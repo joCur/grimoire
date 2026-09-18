@@ -197,7 +197,7 @@ describe("buildPrompt", () => {
 
   test("the sections after it are unchanged and in their old order", () => {
     const prompt = buildPrompt({ ...REQ, knowledge: KNOWLEDGE });
-    const order = ["## Glossar", "## Kontext", "## Referenz-Zieldatei", "## Quelltext"].map((h) =>
+    const order = ["## Glossar", "## Kontext", "## Referenz-Zieleintrag", "## Quelltext"].map((h) =>
       prompt.indexOf(h),
     );
     expect(order.every((at) => at !== -1)).toBe(true);

@@ -99,10 +99,10 @@ function oneOf(column: string, values: readonly string[], nullable = false): SQL
 /**
  * One campaign. `id` is the key in every URL.
  *
- * `version` replaces the chokidar-fed in-memory counter behind
- * `GET /api/campaigns/:campaign/version` (DECISIONS #9): with the database as the only
- * truth there is no external editor to watch, so the counter is simply bumped
- * by whoever writes.
+ * `version` is the counter behind `GET /api/campaigns/:campaign/version`
+ * (DECISIONS #9). With the database as the only truth there is nothing outside
+ * the server that could change campaign content, so the counter is simply
+ * bumped by whoever writes — no watcher is involved.
  */
 export const campaigns = sqliteTable("campaigns", {
   id: text("id").primaryKey(),

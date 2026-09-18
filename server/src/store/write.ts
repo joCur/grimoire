@@ -181,7 +181,7 @@ function assertClosedValue(
   key: string,
   allowed: readonly string[],
   code: ErrorCode,
-  extra: Record<string, unknown> = {},
+  details: Record<string, unknown> = {},
 ): void {
   if (!(key in fields)) return;
   const value = fields[key];
@@ -191,7 +191,7 @@ function assertClosedValue(
     code,
     value: String(value),
     allowed: [...allowed],
-    ...extra,
+    ...details,
   });
 }
 
@@ -304,10 +304,10 @@ function asMap(value: unknown): Record<string, unknown> {
  * YAML round trip: the columns are the values now.
  */
 function applyPatch(
-  fm: Record<string, unknown>,
+  props: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
-  const next = { ...fm };
+  const next = { ...props };
   for (const [key, value] of Object.entries(patch)) {
     if (key === "" || UNSAFE_KEYS.has(key)) throw new ApiError(400, `invalid patch key: ${key}`);
     if (value === null) delete next[key];
@@ -923,8 +923,8 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CAMPAIGN_KEYS);
-      const fm = applyPatch(renderCampaign(row).properties, patch);
-      const name = asStr(fm.name);
+      const props = applyPatch(renderCampaign(row).properties, patch);
+      const name = asStr(props.name);
       // Accepted by design: a name that EQUALS the id is stored as "" — the
       // empty name means "fall back to the id" everywhere it is rendered
       // (./render, ./read), so the round trip shows the same name back and
@@ -932,7 +932,7 @@ function patchLocator(
       const next: CampaignRow = {
         ...row,
         name: name === row.id ? "" : name,
-        description: asOptStr(fm.description),
+        description: asOptStr(props.description),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -957,11 +957,11 @@ function patchLocator(
       // Only the known trio may be WRITTEN; what is already stored is still
       // shown verbatim.
       assertChapterStatus(patch);
-      const fm = applyPatch(renderChapter(row).properties, patch);
+      const props = applyPatch(renderChapter(row).properties, patch);
       const next: ChapterRow = {
         ...row,
-        title: asStr(fm.title, row.id),
-        status: asOptStr(fm.status),
+        title: asStr(props.title, row.id),
+        status: asOptStr(props.status),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -989,13 +989,13 @@ function patchLocator(
         refNpcs(tx, campaign, row.id),
         refTags(tx, campaign, row.id),
       );
-      const fm = applyPatch(before.properties, patch);
-      const npcRefs = asStrArray(fm.npcs);
-      const tags = asStrArray(fm.tags);
+      const props = applyPatch(before.properties, patch);
+      const npcRefs = asStrArray(props.npcs);
+      const tags = asStrArray(props.tags);
       // The chapter a scene belongs to is part of its ADDRESS (the path), so
       // a patch may MOVE the scene — but only into a chapter that exists. It
       // cannot be removed: a scene without a chapter has no address.
-      const declared: string | null = asOptStr(fm.chapter);
+      const declared: string | null = asOptStr(props.chapter);
       if (declared === null) {
         throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter", {
           code: "chapter_required",
@@ -1004,18 +1004,18 @@ function patchLocator(
       // Every reference first, so a save that names something unknown is
       // refused before anything is written.
       assertChapterRef(tx, campaign, declared);
-      const nextLocation = sceneLocation(fm.location);
+      const nextLocation = sceneLocation(props.location);
       assertLocationRef(tx, campaign, nextLocation);
       assertNpcRefs(tx, campaign, npcRefs);
       const next: SceneRow = {
         ...row,
-        title: asStr(fm.title, row.id),
-        type: asStr(fm.type, "planned"),
-        trigger: asOptStr(fm.trigger),
+        title: asStr(props.title, row.id),
+        type: asStr(props.type, "planned"),
+        trigger: asOptStr(props.trigger),
         chapterId: declared,
         location: nextLocation,
-        status: asStr(fm.status, "draft"),
-        handouts: packJson(asStrArray(fm.handouts)),
+        status: asStr(props.status, "draft"),
+        handouts: packJson(asStrArray(props.handouts)),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -1047,20 +1047,20 @@ function patchLocator(
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, NPC_KEYS);
       assertNpcStatus(patch);
-      const fm = applyPatch(renderNpc(row).properties, patch);
-      const quickstats = asMap(fm.quickstats);
-      const npcChapter = asOptStr(fm.chapter);
+      const props = applyPatch(renderNpc(row).properties, patch);
+      const quickstats = asMap(props.quickstats);
+      const npcChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, npcChapter);
       const next: NpcRow = {
         ...row,
-        name: asStr(fm.name, row.id),
-        role: asOptStr(fm.role),
+        name: asStr(props.name, row.id),
+        role: asOptStr(props.role),
         chapterId: npcChapter,
-        status: asStr(fm.status, NPC_DEFAULT_STATUS),
-        statblock: asOptStr(fm.statblock),
+        status: asStr(props.status, NPC_DEFAULT_STATUS),
+        statblock: asOptStr(props.statblock),
         quickstats: packJson(quickstats),
-        voice: asOptStr(fm.voice),
-        appearance: asOptStr(fm.appearance),
+        voice: asOptStr(props.voice),
+        appearance: asOptStr(props.appearance),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -1088,14 +1088,14 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, LOCATION_KEYS);
-      const fm = applyPatch(renderLocation(row).properties, patch);
-      const locationChapter = asOptStr(fm.chapter);
+      const props = applyPatch(renderLocation(row).properties, patch);
+      const locationChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, locationChapter);
       const next: LocationRow = {
         ...row,
-        name: asStr(fm.name, row.id),
+        name: asStr(props.name, row.id),
         chapterId: locationChapter,
-        roll20Page: asOptStr(fm["roll20-page"]),
+        roll20Page: asOptStr(props["roll20-page"]),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -1118,8 +1118,8 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SESSION_KEYS);
-      const fm = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
-      patchSessionRow(tx, campaign, row, fm);
+      const props = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
+      patchSessionRow(tx, campaign, row, props);
       const updated = sessionRow(tx, campaign, row.id);
       return renderSessionRow(tx, campaign, updated ?? row);
     }
@@ -1160,18 +1160,18 @@ function patchSessionRow(
   tx: GrimoireDb,
   campaign: string,
   row: SessionRow,
-  fm: Record<string, unknown>,
+  props: Record<string, unknown>,
 ): void {
   tx.update(sessions)
     .set({
-      started: asOptStr(fm.started),
-      ended: asOptStr(fm.ended),
+      started: asOptStr(props.started),
+      ended: asOptStr(props.ended),
       rev: row.rev + 1,
     })
     .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
     .run();
 
-  const played = asStrArray(fm.scenes_played);
+  const played = asStrArray(props.scenes_played);
   for (const sceneId of played) {
     if (sceneId === "") continue;
     assertSceneRef(tx, campaign, sceneId, "played_scene_unknown");
@@ -1191,7 +1191,7 @@ function patchSessionRow(
       .run();
   });
 
-  const pauses = Array.isArray(fm.pauses) ? fm.pauses : fm.pauses === undefined ? [] : [fm.pauses];
+  const pauses = Array.isArray(props.pauses) ? props.pauses : props.pauses === undefined ? [] : [props.pauses];
   tx.delete(sessionPauses)
     .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, row.id)))
     .run();
@@ -1211,7 +1211,7 @@ function patchSessionRow(
       .run();
   }
 
-  const reviewed = new Set(asStrArray(fm.reviewed));
+  const reviewed = new Set(asStrArray(props.reviewed));
   for (const entry of logRows(tx, campaign, row.id)) {
     const flag = reviewed.has(entry.hash) ? 1 : 0;
     if (flag === entry.reviewed) continue;
@@ -2031,15 +2031,15 @@ export interface EntityDraft {
  */
 export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft): void {
   const locator = locatorFromPath(draft.rel);
-  const fm = draft.properties;
+  const props = draft.properties;
   switch (locator.kind) {
     case "scene": {
-      const id = asStr(fm.id, locator.id);
-      const title = asStr(fm.title, id);
-      const npcRefs = asStrArray(fm.npcs);
-      const tags = asStrArray(fm.tags);
-      const draftLocation = sceneLocation(fm.location);
-      assertSceneClosedFields(fm);
+      const id = asStr(props.id, locator.id);
+      const title = asStr(props.title, id);
+      const npcRefs = asStrArray(props.npcs);
+      const tags = asStrArray(props.tags);
+      const draftLocation = sceneLocation(props.location);
+      assertSceneClosedFields(props);
       // The scene's chapter is written in THIS transaction, before the scene
       // itself: a new-chapter run creates its chapter from the run's own
       // state (generator.ts `jobChapterTarget`), and this is the net under
@@ -2065,11 +2065,11 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           id,
           chapterId: locator.chapterId,
           title,
-          type: asStr(fm.type, "planned"),
-          trigger: asOptStr(fm.trigger),
+          type: asStr(props.type, "planned"),
+          trigger: asOptStr(props.trigger),
           location: draftLocation,
-          status: asStr(fm.status, "draft"),
-          handouts: packJson(asStrArray(fm.handouts)),
+          status: asStr(props.status, "draft"),
+          handouts: packJson(asStrArray(props.handouts)),
           body: draft.body,
           pos,
         })
@@ -2080,19 +2080,19 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       return;
     }
     case "npc": {
-      const id = asStr(fm.id, locator.id);
-      const npcChapter = asOptStr(fm.chapter);
+      const id = asStr(props.id, locator.id);
+      const npcChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, npcChapter);
-      assertNpcStatus(fm);
+      assertNpcStatus(props);
       const values = {
-        name: asStr(fm.name, id),
-        role: asOptStr(fm.role),
+        name: asStr(props.name, id),
+        role: asOptStr(props.role),
         chapterId: npcChapter,
-        status: asStr(fm.status, NPC_DEFAULT_STATUS),
-        statblock: asOptStr(fm.statblock),
-        quickstats: packJson(asMap(fm.quickstats)),
-        voice: asOptStr(fm.voice),
-        appearance: asOptStr(fm.appearance),
+        status: asStr(props.status, NPC_DEFAULT_STATUS),
+        statblock: asOptStr(props.statblock),
+        quickstats: packJson(asMap(props.quickstats)),
+        voice: asOptStr(props.voice),
+        appearance: asOptStr(props.appearance),
         body: draft.body,
       };
       // An entry the DM created and left empty is FILLED — inserting would
@@ -2113,13 +2113,13 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       return;
     }
     case "location": {
-      const id = asStr(fm.id, locator.id);
-      const locationChapter = asOptStr(fm.chapter);
+      const id = asStr(props.id, locator.id);
+      const locationChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, locationChapter);
       const values = {
-        name: asStr(fm.name, id),
+        name: asStr(props.name, id),
         chapterId: locationChapter,
-        roll20Page: asOptStr(fm["roll20-page"]),
+        roll20Page: asOptStr(props["roll20-page"]),
         body: draft.body,
       };
       // Fill an empty entry rather than collide with it — see the npc case.
@@ -2151,8 +2151,8 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         .values({
           campaignId: campaign,
           id: locator.id,
-          title: asStr(fm.title, locator.id),
-          status: asOptStr(fm.status),
+          title: asStr(props.title, locator.id),
+          status: asOptStr(props.status),
           body: draft.body,
           pos,
         })
