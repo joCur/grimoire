@@ -1,4 +1,4 @@
-// The controls of the „Eigenschaften" form — one row per
+// The controls of the properties form — one row per
 // properties field, chosen by the field's control. Kept apart from the dialog
 // so the dialog stays the save/409 shell and this file stays plain rendering:
 // every row gets its value and gives back a new one, no queries, no writes.
@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 
 /** Stable per-field DOM id — one dialog is on screen at a time. */
 function fieldId(key: string): string {
-  return `fm-${key.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  return `prop-${key.replace(/[^a-zA-Z0-9-]/g, "-")}`;
 }
 
 /** Label, control, hint — the same three lines for every field. */
@@ -84,7 +84,7 @@ function FieldRow({
 
 /**
  * One field of the form. `pending` is the text still standing in a chip input
- * — it lives in the dialog so „Speichern" can fold it in instead of losing it.
+ * — it lives in the dialog so the save can fold it in instead of losing it.
  */
 export function PropertiesFieldControl({
   field,
@@ -220,15 +220,14 @@ function ReferenceOptions({ id, options }: { id: string; options: readonly Field
 
 /**
  * What the typed id resolves to. Says nothing while the field is empty, names
- * the entity when the id is known, and says „Unbekannt" when nothing has
- * that id — a reference names an entry that exists, so the save would be
+ * the entity when the id is known, and says so when nothing has that id — a reference names an entry that exists, so the save would be
  * refused, and the DM should see that before clicking rather than in a toast
  * afterwards.
  *
  * `location` is the one field whose text is not its id: it is the group the
  * scene sits under in its chapter, so it STORES an id while the DM types a
  * name, and the form slugs it. The line therefore resolves over the SLUG —
- * typing the name of an existing Ort shows that Ort.
+ * typing the name of an existing location shows that location.
  */
 function ReferenceHint({
   field,
@@ -243,8 +242,8 @@ function ReferenceHint({
   const id = value.trim();
   if (id === "") return null;
   if (field.source === "locations") {
-    // Resolved over the SLUG, so typing the name of an existing Ort shows
-    // that Ort's name — the save would land on exactly this entry.
+    // Resolved over the SLUG, so typing the name of an existing location
+    // shows that location's name — the save would land on exactly this entry.
     const ref = locationRef(id, options);
     switch (ref.kind) {
       case "empty":
@@ -389,7 +388,7 @@ function PairsField({
     onChange(entries.map((existing, i) => (i === index ? entry : existing)));
   // These two inputs are the only ones in the form where Enter would hit the
   // form's implicit submit — the dialog would save and close in the middle of
-  // typing a stat. Enter here means „done with this cell", i.e. nothing.
+  // typing a stat. Enter here means "done with this cell", i.e. nothing.
   const swallowEnter = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") e.preventDefault();
   };

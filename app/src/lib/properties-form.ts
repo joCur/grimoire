@@ -37,7 +37,7 @@ import { toSlug } from "@grimoire/shared/slug";
 import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
-import { fmQuickstats, fmStringArray } from "@/lib/properties";
+import { propQuickstats, propStringArray } from "@/lib/properties";
 import { chapterStatusOptions } from "@/lib/chapter-status";
 import { sceneStatusOptions } from "@/lib/scene-status";
 
@@ -339,12 +339,12 @@ export function propertiesFormValues(
     const raw = properties[field.key];
     switch (fieldValueKind(field.control)) {
       case "list":
-        values[field.key] = { kind: "list", items: fmStringArray(raw) };
+        values[field.key] = { kind: "list", items: propStringArray(raw) };
         break;
       case "pairs":
         values[field.key] = {
           kind: "pairs",
-          entries: fmQuickstats(raw).map(([key, value]) => ({ key, value })),
+          entries: propQuickstats(raw).map(([key, value]) => ({ key, value })),
         };
         break;
       default:

@@ -1,4 +1,4 @@
-// Render tests for the „Eigenschaften" controls (react-dom/server —
+// Render tests for the properties controls (react-dom/server —
 // no DOM). What must hold is the degrade contract of the reference and select
 // fields: the existing ids are OFFERED (a <datalist>, never a closed list), an
 // id without a file stays typeable and visible, and a status value nobody knows
@@ -65,8 +65,8 @@ function count(html: string, needle: string): number {
 describe("reference fields", () => {
   test("a single reference suggests the existing ids and names the chosen one", () => {
     const html = render(sceneField("location"), { kind: "text", text: "leuchtturm" });
-    expect(html).toContain('list="fm-location-options"');
-    expect(html).toContain('<datalist id="fm-location-options">');
+    expect(html).toContain('list="prop-location-options"');
+    expect(html).toContain('<datalist id="prop-location-options">');
     expect(html).toContain('value="leuchtturm"');
     expect(html).toContain("Der Leuchtturm");
   });
@@ -86,8 +86,9 @@ describe("reference fields", () => {
     expect(html).not.toContain("Keine Orts-Kennung");
   });
 
-  test("text that SLUGS to a known Ort resolves to that Ort's name", () => {
-    // Typing the name lands on the entry that is already there — no „neu".
+  test("text that SLUGS to a known location resolves to that location's name", () => {
+    // Typing the name lands on the entry that is already there, so the field
+    // does not offer to create one.
     const html = render(sceneField("location"), { kind: "text", text: "Leuchtturm" });
     expect(html).toContain("Der Leuchtturm");
     expect(html).not.toContain("angelegt");
@@ -114,7 +115,7 @@ describe("reference fields", () => {
     expect(html).toContain("Hafenmeisterin Jorna"); // in the suggestion list
     expect(html).toContain('aria-label="fenn entfernen"');
     expect(html).toContain('aria-label="kapitaen-torv entfernen"');
-    expect(html).toContain('<datalist id="fm-npcs-options">');
+    expect(html).toContain('<datalist id="prop-npcs-options">');
   });
 });
 

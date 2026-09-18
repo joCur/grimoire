@@ -2,12 +2,12 @@
 // WITHOUT leaving the running session.
 //
 // An NPC card in the live aside is not a link: one click would land on the
-// reading route, losing the selected scene and whatever was half-typed in the
-// Schnellnotiz. The drawer keeps the live route mounted
+// reading route, losing the selected scene and whatever was half-typed in
+// the quick note. The drawer keeps the live route mounted
 // (so both survive) and renders the very same article pipeline the reading
 // view uses (EntityArticle → Markdown → callouts), so what the DM reads here
-// is what the entry says. „Eintrag öffnen" is the deliberate way OUT into the
-// full view, for when the drawer is not enough.
+// is what the entry says. The link to the entry is the deliberate way OUT
+// into the full view, for when the drawer is not enough.
 //
 // No animation (ui/sheet.tsx): the quality floor asks for reduced-motion
 // safety, and mid-sentence a panel that is simply there is the calm answer.
@@ -20,7 +20,7 @@ import { fetchEntry } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/i18n";
-import { fmString } from "@/lib/properties";
+import { propString } from "@/lib/properties";
 
 export function LiveEntityDrawer({
   campaign,
@@ -60,7 +60,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
   const name =
     data === undefined
       ? path
-      : (fmString(data.properties.name) ?? fmString(data.properties.title) ?? path);
+      : (propString(data.properties.name) ?? propString(data.properties.title) ?? path);
 
   return (
     <>

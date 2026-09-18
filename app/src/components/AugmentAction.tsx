@@ -56,7 +56,7 @@ import {
   type DiffToken,
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
-import { fmString } from "@/lib/properties";
+import { propString } from "@/lib/properties";
 import { reviewOf, runJobArrived } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
@@ -71,7 +71,7 @@ const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-mute
  * how the entry is addressed, not how it is known at the table.
  */
 function entryName(file: EntryResponse): string {
-  return fmString(file.properties.name) ?? fmString(file.properties.title) ?? file.path;
+  return propString(file.properties.name) ?? propString(file.properties.title) ?? file.path;
 }
 
 /**
@@ -378,18 +378,18 @@ function AugmentReview({
   campaign: string;
   file: EntryResponse;
   jobId: string | undefined;
-  /** The job the proposal came from — it carries the DM's decisions (#97). */
+  /** The job the proposal came from — it carries the DM's decisions. */
   job: GenerateJob | null | undefined;
   proposal: AugmentResult;
   onDone: () => void;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  // The per-field and per-block decisions are SERVER state since issue #97:
-  // a closed dialog, a reload or a second tab all come back to the same
-  // review. Only the DEFAULTS are computed here — a key the job does not
-  // carry has not been decided, and then the ticket's rule applies (take
-  // what is new, keep what is filled).
+  // The per-field and per-block decisions are SERVER state: a closed dialog,
+  // a reload or a second tab all come back to the same review. Only the
+  // DEFAULTS are computed here — a key the job does not carry has not been
+  // decided, and then the standing rule applies: take what is new, keep what
+  // is filled.
   const review = useJobReview(campaign, job);
   const stored = reviewOf(job);
   // The text the proposal is diffed AGAINST. It starts as the one the run saw
@@ -612,8 +612,8 @@ function AugmentReview({
         <EditConflict onReload={apply.reload} onForce={apply.forceSave} busy={apply.isSaving} />
       )}
       <div className="flex items-center justify-end gap-2 pt-1">
-        {/* Every decision above is saved on the job (issue #97) — said here
-            as quietly as in the generator review, and with the same words. */}
+        {/* Every decision above is saved on the job — said here as quietly
+            as in the generator review, and with the same words. */}
         <ReviewSaveStatus status={review.status} />
         <Button
           type="button"
@@ -722,7 +722,7 @@ function BlockRow({
  * The markdown a non-changed row shows — the side that exists. It is the
  * block's VERBATIM source WITH everything the block contains: an `## If:`
  * section's card shows its heading AND its body, because that whole section
- * is what the one toggle next to it decides about (issue #36). So the review
+ * is what the one toggle next to it decides about. So the review
  * shows exactly the text the accept would write.
  */
 function blockSource(change: BlockChange): string {

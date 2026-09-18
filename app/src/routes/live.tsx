@@ -31,7 +31,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
-import { fmStringArray } from "@/lib/properties";
+import { propStringArray } from "@/lib/properties";
 import { isSceneDone } from "@/lib/scene-status";
 import { parseLogEntries } from "@/lib/session";
 import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
@@ -125,7 +125,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // untouched while the drawer opens and closes.
   const [drawerPath, setDrawerPath] = useState<string>();
 
-  const playedIds = fmStringArray(session.data?.properties.scenes_played);
+  const playedIds = propStringArray(session.data?.properties.scenes_played);
 
   // Only the tree decides whether a scene's `location` is an entity: the
   // format allows a free string there, and that must stay plain text instead

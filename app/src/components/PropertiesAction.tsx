@@ -1,5 +1,6 @@
 // The properties action of the reading view: the DM
-// edits EVERY properties field of a scene/NPC/Ort/Kapitel in a form — never
+// edits EVERY properties field of a scene, npc, location or chapter in a
+// form — never
 // raw YAML, never a text editor detour.
 //
 // The dialog follows the house pattern: mounted only while open,
@@ -42,7 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n, useT } from "@/i18n";
-import { fmString } from "@/lib/properties";
+import { propString } from "@/lib/properties";
 import {
   canSubmitProperties,
   commitPendingText,
@@ -195,7 +196,7 @@ function PropertiesDialog({
     Object.keys(patch).length > 0 &&
     !save.isSaving;
 
-  const id = fmString(file.properties.id);
+  const id = propString(file.properties.id);
   // Esc, the overlay, the cancel button and the X all come through here: with
   // something typed they ask first (house pattern of EntryBodyEditor), an
   // untouched form just closes.

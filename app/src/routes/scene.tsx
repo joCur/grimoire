@@ -47,7 +47,7 @@ import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
 import { canEditEntryBody } from "@/lib/entry-body";
-import { fmString, fmStringArray } from "@/lib/properties";
+import { propString, propStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
 
 export function SceneRoute() {
@@ -83,7 +83,7 @@ export function SceneRoute() {
   // properties `id`, which the format declares immutable, with
   // the canonical address as the fallback for an entry whose properties
   // carries none.
-  const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
+  const docId = data === undefined ? undefined : (propString(data.properties.id) ?? data.path);
   // Whether this entry has an editable text at all (canEditEntryBody). It
   // gates the mode itself, not just the header trigger: a list entry like the
   // glossary has no body to write, and an editor reached past the trigger —
@@ -150,7 +150,7 @@ export function SceneRoute() {
 
   const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in properties.
-  const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
+  const npcs = isScene ? propStringArray(data.properties.npcs) : [];
   // The edit action — the body editor, offered for the kinds whose
   // prose the DM maintains (canEditEntryBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
@@ -217,7 +217,7 @@ export function SceneRoute() {
                 <SceneStatusControl
                   campaign={campaign}
                   path={data.path}
-                  status={fmString(data.properties.status) ?? "draft"}
+                  status={propString(data.properties.status) ?? "draft"}
                   rev={data.rev}
                   variant="pill"
                 />
