@@ -302,8 +302,9 @@ describe("GET /api/campaigns/:campaign/entries", () => {
     // With the address in the path, every URL parser on the way normalizes
     // `.` and `..` segments (percent-encoded ones included) before the server
     // sees them. What arrives is a different, ordinary address, so the honest
-    // answer is 404 and not the 400 of the address guard.
-    for (const address of ["../../etc/passwd", "01-salzhafen/../../beispiel/inbox"]) {
+    // answer is 404 and not the 400 of the address guard. The probe uses a
+    // neutral traversal target; only the `..` segments matter here.
+    for (const address of ["../../vertraulich/notizen", "01-salzhafen/../../beispiel/inbox"]) {
       expect((await app.request(entriesUrl("beispiel", address))).status).toBe(404);
     }
   });
