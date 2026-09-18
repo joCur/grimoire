@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignTree, EntryResponse, SessionResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { applyDrafts } from "../src/store/write";
+import { applyDrafts } from "../src/store/drafts";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 

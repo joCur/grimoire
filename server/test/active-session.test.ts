@@ -3,7 +3,7 @@
 // row lands in the RUNNING session even when that is yesterday's row.
 //
 // A session lives in `sessions` + `session_pauses` + `log_entries`, and the
-// picking rule is a query (store/read.ts `pickSession`) — that rule is what
+// picking rule is a query (store/session-rows.ts `pickSession`) — that rule is
 // this file pins. Each case gets a fresh in-memory database seeded from the
 // committed JSON entries (test/support/store.ts); the system time is faked
 // per case (setSystemTime).
@@ -28,7 +28,8 @@ import { app } from "../src/server";
 import { localDateTimeToMs } from "../src/store/time";
 import type { GrimoireDb } from "../src/db/client";
 import { sessions as sessionsTable } from "../src/db/schema";
-import { pickSession, sessionOrderKey } from "../src/store/read";
+import { pickSession } from "../src/store/session-rows";
+import { sessionOrderKey } from "../src/store/shared";
 import type { SessionRow } from "../src/store/render";
 import type { SeedEntry } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
@@ -145,7 +146,7 @@ afterEach(async () => {
 });
 
 // --- the picking rule, as a query -------------------------------------------
-// The rule lives in store/read.ts and is exercised against real rows: the
+// The rule lives in store/session-rows.ts and is exercised against real rows:
 // chronology is what decides, not the row order the database happens to
 // return.
 
@@ -504,7 +505,7 @@ describe("start — the state machine's edges", () => {
   test("a hand-broken `started` no longer blocks the start (the degrade moved)", async () => {
     // The running-session check is on `started`, not on the id: a row whose
     // `started` is unreadable has no place in the chronology at all
-    // (store/read.ts sessionOrderKey), so it is not the "running session"
+    // (store/shared.ts sessionOrderKey), so it is not the "running session"
     // either and a start simply opens a new one. The broken row stays
     // readable and is not touched.
     const broken = await startSession();
@@ -527,7 +528,7 @@ describe("start — the state machine's edges", () => {
   test("same-second restarts order by the row's insertion time", async () => {
     // Start, end and start again inside ONE second: `started` ties, and the
     // opaque id cannot decide which session is "the last started" — the row's
-    // `createdAt` does (store/read.ts compareSessionsNewestFirst).
+    // `createdAt` does (store/shared.ts compareSessionsNewestFirst).
     const first = await startSession();
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
     const second = await startSession();

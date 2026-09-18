@@ -44,45 +44,42 @@ import {
 } from "@grimoire/shared";
 import { getBuildId } from "../config";
 import { ApiError } from "../api-error";
+// The store, by domain — one module per kind of entry and per list.
 import {
-  buildTree,
   campaignVersion,
+  createCampaign,
   listCampaigns,
-  listSessions,
-  readActiveSession,
-  readGlossary,
-  readInbox,
-  readKnowledge,
-  readEntry,
-  readSession,
   requireCampaign,
-} from "../store/read";
+} from "../store/campaigns";
+import {
+  appendThreadToChapter,
+  buildTree,
+  createChapter,
+  createScene,
+  setActiveChapter,
+} from "../store/chapters";
+import { patchEntry, readEntry } from "../store/entries";
+import { readGlossary, writeGlossary } from "../store/glossary";
+import { appendInboxEntry, markInboxLineDone, readInbox } from "../store/inbox";
+import { readKnowledge, writeKnowledge } from "../store/knowledge";
+import { createLocation } from "../store/locations";
+import { createNpc, createNpcStub } from "../store/npcs";
+import {
+  appendLogEntry,
+  continueSession,
+  discardSession,
+  endSession,
+  listSessions,
+  markLogLineSeen,
+  patchSession,
+  pauseSession,
+  readActiveSession,
+  readSession,
+  startSession,
+} from "../store/sessions";
 import { addressSegments } from "../store/paths";
 import { searchCampaign } from "../store/search";
 import { readSettings, writeSettings } from "../store/settings";
-import {
-  appendInboxEntry,
-  appendLogEntry,
-  appendThreadToChapter,
-  continueSession,
-  createCampaign,
-  createChapter,
-  setActiveChapter,
-  createLocation,
-  createNpc,
-  createNpcStub,
-  createScene,
-  discardSession,
-  endSession,
-  markInboxLineDone,
-  markLogLineSeen,
-  patchEntry,
-  patchSession,
-  pauseSession,
-  startSession,
-  writeGlossary,
-  writeKnowledge,
-} from "../store/write";
 import { acceptJobParts } from "../generate-accept";
 import {
   applyGenerated,
@@ -162,7 +159,7 @@ function requireRev(value: unknown): number {
  *
  * The knowledge list feeds the generator prompt, where an entry becomes one
  * bullet in markdown the model reads as INSTRUCTIONS
- * (store/read.ts knowledgeText). A newline inside an entry is
+ * (store/knowledge.ts knowledgeText). A newline inside an entry is
  * therefore not a formatting detail: it lets an entry open lines of its own —
  * a `## ` heading that poses as a section of the prompt, for instance. The UI
  * has single-line inputs and cannot produce one, so refusing it costs the DM
@@ -549,7 +546,7 @@ api.post("/campaigns/:campaign/inbox", async (c) => {
 // separate move endpoint. Of duplicate terms the FIRST one wins. `rev` is
 // the list's guard token (the one GET /glossary hands out); a stale one is
 // 409 { code: "rev_conflict", rev } and writes nothing. No `entry` rides
-// along — the glossary is not one (ADR #26), and the settings page reloads
+// along — the glossary is not one (ADR #26), and the glossary page reloads
 // the list itself.
 //
 // This is the ONLY way the glossary is written: it has no address, so there
@@ -569,7 +566,8 @@ api.put("/campaigns/:campaign/glossary", async (c) => {
     }
     // NO single-line rule here, unlike the knowledge list below: a glossary
     // explanation may span several lines (the example campaign has one), so a
-    // 400 would make such a glossary unsavable. `promptInline` (store/read.ts)
+    // 400 would make such a glossary unsavable. `promptInline`
+    // (store/knowledge.ts)
     // flattens them for the prompt instead — the defence that does not lose
     // data.
     entries.push({ term: item.term, explanation: item.explanation ?? "" });
@@ -588,7 +586,7 @@ api.put("/campaigns/:campaign/glossary", async (c) => {
 // A `naming` entry's pair may be HALF-FILLED here on purpose — that is a
 // convention the DM has not finished typing, and refusing the save would
 // lose the rest of the list with it. The prompt skips incomplete rules
-// instead (store/read.ts knowledgeText), which is where a half rule could do
+// instead (store/knowledge.ts knowledgeText), which is where a half rule could do
 // damage.
 //
 // An entry's fields must be SINGLE LINE (400 otherwise): an entry becomes
@@ -623,7 +621,7 @@ api.put("/campaigns/:campaign/knowledge", async (c) => {
 // ENTRY — the same `EntryResponse` every other write returns, so the app can
 // navigate straight into it. A taken id is
 // `409 { code: "slug_taken", id, suggestion, path }`; a name that yields no
-// slug at all is a 400 that says so (store/write.ts explains why neither is
+// slug at all is a 400 that says so (store/shared.ts explains why neither is
 // silently resolved). Every one of them also accepts an explicit `id` — that
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of
 // making the DM invent another name.
@@ -671,7 +669,7 @@ api.post("/campaigns/:campaign/chapters", async (c) => {
 // `active` and the one that was active goes back to `planned`, in ONE
 // transaction — two calls from the app would leave a window with two active
 // chapters, and the session view picks the first it finds. Idempotent, 404
-// for an unknown chapter, no rev guard (store/write.ts explains why).
+// for an unknown chapter, no rev guard (store/chapters.ts explains why).
 api.post("/campaigns/:campaign/chapters/:id/active", async (c) =>
   c.json(await setActiveChapter(c.req.param("campaign"), c.req.param("id"))),
 );
@@ -1114,7 +1112,7 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 // SUCCESSFUL apply discards that job — the drafts are stored, there is
 // nothing left to restore. A stale id (a newer run started meanwhile) is
 // ignored rather than dropping the wrong job. That discard is
-// part of the write TRANSACTION (store/write.ts applyDrafts), so drafts and
+// part of the write TRANSACTION (store/drafts.ts applyDrafts), so drafts and
 // job can never disagree after a crash.
 // `npc` is the NPC generator's one draft — deliberately the SAME
 // endpoint: it needs exactly the same all-or-nothing write, the same 409 and

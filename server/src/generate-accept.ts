@@ -19,8 +19,8 @@ import {
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
-import { requireCampaign } from "./store/read";
-import { applyDrafts } from "./store/write";
+import { requireCampaign } from "./store/campaigns";
+import { applyDrafts } from "./store/drafts";
 
 /**
  * Accept PART of a finished run — „Diesen übernehmen" per scene

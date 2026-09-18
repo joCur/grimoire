@@ -10,7 +10,7 @@ import type { GlossaryResponse, KnowledgeEntry, KnowledgeResponse } from "@grimo
 import { app } from "../src/server";
 import { campaignKnowledge } from "../src/db/schema";
 import { getDb } from "../src/store/handle";
-import { knowledgeText, namingRules } from "../src/store/read";
+import { knowledgeText, namingRules } from "../src/store/knowledge";
 import { dropStore, seedStore } from "./support/store";
 
 const CAMPAIGN = "beispiel";
@@ -170,7 +170,7 @@ describe("PUT /api/campaigns/:campaign/knowledge", () => {
   });
 });
 
-describe("the prompt block (store/read.ts knowledgeText)", () => {
+describe("the prompt block (store/knowledge.ts knowledgeText)", () => {
   test("no entries means NO block at all — the prompt stays as it was", async () => {
     expect(await knowledgeText(CAMPAIGN)).toBeUndefined();
   });

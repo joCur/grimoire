@@ -61,14 +61,11 @@ import { parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
-import {
-  buildTree,
-  glossaryText,
-  knowledgeText,
-  namingRules,
-  requireCampaign,
-} from "./store/read";
-import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
+import { requireCampaign } from "./store/campaigns";
+import { buildTree, chapterExists } from "./store/chapters";
+import { knowledgeText, namingRules } from "./store/knowledge";
+import { glossaryText } from "./store/glossary";
+import { applyDrafts, draftTargetExists } from "./store/drafts";
 import {
   addressHead,
   addressIdentity,
@@ -1376,7 +1373,7 @@ export async function applyGenerated(
   }
 
   // The conflict check runs in the SAME transaction as the inserts — see
-  // store/write.ts `applyDrafts`. Asking here first would leave a window
+  // store/drafts.ts `applyDrafts`. Asking here first would leave a window
   // between "free" and "inserted" in which a target could appear, and the
   // documented `409 { conflicts }` would become a primary-key violation (a
   // 500). It asks by ADDRESS, i.e. by id, which is the key — so a draft that

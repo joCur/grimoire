@@ -17,7 +17,7 @@ import type {
 } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
-import { applyDrafts } from "../src/store/write";
+import { applyDrafts } from "../src/store/drafts";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 

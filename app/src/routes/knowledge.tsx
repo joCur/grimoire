@@ -2,7 +2,7 @@
 // the naming conventions, facts and style rules that travel with
 // every generator run and hold even when the source material says otherwise.
 //
-// The ORDER is the order of the prompt (server/src/store/read.ts), so it is
+// The ORDER is the order of the prompt (server/src/store/knowledge.ts), so it is
 // the DM's to arrange — this is the list with up/down. The kind decides the
 // fields: a naming convention is the „Alt → Neu" pair, a fact and a style rule
 // are one sentence each, in a textarea that grows with it.

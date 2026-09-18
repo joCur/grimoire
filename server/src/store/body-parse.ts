@@ -1,7 +1,7 @@
 // The identity of one session log row.
 //
 // One thing lives here: `logLineId`, the short hash that IS a log row's id.
-// The log append (store/write.ts), the seed (db/seed.ts) and the review action
+// The log append (store/sessions.ts), the seed (db/seed.ts) and the review action
 // have to compute it exactly the same way, so they all compute it here.
 //
 // It hashes the row's CANONICAL LINE — `- HH:MM (scene-id) text`, the three

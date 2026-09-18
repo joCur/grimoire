@@ -190,7 +190,7 @@ describe("POST /api/campaigns/:campaign/review/seen", () => {
 });
 
 // The `## Offene Fäden` markdown surgery is UNCHANGED by the cutover
-// (store/write.ts appendThreadItem) — it operates on the chapter row's body
+// (store/chapters.ts appendThreadItem) — it operates on the chapter row's body
 // instead of on stored bytes, and the three insertion cases below are the same
 // three it always had.
 describe("POST /api/campaigns/:campaign/review/thread", () => {

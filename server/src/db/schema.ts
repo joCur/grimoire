@@ -7,7 +7,7 @@
 //      Everything README.md names for an entity gets its own column; a key
 //      the contract does not name has no field behind it and is refused
 //      (the entry PATCH answers 400, and so does a seed). The contract
-//      lists live once, in store/write.ts `PROPERTY_CONTRACT`.
+//      lists live once, in store/properties.ts `PROPERTY_CONTRACT`.
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
@@ -157,7 +157,7 @@ export const chapters = sqliteTable(
      * `planned | active | done` (@grimoire/shared `CHAPTER_STATUSES`), or
      * nothing: a chapter without a status is a legal chapter, and clearing
      * the field is how it loses one. A CHECK holds the trio (rule 7), and at
-     * most ONE chapter per campaign holds `active` (store/write.ts
+     * most ONE chapter per campaign holds `active` (store/chapters.ts
      * `clearOtherActiveChapters`) — that second rule is the store's, because
      * it spans rows.
      */
@@ -389,7 +389,7 @@ export const locations = sqliteTable(
  * An `ended` that is NULL or blank means the session runs (session-state.ts).
  *
  * IDENTITY (PO decision): the id of a NEW session is an OPAQUE
- * RANDOM string — `crypto.randomUUID()` (store/write.ts `newSessionId`).
+ * RANDOM string — `crypto.randomUUID()` (store/sessions.ts `newSessionId`).
  * Nobody reads it: it is an address (`sessions/<id>`) and nothing else,
  * and everything DISPLAYABLE about a session is derived from `started`.
  *
@@ -405,7 +405,7 @@ export const locations = sqliteTable(
  * before this (`2026-01-15`, `2026-01-15-2`) stay valid and need no migration.
  * They are simply not parsed.
  *
- * ORDER is `started` alone (store/read.ts `compareSessionsNewestFirst`), with
+ * ORDER is `started` alone (store/shared.ts `compareSessionsNewestFirst`), with
  * `createdAt` as the tie-break — see that column.
  */
 export const sessions = sqliteTable(
@@ -427,7 +427,7 @@ export const sessions = sqliteTable(
      * NOT a wall-clock string like `started`: this is bookkeeping of the
      * database, never entry content, and an entry has no property for it.
      * It is also STRICTLY INCREASING per campaign rather than a plain
-     * `Date.now()` (store/write.ts `nextCreatedAt`) — a clock that stands
+     * `Date.now()` (store/sessions.ts `nextCreatedAt`) — a clock that stands
      * still or jumps back must not make two rows unorderable.
      *
      * `0` for rows written before the column existed and for the markdown

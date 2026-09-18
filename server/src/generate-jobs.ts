@@ -1053,7 +1053,7 @@ export async function deleteJob(campaign: string): Promise<boolean> {
 }
 
 // Discarding the job an apply came from is NOT here: it belongs to the same
-// transaction as the writes, so it lives in store/write.ts `applyDrafts`.
+// transaction as the writes, so it lives in store/drafts.ts `applyDrafts`.
 // A separate "delete if current" call after the write left a
 // window in which a crash kept a done job whose drafts were already stored.
 
@@ -1175,7 +1175,7 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
 
 /**
  * Record a partial accept on the job — called INSIDE the write transaction
- * (store/write.ts `applyDrafts`), so the job and the entries it produced can
+ * (store/drafts.ts `applyDrafts`), so the job and the entries it produced can
  * never disagree after a crash: either both landed or neither did (the same
  * rule the whole-run apply follows).
  *

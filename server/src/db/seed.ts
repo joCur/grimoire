@@ -9,7 +9,7 @@
 //
 //   1. THE STORE LAYER DOES THE WRITING wherever it has a path for it:
 //      chapter, scene, npc and location go through `insertDraft`
-//      (store/write.ts), so references, tags, handouts and the search index
+//      (store/drafts.ts), so references, tags, handouts and the search index
 //      are maintained by the same code a create endpoint runs. What has no
 //      endpoint because it is historic data — the campaign row, sessions with
 //      their pauses and log lines, the inbox list, the glossary — is written
@@ -40,13 +40,10 @@ import {
   sessionScenesPlayed,
   sessions,
 } from "./schema";
-import { campaignRow } from "../store/read";
-import {
-  indexCampaign,
-  indexGlossaryTerm,
-  insertDraft,
-  PROPERTY_CONTRACT,
-} from "../store/write";
+import { campaignRow, indexCampaign } from "../store/campaigns";
+import { indexGlossaryTerm } from "../store/glossary";
+import { PROPERTY_CONTRACT } from "../store/properties";
+import { insertDraft } from "../store/drafts";
 import { logLineId } from "../store/body-parse";
 import { chapterPath, locationPath, npcPath, sceneAddress } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";
@@ -302,7 +299,7 @@ export function seedCampaign(
     // (store/refs.ts), and while loading, half the entries a body points at
     // have no row yet.
     expandIndexedRefs(tx, campaignId);
-    // One bump for the whole load, like any other write (store/write.ts
+    // One bump for the whole load, like any other write (store/campaigns.ts
     // `mutate`): a client polling `GET /version` sees the campaign appear once.
     tx.update(campaigns)
       .set({ version: sql`${campaigns.version} + 1` })

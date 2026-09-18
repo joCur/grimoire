@@ -4,7 +4,7 @@
 // keys of the format ("id … NIE ändern"), the database uses them as primary
 // keys, and every address is built from them (store/paths.ts). Until now the
 // rule was written down three times — `ENTITY_SLUG` in the server's
-// store/write.ts, a copy in the app's lib/entity.ts, and the German
+// store, a copy in the app's lib/entity.ts, and the German
 // transliteration in the app's lib/review.ts (the npc-stub dialog). The app
 // DERIVES an id from a typed title for five kinds and the server has to
 // derive the same one and propose a free variant on a collision, so the

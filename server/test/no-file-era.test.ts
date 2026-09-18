@@ -243,7 +243,7 @@ const RULES: readonly Rule[] = [
   {
     id: "read-parsed-file",
     pattern: /\breadParsedFile\b/,
-    meaning: "the store reads a ROW, through server/src/store/read.ts",
+    meaning: "the store reads a ROW, through server/src/store/entries.ts",
   },
   {
     id: "parse-glossary-body",
