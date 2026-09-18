@@ -43,7 +43,7 @@ import {
 import { campaignRow, indexCampaign } from "../store/campaigns";
 import { indexGlossaryTerm } from "../store/glossary";
 import { PROPERTY_CONTRACT } from "../store/properties";
-import { insertDraft } from "../store/write";
+import { insertDraft } from "../store/drafts";
 import { logLineId } from "../store/body-parse";
 import { chapterPath, locationPath, npcPath, sceneAddress } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";
