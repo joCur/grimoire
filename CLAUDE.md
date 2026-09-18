@@ -168,7 +168,7 @@ Die Pfade:
    Eigenschaften-Felder wie im Eigenschaften-Dialog, den Text auf den
    Oberflächen des Eintrags-Editors —, gespeichert wird **je Hälfte**, und
    „Übernehmen" schreibt die bearbeitete Hälfte plus die unberührte des
-   Modells. Dazu Kampagnenwissen und Glossar auf `/settings` pflegen —
+   Modells. Dazu Kampagnenwissen und Glossar auf ihren eigenen Seiten (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen —
    anlegen, bearbeiten, löschen, umsortieren, 409 — und der Lauf danach:
    Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
    Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
