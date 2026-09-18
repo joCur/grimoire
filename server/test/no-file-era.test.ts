@@ -8,9 +8,11 @@
 // that an entry is a text with properties parsed out of it, which it has not
 // been since ADR #13, #23 and #24.
 //
-// HOW IT READS: one rule per name, over `server/src`, `shared/src`, `app/src`,
-// `generator/`, `fixtures/` and `e2e/`. A hit fails with the file, the line
-// number and the line, so the fix is obvious from the failure alone.
+// HOW IT READS: one rule per name, over `server/src`, `server/test`,
+// `shared/src`, `shared/test`, `app/src`, `generator/`, `fixtures/` and
+// `e2e/`. The tests are read along with the code: a helper called `getFile`
+// teaches the next case to write a second one. A hit fails with the file, the
+// line number and the line, so the fix is obvious from the failure alone.
 // Exceptions live in ONE array below, each with its reason; `pendingRules`
 // below that is the opposite list — names a follow-up removes, asserted to
 // still BE there, so that step flips them from pending to forbidden
@@ -28,7 +30,16 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
 
 /** What is scanned, relative to the repository root. */
-const ROOTS = ["server/src", "shared/src", "app/src", "generator", "fixtures", "e2e"];
+const ROOTS = [
+  "server/src",
+  "server/test",
+  "shared/src",
+  "shared/test",
+  "app/src",
+  "generator",
+  "fixtures",
+  "e2e",
+];
 
 /** Directories never entered, wherever they appear. */
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", "coverage", ".git", "playwright-report"]);
@@ -140,6 +151,21 @@ const EXCEPTIONS: readonly Exception[] = [
     phrase: "static-files",
     rule: "file-word-for-an-entry",
     reason: "the module that serves the built app's assets — real files over HTTP",
+  },
+  {
+    phrase: "schema file",
+    rule: "file-word-for-an-entry",
+    reason: "`shared/schema/*.json`, the JSON schemas the consistency test reads from disk",
+  },
+  {
+    path: "server/test/typography.test.ts",
+    rule: "file-word-for-an-entry",
+    reason: "it walks the prompt and fixture files on disk and reports the offenders by path",
+  },
+  {
+    path: "server/test/static-files.test.ts",
+    rule: "file-word-for-an-entry",
+    reason: "it builds a dist directory of real assets and asks the server to serve them",
   },
 ];
 

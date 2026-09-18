@@ -1,6 +1,6 @@
 // The one consistency test over the schema files in ../schema.
 //
-// The schemas are plain files, so nothing stops one of them from slowly
+// The schemas are plain JSON on disk, so nothing stops one of them from slowly
 // disagreeing with the code that reads the same data. This test is what
 // stops it. It never writes a schema and never builds one — it ASSERTS,
 // schema by schema, against the definitions the rest of the app already uses:
@@ -17,8 +17,8 @@
 //      on EVERY call and therefore a permanent, silent downgrade for the
 //      whole process (server/src/llm-provider.ts).
 //   4. a NEW scene can only be a draft; an existing one keeps the status the
-//      DM gave it — the whole difference between the create files and the
-//      augment files.
+//      DM gave it — the whole difference between the create schemas and the
+//      augment schemas.
 //   5. the outline names the same scene types, ids and bounds the server's
 //      semantic validation reads, and is strict-mode shaped too.
 //   6. a copy per call, because both transports serialize it into a body.

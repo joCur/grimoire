@@ -16,7 +16,7 @@
 // It runs unchanged under `bun test` and under `node --test` — the CI job
 // `db-smoke-node` in .github/workflows/ci.yml is the node half.
 // That is why it imports from "node:test"/"node:assert" instead of
-// "bun:test": bun's test runner understands node:test files, the reverse is
+// "bun:test": bun's test runner understands node:test modules, the reverse is
 // not true.
 
 import { test } from "node:test";
@@ -258,16 +258,16 @@ test("an on-disk database gets WAL and survives a reopen", async () => {
   const { tmpdir } = await import("node:os");
   const nodePath = await import("node:path");
   const dir = await mkdtemp(nodePath.join(tmpdir(), "grimoire-db-smoke-"));
-  const file = nodePath.join(dir, "nested", "grimoire.db");
+  const dbPath = nodePath.join(dir, "nested", "grimoire.db");
   try {
-    const first = await openDb(file);
+    const first = await openDb(dbPath);
     const journal = first.db.all<{ journal_mode: string }>(sql`PRAGMA journal_mode`);
     assert.equal(String(journal[0]?.journal_mode).toLowerCase(), "wal");
     first.db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
     first.close();
 
     // Reopening runs the migrator again — it must be a no-op, not a failure.
-    const second = await openDb(file);
+    const second = await openDb(dbPath);
     try {
       assert.equal(second.db.select().from(campaigns).all().length, 1);
     } finally {

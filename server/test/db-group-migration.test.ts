@@ -167,7 +167,7 @@ describe("group_slug -> location", () => {
     const client = await openSqlite(":memory:");
     client.exec("create table scenes (campaign_id text, id text, location text)");
     expect(migrateGroupsToLocations(client)).toEqual(NO_GROUP_MIGRATION);
-    // …and so is a database that has no scenes table at all (a fresh file).
+    // …and so is a database that has no scenes table at all (a fresh database file).
     const fresh = await openSqlite(":memory:");
     expect(migrateGroupsToLocations(fresh)).toEqual(NO_GROUP_MIGRATION);
     client.close();

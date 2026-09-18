@@ -1,6 +1,6 @@
 // NPC generator tests. Same harness as the scene pipeline tests
 // (generator.test.ts): a database seeded from the example campaign — once for
-// the whole file, because cases build on what an earlier one applied — and a
+// this file, because cases build on what an earlier one applied — and a
 // FakeProvider with scripted raw replies instead of a real LLM. Since the
 // database cutover an applied draft is a ROW, so "was it written?" is asked
 // through the API.
@@ -119,7 +119,7 @@ const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
 
 // --- fixtures -------------------------------------------------------------------
 
-/** A prompt-conform NPC file for an npc the example campaign does NOT have. */
+/** A prompt-conform NPC entry for an npc the example campaign does NOT have. */
 function npcDraft(
   over: {
     id?: string;
@@ -303,7 +303,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(await exists("npcs/grella")).toBe(false);
   });
 
-  test("a pinned id travels in the context and decides the file name", async () => {
+  test("a pinned id travels in the context and decides the address", async () => {
     const fake = useFake([replyFor("die-krähe")]);
     // an id with an umlaut is not kebab-safe -> 400 before the provider runs
     expect((await generateNpc({ ...npcBody, id: "die-krähe" })).status).toBe(400);
@@ -485,7 +485,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     // its name and nobody was asked. The reply schema requires the field
     // (it is the one the properties dialog requires too), so the model is
     // told instead of the server inventing — the degrade rule stays where it
-    // belongs, on the READ path for files a DM hand-wrote.
+    // belongs, on the READ path for entries a DM hand-wrote.
     expect(
       await firstValidationError([
         npcReply({ content: npcDraft({ id: "namenlos", name: null }) }),
@@ -548,7 +548,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   // --- id collisions -------------------------------------------------------------
 
-  test("a pinned id whose file exists answers 409 — the provider is never called", async () => {
+  test("a pinned id whose entry exists answers 409 — the provider is never called", async () => {
     const fake = useFake([npcReply()]);
     const res = await generateNpc({ ...npcBody, id: "fenn" });
     expect(res.status).toBe(409);
@@ -831,7 +831,7 @@ describe("apply an npc draft", () => {
     expect((await fetchJob())!.kind).toBe("npc");
   });
 
-  test("409 when the file exists — nothing overwritten, the job stays", async () => {
+  test("409 when the entry exists — nothing overwritten, the job stays", async () => {
     // apply-happy.md was written by the test above
     useFake([replyFor("apply-happy")]);
     // the reply's id collides with an existing npc, so the RUN already fails
@@ -907,7 +907,7 @@ describe("campaign knowledge", () => {
     expect(res.status).toBe(200);
   }
 
-  // The database is shared by the whole file — nothing may leak upwards.
+  // The database is shared by this file — nothing may leak upwards.
   afterEach(async () => {
     await setKnowledge([]);
   });

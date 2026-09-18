@@ -41,7 +41,7 @@ describe("GET /api/campaigns", () => {
         name: "Der Leuchtturm von Salzhafen",
         description: expect.any(String),
       });
-      // Only campaign rows, never a file name that happened to sit in the
+      // Only campaign rows, never a stray name that happened to sit in the
       // root of the tree the migration read.
       for (const c of body) {
         expect(c.id.startsWith(".")).toBe(false);
@@ -155,7 +155,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     const leuchtturm = chapter.groups.find((g) => g.slug === "leuchtturm")!;
     expect(leuchtturm.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
     expect(leuchtturm.scenes[0]!.status).toBe("ready");
-    // The path segment is the scene ID now (store/paths.ts) — the file stem
+    // The path segment is the scene ID now (store/paths.ts) — the old stem
     // ("ankunft-leuchtturm") does not exist anywhere any more.
     expect(leuchtturm.scenes[0]!.path).toBe("01-salzhafen/leuchtturm/lighthouse-arrival");
     const bucht = chapter.groups.find((g) => g.slug === "bucht")!;
@@ -176,7 +176,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(ids).toEqual([...ids].sort().reverse());
   });
 
-  test("root-level files (incl. campaign) never appear in the tree", async () => {
+  test("root-level entries (incl. campaign) never appear in the tree", async () => {
     const t = await tree();
     // The tree has no slot for campaign metadata;
     // the campaign row is addressed by campaign and by nothing in here.
@@ -240,7 +240,7 @@ describe("GET /api/campaigns/:campaign/entries", () => {
     expect(body.properties.name).toBe("Der Leuchtturm von Salzhafen");
   });
 
-  test("serves the two list files from their rows: inbox and glossary", async () => {
+  test("serves the two list entries from their rows: inbox and glossary", async () => {
     // They have no entity row of their own; the campaign's version counter is
     // their guard token (store/read.ts readByLocator).
     const inbox = await app.request(entriesUrl("beispiel", "inbox"));
@@ -254,7 +254,7 @@ describe("GET /api/campaigns/:campaign/entries", () => {
     expect(((await glossary.json()) as EntryResponse).kind).toBe("glossary");
   });
 
-  test("404 for unknown file and unknown campaign", async () => {
+  test("404 for unknown entry and unknown campaign", async () => {
     expect((await app.request(entriesUrl("beispiel", "01-salzhafen/nope"))).status).toBe(404);
     expect((await app.request(entriesUrl("nope", "inbox"))).status).toBe(404);
   });

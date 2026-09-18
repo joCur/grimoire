@@ -61,7 +61,7 @@ describe("POST /api/campaigns — the cold start", () => {
     expect(summary.description).toBe("Ein Küstenabenteuer");
 
     // It is a campaign like any other from here on: it appears in the list and
-    // its document is readable with a guard token.
+    // its campaign entry is readable with a guard token.
     const list = (await (await app.request("/api/campaigns")).json()) as CampaignSummary[];
     expect(list.map((c) => c.id)).toEqual(["die-kueste-von-salzhafen"]);
     const doc = (await (
@@ -188,7 +188,7 @@ describe("the per-campaign creates", () => {
   test("the campaign 409 points at an address, not at a bare id", async () => {
     const res = await post("/campaigns", { name: "Nordwind" });
     expect(res.status).toBe(409);
-    // `campaign` is the one document an otherwise empty campaign always has.
+    // `campaign` is the one entry an otherwise empty campaign always has.
     expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 

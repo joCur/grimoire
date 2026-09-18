@@ -31,13 +31,13 @@ import { seedCampaign } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
+async function getEntry(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(entriesUrl(campaign, rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
-async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
+async function entryStatus(rel: string, campaign = "beispiel"): Promise<number> {
   return (await app.request(entriesUrl(campaign, rel))).status;
 }
 
@@ -102,7 +102,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   test("happy path: only named keys change, key order stable, body untouched", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
 
     const after = await patchOk(SCENE, { rev: before.rev, properties: { status: "played" } });
     expect(after.properties.status).toBe("played");
@@ -128,32 +128,32 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
     expect(after.properties).toEqual({ ...before.properties, status: "played" });
     // Fresh guard token (exactly one write) and a subsequent GET sees both.
     expect(after.rev).toBe(before.rev + 1);
-    const again = await getFile(SCENE);
+    const again = await getEntry(SCENE);
     expect(again.properties.status).toBe("played");
     expect(again.rev).toBe(after.rev);
   });
 
   test("400 for a key the entry has no field for — nothing is written", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchEntry(SCENE, {
       rev: before.rev,
       properties: { review_note: "x" },
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("review_note");
-    expect((await getFile(SCENE)).rev).toBe(before.rev);
+    expect((await getEntry(SCENE)).rev).toBe(before.rev);
   });
 
   test("400 when the patch carries `id` — an id never changes", async () => {
     // The id IS the primary key: always present and never patchable. What
     // CAN happen is a form sending the whole properties back, `id` included
     // — and that must not orphan every reference to the entity.
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchEntry(SCENE, { rev: before.rev, properties: { id: "neu" } });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("id is the primary key");
     // Refused means refused: the row did not move.
-    expect((await getFile(SCENE)).rev).toBe(before.rev);
+    expect((await getEntry(SCENE)).rev).toBe(before.rev);
     // An id patch that changes NOTHING is a no-op, not an error — that is what
     // "send the form back unchanged" looks like.
     const same = await patchOk(SCENE, {
@@ -168,17 +168,17 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
   // two properties-less kinds below is what guards this corner.
   test("400 for inbox and glossary — lists of rows, not entities", async () => {
     for (const rel of ["inbox", "glossary"]) {
-      const before = await getFile(rel);
+      const before = await getEntry(rel);
       const res = await patchEntry(rel, { rev: before.rev, properties: { status: "x" } });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain("no properties");
-      expect(await getFile(rel)).toEqual(before);
+      expect(await getEntry(rel)).toEqual(before);
     }
   });
 
   test("the campaign entry is patchable through the same endpoint", async () => {
     const rel = "campaign";
-    const before = await getFile(rel);
+    const before = await getEntry(rel);
     expect(before.kind).toBe("campaign");
     const after = await patchOk(rel, {
       rev: before.rev,
@@ -197,7 +197,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
   });
 
   test("409 on a stale token carries the current one and writes nothing", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchEntry(SCENE, {
       rev: before.rev - 1,
       properties: { status: "ready" },
@@ -215,11 +215,11 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
     // The conflict hands the app the entry it collided with.
     expect(body.entry).toEqual(before);
     // and nothing was written — same row, same token
-    expect(await getFile(SCENE)).toEqual(before);
+    expect(await getEntry(SCENE)).toEqual(before);
   });
 
   test("400 on malformed bodies", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const bad = [
       {}, // missing everything
       { rev: before.rev }, // neither properties nor body
@@ -241,7 +241,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
     });
     expect(res.status).toBe(400);
     // none of the rejected requests touched the row
-    expect(await getFile(SCENE)).toEqual(before);
+    expect(await getEntry(SCENE)).toEqual(before);
   });
 
   test("address safety and missing rows behave like the read API", async () => {
@@ -263,23 +263,23 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
 
 describe("POST /api/campaigns/:campaign/session/start", () => {
   test("creates today's session with the documented shape", async () => {
-    const file = await postOk("/api/campaigns/beispiel/session/start");
-    expect(file.kind).toBe("session");
+    const entry = await postOk("/api/campaigns/beispiel/session/start");
+    expect(entry.kind).toBe("session");
     // The id is an OPAQUE random string (a UUID): the entry's address and
     // nothing else. What is asserted about it is that it IS the address and
     // that it carries no calendar date.
-    const id = String(file.properties.id);
+    const id = String(entry.properties.id);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(file.path).toBe(`sessions/${id}`);
-    expect(file.properties.started).toBe("2026-08-19T21:05:00");
-    expect(file.properties.scenes_played).toEqual([]);
+    expect(entry.path).toBe(`sessions/${id}`);
+    expect(entry.properties.started).toBe("2026-08-19T21:05:00");
+    expect(entry.properties.scenes_played).toEqual([]);
     // The skeleton is the one the format prescribes — the `## Log` section is
     // rendered from (still zero) log rows.
-    expect(file.properties).toEqual({ id, started: "2026-08-19T21:05:00", scenes_played: [] });
-    expect(file.body).toBe("\n## Log\n");
+    expect(entry.properties).toEqual({ id, started: "2026-08-19T21:05:00", scenes_played: [] });
+    expect(entry.body).toBe("\n## Log\n");
     // A fresh row starts at rev 1, and the GET agrees.
-    expect(file.rev).toBe(1);
-    expect((await getFile(file.path)).rev).toBe(1);
+    expect(entry.rev).toBe(1);
+    expect((await getEntry(entry.path)).rev).toBe(1);
   });
 
   test("two starts hand out two DIFFERENT ids", async () => {
@@ -294,20 +294,20 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
   // end→start that reads like the old session kept counting.
   test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
     setSystemTime(new Date(2026, 7, 19, 21, 5, 50));
-    const file = await postOk("/api/campaigns/beispiel/session/start");
-    expect(file.properties.started).toBe("2026-08-19T21:05:50");
+    const entry = await postOk("/api/campaigns/beispiel/session/start");
+    expect(entry.properties.started).toBe("2026-08-19T21:05:50");
     // …and what the app actually clocks — startedMs vs. the same instant — is
     // zero, not 50 seconds.
-    expect(file.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
+    expect(entry.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
   });
 
   test("a session started on the REAL system clock has an elapsed under 2s", async () => {
     setSystemTime(); // the real clock, the surface this matters on
     const before = Date.now();
-    const file = await postOk("/api/campaigns/beispiel/session/start");
-    expect(file.startedMs).toBeDefined();
-    expect(file.startedMs as number).toBeGreaterThanOrEqual(before - 1000);
-    expect(Date.now() - (file.startedMs as number)).toBeLessThan(2000);
+    const entry = await postOk("/api/campaigns/beispiel/session/start");
+    expect(entry.startedMs).toBeDefined();
+    expect(entry.startedMs as number).toBeGreaterThanOrEqual(before - 1000);
+    expect(Date.now() - (entry.startedMs as number)).toBeLessThan(2000);
   });
 
   test("second start on the same day is idempotent (nothing reset)", async () => {
@@ -368,11 +368,11 @@ describe("POST /api/campaigns/:campaign/log", () => {
   test("appends `- HH:MM (sceneId) text` under ## Log", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 12));
-    const file = await postOk("/api/campaigns/beispiel/log", {
+    const entry = await postOk("/api/campaigns/beispiel/log", {
       text: "Spuren am Strand #thread",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.body).toBe("\n## Log\n\n- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n");
+    expect(entry.body).toBe("\n## Log\n\n- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n");
   });
 
   test("omits the parens without sceneId and appends after existing entries", async () => {
@@ -383,18 +383,18 @@ describe("POST /api/campaigns/:campaign/log", () => {
       sceneId: "lighthouse-arrival",
     });
     setSystemTime(new Date(2026, 7, 19, 21, 20));
-    const file = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
+    const entry = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
     // Append order is the rows' `pos` order — a log line is never rewritten.
     expect(
-      file.body.endsWith("- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n- 21:20 Pause\n"),
+      entry.body.endsWith("- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n- 21:20 Pause\n"),
     ).toBe(true);
   });
 
   test("multi-line text collapses to a single log line", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 25));
-    const file = await postOk("/api/campaigns/beispiel/log", { text: "  Zeile eins\n   Zeile zwei  " });
-    expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
+    const entry = await postOk("/api/campaigns/beispiel/log", { text: "  Zeile eins\n   Zeile zwei  " });
+    expect(entry.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
 
   test("the line goes into ## Log, above the session's other sections", async () => {
@@ -410,13 +410,13 @@ describe("POST /api/campaigns/:campaign/log", () => {
       .where(eq(sessionsTable.id, "2026-01-15"))
       .run();
     setSystemTime(new Date(2026, 0, 15, 23, 0));
-    const file = await postOk("/api/campaigns/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
-    expect(file.path).toBe("sessions/2026-01-15");
-    expect(file.body).toContain(
+    const entry = await postOk("/api/campaigns/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
+    expect(entry.path).toBe("sessions/2026-01-15");
+    expect(entry.body).toContain(
       "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
     );
     // Threads content untouched
-    expect(file.body).toContain("- [ ] Wer bezahlt die Schmuggler?");
+    expect(entry.body).toContain("- [ ] Wer bezahlt die Schmuggler?");
   });
 
   test("400 on empty or missing text", async () => {
@@ -431,26 +431,26 @@ describe("POST /api/campaigns/:campaign/log", () => {
 describe("scenes_played maintenance (POST log with sceneId)", () => {
   test("first log with a sceneId adds it to scenes_played", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
-    const file = await postOk("/api/campaigns/beispiel/log", {
+    const entry = await postOk("/api/campaigns/beispiel/log", {
       text: "Ankunft",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     // The played scene is a row, and rendering it back did not disturb the log
-    expect(file.body).toBe("\n## Log\n\n- 21:05 (lighthouse-arrival) Ankunft\n");
+    expect(entry.body).toBe("\n## Log\n\n- 21:05 (lighthouse-arrival) Ankunft\n");
   });
 
   test("second log with the same sceneId does not duplicate", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
     setSystemTime(new Date(2026, 7, 19, 21, 10));
-    const file = await postOk("/api/campaigns/beispiel/log", {
+    const entry = await postOk("/api/campaigns/beispiel/log", {
       text: "Immer noch da",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     // The log, however, grows — both lines are there, in order.
-    expect(file.body.endsWith("- 21:05 (lighthouse-arrival) Ankunft\n- 21:10 (lighthouse-arrival) Immer noch da\n")).toBe(
+    expect(entry.body.endsWith("- 21:05 (lighthouse-arrival) Ankunft\n- 21:10 (lighthouse-arrival) Immer noch da\n")).toBe(
       true,
     );
   });
@@ -463,20 +463,20 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
     setSystemTime(new Date(2026, 7, 19, 21, 15));
     // Playing the FIRST scene again must not reorder the list — the order is
     // "first played", not "last played" (it is the review's reading order).
-    const file = await postOk("/api/campaigns/beispiel/log", {
+    const entry = await postOk("/api/campaigns/beispiel/log", {
       text: "Zurück am Turm",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
+    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
   });
 
   test("log without sceneId leaves scenes_played untouched", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
     setSystemTime(new Date(2026, 7, 19, 21, 15));
-    const file = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
-    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
-    expect(file.body.endsWith("- 21:15 Pause\n")).toBe(true);
+    const entry = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
+    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(entry.body.endsWith("- 21:15 Pause\n")).toBe(true);
   });
 
   // `scenes_played` is rendered from `session_scenes_played` and therefore
@@ -490,12 +490,12 @@ describe("POST /api/campaigns/:campaign/session/end", () => {
     setSystemTime(new Date(2026, 7, 19, 21, 25));
     await postOk("/api/campaigns/beispiel/log", { text: "Zeile eins Zeile zwei" });
     setSystemTime(new Date(2026, 7, 19, 23, 45));
-    const file = await postOk("/api/campaigns/beispiel/session/end");
-    expect(file.properties.ended).toBe("2026-08-19T23:45:00");
-    expect(Object.keys(file.properties)).toEqual(["id", "started", "ended", "scenes_played"]);
-    expect(file.properties.started).toBe("2026-08-19T21:05:00");
+    const entry = await postOk("/api/campaigns/beispiel/session/end");
+    expect(entry.properties.ended).toBe("2026-08-19T23:45:00");
+    expect(Object.keys(entry.properties)).toEqual(["id", "started", "ended", "scenes_played"]);
+    expect(entry.properties.started).toBe("2026-08-19T21:05:00");
     // the log line appended earlier survives verbatim
-    expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
+    expect(entry.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
 
   test("second end keeps the first ended (idempotent)", async () => {
@@ -517,9 +517,9 @@ describe("POST /api/campaigns/:campaign/session/end", () => {
     // ended or not — and keeps its `ended`. That is what makes "Session
     // beenden" safe to press twice, also after midnight.
     setSystemTime(new Date(2026, 7, 22, 22, 0));
-    const file = await postOk("/api/campaigns/beispiel/session/end");
-    expect(file.path).toBe(started.path);
-    expect(file.properties.ended).toBe("2026-08-19T23:45:00");
+    const entry = await postOk("/api/campaigns/beispiel/session/end");
+    expect(entry.path).toBe(started.path);
+    expect(entry.properties.ended).toBe("2026-08-19T23:45:00");
     // A log line, however, is STRICTLY the running session's business: a note
     // typed after the end is refused, not appended to the closed log.
     const log = await postJson("/api/campaigns/beispiel/log", { text: "verloren" });
@@ -537,15 +537,15 @@ describe("POST /api/campaigns/:campaign/session/end", () => {
 
 describe("POST /api/campaigns/:campaign/inbox", () => {
   test("appends `- text` to the existing inbox", async () => {
-    const before = await getFile("inbox");
+    const before = await getEntry("inbox");
     const after = await postOk("/api/campaigns/beispiel/inbox", { text: "Schmied beobachten #thread" });
     // Append-only: the existing rendering is a PREFIX of the new one.
     expect(after.body.startsWith(before.body.replace(/\n$/, ""))).toBe(true);
     expect(after.body.endsWith("- Schmied beobachten #thread\n")).toBe(true);
     // visible in a subsequent GET with the fresh token
-    const file = await getFile("inbox");
-    expect(file.body).toBe(after.body);
-    expect(file.rev).toBe(after.rev);
+    const entry = await getEntry("inbox");
+    expect(entry.body).toBe(after.body);
+    expect(entry.rev).toBe(after.rev);
   });
 
   test("creates the inbox with a # Inbox heading when there is none", async () => {
@@ -553,12 +553,12 @@ describe("POST /api/campaigns/:campaign/inbox", () => {
     // a missing one — GET answers 200 — and the first entry brings the
     // heading the format opens the inbox with.
     await withFreshCampaign(async () => {
-      expect(await fileStatus("inbox", FRESH)).toBe(200);
+      expect(await entryStatus("inbox", FRESH)).toBe(200);
       const res = await postJson(`/api/campaigns/${FRESH}/inbox`, { text: "Erste Idee" });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as EntryResponse;
-      expect(file.body).toBe("\n# Inbox\n\n- Erste Idee\n");
-      expect(file.properties).toEqual({ id: "inbox" });
+      const entry = (await res.json()) as EntryResponse;
+      expect(entry.body).toBe("\n# Inbox\n\n- Erste Idee\n");
+      expect(entry.properties).toEqual({ id: "inbox" });
     });
   });
 
@@ -582,7 +582,7 @@ describe("naming a campaign that has none", () => {
     await withFreshCampaign(async () => {
       // Unnamed: the entry exists and shows the ID as its display name,
       // which is exactly what GET /campaigns says too (both synthesize).
-      const before = await getFile("campaign", FRESH);
+      const before = await getEntry("campaign", FRESH);
       expect(before.properties).toEqual({ id: FRESH, name: FRESH });
 
       const res = await patchEntry(
@@ -597,17 +597,17 @@ describe("naming a campaign that has none", () => {
         FRESH,
       );
       expect(res.status).toBe(200);
-      const file = (await res.json()) as EntryResponse;
-      expect(file.path).toBe("campaign");
-      expect(file.kind).toBe("campaign");
-      expect(file.properties.name).toBe("Die Aschekönige");
+      const entry = (await res.json()) as EntryResponse;
+      expect(entry.path).toBe("campaign");
+      expect(entry.kind).toBe("campaign");
+      expect(entry.properties.name).toBe("Die Aschekönige");
       // The id is the CAMPAIGN key — never client input.
-      expect(file.properties).toEqual({
+      expect(entry.properties).toEqual({
         id: "frischling",
         name: "Die Aschekönige",
         description: "Eine Wüstenkampagne um verschüttete Städte.",
       });
-      expect(file.body).toBe("");
+      expect(entry.body).toBe("");
 
       // The campaign list serves the new metadata right away.
       const list = (await (await app.request("/api/campaigns")).json()) as Array<
@@ -622,28 +622,28 @@ describe("naming a campaign that has none", () => {
 
   test("a blank description is DELETED with null, not written as an empty key", async () => {
     await withFreshCampaign(async () => {
-      const before = await getFile("campaign", FRESH);
+      const before = await getEntry("campaign", FRESH);
       const res = await patchEntry(
         "campaign",
         { rev: before.rev, properties: { name: "Nur ein Name", description: null } },
         FRESH,
       );
       expect(res.status).toBe(200);
-      const file = (await res.json()) as EntryResponse;
-      expect(Object.keys(file.properties)).toEqual(["id", "name"]);
-      expect(file.properties).toEqual({ id: "frischling", name: "Nur ein Name" });
-      expect(file.body).toBe("");
+      const entry = (await res.json()) as EntryResponse;
+      expect(Object.keys(entry.properties)).toEqual(["id", "name"]);
+      expect(entry.properties).toEqual({ id: "frischling", name: "Nur ein Name" });
+      expect(entry.body).toBe("");
     });
   });
 
   test("a stale token is a 409 — the existing name is never touched", async () => {
-    const before = await getFile("campaign");
+    const before = await getEntry("campaign");
     const res = await patchEntry("campaign", {
       rev: before.rev - 1,
       properties: { name: "Überschrieben" },
     });
     expect(res.status).toBe(409);
-    expect(await getFile("campaign")).toEqual(before);
+    expect(await getEntry("campaign")).toEqual(before);
   });
 
   test("the create endpoint is gone — 404, no route", async () => {
@@ -660,7 +660,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   test("roundtrip: writing the read body back changes nothing but the token", async () => {
-    const before = await getFile(REFERENCE);
+    const before = await getEntry(REFERENCE);
     // the reference scene carries callouts and `## If:` sections
     expect(before.body).toContain("> [!check] Charisma (Deception)");
     expect(before.body).toContain("## If: sie lügen");
@@ -671,11 +671,11 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
     // A write is a write, so the rev moves — the token is opaque and
     // monotonic, never a content hash.
     expect(after.rev).toBe(before.rev + 1);
-    expect((await getFile(REFERENCE)).rev).toBe(after.rev);
+    expect((await getEntry(REFERENCE)).rev).toBe(after.rev);
   });
 
   test("unknown callouts and headings survive a write verbatim", async () => {
-    const before = await getFile(REFERENCE);
+    const before = await getEntry(REFERENCE);
     const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
     const after = await patchOk(REFERENCE, { rev: before.rev, body });
     expect(after.body).toBe(body);
@@ -686,7 +686,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
   });
 
   test("happy path: new body, properties untouched", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const body = "\n## Flow\n\nKomplett neu geschrieben.\n";
 
     const after = await patchOk(SCENE, { rev: before.rev, body });
@@ -698,17 +698,17 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
     expect(Object.keys(after.properties)).toEqual(Object.keys(before.properties));
     // fresh token, and a GET sees the write
     expect(after.rev).toBe(before.rev + 1);
-    expect((await getFile(SCENE)).body).toBe(body);
+    expect((await getEntry(SCENE)).body).toBe(body);
   });
 
   test("a body without a trailing newline gets exactly one", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const after = await patchOk(SCENE, { rev: before.rev, body: "\nOhne Newline" });
     expect(after.body).toBe("\nOhne Newline\n");
   });
 
   test("an empty body leaves the properties alone", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const after = await patchOk(SCENE, { rev: before.rev, body: "" });
     expect(after.body).toBe("");
     expect(after.properties).toEqual(before.properties);
@@ -720,28 +720,28 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
     // could only be a misunderstanding, and silently ignoring it would look
     // like a save (DECISIONS #4, ADR #23).
     for (const rel of ["glossary", "inbox", "sessions/2026-01-15"]) {
-      const before = await getFile(rel);
+      const before = await getEntry(rel);
       const res = await patchEntry(rel, { rev: before.rev, body: "\n- alles neu\n" });
       expect(res.status).toBe(400);
       const error = (await res.json()) as { code: string; path: string };
       expect(error.code).toBe("body_not_editable");
       expect(error.path).toBe(rel);
-      expect(await getFile(rel)).toEqual(before);
+      expect(await getEntry(rel)).toEqual(before);
     }
   });
 
   test("409 on a stale token carries the current one and writes nothing", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchEntry(SCENE, { rev: before.rev - 1, body: "\nZu spät\n" });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; rev: number };
     expect(typeof body.error).toBe("string");
     expect(body.rev).toBe(before.rev);
-    expect(await getFile(SCENE)).toEqual(before);
+    expect(await getEntry(SCENE)).toEqual(before);
   });
 
   test("400 on malformed bodies", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const bad = [
       { rev: "später", body: "x" }, // rev not a number
       { rev: before.rev, body: ["x"] }, // body not a string
@@ -759,7 +759,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
     });
     expect(res.status).toBe(400);
     // none of the rejected requests touched the row
-    expect(await getFile(SCENE)).toEqual(before);
+    expect(await getEntry(SCENE)).toEqual(before);
   });
 
   test("address safety and missing rows behave like the read API", async () => {
@@ -801,7 +801,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
   }
 
   test("fields and text in one call", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const versionBefore = await campaignVersion();
     const after = await patchOk(SCENE, {
       rev: before.rev,
@@ -814,23 +814,23 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
     // ONE write: the rev steps exactly once, however much the request
     // carried. Two steps would leak the two statements this used to be.
     expect(after.rev).toBe(before.rev + 1);
-    expect(await getFile(SCENE)).toEqual(after);
+    expect(await getEntry(SCENE)).toEqual(after);
     // …and the campaign version counts one change too, not two.
     expect(await campaignVersion()).toBe(versionBefore + 1);
   });
 
   test("neither half is nothing_to_write, with the code", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     for (const body of [{ rev: before.rev }, { rev: before.rev, properties: {} }]) {
       const res = await patchEntry(SCENE, body);
       expect(res.status).toBe(400);
       expect(((await res.json()) as { code: string }).code).toBe("nothing_to_write");
     }
-    expect(await getFile(SCENE)).toEqual(before);
+    expect(await getEntry(SCENE)).toEqual(before);
   });
 
   test("force keeps a field somebody else changed while replacing the text", async () => {
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
     // The second tab changes a field; the first tab still holds `read.rev`.
     const other = await patchEntry(SCENE, {
       rev: read.rev,
@@ -846,6 +846,6 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
     expect(forced.body).toBe("\n## Flow\n\nTrotzdem gespeichert.\n");
     // Only what the request carried was written — the status survived.
     expect(forced.properties.status).toBe("played");
-    expect(await getFile(SCENE)).toEqual(forced);
+    expect(await getEntry(SCENE)).toEqual(forced);
   });
 });

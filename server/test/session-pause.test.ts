@@ -44,8 +44,8 @@ async function session(): Promise<EntryResponse> {
 }
 
 /** Log lines of the rendered session body, in order. */
-function logLines(file: EntryResponse): string[] {
-  return file.body
+function logLines(entry: EntryResponse): string[] {
+  return entry.body
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.startsWith("- "));
@@ -123,10 +123,10 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
     setSystemTime(new Date(2026, 7, 19, 22, 0, 0));
     await ok("/api/campaigns/beispiel/session/pause");
     setSystemTime(new Date(2026, 7, 19, 22, 5, 30));
-    const file = await ok("/api/campaigns/beispiel/session/continue");
-    expect(file.pausedMs).toBe((10 * 60 + 5 * 60 + 30) * 1000);
-    expect((file.properties.pauses as unknown[]).length).toBe(2);
-    expect(logLines(file)).toEqual([
+    const entry = await ok("/api/campaigns/beispiel/session/continue");
+    expect(entry.pausedMs).toBe((10 * 60 + 5 * 60 + 30) * 1000);
+    expect((entry.properties.pauses as unknown[]).length).toBe(2);
+    expect(logLines(entry)).toEqual([
       "- 21:10 — Pause",
       "- 21:20 — Weiter",
       "- 22:00 — Pause",
@@ -169,9 +169,9 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
 
   test("a session that already carries intervals counts them, and a pause APPENDS", async () => {
     await seedWithPauses([{ from: "2026-08-19T21:30", to: "2026-08-19T21:33" }]);
-    const file = await session();
-    expect(file.pausedMs).toBe(3 * 60 * 1000);
-    expect(file.pausedSinceMs).toBeUndefined();
+    const entry = await session();
+    expect(entry.pausedMs).toBe(3 * 60 * 1000);
+    expect(entry.pausedSinceMs).toBeUndefined();
 
     // A pause on top keeps the stored interval verbatim and adds an open one.
     setSystemTime(new Date(2026, 7, 19, 21, 40, 0));

@@ -36,7 +36,7 @@ async function search(q: string): Promise<SearchResult[]> {
 }
 
 /** GET /entry, for the write cases below (they need the guard token). */
-async function readFile(rel: string): Promise<{ rev: number; body: string }> {
+async function readEntry(rel: string): Promise<{ rev: number; body: string }> {
   const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
@@ -125,7 +125,7 @@ describe("GET /api/campaigns/:campaign/search", () => {
 
 // --- the reference queries -------------------------------------------------
 
-describe("reference queries (issue #57 AK5)", () => {
+describe("reference queries", () => {
   test("'jorna' puts the NPC first — title/ref outweigh a body mention", async () => {
     const results = await search("jorna");
     expect(results[0]).toMatchObject({
@@ -187,7 +187,7 @@ describe("reference queries (issue #57 AK5)", () => {
 
   test("glossary terms are indexed too: 'lighthouse keeper'", async () => {
     // New with the cutover — the glossary is a TABLE now (planning F6), so it
-    // is a searchable kind instead of one opaque markdown file.
+    // is a searchable kind instead of one opaque markdown body.
     const results = await search("lighthouse keeper");
     const entry = results.find((r) => r.kind === "glossary");
     expect(entry).toMatchObject({
@@ -212,13 +212,13 @@ describe("the index follows every write", () => {
     const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     expect(await search("nachtwache")).toEqual([]);
 
-    const file = await readFile(rel);
+    const entry = await readEntry(rel);
     const res = await app.request(entriesUrl("beispiel", rel), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        rev: file.rev,
-        body: `${file.body}\n## Nachtwache\n\nJemand hält Wache am Turm.\n`,
+        rev: entry.rev,
+        body: `${entry.body}\n## Nachtwache\n\nJemand hält Wache am Turm.\n`,
       }),
     });
     expect(res.status).toBe(200);
@@ -231,11 +231,11 @@ describe("the index follows every write", () => {
     const rel = "npcs/fenn";
     expect(await search("bucht-kapitaen")).toEqual([]);
 
-    const file = await readFile(rel);
+    const entry = await readEntry(rel);
     const res = await app.request(entriesUrl("beispiel", rel), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: file.rev, properties: { name: "Bucht-Kapitaen Fenn" } }),
+      body: JSON.stringify({ rev: entry.rev, properties: { name: "Bucht-Kapitaen Fenn" } }),
     });
     expect(res.status).toBe(200);
 
@@ -247,11 +247,11 @@ describe("the index follows every write", () => {
     // ONE rule for the indexed text of an npc: the whole entry. A status
     // change must not drop `## Beziehungen` out of the index.
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
-    const file = await readFile("npcs/fenn");
+    const entry = await readEntry("npcs/fenn");
     const res = await app.request(entriesUrl("beispiel", "npcs/fenn"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: file.rev, properties: { status: "dead" } }),
+      body: JSON.stringify({ rev: entry.rev, properties: { status: "dead" } }),
     });
     expect(res.status).toBe(200);
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
@@ -268,9 +268,9 @@ describe("GET /api/campaigns/:campaign/version", () => {
   }
 
   test("polling alone never bumps; a write does (in the same transaction)", async () => {
-    // The counter replaced the chokidar watcher (DECISIONS #9): with the
+    // The counter replaced the watcher DECISIONS #9 describes: with the
     // database as the only truth there is no external editor left to watch,
-    // so the version is bumped BY the write instead of by a file event.
+    // so the version is bumped BY the write instead of by a watch event.
     const before = await version();
     expect(await version()).toBe(before);
 

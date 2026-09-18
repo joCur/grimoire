@@ -28,13 +28,13 @@ const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_B = "01-salzhafen/bucht/smuggler-captured";
 const NPC = "npcs/fenn";
 
-async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
+async function getEntry(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(entriesUrl(campaign, rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
-async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
+async function entryStatus(rel: string, campaign = "beispiel"): Promise<number> {
   return (await app.request(entriesUrl(campaign, rel))).status;
 }
 
@@ -47,7 +47,7 @@ async function patchFm(rel: string, patch: Record<string, unknown>): Promise<Ent
 
 /** The raw answer of a properties patch — for the cases that are refused. */
 async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Response> {
-  const before = await getFile(rel);
+  const before = await getEntry(rel);
   return app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -56,7 +56,7 @@ async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Re
 }
 
 async function patchBody(rel: string, body: string): Promise<EntryResponse> {
-  const before = await getFile(rel);
+  const before = await getEntry(rel);
   const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -78,7 +78,7 @@ async function post(rel: string, body: unknown): Promise<Response> {
 async function createEmptyNpc(id: string): Promise<void> {
   const res = await post("/npcs", { name: id });
   expect(res.status).toBe(201);
-  expect((await getFile(`npcs/${id}`)).properties.name).toBe(id);
+  expect((await getEntry(`npcs/${id}`)).properties.name).toBe(id);
 }
 
 async function tree(): Promise<CampaignTree> {
@@ -97,13 +97,13 @@ afterEach(() => {
 
 describe("a reference that names nothing is refused", () => {
   test("a scene's npcs list: 400 npc_unknown, and no entry appears", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchRes(SCENE, { npcs: ["jorna", "holm"] });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "npc_unknown", value: "holm" });
     // Nothing was written — not the list, not an entry for the id.
-    expect((await getFile(SCENE)).properties.npcs).toEqual(before.properties.npcs);
-    expect(await fileStatus("npcs/holm")).toBe(404);
+    expect((await getEntry(SCENE)).properties.npcs).toEqual(before.properties.npcs);
+    expect(await entryStatus("npcs/holm")).toBe(404);
     expect((await tree()).npcs.some((n) => n.id === "holm")).toBe(false);
   });
 
@@ -116,16 +116,16 @@ describe("a reference that names nothing is refused", () => {
   });
 
   test("a scene's location: 400 location_unknown, and no entry appears", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchRes(SCENE, { location: "alte-mole" });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "location_unknown", value: "alte-mole" });
-    expect((await getFile(SCENE)).properties.location).toBe(before.properties.location);
-    expect(await fileStatus("locations/alte-mole")).toBe(404);
+    expect((await getEntry(SCENE)).properties.location).toBe(before.properties.location);
+    expect(await entryStatus("locations/alte-mole")).toBe(404);
   });
 
   test("free text in location stays the 400 that names the id to use", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     const res = await patchRes(SCENE, { location: "Der alte Hafen" });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -133,20 +133,20 @@ describe("a reference that names nothing is refused", () => {
       value: "Der alte Hafen",
       suggestion: "der-alte-hafen",
     });
-    expect((await getFile(SCENE)).properties.location).toBe(before.properties.location);
+    expect((await getEntry(SCENE)).properties.location).toBe(before.properties.location);
     expect((await tree()).locations.some((l) => l.id === "der-alte-hafen")).toBe(false);
   });
 
   test("an unknown chapter: 400 chapter_unknown for a scene, an npc and an ort", async () => {
     for (const rel of [SCENE, NPC, "locations/leuchtturm"]) {
-      const before = await getFile(rel);
+      const before = await getEntry(rel);
       const res = await patchRes(rel, { chapter: "99-nirgendwo" });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         code: "chapter_unknown",
         value: "99-nirgendwo",
       });
-      expect((await getFile(rel)).properties.chapter).toBe(before.properties.chapter);
+      expect((await getEntry(rel)).properties.chapter).toBe(before.properties.chapter);
     }
     // An existing chapter is stored as before.
     expect((await patchFm(NPC, { chapter: "01-salzhafen" })).properties.chapter).toBe(
@@ -162,7 +162,7 @@ describe("a reference that names nothing is refused", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "chapter_required" });
     // …and the scene still hangs where it did.
-    expect((await getFile(SCENE)).properties.chapter).toBe("01-salzhafen");
+    expect((await getEntry(SCENE)).properties.chapter).toBe("01-salzhafen");
   });
 
   test("a quick note's scene: 400 log_scene_unknown, and the log stays empty", async () => {
@@ -176,7 +176,7 @@ describe("a reference that names nothing is refused", () => {
     const session = (await tree()).sessions[0];
     expect(session?.scenes_played).toEqual([]);
     // The note itself was not written either.
-    expect((await getFile(`sessions/${session!.id}`)).body).not.toContain("Etwas passiert");
+    expect((await getEntry(`sessions/${session!.id}`)).body).not.toContain("Etwas passiert");
   });
 
   test("parentheses in the NOTE are text, not a reference", async () => {
@@ -188,7 +188,7 @@ describe("a reference that names nothing is refused", () => {
     const res = await post("/log", { text: "(vermutlich) der Turmwärter lügt" });
     expect(res.status).toBe(200);
     const id = (await tree()).sessions[0]!.id;
-    const session = await getFile(`sessions/${id}`);
+    const session = await getEntry(`sessions/${id}`);
     expect(session.body).toContain("(vermutlich) der Turmwärter lügt");
     expect(session.properties.scenes_played).toEqual([]);
   });
@@ -204,7 +204,7 @@ describe("a reference that names nothing is refused", () => {
       value: "gibt-es-nicht",
     });
     // Not half of the list either — the transaction rolled back.
-    expect((await getFile(rel)).properties.scenes_played).toEqual([]);
+    expect((await getEntry(rel)).properties.scenes_played).toEqual([]);
   });
 });
 
@@ -217,13 +217,13 @@ describe("a reference that names an entry is stored", () => {
 
   test("changing location MOVES the scene — group and address", async () => {
     expect((await post("/locations", { name: "Alte Räucherkammer" })).status).toBe(201);
-    expect((await getFile(SCENE_B)).properties.location).toBe("bucht");
+    expect((await getEntry(SCENE_B)).properties.location).toBe("bucht");
 
     const moved = await patchFm(SCENE_B, { location: "alte-raeucherkammer" });
     expect(moved.path).toBe("01-salzhafen/alte-raeucherkammer/smuggler-captured");
     // The OLD address still names the scene and answers with the new one —
     // the app replaces the URL with it (ADR #17).
-    expect((await getFile(SCENE_B)).path).toBe(
+    expect((await getEntry(SCENE_B)).path).toBe(
       "01-salzhafen/alte-raeucherkammer/smuggler-captured",
     );
     const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
@@ -250,7 +250,7 @@ describe("a reference that names an entry is stored", () => {
 
 describe("a mention in text is not a reference", () => {
   test("a `## Beziehungen` line names an unknown npc: no entry, no error", async () => {
-    const npc = await getFile(NPC);
+    const npc = await getEntry(NPC);
     const seeded = "- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus";
     expect(npc.body).toContain(seeded);
     const written = await patchBody(
@@ -259,15 +259,15 @@ describe("a mention in text is not a reference", () => {
     );
     // The line is prose and comes back exactly as written.
     expect(written.body).toContain("- holm: schuldet ihm Geld");
-    expect((await getFile(NPC)).body).toContain("- holm: schuldet ihm Geld");
-    expect(await fileStatus("npcs/holm")).toBe(404);
+    expect((await getEntry(NPC)).body).toContain("- holm: schuldet ihm Geld");
+    expect(await entryStatus("npcs/holm")).toBe(404);
   });
 
   test("an unknown `[[slug]]` in prose stays visible text", async () => {
-    const scene = await getFile(SCENE);
+    const scene = await getEntry(SCENE);
     const written = await patchBody(SCENE, `${scene.body}\nWer ist [[niemand]]?\n`);
     expect(written.body).toContain("Wer ist [[niemand]]?");
-    expect(await fileStatus("npcs/niemand")).toBe(404);
+    expect(await entryStatus("npcs/niemand")).toBe(404);
     expect((await tree()).npcs.some((n) => n.id === "niemand")).toBe(false);
   });
 });
@@ -302,11 +302,11 @@ describe("the generator's apply step", () => {
         body: "\n## Beim ersten Betreten\n\nMorsch.\n",
       },
     ]);
-    const npc = await getFile("npcs/holm");
+    const npc = await getEntry("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
     expect(npc.properties.status).toBe("alive");
-    expect((await getFile("locations/alte-mole")).properties.name).toBe("Alte Mole");
-    const scene = await getFile("01-salzhafen/alte-mole/neue-szene");
+    expect((await getEntry("locations/alte-mole")).properties.name).toBe("Alte Mole");
+    const scene = await getEntry("01-salzhafen/alte-mole/neue-szene");
     expect(scene.properties.npcs).toEqual(["holm"]);
   });
 
@@ -322,8 +322,8 @@ describe("the generator's apply step", () => {
       ]),
     ).rejects.toThrow(/unknown npc/);
     // Nothing of the batch was written.
-    expect(await fileStatus("01-salzhafen/hafen/neue-szene")).toBe(404);
-    expect(await fileStatus("npcs/holm")).toBe(404);
+    expect(await entryStatus("01-salzhafen/hafen/neue-szene")).toBe(404);
+    expect(await entryStatus("npcs/holm")).toBe(404);
   });
 
   test("an EMPTY entry is filled by the draft for its id", async () => {
@@ -336,13 +336,13 @@ describe("the generator's apply step", () => {
         body: "\n## Will\n\nSeine Netze zurück.\n",
       },
     ]);
-    const npc = await getFile("npcs/holm");
+    const npc = await getEntry("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
     expect(npc.body).toContain("Seine Netze zurück.");
   });
 
   test("an entry that holds CONTENT is still a 409 conflict", async () => {
-    const before = await getFile(NPC);
+    const before = await getEntry(NPC);
     await expect(
       applyDrafts("beispiel", [
         {
@@ -353,7 +353,7 @@ describe("the generator's apply step", () => {
         },
       ]),
     ).rejects.toThrow(/already exist/);
-    expect(await getFile(NPC)).toEqual(before);
+    expect(await getEntry(NPC)).toEqual(before);
   });
 
   test("a STATUS the DM set makes an empty entry non-empty (409 on apply)", async () => {
@@ -372,7 +372,7 @@ describe("the generator's apply step", () => {
         },
       ]),
     ).rejects.toThrow(/already exist/);
-    const untouched = await getFile("npcs/holm");
+    const untouched = await getEntry("npcs/holm");
     expect(untouched.properties.status).toBe("dead");
     expect(untouched.properties.name).toBe("holm");
   });
@@ -403,7 +403,7 @@ describe("the generator's apply step", () => {
       ]),
     ).rejects.toMatchObject({ status: 409, message: "target entries already exist" });
     // The scene that was already there is untouched.
-    expect((await getFile(SCENE)).properties.title).toBe("Ankunft am Leuchtturm");
+    expect((await getEntry(SCENE)).properties.title).toBe("Ankunft am Leuchtturm");
   });
 
   test("TWO drafts for one target are a 409, not last-write-win", async () => {
@@ -430,13 +430,13 @@ describe("the generator's apply step", () => {
     }
     expect(conflicts).toEqual(["npcs/holm", "npcs/holm-2"]);
     // Nothing was written: the transaction rolled back.
-    expect(await fileStatus("npcs/holm")).toBe(404);
+    expect(await entryStatus("npcs/holm")).toBe(404);
   });
 });
 
 describe("empty is not missing", () => {
   test("an empty inbox is an empty entry (200), not a missing one", async () => {
-    const inbox = await getFile("inbox");
+    const inbox = await getEntry("inbox");
     expect(inbox.kind).toBe("inbox");
   });
 });

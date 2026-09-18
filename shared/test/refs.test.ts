@@ -1,4 +1,4 @@
-// The `[[slug]]` grammar (issue #68): what is a reference, what is text.
+// The `[[slug]]` grammar: what is a reference, what is text.
 
 import { describe, expect, test } from "bun:test";
 import {

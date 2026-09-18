@@ -1,4 +1,4 @@
-// GET/PUT /api/settings — the instance's UI language (issue #69).
+// GET/PUT /api/settings — the instance's UI language.
 //
 // The setting is CAMPAIGN-INDEPENDENT and works on an EMPTY instance too: the
 // cold start has no campaign yet and still has to be able to ask which

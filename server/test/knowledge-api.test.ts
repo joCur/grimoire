@@ -127,7 +127,7 @@ describe("PUT /api/campaigns/:campaign/knowledge", () => {
     expect((await getKnowledge()).entries).toEqual([]);
   });
 
-  // --- the prompt is a document, so an entry is ONE LINE (review of #53) ----
+  // --- the prompt is one text, so an entry is ONE LINE ---------------------
 
   test("a newline in an entry is a 400 and writes nothing", async () => {
     for (const entry of [
@@ -211,7 +211,7 @@ describe("the prompt block (store/read.ts knowledgeText)", () => {
     expect(await namingRules(CAMPAIGN)).toEqual([{ from: "Salt Harbour", to: "Salzhafen" }]);
   });
 
-  // --- the entry cannot become prompt STRUCTURE (review of #53) -------------
+  // --- the entry cannot become prompt STRUCTURE ----------------------------
 
   test("whitespace inside an entry collapses — one entry is one line", async () => {
     // The endpoint already refuses newlines; this is the second line of
@@ -249,7 +249,7 @@ describe("the prompt block (store/read.ts knowledgeText)", () => {
   });
 });
 
-describe("the glossary's rev guard (issue #53)", () => {
+describe("the glossary's rev guard", () => {
   test("GET answers the list WITH its rev", async () => {
     const glossary = await getGlossary();
     expect(glossary.rev).toBeGreaterThan(0);

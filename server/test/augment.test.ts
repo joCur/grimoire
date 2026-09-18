@@ -300,8 +300,8 @@ describe("prompt assembly", () => {
       ["augment/scene", await augmentSystemPrompt("scene")],
       // The two further prompt kinds: the outline step, and the
       // scene prompt in „genau eine Szene aus der Gliederung" mode. The
-      // single-scene mode is an output-schema SWAP, not a second prompt
-      // file, so that these rules keep travelling exactly once.
+      // single-scene mode is an output-schema SWAP, not a second prompt file,
+      // so that these rules keep travelling exactly once.
       ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
       ["scene/single", await sceneSystemPrompt()],
     ];
