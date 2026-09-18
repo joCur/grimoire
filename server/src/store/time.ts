@@ -26,6 +26,13 @@ import { format, isValid, parse } from "date-fns";
 export const LOCAL_DATE_TIME_SECONDS = "yyyy-MM-dd'T'HH:mm:ss";
 
 /**
+ * The same shape spelled for a HUMAN — the pattern above with the quoting
+ * `date-fns` needs stripped out. It is what the boot pre-flight's report and
+ * the write path's refusal name, so both say the shape the same way.
+ */
+export const LOCAL_DATE_TIME_SHAPE = LOCAL_DATE_TIME_SECONDS.replace(/'/g, "");
+
+/**
  * A stored session timestamp as epoch milliseconds, interpreted in the
  * SERVER's timezone — the inverse of the format above.
  *

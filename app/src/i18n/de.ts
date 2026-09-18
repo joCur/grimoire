@@ -309,6 +309,8 @@ export const de = {
   "server.llm_truncated.defaultCap": "Standard des Endpoints",
   "server.status_not_allowed": 'Status „{value}“ gibt es nicht — erlaubt sind {allowed}.',
   "server.scene_type_not_allowed": 'Szenentyp „{value}“ gibt es nicht — erlaubt sind {allowed}.',
+  "server.timestamp_not_allowed":
+    'Zeitangabe „{value}“ hat nicht die Form JJJJ-MM-TTThh:mm:ss.',
 
   "server.kind.entry": "Der Eintrag",
   "server.kind.campaign": "Kampagne",

@@ -51,7 +51,7 @@ import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import type { GrimoireDb } from "../db/client";
 import { logLineShortHash } from "./body-parse";
-import { LOCAL_DATE_TIME_SECONDS } from "./time";
+import { LOCAL_DATE_TIME_SECONDS, LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "./time";
 import {
   campaignKnowledge,
   campaigns,
@@ -211,6 +211,32 @@ function assertSceneClosedFields(fields: Record<string, unknown>): void {
 /** The npc's one closed field. */
 function assertNpcStatus(fields: Record<string, unknown>): void {
   assertClosedValue(fields, "status", NPC_STATUSES, "status_not_allowed", { kind: "npc" });
+}
+
+/**
+ * A session timestamp a write may carry: the ONE shape a stored timestamp has
+ * (./time.ts), or nothing.
+ *
+ * The same closedness as the fields above, one layer down. `started`, `ended`
+ * and the two ends of a pause are written from the server's own clock
+ * everywhere else; a PATCH of a session is the only door through which a
+ * value from outside reaches those columns, and without this guard it was a
+ * door PAST the boot pre-flight (db/timestamp-preflight.ts): a stored `19:30`
+ * leaves that session without a place in the campaign's chronology, and the
+ * next start refuses the database over a value the app itself wrote.
+ *
+ * An EMPTY value is left through. `null` clears the column, and a blank
+ * string is "not set" to the reader and to the pre-flight alike — refusing it
+ * would make clearing a field depend on how the caller spells "nothing".
+ */
+function assertTimestamp(value: string | null, field: string): void {
+  if (value === null || value.trim() === "") return;
+  if (localDateTimeToMs(value) !== undefined) return;
+  throw new ApiError(400, `invalid ${field}: ${value} — expected ${LOCAL_DATE_TIME_SHAPE}`, {
+    code: "timestamp_not_allowed",
+    field,
+    value,
+  });
 }
 
 // --- transaction plumbing ----------------------------------------------------
@@ -1153,6 +1179,30 @@ function refTags(tx: GrimoireDb, campaign: string, sceneId: string): string[] {
 }
 
 /**
+ * The pause rows a patched `pauses` list becomes, in the order they will be
+ * stored. An entry without `from` is not a pause and drops out — the
+ * positions close up behind it, so `pos` stays a gap-less sequence.
+ *
+ * Both ends go through the timestamp guard here rather than at the insert,
+ * because the whole list is checked before the first row of the patch is
+ * written.
+ */
+function patchedPauses(value: unknown): { fromTs: string; toTs: string | null }[] {
+  const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  const rows: { fromTs: string; toTs: string | null }[] = [];
+  entries.forEach((entry, index) => {
+    const map = asMap(entry);
+    const fromTs = asOptStr(map.from);
+    if (fromTs === null) return;
+    const toTs = asOptStr(map.to);
+    assertTimestamp(fromTs, `pauses[${index}].from`);
+    assertTimestamp(toTs, `pauses[${index}].to`);
+    rows.push({ fromTs, toTs });
+  });
+  return rows;
+}
+
+/**
  * Write a patched session properties back onto the row and its child tables.
  * `pauses` and `scenes_played` are lists in the format and tables here;
  * `reviewed` is a hash list in the format and a flag on the log row.
@@ -1163,12 +1213,16 @@ function patchSessionRow(
   row: SessionRow,
   props: Record<string, unknown>,
 ): void {
+  // Every timestamp of the patch is checked BEFORE the first write, so a
+  // refusal is a refusal of the whole patch and not of its tail.
+  const started = asOptStr(props.started);
+  const ended = asOptStr(props.ended);
+  assertTimestamp(started, "started");
+  assertTimestamp(ended, "ended");
+  const nextPauses = patchedPauses(props.pauses);
+
   tx.update(sessions)
-    .set({
-      started: asOptStr(props.started),
-      ended: asOptStr(props.ended),
-      rev: row.rev + 1,
-    })
+    .set({ started, ended, rev: row.rev + 1 })
     .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
     .run();
 
@@ -1192,25 +1246,14 @@ function patchSessionRow(
       .run();
   });
 
-  const pauses = Array.isArray(props.pauses) ? props.pauses : props.pauses === undefined ? [] : [props.pauses];
   tx.delete(sessionPauses)
     .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, row.id)))
     .run();
-  let pos = 0;
-  for (const entry of pauses) {
-    const map = asMap(entry);
-    const from = asOptStr(map.from);
-    if (from === null) continue; // an entry without `from` is not a pause
+  nextPauses.forEach((pause, pos) => {
     tx.insert(sessionPauses)
-      .values({
-        campaignId: campaign,
-        sessionId: row.id,
-        pos: pos++,
-        fromTs: from,
-        toTs: asOptStr(map.to),
-      })
+      .values({ campaignId: campaign, sessionId: row.id, pos, ...pause })
       .run();
-  }
+  });
 
   const reviewed = new Set(asStrArray(props.reviewed));
   for (const entry of logRows(tx, campaign, row.id)) {

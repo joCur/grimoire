@@ -114,6 +114,16 @@ export const ERROR_CODES = [
    * `{ value, allowed }`
    */
   "scene_type_not_allowed",
+  /**
+   * 400, session write: a `started`, `ended` or pause timestamp is not in the
+   * one shape those columns hold (`yyyy-mm-ddThh:mm:ss`). The shape is closed
+   * the way a status is: the reader reads only it, and the boot check refuses
+   * a database holding anything else — so a value from the wire is refused
+   * here instead of surviving until the next start. `{ field, value }`, where
+   * `field` is addressing (`started`, `ended`, `pauses[0].from`) and `value`
+   * is what the sentence names.
+   */
+  "timestamp_not_allowed",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

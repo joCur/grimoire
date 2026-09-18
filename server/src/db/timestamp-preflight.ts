@@ -19,7 +19,7 @@
 // (a database on its very first boot).
 
 import type { SqliteClient } from "./driver";
-import { LOCAL_DATE_TIME_SECONDS, localDateTimeToMs } from "../store/time";
+import { LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "../store/time";
 
 /** One stored timestamp the reader would not be able to read. */
 export interface TimestampProblem {
@@ -105,7 +105,7 @@ export function findTimestampProblems(client: SqliteClient): TimestampProblem[] 
 export function timestampProblemReport(problems: TimestampProblem[]): string[] {
   const lines = [
     "Timestamp check failed — these session values are not in the one shape" +
-      ` ${LOCAL_DATE_TIME_SECONDS.replace(/'/g, "")}:`,
+      ` ${LOCAL_DATE_TIME_SHAPE}:`,
   ];
   for (const problem of problems) {
     lines.push(
