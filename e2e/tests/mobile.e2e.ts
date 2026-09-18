@@ -24,7 +24,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 const IDEA = "Nachtmarkt im Hafen als Aufhänger #thread";
 
 test("mobile start surface: search, inbox capture, lookup lists", async ({ page, api }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
 
   // The desktop topbar is desktop chrome — below md the surface carries its
   // own wordmark instead.
@@ -33,7 +33,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await expect(
     page.getByRole("main").getByText("Kampagne: Der Leuchtturm von Salzhafen"),
   ).toBeVisible();
-  // The desktop pool is not rendered here.
+  // The desktop chapter overview is not rendered here.
   await expect(page.getByText("Eventualszenen")).toBeHidden();
 
   // Lookup rows with their counts from the tree.
@@ -64,12 +64,12 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await search.fill("fenn");
   await page.getByRole("option").filter({ hasText: "Fenn" }).first().click();
 
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/fenn$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/fenn$/);
   // The mobile read view has its own way back to the start surface.
   const back = page.getByRole("link", { name: "Kapitel" });
   await expect(back).toBeVisible();
   await back.click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByLabel("Ideen")).toBeVisible();
 });
 
@@ -83,21 +83,21 @@ test.describe("with a session open since yesterday", () => {
   }) => {
     // The session is the server's answer, not something the client derives
     // from today's date — it comes out of the seeded entry.
-    await page.goto("/beispiel");
-    // The same chip the desktop topbar carries (PO feedback on issue #40) — in
-    // link mode, in the mobile row: one tap back into the session.
+    await page.goto("/campaigns/beispiel");
+    // The same chip the desktop topbar carries — in link mode, in the mobile
+    // row: one tap back into the session.
     const row = page.getByRole("link", { name: /Session läuft/ });
     await expect(row).toBeVisible();
     // The runtime is computed from the SERVER's reading of `started`, so it is
     // a real elapsed time (well over an hour by now), not 0:00:00.
     await expect(row).toContainText(/\d+:\d{2}:\d{2}/);
     await row.click();
-    await expect(page).toHaveURL(/\/beispiel\/live$/);
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   });
 });
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
-  await page.goto("/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival");
+  await page.goto("/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

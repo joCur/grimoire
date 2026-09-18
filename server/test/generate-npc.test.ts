@@ -30,16 +30,17 @@ import type {
   LLMProvider,
   TokenUsage,
 } from "../src/llm-provider";
+import { entriesUrl } from "./support/urls";
 
 /** Whether an entity is there: its address resolves through GET /entry. */
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl("beispiel", rel));
   return res.status === 200;
 }
 
 /** GET /entry of an applied draft. */
 async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -200,7 +201,7 @@ const npcBody = {
 // --- job helpers ----------------------------------------------------------------
 
 async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
-  const res = await app.request(`/api/${campaign}/generate/job`);
+  const res = await app.request(`/api/campaigns/${campaign}/generate/job`);
   if (res.status === 404) return null;
   expect(res.status).toBe(200);
   return (await res.json()) as GenerateJob;
@@ -223,7 +224,7 @@ interface GenerateOutcome {
 
 /** Start an NPC run and wait for it — the synchronous view of the job flow. */
 async function generateNpc(body?: unknown, campaign = "beispiel"): Promise<GenerateOutcome> {
-  const res = await postJson(`/api/${campaign}/generate/npc`, body);
+  const res = await postJson(`/api/campaigns/${campaign}/generate/npc`, body);
   if (res.status !== 202) return { status: res.status, json: () => res.json() };
   expect(await res.json()).toEqual({ jobId: expect.any(String) });
   const job = await waitForJob(campaign);
@@ -242,9 +243,9 @@ async function firstValidationError(replies: ScriptedReply[]): Promise<string> {
   return body.validationErrors.join("\n");
 }
 
-// --- POST /api/:campaign/generate/npc -------------------------------------------
+// --- POST /api/campaigns/:campaign/generate/npc -------------------------------------------
 
-describe("POST /api/:campaign/generate/npc", () => {
+describe("POST /api/campaigns/:campaign/generate/npc", () => {
   test("happy path: GenerateNpcResult from one call, nothing written", async () => {
     const fake = useFake([npcReply()]);
     const res = await generateNpc(npcBody);
@@ -321,15 +322,15 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls[0]!.req.context.targetId).toBe("die-graue");
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain('"die-graue"');
-    // the correction turn names the NPC file, not "alle Szenen und Stubs"
+    // the correction turn names the NPC entry, not "alle Szenen und Stubs"
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständige NPC-Datei");
   });
 
   test("an npc reply without an id is a correction turn, not the id npc", async () => {
     // The reply carries NO `id`. The shared parser degrades a missing id to
-    // the address's last segment, and the validation used to parse the reply
-    // under the label `"npc"` — a kebab slug that passed the id pattern, so
-    // the run silently produced `npcs/npc`.
+    // the address's last segment, so parsing the reply under the label
+    // `"npc"` — a kebab slug that passes the id pattern — would silently
+    // produce `npcs/npc`.
     const bad = npcReply({ content: npcMarkdown().replace("id: grella\n", "") });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);
@@ -658,7 +659,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.LLM_PROVIDER;
     try {
-      const res = await postJson("/api/beispiel/generate/npc", npcBody);
+      const res = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
       expect(res.status).toBe(503);
       expect(await res.json()).toEqual({ error: "ANTHROPIC_API_KEY fehlt" });
       expect(await fetchJob()).toBeNull();
@@ -675,7 +676,7 @@ describe("npc generate jobs", () => {
     const open = gate();
     useFake([replyFor("job-kind")], undefined, open.promise);
 
-    const res = await postJson("/api/beispiel/generate/npc", npcBody);
+    const res = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
     expect(res.status).toBe(202);
     const { jobId } = (await res.json()) as { jobId: string };
 
@@ -700,14 +701,14 @@ describe("npc generate jobs", () => {
     const open = gate();
     process.env.LLM_CORRECTION_TURNS = "0";
     useFake(["{}"], undefined, open.promise);
-    const scene = await postJson("/api/beispiel/generate", {
+    const scene = await postJson("/api/campaigns/beispiel/generate", {
       chapter: "01-salzhafen",
       sourceText: "Fenn waits at the docks.",
     });
     expect(scene.status).toBe(202);
     const { jobId } = (await scene.json()) as { jobId: string };
 
-    const npc = await postJson("/api/beispiel/generate/npc", npcBody);
+    const npc = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
     expect(npc.status).toBe(409);
     expect(await npc.json()).toEqual({
       error: "a generate job is already running for this campaign",
@@ -720,9 +721,9 @@ describe("npc generate jobs", () => {
     // …and the other way round: npc job running -> scene start is a 409
     const open2 = gate();
     useFake([replyFor("job-block")], undefined, open2.promise);
-    const started = await postJson("/api/beispiel/generate/npc", npcBody);
+    const started = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
     expect(started.status).toBe(202);
-    const second = await postJson("/api/beispiel/generate", {
+    const second = await postJson("/api/campaigns/beispiel/generate", {
       chapter: "01-salzhafen",
       sourceText: "Fenn waits at the docks.",
     });
@@ -739,7 +740,7 @@ describe("npc generate jobs", () => {
       replyFor("job-replace"),
     ]);
     process.env.LLM_CORRECTION_TURNS = "0";
-    await postJson("/api/beispiel/generate", {
+    await postJson("/api/campaigns/beispiel/generate", {
       chapter: "01-salzhafen",
       sourceText: "Fenn waits at the docks.",
     });
@@ -763,7 +764,7 @@ describe("npc generate jobs", () => {
     // known-path rule.
     const edit = async (path: string) => {
       const current = await fetchJob();
-      return app.request(`/api/beispiel/generate/job/${current!.id}/review`, {
+      return app.request(`/api/campaigns/beispiel/generate/job/${current!.id}/review`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ rev: current!.rev ?? 0, edits: { [path]: edited } }),
@@ -781,7 +782,7 @@ describe("npc generate jobs", () => {
   });
 });
 
-// --- POST /api/:campaign/generate/apply with an npc draft ------------------------
+// --- POST /api/campaigns/:campaign/generate/apply with an npc draft ------------------------
 
 describe("apply an npc draft", () => {
   /** Run + apply, the app's flow: the draft of a finished job goes to disk. */
@@ -789,7 +790,7 @@ describe("apply an npc draft", () => {
     useFake([replyFor(id)]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     const job = await fetchJob();
-    return postJson("/api/beispiel/generate/apply", {
+    return postJson("/api/campaigns/beispiel/generate/apply", {
       npc: job!.npcResult!.npc,
       jobId: over.jobId ?? job!.id,
     });
@@ -833,7 +834,7 @@ describe("apply an npc draft", () => {
 
     // …and a client that posts the draft anyway gets a 409 with the path
     const before = await read("npcs/apply-happy");
-    const res = await postJson("/api/beispiel/generate/apply", {
+    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       npc: { path: "npcs/apply-happy", markdown: npcMarkdown({ id: "apply-happy" }) },
     });
     expect(res.status).toBe(409);
@@ -867,7 +868,7 @@ describe("apply an npc draft", () => {
       ["not an object", "npcs/anders"],
     ];
     for (const [what, npc] of cases) {
-      const res = await postJson("/api/beispiel/generate/apply", { npc });
+      const res = await postJson("/api/campaigns/beispiel/generate/apply", { npc });
       expect(res.status, what).toBe(400);
     }
     expect(await exists("npcs/anders")).toBe(false);
@@ -875,7 +876,7 @@ describe("apply an npc draft", () => {
   });
 
   test("an empty body is still 'nothing to apply'", async () => {
-    const res = await postJson("/api/beispiel/generate/apply", { npc: null });
+    const res = await postJson("/api/campaigns/beispiel/generate/apply", { npc: null });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe("nothing to apply");
   });
@@ -890,9 +891,9 @@ describe("apply an npc draft", () => {
 
 describe("campaign knowledge", () => {
   async function setKnowledge(entries: unknown[]): Promise<void> {
-    const current = await app.request("/api/beispiel/knowledge");
+    const current = await app.request("/api/campaigns/beispiel/knowledge");
     const { rev } = (await current.json()) as { rev: number };
-    const res = await app.request("/api/beispiel/knowledge", {
+    const res = await app.request("/api/campaigns/beispiel/knowledge", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ entries, rev }),

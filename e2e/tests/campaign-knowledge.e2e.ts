@@ -1,6 +1,6 @@
-// Critical path 6, extended (issue #53, PO feedback on PR #87): the campaign
+// Critical path 6, extended: the campaign
 // knowledge and the glossary as the DM maintains them on their own PAGES, and
-// what the generator then does with them. See CLAUDE.md, „Kritische Pfade“.
+// what the generator then does with them. See the critical paths in CLAUDE.md.
 //
 // Nothing here is mocked except the model (e2e/fixtures/stub-llm.ts), and the
 // two claims that only the real stack can show are:
@@ -13,13 +13,13 @@
 //      the path that runs in production.
 //   2. THE POST-RUN CHECK FIRES AND DOES NOT BLOCK. With TRIGGER.oldName the
 //      stub answers in exactly the spelling the convention forbids; the review
-//      has to name it, with its position, AND still let „Übernehmen“ write the
-//      draft.
+//      has to name it, with its position, AND still let the accept action write
+//      the draft.
 //
-// Plus what the PAGES have to do that the old inline settings sections did
-// not: be reached from four entry points, filter, open ONE entry at a time
-// with fields that fit the content, save that entry on its own, confirm a
-// deletion — and the 409 that a whole-list PUT still needs underneath.
+// Plus what the PAGES have to do: be reached from four entry points, filter,
+// open ONE entry at a time with fields that fit the content, save that entry
+// on its own, confirm a deletion — and the 409 that a whole-list PUT still
+// needs underneath.
 
 import type { Page } from "@playwright/test";
 
@@ -28,18 +28,18 @@ import { expect, test } from "../support/test";
 
 const SOURCE = "The party watches the quay at low tide.";
 
-/** The knowledge page, reached from the pool's „Nachschlagen“ line. */
+/** The knowledge page, reached from the chapter overview's lookup line. */
 async function openKnowledge(page: Page): Promise<void> {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: "Kampagnenwissen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
 }
 
 async function openGlossary(page: Page): Promise<void> {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: "Glossar" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Glossar");
 }
 
@@ -69,10 +69,10 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
   // empty state invites action rather than showing a blank box.
   await expect(page.getByText("Noch kein Kampagnenwissen", { exact: false })).toBeVisible();
 
-  // --- anlegen: a naming convention -----------------------------------------
+  // --- creating: a naming convention ----------------------------------------
   await page.getByRole("button", { name: "Neuer Eintrag" }).click();
-  // „Namenskonvention“ is the default kind, so the Alt/Neu pair is there —
-  // each on its own full-width line (PO feedback on PR #87).
+  // The naming convention is the default kind, so the old/new pair is there —
+  // each on its own full-width line.
   await expect(page.getByLabel("Art")).toHaveValue("naming");
   await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzmarsch");
@@ -90,7 +90,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
 
   // Stored on the SERVER, in the order they were typed (quality floor: no
   // localStorage — the list has to be visible through the API).
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("campaigns/beispiel/knowledge");
   expect(stored.entries).toEqual([
     { kind: "naming", from: OLD_NAME, to: "Salzmarsch", text: "" },
     { kind: "style", from: "", to: "", text: "Keine Würfelwerte im Read-Aloud." },
@@ -99,7 +99,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
   // --- umsortieren: the order IS the order of the prompt --------------------
   await page.getByRole("button", { name: "Nach oben" }).nth(1).click();
   await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
-  const reordered = await api.get<{ entries: Array<{ kind: string }> }>("beispiel/knowledge");
+  const reordered = await api.get<{ entries: Array<{ kind: string }> }>("campaigns/beispiel/knowledge");
   expect(reordered.entries.map((e) => e.kind)).toEqual(["style", "naming"]);
   // The buttons at the ends are disabled — there is nowhere to move.
   await expect(page.getByRole("button", { name: "Nach oben" }).first()).toBeDisabled();
@@ -116,9 +116,9 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
   await page.reload();
   await expect(page.getByText("Read-Aloud ohne Zahlen.")).toBeVisible();
 
-  // --- löschen, mit Bestätigung ---------------------------------------------
+  // --- deleting, with a confirmation ----------------------------------------
   await deleteRow(page, /Read-Aloud ohne Zahlen.*löschen/);
-  const afterDelete = await api.get<{ entries: Array<{ kind: string }> }>("beispiel/knowledge");
+  const afterDelete = await api.get<{ entries: Array<{ kind: string }> }>("campaigns/beispiel/knowledge");
   expect(afterDelete.entries.map((e) => e.kind)).toEqual(["naming"]);
   await expect(page.getByText("Read-Aloud ohne Zahlen.")).toHaveCount(0);
 });
@@ -129,7 +129,7 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
 }) => {
   await openGlossary(page);
   const before = await api.get<{ entries: Array<{ term: string }>; rev: number }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   expect(before.entries.length).toBeGreaterThan(0);
 
@@ -138,8 +138,8 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   expect(shown).toBe(before.entries.length);
 
   // --- anlegen, with an explanation that is a PARAGRAPH ---------------------
-  // The complaint that started this rework: the old inline field was a 120px
-  // box. The textarea grows, and what is typed is what comes back.
+  // An explanation is a paragraph, not a 120px box: the textarea grows, and
+  // what is typed is what comes back.
   const LONG =
     "Das Watt vor Salzhafen fällt bei Ebbe über eine Meile weit trocken; " +
     "Schmuggler nutzen die Priele, weil die Zollkutter dort auflaufen, und " +
@@ -154,14 +154,14 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   await saveEntry(page);
 
   const after = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   expect(after.entries.map((e) => e.term)).toEqual([
     ...before.entries.map((e) => e.term),
     "tidal flat",
   ]);
   expect(after.entries.at(-1)?.explanation).toBe(LONG);
-  // The list's own guard token moved — the glossary is one document.
+  // The list's own guard token moved — the glossary is one entry.
   expect(after.rev).toBe(before.rev + 1);
 
   // --- the filter hides rows, and the row it leaves is the right one -------
@@ -174,7 +174,7 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   // --- and deleting the FILTERED row deletes that row, not the first one ---
   await page.getByPlaceholder("Begriff filtern").fill("tidal");
   await deleteRow(page, /tidal flat.*löschen/);
-  const afterDelete = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const afterDelete = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   expect(afterDelete.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
 });
 
@@ -183,14 +183,14 @@ test("„Abbrechen“ throws the open entry away and leaves the stored one alone
   api,
 }) => {
   await openGlossary(page);
-  const before = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const before = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   const first = before.entries[0]!.term;
 
   await page.getByRole("button", { name: new RegExp(`${first}.*löschen`) }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
   // The confirmation was declined — nothing was written.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const after = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const after = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   expect(after.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
 });
 
@@ -202,8 +202,8 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
 
   // Somebody else saves first (another tab, the same endpoint).
-  const current = await api.get<{ rev: number }>("beispiel/knowledge");
-  await api.send("PUT", "beispiel/knowledge", {
+  const current = await api.get<{ rev: number }>("campaigns/beispiel/knowledge");
+  await api.send("PUT", "campaigns/beispiel/knowledge", {
     entries: [{ kind: "fact", from: "", to: "", text: "Von woanders." }],
     rev: current.rev,
   });
@@ -211,16 +211,16 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   await page.getByRole("button", { name: "Speichern" }).click();
   // Nothing was written, and the DM is told instead of losing the other list.
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  const after = await api.get<{ entries: Array<{ text: string }> }>("beispiel/knowledge");
+  const after = await api.get<{ entries: Array<{ text: string }> }>("campaigns/beispiel/knowledge");
   expect(after.entries.map((e) => e.text)).toEqual(["Von woanders."]);
   // What the DM typed is still on screen — theirs to keep or to discard.
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
 
-  // Retrying blindly is not offered: „Speichern“ is off until the DM decides.
+  // Retrying blindly is not offered: saving is off until the DM decides.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
 
   // Reloading is their decision — and it costs the draft, so it asks first
-  // (PO finding on PR #87: it used to discard the typing without a word).
+  // instead of discarding the typing without a word.
   await page.getByRole("button", { name: "Neu laden" }).click();
   const discard = page.getByRole("dialog");
   await expect(discard).toContainText("Änderungen verwerfen?");
@@ -234,10 +234,10 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
 });
 
 test("leaving with an unsaved entry asks first — and only then", async ({ page }) => {
-  // At 390px the way out is the „‹ Kapitel“ row — a plain router link, which is
+  // At 390px the way out is the back row to the chapter overview — a plain router link, which is
   // exactly the exit that would otherwise drop the open entry without a word.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/beispiel/knowledge");
+  await page.goto("/campaigns/beispiel/knowledge");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
 
   // An entry that has been typed into blocks the way out.
@@ -247,14 +247,14 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Änderungen verwerfen?");
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Nicht verlieren");
 
   // A SAVED entry does not ask — the guard is about unsaved work only.
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
   await saveEntry(page);
   await page.getByRole("link", { name: "Kapitel" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
@@ -273,7 +273,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
   await page.getByLabel("Art").selectOption("fact");
   await expect(page.getByLabel("Fakt, der gilt")).toHaveValue("Salt Harbour → Salzhafen");
 
-  // fact -> naming: the sentence lands in „Alt“, where it is visible.
+  // fact -> naming: the sentence lands in the old-spelling field, where it is visible.
   await page.getByLabel("Art").selectOption("naming");
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Salt Harbour → Salzhafen");
   await expect(page.getByLabel("Neu (in dieser Kampagne)")).toHaveValue("");
@@ -282,7 +282,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
   // travels along invisibly.
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzhafen");
   await saveEntry(page);
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("campaigns/beispiel/knowledge");
   expect(stored.entries).toEqual([
     { kind: "naming", from: "Salt Harbour → Salzhafen", to: "Salzhafen", text: "" },
   ]);
@@ -290,49 +290,49 @@ test("switching the kind carries the text into the new form", async ({ page, api
 
 // --- how the pages are REACHED ------------------------------------------------
 
-test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ page }) => {
-  // (a) The pool's quiet „Nachschlagen“ line — and the topbar is UNCHANGED
-  //     (PO feedback on PR #87: the two pages are deliberately not up there).
-  await page.goto("/beispiel");
+test("four ways in: the chapter overview line, the phone, ⌘K and the generator", async ({ page }) => {
+  // (a) The chapter overview's quiet lookup line — and the topbar carries neither page
+  //     (the two pages are deliberately not up there).
+  await page.goto("/campaigns/beispiel");
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup).toBeVisible();
   await expect(lookup.getByRole("link", { name: "NPCs" })).toBeVisible();
   await expect(lookup.getByRole("link", { name: "Orte" })).toBeVisible();
   await lookup.getByRole("link", { name: "Kampagnenwissen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
   const topbar = page.getByRole("navigation", { name: "Kapitel, NPCs und Orte" });
   await expect(topbar.getByRole("link", { name: "Glossar" })).toHaveCount(0);
   await expect(topbar.getByRole("link", { name: "Kampagnenwissen" })).toHaveCount(0);
 
   // (c) ⌘K reaches both as navigation targets — the server's index holds
-  //     documents, not pages, so nothing but the palette itself can offer them.
+  //     entries, not pages, so nothing but the palette itself can offer them.
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByRole("combobox").fill("glossar");
   const option = page.getByRole("option").filter({ hasText: "Glossar" });
   await expect(option.first()).toBeVisible();
   await expect(option.first()).toContainText("Seite");
   await option.first().click();
-  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
 
   // (d) The generator's context line links to both — this is where the DM
   //     notices a rule is missing, and the fix is one click away.
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: /Kampagnenwissen/ })).toHaveAttribute(
     "href",
-    "/beispiel/knowledge",
+    "/campaigns/beispiel/knowledge",
   );
   await page.getByRole("link", { name: "Glossar", exact: true }).click();
-  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
 });
 
 test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   const browse = page.getByRole("navigation", { name: "Nachschlagen" });
   await browse.getByRole("link", { name: "Kampagnenwissen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
 
   // The page works at the mobile floor: a new entry, typed and saved.
   await page.getByRole("button", { name: "Neuer Eintrag" }).click();
@@ -350,9 +350,10 @@ test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px"
   );
   expect(noOverflow).toBe(true);
 
-  // „‹ Kapitel“ is the way back, as on every other campaign view below md.
+  // The back row to the chapter overview is the way out, as on every other
+  // campaign view below md.
   await page.getByRole("link", { name: "Kapitel" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 });
 
 // --- and what the generator does with all of it -------------------------------
@@ -372,8 +373,8 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   await page.getByLabel("Fakt, der gilt").fill("[[fenn]] führt die Schmuggler.");
   await saveEntry(page);
 
-  // --- the generator names the COUNT in „Mitgeschickter Kontext“ (AK5) ------
-  await page.goto("/beispiel/generate");
+  // --- the generator names the COUNT in the sent-context summary -----------
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: "2 Wissens-Einträge" })).toBeVisible();
 
   // --- the run: the stub answers in the forbidden spelling ------------------
@@ -385,7 +386,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
 
   // 1. WHAT ARRIVED: the stub echoes the prompt's knowledge block back, so
   //    the review shows both rules — and `[[fenn]]` reached the model as the
-  //    NPC's NAME, not as a slug (AK4).
+  //    NPC's NAME, not as a slug.
   const echo = page.getByText(CONTEXT_ECHO, { exact: false });
   await expect(echo).toBeVisible();
   await expect(echo).toContainText(`schreibe „${OLD_NAME}“ immer als „Salzmarsch“`);
@@ -416,9 +417,9 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   page,
 }) => {
   // The example campaign has no knowledge, so this is the shape every
-  // campaign that never uses the feature sees (AK5: „Glossar-Verhalten im
-  // Prompt unverändert").
-  await page.goto("/beispiel/generate");
+  // campaign that never uses the feature sees: the glossary's behaviour in the
+  // prompt is the same as always.
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toBeVisible();
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
@@ -431,7 +432,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   await expect(page.getByRole("heading", { name: /Namens-Hinweis/ })).toHaveCount(0);
 });
 
-// --- what an OPEN row survives (PO findings on PR #87) ------------------------
+// --- what an OPEN row survives ------------------------------------------------
 //
 // The version poller refetches both lists every ~5s (app/src/lib/use-campaign-
 // version.ts), so the list under an open row really does change in production
@@ -444,10 +445,10 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
 }) => {
   await openGlossary(page);
   const before = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   // Two terms that are not the same row: one is edited, the other is deleted
-  // from underneath by „another tab“.
+  // from underneath by a second writer, standing in for another tab.
   const edited = before.entries.at(-1)!;
   const deleted = before.entries[0]!;
   expect(edited.term).not.toBe(deleted.term);
@@ -463,7 +464,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
 
   // Somebody else deletes the FIRST entry — every stored position below it
   // shifts by one, and the poller brings that list into this page.
-  await api.send("PUT", "beispiel/glossary", {
+  await api.send("PUT", "campaigns/beispiel/glossary", {
     entries: before.entries.filter((entry) => entry.term !== deleted.term),
     rev: before.rev,
   });
@@ -479,15 +480,15 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
   const afterConflict = await api.get<{
     entries: Array<{ term: string; explanation: string }>;
     rev: number;
-  }>("beispiel/glossary");
+  }>("campaigns/beispiel/glossary");
   expect(afterConflict.entries.map((e) => e.explanation)).not.toContain("Von mir bearbeitet.");
 
-  // And „Speichern“ is OFF until the DM decides — retrying against a list
+  // And saving is OFF until the DM decides — retrying against a list
   // that moved is exactly how a draft lands on a neighbouring entry.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
   await expect(explanation).toHaveValue("Von mir bearbeitet.");
 
-  // „Draft behalten“ re-aims it at the list that came back — offered because
+  // Keeping the draft re-aims it at the list that came back — offered because
   // the opened entry is still there, unchanged.
   await page.getByRole("button", { name: /Entwurf behalten/ }).click();
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -496,7 +497,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
   // THE POINT: the text landed on the entry it was typed into, and the entry
   // that moved into its old position is untouched.
   const after = await api.get<{ entries: Array<{ term: string; explanation: string }> }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   const written = after.entries.find((entry) => entry.term === edited.term);
   expect(written?.explanation).toBe("Von mir bearbeitet.");
@@ -518,7 +519,7 @@ test("a dirty draft is never thrown away by a click — moving on asks first", a
   await rows.first().click();
   await page.getByLabel("Erklärung").fill("Nicht verlieren.");
 
-  // Another ROW: the question is asked, and „Weiter bearbeiten“ leaves the
+  // Another ROW: the question is asked, and continuing to edit leaves the
   // draft exactly where it was.
   await page.getByRole("button", { name: second }).click();
   let dialog = page.getByRole("dialog");
@@ -526,14 +527,14 @@ test("a dirty draft is never thrown away by a click — moving on asks first", a
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
   await expect(page.getByLabel("Erklärung")).toHaveValue("Nicht verlieren.");
 
-  // „Neuer Begriff“ is the same exit and asks the same question.
+  // Starting a new term is the same exit and asks the same question.
   await page.getByRole("button", { name: "Neuer Begriff" }).click();
   dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Änderungen verwerfen?");
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
   await expect(page.getByLabel("Erklärung")).toHaveValue("Nicht verlieren.");
 
-  // Only „Verwerfen“ moves on — and then the OTHER row is the open one.
+  // Only discarding moves on — and then the OTHER row is the open one.
   await page.getByRole("button", { name: second }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -577,7 +578,7 @@ test("the growing textarea follows the WIDTH, not only the text", async ({ page 
   const wide = await explanation.boundingBox();
 
   // Narrower viewport: the same text needs more lines. The field has to grow
-  // with them instead of clipping its own bottom (PO finding on PR #87).
+  // with them instead of clipping its own bottom.
   await page.setViewportSize({ width: 560, height: 900 });
   await expect
     .poll(async () => (await explanation.boundingBox())?.height ?? 0)

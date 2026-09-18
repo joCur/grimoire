@@ -1,25 +1,24 @@
-// "/" — normally no page at all (issue #14): it redirects into the last active
+// "/" — normally no page at all: it redirects into the last active
 // campaign, so opening Grimoire lands directly where the DM left off. The
 // heuristic is server-side data (`lastSession` per campaign, no localStorage —
 // the server is the truth); the switcher in the topbar stays the only way to
 // change campaigns.
 //
-// The one case that DOES render here is the COLD START (issue #56), and since
-// issue #79 it is the normal first screen of a fresh installation: the boot
-// imports nothing, so a new instance has no campaign at all. What stood here
-// was "Kampagne mit „grimoire seed“ importieren" — true, but a shell command,
-// i.e. a dead end for the person the tool is for. So this is a form: a name, an
-// optional sentence, and the id is derived from the name (the shared slug rule)
-// and shown before it is created, because an id is permanent.
+// The one case that DOES render here is the COLD START, the normal first
+// screen of a fresh installation: the boot imports nothing, so a new instance
+// has no campaign at all. Pointing the DM at a shell command would be a dead
+// end for the person the tool is for, so this is a form: a name, an optional
+// sentence, and the id is derived from the name (the shared slug rule) and
+// shown before it is created, because an id is permanent.
 //
-// A PAGE, not a dialog. There is nothing behind it to keep visible, the surface
-// has to work at 390px, and „Kampagne anlegen" is the only thing this screen is
-// about. On success the redirect below picks the new campaign up — the pool
-// then carries the next step („Kapitel anlegen").
+// A PAGE, not a dialog. There is nothing behind it to keep visible, the
+// surface has to work at 390px, and creating a campaign is the only thing this
+// screen is about. On success the redirect below picks the new campaign up —
+// the chapter overview then carries the next step, creating a chapter.
 //
 // The SECOND campaign is created from the topbar switcher instead, through the
 // same `useCampaignCreate` (components/CreateActions.tsx) — one create, two
-// surfaces. The field hints here are generic („Name der Kampagne"): a
+// surfaces. The field hints here are generic (the campaign's name): a
 // placeholder naming the example campaign reads like a default.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -50,8 +49,8 @@ export function HomeRoute() {
 
   const target = data === undefined ? undefined : pickLastCampaign(data);
   // `replace`: the redirect must not sit in the history, or "back" from the
-  // pool would bounce straight forward again.
-  if (target !== undefined) return <Navigate to={`/${target}`} replace />;
+  // chapter overview would bounce straight forward again.
+  if (target !== undefined) return <Navigate to={`/campaigns/${target}`} replace />;
 
   if (isPending) {
     return (
@@ -75,7 +74,7 @@ function ColdStart() {
   const t = useT();
   const nameId = useId();
   const descriptionId = useId();
-  // Shared with the switcher's „Kampagne anlegen" dialog (components/
+  // Shared with the switcher's campaign create dialog (components/
   // CreateActions.tsx) — one create, two surfaces. `replace`: the redirect
   // must not sit in the history, or "back" would bounce straight forward again.
   const createCampaignFlow = useCampaignCreate({ replace: true });
@@ -184,7 +183,7 @@ function ColdStart() {
         </div>
       </form>
 
-      {/* The language switch (issue #69 follow-up). There is no campaign yet,
+      {/* The language switch. There is no campaign yet,
           so the topbar carries no switcher — without this row the FIRST screen
           of a new installation would be the one screen whose language cannot be
           changed. A footer, hairline above, well below the form: the first

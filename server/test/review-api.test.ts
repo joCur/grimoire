@@ -23,6 +23,7 @@ import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { seedCampaign } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
@@ -39,17 +40,17 @@ async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
 }
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
-  const res = await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl(campaign, rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function putBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
-  const res = await app.request("/api/beispiel/entry", {
+  const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, rev: before.rev, body }),
+    body: JSON.stringify({ rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
@@ -68,14 +69,14 @@ afterEach(() => {
   dropStore();
 });
 
-describe("POST /api/:campaign/review/seen", () => {
+describe("POST /api/campaigns/:campaign/review/seen", () => {
   const SESSION = "sessions/2026-01-15";
   const LINE = "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision";
   const LINE2 = '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin „Old Metta“ am Steg #npc';
 
   test("adds the short hash once; Log unchanged; key rendered last", async () => {
     const before = await getFile(SESSION);
-    const file = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
+    const file = await postOk("/api/campaigns/beispiel/review/seen", { path: SESSION, line: LINE });
     expect(file.properties.reviewed).toEqual([sha8(LINE)]);
 
     // `reviewed` is rendered after the session's own keys — the position the
@@ -98,13 +99,13 @@ describe("POST /api/:campaign/review/seen", () => {
     const expected = createHash("sha256").update(LINE, "utf8").digest("hex").slice(0, 8);
     expect(expected).toHaveLength(8);
     expect(expected).toMatch(/^[0-9a-f]{8}$/);
-    const file = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
+    const file = await postOk("/api/campaigns/beispiel/review/seen", { path: SESSION, line: LINE });
     expect(file.properties.reviewed).toEqual([expected]);
   });
 
   test("idempotent: the same line does not add a second entry", async () => {
-    const first = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
-    const again = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
+    const first = await postOk("/api/campaigns/beispiel/review/seen", { path: SESSION, line: LINE });
+    const again = await postOk("/api/campaigns/beispiel/review/seen", { path: SESSION, line: LINE });
     expect(again.properties.reviewed).toEqual([sha8(LINE)]);
     // Nothing to write means nothing written: the session's guard token stands.
     expect(again.rev).toBe(first.rev);
@@ -115,9 +116,9 @@ describe("POST /api/:campaign/review/seen", () => {
     // Deliberately marked back to front. The file version appended hashes as
     // they arrived; the flag on the row has no click order to remember, and
     // the log's own order is the one the review reads in.
-    const second = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE2 });
+    const second = await postOk("/api/campaigns/beispiel/review/seen", { path: SESSION, line: LINE2 });
     expect(second.properties.reviewed).toEqual([sha8(LINE2)]);
-    const both = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
+    const both = await postOk("/api/campaigns/beispiel/review/seen", { path: SESSION, line: LINE });
     expect(both.properties.reviewed).toEqual([sha8(LINE), sha8(LINE2)]);
   });
 
@@ -128,7 +129,7 @@ describe("POST /api/:campaign/review/seen", () => {
     // It is not SILENT though: `marked: false` is the answer saying "no row
     // hashes to what you sent", which a bare 200 would hide.
     const before = await getFile(SESSION);
-    const after = (await postOk("/api/beispiel/review/seen", {
+    const after = (await postOk("/api/campaigns/beispiel/review/seen", {
       path: SESSION,
       line: "- 23:59 gibt es in diesem Log nicht",
     })) as EntryResponse & { marked?: boolean };
@@ -139,12 +140,12 @@ describe("POST /api/:campaign/review/seen", () => {
   });
 
   test("a line that IS in the log answers marked: true, and again on a repeat", async () => {
-    const first = (await postOk("/api/beispiel/review/seen", {
+    const first = (await postOk("/api/campaigns/beispiel/review/seen", {
       path: SESSION,
       line: LINE,
     })) as EntryResponse & { marked?: boolean };
     expect(first.marked).toBe(true);
-    const again = (await postOk("/api/beispiel/review/seen", {
+    const again = (await postOk("/api/campaigns/beispiel/review/seen", {
       path: SESSION,
       line: LINE,
     })) as EntryResponse & { marked?: boolean };
@@ -153,13 +154,13 @@ describe("POST /api/:campaign/review/seen", () => {
 
   test("400 unless path is a sessions/<id> address", async () => {
     for (const p of ["npcs/fenn", "inbox", "sessions/x/y"]) {
-      const res = await postJson("/api/beispiel/review/seen", { path: p, line: LINE });
+      const res = await postJson("/api/campaigns/beispiel/review/seen", { path: p, line: LINE });
       expect(res.status).toBe(400);
     }
   });
 
   test("404 for a session that does not exist", async () => {
-    const res = await postJson("/api/beispiel/review/seen", {
+    const res = await postJson("/api/campaigns/beispiel/review/seen", {
       path: "sessions/1999-01-01",
       line: LINE,
     });
@@ -178,7 +179,7 @@ describe("POST /api/:campaign/review/seen", () => {
       { path: SESSION, line: LINE, extra: 1 }, // unknown key
     ];
     for (const b of bad) {
-      expect((await postJson("/api/beispiel/review/seen", b)).status).toBe(400);
+      expect((await postJson("/api/campaigns/beispiel/review/seen", b)).status).toBe(400);
     }
   });
 });
@@ -187,12 +188,12 @@ describe("POST /api/:campaign/review/seen", () => {
 // (store/write.ts appendThreadItem) — it operates on the chapter row's body
 // instead of on file bytes, and the three insertion cases below are the same
 // three it always had.
-describe("POST /api/:campaign/review/thread", () => {
+describe("POST /api/campaigns/:campaign/review/thread", () => {
   const CHAPTER = "01-salzhafen";
 
   test("appends to an existing ## Offene Fäden section (append-only)", async () => {
     const before = await getFile(CHAPTER);
-    const file = await postOk("/api/beispiel/review/thread", {
+    const file = await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "Lichter in der Bucht untersuchen",
     });
@@ -206,7 +207,7 @@ describe("POST /api/:campaign/review/thread", () => {
     // The body is set up through PUT /entry — the app's own way to get a
     // chapter into this shape, instead of writing a file behind the server.
     await putBody(CHAPTER, "\n## Offene Fäden\n\n- [ ] Alt\n\n## Notizen\n\nText bleibt.\n");
-    const file = await postOk("/api/beispiel/review/thread", {
+    const file = await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "Neu",
     });
@@ -218,7 +219,7 @@ describe("POST /api/:campaign/review/thread", () => {
   test("creates the section at the end when it is missing", async () => {
     const body = "\n## Ziel des Kapitels\n\nText.\n";
     await putBody(CHAPTER, body);
-    const file = await postOk("/api/beispiel/review/thread", {
+    const file = await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "Erster Faden",
     });
@@ -226,11 +227,11 @@ describe("POST /api/:campaign/review/thread", () => {
   });
 
   test("multi-line text collapses to a single item line", async () => {
-    await postOk("/api/beispiel/review/thread", {
+    await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "Faden eins",
     });
-    const file = await postOk("/api/beispiel/review/thread", {
+    const file = await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "  Zeile eins\n  Zeile zwei  ",
     });
@@ -244,41 +245,41 @@ describe("POST /api/:campaign/review/thread", () => {
     // typo (the generator's new-chapter flow does that, deliberately). So an
     // unknown chapter is now 404 in BOTH shapes the old test distinguished.
     expect(
-      (await postJson("/api/beispiel/review/thread", { chapter: "04-leer", text: "x" })).status,
+      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "04-leer", text: "x" })).status,
     ).toBe(404);
     expect(
-      (await postJson("/api/beispiel/review/thread", { chapter: "99-nix", text: "x" })).status,
+      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "99-nix", text: "x" })).status,
     ).toBe(404);
     // `npcs` is a reserved name, never a chapter id.
     expect(
-      (await postJson("/api/beispiel/review/thread", { chapter: "npcs", text: "x" })).status,
+      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "npcs", text: "x" })).status,
     ).toBe(404);
   });
 
   test("400 on unsafe chapter ids and empty text", async () => {
     for (const chapter of ["../beispiel", "a/b", ".hidden", "", "a\\b"]) {
       expect(
-        (await postJson("/api/beispiel/review/thread", { chapter, text: "x" })).status,
+        (await postJson("/api/campaigns/beispiel/review/thread", { chapter, text: "x" })).status,
       ).toBe(400);
     }
     expect(
-      (await postJson("/api/beispiel/review/thread", { chapter: "01-salzhafen", text: "  " }))
+      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "01-salzhafen", text: "  " }))
         .status,
     ).toBe(400);
     expect(
-      (await postJson("/api/beispiel/review/thread", { chapter: "01-salzhafen" })).status,
+      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "01-salzhafen" })).status,
     ).toBe(400);
-    expect((await postJson("/api/beispiel/review/thread", { chapter: 42, text: "x" })).status).toBe(
+    expect((await postJson("/api/campaigns/beispiel/review/thread", { chapter: 42, text: "x" })).status).toBe(
       400,
     );
   });
 });
 
-describe("POST /api/:campaign/review/npc-stub", () => {
+describe("POST /api/campaigns/:campaign/review/npc-stub", () => {
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   test("creates the npc with the documented shape", async () => {
-    const file = await postOk("/api/beispiel/review/npc-stub", {
+    const file = await postOk("/api/campaigns/beispiel/review/npc-stub", {
       id: "old-metta",
       name: "Old Metta",
       note: "Fischerin am Steg, kennt die Gezeiten #npc",
@@ -296,7 +297,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
   });
 
   test("name defaults to the id; without a note the section stays empty", async () => {
-    const file = await postOk("/api/beispiel/review/npc-stub", { id: "kai" });
+    const file = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "kai" });
     expect(file.properties).toEqual({ id: "kai", name: "kai", status: "unknown" });
     expect(file.body).toBe("\n## Notizen\n");
   });
@@ -306,7 +307,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // content comes back untouched — the old 409 made the review correct an
     // id that was right.
     const before = await getFile("npcs/fenn");
-    const linked = await postOk("/api/beispiel/review/npc-stub", {
+    const linked = await postOk("/api/campaigns/beispiel/review/npc-stub", {
       id: "fenn",
       name: "Anders",
       note: "doppelt",
@@ -314,15 +315,15 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     expect(linked).toEqual(before);
     expect(await getFile("npcs/fenn")).toEqual(before);
     // and a stub created in this run is linked the same way
-    const first = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
-    const second = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
+    const first = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "old-metta" });
+    const second = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "old-metta" });
     expect(second).toEqual(first);
   });
 
   test("an EMPTY entry is filled in", async () => {
     // An entry the DM created and did not fill in — the review is the first
     // thing that knows a name and a note for it.
-    const created = await app.request("/api/beispiel/npcs", {
+    const created = await app.request("/api/campaigns/beispiel/npcs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "holm" }),
@@ -330,7 +331,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     expect(created.status).toBe(201);
     const empty = await getFile("npcs/holm");
     expect(empty.properties.name).toBe("holm");
-    const filled = await postOk("/api/beispiel/review/npc-stub", {
+    const filled = await postOk("/api/campaigns/beispiel/review/npc-stub", {
       id: "holm",
       name: "Holm",
       note: "war am Steg #npc",
@@ -343,20 +344,20 @@ describe("POST /api/:campaign/review/npc-stub", () => {
   test("400 unless id is a kebab-case slug", async () => {
     const bad = ["Old Metta", "old_metta", "-metta", "metta-", "a--b", "", "a/b", "ä", "A1"];
     for (const id of bad) {
-      expect((await postJson("/api/beispiel/review/npc-stub", { id })).status).toBe(400);
+      expect((await postJson("/api/campaigns/beispiel/review/npc-stub", { id })).status).toBe(400);
     }
-    expect((await postJson("/api/beispiel/review/npc-stub", {})).status).toBe(400);
-    expect((await postJson("/api/beispiel/review/npc-stub", { id: 42 })).status).toBe(400);
+    expect((await postJson("/api/campaigns/beispiel/review/npc-stub", {})).status).toBe(400);
+    expect((await postJson("/api/campaigns/beispiel/review/npc-stub", { id: 42 })).status).toBe(400);
     expect(
-      (await postJson("/api/beispiel/review/npc-stub", { id: "ok-slug", name: 42 })).status,
+      (await postJson("/api/campaigns/beispiel/review/npc-stub", { id: "ok-slug", name: 42 })).status,
     ).toBe(400);
     expect(
-      (await postJson("/api/beispiel/review/npc-stub", { id: "ok-slug", note: 42 })).status,
+      (await postJson("/api/campaigns/beispiel/review/npc-stub", { id: "ok-slug", note: 42 })).status,
     ).toBe(400);
   });
 });
 
-describe("POST /api/:campaign/review/inbox-done", () => {
+describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
   const DONE_TARGET =
     "- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread";
 
@@ -365,7 +366,7 @@ describe("POST /api/:campaign/review/inbox-done", () => {
     const idx = beforeLines.indexOf(DONE_TARGET);
     expect(idx).toBeGreaterThan(-1);
 
-    const file = await postOk("/api/beispiel/review/inbox-done", { line: DONE_TARGET });
+    const file = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: DONE_TARGET });
     const afterLines = file.body.split("\n");
     expect(afterLines.length).toBe(beforeLines.length);
     for (let i = 0; i < beforeLines.length; i++) {
@@ -378,28 +379,28 @@ describe("POST /api/:campaign/review/inbox-done", () => {
   });
 
   test("idempotent: the original line again and the done form both no-op", async () => {
-    const first = await postOk("/api/beispiel/review/inbox-done", { line: DONE_TARGET });
+    const first = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: DONE_TARGET });
     // Original (now rewritten) form. The inbox has no row of its own to carry
     // a rev, so its token is the campaign's version counter, which EVERY
     // write bumps — the content is what "no-op" is about here.
-    const again = await postOk("/api/beispiel/review/inbox-done", { line: DONE_TARGET });
+    const again = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: DONE_TARGET });
     expect(again.body).toBe(first.body);
     // Explicit done form.
-    const explicit = await postOk("/api/beispiel/review/inbox-done", {
+    const explicit = await postOk("/api/campaigns/beispiel/review/inbox-done", {
       line: `- [x] ${DONE_TARGET.slice(2)}`,
     });
     expect(explicit.body).toBe(first.body);
   });
 
   test("only the FIRST of several identical lines is rewritten", async () => {
-    await postOk("/api/beispiel/inbox", { text: "Doppelt" });
-    await postOk("/api/beispiel/inbox", { text: "Doppelt" });
-    const file = await postOk("/api/beispiel/review/inbox-done", { line: "- Doppelt" });
+    await postOk("/api/campaigns/beispiel/inbox", { text: "Doppelt" });
+    await postOk("/api/campaigns/beispiel/inbox", { text: "Doppelt" });
+    const file = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: "- Doppelt" });
     expect(file.body.endsWith("- [x] Doppelt\n- Doppelt\n")).toBe(true);
   });
 
   test("404 when the line is not in the inbox", async () => {
-    const res = await postJson("/api/beispiel/review/inbox-done", { line: "- gibt es nicht" });
+    const res = await postJson("/api/campaigns/beispiel/review/inbox-done", { line: "- gibt es nicht" });
     expect(res.status).toBe(404);
   });
 
@@ -414,7 +415,7 @@ describe("POST /api/:campaign/review/inbox-done", () => {
       { line: "- x", extra: 1 }, // unknown key
     ];
     for (const b of bad) {
-      expect((await postJson("/api/beispiel/review/inbox-done", b)).status).toBe(400);
+      expect((await postJson("/api/campaigns/beispiel/review/inbox-done", b)).status).toBe(400);
     }
   });
 
@@ -425,18 +426,18 @@ describe("POST /api/:campaign/review/inbox-done", () => {
     seedCampaign(await getDb(), [
       { kind: "campaign", properties: { id: "frischling" }, body: "" },
     ]);
-    const res = await postJson("/api/frischling/review/inbox-done", { line: "- egal" });
+    const res = await postJson("/api/campaigns/frischling/review/inbox-done", { line: "- egal" });
     expect(res.status).toBe(404);
   });
 
   test("404 for an unknown campaign on all four endpoints", async () => {
     expect(
-      (await postJson("/api/nope/review/seen", { path: "sessions/x", line: "- x" })).status,
+      (await postJson("/api/campaigns/nope/review/seen", { path: "sessions/x", line: "- x" })).status,
     ).toBe(404);
-    expect((await postJson("/api/nope/review/thread", { chapter: "a", text: "x" })).status).toBe(
+    expect((await postJson("/api/campaigns/nope/review/thread", { chapter: "a", text: "x" })).status).toBe(
       404,
     );
-    expect((await postJson("/api/nope/review/npc-stub", { id: "a" })).status).toBe(404);
-    expect((await postJson("/api/nope/review/inbox-done", { line: "- x" })).status).toBe(404);
+    expect((await postJson("/api/campaigns/nope/review/npc-stub", { id: "a" })).status).toBe(404);
+    expect((await postJson("/api/campaigns/nope/review/inbox-done", { line: "- x" })).status).toBe(404);
   });
 });

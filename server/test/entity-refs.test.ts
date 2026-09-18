@@ -13,6 +13,7 @@ import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { expandBodyRefs, referrersOf } from "../src/store/refs";
 import { dropStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 /** A scene of the example campaign we overwrite with reference prose. */
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
@@ -34,24 +35,24 @@ afterEach(() => {
 });
 
 async function readFile(rel: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
 
 async function writeBody(rel: string, body: string): Promise<void> {
   const file = await readFile(rel);
-  const res = await app.request("/api/beispiel/entry", {
+  const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, rev: file.rev, body }),
+    body: JSON.stringify({ rev: file.rev, body }),
   });
   expect(res.status).toBe(200);
 }
 
 async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
   const file = await readFile(rel);
-  const res = await app.request("/api/beispiel/properties", {
+  const res = await app.request("/api/campaigns/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: rel, rev: file.rev, patch: p }),
@@ -61,7 +62,7 @@ async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
 
 /** Create a scene with an EXPLICIT id, so a slug can be claimed on purpose. */
 async function createScene(title: string, chapter: string, id: string): Promise<void> {
-  const res = await app.request("/api/beispiel/scenes", {
+  const res = await app.request("/api/campaigns/beispiel/scenes", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ title, chapter, id }),
@@ -70,7 +71,7 @@ async function createScene(title: string, chapter: string, id: string): Promise<
 }
 
 async function search(q: string): Promise<SearchResult[]> {
-  const res = await app.request(`/api/beispiel/search?q=${encodeURIComponent(q)}`);
+  const res = await app.request(`/api/campaigns/beispiel/search?q=${encodeURIComponent(q)}`);
   expect(res.status).toBe(200);
   return ((await res.json()) as { results: SearchResult[] }).results;
 }

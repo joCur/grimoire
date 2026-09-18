@@ -1,22 +1,18 @@
-// The list mechanics of the two campaign-content pages (issue #53, PO
-// feedback on PR #87): „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
-// (/:campaign/glossary).
+// The list mechanics of the two campaign-content pages:
+// „Kampagnenwissen" (/campaigns/:campaign/knowledge) and „Glossar"
+// (/campaigns/:campaign/glossary).
 //
 // Both lists are ONE text the server takes as a whole (server/src/server.ts):
-// the array order is the stored order, so „umsortieren", „löschen" and
-// „bearbeiten" are all the same request — a whole-list PUT guarded by the
-// list's `rev`. This module is that arithmetic — pure, so the pages stay about
-// layout and the rules are testable without a DOM.
+// the array order is the stored order, so reordering, deleting and editing are
+// all the same request — a whole-list PUT guarded by the list's `rev`. This
+// module is that arithmetic — pure, so the pages stay about layout and the
+// rules are testable without a DOM.
 //
-// WHAT CHANGED WITH THE PAGES. The first version lived inline under
-// `/settings`: every row an always-open form, one global „Speichern" over the
-// lot, and a client-side row key per entry so React could follow a row through
-// a reorder. With 30 glossary terms that page was a wall of tiny text fields
-// (PO feedback). The pages open exactly ONE entry at a time, so the identity
-// problem disappears with the keys: the page holds exactly one open entry.
-// WHICH entry that is is a snapshot of its CONTENT (`findEntryIndex`), not its
-// index — the version poller refetches the list under the open row, and an
-// index that another tab shifted addresses a neighbour (PO finding on PR #87).
+// Each page holds exactly ONE open entry at a time, so no per-row client key
+// is needed to follow a row through a reorder. WHICH entry is open is a
+// snapshot of its CONTENT (`findEntryIndex`), not its index — the version
+// poller refetches the list under the open row, and an index that another tab
+// shifted addresses a neighbour.
 //
 // Why UP/DOWN buttons and not drag & drop for the knowledge order: the list is
 // short, the page has to work on a phone (quality floor) and a drag needs a
@@ -84,7 +80,7 @@ function contains(haystack: string, needle: string): boolean {
  * Alphabetical and not stored order because a glossary is looked things up in,
  * and „where did I put it" is not a question a reference list should ask. The
  * stored order therefore carries no meaning here, which is why the page offers
- * no up/down (PO feedback on PR #87).
+ * no up/down.
  */
 export function glossaryRows(
   entries: readonly GlossaryEntry[],
@@ -141,10 +137,9 @@ export function emptyGlossaryEntry(): GlossaryEntry {
 }
 
 /**
- * An empty knowledge entry. `naming` is the default kind because it is the one
- * the ticket is actually about (and the only one the server can check
- * afterwards) — the other two are a sentence the DM can also just type into
- * the campaign body.
+ * An empty knowledge entry. `naming` is the default kind because it is the
+ * only one the server can check afterwards — the other two are a sentence the
+ * DM can also just type into the campaign body.
  */
 export function emptyKnowledgeEntry(kind: KnowledgeKind = "naming"): KnowledgeEntry {
   return { kind, from: "", to: "", text: "" };
@@ -175,11 +170,11 @@ export function isSendableKnowledgeEntry(entry: KnowledgeEntry): boolean {
 }
 
 /**
- * Switching a knowledge entry's KIND, carrying the text over (review of #53).
+ * Switching a knowledge entry's KIND, carrying the text over.
  *
  * Keeping all three columns filled and only hiding the ones the new kind has
- * no field for is the worst of both: the text is invisible but still saved,
- * still counted and still sent — so a mis-picked kind left a fact in the
+ * no field for would be the worst of both: the text invisible but still saved,
+ * still counted and still sent — a mis-picked kind would leave a fact in the
  * database that nothing on screen explains.
  *
  * Clearing them instead would throw the sentence away on a mis-click. So the
@@ -217,7 +212,7 @@ export function isIncompleteNamingEntry(entry: KnowledgeEntry): boolean {
 
 /**
  * How many knowledge entries actually reach the PROMPT — what the generator
- * view's „Mitgeschickter Kontext" counts (issue #53 AK5).
+ * view's context-sent-along line counts.
  *
  * Not simply `entries.length`: a half-typed naming convention is stored but
  * skipped by the prompt (server/src/store/read.ts knowledgeText), and a count
@@ -237,7 +232,7 @@ export function promptKnowledgeCount(entries: readonly KnowledgeEntry[]): number
 /**
  * Has the OPEN entry been touched? Only the open one has unsaved work now —
  * everything else on the page is either stored or not on screen — so the
- * unsaved-changes guard asks exactly this question (PO feedback on PR #87).
+ * unsaved-changes guard asks exactly this question.
  */
 export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
   return JSON.stringify(draft) !== JSON.stringify(stored ?? null);
@@ -246,7 +241,7 @@ export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
 // --- what the keyboard does after an entry disappears -------------------------
 
 /**
- * Where the focus goes when a row is deleted (review of #53, follow-up).
+ * Where the focus goes when a row is deleted.
  *
  * Deleting the row the focus sits in drops the focus to the document, which on
  * a list you clear from the bottom means reaching for the mouse after every
@@ -256,8 +251,8 @@ export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
  * the stored array: the glossary shows its entries alphabetically and filtered,
  * so the row that takes the deleted one's place is the one at the same DISPLAY
  * position afterwards. Hence `remaining` and `shown` are both measured on the
- * POST-delete display list — computing the target from pre-delete indices is
- * how the focus landed on an unrelated term two rows away.
+ * POST-delete display list — computing the target from pre-delete indices
+ * would land the focus on an unrelated term two rows away.
  *
  * With nothing left there is no row to focus, so „Neuer Eintrag" takes it: the
  * only thing still worth doing.
@@ -273,16 +268,16 @@ export function focusAfterRemove(remaining: number, shown: number): RemoveFocus 
 // --- which stored entry an OPEN row is, after the list moved ------------------
 
 /**
- * Find the entry the DM opened in the list as it stands NOW (PO finding on
- * PR #87): `-1` when it is no longer there, or no longer what it was.
+ * Find the entry the DM opened in the list as it stands NOW: `-1` when it is
+ * no longer there, or no longer what it was.
  *
- * The open row used to be named by its stored INDEX, which is only true while
- * nothing else moves. It does move: the version poller (lib/use-campaign-
- * version.ts) refetches both lists every few seconds, so another tab deleting
- * the first term shifts every index below it — and the save then wrote the
- * DM's text over a neighbour. Content is the identity that survives that: the
- * snapshot taken when the row was opened is looked up again when it is saved,
- * and „not found" is a conflict to be told about, never a write.
+ * A stored INDEX only names the open row while nothing else moves, and the
+ * list does move: the version poller (lib/use-campaign-version.ts) refetches
+ * both lists every few seconds, so another tab deleting the first term shifts
+ * every index below it — and the save would write the DM's text over a
+ * neighbour. Content is the identity that survives that: the snapshot taken
+ * when the row was opened is looked up again when it is saved, and "not
+ * found" is a conflict to be told about, never a write.
  *
  * Duplicates resolve to the first match. Two entries that are byte-identical
  * are interchangeable by definition — replacing either produces the same list.

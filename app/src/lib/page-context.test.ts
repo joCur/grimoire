@@ -19,11 +19,11 @@ const tree: CampaignTree = {
 };
 
 describe("pageContextCrumbs", () => {
-  test("a grouped scene reads chapter title then group, chapter links to the pool", () => {
+  test("a grouped scene reads chapter title then group, chapter links to the chapter overview", () => {
     expect(
       pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm", tree, de),
     ).toEqual([
-      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/beispiel" },
+      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
       // No location file for "hafen" — the slug stands as written.
       { label: "hafen" },
     ]);
@@ -33,32 +33,32 @@ describe("pageContextCrumbs", () => {
     expect(
       pageContextCrumbs("beispiel", "01-salzhafen/leuchtturm/aufstieg", tree, de),
     ).toEqual([
-      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/beispiel" },
+      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
       { label: "Der Leuchtturm von Salzhafen" },
     ]);
   });
 
   test("a scene directly in the chapter directory has no group crumb", () => {
     expect(pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de)).toEqual([
-      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/beispiel" },
+      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
     ]);
   });
 
   test("npc and location views point at THEIR list, never at a chapter", () => {
     expect(pageContextCrumbs("beispiel", "npcs/fenn", tree, de)).toEqual([
-      { label: "NPCs", to: "/beispiel/list/npcs" },
+      { label: "NPCs", to: "/campaigns/beispiel/list/npcs" },
     ]);
     expect(pageContextCrumbs("beispiel", "locations/leuchtturm", tree, de)).toEqual([
-      { label: "Orte", to: "/beispiel/list/locations" },
+      { label: "Orte", to: "/campaigns/beispiel/list/locations" },
     ]);
   });
 
   test("the list labels follow the UI language (issue #69)", () => {
     expect(pageContextCrumbs("beispiel", "npcs/fenn", tree, en)).toEqual([
-      { label: "NPCs", to: "/beispiel/list/npcs" },
+      { label: "NPCs", to: "/campaigns/beispiel/list/npcs" },
     ]);
     expect(pageContextCrumbs("beispiel", "locations/leuchtturm", tree, en)).toEqual([
-      { label: "Locations", to: "/beispiel/list/locations" },
+      { label: "Locations", to: "/campaigns/beispiel/list/locations" },
     ]);
   });
 
@@ -78,10 +78,10 @@ describe("pageContextCrumbs", () => {
 
   test("degrades: unknown chapter keeps its id, no tree keeps every raw value", () => {
     expect(pageContextCrumbs("beispiel", "09-unbekannt/szene", tree, de)).toEqual([
-      { label: "09-unbekannt", to: "/beispiel" },
+      { label: "09-unbekannt", to: "/campaigns/beispiel" },
     ]);
     expect(pageContextCrumbs("beispiel", "01-salzhafen/hafen/x", undefined, de)).toEqual([
-      { label: "01-salzhafen", to: "/beispiel" },
+      { label: "01-salzhafen", to: "/campaigns/beispiel" },
       { label: "hafen" },
     ]);
   });

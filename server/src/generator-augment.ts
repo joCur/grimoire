@@ -1,4 +1,4 @@
-// „Mit KI ergänzen": the generator pipeline pointed at an entry
+// AI augmentation: the generator pipeline pointed at an entry
 // that ALREADY EXISTS — an NPC, a location or a scene.
 //
 // It is deliberately the SAME pipeline as the two create runs
@@ -62,7 +62,7 @@ const AUGMENT_CORRECTION_TAIL = "den vollständigen ergänzten Eintrag enthalten
 /**
  * Properties keys a proposal may never touch. `id` is the primary key (and
  * the reference key of the whole campaign), fixed at creation (ADR #21); a
- * model that „improves" it here would orphan every reference to the entry.
+ * model that "improves" it here would orphan every reference to the entry.
  * The others are APP-MANAGED bookkeeping that the DM's own properties form
  * does not offer either.
  */
@@ -102,8 +102,8 @@ const FORMAT_HEADING = "## Eigenschaften und Text des Eintrags";
  * Why the slice: a create prompt also carries its own „## Ausgabeformat" —
  * `scenes`/`entries` for a scene run, `npc` for an NPC run — and its
  * „## Regeln" speak of stubs the augment run can never produce. Embedding
- * the whole prompt put TWO contradictory output schemas in front of the
- * model, and „this prompt wins" is a sentence, not a guarantee. The augment
+ * the whole prompt would put TWO contradictory output schemas in front of the
+ * model, and "this prompt wins" is a sentence, not a guarantee. The augment
  * run brings its own output schema and its own rules; all it needs from the
  * create prompt is the shape of the target entry.
  *
@@ -146,7 +146,7 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  * already exists. Deliberately NARROWER than the create runs':
  *
  *   * a scene's `status` is whatever the DM made it (`ready`, `played`, …) —
- *     forcing `draft` would reset the pool state of a prepared scene,
+ *     forcing `draft` would reset the status of a prepared scene,
  *   * `npcs`/`location` pointing at something unknown is not checked HERE:
  *     the write path refuses it with the same sentence the properties dialog
  *     next to the button gets, so checking it twice would only make the
@@ -211,14 +211,14 @@ export function validateAugmentReply(
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
-  // the warnings. The augmentation rule („immer den GANZEN Eintrag") is the rule
-  // it always was — the shape around it is what changed.
+  // the warnings. The augmentation rule holds throughout: a reply carries the
+  // WHOLE entry.
   //
   // A key the schema does NOT have (a `roll20-page` on an npc, app-managed
   // bookkeeping, anything a DM hand-wrote) therefore cannot be proposed at
   // all — and it cannot be lost either: the proposal only patches the keys it
   // lists, so every other key keeps its value, which is exactly what
-  // „nichts löschen" means here.
+  // "delete nothing" means here.
   const { kind, stored } = target;
   // Read in AUGMENT mode: an unknown property key is an echo of the entry the
   // model was shown, not a proposal (see normalizeProperties) — it is dropped
@@ -270,7 +270,7 @@ export function validateAugmentReply(
 // --- the properties proposal --------------------------------------------------
 
 /**
- * „The entry has no value here" — what makes a proposed field a `new` one
+ * "The entry has no value here" — what makes a proposed field a `new` one
  * (and therefore preselected in the review). Absent, null, a blank string and
  * an empty list/mapping all count; `false` and `0` do NOT — those are values
  * the DM chose.
@@ -305,7 +305,7 @@ function sameValue(a: unknown, b: unknown): boolean {
  * Only what CHANGES is listed: a key the proposal repeats verbatim is
  * not a decision the DM has to make.
  *
- * A key the proposal DROPS is not listed either — „nichts löschen" is the
+ * A key the proposal DROPS is not listed either — "delete nothing" is the
  * augmentation rule, and a model that simply forgot a key must not turn into
  * a deletion the DM has to notice and undo.
  */
@@ -377,7 +377,7 @@ export async function runAugment(
         markdown: renderRaw(target.stored.properties, target.stored.body),
       },
       ...(instruction === "" ? {} : { instruction }),
-      // Forced like every other reply — in „augment" mode, which
+      // Forced like every other reply — in "augment" mode, which
       // is the one difference: an existing scene's `status` is whatever the DM
       // made it, so the schema must not narrow it to `draft`.
       jsonSchema: entryReplySchema(target.kind, "augment"),
@@ -405,9 +405,9 @@ function chapterOf(stored: EntryResponse): string {
  * The proposed body under the proposed properties — what the check reads.
  *
  * The properties go through the STORE'S OWN renderer, not through
- * `String(value)`: a list, a mapping or a `role` that contains „: " produced
- * YAML the parser could not read, and the whole block then degraded into the
- * body — every hint landed on `body` with a line number that pointed at
+ * `String(value)`: a list, a mapping or a `role` that contains ": " produces
+ * YAML the parser cannot read, and the whole block then degrades into the
+ * body — every hint would land on `body` with a line number that points at
  * nothing. Same renderer as a written entry, so the check reads the entry
  * the DM is about to accept.
  */
@@ -419,7 +419,7 @@ function proposedEntry(result: AugmentResult): string {
 // --- accepting ---------------------------------------------------------------
 
 /**
- * POST /api/:campaign/generate/augment/apply — write the DM's decisions.
+ * POST /api/campaigns/:campaign/generate/augment/apply — write the DM's decisions.
  *
  * The client sends the accepted properties fields and the body it assembled
  * out of the accepted blocks; the server does not re-derive either (the

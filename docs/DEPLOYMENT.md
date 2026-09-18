@@ -237,9 +237,9 @@ immer im ersten Turn — ein zweiter kostet nur. `0` schaltet Korrektur-Turns
 ganz ab (billigster, strengster Modus), `2` ist das Maximum.
 
 **Generierungen laufen im Hintergrund** (Issue #19): `POST
-/api/:campaign/generate` startet einen Job und antwortet mit `202
+/api/campaigns/:campaign/generate` startet einen Job und antwortet mit `202
 {"jobId":…}`; das Ergebnis holt die App über `GET
-/api/:campaign/generate/job`. Ein Job pro Kampagne (zweiter Start → `409`
+/api/campaigns/:campaign/generate/job`. Ein Job pro Kampagne (zweiter Start → `409`
 mit der laufenden `jobId`), und er bleibt inklusive Review-Edits liegen, bis
 er übernommen oder verworfen wird — Navigation, Reload oder ein geschlossener
 Tab kosten damit keine Generierung mehr. Die Jobs liegen **nur im
@@ -249,7 +249,7 @@ Die App meldet das dann im Generator als „Der Generierungs-Job ist nicht mehr
 vorhanden (Server-Neustart?)".
 
 Fehlt eine erforderliche Variable, antwortet nur `POST
-/api/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.
+/api/campaigns/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.
 `{"error":"ANTHROPIC_API_KEY fehlt"}`, `{"error":"OPENROUTER_API_KEY fehlt"}`
 oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)"}` (der
 Provider wird bewusst erst pro Request erzeugt). Ein Tippfehler in
@@ -378,7 +378,7 @@ Verzeichnis kopieren) und die Wiederherstellung.
 - Healthcheck: eingebaut (`GET /api/campaigns`), sichtbar über
   `docker inspect --format '{{.State.Health.Status}}' grimoire`.
 - Aktualisierung im Browser: jeder Write zählt `campaigns.version` in
-  derselben Transaktion hoch, die App pollt `GET /api/:campaign/version`
+  derselben Transaktion hoch, die App pollt `GET /api/campaigns/:campaign/version`
   (DECISIONS #9). Es gibt keinen Datei-Watcher mehr — Edits im Dateibaum
   wirken NICHT, die Datenbank ist die Wahrheit (ADR #13).
 - Start bricht mit `Reference check failed — …` oder

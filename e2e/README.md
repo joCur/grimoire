@@ -235,7 +235,7 @@ mehrere Schreibwege auf ihm liegen:
 
 | Pfad (CLAUDE.md)   | Spec                                                           |
 | ------------------ | -------------------------------------------------------------- |
-| 1 Auto-Einstieg    | `tests/pool.e2e.ts` (Gruppen = Ortsnamen, „Ohne Ort")          |
+| 1 Auto-Einstieg    | `tests/chapter-overview.e2e.ts` (Gruppen = Ortsnamen, „Ohne Ort")          |
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
@@ -346,7 +346,7 @@ Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.
 
 Ein Spec deckt auch spätere Scheiben auf seinem Pfad ab, nicht nur die Scheibe,
-die ihn angelegt hat: `tests/pool.e2e.ts` prüft zusätzlich Gruppenkopf-Namen,
+die ihn angelegt hat: `tests/chapter-overview.e2e.ts` prüft zusätzlich Gruppenkopf-Namen,
 die Topbar-Navigation und den Kampagnen-Metadaten-Dialog,
 `tests/review.e2e.ts` den Szenentitel im Quellchip, und
 `tests/search.e2e.ts` die Frische-Zusicherung des Cutovers: was die
@@ -366,7 +366,7 @@ Zwei Pfade tragen das Kapitel als eigenen Eintrag.
   Zu beachten: ein Bulk-„Übernehmen" lässt **unentschiedene** vorgeschlagene
   Einträge offen (Regel des Prüfschritts), der Prüfschritt bleibt stehen und
   meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.
-- **Pfad 1** (`pool.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
+- **Pfad 1** (`chapter-overview.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
   wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte
   Eigenschaften-Dialog), „Kapitel bearbeiten" (Kapiteltext, aus dem die
   Zielzeile kommt, inkl. 409 gegen einen zweiten Schreiber) und das

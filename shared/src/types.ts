@@ -9,7 +9,7 @@
 
 import type { SessionPause } from "./session-state";
 
-/** Known scene lifecycle states; files may contain other values (degrade). */
+/** Known scene lifecycle states; entries may carry other values (degrade). */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
 export type SceneStatus = (typeof SCENE_STATUSES)[number];
 
@@ -94,14 +94,14 @@ export interface LocationProperties {
 
 /**
  * Properties of a campaign's `campaign` (README, "Entität: Kampagne
- * (optional)"). The file is optional — without it the UI shows the directory
- * name. `id` is the directory name, `name` the display name; further keys
+ * (optional)"). The entry is optional — without it the UI shows the campaign's
+ * id. `id` is that id, `name` the display name; further keys
  * (e.g. `system`) are preserved verbatim.
  */
 export interface CampaignProperties {
   id: string;
   name: string;
-  /** One-liner shown next to the name (switcher meta, pool subtitle). */
+  /** One-liner shown next to the name (switcher meta, chapter overview subtitle). */
   description?: string;
   [key: string]: unknown;
 }
@@ -115,7 +115,7 @@ export interface ChapterProperties {
 }
 
 /**
- * Session files are app-managed (`sessions/<id>`, where `<id>` is an
+ * Session entries are app-managed (`sessions/<id>`, where `<id>` is an
  * opaque random string — everything displayable about a
  * session comes from `started`).
  * Timestamps are strings — YAML would otherwise parse bare ISO dates as
@@ -127,7 +127,7 @@ export interface SessionProperties {
   ended?: string;
   scenes_played?: string[];
   /**
-   * Pause intervals of the session (app-managed, hand-editable):
+   * Pause intervals of the session (app-managed):
    * `[{ from: yyyy-mm-ddTHH:MM:SS, to?: … }]` in the same zone-less
    * local-time convention as started/ended. An entry without `to` is the
    * running pause. Read it through `sessionPauses` (session-state.ts), which
@@ -137,7 +137,7 @@ export interface SessionProperties {
   /**
    * Short hashes of log lines seen in the review step (app-managed). One
    * entry is the first 8 hex chars of SHA-256 over the RAW log line — this
-   * keeps `## Log` strictly append-only and survives external reordering
+   * keeps `## Log` strictly append-only and survives reordering
    * (README, "Entität: Session").
    */
   reviewed?: string[];
@@ -155,7 +155,7 @@ export type EntityKind =
   | "glossary"
   | "unknown";
 
-/** One parsed markdown file. `path` is always relative to the campaign root. */
+/** One parsed entry. `path` is its address within the campaign. */
 export interface ParsedFile<F = Record<string, unknown>> {
   path: string;
   kind: EntityKind;
@@ -172,26 +172,26 @@ export interface CampaignSummary {
   /** The campaign's id — the key in every URL. */
   id: string;
   /**
-   * Id of the campaign's newest session (`sessions/<id>` without the
-   * extension). OPAQUE by PO decision: an address, not a
+   * Id of the campaign's newest session (the `<id>` of `sessions/<id>`).
+   * OPAQUE: an address, not a
    * date, and NOT comparable — order by `lastSessionStarted` instead. Absent
    * when the campaign has no session.
    */
   lastSession?: string;
   /**
    * `started` of that newest session — the zone-less wall-clock string the
-   * file format carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
+   * property carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
    * means, and the only orderable thing about a session the client
    * gets. Absent when the campaign has no session, or when that session has no
-   * usable `started` (a hand-edited file) — either way it then sorts behind
-   * every campaign that has one.
+   * usable `started` — either way it then sorts behind every campaign that
+   * has one.
    */
   lastSessionStarted?: string;
   /**
    * Display name. Always present: a campaign
-   * without an authored name is shown under its ID, exactly as the campaign
-   * DOCUMENT renders it (`GET /entry?path=campaign`) — the two endpoints
-   * used to disagree. Optional in the type so an older payload still parses.
+   * without an authored name is shown under its id, exactly as the campaign
+   * ENTRY renders it (`GET /entry?path=campaign`) — the two endpoints must
+   * agree. Optional in the type so an older payload still parses.
    */
   name?: string;
   /**
@@ -226,14 +226,14 @@ export interface SceneGroup {
    * group, which is not a location and is labelled by the app.
    *
    * Resolved HERE because the groups are ordered by it: the heading the DM
-   * reads is the name, so an ordering by slug put „Die Bucht" under B.
+   * reads is the name, so an ordering by slug would sort by the id instead.
    */
   name: string;
   scenes: SceneSummary[];
 }
 
 export interface ChapterNode {
-  /** Directory name, e.g. "01-salzhafen". */
+  /** The chapter's id, e.g. "01-salzhafen". */
   id: string;
   /** The chapter's title; falls back to its id. */
   title: string;
@@ -306,7 +306,7 @@ export interface EntryResponse extends ParsedFile {
 /**
  * One row of GET /api/:campaign/search (the response wraps them as
  * `{ results: SearchResult[] }`, see SearchResponse). Only scenes, npcs,
- * locations, chapters and the campaign file are indexed — see
+ * locations, chapters and the campaign entry are indexed — see
  * server/src/search-index.ts.
  */
 export interface SearchResult {
@@ -328,13 +328,13 @@ export interface SearchResponse {
 // --- generator (POST /api/:campaign/generate, see generator/README.md) -----
 
 /**
- * One generated scene draft in the review preview. Nothing is on disk yet —
+ * One generated scene draft in the review preview. Nothing is stored yet —
  * writing happens only via POST /api/:campaign/generate/apply.
  */
 export interface GeneratedSceneDraft {
   /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured". */
   path: string;
-  /** The complete markdown file including the properties block. */
+  /** The complete markdown including the properties block. */
   markdown: string;
   /** The parsed properties (always `status: draft`), for the review UI. */
   properties: Record<string, unknown>;
@@ -349,7 +349,7 @@ export interface GeneratedStub {
   kind: "npc" | "location";
   id: string;
   name: string;
-  /** The complete stub markdown file including the properties block. */
+  /** The complete stub markdown including the properties block. */
   markdown: string;
 }
 
@@ -389,16 +389,16 @@ export interface GenerateResult {
 }
 
 /**
- * One generated NPC file draft. Same "nothing is on disk yet"
+ * One generated NPC draft. Same "nothing is stored yet"
  * rule as a scene draft: writing happens only via POST
  * /api/:campaign/generate/apply. The path is always `npcs/<id>` and the
- * properties id matches that filename — the server validates both before
+ * properties id matches that address — the server validates both before
  * the draft ever reaches the review.
  */
 export interface GeneratedNpcDraft {
   /** Campaign-relative target path, always "npcs/<kebab-id>". */
   path: string;
-  /** The complete markdown file including the properties block. */
+  /** The complete markdown including the properties block. */
   markdown: string;
   /** The parsed properties (id/name/status guaranteed), for the review UI. */
   properties: Record<string, unknown>;
@@ -407,7 +407,7 @@ export interface GeneratedNpcDraft {
 /**
  * Result of an NPC run (POST /api/:campaign/generate/npc) —
  * deliberately its OWN shape instead of a scene-less GenerateResult: an NPC
- * run produces exactly one file, has no stubs and no chapter, and a
+ * run produces exactly one entry, has no stubs and no chapter, and a
  * `scenes: []` would be a lie every consumer would have to special-case.
  * Carried by a finished job as `npcResult` (see GenerateJob).
  */
@@ -424,8 +424,8 @@ export interface GenerateNpcResult {
 // --- augmenting an EXISTING entry -------------------------------------------
 
 /**
- * The entity kinds „Mit KI ergänzen" works on. Deliberately its own list and
- * not `EntityKind`: a chapter, a session or the campaign file has no augment
+ * The entity kinds AI augmentation works on. Deliberately its own list and
+ * not `EntityKind`: a chapter, a session or the campaign entry has no augment
  * prompt, and a kind without one must not even reach the pipeline.
  */
 export const AUGMENT_KINDS = ["npc", "location", "scene"] as const;
@@ -438,13 +438,13 @@ export function isAugmentKind(value: unknown): value is AugmentKind {
 
 /**
  * One properties field of an augment proposal, as the review renders it:
- * „Vorhanden | Vorschlag" side by side.
+ * current value and proposal side by side.
  *
  * `state` is what the DEFAULT decision hangs off (never
  * silently overwrite): `new` means the entry has no value for the key (absent,
  * null, empty string, empty list) and the proposal is preselected; `changed`
  * means the entry HAS a value and the model wants a different one — the
- * default there is „Behalten".
+ * default there is to keep the current value.
  *
  * Fields the proposal leaves alone are not listed at all; `current` is absent
  * exactly when the key does not exist on the entry.
@@ -476,7 +476,7 @@ export interface AugmentResult {
   rev: number;
   /** Only the keys the proposal adds or changes (see AugmentPropertyProposal). */
   properties: AugmentPropertyProposal[];
-  /** The entry's body as the run read it — the „Vorher" side of the diff. */
+  /** The entry's body as the run read it — the BEFORE side of the diff. */
   currentBody: string;
   /** The model's proposed body, complete (not a patch). */
   proposedBody: string;
@@ -500,9 +500,9 @@ export interface AugmentResult {
  * while its siblings are still running.
  *
  * The OUTLINE itself never travels: it is a purely internal step for error
- * reduction (PO, 15.09.) and is never offered for editing. What the client
+ * reduction and is never offered for editing. What the client
  * gets is the part LIST — order, kind, title, status — because a status card
- * and „2 von 3 Szenen fertig" cannot be drawn without it.
+ * and a progress count of finished parts cannot be drawn without it.
  */
 export interface GenerateJobPart {
   /** Stable key of the part; the retry endpoint addresses it (`scene:<id>`). */
@@ -513,11 +513,11 @@ export interface GenerateJobPart {
   /** Display title of the part; the id when the outline named none. */
   title: string;
   status: GenerateJobPartStatus;
-  /** Why the part failed — the DM reads this next to „Erneut versuchen". */
+  /** Why the part failed — the DM reads this next to the retry action. */
   error?: string;
   /** The mechanical validation errors of a failed part, when there were any. */
   validationErrors?: string[];
-  /** The raw reply of the failed attempt (capped) — the „was kam zurück" block. */
+  /** The raw reply of the failed attempt (capped) — the raw-reply block. */
   rawReply?: string;
 }
 
@@ -533,7 +533,7 @@ export interface GenerateJobPipeline {
   parts: GenerateJobPart[];
   /**
    * Summed over every provider call of every part, the outline included —
-   * the review header shows it as „~N Tokens · M Aufrufe". `calls` counts
+   * the review header shows it as a token and call count. `calls` counts
    * provider calls (a correction turn is one more).
    */
   totals: { inputTokens: number; outputTokens: number; calls: number };
@@ -546,7 +546,7 @@ export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
 
 /**
  * What a generator job produces: scene drafts for a chapter, one
- * NPC file draft, or a PROPOSAL for an entry that already exists
+ * NPC draft, or a PROPOSAL for an entry that already exists
  * (`augment`). There is still exactly ONE job per campaign; the
  * kind only tells the client which result field to read and which mode to
  * restore.
@@ -656,9 +656,10 @@ export interface GenerateJobReview {
   /** Scene draft paths the DM dropped from the run — never written. */
   dropped: string[];
   /**
-   * Augment run only: decision per PROPERTY key. `true` = übernehmen,
-   * `false` = behalten; an absent key keeps the computed default (lib/augment
-   * `defaultAccepted`), so a fresh review still starts where it always did.
+   * Augment run only: decision per PROPERTY key. `true` accepts the
+   * proposal, `false` keeps the current value; an absent key keeps the
+   * computed default (lib/augment `defaultAccepted`), so a fresh review
+   * starts from that default.
    */
   fields: Record<string, boolean>;
   /** Augment run only: the same per body BLOCK id. */
@@ -737,7 +738,7 @@ export interface GlossaryResponse {
 }
 
 /**
- * The three kinds of campaign knowledge (PO decision):
+ * The three kinds of campaign knowledge:
  *
  *   naming  a NAMING CONVENTION — `from` is the spelling the source material
  *           uses, `to` the one this campaign uses. The only kind the server

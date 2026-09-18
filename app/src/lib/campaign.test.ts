@@ -5,8 +5,8 @@ import { locationName, pickLastCampaign, sceneTitle, settingsCampaign } from "./
 
 /**
  * A campaign whose newest session STARTED at `lastSessionStarted`. The
- * session's own id is opaque noise since issue #58 and deliberately random
- * here — nothing in the order may read it.
+ * session's own id is opaque noise and deliberately random here — nothing in
+ * the order may read it.
  */
 const c = (id: string, lastSessionStarted?: string): CampaignSummary =>
   lastSessionStarted === undefined
@@ -54,8 +54,7 @@ describe("pickLastCampaign", () => {
 
   test("two sessions of the SAME DAY order by their TIME, not by their id (#58)", () => {
     // The ids say nothing about the order — the evening's second session
-    // simply started later. (Under the old scheme this was `-2` vs `-10` and
-    // the app had to know that `-10` is the newer one.)
+    // simply started later, and only the start time says so.
     expect(
       pickLastCampaign([c("alpha", "2026-09-06T18:00:00"), c("zeta", "2026-09-06T22:15:00")]),
     ).toBe("zeta");
@@ -116,7 +115,7 @@ const tree: CampaignTree = {
 };
 
 describe("locationName", () => {
-  test("resolves a known id to its name — this is what a pool group header shows", () => {
+  test("resolves a known id to its name — this is what a chapter overview group header shows", () => {
     expect(locationName(tree, "leuchtturm")).toBe("Der Leuchtturm von Salzhafen");
   });
 

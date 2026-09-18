@@ -1,24 +1,24 @@
 // React-query hooks around the session.
 //
-// TWO different questions, two hooks (issue #40) — and BOTH are the server's
+// TWO different questions, two hooks — and BOTH are the server's
 // answer, never the client's date:
 //
 //   - useActiveSession — "is a session running right now?"
-//     (GET /:campaign/session): the last started session that is not ended,
+//     (GET /campaigns/:campaign/session): the last started session that is not ended,
 //     which may well be YESTERDAY's session when the evening went past midnight.
 //     `null` means "nothing running" — a normal state, not an error.
 //   - useLastStartedSession — "which session does the review harvest?"
-//     (GET /:campaign/session?includeEnded=1): the last started session,
-//     ENDED or not. Deriving today's session id here was the midnight bug of
-//     the review (finding 1): `end` writes into the session that was
-//     STARTED in, so after a session that ran past midnight the harvest — and
-//     every `review/seen` patch — looked at a session that does not exist.
+//     (GET /campaigns/:campaign/session?includeEnded=1): the last started session,
+//     ENDED or not. Today's session id is NOT derived here: `end` writes into
+//     the session that was STARTED in, so after a session that ran past
+//     midnight a derived id — for the harvest and for every `review/seen`
+//     patch — would name a session that does not exist.
 //
 // Every write endpoint returns the fresh EntryResponse: it is written into the
 // cache immediately (keyed by the path the SERVER reports, never a guessed
 // one). No invalidation on top — the version poll (lib/use-campaign-version)
-// covers external changes, and re-fetching the same session per log line was one
-// redundant request per keystroke-sized write.
+// covers external changes, and re-fetching the same session per log line would
+// be one redundant request per keystroke-sized write.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { isEnded } from "@grimoire/shared/session-state";
@@ -78,10 +78,10 @@ export function noSessionYet(error: unknown): boolean {
 
 /**
  * The `code` of a `POST /session/start` 409 (server: store/write.ts). Exactly
- * ONE code is left since issue #58: `"session_running"` — an OLDER session is
- * still open. An already ended session of today is no conflict at all any
- * more; the start simply creates the next session of the day. Undefined for
- * anything else, so the caller can fall back to a plain error message.
+ * ONE code exists: `"session_running"` — an OLDER session is still open. An
+ * already ended session of today is no conflict; the start simply creates the
+ * next session of the day. Undefined for anything else, so the caller can fall
+ * back to a plain error message.
  */
 export type SessionStartConflict = "session_running";
 
@@ -101,9 +101,9 @@ export function conflictPath(error: unknown): string | undefined {
  * Session write mutation (start/end/log/pause): seeds the caches from
  * the returned session.
  *
- * The session cache is keyed by `data.path` — the server decides which session the
- * write landed in (issue #40: a log line goes into the RUNNING session, which
- * can be yesterday's session). The active-session cache is seeded only while the
+ * The session cache is keyed by `data.path` — the server decides which session
+ * the write landed in: a log line goes into the RUNNING session, which can be
+ * yesterday's session. The active-session cache is seeded only while the
  * returned session is not ended (shared `isEnded` — the ONE predicate, so client
  * and server never disagree about a blank `ended`); an ended session is no
  * longer active and must not linger as a live indicator. The review's session
@@ -127,9 +127,9 @@ export function useSessionWrite<TVars = void>(
 }
 
 /**
- * "Session verwerfen" (issue #40 AK7): the active session is DELETED.
- * Offered only while `isSessionEmpty` holds — the same shared predicate the
- * server enforces, so the action never leads into a 409.
+ * "Session verwerfen": the active session is DELETED. Offered only while
+ * `isSessionEmpty` holds — the same shared predicate the server enforces, so
+ * the action never leads into a 409.
  *
  * The cache cannot be seeded from a response here (there is no session any
  * more): the active session becomes `null` immediately, and the review's
@@ -158,9 +158,9 @@ export function useSessionDiscard(campaign: string, onDone?: () => void) {
  * ending someone else's evening is not implied by "starten". Both places that
  * offer the button (topbar and live view) ask that same question.
  *
- * "Fortsetzen" is gone (issue #58): "Session beenden" is FINAL, so a start
- * after an ended session creates a NEW session (own id, empty log, runtime at
- * 0) instead of re-opening the last one.
+ * There is no resume: "Session beenden" is FINAL, so a start after an ended
+ * session creates a NEW session (own id, empty log, runtime at 0) instead of
+ * re-opening the last one.
  */
 export function useSessionStartFlow(campaign: string, onEnter?: (data: EntryResponse) => void) {
   const start = useSessionWrite(campaign, () => startSession(campaign), onEnter);

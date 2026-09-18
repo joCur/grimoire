@@ -59,7 +59,7 @@ import { assertSafeAddress } from "./addressing";
 import { composeEntry, parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
-// the campaign file tree is not a data source any more.
+// nothing else is a data source.
 import {
   buildTree,
   glossaryText,
@@ -164,8 +164,8 @@ export interface PromptAssets {
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
-  // Locations had no prompt of their own — the augment run is the
-  // first caller, and the pair is written so a future „Ort generieren" can
+  // Locations have no generator run of their own — the augment run is the
+  // only caller, and the pair is written so a future location run can
   // use it unchanged.
   location: {
     systemPrompt: "location-system-prompt.md",
@@ -177,8 +177,8 @@ export const ASSET_FILES = {
     systemPrompt: "outline-system-prompt.md",
     fewShotTarget: "outline-example-output.json",
   },
-  // The output-schema section that turns the scene prompt into „genau eine
-  // Szene aus der Gliederung" mode. No few-shot of its own — the
+  // The output-schema section that turns the scene prompt into
+  // single-scene-from-outline mode. No few-shot of its own — the
   // per-scene call sends the scene example file — so, like `augment`, this
   // entry carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
@@ -379,7 +379,7 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 
 /**
  * One entry of a model reply. There is no `path`:
- * the model does not address anything. It writes a DOCUMENT, the `id` in its
+ * the model does not address anything. It writes an ENTRY, the `id` in its
  * properties is the entity's key, and the server builds the address from the
  * run's chapter plus that id — which is what makes a corrected `location`
  * move the scene instead of contradicting a path the model chose.
@@ -612,7 +612,7 @@ export function validateSceneEntry(input: {
   // The `chapter` key and the scene's ADDRESS have to say the same thing. The
   // address is the run's (`<chapter>/<id>`, never the model's), so a reply
   // that names a different chapter would produce an entry sitting in one
-  // chapter while claiming another — the pool groups by the key, the entry
+  // chapter while claiming another — the chapter overview groups by the key, the entry
   // tree by the address, and the two would disagree forever after. Cheaper as
   // a correction turn than as a scene the DM has to find and fix by hand.
   if (typeof fm.chapter === "string" && fm.chapter !== "" && fm.chapter !== chapter) {
@@ -764,14 +764,14 @@ function notesErrors(body: string): string[] {
 /**
  * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
  * number 2 and the plus — the whole point of a social modifier — is gone
- * before anyone sees the file.
+ * before anyone sees the value.
  *
- * A REPLY can no longer break the rule: `quickstats` travels
+ * A REPLY cannot break the rule: `quickstats` travels
  * as a `{ key, value }` LIST whose values the schema types as strings, and
  * the server folds it into the mapping itself (entry-reply.ts
  * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
  * the augment run — pass exactly such a folded mapping, so the check fires on
- * none of them any more.
+ * none of them.
  *
  * It stays as a BACKSTOP, and the augment path is why: there the mapping does
  * not end up in an entry the server just composed but in a properties PATCH the
@@ -941,7 +941,7 @@ class RunUsage {
   private outputTokens = 0;
   // Log-only: how much of the input was a cache hit. It is NOT
   // added to the reported usage — a cached token was still sent, and the
-  // review's „~N Tokens" is the size of the prompt, not its price.
+  // review's token figure is the size of the prompt, not its price.
   private cachedInputTokens = 0;
   private reported = false;
 
@@ -1026,7 +1026,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   /**
    * Called once per provider call. The pipeline counts its own
    * calls with it: `usage` is absent whenever the endpoint reports no tokens,
-   * so the run's „M Aufrufe" cannot be read off it — and a part that FAILED
+   * so the run's call count cannot be read off it — and a part that FAILED
    * has to contribute its attempts to the total as well.
    */
   onCall?: () => void;
@@ -1081,7 +1081,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   }
 }
 
-// --- POST /api/:campaign/generate/npc ----------------------------------------
+// --- POST /api/campaigns/:campaign/generate/npc ----------------------------------------
 
 /**
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
@@ -1128,7 +1128,7 @@ export async function runGenerateNpc(
   );
 }
 
-// --- POST /api/:campaign/generate/apply -----------------------------------------
+// --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
 
 const SCENE_ITEM_KEYS = new Set(["path", "markdown", "properties"]);
 const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
@@ -1167,7 +1167,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   // a scene address is its `location`, which the SERVER derives on the way in
   // (`draftAddress`). A client that still sends a three-segment path is
   // naming a group of its own, and that is exactly the contradiction between
-  // address and `location` this ticket removes.
+  // address and `location` that the two-segment rule rules out.
   const segments = rel.split("/");
   if (segments.length !== 2 || RESERVED_DIRS.has(segments[0]!)) {
     throw new ApiError(400, `${label}.path must be "<chapter>/<scene-id>"`);
@@ -1265,14 +1265,13 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * never the active one); the body stays empty and degrades.
  */
 /**
- * The chapter target of a „Neues Kapitel" run, decided from the JOB.
+ * The chapter target of a new-chapter run, decided from the JOB.
  *
- * The app used to send `chapter`/`chapterTitle` from its own state on accept,
- * and the review state is persistent — so that state is gone after a
- * navigation or a reload, and the scenes were written under a chapter that had
- * no entry of its own: invisible in the overview, together with every scene in
- * it. The run knows what chapter it is for (`generate_jobs.chapter`) and, since
- * the migration next to this, what it is CALLED
+ * The app must not decide it from its own state: the review state is
+ * persistent, so that state is gone after a navigation or a reload, and the
+ * scenes would land under a chapter that has no entry of its own — invisible
+ * in the overview, together with every scene in it. The run knows what
+ * chapter it is for (`generate_jobs.chapter`) and what it is CALLED
  * (`generate_jobs.new_chapter_title`), so the decision is made here and needs
  * no browser.
  *
@@ -1323,12 +1322,12 @@ export async function newChapterTarget(
  * Write the reviewed drafts (as ROWS). Validates ALL drafts first
  * (400), then checks ALL targets for conflicts (409 with the conflicting
  * paths, nothing partially written), then inserts them in ONE transaction —
- * which is what "all or nothing" now means literally. Returns the written
+ * which is what "all or nothing" means literally. Returns the written
  * campaign-relative paths.
  *
  * `chapter`/`chapterTitle` (both or neither) add the chapter's chapter entry
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
- * "Neues Kapitel" flow.
+ * new-chapter flow.
  *
  * `npc` is the NPC generator's single draft — the same endpoint on
  * purpose: conflict handling, atomic writes and the job cleanup are identical,
@@ -1376,7 +1375,7 @@ export async function applyGenerated(
     // The ADDRESS the entity will have (store/paths) — for a scene that is
     // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because
     // that is the key `insertDraft` writes under. The model's last segment is
-    // not part of the addressing any more, so it must not decide anything
+    // not part of the addressing, so it must not decide anything
     // here either: checking the path-derived id while inserting the
     // properties id would let a colliding draft past the 409 and into a
     // primary-key violation.
@@ -1399,13 +1398,13 @@ export async function applyGenerated(
   }
 
   // The conflict check runs in the SAME transaction as the inserts — see
-  // store/write.ts `applyDrafts`. Asking here first left a window between
-  // "free" and "inserted" in which a target could appear, and the documented
-  // `409 { conflicts }` became a primary-key violation (a 500). It asks by
-  // ADDRESS, i.e. by id, which is the key now — so a draft that collides with
-  // an existing entity is caught even when the model chose a different file
-  // name for it; the conflict is REPORTED under the path the client sent,
-  // which is the draft it has to fix.
+  // store/write.ts `applyDrafts`. Asking here first would leave a window
+  // between "free" and "inserted" in which a target could appear, and the
+  // documented `409 { conflicts }` would become a primary-key violation (a
+  // 500). It asks by ADDRESS, i.e. by id, which is the key — so a draft that
+  // collides with an existing entity is caught even when the model chose a
+  // different last segment for it; the conflict is REPORTED under the path
+  // the client sent, which is the draft it has to fix.
   await applyDrafts(campaign, drafts, jobId);
   return { written: drafts.map((draft) => draft.address) };
 }
@@ -1415,7 +1414,7 @@ export async function applyGenerated(
  * scene, the id segment of its address). It arrives from a client payload and
  * was taken on trust: `id: ""` inserted a row nothing can address, and
  * `id: "a/b"` inserted one whose address parses as a different path — both
- * unreachable through `GET /entry`, i.e. content written and lost in the same
+ * unreachable through `GET /entries`, i.e. content written and lost in the same
  * request. A properties that HAS an `id` must therefore carry a usable one;
  * a draft without the key keeps falling back to its address segment, which
  * the address validation already constrains.
@@ -1438,8 +1437,8 @@ export function assertDraftId(id: unknown, rel: string): void {
  * Where a draft will live: its address. For a SCENE that is
  * `<chapter>/<location>/<id>` — the chapter from the draft's own path (the
  * run's chapter), the id from the properties, and the GROUP from the
- * properties `location`. Nothing about the group is taken from
- * the path any more: that is what made a corrected `location` and the stored
+ * properties `location`. Nothing about the group is taken from the path:
+ * taking it from there would make a corrected `location` and the stored
  * address disagree. For every other kind the address is the path (an npc or
  * location draft is validated against its own segment, a chapter's id IS the
  * first segment).

@@ -1,8 +1,8 @@
-// The pipelined scene run (issue #102) — the pieces that are worth testing
+// The pipelined scene run — the pieces that are worth testing
 // on their own, plus the run mechanics a rendering test cannot see.
 //
 // The pure halves (the outline validation, the excerpt cut, the prompt
-// assembly) are called directly: they are the rules the whole ticket rests on
+// assembly) are called directly: they are the rules the whole run rests on
 // and going through HTTP for them would only make a failure harder to read.
 // The run mechanics — a failed part that does not take its siblings down, a
 // retry that re-runs ONE part, a cancel that stops the open rest — go through
@@ -174,10 +174,9 @@ test("the outline's ids are kebab slugs and unique across scenes AND entries", (
 });
 
 test("an id the campaign already has is NOT an outline error", () => {
-  // Since issue #70 a reference creates an EMPTY row, so „fenn exists“ can
-  // mean „a scene mentions him and nobody has written him yet“ — which is
-  // exactly the entry this run should fill. Collisions are the apply path's
-  // question, and they always were.
+  // A reference creates an EMPTY row, so „fenn exists“ can mean „a scene
+  // mentions him and nobody has written him yet“ — which is exactly the entry
+  // this run should fill. Collisions are the apply path's question.
   expect(
     outlineErrors(
       outlineReply({ entries: [{ kind: "npc", id: "fenn", name: "Fenn", summary: "x" }] }),
@@ -377,7 +376,7 @@ test("the single-scene mode swaps the output schema and keeps every rule", async
   // The outline-bound half of the swap: one scene per call, no entries.
   expect(single).toContain("GENAU EINE Szene");
   expect(single).toContain("Die Gliederung ist verbindlich.");
-  // Exactly one output-format heading, and the file format and the rules of
+  // Exactly one output-format heading, and the entry format and the rules of
   // the scene prompt are untouched — that is why this is a swap and not a
   // second prompt file.
   expect(single.split("## Ausgabeformat").length - 1).toBe(1);
@@ -405,7 +404,7 @@ test("the outline block names every id — and nothing about the assigned part",
   expect(block).toContain("→ verweist auf: captured");
   expect(block).toContain("npc: grella (Grella) — Schmugglerin");
   // Which scene THIS call writes is NOT in here — it is a section of its own
-  // in the variable half, so the block stays cacheable (issue #102 review).
+  // in the variable half, so the block stays cacheable.
   expect(block).not.toContain("DIESE Szene");
   expect(assignmentBlock(outline.scenes[1]!)).toBe("captured — Erwischt");
 
@@ -418,7 +417,7 @@ test("the outline block names every id — and nothing about the assigned part",
 });
 
 test("two parts of one run share a byte-identical constant prefix", () => {
-  // The saving the whole split exists for (issue #102): everything above the
+  // The saving the whole split exists for: everything above the
   // excerpt is the same text for every part, so an endpoint with prefix
   // caching sees the run's prompt once. One marker in the outline block used
   // to break that for every part at once.
@@ -479,7 +478,7 @@ function sceneDoc(id: string, over: { status?: string } = {}): string {
 
 /**
  * A provider that answers the outline with three scenes and then serves one
- * document per scene — with `broken` failing its validation every time, which
+ * entry per scene — with `broken` failing its validation every time, which
  * is what „ein Teil schlägt fehl“ has to mean for the other two.
  */
 class ThreeSceneProvider implements LLMProvider {
@@ -533,7 +532,7 @@ async function send(method: string, url: string, body?: unknown): Promise<Respon
 }
 
 async function fetchJob(): Promise<GenerateJob | null> {
-  const res = await app.request("/api/beispiel/generate/job");
+  const res = await app.request("/api/campaigns/beispiel/generate/job");
   if (res.status === 404) return null;
   expect(res.status).toBe(200);
   return (await res.json()) as GenerateJob;
@@ -542,7 +541,7 @@ async function fetchJob(): Promise<GenerateJob | null> {
 async function runJob(): Promise<GenerateJob> {
   expect(
     (
-      await send("POST", "/api/beispiel/generate", {
+      await send("POST", "/api/campaigns/beispiel/generate", {
         chapter: "01-salzhafen",
         sourceText: "Fenn waits at the docks.",
       })
@@ -609,24 +608,23 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect(provider.calls.filter((c) => c === "zwei")).toHaveLength(2);
 
   // …and one of them can be accepted while the failed part is still open.
-  const accepted = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+  const accepted = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     rev: job.rev ?? 0,
     paths: ["01-salzhafen/eins"],
   });
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
     written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
-    // The job stays: the failed part is not settled (issue #102).
+    // The job stays: the failed part is not settled.
     jobDeleted: false,
   });
   expect((await fetchJob())!.id).toBe(job.id);
 });
 
 test("a done part is acceptable while the run is still RUNNING (AK2)", async () => {
-  // The old gate asked for a finished JOB, which made the pipeline's central
-  // promise unkeepable: „was hier steht, kannst du schon übernehmen" while
-  // the run says `running`. The UI offers it, so the endpoint has to answer
-  // it (issue #102 review).
+  // The gate is the PART, not the job: „was hier steht, kannst du schon
+  // übernehmen" has to hold while the run still says `running`. The UI offers
+  // it, so the endpoint has to answer it.
   const gate = new Promise<void>(() => {});
   class HoldsLast extends ThreeSceneProvider {
     override async complete(
@@ -639,7 +637,7 @@ test("a done part is acceptable while the run is still RUNNING (AK2)", async () 
     }
   }
   setProviderForTests(new HoldsLast(null));
-  await send("POST", "/api/beispiel/generate", {
+  await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: "Fenn waits at the docks.",
   });
@@ -648,7 +646,7 @@ test("a done part is acceptable while the run is still RUNNING (AK2)", async () 
   );
   expect(job.status).toBe("running");
 
-  const accepted = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+  const accepted = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     rev: job.rev,
     paths: ["01-salzhafen/eins"],
   });
@@ -679,12 +677,12 @@ test("a run that has produced nothing yet is not acceptable", async () => {
     }
   }
   setProviderForTests(new HoldsEverything(null));
-  await send("POST", "/api/beispiel/generate", {
+  await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: "Fenn waits at the docks.",
   });
   const job = await waitForParts((parts) => parts.length === 3);
-  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
+  const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
   expect(res.status).toBe(409);
 });
 
@@ -699,7 +697,7 @@ test("„Erneut versuchen“ re-runs ONE part and leaves the rest alone (AK3)", 
   setProviderForTests(retryProvider);
   const res = await send(
     "POST",
-    `/api/beispiel/generate/job/${first.id}/parts/scene:zwei/retry`,
+    `/api/campaigns/beispiel/generate/job/${first.id}/parts/scene:zwei/retry`,
   );
   expect(res.status).toBe(202);
   for (let i = 0; i < 2000; i += 1) {
@@ -744,7 +742,7 @@ test("a retry that races a sibling's result does not clobber it", async () => {
   setProviderForTests(new HoldsLast("zwei"));
   expect(
     (
-      await send("POST", "/api/beispiel/generate", {
+      await send("POST", "/api/campaigns/beispiel/generate", {
         chapter: "01-salzhafen",
         sourceText: "Fenn waits at the docks.",
       })
@@ -757,7 +755,7 @@ test("a retry that races a sibling's result does not clobber it", async () => {
 
   // Fire the retry and let „drei" answer INTO its context read.
   setProviderForTests(new HoldsLast(null));
-  const retry = send("POST", `/api/beispiel/generate/job/${before.id}/parts/scene:zwei/retry`);
+  const retry = send("POST", `/api/campaigns/beispiel/generate/job/${before.id}/parts/scene:zwei/retry`);
   release?.();
   expect((await retry).status).toBe(202);
 
@@ -788,14 +786,14 @@ test("a PENDING part is the pool's, not the retry's", async () => {
     }
   }
   setProviderForTests(new HoldsEverything(null, [...SCENE_IDS, "vier"]));
-  await send("POST", "/api/beispiel/generate", {
+  await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: "Fenn waits at the docks.",
   });
   const job = await waitForParts(
     (parts) => parts.length === 4 && parts[3]!.status === "pending",
   );
-  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/parts/scene:vier/retry`);
+  const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/parts/scene:vier/retry`);
   expect(res.status).toBe(409);
   expect((await fetchJob())!.pipeline!.parts[3]!.status).toBe("pending");
 });
@@ -804,13 +802,13 @@ test("a retry is refused for a part that is done, and for an unknown key", async
   setProviderForTests(new ThreeSceneProvider(null));
   const job = await runJob();
   expect(
-    (await send("POST", `/api/beispiel/generate/job/${job.id}/parts/scene:eins/retry`)).status,
+    (await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/parts/scene:eins/retry`)).status,
   ).toBe(409);
   expect(
-    (await send("POST", `/api/beispiel/generate/job/${job.id}/parts/scene:nope/retry`)).status,
+    (await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/parts/scene:nope/retry`)).status,
   ).toBe(404);
   expect(
-    (await send("POST", "/api/beispiel/generate/job/not-this-one/parts/scene:eins/retry")).status,
+    (await send("POST", "/api/campaigns/beispiel/generate/job/not-this-one/parts/scene:eins/retry")).status,
   ).toBe(404);
 });
 
@@ -834,7 +832,7 @@ test("a restart fails the open parts and keeps the finished ones (AK3)", async (
     }
   }
   setProviderForTests(new HoldingProvider(null));
-  await send("POST", "/api/beispiel/generate", {
+  await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: "Fenn waits at the docks.",
   });
@@ -879,7 +877,7 @@ test("„Verwerfen“ stops the open parts — nothing of them lands afterwards"
     }
   }
   setProviderForTests(new SlowProvider(null));
-  await send("POST", "/api/beispiel/generate", {
+  await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: "Fenn waits at the docks.",
   });
@@ -888,7 +886,7 @@ test("„Verwerfen“ stops the open parts — nothing of them lands afterwards"
     if ((job?.pipeline?.parts.length ?? 0) === 3) break;
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
-  expect((await send("DELETE", "/api/beispiel/generate/job")).status).toBe(200);
+  expect((await send("DELETE", "/api/campaigns/beispiel/generate/job")).status).toBe(200);
   release?.();
   await new Promise((resolve) => setTimeout(resolve, 20));
   // The discarded run is gone and stays gone.
@@ -918,7 +916,7 @@ test("the pipeline is not serialized for a single-call run", async () => {
     ]),
   );
   expect(
-    (await send("POST", "/api/beispiel/generate/npc", { sourceText: "An ageing fisherman." }))
+    (await send("POST", "/api/campaigns/beispiel/generate/npc", { sourceText: "An ageing fisherman." }))
       .status,
   ).toBe(202);
   for (let i = 0; i < 2000; i += 1) {

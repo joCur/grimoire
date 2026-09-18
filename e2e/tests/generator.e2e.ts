@@ -1,12 +1,12 @@
 // Critical path 6: the generator cycle against the stub LLM; see CLAUDE.md.
 //
-// Job → review → apply → draft in the pool, plus the NPC mode and the failure
+// Job → review → apply → draft in the chapter overview, plus the NPC mode and the failure
 // path.
 //
-// One thing the cutover changed here: the draft is REVIEWED under
-// the file name the model chose (`SCENE_ID`) but STORED under its id
-// (`SCENE_ID`), because a scene's address is `<chapter>/<id>` now. So the
-// review assertions use the slug and everything after „Übernehmen" the id.
+// The two addresses of one draft differ: the review shows `<chapter>/<id>`,
+// while the stored scene sits under its location group as
+// `<chapter>/<location>/<id>`. So the review assertions use the review path
+// and everything after the accept uses the stored one.
 //
 // Nothing about it is mocked except the model itself: the app starts a real
 // background job, the server calls a real HTTP endpoint
@@ -29,7 +29,7 @@ import { expect, test } from "../support/test";
 
 /**
  * How the REVIEW addresses the draft: `<chapter>/<id>`, built by the server
- * from the run's chapter and the frontmatter id.
+ * from the run's chapter and the property id.
  */
 const DRAFT_PATH = `01-salzhafen/${SCENE_ID}`;
 /**
@@ -46,11 +46,11 @@ const NPC_SOURCE = `Brakk Ironhand, an ageing fisherman who knows every sandbank
 of the north bay. He has seen strangers carrying crates at night and keeps
 quiet out of fear.`;
 
-test("scene run: job, review, apply — the draft is stored and in the pool", async ({
+test("scene run: job, review, apply — the draft is stored and in the chapter overview", async ({
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
 
   // The active chapter is preselected, and the context hint names what travels.
@@ -60,19 +60,19 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The knowledge count is part of that line; the example
   // campaign has none, so it says so. The knowledge path itself is
   // campaign-knowledge.e2e.ts.
-  // Two locations: each Ort a scene names has an entry of its own, because a
-  // reference creates nothing (ADR #19).
+  // Two locations: each location a scene names has an entry of its own,
+  // because a reference creates nothing (ADR #19).
   await expect(page.getByText("2 NPCs · 2 Orte")).toBeVisible();
-  // The knowledge and the glossary halves are LINKS to their own pages now —
+  // The knowledge and the glossary halves are LINKS to their own pages —
   // this line is where the DM notices a rule is missing, so the fix is one
   // click from here.
   await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toHaveAttribute(
     "href",
-    "/beispiel/knowledge",
+    "/campaigns/beispiel/knowledge",
   );
   await expect(page.getByRole("link", { name: "Glossar", exact: true })).toHaveAttribute(
     "href",
-    "/beispiel/glossary",
+    "/campaigns/beispiel/glossary",
   );
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
@@ -92,7 +92,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The draft card: title, target path, status pill, rendered body.
   const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
-  // The status chip shows the LABEL, not the raw frontmatter value.
+  // The status chip shows the LABEL, not the raw property value.
   await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
   await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
   await expect(card.locator("[data-callout='loot']")).toContainText("Beute");
@@ -103,7 +103,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toHaveText("Fenn");
   await expect(card).toContainText("[[grella]]");
 
-  // Nothing is stored before "Übernehmen" — under neither name.
+  // Nothing is stored before the accept — under neither address.
   expect(await api.exists(DRAFT_PATH)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
@@ -142,9 +142,9 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // scene actually is (ADR #17).
   expect((await api.file(DRAFT_PATH)).path).toBe(SCENE_PATH);
 
-  // Back in the pool the draft shows up with the German status label.
+  // Back in the chapter overview the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   const row = page.getByRole("link", { name: new RegExp(SCENE_TITLE) });
   await expect(row).toBeVisible();
   await expect(
@@ -154,26 +154,22 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
 });
 
 /**
- * The stall the PO hit on 15.09.: „Entwürfe generieren" was
- * clicked, the run finished on the server — and the page stayed on „Entwürfe
- * werden generiert …" until it was reloaded.
- *
- * The cause was the view taking the START REQUEST's lifetime for the run's:
- * with a fast model the job is `done` before its own 202 arrives, so the
- * first poll that answers already carries the finished run while the POST is
- * still in flight. That state has to BE the review.
+ * The run's lifetime is the JOB's, not the START REQUEST's: with a fast model
+ * the job is `done` before its own 202 arrives, so the first poll that
+ * answers already carries the finished run while the POST is still in
+ * flight. That state has to BE the review, without a reload.
  *
  * The 202 is therefore held here — the REAL response of the real server,
  * fetched by the real route and handed on late (nothing is mocked, see
  * README: the stub LLM stays the only stand-in). Holding it is the only way
- * to pin the claim „the job decides, not the request": with a response that
- * comes back in 30ms the test would pass either way.
+ * to pin the claim that the job decides and not the request: with a response
+ * that comes back in 30ms the test would pass either way.
  */
 test("the review appears as soon as the job is done — even with the start request still in flight", async ({
   page,
 }) => {
   let released = false;
-  const start = page.route("**/api/*/generate", async (route) => {
+  const start = page.route("**/api/campaigns/*/generate", async (route) => {
     const response = await route.fetch();
     const body = await response.text();
     await new Promise((resolve) => setTimeout(resolve, 8_000));
@@ -182,7 +178,7 @@ test("the review appears as soon as the job is done — even with the start requ
   });
   await start;
 
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
   // The honest state right after the click: no job of this run is readable yet.
@@ -203,13 +199,12 @@ test("the review appears as soon as the job is done — even with the start requ
 });
 
 /**
- * The scene body carries German
- * quotation marks closed with an ASCII `"`. When the model hand-wrote the
- * JSON wrapper, that quote ended the `content` string and an otherwise
- * correct scene cost the run a correction turn — and often a „Formprüfung
- * nicht bestanden".
+ * The scene body carries typographic opening quotation marks closed with an
+ * ASCII `"`. Such a quote would end the `content` string if the model wrote
+ * the JSON wrapper by hand, costing an otherwise correct scene a correction
+ * turn or a failed validation.
  *
- * The body is a string of a schema-forced object now, so the ESCAPING is the
+ * The body is a string of a schema-forced object, so the ESCAPING is the
  * transport's: the run reaches the review in one call per part and the
  * characters arrive byte for byte, through a real HTTP endpoint and the real
  * provider.
@@ -218,7 +213,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.asciiQuotes}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
@@ -231,7 +226,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
     page.getByText("1 Szene · 0 vorgeschlagene Einträge · noch nichts geschrieben"),
   ).toBeVisible();
   await expect(page.getByText(/~[\d.]+ Tokens · 2 Aufrufe/)).toBeVisible();
-  // Nothing failed, so no error block and no „Erneut versuchen".
+  // Nothing failed, so no error block and no retry action.
   await expect(page.getByRole("button", { name: "Erneut versuchen" })).toHaveCount(0);
 
   // The read-aloud carries the mixed quotation marks, rendered as written.
@@ -248,7 +243,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
 });
 
 test("npc run: pinned id, review, apply", async ({ page, api }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByRole("button", { name: "NPC", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPC generieren");
 
@@ -277,12 +272,12 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   const npc = await api.properties("npcs/brakk");
   expect(npc.id).toBe("brakk");
   expect(npc.status).toBe("alive");
-  // Quoted quickstats stay STRINGS — a „+1" is not read as the number 1.
+  // Quoted quickstats stay STRINGS — a relative value is not read as a number.
   expect(npc.quickstats).toMatchObject({ insight: "+1" });
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/brakk$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 
@@ -290,7 +285,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.invalid}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
@@ -304,8 +299,8 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
     page.getByText("Quelltext kürzen oder klarer strukturieren und erneut generieren."),
   ).toBeVisible();
   // Three calls: the outline, then the scene part's initial call plus its
-  // correction turn. The failure block still reports „Versuche", because it
-  // reads the run's usage out of the error body.
+  // correction turn. The failure block still reports the attempt count,
+  // because it reads the run's usage out of the error body.
   await expect(page.getByText(/~[\d.]+ Tokens · 3 Versuche/)).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
@@ -324,7 +319,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
@@ -332,7 +327,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   });
 
   // (1) Edit the draft, leave the page, come back: the text is there. This is
-  // the loss being guarded against — it used to live in component state only.
+  // the loss being guarded against: component state alone would not survive.
   const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
@@ -345,8 +340,8 @@ test("review state survives navigation and reload; parts are accepted one by one
   await textarea.blur();
   await expect(page.getByText("Gespeichert")).toBeVisible();
 
-  await page.goto("/beispiel");
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
   await expect(page.getByText("Die Flut zieht sich im Regen")).toBeVisible();
 
@@ -365,14 +360,14 @@ test("review state survives navigation and reload; parts are accepted one by one
 
   // (3) The second suggested entry, decided as well: the scene NAMES both of
   // them, and a scene cannot be written while a reference names nothing
-  // (ADR #19) — „Annehmen" is that decision, the write comes below.
+  // (ADR #19) — accepting is that decision, the write comes below.
   await stubRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
   // Accepted is a decision, not a write.
   expect(await api.exists(`npcs/${NPC_STUB_ID}`)).toBe(false);
 
-  // (4) „Diesen übernehmen" on the scene writes the scene AND the two
-  // accepted entries it references — one batch, so nothing is half-written.
+  // (4) Accepting the scene writes the scene AND the two accepted entries it
+  // references — one batch, so nothing is half-written.
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await page
     .locator("div")
@@ -388,11 +383,11 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
   // Nothing is left open, so the job is gone.
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 
 test("„Verwerfen\" drops only the open rest — what was accepted stays", async ({ page, api }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
@@ -423,17 +418,17 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect(await api.exists(SCENE_PATH)).toBe(false);
   expect(await api.exists(`locations/${LOCATION_STUB_ID}`)).toBe(false);
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 
-// Critical path 6: „Neues Kapitel" → leave the page → come back →
-// „Übernehmen". The chapter has to be in the overview WITH its title.
+// Critical path 6: start a run into a new chapter → leave the page → come
+// back → accept. The chapter has to be in the overview WITH its title.
 //
-// The app used to send the chapter and its title from its own state when the
-// accept was pressed; the review state is persistent, so the accept regularly
-// happens after a navigation or a reload, when that state is gone — and then
-// the scenes were written under a chapter that had no entry of its own, which
-// the overview cannot list.
+// The chapter and its title come from the JOB, not from the app's own state:
+// the review state is persistent, so the accept regularly happens after a
+// navigation or a reload, when that state is gone — and scenes written under
+// a chapter that has no entry of its own are something the overview cannot
+// list.
 //
 // The navigation is the whole point of the test, so it is a REAL one: to the
 // overview and back, which is what a DM does while the run is going.
@@ -444,7 +439,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   const CHAPTER_ID = "02-die-schmugglerbucht";
   const CHAPTER_TITLE = "Die Schmugglerbucht";
 
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByRole("button", { name: "Neues Kapitel" }).click();
   await page.getByLabel("Kapiteltitel").fill(CHAPTER_TITLE);
   // The id is derived from the title and is the field that decides where the
@@ -459,9 +454,9 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 
   // …and away. The review state is a row, so it is still there when we come
   // back — but this browser has forgotten the title it typed.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
@@ -483,7 +478,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 
   // The overview lists the chapter with that title, and the scene inside it.
   await page.getByRole("link", { name: "Kapitel", exact: true }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("heading", { level: 2, name: CHAPTER_TITLE })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(CHAPTER_TITLE) }).click();
   await expect(page.getByRole("link", { name: new RegExp(SCENE_TITLE) })).toBeVisible();

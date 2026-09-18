@@ -1,42 +1,41 @@
-// `/settings` — the one place instance-wide choices live (issue #69, PO
-// feedback on PR #83).
+// `/settings` — the one place instance-wide choices live.
 //
-// WHY A PAGE, not the campaign switcher's menu. Scheibe 1 put the language
-// into that menu: cheap, always on screen, no new chrome. The PO's objection
-// is about MEANING, not pixels — the switcher is where you pick a CAMPAIGN,
-// and an instance-wide setting hidden in it is both hard to find and wrong by
-// category. A settings page is where anyone looks for a setting.
+// WHY A PAGE, not the campaign switcher's menu. The switcher is where you
+// pick a CAMPAIGN, and an instance-wide setting hidden in it is both hard to
+// find and wrong by category. A settings page is where anyone looks for a
+// setting.
 //
 // INSTANCE ONLY — today exactly one section, the UI language.
 //
-// Issue #53 briefly put the campaign's Glossar and Kampagnenwissen here as
-// campaign sections. The PO's objection on PR #87 settles the category: those
-// two are campaign CONTENT, the same kind of thing as the NPCs and the Orte,
-// and they belong on list pages of their own (`/:campaign/knowledge`,
-// `/:campaign/glossary`) — not in a settings page, and not as 30 inline text
-// fields under one global save button. What is left here is what is true of
-// the INSTALLATION, which is also why the route stays reachable with no
-// campaign at all (a fresh instance has none).
+// The campaign's knowledge and glossary are campaign CONTENT, the same kind
+// of thing as the NPCs and the locations, and they belong on list pages of
+// their own (`/campaigns/:campaign/knowledge`,
+// `/campaigns/:campaign/glossary`) — not in a settings page, and not as 30
+// inline text fields under one global save button. What is left here is what
+// is true of the INSTALLATION, which is also why the route stays reachable
+// with no campaign at all (a fresh instance has none).
 //
 // The page is deliberately QUIET (docs/UI-BRIEF.md): the DM comes here once,
-// so nothing here competes with the pool. Section headings follow the pool's
-// hairline-under-a-small-heading pattern rather than inventing a card style.
+// so nothing here competes with the chapter overview. Section headings follow
+// the overview's hairline-under-a-small-heading pattern rather than inventing
+// a card style.
 //
 // WHICH CAMPAIGN is "currently open" cannot be the PATH — `/settings` is
 // campaign-independent on purpose, so the gear works from the cold start too.
 // It is the campaign the DM CAME FROM: the gear carries it in `?from=`
 // (components/Topbar.tsx). That is the only honest answer — guessing with the
-// "/" heuristic instead sent the DM back to a different campaign than the one
-// they had open, and would label a future campaign section with the wrong
-// name (PO feedback on PR #83).
+// "/" heuristic instead sends the DM back to a different campaign than the
+// one they had open, and would label a future campaign section with the wrong
+// name.
 //
 // `?from=` is checked against the campaign LIST rather than trusted: a stale
-// bookmark or a renamed campaign must not produce a back row into nothing.
-// Only with no origin at all (the gear from "/" on a fresh instance, or a
-// hand-typed `/settings`) does the old heuristic stand in — `pickLastCampaign`
-// (lib/campaign.ts), the same one "/" uses. No localStorage (quality floor).
-// It is still needed with no campaign section on the page: the topbar above
-// and the mobile „‹ Pool" row both have to lead back where the DM came from.
+// bookmark or a campaign that is gone must not produce a back row into
+// nothing. Only with no origin at all (the gear from "/" on a fresh instance,
+// or a hand-typed `/settings`) does the heuristic stand in —
+// `pickLastCampaign` (lib/campaign.ts), the same one "/" uses. No
+// localStorage (quality floor). It is still needed with no campaign section
+// on the page: the topbar above and the mobile back row both have to lead
+// back where the DM came from.
 
 import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
@@ -58,8 +57,8 @@ export function SettingsRoute() {
   const campaigns = data ?? [];
   const [search] = useSearchParams();
   const campaign = settingsCampaign(search.get("from"), campaigns);
-  // The chrome above this page is that campaign's chrome (components/Topbar.tsx,
-  // PO feedback on PR #83) — session chip included. It has to stay LIVE here,
+  // The chrome above this page is that campaign's chrome
+  // (components/Topbar.tsx) — session chip included. It has to stay LIVE here,
   // so this route mounts the version polling CampaignScope mounts for every
   // campaign-scoped view; `/settings` sits outside that layout because it must
   // also work with no campaign at all, and then the hook stays idle ("").
@@ -68,8 +67,8 @@ export function SettingsRoute() {
   return (
     <>
       {/* Below md the topbar (and with it the gear) is not the chrome — the
-          same "‹ Pool" row every other campaign view carries is the way back.
-          Only with a campaign: on a fresh instance there is no pool to go
+          same "‹ Kapitel" row every other campaign view carries is the way back.
+          Only with a campaign: on a fresh instance there is no chapter overview to go
           back to. */}
       {campaign !== undefined && <MobileBackRow campaign={campaign} />}
       <div className="mx-auto max-w-[640px] px-5 pt-8 pb-24 md:px-7 md:pt-10">
@@ -89,7 +88,7 @@ export function SettingsRoute() {
 /**
  * The instance language. Its own component only because the radio group has to
  * be labelled BY the section heading (there is exactly one word for both, and
- * announcing „Sprache, Sprache" is what happens otherwise).
+ * announcing that word twice is what happens otherwise).
  */
 function LanguageSection() {
   const t = useT();
@@ -107,7 +106,7 @@ function LanguageSection() {
 
 /**
  * One section: a small heading over a hairline, an optional quiet hint, the
- * control below. The pool's grouping pattern, so the page reads like the rest
+ * control below. The chapter overview's grouping pattern, so the page reads like the rest
  * of the app rather than like a preferences dialog.
  */
 function Section({

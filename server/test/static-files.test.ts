@@ -1,4 +1,4 @@
-// Static SPA serving tests (issue #13). The dist directory is a temp fixture
+// Static SPA serving tests. The dist directory is a temp fixture
 // that mimics a Vite build (index.html + hashed /assets/*), so the tests do
 // not depend on whether app/dist has been built.
 //
@@ -22,8 +22,8 @@ let dist = "";
 let app: Hono;
 
 beforeAll(async () => {
-  // The boot imports nothing since issue #79 — the campaign the /api
-  // assertion below asks for is seeded explicitly.
+  // The boot imports nothing — the campaign the /api assertion below asks
+  // for is seeded explicitly.
   await seedStore();
   dist = await mkdtemp(path.join(os.tmpdir(), "grimoire-dist-"));
   await mkdir(path.join(dist, "assets"), { recursive: true });
@@ -177,7 +177,7 @@ describe("/api is untouched", () => {
   });
 
   test("unknown /api paths 404 instead of falling back to index.html", async () => {
-    for (const p of ["/api/nope", "/api/", "/api"]) {
+    for (const p of ["/api/campaigns/nope", "/api/", "/api"]) {
       const res = await app.request(p);
       expect(res.status).toBe(404);
       expect(await res.text()).not.toBe(INDEX_HTML);

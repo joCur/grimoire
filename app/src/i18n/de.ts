@@ -9,13 +9,14 @@
 // plural, one {…} other {…}}` picks the form, `#` is the number itself.
 // A literal brace in copy has to be quoted as `'{'` — there is none here.
 //
-// The German strings are taken 1:1 out of the components they came from; the
-// typographic detail is part of the design (»…« as „ “, the em dash with
-// spaces, the ellipsis character in „Speichere …“). Do not normalize them.
+// The German strings are the ones the components show; their typographic
+// detail is part of the design (curly quotation marks, the em dash with
+// spaces, the single ellipsis character). Do not normalize them.
 //
-// SLICE 1: topbar incl. session chip, campaign switcher, the
-// five create dialogs, properties dialog + fields, cold start.
-// Everything else still carries its literal strings and follows in slice 2.
+// The catalog covers the topbar incl. session chip, campaign switcher, the
+// five create dialogs, properties dialog + fields, cold start and the areas
+// listed in the sections below. A component not covered here still carries
+// its literal strings.
 
 export const de = {
   // --- shared verbs ---------------------------------------------------------
@@ -76,7 +77,7 @@ export const de = {
   "session.discard.description": "Die Session wird gelöscht.",
   "session.discard.failed": "Session nicht verworfen — Server prüfen und neu laden.",
   // `{date}` comes from Intl.DateTimeFormat in the selected language, so the
-  // German reading stays „Session vom 13.09.2026“.
+  // date reads in the conventions of that language.
   "session.date": "Session vom {date}",
   "session.date.unknown": "Session",
 
@@ -217,9 +218,10 @@ export const de = {
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
 
   // --- the two campaign-content pages --------------------------------------
-  // „Kampagnenwissen“ (/:campaign/knowledge) and „Glossar“
-  // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
-  // instance settings under /settings are a different thing entirely.
+  // the campaign-knowledge page (/campaigns/:campaign/knowledge) and the
+  // glossary page (/campaigns/:campaign/glossary). Campaign CONTENT, like the
+  // npcs and the locations — the instance settings under /settings are a
+  // different thing entirely.
   // Shared by both pages: the row controls, the per-entry
   // save outcome, the delete confirmation.
   "entryList.loading": "Lade Liste …",
@@ -271,8 +273,8 @@ export const de = {
   "glossary.explanation": "Erklärung",
   "glossary.noExplanation": "Ohne Erklärung",
 
-  // Where the two pages are reached from: the pool's „Nachschlagen“ line and
-  // the mobile start surface's rows (deliberately NOT
+  // Where the two pages are reached from: the chapter overview's lookup line
+  // and the mobile start surface's rows (deliberately NOT
   // the topbar, which stays the three campaign-wide entries it has).
   "lookup.heading": "Nachschlagen",
 
@@ -321,7 +323,7 @@ export const de = {
   "status.npc.missing": "Vermisst",
   "status.npc.unknown": "Unbekannt",
 
-  // --- browse list pages (/:campaign/list/:kind) ---------------------------
+  // --- browse list pages (/campaigns/:campaign/list/:kind) ---------------------------
   "browse.title.scenes": "Szenen",
   "browse.title.npcs": "NPCs",
   "browse.title.locations": "Orte",
@@ -334,35 +336,35 @@ export const de = {
   "status.change.aria": "Status ändern, aktuell {current}",
   "status.sceneUnloadable": "Szene nicht ladbar",
 
-  // --- the scene pool ("/:campaign", routes/pool.tsx) -----------------------
-  "pool.loading": "Lade Szenen …",
-  "pool.empty":
+  // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
+  "chapterOverview.loading": "Lade Szenen …",
+  "chapterOverview.empty":
     "Noch keine Kapitel. Ein Kapitel ist die Klammer um Szenen — danach legst du darin die erste Szene an.",
-  // The two counts of the pool header and the chapter accordions. German has
-  // one form for both plural categories here — the ICU shape stays, so `en`
+  // The two counts of the overview header and the chapter accordions. German
+  // has one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
-  "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
+  "chapterOverview.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
   // The chapter's leftovers section: the scenes that name no location.
-  "pool.group.noLocation": "Ohne Ort",
-  "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
-  "pool.chapter.goal": "Ziel: {goal}",
-  "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
+  "chapterOverview.group.noLocation": "Ohne Ort",
+  "chapterOverview.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
+  "chapterOverview.chapter.goal": "Ziel: {goal}",
+  "chapterOverview.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // --- chapter actions in the chapter overview -----------------------------
-  // The chapter's status control („Aktiv" sets `active` and takes it off the
-  // chapter that held it — one server call, one transaction) carries its
+  // The chapter's status control (the active option sets `active` and takes it
+  // off the chapter that held it — one server call, one transaction) carries its
   // labels under `properties.chapter.status.*`.
-  "pool.chapter.properties": "Kapitel-Eigenschaften",
-  "pool.chapter.edit": "Kapitel bearbeiten",
+  "chapterOverview.chapter.properties": "Kapitel-Eigenschaften",
+  "chapterOverview.chapter.edit": "Kapitel bearbeiten",
   "chapterBody.title": "Kapitel bearbeiten: {title}",
   "chapterBody.description":
     "Text des Kapitels als Markdown — die Überschrift „## Ziel des Kapitels“ ist die Zeile, die die Übersicht als Ziel zeigt.",
   "chapterBody.field.body": "Text",
   "chapterBody.field.body.placeholder":
     "## Ziel des Kapitels\n\nWas die Gruppe hier erreichen soll",
-  // The quiet second half of the „Eventualszenen“ heading row — the `· `
+  // The quiet second half of the contingency-scenes heading row — the `· `
   // separator stays markup in the JSX.
-  "pool.contingencies.hint": "nur wenn der Auslöser feuert",
-  "pool.scene.trigger": "Wenn: {trigger}",
+  "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
+  "chapterOverview.scene.trigger": "Wenn: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   // The three list titles are already above under `browse.title.*`.
@@ -373,17 +375,17 @@ export const de = {
   "browse.empty.npcs": "Noch keine NPCs.",
   "browse.empty.locations": "Noch keine Orte.",
 
-  // --- the reading view ("/:campaign/entry/*", routes/scene.tsx) -------------
+  // --- the reading view ("/campaigns/:campaign/entries/*", routes/scene.tsx) -------------
   "scene.loading": "Lade Eintrag …",
   "scene.notLoadable": "Eintrag nicht ladbar — Pfad prüfen oder Server starten.",
   "scene.npcs.heading": "NPCs dieser Szene",
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Kontext",
-  "mobileBack.pool": "Kapitel",
+  "mobileBack.chapterOverview": "Kapitel",
 
-  // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
-  // Neutral prefix on purpose: the live nav and the pool list show the SAME
+  // --- shared scene-group headings (routes/live.tsx + routes/chapter-overview.tsx) ------
+  // Neutral prefix on purpose: the live nav and the chapter overview list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Geplant",
   "scene.contingencies.heading": "Eventualszenen",
@@ -426,7 +428,7 @@ export const de = {
   "live.session.olderRunning.withPath": "Eine ältere Session läuft noch ({path}) — erst beenden.",
   "live.session.endOld": "Alte Session beenden",
 
-  // The „Für die Spieler“ reminder list of the aside.
+  // The players-facing reminder list of the aside.
   "live.pc.heading": "Für die Spieler",
   "live.pc.done": "„{text}“ erledigt",
   "live.pc.allDone": "Alles erledigt.",
@@ -437,13 +439,13 @@ export const de = {
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
   "live.drawer.open": "Eintrag öffnen",
 
-  // --- review (the session wrap-up, formerly "Fünf Minuten Ernte"; the
-  // "Ernte"/harvest metaphor stayed in the code, not in the UI)
+  // --- review (the session wrap-up; the harvest metaphor lives in the code
+  // names only, not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
   "review.noSession": "Es gibt keine Session zum Sichten.",
-  "review.backToPool": "Zurück zu den Kapiteln",
+  "review.backToChapters": "Zurück zu den Kapiteln",
   "review.lead":
     "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters).
@@ -685,7 +687,8 @@ export const de = {
   "generate.review.saved": "Gespeichert",
   "generate.review.saveConflict": "In einem anderen Tab geändert — neu geladen.",
   "generate.review.saveFailed": "Nicht gespeichert — Server prüfen.",
-  // Partial accepts: „2 von 3 übernommen“ (ICU, both halves are numbers).
+  // Partial accepts: how many of how many were taken over (ICU, both halves
+  // are numbers).
   "generate.review.progress":
     "{written} von {total} übernommen · der Rest wartet hier",
   "generate.review.acceptOne": "Diesen übernehmen",
@@ -711,8 +714,8 @@ export const de = {
     "~{tokens} Tokens · {calls, plural, one {# Aufruf} other {# Aufrufe}}",
   "generate.pipeline.progress":
     "{done} von {total, plural, one {# Szene} other {# Szenen}} fertig",
-  // Counted over EVERY part of the run — so the wording says „Teile“ as soon
-  // as the run has suggested entries next to its scenes.
+  // Counted over EVERY part of the run — so the wording says parts rather
+  // than scenes as soon as the run has suggested entries next to its scenes.
   "generate.pipeline.progressParts":
     "{done} von {total, plural, one {# Teil} other {# Teilen}} fertig",
   "generate.pipeline.partRunning": "wird geschrieben …",
@@ -720,7 +723,7 @@ export const de = {
   "generate.pipeline.partFailed": "nicht geschrieben",
   "generate.pipeline.retry": "Erneut versuchen",
   "generate.pipeline.retryFailed": "Nicht neu gestartet — Server prüfen.",
-  // The 409 of „Erneut versuchen“: the part is already running or already
+  // The 409 of the retry action: the part is already running or already
   // done (a second tab, a double click) — not a server error.
   "generate.pipeline.retryConflict":
     "Nicht neu gestartet — dieser Teil läuft schon oder ist fertig. Die Ansicht wird neu geladen.",
@@ -751,7 +754,7 @@ export const de = {
   "generate.written.hint.npc":
     "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.openNpc": "NPC ansehen",
-  "generate.written.toPool": "Zu den Kapiteln",
+  "generate.written.toChapters": "Zu den Kapiteln",
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show
@@ -803,11 +806,11 @@ export const de = {
   "composer.markdown.hint": "Markdown mit Markern — wird unverändert übernommen.",
   "composer.list.aria": "Blöcke: {label}",
   "composer.empty": 'Noch keine Blöcke — mit „+“ den ersten anlegen.',
-  // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt“):
-  // the word order of the insert target is not the same in every language.
+  // Two whole sentences instead of one glued-in fragment naming the insert
+  // target: that word order is not the same in every language.
   "composer.insert.aria": "Block an Position {position} einfügen",
   "composer.insert.section.aria": "Block im Falls-Abschnitt an Position {position} einfügen",
-  // „Vorlesetext 2“ — the position makes the second read-aloud of a scene
+  // Label plus position: it makes the second read-aloud of a scene
   // distinguishable for screen readers and for the E2E suite.
   "composer.card.name": "{label} {position}",
   "composer.card.moveUp.aria": "{name} nach oben",
@@ -822,7 +825,7 @@ export const de = {
     "»##«-Überschrift beendet den Falls-Abschnitt — tiefer einstufen (###) oder Block nach außen ziehen.",
 
   // --- the raw-markdown editor (components/MarkdownEditor.tsx) --------------
-  // „Bearbeiten“ is `common.edit`.
+  // The edit action is labelled by `common.edit`.
   "editor.preview": "Vorschau",
 
   // --- scene article (components/SceneArticle.tsx) --------------------------
@@ -851,7 +854,7 @@ export const de = {
   "harness.lead": "Rendert die Referenz-Fixtures aus fixtures/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
 
-  // --- „Mit KI ergänzen“ (components/AugmentAction.tsx) --------------------
+  // --- the augment-with-AI action (components/AugmentAction.tsx) -----------
   "augment.action": "Mit KI ergänzen",
   "augment.title": "Mit KI ergänzen",
   "augment.description":

@@ -1,5 +1,5 @@
-// „/:campaign/knowledge" — the campaign knowledge (issue #53, PO feedback on
-// PR #87): the naming conventions, facts and style rules that travel with
+// „/campaigns/:campaign/knowledge" — the campaign knowledge (PO decision):
+// the naming conventions, facts and style rules that travel with
 // every generator run and hold even when the source material says otherwise.
 //
 // The ORDER is the order of the prompt (server/src/store/read.ts), so it is
@@ -33,7 +33,7 @@ import {
   switchKnowledgeKind,
 } from "@/lib/entry-list";
 
-/** The catalog label of one knowledge kind. Exhaustive by type (issue #69). */
+/** The catalog label of one knowledge kind. Exhaustive by type. */
 const KIND_LABEL: Record<KnowledgeEntry["kind"], MessageKey> = {
   naming: "knowledge.kind.naming",
   fact: "knowledge.kind.fact",
@@ -114,8 +114,8 @@ function KnowledgeForm({
 
       {value.kind === "naming" ? (
         // „Alt → Neu": two single-line fields, each on its own full-width
-        // row. Side by side they were two half-width boxes for names that
-        // are routinely longer than that (PO feedback on PR #87).
+        // row. Side by side they would be two half-width boxes for names
+        // that are routinely longer than that.
         <>
           <EntryField
             label={t("knowledge.from")}

@@ -1,6 +1,6 @@
-// Pure mapping logic for the ⌘K palette (issue #7): kind → German label,
-// kind → lucide icon (contingency scenes get the fork, like the pool view),
-// result → route. Kept out of the component for unit tests.
+// Pure mapping logic for the ⌘K palette: kind → readable label, kind → lucide
+// icon (contingency scenes get the fork, like the chapter overview), result →
+// route. Kept out of the component for unit tests.
 
 import type { CampaignTree, SearchResult } from "@grimoire/shared/types";
 import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
@@ -10,9 +10,9 @@ import type { MessageKey, Translate } from "@/i18n";
 
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
- * catalog since issue #69, with the translator PASSED IN (the lib layer never
- * decides the language) — and from the SAME `kind.*` keys the properties
- * dialog's title uses, so „Szene" is one string in one place.
+ * catalog, with the translator PASSED IN (the lib layer never decides the
+ * language) — and from the SAME `kind.*` keys the properties dialog's title
+ * uses, so each kind name is one string in one place.
  *
  * Unknown kinds pass through verbatim (degrade, README).
  */
@@ -68,12 +68,12 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 
 /**
  * Route for a picked result. Every kind opens as an entry view
- * (/:campaign/entry/<path>) — except the campaign itself, whose "view" is the
- * pool. Path segments are encoded individually so umlauts/spaces in filenames
+ * (/campaigns/:campaign/entries/<path>) — except the campaign itself, whose "view" is the
+ * chapter overview. Path segments are encoded individually so umlauts and spaces in an address
  * survive, but the slashes stay routable.
  */
 export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "path">): string {
-  if (result.kind === "campaign") return `/${encodeURIComponent(campaign)}`;
+  if (result.kind === "campaign") return `/campaigns/${encodeURIComponent(campaign)}`;
   const encodedPath = result.path.split("/").map(encodeURIComponent).join("/");
-  return `/${encodeURIComponent(campaign)}/entry/${encodedPath}`;
+  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodedPath}`;
 }

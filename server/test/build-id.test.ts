@@ -1,4 +1,4 @@
-// Build id handshake, server half (issue #24): the id rides on the version
+// Build id handshake, server half: the id rides on the version
 // poll the app already runs, plus a header on every /api response.
 // In-process via app.request(), against the example campaign.
 
@@ -9,8 +9,8 @@ import { dropStore, seedStore } from "./support/store";
 
 const originalEnv = process.env.GRIMOIRE_BUILD;
 
-// The boot imports nothing since issue #79, so the campaign this spec asks
-// for is seeded explicitly — the same call `grimoire seed` makes.
+// The boot imports nothing, so the campaign this spec asks for is seeded
+// explicitly — the same call `grimoire seed` makes.
 beforeAll(async () => {
   await seedStore();
 });
@@ -43,9 +43,9 @@ describe("getBuildId", () => {
   });
 });
 
-describe("GET /api/:campaign/version", () => {
+describe("GET /api/campaigns/:campaign/version", () => {
   async function version(): Promise<{ version: number; build: string }> {
-    const res = await app.request("/api/beispiel/version");
+    const res = await app.request("/api/campaigns/beispiel/version");
     expect(res.status).toBe(200);
     return (await res.json()) as { version: number; build: string };
   }
@@ -68,13 +68,13 @@ describe("x-grimoire-build header", () => {
     process.env.GRIMOIRE_BUILD = "deadbee";
     const campaigns = await app.request("/api/campaigns");
     expect(campaigns.headers.get("x-grimoire-build")).toBe("deadbee");
-    const tree = await app.request("/api/beispiel/tree");
+    const tree = await app.request("/api/campaigns/beispiel/tree");
     expect(tree.headers.get("x-grimoire-build")).toBe("deadbee");
   });
 
   test("is on error responses too", async () => {
     process.env.GRIMOIRE_BUILD = "deadbee";
-    const res = await app.request("/api/nope/version");
+    const res = await app.request("/api/campaigns/nope/version");
     expect(res.status).toBe(404);
     expect(res.headers.get("x-grimoire-build")).toBe("deadbee");
   });

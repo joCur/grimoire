@@ -41,8 +41,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
   (Adressen), beschrieben in README.md — die drei synchron halten;
   `shared/src/parse.ts` ist der Entwurfs-Parser des Generators.
-- `server/` — Hono-API. Geplante Endpoints sind in `server/src/server.ts`
-  dokumentiert und dort abzuhaken, wenn implementiert. Datenzugriff
+- `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
+  `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
+  Abhaken. `server/src/server.ts` setzt nur die App zusammen. Datenzugriff
   ausschließlich über `server/src/store/` (Queries), nie direkt SQL aus einer
   Route.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).

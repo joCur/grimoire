@@ -35,14 +35,14 @@ const LOOT_SCENE_PATH = "01-salzhafen/leuchtturm/loot-check";
 const WIDE_TABLE_SCENE = entry("wide-table-scene.json");
 const WIDE_TABLE_SCENE_PATH = "01-salzhafen/leuchtturm/wide-table";
 
-const ARRIVAL = "/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival";
-const CAPTURED = "/beispiel/entry/01-salzhafen/bucht/smuggler-captured";
+const ARRIVAL = "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival";
+const CAPTURED = "/campaigns/beispiel/entries/01-salzhafen/bucht/smuggler-captured";
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
 
   // The context line above the title: chapter › group, replacing
-  // the topbar breadcrumb. The chapter links back to the pool.
+  // the topbar breadcrumb. The chapter links back to the chapter overview.
   const context = page.getByRole("navigation", { name: "Kontext" });
   await expect(
     context.getByRole("link", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
@@ -97,7 +97,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
 
   // The card links into the NPC reading view.
   await aside.getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
 });
 
 test("reference scene 2: contingency header, collapsible If-sections, consequence", async ({
@@ -156,7 +156,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   // other card — the id as the name, nothing else. No "NPC-Eintrag fehlt",
   // no "Stub anlegen" detour, and the card opens the (equally thin) page.
   expect(await api.exists("npcs/holm")).toBe(false);
-  await api.send("POST", "beispiel/npcs", { name: "holm" });
+  await api.send("POST", "campaigns/beispiel/npcs", { name: "holm" });
   await api.patchProperties("01-salzhafen/leuchtturm/lighthouse-arrival", {
     npcs: ["jorna", "holm"],
   });
@@ -169,7 +169,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(aside.getByRole("button", { name: "Stub anlegen" })).toHaveCount(0);
 
   await aside.getByRole("link", { name: /holm/ }).click();
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/holm$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/holm$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
   // And it is editable from here like every other entry.
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
@@ -180,7 +180,7 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   // the id has to have an entry (ADR #19).
   const scene = "01-salzhafen/bucht/smuggler-captured";
   const patchLocation = async (value: string, rev: number): Promise<Response> =>
-    api.fetch("beispiel/properties", {
+    api.fetch("campaigns/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: scene, rev, patch: { location: value } }),
@@ -207,11 +207,11 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   expect(await api.exists("locations/der-alte-hafen")).toBe(false);
 
   // With the Ort created, the patch lands and the scene MOVES with it.
-  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
+  await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(scene, { location: "nordbucht" });
   const moved = await api.file(scene);
   expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
-  await page.goto(`/beispiel/entry/${moved.path}`);
+  await page.goto(`/campaigns/beispiel/entries/${moved.path}`);
   await expect(page.getByRole("article")).toContainText("Nordbucht");
 });
 
@@ -224,7 +224,7 @@ test.describe("with a seeded loot scene", () => {
     // [!loot] is missing from the reference scenes, so the sixth kind is
     // checked on a scene this test seeds into its own copy of the fixtures.
     // Its last address segment is the scene's id, like every scene address.
-    await page.goto(`/beispiel/entry/${LOOT_SCENE_PATH}`);
+    await page.goto(`/campaigns/beispiel/entries/${LOOT_SCENE_PATH}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Beutezug in der Räucherkammer",
     );
@@ -266,7 +266,7 @@ test.describe("the table at 390px", () => {
   test("a table too wide for the phone scrolls in its own box, the page does not", async ({
     page,
   }) => {
-    await page.goto(`/beispiel/entry/${WIDE_TABLE_SCENE_PATH}`);
+    await page.goto(`/campaigns/beispiel/entries/${WIDE_TABLE_SCENE_PATH}`);
 
     // Overflowing, so the box IS a named region: the tab stop and the
     // landmark only appear once there is something to scroll.

@@ -13,6 +13,7 @@ import type { CampaignSummary, CampaignTree, EntryResponse } from "@grimoire/sha
 import { app } from "../src/server";
 import { seedCampaign, type SeedEntry } from "../src/db/seed";
 import { dropStore, emptyStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 describe("GET /api/campaigns", () => {
   const campaigns = async (): Promise<CampaignSummary[]> => {
@@ -112,7 +113,7 @@ describe("GET /api/campaigns", () => {
   });
 });
 
-describe("GET /api/:campaign/tree", () => {
+describe("GET /api/campaigns/:campaign/tree", () => {
   beforeEach(async () => {
     await seedStore();
   });
@@ -121,7 +122,7 @@ describe("GET /api/:campaign/tree", () => {
   });
 
   const tree = async (): Promise<CampaignTree> => {
-    const res = await app.request("/api/beispiel/tree");
+    const res = await app.request("/api/campaigns/beispiel/tree");
     expect(res.status).toBe(200);
     return (await res.json()) as CampaignTree;
   };
@@ -188,23 +189,23 @@ describe("GET /api/:campaign/tree", () => {
   });
 
   test("404 for unknown campaign", async () => {
-    const res = await app.request("/api/nope/tree");
+    const res = await app.request("/api/campaigns/nope/tree");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: expect.any(String) });
   });
 
   test("traversal in campaign segment is refused before any lookup", async () => {
     // "..%2f..": Hono decodes the param to "../.." -> our guard answers 400.
-    const res = await app.request("/api/..%2f../tree");
+    const res = await app.request("/api/campaigns/..%2f../tree");
     expect(res.status).toBe(400);
     // Fully encoded "%2e%2e" is normalized away by URL/route matching before
     // any handler runs -> 404 from the router, also safe.
-    const res2 = await app.request("/api/%2e%2e/tree");
+    const res2 = await app.request("/api/campaigns/%2e%2e/tree");
     expect([400, 404]).toContain(res2.status);
   });
 });
 
-describe("GET /api/:campaign/entry", () => {
+describe("GET /api/campaigns/:campaign/entries", () => {
   beforeEach(async () => {
     await seedStore();
   });
@@ -214,7 +215,7 @@ describe("GET /api/:campaign/entry", () => {
 
   test("returns properties, body and the rev", async () => {
     const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
-    const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+    const res = await app.request(entriesUrl("beispiel", rel));
     expect(res.status).toBe(200);
     const body = (await res.json()) as EntryResponse;
     expect(body.path).toBe(rel);
@@ -231,7 +232,7 @@ describe("GET /api/:campaign/entry", () => {
   });
 
   test("serves campaign as kind campaign (no new endpoint needed)", async () => {
-    const res = await app.request("/api/beispiel/entry?path=campaign");
+    const res = await app.request(entriesUrl("beispiel", "campaign"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as EntryResponse;
     expect(body.kind).toBe("campaign");
@@ -242,20 +243,20 @@ describe("GET /api/:campaign/entry", () => {
   test("serves the two list files from their rows: inbox and glossary", async () => {
     // They have no entity row of their own; the campaign's version counter is
     // their guard token (store/read.ts readByLocator).
-    const inbox = await app.request("/api/beispiel/entry?path=inbox");
+    const inbox = await app.request(entriesUrl("beispiel", "inbox"));
     expect(inbox.status).toBe(200);
     const inboxBody = (await inbox.json()) as EntryResponse;
     expect(inboxBody.kind).toBe("inbox");
     expect(inboxBody.body).toContain("- ");
 
-    const glossary = await app.request("/api/beispiel/entry?path=glossary");
+    const glossary = await app.request(entriesUrl("beispiel", "glossary"));
     expect(glossary.status).toBe(200);
     expect(((await glossary.json()) as EntryResponse).kind).toBe("glossary");
   });
 
   test("404 for unknown file and unknown campaign", async () => {
-    expect((await app.request("/api/beispiel/entry?path=01-salzhafen/nope")).status).toBe(404);
-    expect((await app.request("/api/nope/entry?path=inbox")).status).toBe(404);
+    expect((await app.request(entriesUrl("beispiel", "01-salzhafen/nope"))).status).toBe(404);
+    expect((await app.request(entriesUrl("nope", "inbox"))).status).toBe(404);
   });
 
   test("a STALE scene address resolves and answers with the current one", async () => {
@@ -268,49 +269,57 @@ describe("GET /api/:campaign/entry", () => {
       "01-salzhafen/hafen/lighthouse-arrival",
       "02-nope/lighthouse-arrival",
     ]) {
-      const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(stale)}`);
+      const res = await app.request(entriesUrl("beispiel", stale));
       expect(res.status).toBe(200);
       expect(((await res.json()) as { path: string }).path).toBe(
         "01-salzhafen/leuchtturm/lighthouse-arrival",
       );
     }
     // An unknown ID is still a 404 — nothing to redirect to.
-    expect((await app.request("/api/beispiel/entry?path=01-salzhafen/nirgends")).status).toBe(404);
+    expect((await app.request(entriesUrl("beispiel", "01-salzhafen/nirgends"))).status).toBe(404);
   });
 
-  test("400 without path parameter", async () => {
-    expect((await app.request("/api/beispiel/entry")).status).toBe(400);
+  test("400 without an address", async () => {
+    expect((await app.request("/api/campaigns/beispiel/entries/")).status).toBe(400);
   });
 
   test("400 on traversal attempts", async () => {
     const cases = [
-      "?path=../../etc/passwd",
-      "?path=..%2F..%2Fetc%2Fpasswd",
-      "?path=%2e%2e%2f%2e%2e%2fetc%2fpasswd", // fully encoded ../..
-      "?path=/etc/passwd",
-      `?path=${encodeURIComponent("C:\\windows\\system32")}`,
-      `?path=${encodeURIComponent("01-salzhafen\\..\\..\\secret.md")}`,
-      `?path=${encodeURIComponent("01-salzhafen/../../beispiel/inbox")}`,
+      "/etc/passwd",
+      "C:\\windows\\system32",
+      "01-salzhafen\\..\\..\\secret.md",
+      ".hidden/x",
     ];
-    for (const q of cases) {
-      const res = await app.request(`/api/beispiel/entry${q}`);
+    for (const address of cases) {
+      const res = await app.request(entriesUrl("beispiel", address));
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string };
       expect(typeof body.error).toBe("string");
     }
   });
 
+  test("a `..` segment never reaches the address — the URL resolves it away", async () => {
+    // With the address in the path, every URL parser on the way normalizes
+    // `.` and `..` segments (percent-encoded ones included) before the server
+    // sees them. What arrives is a different, ordinary address, so the honest
+    // answer is 404 and not the 400 of the address guard. The probe uses a
+    // neutral traversal target; only the `..` segments matter here.
+    for (const address of ["../../vertraulich/notizen", "01-salzhafen/../../beispiel/inbox"]) {
+      expect((await app.request(entriesUrl("beispiel", address))).status).toBe(404);
+    }
+  });
+
   test("400 for hidden segments, 404 for an address the schema has no row for", async () => {
     // Hidden segments stay a 400 — that is a hostile value, not an address.
-    expect((await app.request("/api/beispiel/entry?path=.hidden")).status).toBe(400);
-    expect((await app.request("/api/beispiel/entry?path=.hidden.md")).status).toBe(400);
+    expect((await app.request(entriesUrl("beispiel", ".hidden"))).status).toBe(400);
+    expect((await app.request(entriesUrl("beispiel", ".hidden.md"))).status).toBe(400);
     // An address the schema describes but no row answers is honestly a 404 —
     // "there is no such entry" — not a 400 about its shape.
-    expect((await app.request("/api/beispiel/entry?path=kein-kapitel")).status).toBe(404);
-    expect((await app.request("/api/beispiel/entry?path=notes.txt")).status).toBe(404);
+    expect((await app.request(entriesUrl("beispiel", "kein-kapitel"))).status).toBe(404);
+    expect((await app.request(entriesUrl("beispiel", "notes.txt"))).status).toBe(404);
     // …including the OLD `.md` form: no compatibility, by decision.
     expect(
-      (await app.request("/api/beispiel/entry?path=npcs%2Fjorna.md")).status,
+      (await app.request(entriesUrl("beispiel", "npcs/jorna.md"))).status,
     ).toBe(404);
   });
 });
@@ -335,10 +344,10 @@ describe("a fresh database (nothing loaded at boot)", () => {
 
   test("every campaign-scoped endpoint answers 404", async () => {
     for (const p of [
-      "/api/beispiel/tree",
-      "/api/beispiel/version",
-      "/api/beispiel/entry?path=campaign",
-      "/api/beispiel/session",
+      "/api/campaigns/beispiel/tree",
+      "/api/campaigns/beispiel/version",
+      entriesUrl("beispiel", "campaign"),
+      "/api/campaigns/beispiel/session",
     ]) {
       expect((await app.request(p)).status).toBe(404);
     }

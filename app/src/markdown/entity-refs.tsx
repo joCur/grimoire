@@ -199,7 +199,7 @@ export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNod
     );
   }
   return (
-    <Link to={`/${campaign}/entry/${target.path}`} aria-label={label} className={REF_CLASS}>
+    <Link to={`/campaigns/${campaign}/entries/${target.path}`} aria-label={label} className={REF_CLASS}>
       {target.name}
     </Link>
   );

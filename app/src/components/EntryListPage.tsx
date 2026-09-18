@@ -1,9 +1,9 @@
-// The shell of the two campaign-content pages (issue #53, PO feedback on
-// PR #87): „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
-// (/:campaign/glossary).
+// The shell of the two campaign-content pages:
+// the campaign-knowledge page (/campaigns/:campaign/knowledge) and the
+// glossary page (/campaigns/:campaign/glossary).
 //
-// WHY PAGES AND NOT SETTINGS SECTIONS. The first version put both lists inline
-// under `/settings`. Two objections, and the second is the one that decides
+// WHY PAGES AND NOT SETTINGS SECTIONS. Both lists could sit inline under
+// `/settings`. Two objections, and the second is the one that decides
 // the shape: with 30 glossary terms the page is an endless wall of tiny text
 // fields, and — more importantly — a glossary IS campaign content, the same
 // kind of thing as the NPCs and the locations. It belongs where those live:
@@ -15,28 +15,28 @@
 // rows. The difference is where a row leads — the npc list opens a read view,
 // these open the entry itself for editing, in place.
 //
-// ONE ROW OPEN AT A TIME, SAVED ON ITS OWN. The old page had one „Speichern"
-// over everything, which meant the DM had to remember that a term three
-// screens up was also unsaved. A row is opened, edited, saved, closed: the
-// unit of work on screen is the unit of work in the head. The WIRE is still a
+// ONE ROW OPEN AT A TIME, SAVED ON ITS OWN. One save action over everything
+// would mean the DM has to remember that a term three screens up is also
+// unsaved. A row is opened, edited, saved, closed: the
+// unit of work on screen is the unit of work in the head. The WIRE is a
 // whole-list PUT guarded by the list's `rev` (server/src/server.ts) — that is
 // the endpoint's contract and this page does not get to change it — so a
-// per-entry save is „the stored list with this one entry replaced".
+// per-entry save is the stored list with this one entry replaced.
 //
-// THE FIELDS FIT WHAT GOES IN THEM (PO feedback): a term, an „Alt", a „Neu"
-// are single-line and full width; an explanation, a fact, a style rule are
+// THE FIELDS FIT WHAT GOES IN THEM: a term, and the two halves of a naming
+// rule, are single-line and full width; an explanation, a fact, a style rule are
 // sentences and get a textarea that grows with them
 // (components/ui/autogrow-textarea.tsx). Nothing on the page is a 120px box
-// holding a paragraph any more.
+// holding a paragraph.
 //
 // THE 409 is the shape ADR #4 prescribes: nothing was written, the list is
 // re-read and the DM is told — never a silent overwrite. The open row keeps
 // what they typed; what happens next is their decision — reload, or re-aim
-// the draft at the list that came back. „Speichern" is OFF in between: the
+// the draft at the list that came back. Saving is OFF in between: the
 // list moved, so retrying blindly is the overwrite the 409 just prevented.
 //
-// WHAT „THIS ENTRY" MEANS while the list moves underneath (PO findings on
-// PR #87). The version poller refetches both lists every few seconds
+// WHAT "THIS ENTRY" MEANS while the list moves underneath. The version poller
+// refetches both lists every few seconds
 // (lib/use-campaign-version.ts), so the stored array can change while a row
 // is open. Two consequences, and they are the load-bearing part of this file:
 //
@@ -49,7 +49,7 @@
 //
 // AND WHILE A DRAFT IS OPEN the page does not let anything else rewrite the
 // list under it: deleting or moving another row is disabled, and opening a
-// different row asks „Änderungen verwerfen?" first.
+// different row asks whether to discard the changes first.
 //
 // UNSAVED-CHANGES GUARD: only the open row can hold unsaved work, so that is
 // exactly what the guard asks about (components/UnsavedChangesGuard.tsx).
@@ -98,7 +98,7 @@ export interface EntryListPageProps<T> {
   /** Shown in place of the list: nothing stored yet / nothing matches. */
   emptyMessage: MessageKey;
   noMatchMessage: MessageKey;
-  /** The „Neuer Eintrag" action — each list names its own kind of entry. */
+  /** The add action — each list names its own kind of entry. */
   addLabel: MessageKey;
   /** What a row says on one line, and what its delete confirmation names. */
   rowTitle: (entry: T) => string;
@@ -108,13 +108,13 @@ export interface EntryListPageProps<T> {
   rowsOf: (entries: readonly T[], filter: string) => Array<EntryRow<T>>;
   /** The open row's form. `patch` replaces the whole value (kind switches). */
   renderForm: (value: T, patch: (next: T) => void, t: Translate) => ReactNode;
-  /** Is the open row worth saving? Arms „Speichern". */
+  /** Is the open row worth saving? Arms the save action. */
   isSendable: (entry: T) => boolean;
   emptyEntry: () => T;
   /**
    * Does the stored ORDER mean something? The knowledge list is the order of
    * the prompt, so it gets up/down; the glossary is alphabetical and has no
-   * manual order to offer (PO feedback on PR #87).
+   * manual order to offer.
    */
   reorderable?: boolean;
 }
@@ -127,8 +127,7 @@ export interface EntryListPageProps<T> {
  * up again in the list as it stands then (lib/entry-list.ts findEntryIndex)
  * instead of writing to a remembered index: the version poller refetches both
  * lists every few seconds, so a delete in another tab silently renumbers
- * everything below it, and an index-addressed write lands on a neighbour
- * (PO finding on PR #87).
+ * everything below it, and an index-addressed write lands on a neighbour.
  *
  * `rev` is the list's guard token as of the same moment. Sending the CURRENT
  * one would defeat the guard for exactly the case it exists for: the poller
@@ -153,8 +152,8 @@ type Status =
   | { kind: "failed"; message: string };
 
 export function EntryListPage<T>(props: EntryListPageProps<T>) {
-  // The guard wraps the page rather than the list: „you have unsaved changes"
-  // is a statement about the page, and `useBlocker` is one blocker per router.
+  // The guard wraps the page rather than the list: unsaved changes are a
+  // statement about the page, and `useBlocker` is one blocker per router.
   return (
     <UnsavedChangesGuard>
       <EntryListBody {...props} />
@@ -201,7 +200,7 @@ function EntryListBody<T>({
   // reader should hear — both only ever set by an action that moves the focus
   // out from under it (a deletion).
   const [pendingFocus, setPendingFocus] = useState<number | "add">();
-  /** „Änderungen verwerfen?" — what would happen if the DM says yes. */
+  /** The discard confirmation — what would happen if the DM says yes. */
   const [confirmDiscard, setConfirmDiscard] = useState<
     { kind: "reload" } | { kind: "open"; target: Editing<T> }
   >();
@@ -287,10 +286,10 @@ function EntryListBody<T>({
   const locked = busy || dirty;
 
   /**
-   * Open something else. With unsaved work on screen this ASKS first — before
-   * this, clicking the next row threw the draft away without a word, which is
-   * the silent loss ADR #4 forbids (and which the leave-the-page guard already
-   * refused to allow).
+   * Open something else. With unsaved work on screen this ASKS first —
+   * without the question, clicking the next row throws the draft away without
+   * a word, which is the silent loss ADR #4 forbids (and which the
+   * leave-the-page guard already refuses to allow).
    */
   const requestOpen = (target: Editing<T>) => {
     if (dirty) {
@@ -333,7 +332,7 @@ function EntryListBody<T>({
     const without = removeEntry(entries, index);
     // The focus target is read off the list as it will LOOK afterwards: the
     // glossary is alphabetical and filtered, so a pre-delete index names a
-    // different row than the one that takes the gap (PO finding on PR #87).
+    // different row than the one that takes the gap.
     const remaining = rowsOf(without, filter);
     if (!(await commit(without, rev))) return;
     if (editing !== undefined && editing.at === "stored" && storedIndex === index) {
@@ -354,7 +353,7 @@ function EntryListBody<T>({
   /**
    * After a conflict: keep what was typed and re-aim it at the list that came
    * back. Only offered when the opened entry is STILL THERE, unchanged — then
-   * „replace this entry" means the same thing in the new list as it did in the
+   * replacing this entry means the same thing in the new list as it did in the
    * old one. Otherwise the only honest option is reloading.
    */
   const canApplyDraft =
@@ -369,15 +368,15 @@ function EntryListBody<T>({
 
   return (
     <>
-      {/* Below md the topbar is not the chrome — the same „‹ Pool" row every
-          other campaign view carries is the way back. */}
+      {/* Below md the topbar is not the chrome — the same back row to the
+          chapter overview every other campaign view carries is the way back. */}
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto max-w-[760px] px-5 pt-5 pb-16 md:px-7 md:pt-10">
         <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
           <h1 className="font-serif text-[24px] leading-[1.25] font-semibold text-foreground">
             {t(title)}
           </h1>
-          {/* „Neuer Eintrag" sits in the heading row, where the npc and
+          {/* The add action sits in the heading row, where the npc and
               location lists carry theirs (routes/browse.tsx): the page's own
               action, above the list rather than after it, so it does not move
               as the list grows. */}
@@ -470,8 +469,8 @@ function EntryListBody<T>({
                       disabled={busy}
                       // Named explicitly rather than by the summary inside it:
                       // the row's text alone announces as a sentence with no
-                      // verb, and „was ist das hier, ein Link?" is exactly the
-                      // question a screen reader user should not have to ask.
+                      // verb, and "is this a link?" is exactly the question a
+                      // screen reader user should not have to ask.
                       aria-label={t("entryList.edit", { name: rowTitle(row.entry) })}
                       onClick={() =>
                         requestOpen({
@@ -548,7 +547,7 @@ function EntryListBody<T>({
               {/* The two honest next steps, as controls rather than as advice.
                   „Speichern" stays OFF until one of them is taken: retrying
                   against a list that moved is how the draft ends up on a
-                  neighbouring entry (PO finding on PR #87). */}
+                  neighbouring entry. */}
               <button
                 type="button"
                 disabled={busy}
@@ -579,7 +578,7 @@ function EntryListBody<T>({
         </span>
       </div>
 
-      {/* „Änderungen verwerfen?" — the same question the way OUT of the page
+      {/* The discard confirmation — the same question the way OUT of the page
           asks (components/UnsavedChangesGuard.tsx), for the two ways out of an
           open ROW that stay on it: opening another entry, and reloading the
           list after a conflict. */}
@@ -587,7 +586,7 @@ function EntryListBody<T>({
         <Dialog
           open
           onOpenChange={(isOpen) => {
-            // Escape and the backdrop mean „Weiter bearbeiten".
+            // Escape and the backdrop mean carrying on editing.
             if (!isOpen) setConfirmDiscard(undefined);
           }}
         >
@@ -677,8 +676,7 @@ const STALE_ACTION =
  *
  * A panel inside the list rather than a dialog — the DM is correcting a term
  * against the ones around it, and a modal would hide exactly that context. It
- * carries its own „Speichern": the unit of work is this entry
- * (PO feedback on PR #87).
+ * carries its own save action: the unit of work is this entry.
  */
 function EntryForm({
   heading,
@@ -701,7 +699,7 @@ function EntryForm({
   // The first TEXT field takes the focus: the row was clicked to type in it,
   // and on a phone that is also what brings up the keyboard without a second
   // tap. A `<select>` is skipped on the way — the knowledge form leads with
-  // „Art", and landing the keyboard on a select means the first arrow key
+  // the kind select, and landing the keyboard on a select means the first arrow key
   // silently changes the kind of the entry the DM came to fix a typo in.
   useEffect(() => {
     const node = ref.current;

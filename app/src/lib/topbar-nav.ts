@@ -1,5 +1,5 @@
-// Which section of the topbar's campaign navigation ("Kapitel · NPCs · Orte")
-// the current view belongs to (issue #34, PO rework of PR #35).
+// Which section of the topbar's campaign navigation (chapters, NPCs,
+// locations) the current view belongs to.
 //
 // The topbar chrome is global and STABLE: every campaign-scoped view shows the
 // same left block, and the only thing that moves is this marking. So the
@@ -7,10 +7,10 @@
 // no waiting, no flicker between "unmarked" and "marked".
 //
 // Sections are the three campaign-wide entry points, not entity kinds: a scene
-// entry belongs under Kapitel because that is where the DM finds it, an NPC entry
-// under NPCs no matter which chapter mentions it. Views that are not part of
-// any section (generator, review, the campaign entry, sessions, inbox, glossary)
-// are marked nowhere — an arbitrary highlight would be a lie.
+// entry belongs under Chapters because that is where the DM finds it, an NPC
+// entry under NPCs no matter which chapter mentions it. Views that are not
+// part of any section (generator, review, the campaign entry, sessions, inbox,
+// glossary) are marked nowhere — an arbitrary highlight would be a lie.
 
 import { kindFromAddress } from "@grimoire/shared/kind";
 
@@ -19,23 +19,23 @@ export type NavSection = "chapters" | "npcs" | "locations";
 
 /** The view the topbar is rendering for, as far as the marking cares. */
 export interface NavView {
-  /** The pool ("/:campaign"). */
-  isPool: boolean;
-  /** `:kind` of "/:campaign/list/:kind", or "" when this is not a list view. */
+  /** The chapter overview ("/campaigns/:campaign"). */
+  isChapterOverview: boolean;
+  /** `:kind` of "/campaigns/:campaign/list/:kind", or "" when this is not a list view. */
   listKind?: string;
-  /** Campaign-relative path of "/:campaign/entry/*", or "" when not a file view. */
+  /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not an entry view. */
   filePath?: string;
 }
 
 /**
  * The section to mark, or undefined for the views that belong to none.
  *
- * The pool and the scene list are Kapitel; an entry's section comes from its
+ * The chapter overview and the scene list are Chapters; an entry's section comes from its
  * kind (the shared path table — the format contract in code exactly once):
- * scenes and chapters are Kapitel, npc/location entries their own lists.
+ * scenes and chapters are Chapters, npc/location entries their own lists.
  */
 export function navSection(view: NavView): NavSection | undefined {
-  if (view.isPool) return "chapters";
+  if (view.isChapterOverview) return "chapters";
 
   switch (view.listKind) {
     case "scenes":

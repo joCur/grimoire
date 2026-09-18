@@ -1,6 +1,6 @@
-// Background generate jobs — born from a production loss: a
-// finished, good generation died with a browser-back gesture because the
-// run was one synchronous request and the result lived only in client state.
+// Background generate jobs — a generation must not die with a
+// browser-back gesture, which is what happens when the run is one
+// synchronous request and the result lives only in client state.
 //
 // The model is deliberately small:
 //
@@ -17,15 +17,13 @@
 //     survives the same way.
 //
 // THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
-// Persistence was parked as a non-goal because the campaign files were
-// the only truth and there was nowhere sensible to put a job; with the
-// database as that truth (ADR #13) the row is the obvious home, and the loss
-// it prevents is the same one the job model was built for: a deploy or a
-// container restart in the minute between "fertig" and "Übernehmen" used to
-// throw away a finished generation.
+// With the database as the single truth (ADR #13) the row is the obvious
+// home, and it prevents the loss the job model was built for: a deploy or a
+// container restart in the minute between a finished run and its accept
+// would otherwise throw the generation away.
 //
-// What persistence changes for the client — nothing, except that the answers
-// are now truthful across a restart:
+// Persistence changes nothing for the client, except that the answers stay
+// truthful across a restart:
 //
 //   done/failed  survive a restart whole (result, npcResult, error body,
 //                draftEdits), so the review comes back and can be applied.
@@ -100,26 +98,25 @@ interface Job {
   /**
    * The pipeline of a scene run: the internal outline, the parts
    * with their status, and the run's totals. `undefined` for the single-call
-   * runs and for a row written before this deploy.
+   * runs and for a row that carries no pipeline.
    */
   pipeline?: PipelineRecord;
   /** The run's source material — a per-part retry sends it again. */
   sourceText?: string;
   newChapter: boolean;
   /**
-   * Title of the chapter a „Neues Kapitel" run creates — stored when the run
-   * STARTS, so the accept step no longer depends on the browser still holding
-   * it. Undefined for every other run and for a job written before that
-   * column existed; the accept then falls back to the chapter id as the
-   * title.
+   * Title of the chapter a new-chapter run creates — stored when the run
+   * STARTS, so the accept step does not depend on the browser still holding
+   * it. Undefined for every other run and for a job that carries no title;
+   * the accept then falls back to the chapter id as the title.
    */
   newChapterTitle?: string;
 }
 
 /**
  * What the `pipeline` column holds. The OUTLINE is stored but
- * never serialized: it is an internal step and is never shown to the DM (PO,
- * 15.09.). A retry needs it, a restart needs it — the browser does not.
+ * never serialized: it is an internal step and is never shown to the DM.
+ * A retry needs it, a restart needs it — the browser does not.
  */
 export interface PipelineRecord {
   outline?: RunOutline;
@@ -287,17 +284,17 @@ function unpackReview(value: string): GenerateJobReview {
 
 /**
  * A persisted job row outlives the deploy that wrote it — that is the whole
- * point of persisting it — so its draft paths can be spelled the way TWO
- * earlier schemes spelled them, and neither is a legal target any more:
+ * point of persisting it — so its draft paths can be spelled in TWO older
+ * schemes, and neither is a legal target:
  *
- *   * the file extension is gone from every ADDRESS, and a `.md`
- *     path is rejected outright by the NPC apply pattern (400 on
- *     „Übernehmen") or would insert a scene row whose id nothing can address.
+ *   * an ADDRESS carries no file extension, and a `.md`
+ *     path is rejected outright by the NPC apply pattern (400 on the
+ *     accept) or would insert a scene row whose id nothing can address.
  *   * a scene draft's path is `<chapter>/<id>`: the group
  *     segment IS the `location`, and the SERVER derives it on the way in.
- *     A three-segment scene path is now a client naming a group of its own,
- *     which `applySceneTarget` answers with a 400 — for a `done` job stored
- *     before this deploy, forever. The drafts are still perfectly good, so
+ *     A three-segment scene path is a client naming a group of its own,
+ *     which `applySceneTarget` answers with a 400 — for such a stored `done`
+ *     job, forever. The drafts are still perfectly good, so
  *     the group segment is dropped instead of the run.
  *
  * So a persisted job is normalized ONCE, on the way out of the row: both
@@ -645,12 +642,12 @@ async function finish(
 // neither is true of state kept in the process:
 //
 //   * a part that is `done` is in `result` and therefore reviewable and
-//     acceptable while its siblings are still going (AK2),
+//     acceptable while its siblings are still going,
 //   * a restart keeps the done parts and fails only what was in flight
-//     (AK3, db/job-boot.ts).
+//     (db/job-boot.ts).
 //
 // `cancelled()` asks the DATABASE, not a flag: the row is the only thing that
-// knows whether this run is still the campaign's run. „Verwerfen" deletes the
+// knows whether this run is still the campaign's run. Discarding deletes the
 // row and a new start replaces it — both make every open part of the old run
 // stop at its next checkpoint, and neither needs a message to reach the
 // worker.
@@ -843,8 +840,8 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
         pipeline.parts = parts.map((part) => ({ ...part }));
         addUsage(pipeline, usage);
         // The outline's own warnings are the run's warnings: it is the step
-        // that read the whole source text, so „der Quelltext nennt keine
-        // Statblocks" can only come from here.
+        // that read the whole source text, so a warning about what the
+        // source material does not contain can only come from here.
         const warnings = outline.warnings.filter((w) => !result.warnings.includes(w));
         return { result: { ...result, warnings: [...result.warnings, ...warnings] } };
       });
@@ -857,8 +854,8 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           delete part.error;
           delete part.validationErrors;
           // The raw reply belongs to the attempt that failed; a part that is
-          // being written again has none, and leaving the old one there put
-          // „was kam zurück" under a running part (and into the next
+          // being written again has none, and leaving the old one there would
+          // put the raw-reply block under a running part (and into the next
           // success, where nothing came back wrong at all).
           delete part.rawReply;
         }
@@ -901,7 +898,7 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
   };
 }
 
-// --- „Erneut versuchen" per part ---------------------------------------------
+// --- retry per part ----------------------------------------------------------
 
 /**
  * Restart ONE part of a run. Only that part: the outline stays, the finished
@@ -910,15 +907,15 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
  *
  * 404 when the campaign has no job, when `jobId` names a different one or
  * when the run has no such part; 409 when the part is already running, still
- * PENDING (the pool owns it — it has not had its turn yet) or already done (a
+ * PENDING (the run's queue owns it — it has not had its turn yet) or already done (a
  * double click is not a reason to spend tokens twice).
  *
  * The revive is ONE TRANSACTION over a re-read row, and that is not a detail:
  * `replanStoredRun` awaits the campaign context, and while it does a sibling
  * part of the very same run can report `partDone`. Writing back the pipeline
- * this function read BEFORE that await used to clobber the sibling's status
- * (it flipped from `done` to `running`) and with it the run's ability to ever
- * settle. So the transaction re-reads the row, mutates ONLY the addressed
+ * this function read BEFORE that await would clobber the sibling's status
+ * (flipping it from `done` back to `running`) and with it the run's ability to
+ * ever settle. So the transaction re-reads the row, mutates ONLY the addressed
  * part, and re-checks every guard against what it found — the losing racer
  * gets its 409 instead of a lost write.
  */
@@ -1011,8 +1008,8 @@ function assertRetryable(job: Job, key: string): StoredPart {
   if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
   if (part.status === "running") throw new ApiError(409, "this part is already running");
   if (part.status === "done") throw new ApiError(409, "this part is already finished");
-  // A PENDING part still belongs to the run's own pool: it has not had its
-  // turn yet, and reviving it here would run it twice — once from the pool,
+  // A PENDING part still belongs to the run's own queue: it has not had its
+  // turn yet, and reviving it here would run it twice — once from the queue,
   // once from this call, both writing the same part.
   if (part.status === "pending") throw new ApiError(409, "this part has not run yet");
   if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
@@ -1047,7 +1044,7 @@ export async function deleteJob(campaign: string): Promise<boolean> {
  *
  * `dropped` is the one exception: a set, sent whole, because "no longer
  * dropped" has to be expressible too. In `entries`, `fields` and `blocks` a
- * `null` value DELETES the key — „wieder offen", and the only way to clear
+ * `null` value DELETES the key — back to undecided, and the only way to clear
  * decisions whose keys no longer exist (an augment re-alignment cuts new
  * block ids).
  */
@@ -1124,7 +1121,7 @@ function applyReviewPatch(job: Job, patch: ReviewPatch): void {
     job.draftEdits.set(draftAddress(path), markdown);
   }
   for (const [key, decision] of Object.entries(patch.entries ?? {})) {
-    // `null` is „wieder offen" — the review's third state, which is why an
+    // `null` is undecided — the review's third state, which is why an
     // undo has to be expressible and is not just a missing key.
     if (decision === null) delete job.review.entries[key];
     else job.review.entries[key] = decision;
@@ -1154,9 +1151,9 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
  * The row is re-read HERE, inside the transaction. A job that MOVED (rev) or
  * VANISHED in the meantime throws, which rolls the whole write back — the
  * pre-read the accept planned with is then stale. Reporting a lost job as a
- * quiet `false` used to commit the drafts while silently dropping the
- * bookkeeping that says they were written, so the next „Alle übernehmen"
- * would have written them a second time.
+ * quiet `false` would commit the drafts while silently dropping the
+ * bookkeeping that says they were written, so the next accept-all
+ * would write them a second time.
  */
 export function markWrittenInTx(
   tx: GrimoireDb,

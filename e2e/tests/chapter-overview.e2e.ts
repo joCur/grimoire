@@ -1,13 +1,13 @@
-// Critical path 1: auto entry — the pool loads the campaign; see CLAUDE.md.
+// Critical path 1: auto entry — the chapter overview loads the campaign; see CLAUDE.md.
 //
 // "/" has no page of its own: it redirects into the campaign the
-// server reports, and the pool is the first thing the DM sees — campaign
+// server reports, and the chapter overview is the first thing the DM sees — campaign
 // header, the active chapter with its goal line, the location group and the
 // contingency block.
 //
 // The campaign chrome lives on this path as well: the group header resolves its slug
 // against the locations, the topbar carries the NPCs/Orte navigation (the
-// pool's own footer line is gone), and the campaign's name/description are
+// chapter overview's own footer line is gone), and the campaign's name/description are
 // editable from the header.
 
 import type { Page } from "@playwright/test";
@@ -19,10 +19,10 @@ import { expect, test, todaySessionId, type SeedEntry } from "../support/test";
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
  *
  * Measured as "right edge of the rightmost child vs. the row's CONTENT edge",
- * not as `header.scrollWidth - header.clientWidth` (a CI finding):
+ * not as `header.scrollWidth - header.clientWidth`:
  * an overflowing flex item first eats the row's 24px right padding, and
- * `scrollWidth` does not grow for that at all — the old metric reported a
- * clean row while the session chip was already 10px past the padding and,
+ * `scrollWidth` does not grow for that at all — that metric reports a
+ * clean row while the session chip is already 10px past the padding and,
  * further out, past the viewport. The page's own horizontal scroll is
  * reported alongside, since that is the other half of "does not overflow".
  */
@@ -48,11 +48,11 @@ async function topbarOverflow(page: Page) {
 
 /**
  * Stands in for WIDER GLYPHS than the machine running the test happens to
- * have. Linux CI renders every label ~2px wider than macOS does, which is how
- * the row came to overflow on CI only — twice. `letter-spacing`
+ * have. Linux CI renders every label ~2px wider than macOS does, which is
+ * enough to overflow the row on CI alone. `letter-spacing`
  * on the row reproduces that class of difference locally and scales it, so
  * the guard below asserts that the row survives 1px of it: far more than the
- * ~0.6px equivalent of the observed CI delta, at every width.
+ * ~0.6px equivalent of that delta, at every width.
  */
 async function widenGlyphs(page: Page, spacing: string) {
   await page.addStyleTag({
@@ -69,8 +69,8 @@ async function widenGlyphs(page: Page, spacing: string) {
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /**
- * A scene that names NO location — it belongs under the pool's neutral
- * „Ohne Ort" section. The example campaign has none, so the
+ * A scene that names NO location — it belongs under the chapter overview's
+ * neutral no-location section. The example campaign has none, so the
  * test that needs one seeds it.
  */
 const SCENE_WITHOUT_LOCATION: SeedEntry = {
@@ -106,13 +106,13 @@ const NAMELESS_CAMPAIGN: SeedEntry = {
   body: "",
 };
 
-test('"/" redirects into the campaign and the pool shows chapter and scenes', async ({
+test('"/" redirects into the campaign and the chapter overview shows chapter and scenes', async ({
   page,
 }) => {
   await page.goto("/");
 
   // The redirect target comes from the server (lastSession per campaign).
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 
   // Campaign header from the campaign entry.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -132,8 +132,8 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
   await expect(chapter).toBeVisible();
-  // The chapter is a HEADING inside that trigger: the
-  // outline used to jump from the pool's h1 straight to the group h3s.
+  // The chapter is a HEADING inside that trigger, so the outline does not
+  // jump from the chapter overview's h1 straight to the group h3s.
   await expect(
     chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
@@ -176,10 +176,10 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     "Wenn: Charaktere werden beim Auskundschaften der Bucht entdeckt",
   );
 
-  // Opening a row is the pool's job — the reading view takes over from here.
+  // Opening a row is the chapter overview's job — the reading view takes over from here.
   await planned.click();
   await expect(page).toHaveURL(
-    /\/beispiel\/entry\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
+    /\/campaigns\/beispiel\/entries\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
   );
 });
 
@@ -189,10 +189,10 @@ test.describe("a scene without a location", () => {
   });
 
   test('scenes that name no location get the neutral „Ohne Ort" section', async ({ page }) => {
-    await page.goto("/beispiel");
+    await page.goto("/campaigns/beispiel");
     // A section, not a location with a blank name — and it comes LAST, after
-    // every real location of the chapter. („Eventualszenen" is a section of
-    // the chapter too and follows the location groups.)
+    // every real location of the chapter. (The contingency-scenes section
+    // belongs to the chapter too and follows the location groups.)
     const headings = page.getByRole("heading", { level: 3 });
     await expect(headings).toHaveText([
       "Der Leuchtturm von Salzhafen",
@@ -202,7 +202,7 @@ test.describe("a scene without a location", () => {
     const scene = page.getByRole("link", { name: /Irgendwo unterwegs/ });
     await expect(scene).toBeVisible();
     // …and the scene sits at chapter level, address included.
-    await expect(scene).toHaveAttribute("href", "/beispiel/entry/01-salzhafen/ohne-ort-szene");
+    await expect(scene).toHaveAttribute("href", "/campaigns/beispiel/entries/01-salzhafen/ohne-ort-szene");
   });
 });
 
@@ -224,8 +224,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
    * The whole left block of the topbar, as text and as geometry. EVERY
    * campaign-scoped view must agree on every bit of it except which entry is
    * marked: the chrome is global and stable, the trio is a persistent section
-   * nav, and no view brings a breadcrumb of its own any more (a PO
-   * rework). So nothing appears, disappears or shifts while navigating.
+   * nav, and no view brings a breadcrumb of its own. So nothing appears,
+   * disappears or shifts while navigating.
    */
   const leftBlock = async () => ({
     campaign: await label.textContent(),
@@ -240,35 +240,35 @@ test("the topbar trio navigates without anything in the left block moving", asyn
 
   /** The campaign name belongs to the switcher — and to nothing else up there. */
   const assertChromeIsStable = async (
-    onPool: Awaited<ReturnType<typeof leftBlock>>,
+    onChapterOverview: Awaited<ReturnType<typeof leftBlock>>,
   ) => {
-    expect(await leftBlock()).toEqual(onPool);
+    expect(await leftBlock()).toEqual(onChapterOverview);
     await expect(
       page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
     ).toHaveCount(1);
   };
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
   await expect(nav.getByRole("link")).toHaveText(["Kapitel", "NPCs", "Orte"]);
-  // The pool marks its own entry.
+  // The chapter overview marks its own entry.
   await expect(current).toHaveText("Kapitel");
-  const onPool = await leftBlock();
+  const onChapterOverview = await leftBlock();
   await expect(
     page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
   ).toHaveCount(1);
 
-  // The pool carries a „Nachschlagen" line again (PO feedback) — it is
-  // where the two campaign-content pages are reached from on
-  // the desktop. What matters HERE is that they did not move into the TOPBAR:
-  // the trio above is still exactly Kapitel/NPCs/Orte, which is what the rest
-  // of this test measures.
+  // The chapter overview carries a lookup line — it is where the two
+  // campaign-content pages are reached from on
+  // the desktop. What matters HERE is that they are not in the TOPBAR:
+  // the trio above is still exactly chapters/NPCs/locations, which is what the
+  // rest of this test measures.
   await expect(
     page.getByRole("navigation", { name: "Nachschlagen" }).getByRole("link"),
   ).toHaveText(["NPCs", "Orte", "Glossar", "Kampagnenwissen"]);
 
   await nav.getByRole("link", { name: "Orte" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/list\/locations$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
   // Both example Orte sit in the same chapter and each row names that chapter
   // under the Ort, so the name is anchored: the row STARTS with the Ort's own
@@ -277,7 +277,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("main").getByRole("link", { name: /^Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
   await expect(current).toHaveText("Orte");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
   // No list-title crumb behind the switcher — "Orte" appears in the banner
   // exactly once, in the nav.
   await expect(
@@ -285,28 +285,28 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   ).toHaveCount(1);
 
   await nav.getByRole("link", { name: "NPCs" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/list\/npcs$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
   await expect(current).toHaveText("NPCs");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
-  // --- file views: same chrome, section marking follows the entity ----------
-  // A scene belongs to Kapitel; its hierarchy lives in the page's context
-  // line, not in the topbar.
-  await page.goto("/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival");
+  // --- entry views: same chrome, section marking follows the entity ---------
+  // A scene belongs to the chapters section; its hierarchy lives in the page's
+  // context line, not in the topbar.
+  await page.goto("/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
   );
   await expect(current).toHaveText("Kapitel");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
-  // An NPC belongs to NPCs — whichever chapter happens to mention it. The old
-  // breadcrumb claimed a chapter path here, which was plain misleading for an
+  // An NPC belongs to NPCs — whichever chapter happens to mention it. A
+  // breadcrumb claiming a chapter path here would be plain misleading for an
   // NPC opened from the NPC list.
-  await page.goto("/beispiel/entry/npcs/fenn");
+  await page.goto("/campaigns/beispiel/entries/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   await expect(current).toHaveText("NPCs");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
   // Its context line points at the list it came from.
   await expect(
     page
@@ -315,21 +315,22 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   ).toBeVisible();
 
   // Views that belong to no section mark nothing at all.
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(current).toHaveCount(0);
-  await assertChromeIsStable(onPool);
-  await page.goto("/beispiel/review");
+  await assertChromeIsStable(onChapterOverview);
+  await page.goto("/campaigns/beispiel/review");
   await expect(current).toHaveCount(0);
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
-  // "Kapitel" is the way back to the pool — the reason the trio exists.
+  // The chapters link is the way back to the chapter overview — the reason the
+  // trio exists.
   await nav.getByRole("link", { name: "Kapitel" }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
   await expect(current).toHaveText("Kapitel");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
   // The switcher still switches, from a list as well.
   await nav.getByRole("link", { name: "Orte" }).click();
@@ -337,15 +338,15 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await page
     .getByRole("menuitem", { name: /Der Leuchtturm von Salzhafen/ })
     .click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 });
 
 /**
  * The gear is part of the global chrome, so it must not undress the bar it
- * sits on (PO feedback). `/settings` used to count as a campaign-LESS
- * route, which left the topbar with the wordmark alone: switcher, nav trio,
- * search and session chip all vanished the moment the DM pressed the gear —
- * exactly the "nothing appears or disappears between views" rule the chrome
+ * sits on. Counting `/settings` as a campaign-LESS route would leave the
+ * topbar with the wordmark alone: switcher, nav trio, search and session chip
+ * gone the moment the DM presses the gear — against the "nothing appears or
+ * disappears between views" rule the chrome
  * exists for (components/Topbar.tsx). So this is the stability check of the
  * trio test above, run across the one route that is not campaign-scoped: the
  * left block and the session chip have to come out BYTE-EQUAL, and the only
@@ -391,7 +392,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
       gearBox: await gear.boundingBox(),
     });
 
-    await page.goto("/beispiel/list/npcs");
+    await page.goto("/campaigns/beispiel/list/npcs");
     await expect(label).toHaveAccessibleName(
       "Kampagne: Der Leuchtturm von Salzhafen",
     );
@@ -420,16 +421,16 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
     // And the chip is still the running session's, so the live clock the
     // version poll keeps fresh is reachable from here as well.
     await chip.click();
-    await expect(page).toHaveURL(/\/beispiel\/live$/);
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   });
 });
 
 /**
- * The topbar must not overflow at ANY width from 390px up. The
- * medium widths were the broken ones — switcher, live pill, timer, Pause,
- * verwerfen, beenden, search and Generator in one 56px row simply ran over.
- * With the session consolidated into ONE chip (PO feedback) the
- * row fits; this test is the guard that keeps it fitting.
+ * The topbar must not overflow at ANY width from 390px up. The medium widths
+ * are the tight ones — switcher, live pill, timer, Pause, verwerfen, beenden,
+ * search and Generator in one 56px row would run over. With the session
+ * consolidated into ONE chip the row fits; this test is the guard that keeps
+ * it fitting.
  */
 test.describe("with a session running since 19:30", () => {
   test.use({
@@ -441,7 +442,7 @@ test.describe("with a session running since 19:30", () => {
   }) => {
     for (const width of TOPBAR_WIDTHS) {
       await page.setViewportSize({ width, height: 800 });
-      await page.goto("/beispiel");
+      await page.goto("/campaigns/beispiel");
       await expect(
         page.getByRole("link", { name: /Session läuft/ }),
       ).toBeVisible();
@@ -454,20 +455,20 @@ test.describe("with a session running since 19:30", () => {
           page.getByRole("link", { name: "Einstellungen" }),
         ).toBeVisible();
       }
-      expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({
+      expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
         row: 0,
         page: 0,
       });
       await widenGlyphs(page, "1px");
       expect(
         await topbarOverflow(page),
-        `pool at ${width}px with wider glyphs`,
+        `chapter overview at ${width}px with wider glyphs`,
       ).toEqual({ row: 0, page: 0 });
 
       // …and the live route, whose chip is the menu trigger — from md up,
       // where the topbar IS the chrome; below that the mobile row's link chip
       // is the one on screen.
-      await page.goto("/beispiel/live");
+      await page.goto("/campaigns/beispiel/live");
       await expect(
         width >= 768
           ? page.getByRole("button", { name: /Session läuft/ })
@@ -490,34 +491,34 @@ test.describe("with a session running since 19:30", () => {
  * The FULLEST row there is — and the one the guard above never saw: with NO
  * session running the chip carries the long "Session starten" label instead
  * of the clock, and the example campaign's last session leaves the
- * "Nachbereitung · N offen" link on the row next to generator and gear
- * (a CI finding: at 768 and at 1024 that row overflowed by 41 and
- * 10px in plain macOS rendering, invisible to the old scrollWidth metric).
+ * "Nachbereitung · N offen" link on the row next to generator and gear. At
+ * 768 and at 1024 that row is tightest: a regression there overflows by 41
+ * and 10px in plain macOS rendering, invisible to a `scrollWidth` metric.
  */
 test("the topbar does not overflow at medium widths with no session running", async ({
   page,
 }) => {
   for (const width of TOPBAR_WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto("/beispiel");
+    await page.goto("/campaigns/beispiel");
     if (width >= 768) {
       await expect(
         page.getByRole("button", { name: "Session starten" }),
       ).toBeVisible();
       // The review link is part of THIS row on purpose — it is the widest
-      // optional element, and the reason the row ran over.
+      // optional element, and the one that runs the row over.
       await expect(
         page.getByRole("link", { name: /Nachbereitung/ }),
       ).toBeVisible();
     }
-    expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({
+    expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
       row: 0,
       page: 0,
     });
     await widenGlyphs(page, "1px");
     expect(
       await topbarOverflow(page),
-      `pool at ${width}px with wider glyphs`,
+      `chapter overview at ${width}px with wider glyphs`,
     ).toEqual({ row: 0, page: 0 });
   }
 });
@@ -525,9 +526,9 @@ test("the topbar does not overflow at medium widths with no session running", as
 /**
  * The generator chip's fullest state: a pipelined run that is
  * still going AND has parts the DM already accepted — so the chip carries its
- * pulsing dot and the „N von M übernommen" progress at the same time. That
- * pair was never on the row before this ticket (a run was either running or
- * reviewable, never both), so the guard above never saw it.
+ * pulsing dot and the accepted-of-total progress at the same time. Only a
+ * pipelined run puts that pair on the row — otherwise a run is either running
+ * or reviewable, never both — so the guard above never sees it.
  */
 test("the topbar does not overflow while a pipelined run fills up", async ({
   page,
@@ -535,7 +536,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
 }) => {
   // A run with three scenes whose LAST reply is held: two parts land, the
   // third keeps the run `running` for as long as this test needs it.
-  const started = await api.send<{ jobId: string }>("POST", "beispiel/generate", {
+  const started = await api.send<{ jobId: string }>("POST", "campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: [
       "The party watches the quay at low tide.",
@@ -549,7 +550,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     pipeline?: { parts: Array<{ status: string }> };
   }
   const job = async (): Promise<JobShape> =>
-    (await api.fetch("beispiel/generate/job").then((r) => r.json())) as JobShape;
+    (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as JobShape;
   const deadline = Date.now() + 30_000;
   for (;;) {
     const current = await job();
@@ -558,17 +559,17 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   // Accepting one part while the run is still running is what fills
-  // `review.written` — and it is the endpoint half of AK2.
+  // `review.written` — the endpoint half of accepting during a run.
   const current = await job();
   expect(current.status).toBe("running");
-  await api.send("POST", `beispiel/generate/job/${started.jobId}/accept`, {
+  await api.send("POST", `campaigns/beispiel/generate/job/${started.jobId}/accept`, {
     rev: current.rev,
     paths: [`01-salzhafen/${THREE_SCENES[0].id}`],
   });
 
   for (const width of TOPBAR_WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto("/beispiel");
+    await page.goto("/campaigns/beispiel");
     // Below md the topbar is hidden (the mobile start surface is the chrome
     // there), so the chip is only on the row from 768 up.
     if (width >= 768) {
@@ -576,23 +577,23 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
       await expect(chip).toBeVisible();
       // The number is on the chip exactly ONCE, whatever the width does with
       // it: above 2xl it is spelled out, below it stands
-      // in the accessible name only — never both, which read as „1 von 3
-      // übernommen / 1 von 3 übernommen".
+      // in the accessible name only — never both, which would read as the
+      // same progress phrase printed twice.
       const text = await chip.innerText();
       expect(
         text.match(/übernommen/g)?.length ?? 0,
         `chip text at ${width}px: ${JSON.stringify(text)}`,
       ).toBe(1);
       // And it counts against the PARTS OF THE RUN, not against the parts
-      // that happen to have answered already: one of three, next to „2 von 3
-      // Szenen fertig" on the generator page.
+      // that happen to have answered already: one of three, next to the
+      // finished-scenes count on the generator page.
       expect(text).toContain("1 von 3 übernommen");
     }
-    expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({ row: 0, page: 0 });
+    expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({ row: 0, page: 0 });
     await widenGlyphs(page, "1px");
     expect(
       await topbarOverflow(page),
-      `pool at ${width}px with wider glyphs`,
+      `chapter overview at ${width}px with wider glyphs`,
     ).toEqual({ row: 0, page: 0 });
   }
 });
@@ -601,9 +602,9 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
   page,
   api,
 }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
 
-  // `exact`: „Kapitel bearbeiten" stands on the same page per chapter, and a
+  // `exact`: a per-chapter edit action stands on the same page, and a
   // role name matches as a substring.
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   const dialog = page.getByRole("dialog");
@@ -625,7 +626,7 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // Pool header, subtitle …
+  // Chapter overview header, subtitle …
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Salzhafen, zweite Fassung",
   );
@@ -654,7 +655,7 @@ test.describe("a campaign without a name", () => {
     // The campaign is a row like any other, and its name falls back to its
     // id — so there is nothing to create and the ordinary patch path covers
     // this case too.
-    await page.goto("/beispiel");
+    await page.goto("/campaigns/beispiel");
     // Without a name the header degrades to the id.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "beispiel",
@@ -689,7 +690,7 @@ test("the campaign reading view carries the same edit action", async ({
   page,
   api,
 }) => {
-  await page.goto("/beispiel/entry/campaign");
+  await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -705,24 +706,24 @@ test("the campaign reading view carries the same edit action", async ({
   await expect.poll(() => api.properties("campaign")).toHaveProperty("name", "Aus der Leseansicht");
 });
 // The dialog's 409 path is the SAME write flow as the status control's
-// (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> inline
-// "Inzwischen geändert — neu laden" + refetch, nothing written). Critical
+// (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> the inline
+// stale-revision notice + refetch, nothing written). Critical
 // path 7 covers that mechanism against the real server; the dialog's own
 // branch is unit-tested in app/src/lib/campaign-meta.test.ts. Reproducing it
 // here would need the same "beat the 5s version poll" loop — and a retry that
 // closes the dialog on success, which makes the loop unrepeatable.
 
-test("the pool header is ONE row: the actions right beside the title, never under it", async ({
+test("the chapter overview header is ONE row: the actions right beside the title, never under it", async ({
   page,
 }) => {
-  // „Kapitel anlegen" sat next to „Bearbeiten" inside a wrapping
-  // row, and on a campaign with a normal-length name the pair dropped onto a
-  // second line, right-aligned under the title (PO finding). The
-  // actions share the title's line again — checked at the widths a desktop
-  // pool is actually read at, and by geometry rather than by class names.
+  // The create-chapter and edit actions must not sit in a wrapping row: on a
+  // campaign with a normal-length name the pair would drop onto a second
+  // line, right-aligned under the title. The actions share the title's
+  // line — checked at the widths a desktop chapter overview is actually read at, and by
+  // geometry rather than by class names.
   for (const width of [1024, 1280, 1536]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/beispiel");
+    await page.goto("/campaigns/beispiel");
     const title = page.getByRole("heading", { level: 1 });
     await expect(title).toHaveText("Der Leuchtturm von Salzhafen");
     const counter = page.getByText(/\d+ Kapitel · \d+ Szenen/);
@@ -738,7 +739,7 @@ test("the pool header is ONE row: the actions right beside the title, never unde
       ),
     );
 
-    // SAME LINE as the title: the boxes overlap vertically. („Same y" cannot
+    // SAME LINE as the title: the boxes overlap vertically. ("Same y" cannot
     // be literal — the heading is 28px and the quiet actions are 26px on its
     // baseline; a wrapped row puts them a whole row apart instead.)
     for (const box of [createBox!, editBox!]) {
@@ -755,7 +756,7 @@ test("the pool header is ONE row: the actions right beside the title, never unde
     expect(counterBox!.x).toBe(titleBox!.x);
     expect(counterBox!.y).toBeLessThan(descriptionBox!.y);
 
-    // Description, then the „Nachschlagen" line — in that order.
+    // Description, then the lookup line — in that order.
     const lookupBox = (await page
       .getByRole("navigation", { name: "Nachschlagen" })
       .boundingBox())!;
@@ -766,17 +767,17 @@ test("the pool header is ONE row: the actions right beside the title, never unde
 
 // Critical path 1: a chapter is editable where it is read.
 //
-// The gap this closes: „Kapitel anlegen" was the only moment a chapter's title
-// and goal could ever be said. A chapter created without a goal could not get
-// one, and a chapter a generator run created is called by its slug — the
-// overview listed a heading nobody could correct. Both halves go through the
+// Creating a chapter is not the only moment its title and goal can be
+// said: a chapter created without a goal gets one here, and a chapter a
+// generator run created under its slug is renamed here — otherwise the
+// overview would list a heading nobody can correct. Both halves go through the
 // documented endpoints with their rev guard: the title is a PROPERTY (the
 // shared properties dialog), the goal is the TEXT.
 test("a chapter's title and goal are editable from the chapter overview", async ({
   page,
   api,
 }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   // The active chapter is open by default, so its actions are on screen.
   const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
   await expect(properties).toBeVisible();
@@ -818,7 +819,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   page,
   api,
 }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
   const dialog = page.getByRole("dialog");
   const body = dialog.getByRole("textbox", { name: "Text" });
@@ -846,7 +847,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
 // The chapter status control (critical path 1). The overview decides which
 // chapter the session is in, and the status DISPLAY is that control.
 //
-// „Aktiv" is the interesting value: ONE server call for ONE decision about TWO
+// The active value is the interesting one: ONE server call for ONE decision about TWO
 // chapters, so there is never a moment with two active chapters. The other two
 // are an ordinary properties patch.
 test("the chapter status control shows the German labels and swaps the active chapter", async ({
@@ -854,12 +855,12 @@ test("the chapter status control shows the German labels and swaps the active ch
   api,
 }) => {
   // A second chapter to move the flag TO — the example campaign has one.
-  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
     title: "Kapitel 2: Die Bucht",
   });
   const secondPath = created.path;
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
 
   // The active chapter's control names its current value for a screen reader…
   const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
@@ -877,7 +878,7 @@ test("the chapter status control shows the German labels and swaps the active ch
   // --- the swap, from the OTHER chapter's control ---
   // From here on every swap call is counted: ONE decision about two chapters
   // is ONE request. A second one bounces the flag straight back to the
-  // chapter the DM had just left — the control reads „Aktiv" on both rows for
+  // chapter the DM had just left — the control reads active on both rows for
   // a moment, and re-asserting it for the previously active chapter is a swap
   // of its own.
   const swaps: string[] = [];
@@ -899,7 +900,7 @@ test("the chapter status control shows the German labels and swaps the active ch
 
   // Exactly ONE call, and it named the chapter the DM picked — no second one
   // from the row that lost the flag.
-  expect(swaps).toEqual([`beispiel/chapters/${secondPath}/active`]);
+  expect(swaps).toEqual([`campaigns/beispiel/chapters/${secondPath}/active`]);
 
   // …and it stays that way with the invalidation and a version poll behind
   // it: the tree shows the second chapter active and the first planned two
@@ -919,12 +920,12 @@ test("the chapter status control shows the German labels and swaps the active ch
 });
 
 // The control is a RADIO group, so the checked option is the state — selecting
-// it is nothing to write. „Aktiv" on the chapter that already holds the flag
-// would call the swap endpoint anyway, which is how a stray select on the
-// previously active row (its control still reads „Aktiv" until the
+// it is nothing to write. Selecting active on the chapter that already holds
+// the flag would call the swap endpoint anyway, which is how a stray select on
+// the row that was active (its control still reads active until the
 // invalidation lands) could take the flag back.
 test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
-  await api.send("POST", "beispiel/chapters", { title: "Kapitel 2: Die Bucht" });
+  await api.send("POST", "campaigns/beispiel/chapters", { title: "Kapitel 2: Die Bucht" });
 
   const writes: string[] = [];
   page.on("request", (request) => {
@@ -937,7 +938,7 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
     }
   });
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
   await activeMenu.click();
   await page.getByRole("menuitemradio", { name: "Aktiv" }).click();
@@ -948,17 +949,17 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
   expect((await api.file("01-salzhafen")).properties.status).toBe("active");
 });
 
-// „Abgeschlossen" is the other branch: a rev-guarded properties patch on the
+// The completed value is the other branch: a rev-guarded properties patch on the
 // chapter entry, which must NOT touch the active chapter.
 test("picking Abgeschlossen patches that chapter and leaves the active one alone", async ({
   page,
   api,
 }) => {
-  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
     title: "Kapitel 2: Die Bucht",
   });
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Status ändern, aktuell Geplant" }).click();
   await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
 
@@ -975,7 +976,7 @@ test("picking Abgeschlossen patches that chapter and leaves the active one alone
 // cache behind the dialog happened to hold when it opened. That is the other
 // half of the bounce-back: the app's copy of a chapter entry goes stale the
 // moment another writer moves the flag (up to one version poll), and an
-// untouched „Aktiv" in the form would put it back — from a dialog that was
+// untouched active value in the form would put it back — from a dialog that was
 // only opened to fix a title.
 test("an untouched status field is not written, not even a stale Aktiv", async ({ page, api }) => {
   const patches: string[] = [];
@@ -983,7 +984,7 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
     if (request.method() === "PATCH") patches.push(request.postData() ?? "");
   });
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   // The active chapter is open by default: its entry is in the app's cache
   // now, with `status: active`.
   const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
@@ -991,11 +992,11 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
 
   // Another writer moves the flag. The app does not know yet — the version
   // poll is what tells it, and the dialog opens before that.
-  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
     title: "Kapitel 2: Die Bucht",
     id: "02",
   });
-  await api.send("POST", "beispiel/chapters/02/active");
+  await api.send("POST", "campaigns/beispiel/chapters/02/active");
   expect((await api.file("01-salzhafen")).properties.status).toBe("planned");
 
   await properties.click();
@@ -1020,8 +1021,8 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
   expect(stored.properties.status).toBe("planned");
   expect((await api.file(created.path)).properties.status).toBe("active");
-  // Both attempts sent the title and nothing else — „status" never appears on
-  // the wire, so no stale „Aktiv" can ride along.
+  // Both attempts sent the title and nothing else — the status field never
+  // appears on the wire, so no stale active value can ride along.
   expect(patches).toHaveLength(2);
   for (const body of patches) {
     expect(body).toContain("Kapitel 1: Salzhafen");
@@ -1032,14 +1033,14 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
 // The chapter properties dialog is the second door onto the same value — and
 // it must not be a way past the one-active rule.
 test("the properties dialog offers the enum and its Aktiv swaps too", async ({ page, api }) => {
-  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
     title: "Kapitel 2: Die Bucht",
   });
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: /Kapitel 2: Die Bucht/ }).click();
   // Two chapters are open now, so the actions are named per chapter — the
-  // second one belongs to „Kapitel 2".
+  // second one belongs to the second chapter.
   await page.getByRole("button", { name: "Kapitel-Eigenschaften" }).nth(1).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kapitel: Eigenschaften");

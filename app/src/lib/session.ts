@@ -2,12 +2,11 @@
 // timer and the epoch readings of `started`/`ended`. Pure functions —
 // unit-tested, no react or query imports here.
 //
-// There is NO client-side date guessing left here (issue #40 and its
-// review): WHICH session is the active one is always the server's answer
-// (GET /:campaign/session, with ?includeEnded=1 for the review — see
-// lib/use-session.ts). A session past midnight is YESTERDAY's session,
-// and a browser in another timezone than the server would get both the session
-// and the runtime wrong.
+// There is NO client-side date guessing here: WHICH session is the active
+// one is always the server's answer (GET /campaigns/:campaign/session, with
+// ?includeEnded=1 for the review — see lib/use-session.ts). A session past
+// midnight is YESTERDAY's session, and a browser in another timezone than
+// the server would get both the session and the runtime wrong.
 
 import { isPaused, openPause, sessionPauses } from "@grimoire/shared/session-state";
 
@@ -64,13 +63,13 @@ export function parseLogEntries(body: string): LogEntry[] {
  * reading of `started`/`ended` for a server that does not ship the epoch
  * values (see sessionStartMs). Undefined when the value does not parse.
  *
- * SECONDS are read when present — the `pauses` timestamps carry them (issue
- * #40 AK8), and dropping them made every pause up to a minute wrong.
+ * SECONDS are read when present — the `pauses` timestamps carry them, and
+ * a reading that dropped them would be up to a minute off per pause.
  *
  * A DATE-ONLY `yyyy-mm-dd` is read as 00:00: a session started at exactly
  * midnight is written as `…T00:00`, and the YAML normalization cannot tell
  * that apart from a date-only value (shared/src/parse.ts) — so requiring a
- * time part made the timer disappear silently at midnight (issue #40).
+ * time part would make the timer disappear silently at midnight.
  */
 export function parseLocalDateTime(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
@@ -88,7 +87,7 @@ export function parseLocalDateTime(value: unknown): number | undefined {
 }
 
 /**
- * Start / end of a session as epoch milliseconds (issue #40).
+ * Start / end of a session as epoch milliseconds.
  *
  * The SERVER's reading wins (`startedMs`/`endedMs` of the EntryResponse): the
  * format is zone-less on purpose, and only the server knows the timezone
@@ -111,7 +110,7 @@ export function sessionEndMs(session: SessionTimes | undefined): number | undefi
 export interface SessionTimes {
   startedMs?: number;
   endedMs?: number;
-  /** Sum of the CLOSED pause intervals (server arithmetic, issue #40 AK8). */
+  /** Sum of the CLOSED pause intervals (server arithmetic). */
   pausedMs?: number;
   /** Start of the OPEN pause interval — present exactly while paused. */
   pausedSinceMs?: number;
@@ -146,13 +145,13 @@ export function sessionPausedSinceMs(session: SessionTimes | undefined): number 
   return open === undefined ? undefined : parseLocalDateTime(open.from);
 }
 
-/** True while the session is paused — the chip's dimmed state (AK8). */
+/** True while the session is paused — the chip's dimmed state. */
 export function sessionIsPaused(session: SessionTimes | undefined): boolean {
   return sessionPausedSinceMs(session) !== undefined || isPaused(session?.properties);
 }
 
 /**
- * The session's RUNTIME in milliseconds (issue #40 AK8):
+ * The session's RUNTIME in milliseconds:
  *
  *     (ended ?? paused-since ?? now) − started − paused
  *
@@ -178,10 +177,10 @@ export function sessionElapsedMs(
 /**
  * Elapsed time as `H:MM:SS`, clamped at `0:00:00`.
  *
- * The seconds are the point (PO feedback on issue #40): the session chip is
- * the only proof in the chrome that the evening is still running, and a
- * minutes-only readout that changed every ~15s looked frozen — the DM could
- * not tell a live clock from a stale render.
+ * The seconds are the point: the session chip is the only proof in the
+ * chrome that the evening is still running, and a minutes-only readout that
+ * changes every ~15s looks frozen — the DM cannot tell a live clock from a
+ * stale render.
  */
 export function formatElapsed(startMs: number, nowMs: number): string {
   return formatDuration(nowMs - startMs);
@@ -206,14 +205,13 @@ export function sessionElapsedLabel(
 }
 
 /**
- * The session's HEADING — "Session vom 15.01.2026" (issue #58, PO decision).
+ * The session's HEADING — "Session vom 15.01.2026".
  *
- * The session id used to be the label because it WAS the date; it is an opaque
- * random string now, so everything displayable about a session is derived from
- * `started`. Formatted from the wall-clock digits of the string itself, not via
- * `Date` and `toLocaleDateString`: the value is zone-less on purpose (README),
- * and re-reading it in the browser's timezone is how a session that started at
- * 23:30 ends up dated the next day.
+ * The session id is an opaque random string, so everything displayable about
+ * a session is derived from `started`. Formatted from the wall-clock digits of
+ * the string itself, not via `Date` and `toLocaleDateString`: the value is
+ * zone-less on purpose (README), and re-reading it in the browser's timezone
+ * is how a session that started at 23:30 ends up dated the next day.
  *
  * Falls back to a plain "Session" when there is no usable `started` — the
  * honest answer for an imported entry, and better than the raw id, which is
@@ -226,8 +224,8 @@ export function sessionDateLabel(
   const started = properties?.started;
   const m = typeof started === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(started.trim()) : null;
   if (m === null) return t("session.date.unknown");
-  // The DATE itself goes through `Intl` in the selected language (issue #69
-  // AK3): `13.09.2026` in German, `09/13/2026` in English. Built from the
+  // The DATE itself goes through `Intl` in the selected language:
+  // `13.09.2026` in German, `09/13/2026` in English. Built from the
   // zone-less parts as a LOCAL date, so the day never shifts by a timezone.
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return t("session.date", { date: formatDate(t.locale, date) });

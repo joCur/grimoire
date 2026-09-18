@@ -1,22 +1,23 @@
-// Search + version tests (issues #7/#8, ported to FTS5 in issue #57).
+// Search + version tests, over the FTS5 index.
 //
-// Fuse.js and the in-memory index are gone: search is a query against the
-// `search_fts` table, maintained by the store on every write (store/fts.ts).
-// So there is nothing to invalidate any more — a case gets a fresh in-memory
-// database seeded from `examples/` and asks the endpoint.
+// Search is a query against the `search_fts` table, maintained by the store
+// on every write (store/fts.ts). There is nothing to invalidate — a case
+// gets a fresh in-memory database seeded from `examples/` and asks the
+// endpoint.
 //
-// The two properties the reference queries of issue #57 AK5 rely on are
-// PREFIX terms (a half-typed query matches) and DIACRITIC FOLDING (the
-// `unicode61 remove_diacritics 2` tokenizer). What is NOT here any more is
-// fuzzy/typo tolerance — that was Fuse's, and its replacement is prefix plus
-// folding; genuine typo tolerance would need a trigram tokenizer and is a
-// documented later option.
+// The two properties the reference queries below rely on are PREFIX terms (a
+// half-typed query matches) and DIACRITIC FOLDING (the
+// `unicode61 remove_diacritics 2` tokenizer). Fuzzy/typo tolerance is NOT
+// part of the contract: prefix plus folding is what search offers, and
+// genuine typo tolerance would need a trigram tokenizer and is a documented
+// later option.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { SearchResult } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ftsQuery, scoreFromRank } from "../src/store/search";
 import { dropStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 beforeEach(async () => {
   await seedStore();
@@ -27,7 +28,7 @@ afterEach(() => {
 });
 
 async function search(q: string): Promise<SearchResult[]> {
-  const res = await app.request(`/api/beispiel/search?q=${encodeURIComponent(q)}`);
+  const res = await app.request(`/api/campaigns/beispiel/search?q=${encodeURIComponent(q)}`);
   expect(res.status).toBe(200);
   const body = (await res.json()) as { results: SearchResult[] };
   expect(Array.isArray(body.results)).toBe(true);
@@ -36,7 +37,7 @@ async function search(q: string): Promise<SearchResult[]> {
 
 /** GET /entry, for the write cases below (they need the guard token). */
 async function readFile(rel: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
@@ -84,16 +85,16 @@ describe("scoreFromRank", () => {
 
 // --- the endpoint contract ---------------------------------------------------
 
-describe("GET /api/:campaign/search", () => {
+describe("GET /api/campaigns/:campaign/search", () => {
   test("400 on missing or empty q", async () => {
-    expect((await app.request("/api/beispiel/search")).status).toBe(400);
-    expect((await app.request("/api/beispiel/search?q=")).status).toBe(400);
-    expect((await app.request("/api/beispiel/search?q=%20%20")).status).toBe(400);
+    expect((await app.request("/api/campaigns/beispiel/search")).status).toBe(400);
+    expect((await app.request("/api/campaigns/beispiel/search?q=")).status).toBe(400);
+    expect((await app.request("/api/campaigns/beispiel/search?q=%20%20")).status).toBe(400);
   });
 
   test("404 for an unknown campaign, 400 for an unsafe id", async () => {
-    expect((await app.request("/api/nope/search?q=Fenn")).status).toBe(404);
-    expect((await app.request("/api/..%2fbeispiel/search?q=Fenn")).status).toBe(400);
+    expect((await app.request("/api/campaigns/nope/search?q=Fenn")).status).toBe(404);
+    expect((await app.request("/api/campaigns/..%2fbeispiel/search?q=Fenn")).status).toBe(400);
   });
 
   test("results are capped at 20 and every score is a number in 0..1", async () => {
@@ -122,7 +123,7 @@ describe("GET /api/:campaign/search", () => {
   });
 });
 
-// --- the reference queries of issue #57 AK5 ---------------------------------
+// --- the reference queries -------------------------------------------------
 
 describe("reference queries (issue #57 AK5)", () => {
   test("'jorna' puts the NPC first — title/ref outweigh a body mention", async () => {
@@ -212,11 +213,10 @@ describe("the index follows every write", () => {
     expect(await search("nachtwache")).toEqual([]);
 
     const file = await readFile(rel);
-    const res = await app.request("/api/beispiel/entry", {
+    const res = await app.request(entriesUrl("beispiel", rel), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        path: rel,
         rev: file.rev,
         body: `${file.body}\n## Nachtwache\n\nJemand hält Wache am Turm.\n`,
       }),
@@ -232,7 +232,7 @@ describe("the index follows every write", () => {
     expect(await search("bucht-kapitaen")).toEqual([]);
 
     const file = await readFile(rel);
-    const res = await app.request("/api/beispiel/properties", {
+    const res = await app.request("/api/campaigns/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -253,7 +253,7 @@ describe("the index follows every write", () => {
     // `## Beziehungen` out of the index. ONE rule now: the full document.
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
     const file = await readFile("npcs/fenn");
-    const res = await app.request("/api/beispiel/properties", {
+    const res = await app.request("/api/campaigns/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: "npcs/fenn", rev: file.rev, patch: { status: "dead" } }),
@@ -263,11 +263,11 @@ describe("the index follows every write", () => {
   });
 });
 
-// --- GET /api/:campaign/version ---------------------------------------------
+// --- GET /api/campaigns/:campaign/version ---------------------------------------------
 
-describe("GET /api/:campaign/version", () => {
+describe("GET /api/campaigns/:campaign/version", () => {
   async function version(): Promise<number> {
-    const res = await app.request("/api/beispiel/version");
+    const res = await app.request("/api/campaigns/beispiel/version");
     expect(res.status).toBe(200);
     return ((await res.json()) as { version: number }).version;
   }
@@ -279,7 +279,7 @@ describe("GET /api/:campaign/version", () => {
     const before = await version();
     expect(await version()).toBe(before);
 
-    const res = await app.request("/api/beispiel/inbox", {
+    const res = await app.request("/api/campaigns/beispiel/inbox", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: "Notiz aus dem Versionstest" }),
@@ -289,6 +289,6 @@ describe("GET /api/:campaign/version", () => {
   });
 
   test("404 for an unknown campaign", async () => {
-    expect((await app.request("/api/nope/version")).status).toBe(404);
+    expect((await app.request("/api/campaigns/nope/version")).status).toBe(404);
   });
 });

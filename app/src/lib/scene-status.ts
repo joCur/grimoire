@@ -1,9 +1,9 @@
-// Scene status (issue #28): the labels/colors the pool and the reading view
+// Scene status: the labels/colors the chapter overview and the reading view
 // share, the patch payload for PATCH /properties, and the write itself (the
 // rev conflict is the shared protocol in write-with-rev.ts).
 //
-// The LABEL comes from the catalog since issue #69, and the translator is
-// PASSED IN — this module must not decide which language the UI is in
+// The LABEL comes from the catalog, and the translator is PASSED IN — this
+// module must not decide which language the UI is in
 // (CLAUDE.md/i18n/index.ts: the lib layer takes `Translate` as a parameter).
 // The colors stay here: they are design tokens, not copy.
 //
@@ -17,7 +17,7 @@ import { fetchEntry, patchProperties } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
-/** Catalog key + dot/text colors per design/README.md ("Bereit · Entwurf · Gespielt"). */
+/** Catalog key + dot/text colors per design/README.md. */
 const SCENE_STATUS_META: Record<
   SceneStatus,
   { key: MessageKey; dot: string; text: string }
@@ -51,8 +51,8 @@ export function sceneStatusMeta(
  * The four selectable options — SCENE_STATUSES from @grimoire/shared is the
  * single source (and already in lifecycle order: draft → ready → played →
  * dropped), so a format change lands here without a second list. A FUNCTION
- * since issue #69: the labels depend on the UI language, so they cannot be a
- * module constant evaluated once at import time.
+ * rather than a constant: the labels depend on the UI language, so they cannot
+ * be a module constant evaluated once at import time.
  */
 export function sceneStatusOptions(
   t: Translate,
@@ -61,10 +61,9 @@ export function sceneStatusOptions(
 }
 
 /**
- * Statuses that take a scene out of the evening's plan: `played` ("Gespielt")
- * and `dropped` ("Verworfen"). The live nav groups these away (issue #73);
- * everything else — including an unknown value, which degrades to plain text —
- * counts as still planned.
+ * Statuses that take a scene out of the evening's plan: `played` and
+ * `dropped`. The live nav groups these away; everything else — including an
+ * unknown value, which degrades to plain text — counts as still planned.
  */
 const DONE_STATUSES: ReadonlySet<string> = new Set<SceneStatus>(["played", "dropped"]);
 

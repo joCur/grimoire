@@ -2,7 +2,7 @@
 //
 // A scene's group IS its `location`, so the heading is the LOCATION'S NAME —
 // and the group `""` is not a location with an empty name but the scenes
-// that name none. They get a neutral section from the catalog („Ohne Ort"),
+// that name none. They get a neutral no-location section from the catalog,
 // never a blank line where a heading belongs.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { CampaignTree, SceneGroup, SceneSummary } from "@grimoire/shared";
 
-import { PlannedGroup } from "./pool";
+import { PlannedGroup } from "./chapter-overview";
 
 function scene(id: string, over: Partial<SceneSummary> = {}): SceneSummary {
   return {

@@ -1,14 +1,14 @@
-// The review model (issue #10, app half): the union of the harvested
-// session's tagged log lines and the tagged inbox lines, plus the done-state that
-// comes from the server ONLY — log lines via the session's `reviewed`
-// short hashes, inbox lines via their `- [x]` marker. Used by the review
-// route and by the topbar (progress, pool affordance); both share the same
-// query cache, so nothing fetches twice.
+// The review model (app half): the union of the harvested session's tagged log
+// lines and the tagged inbox lines, plus the done-state that comes from the
+// server ONLY — log lines via the session's `reviewed` short hashes, inbox
+// lines via their `- [x]` marker. Used by the review route and by the topbar
+// (progress, chapter overview affordance); both share the same query cache, so
+// nothing fetches twice.
 //
 // It is a HOOK, not a pure helper, so the two readable labels it produces —
 // the source chip and the progress line — come from the catalog through
-// `useT()` (issue #69, same as lib/use-rev-write.ts); the lib layer stays
-// free of copy of its own.
+// `useT()` (same as lib/use-rev-write.ts); the lib layer stays free of copy of
+// its own.
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -46,17 +46,17 @@ export interface ReviewEntry {
   key: string;
   source: "log" | "inbox";
   /**
-   * Which list the entry belongs to (issue #85): the tagged harvest, or the
-   * „Notizen" section of untagged inbox lines thrown in on the go, or the
-   * „Spielercharaktere" of `#pc` lines (issue #86). The counting is the same
-   * for all of them — one source for page and topbar.
+   * Which list the entry belongs to: the tagged harvest, or the notes section
+   * of untagged inbox lines thrown in on the go, or the player-character
+   * section of `#pc` lines. The counting is the same for all of them — one
+   * source for page and topbar.
    */
   section: "harvest" | "notes" | "pc";
   /**
-   * Prototype card label — "Inbox", or "Log" plus the SCENE the line was
-   * written under ("Log · Ankunft am Leuchtturm", issue #34). The scene id
-   * from the log line is resolved against the tree; an id the tree does not
-   * know stays as it is (degrade).
+   * Prototype card label — the inbox label, or the log label plus the SCENE
+   * the line was written under ("Log · <scene title>"). The scene id from the
+   * log line is resolved against the tree; an id the tree does not know stays
+   * as it is (degrade).
    */
   sourceLabel: string;
   /** Mono meta column: `HH:MM` for log lines, `yyyy-mm-dd` for inbox lines. */
@@ -70,7 +70,7 @@ export interface ReviewEntry {
   rawLine: string;
   /** Short hash of rawLine — log entries only. */
   hash?: string;
-  /** The character tag of a `#pc` entry — undefined means „Allgemein". */
+  /** The character tag of a `#pc` entry — undefined means the general group. */
   pcGroup?: string;
   done: boolean;
   canThread: boolean;
@@ -82,7 +82,7 @@ export interface ReviewModel {
   total: number;
   seenCount: number;
   pendingCount: number;
-  /** Topbar progress per the prototype, in the UI language (#69). */
+  /** Topbar progress per the prototype, in the UI language. */
   progressLabel: string;
   /** Still loading session/inbox/hashes — nothing decided yet. */
   isPending: boolean;
@@ -99,7 +99,7 @@ interface UseReviewOptions {
   enabled?: boolean;
 }
 
-/** The „Spielercharaktere" entries of a model, grouped by character tag. */
+/** The player-character entries of a model, grouped by character tag. */
 export function pcGroups(entries: readonly ReviewEntry[]) {
   return groupByPcTag(
     entries.filter((entry) => entry.section === "pc"),
@@ -112,7 +112,7 @@ interface HarvestedLogLine {
   entry: LogEntry;
   index: number;
   tag: string;
-  /** A `#pc` line (issue #86) — its own section, no adoption. */
+  /** A `#pc` line — its own section, no adoption. */
   pc: boolean;
   pcGroup?: string;
 }
@@ -136,10 +136,10 @@ export function useReviewEntries(
     [acted],
   );
   // WHICH session is harvested is the server's answer: the last STARTED one,
-  // ended or not (finding 1). Deriving today's session id here broke every
-  // session that ran past midnight — `end` writes into the session that
-  // started in, so the harvest was empty and `review/seen` patched a path
-  // that does not exist.
+  // ended or not. Deriving today's session id here would break every session
+  // that runs past midnight — `end` writes into the session that started it,
+  // so the harvest would be empty and `review/seen` would patch a path that
+  // does not exist.
   const session = useLastStartedSession(campaign, enabled);
   const sessionPath = session.data?.path ?? "";
   // The tree turns the log line's scene id into the scene TITLE for the
@@ -212,15 +212,15 @@ export function useReviewEntries(
         key: `log:${index}`,
         source: "log",
         section: pc ? "pc" : "harvest",
-        // The scene is part of ONE sentence („Log · Ankunft am Leuchtturm"),
-        // so the separator travels with the message instead of being glued on.
+        // The scene is part of ONE sentence ("Log · <scene title>"), so the
+        // separator travels with the message instead of being glued on.
         sourceLabel:
           scene === undefined ? t("review.source.log") : t("review.source.logScene", { scene }),
         tag,
         text: stripHashtags(entry.text),
         rawLine: entry.raw,
         done: hash !== undefined && reviewed.has(hash),
-        // A PC note is never adopted into chapter or NPC (issue #86).
+        // A PC note is never adopted into chapter or NPC.
         canThread: !pc && tagAllowsThread(tag),
         canNpc: !pc && tagAllowsNpc(tag),
       };
@@ -252,10 +252,10 @@ export function useReviewEntries(
       },
     );
 
-    // Untagged inbox lines (issue #85): no tag means no tag-derived
-    // affordance, so BOTH harvest actions are offered — the DM decides what
-    // the note is. "Erledigt" is the same `inbox-done` write as the tagged
-    // card's "Verwerfen".
+    // Untagged inbox lines: no tag means no tag-derived affordance, so BOTH
+    // harvest actions are offered — the DM decides what the note is. Their
+    // done action is the same `inbox-done` write as the tagged card's discard
+    // action.
     const noteEntries: ReviewEntry[] = inboxNoteEntries(inboxBody, keepDoneInbox).map((line) => {
       const item: ReviewEntry = {
         key: `inbox:${line.index}`,
@@ -273,9 +273,9 @@ export function useReviewEntries(
       return item;
     });
 
-    // `#pc` inbox lines (issue #86): same list/tick-off mechanic as the
-    // notes, but grouped by character in the page and offered in the live
-    // aside. No adoption — see README.
+    // `#pc` inbox lines: same list/tick-off mechanic as the notes, but grouped
+    // by character in the page and offered in the live aside. No adoption —
+    // see README.
     const pcEntries: ReviewEntry[] = inboxPcEntries(inboxBody, keepDoneInbox).map((line) => {
       const item: ReviewEntry = {
         key: `inbox:${line.index}`,

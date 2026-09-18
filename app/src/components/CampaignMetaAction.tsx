@@ -1,17 +1,17 @@
-// „Bearbeiten" for the campaign's name and description — offered on the pool
-// header and in the campaign entry's reading view, the two places where those
-// two values are on screen.
+// The edit action for the campaign's name and description — offered on the
+// chapter overview header and in the campaign entry's reading view, the two
+// places where those two values are on screen.
 //
 // The dialog writes with PATCH /properties and the `rev` it was opened with.
 // That token is frozen on purpose: the 5s version poll keeps refetching the
 // campaign entry while the dialog stands, and taking the live token at save
 // time would let a concurrent edit slip through as a silent overwrite. With
-// the frozen token the server answers 409, the dialog shows „Inzwischen
-// geändert — neu laden", keeps the typed values and moves its base to the
-// re-read entry, so the next „Speichern" writes on top of what is stored now.
+// the frozen token the server answers 409, the dialog shows the
+// stale-revision notice, keeps the typed values and moves its base to the
+// re-read entry, so the next save writes on top of what is stored now.
 //
 // On success the campaigns, tree and search queries are invalidated: the
-// switcher label and the pool header read the campaign list and must not keep
+// switcher label and the chapter overview header read the campaign list and must not keep
 // the old name.
 //
 // Prefilled from GET /campaigns, minus the server's id fallback
@@ -108,13 +108,13 @@ function CampaignMetaDialog({
     write:
       base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.rev),
     entryKey: ["entry", campaign, CAMPAIGN_META_PATH],
-    // The switcher and the pool header read the campaign list; the entry also
+    // The switcher and the chapter overview header read the campaign list; the entry also
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
     onSaved: onClose,
     // 409: the entry changed meanwhile. The typed values stay; only the `rev`
-    // underneath them moves to the re-read one, so the next „Speichern"
-    // writes on top of what is stored now.
+    // underneath them moves to the re-read one, so the next save writes on top
+    // of what is stored now.
     onConflict: (reread) => {
       if (reread !== undefined) setBase({ rev: reread.rev });
     },

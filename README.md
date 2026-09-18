@@ -45,10 +45,18 @@ Szenen nach Ort; Szenen ohne Ort stehen unter „Ohne Ort". Ändert der DM den
 Ort einer Szene, ändert sich ihre Adresse — die alte bleibt auflösbar, der
 Server antwortet mit der aktuellen und die App ersetzt die URL.
 
-Kampagnenwissen (`/<kampagne>/knowledge`) und Glossar (`/<kampagne>/glossary`)
-sind Listen, die der Generator als Kontext bekommt; sie werden auf ihren
-eigenen Seiten gepflegt und über `GET/PUT /api/:campaign/knowledge` bzw.
-`/glossary` gelesen und geschrieben.
+Kampagnenwissen (`/campaigns/<kampagne>/knowledge`) und Glossar
+(`/campaigns/<kampagne>/glossary`) sind Listen, die der Generator als Kontext
+bekommt; sie werden auf ihren eigenen Seiten gepflegt und über
+`GET/PUT /api/campaigns/<kampagne>/knowledge` bzw. `/glossary` gelesen und
+geschrieben.
+
+Alles Kampagnenabhängige hängt unter der Kampagne — in der API
+`/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` (ADR #22).
+Die Adresse steht dabei im Pfad: `GET
+/api/campaigns/beispiel/entries/01-salzhafen/leuchtturm/ankunft-leuchtturm`
+liest diesen Eintrag, `GET /api/campaigns/beispiel` den Kampagnen-Eintrag.
+Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 ## Eigenschaften
 
@@ -290,8 +298,9 @@ Hashtags wie das Log. Die Nachbereitung zeigt sie zusammen mit dem Log.
 
 ## Schreibregeln
 
-- Geschrieben wird ausschließlich über die API (`server/src/server.ts` führt
-  die Endpoints auf): Log, Ideen, `PATCH /properties`, Text-Edits,
+- Geschrieben wird ausschließlich über die API (jeder Endpoint ist in
+  `server/src/routes/api.ts` an seiner Route dokumentiert): Log, Ideen,
+  `PATCH /properties`, Text-Edits,
   Nachbereitung, Generator-Entwürfe.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server

@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignSummary, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, emptyStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 async function post(path: string, body: unknown): Promise<Response> {
   return app.request(`/api${path}`, {
@@ -64,7 +65,7 @@ describe("POST /api/campaigns — the cold start", () => {
     const list = (await (await app.request("/api/campaigns")).json()) as CampaignSummary[];
     expect(list.map((c) => c.id)).toEqual(["die-kueste-von-salzhafen"]);
     const doc = (await (
-      await app.request("/api/die-kueste-von-salzhafen/entry?path=campaign")
+      await app.request(entriesUrl("die-kueste-von-salzhafen", "campaign"))
     ).json()) as EntryResponse;
     expect(doc.properties.name).toBe("Die Küste von Salzhafen");
     expect(doc.rev).toBe(1);
@@ -131,7 +132,7 @@ describe("the per-campaign creates", () => {
   });
 
   test("a chapter takes its id from the title and its goal into the section", async () => {
-    const chapter = await created<EntryResponse>("/nordwind/chapters", {
+    const chapter = await created<EntryResponse>("/campaigns/nordwind/chapters", {
       title: "01 Salzhafen",
       goal: "Die Gruppe kommt an",
     });
@@ -141,13 +142,13 @@ describe("the per-campaign creates", () => {
   });
 
   test("a chapter without a goal has an empty body, not an empty section", async () => {
-    const chapter = await created<EntryResponse>("/nordwind/chapters", { title: "Prolog" });
+    const chapter = await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "Prolog" });
     expect(chapter.body).toBe("");
   });
 
   test("a second chapter with the same title is a 409 with a suggestion", async () => {
-    await created<EntryResponse>("/nordwind/chapters", { title: "Prolog" });
-    const res = await post("/nordwind/chapters", { title: "Prolog" });
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "Prolog" });
+    const res = await post("/campaigns/nordwind/chapters", { title: "Prolog" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
     expect(body.code).toBe("slug_taken");
@@ -156,9 +157,9 @@ describe("the per-campaign creates", () => {
   });
 
   test("a reserved chapter id is refused with a proposal, and no row is written", async () => {
-    // „NPCs" slugs to `npcs`, which the address schema routes to the npc kind —
+    // "NPCs" slugs to `npcs`, which the address schema routes to the npc kind —
     // the chapter would exist and be unreachable forever (store/paths).
-    const res = await post("/nordwind/chapters", { title: "NPCs" });
+    const res = await post("/campaigns/nordwind/chapters", { title: "NPCs" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
     // Its OWN code: the app offers the same one-click
@@ -170,18 +171,18 @@ describe("the per-campaign creates", () => {
     expect(String(body.error)).toContain("reserved name");
 
     // Nothing was created — neither as a chapter row nor as a broken address.
-    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+    const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
       chapters: Array<{ id: string }>;
     };
     expect(tree.chapters.map((c) => c.id)).not.toContain("npcs");
-    expect((await app.request("/api/nordwind/entry?path=npcs")).status).toBe(404);
+    expect((await app.request(entriesUrl("nordwind", "npcs"))).status).toBe(404);
 
     // The proposal itself works, and the reserved ids are all three of them.
-    expect((await created<EntryResponse>("/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
+    expect((await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
       "npcs-2",
     );
-    expect((await post("/nordwind/chapters", { title: "Locations" })).status).toBe(409);
-    expect((await post("/nordwind/chapters", { title: "Sessions" })).status).toBe(409);
+    expect((await post("/campaigns/nordwind/chapters", { title: "Locations" })).status).toBe(409);
+    expect((await post("/campaigns/nordwind/chapters", { title: "Sessions" })).status).toBe(409);
   });
 
   test("the campaign 409 points at an address, not at a bare id", async () => {
@@ -192,19 +193,19 @@ describe("the per-campaign creates", () => {
   });
 
   test("a proposal never lands on an existing empty entry", async () => {
-    await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
+    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
     // An entry whose name IS its id holds nothing — the DM created it and
     // typed nothing else.
-    await created<EntryResponse>("/nordwind/npcs", { name: "holm-2" });
-    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<EntryResponse>("/nordwind/scenes", {
+    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "holm-2" });
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
     // A scene may reference it — the entry exists.
     expect(
       (
-        await app.request("/api/nordwind/properties", {
+        await app.request("/api/campaigns/nordwind/properties", {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ path: scene.path, rev: scene.rev, patch: { npcs: ["holm-2"] } }),
@@ -212,21 +213,21 @@ describe("the per-campaign creates", () => {
       ).status,
     ).toBe(200);
 
-    // „Holm" collides with the filled `holm` — and the proposal SKIPS the
+    // "Holm" collides with the filled `holm` — and the proposal SKIPS the
     // empty `holm-2` instead of handing somebody else's id over.
-    const res = await post("/nordwind/npcs", { name: "Holm" });
+    const res = await post("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(res.status).toBe(409);
     expect((await errorBody(res)).suggestion).toBe("holm-3");
 
     // Filling that entry stays possible — for the DM who types exactly its id.
-    const filled = await created<EntryResponse>("/nordwind/npcs", { name: "Holm 2" });
+    const filled = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm 2" });
     expect(filled.path).toBe("npcs/holm-2");
     expect(filled.properties.name).toBe("Holm 2");
   });
 
   test("a scene lands in its chapter as a draft with an empty body", async () => {
-    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<EntryResponse>("/nordwind/scenes", {
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
       title: "Ankunft am Leuchtturm",
       chapter: "01-salzhafen",
     });
@@ -236,8 +237,8 @@ describe("the per-campaign creates", () => {
     expect(scene.properties.chapter).toBe("01-salzhafen");
     expect(scene.body).toBe("");
 
-    // …and the pool sees it (the tree is what every list reads).
-    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+    // …and the chapter overview sees it (the tree is what every list reads).
+    const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
       chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ path: string }> }> }>;
     };
     expect(tree.chapters[0]?.groups[0]?.scenes[0]?.path).toBe(
@@ -246,7 +247,7 @@ describe("the per-campaign creates", () => {
   });
 
   test("a scene under an unknown chapter is a 400 — chapters are never created by naming", async () => {
-    const res = await post("/nordwind/scenes", { title: "Irgendwo", chapter: "gibt-es-nicht" });
+    const res = await post("/campaigns/nordwind/scenes", { title: "Irgendwo", chapter: "gibt-es-nicht" });
     expect(res.status).toBe(400);
     const error = await errorBody(res);
     expect(String(error.error)).toContain("unknown chapter");
@@ -256,11 +257,11 @@ describe("the per-campaign creates", () => {
   });
 
   test("a scene without a chapter is refused", async () => {
-    expect((await post("/nordwind/scenes", { title: "Irgendwo" })).status).toBe(400);
+    expect((await post("/campaigns/nordwind/scenes", { title: "Irgendwo" })).status).toBe(400);
   });
 
   test("an npc is created from the name alone", async () => {
-    const npc = await created<EntryResponse>("/nordwind/npcs", { name: "Alte Fischerin" });
+    const npc = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Alte Fischerin" });
     expect(npc.path).toBe("npcs/alte-fischerin");
     expect(npc.properties.name).toBe("Alte Fischerin");
     // Nothing is claimed beyond the name — the properties dialog carries the rest.
@@ -270,8 +271,8 @@ describe("the per-campaign creates", () => {
   });
 
   test("a filled npc collides; the suggestion skips it", async () => {
-    await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
-    const res = await post("/nordwind/npcs", { name: "Holm" });
+    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
+    const res = await post("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
     expect(body.suggestion).toBe("holm-2");
@@ -279,22 +280,22 @@ describe("the per-campaign creates", () => {
   });
 
   test("an ort is created from the name alone and collides the same way", async () => {
-    const location = await created<EntryResponse>("/nordwind/locations", { name: "Hafen" });
+    const location = await created<EntryResponse>("/campaigns/nordwind/locations", { name: "Hafen" });
     expect(location.path).toBe("locations/hafen");
     expect(location.properties.name).toBe("Hafen");
-    expect((await post("/nordwind/locations", { name: "Hafen" })).status).toBe(409);
+    expect((await post("/campaigns/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
   test("an EMPTY entry is filled, not collided with", async () => {
-    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<EntryResponse>("/nordwind/scenes", {
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
     // Two entries created and left empty — their name is their own id.
-    await created<EntryResponse>("/nordwind/npcs", { name: "holm" });
-    await created<EntryResponse>("/nordwind/locations", { name: "bucht" });
-    const patched = await app.request("/api/nordwind/properties", {
+    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "holm" });
+    await created<EntryResponse>("/campaigns/nordwind/locations", { name: "bucht" });
+    const patched = await app.request("/api/campaigns/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -305,30 +306,30 @@ describe("the per-campaign creates", () => {
     });
     expect(patched.status).toBe(200);
 
-    // „NPC anlegen" for exactly that id FILLS the entry.
-    const npc = await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
+    // Creating an npc for exactly that id FILLS the entry.
+    const npc = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(npc.path).toBe("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
-    const location = await created<EntryResponse>("/nordwind/locations", { name: "Bucht" });
+    const location = await created<EntryResponse>("/campaigns/nordwind/locations", { name: "Bucht" });
     expect(location.properties.name).toBe("Bucht");
   });
 
   test("an unknown campaign is a 404 for every per-campaign create", async () => {
-    expect((await post("/gibt-es-nicht/chapters", { title: "X" })).status).toBe(404);
-    expect((await post("/gibt-es-nicht/npcs", { name: "X" })).status).toBe(404);
-    expect((await post("/gibt-es-nicht/locations", { name: "X" })).status).toBe(404);
+    expect((await post("/campaigns/gibt-es-nicht/chapters", { title: "X" })).status).toBe(404);
+    expect((await post("/campaigns/gibt-es-nicht/npcs", { name: "X" })).status).toBe(404);
+    expect((await post("/campaigns/gibt-es-nicht/locations", { name: "X" })).status).toBe(404);
   });
 
   test("an unknown body key is refused (the shared body guard)", async () => {
-    expect((await post("/nordwind/npcs", { name: "X", role: "Wirt" })).status).toBe(400);
+    expect((await post("/campaigns/nordwind/npcs", { name: "X", role: "Wirt" })).status).toBe(400);
   });
 
   test("every create bumps the campaign version, so the app refetches", async () => {
-    const before = (await (await app.request("/api/nordwind/version")).json()) as {
+    const before = (await (await app.request("/api/campaigns/nordwind/version")).json()) as {
       version: number;
     };
-    await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
-    const after = (await (await app.request("/api/nordwind/version")).json()) as {
+    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
+    const after = (await (await app.request("/api/campaigns/nordwind/version")).json()) as {
       version: number;
     };
     expect(after.version).toBeGreaterThan(before.version);
@@ -345,54 +346,54 @@ describe("creating next to imported stock", () => {
 
   test("a name that collides with imported content answers a free suggestion", async () => {
     // `01-salzhafen` comes from the example campaign.
-    const res = await post("/beispiel/chapters", { title: "01 Salzhafen" });
+    const res = await post("/campaigns/beispiel/chapters", { title: "01 Salzhafen" });
     expect(res.status).toBe(409);
     expect((await errorBody(res)).suggestion).toBe("01-salzhafen-2");
   });
 
   test("the search index knows a freshly created npc", async () => {
-    await created<EntryResponse>("/beispiel/npcs", { name: "Brunhild Wellenbrecher" });
+    await created<EntryResponse>("/campaigns/beispiel/npcs", { name: "Brunhild Wellenbrecher" });
     const found = (await (
-      await app.request("/api/beispiel/search?q=Wellenbrecher")
+      await app.request("/api/campaigns/beispiel/search?q=Wellenbrecher")
     ).json()) as { results: Array<{ path: string }> };
     expect(found.results.map((r) => r.path)).toContain("npcs/brunhild-wellenbrecher");
   });
 });
 
-// „Aktiv" on a chapter: the action that decides which chapter the session is
+// Activating a chapter: the action that decides which chapter the session is
 // in. It is ONE transaction over TWO chapters, which is the only thing worth
 // testing about it — an app doing it in two calls would have a window with two
 // active chapters, and the session view picks the first it finds.
-describe("POST /api/:campaign/chapters/:id/active", () => {
+describe("POST /api/campaigns/:campaign/chapters/:id/active", () => {
   beforeEach(async () => {
     await emptyStore();
     await created<CampaignSummary>("/campaigns", { name: "Nordwind" });
-    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    await created<EntryResponse>("/nordwind/chapters", { title: "02 Tiefe" });
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "02 Tiefe" });
   });
   afterEach(() => {
     dropStore();
   });
 
   const statuses = async (): Promise<Record<string, string | undefined>> => {
-    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+    const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
       chapters: Array<{ id: string; status?: string }>;
     };
     return Object.fromEntries(tree.chapters.map((c) => [c.id, c.status]));
   };
 
   test("sets active here and puts the previous one back to planned — in one call", async () => {
-    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    expect((await post("/campaigns/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
     expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
 
-    expect((await post("/nordwind/chapters/02-tiefe/active", {})).status).toBe(200);
+    expect((await post("/campaigns/nordwind/chapters/02-tiefe/active", {})).status).toBe(200);
     // The swap, which is the whole point: never two active chapters.
     expect(await statuses()).toEqual({ "01-salzhafen": "planned", "02-tiefe": "active" });
   });
 
   test("is idempotent and answers the chapter entry", async () => {
-    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
-    const res = await post("/nordwind/chapters/01-salzhafen/active", {});
+    expect((await post("/campaigns/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    const res = await post("/campaigns/nordwind/chapters/01-salzhafen/active", {});
     expect(res.status).toBe(200);
     const entry = (await res.json()) as EntryResponse;
     expect(entry.path).toBe("01-salzhafen");
@@ -401,13 +402,13 @@ describe("POST /api/:campaign/chapters/:id/active", () => {
   });
 
   test("404 for a chapter that does not exist, and nothing changes", async () => {
-    await post("/nordwind/chapters/01-salzhafen/active", {});
-    expect((await post("/nordwind/chapters/99-nichts/active", {})).status).toBe(404);
+    await post("/campaigns/nordwind/chapters/01-salzhafen/active", {});
+    expect((await post("/campaigns/nordwind/chapters/99-nichts/active", {})).status).toBe(404);
     expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
   });
 
   test("400 for an unsafe chapter id", async () => {
-    expect((await post("/nordwind/chapters/..%2Fetc/active", {})).status).toBe(400);
+    expect((await post("/campaigns/nordwind/chapters/..%2Fetc/active", {})).status).toBe(400);
   });
 });
 
@@ -419,29 +420,29 @@ describe("the chapter status enum via PATCH /properties", () => {
   beforeEach(async () => {
     await emptyStore();
     await created<CampaignSummary>("/campaigns", { name: "Nordwind" });
-    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    await created<EntryResponse>("/nordwind/chapters", { title: "02 Tiefe" });
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
+    await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "02 Tiefe" });
   });
   afterEach(() => {
     dropStore();
   });
 
   const statuses = async (): Promise<Record<string, string | undefined>> => {
-    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+    const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
       chapters: Array<{ id: string; status?: string }>;
     };
     return Object.fromEntries(tree.chapters.map((c) => [c.id, c.status]));
   };
 
   async function entry(rel: string): Promise<EntryResponse> {
-    const res = await app.request(`/api/nordwind/entry?path=${encodeURIComponent(rel)}`);
+    const res = await app.request(entriesUrl("nordwind", rel));
     expect(res.status).toBe(200);
     return (await res.json()) as EntryResponse;
   }
 
   async function patchStatus(chapter: string, status: unknown): Promise<Response> {
     const current = await entry(chapter);
-    return app.request("/api/nordwind/properties", {
+    return app.request("/api/campaigns/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: current.path, rev: current.rev, patch: { status } }),
@@ -491,7 +492,7 @@ describe("the chapter status enum via PATCH /properties", () => {
 
     const fresh = await entry("01-salzhafen");
     expect(fresh.properties.status).toBe("laeuft");
-    const res = await app.request("/api/nordwind/properties", {
+    const res = await app.request("/api/campaigns/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: fresh.path, rev: fresh.rev, patch: { title: "Neu benannt" } }),
@@ -505,7 +506,7 @@ describe("the chapter status enum via PATCH /properties", () => {
   // The properties dialog must not be a second door past the one-active rule.
   // The endpoint is not the owner of it, the column is.
   test("a patch setting active performs the swap, like the endpoint", async () => {
-    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    expect((await post("/campaigns/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
     expect(await statuses()).toEqual({ "01-salzhafen": "active", "02-tiefe": "planned" });
 
     expect((await patchStatus("02-tiefe", "active")).status).toBe(200);
@@ -514,7 +515,7 @@ describe("the chapter status enum via PATCH /properties", () => {
   });
 
   test("setting a chapter to done does not touch the active one", async () => {
-    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    expect((await post("/campaigns/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
     expect((await patchStatus("02-tiefe", "done")).status).toBe(200);
     expect(await statuses()).toEqual({ "01-salzhafen": "active", "02-tiefe": "done" });
   });

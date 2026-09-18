@@ -4,7 +4,7 @@
 //
 // DM vocabulary, not a literal translation: Session · Scene · Chapter ·
 // Location · Session review (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
-// frontmatter keys stay as they are on the wire — `id`, `active`, `insight +2`
+// property keys stay as they are on the wire — `id`, `active`, `insight +2`
 // are data, not copy.
 
 import type { Messages } from "./messages";
@@ -293,7 +293,7 @@ export const en: Messages = {
   "status.npc.missing": "missing",
   "status.npc.unknown": "unknown",
 
-  // --- browse list pages (/:campaign/list/:kind) ---------------------------
+  // --- browse list pages (/campaigns/:campaign/list/:kind) ---------------------------
   "browse.title.scenes": "Scenes",
   "browse.title.npcs": "NPCs",
   "browse.title.locations": "Locations",
@@ -308,27 +308,27 @@ export const en: Messages = {
   "status.sceneUnloadable": "Scene not loadable",
 
 
-  // --- the scene pool ("/:campaign", routes/pool.tsx) -----------------------
-  "pool.loading": "Loading scenes …",
-  "pool.empty":
+  // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
+  "chapterOverview.loading": "Loading scenes …",
+  "chapterOverview.empty":
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
-  "pool.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
+  "chapterOverview.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
   // The chapter's leftovers section: the scenes that name no location.
-  "pool.group.noLocation": "No location",
-  "pool.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
-  "pool.chapter.goal": "Goal: {goal}",
-  "pool.chapter.empty": "No scenes in this chapter yet.",
+  "chapterOverview.group.noLocation": "No location",
+  "chapterOverview.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
+  "chapterOverview.chapter.goal": "Goal: {goal}",
+  "chapterOverview.chapter.empty": "No scenes in this chapter yet.",
   // --- chapter actions in the chapter overview -----------------------------
-  "pool.chapter.properties": "Chapter properties",
-  "pool.chapter.edit": "Edit chapter",
+  "chapterOverview.chapter.properties": "Chapter properties",
+  "chapterOverview.chapter.edit": "Edit chapter",
   "chapterBody.title": "Edit chapter: {title}",
   "chapterBody.description":
     "The chapter's text as markdown \u2014 the heading \u201c## Ziel des Kapitels\u201d is the line the overview shows as its goal.",
   "chapterBody.field.body": "Text",
   "chapterBody.field.body.placeholder":
     "## Ziel des Kapitels\n\nWhat the party is meant to achieve here",
-  "pool.contingencies.hint": "only when the trigger fires",
-  "pool.scene.trigger": "When: {trigger}",
+  "chapterOverview.contingencies.hint": "only when the trigger fires",
+  "chapterOverview.scene.trigger": "When: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   "browse.fallbackTitle": "Look up",
@@ -338,18 +338,18 @@ export const en: Messages = {
   "browse.empty.npcs": "No NPCs yet.",
   "browse.empty.locations": "No locations yet.",
 
-  // --- the reading view ("/:campaign/entry/*", routes/scene.tsx) -------------
+  // --- the reading view ("/campaigns/:campaign/entries/*", routes/scene.tsx) -------------
   "scene.loading": "Loading entry …",
   "scene.notLoadable": "Entry not loadable — check the path or start the server.",
   "scene.npcs.heading": "NPCs in this scene",
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Context",
-  "mobileBack.pool": "Chapters",
+  "mobileBack.chapterOverview": "Chapters",
 
 
-  // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
-  // Neutral prefix on purpose: the live nav and the pool list show the SAME
+  // --- shared scene-group headings (routes/live.tsx + routes/chapter-overview.tsx) ------
+  // Neutral prefix on purpose: the live nav and the chapter overview list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Planned",
   "scene.contingencies.heading": "Contingency scenes",
@@ -404,13 +404,13 @@ export const en: Messages = {
   "live.drawer.open": "Open entry",
 
 
-  // --- review (the session review, formerly the "five-minute harvest";
-  // the harvest metaphor stayed in the code, not in the UI)
+  // --- review (the session review; the harvest metaphor lives in the code,
+  // not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
   "review.title": "Session review",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
   "review.noSession": "There is no session to review.",
-  "review.backToPool": "Back to the chapters",
+  "review.backToChapters": "Back to the chapters",
   "review.lead":
     "Go through the entries of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters).
@@ -682,7 +682,7 @@ export const en: Messages = {
   "generate.written.hint.npc":
     "The NPC shows up in the NPC list and in search. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.openNpc": "Open NPC",
-  "generate.written.toPool": "To the chapters",
+  "generate.written.toChapters": "To the chapters",
 
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY

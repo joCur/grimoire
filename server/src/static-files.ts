@@ -1,4 +1,4 @@
-// Static serving of the built frontend (issue #13, deployment).
+// Static serving of the built frontend.
 //
 // In production the whole app is ONE process: Hono serves /api and, as a
 // fallback, the Vite build in app/dist (SPA routing -> index.html). In dev
@@ -40,8 +40,9 @@ const CONTENT_TYPES: Record<string, string> = {
  * Extensions that must never fall back to index.html: a missing .js/.css/font
  * is a build problem, and answering it with HTML only produces a confusing
  * MIME error in the browser. `.html` is NOT in this set (a missing page is a
- * client route). Document addresses carry no extension at all since issue #79
- * (`/:campaign/entry/<chapter>/<scene>`), so they never come near this set.
+ * client route). An entry address carries no extension at all
+ * (`/campaigns/:campaign/entries/<chapter>/<location>/<scene>`), so those
+ * routes never come near this set.
  */
 const HARD_404_EXTENSIONS = new Set(
   Object.keys(CONTENT_TYPES).filter((ext) => ext !== ".html" && ext !== ".txt"),

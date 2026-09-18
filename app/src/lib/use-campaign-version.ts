@@ -1,9 +1,9 @@
-// Client half of issue #8: poll GET /api/:campaign/version and invalidate
+// The client half of the version poll: GET /api/campaigns/:campaign/version, then invalidate
 // the campaign's read queries when the counter changes (every server-side
 // write bumps it in its own transaction — nothing else changes the campaign,
 // DECISIONS #9/#13). No UI — data just refreshes.
 //
-// The same response carries the server's build id (issue #24), so this one
+// The same response carries the server's build id, so this one
 // poll doubles as the version handshake: every tick hands the id to
 // reportServerBuild, which flips a sticky flag when it no longer matches the
 // bundle this tab is running. The banner (components/UpdateBanner.tsx) reads
@@ -48,11 +48,11 @@ export function useCampaignVersion(campaign: string): void {
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
     // Something changed on the server — refetch everything read from this campaign.
-    // "active-session" rides along (issue #40): a session ended in another
+    // "active-session" rides along: a session ended in another
     // tab, a hand-edited `ended`, or simply midnight passing must reach the
     // global live indicator without a reload.
     // "last-session" is the review's session (ended or not) — same reasoning.
-    // "knowledge"/"glossary" (issue #53) are campaign reads like the rest:
+    // "knowledge"/"glossary" are campaign reads like the rest:
     // the two content pages have to learn about a write from another tab.
     // NOTE what that means for an OPEN row there: the list under it changes.
     // components/EntryListPage.tsx therefore addresses its save by the
@@ -70,7 +70,7 @@ export function useCampaignVersion(campaign: string): void {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }
     // …plus the campaign list, which carries name/description from
-    // `campaign` (issue #17) and is keyed without a campaign segment.
+    // `campaign` and is keyed without a campaign segment.
     void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
   }, [data, campaign, queryClient]);
 }

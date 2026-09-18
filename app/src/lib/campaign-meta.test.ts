@@ -113,8 +113,8 @@ describe("seedCampaignMetaBase", () => {
 
 describe("prefillCampaignName", () => {
   test("a name that IS the id is the server's fallback, not an authored value", () => {
-    // The dialog must not propose the id as a name (issue #62: both endpoints
-    // synthesize it now) — the field starts empty, the id is the placeholder.
+    // The dialog must not propose the id as a name — both endpoints
+    // synthesize it, so the field starts empty and the id is the placeholder.
     expect(prefillCampaignName("beispiel", "beispiel")).toBe("");
     expect(prefillCampaignName("beispiel", undefined)).toBe("");
     expect(prefillCampaignName("beispiel", "Salzhafen")).toBe("Salzhafen");
@@ -132,7 +132,7 @@ describe("writeCampaignMeta", () => {
     expect(result).toEqual({ ok: true, file: FILE });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/beispiel/properties");
+    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/properties");
     expect(calls[0]?.body).toEqual({
       path: "campaign",
       rev: 42,
@@ -149,7 +149,7 @@ describe("writeCampaignMeta", () => {
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe("/api/beispiel/entry?path=campaign");
+    expect(calls[1]?.url).toBe("/api/campaigns/beispiel/entries/campaign");
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {

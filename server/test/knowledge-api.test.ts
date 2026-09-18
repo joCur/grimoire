@@ -1,5 +1,4 @@
-// GET/PUT /api/:campaign/knowledge and the glossary's new rev guard
-// (issue #53).
+// GET/PUT /api/campaigns/:campaign/knowledge and the glossary's rev guard.
 //
 // The two lists are ONE contract on purpose (server/src/server.ts): whole
 // list in, whole list out, the array order IS the stored order, `rev` guards
@@ -29,13 +28,13 @@ function style(text: string): KnowledgeEntry {
 }
 
 async function getKnowledge(campaign = CAMPAIGN): Promise<KnowledgeResponse> {
-  const res = await app.request(`/api/${campaign}/knowledge`);
+  const res = await app.request(`/api/campaigns/${campaign}/knowledge`);
   expect(res.status).toBe(200);
   return (await res.json()) as KnowledgeResponse;
 }
 
 async function putKnowledge(body: unknown, campaign = CAMPAIGN): Promise<Response> {
-  return app.request(`/api/${campaign}/knowledge`, {
+  return app.request(`/api/campaigns/${campaign}/knowledge`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -43,13 +42,13 @@ async function putKnowledge(body: unknown, campaign = CAMPAIGN): Promise<Respons
 }
 
 async function getGlossary(): Promise<GlossaryResponse> {
-  const res = await app.request(`/api/${CAMPAIGN}/glossary`);
+  const res = await app.request(`/api/campaigns/${CAMPAIGN}/glossary`);
   expect(res.status).toBe(200);
   return (await res.json()) as GlossaryResponse;
 }
 
 async function putGlossary(body: unknown): Promise<Response> {
-  return app.request(`/api/${CAMPAIGN}/glossary`, {
+  return app.request(`/api/campaigns/${CAMPAIGN}/glossary`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -72,18 +71,18 @@ afterAll(() => {
   dropStore();
 });
 
-describe("GET /api/:campaign/knowledge", () => {
+describe("GET /api/campaigns/:campaign/knowledge", () => {
   test("a campaign that was never told anything answers an empty list", async () => {
     expect(await getKnowledge()).toEqual({ entries: [], rev: 1 });
   });
 
   test("an unknown campaign is a 404, not an empty list", async () => {
-    const res = await app.request("/api/nope/knowledge");
+    const res = await app.request("/api/campaigns/nope/knowledge");
     expect(res.status).toBe(404);
   });
 });
 
-describe("PUT /api/:campaign/knowledge", () => {
+describe("PUT /api/campaigns/:campaign/knowledge", () => {
   test("stores all three kinds and reads them back in order", async () => {
     const entries = [naming("Salt Harbour", "Salzhafen"), fact("Der Turm ist leer."), style("Kurz.")];
     const saved = await save(entries);
@@ -192,7 +191,7 @@ describe("the prompt block (store/read.ts knowledgeText)", () => {
   });
 
   test("[[slug]] references are resolved to the current display name", async () => {
-    // `fenn` is an npc of the example campaign (issue #68 expansion).
+    // `fenn` is an npc of the example campaign.
     await save([fact("[[fenn]] weiß von der Ladung.")]);
     expect(await knowledgeText(CAMPAIGN)).toBe("- Fakt: Fenn weiß von der Ladung.");
   });

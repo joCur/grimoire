@@ -3,13 +3,13 @@ import { describe, expect, test } from "bun:test";
 import { navSection } from "./topbar-nav";
 
 /** Only one of the three view shapes is ever set at a time (route match). */
-const pool = { isPool: true };
-const list = (listKind: string) => ({ isPool: false, listKind });
-const file = (filePath: string) => ({ isPool: false, filePath });
+const chapterOverview = { isChapterOverview: true };
+const list = (listKind: string) => ({ isChapterOverview: false, listKind });
+const file = (filePath: string) => ({ isChapterOverview: false, filePath });
 
 describe("navSection", () => {
-  test("the pool is the Kapitel section", () => {
-    expect(navSection(pool)).toBe("chapters");
+  test("the chapter overview is the Kapitel section", () => {
+    expect(navSection(chapterOverview)).toBe("chapters");
   });
 
   test("each browse list marks its own entry; the scene list is Kapitel", () => {
@@ -30,7 +30,7 @@ describe("navSection", () => {
   });
 
   test("views that belong to no section are marked nowhere", () => {
-    expect(navSection({ isPool: false })).toBeUndefined(); // generator, review
+    expect(navSection({ isChapterOverview: false })).toBeUndefined(); // generator, review
     expect(navSection(file("campaign"))).toBeUndefined();
     expect(navSection(file("sessions/2026-01-15"))).toBeUndefined();
     expect(navSection(file("inbox"))).toBeUndefined();
