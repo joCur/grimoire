@@ -90,6 +90,7 @@ import {
 } from "./read";
 import {
   addressIdentity,
+  addressSegments,
   chapterPath,
   locationPath,
   locatorFromPath,
@@ -1846,7 +1847,7 @@ export async function markLogLineSeen(
   line: string,
 ): Promise<EntryResponse & { marked: boolean }> {
   assertSafeAddress(rel);
-  const segments = rel.split("/");
+  const segments = addressSegments(rel);
   if (segments.length !== 2 || segments[0] !== "sessions") {
     throw new ApiError(400, "path must be a sessions/<id> address");
   }

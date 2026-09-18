@@ -5,6 +5,7 @@
 // Its own module on purpose: the app imports `@grimoire/shared/kind` — types
 // plus this function, no runtime dependencies — instead of the package root.
 
+import { addressSegments } from "./address";
 import type { EntityKind } from "./types";
 
 /**
@@ -13,7 +14,7 @@ import type { EntityKind } from "./types";
  * describe is `unknown`.
  */
 export function kindFromAddress(address: string): EntityKind {
-  const segments = address.split("/").filter((s) => s.length > 0);
+  const segments = addressSegments(address).filter((segment) => segment.length > 0);
   const first = segments[0] ?? "";
   if (segments.length === 1) {
     if (first === "campaign") return "campaign";

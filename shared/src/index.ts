@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./address";
 export * from "./kind";
 export * from "./refs";
 export * from "./slug";

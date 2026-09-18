@@ -72,7 +72,7 @@ import {
 } from "./generate-pipeline";
 import type { LLMProvider } from "./llm-provider";
 import { getDb } from "./store/handle";
-import { RESERVED_SEGMENTS } from "./store/paths";
+import { addressSegments, RESERVED_SEGMENTS } from "./store/paths";
 
 /** Server-side job record; `draftEdits` is a Map here, an object on the wire. */
 interface Job {
@@ -333,7 +333,7 @@ function unpackReview(value: string): GenerateJobReview {
  */
 function draftAddress(path: string): string {
   const stripped = path.endsWith(".md") ? path.slice(0, -3) : path;
-  const segments = stripped.split("/");
+  const segments = addressSegments(stripped);
   // Only a SCENE path collapses: `npcs/<id>`/`locations/<id>` have two
   // segments anyway, and a chapter is not a draft path.
   if (segments.length !== 3) return stripped;

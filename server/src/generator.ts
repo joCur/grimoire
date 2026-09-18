@@ -70,7 +70,9 @@ import {
 } from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
 import {
+  addressHead,
   addressIdentity,
+  addressSegments,
   chapterPath,
   locationPath,
   npcPath,
@@ -1162,7 +1164,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   // (`draftAddress`). A client that still sends a three-segment path is
   // naming a group of its own, and that is exactly the contradiction between
   // address and `location` that the two-segment rule rules out.
-  const segments = rel.split("/");
+  const segments = addressSegments(rel);
   if (segments.length !== 2 || RESERVED_DIRS.has(segments[0]!)) {
     throw new ApiError(400, `${label}.path must be "<chapter>/<scene-id>"`);
   }
@@ -1442,8 +1444,8 @@ export function assertDraftId(id: unknown, rel: string): void {
  */
 export function draftAddress(rel: string, properties: Record<string, unknown>): string {
   if (kindFromAddress(rel) !== "scene") return rel;
-  const segments = rel.split("/");
-  const chapterId = segments[0] ?? "";
+  const segments = addressSegments(rel);
+  const chapterId = addressHead(rel);
   const fmId = typeof properties.id === "string" ? properties.id.trim() : "";
   const id = fmId === "" ? (segments[segments.length - 1] ?? "") : fmId;
   const location = typeof properties.location === "string" ? properties.location.trim() : "";

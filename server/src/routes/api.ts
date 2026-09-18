@@ -45,6 +45,7 @@ import {
   readEntry,
   requireCampaign,
 } from "../store/read";
+import { addressSegments } from "../store/paths";
 import { searchCampaign } from "../store/search";
 import { readSettings, writeSettings } from "../store/settings";
 import {
@@ -191,8 +192,7 @@ function entryAddress(c: Context): string {
   const at = pathname.indexOf(marker);
   const rest = at === -1 ? "" : pathname.slice(at + marker.length);
   if (rest === "") throw new ApiError(400, "missing entry address");
-  return rest
-    .split("/")
+  return addressSegments(rest)
     .map((segment) => decodeURIComponent(segment))
     .join("/");
 }

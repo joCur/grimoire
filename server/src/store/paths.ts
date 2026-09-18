@@ -29,7 +29,14 @@
 //
 // An address the schema does not describe names nothing and answers 404.
 
+import { addressHead, addressSegments } from "@grimoire/shared";
 import { ApiError } from "../api-error";
+
+// The two address DECOMPOSITION helpers live in @grimoire/shared, because the
+// app reads segments too and shared/ may not depend on the server. They are
+// re-exported here so everything server-side takes an address apart through
+// this module — the one that also writes them.
+export { addressHead, addressSegments };
 
 /** Which row a campaign-relative address names. */
 export type Locator =
@@ -127,7 +134,7 @@ export function addressIdentity(rel: string): string {
  * the client's side "there is no such entry" is exactly what it means.
  */
 export function locatorFromPath(rel: string): Locator {
-  const segments = rel.split("/");
+  const segments = addressSegments(rel);
   const last = segments[segments.length - 1] ?? "";
 
   if (segments.length === 1) {
@@ -138,7 +145,7 @@ export function locatorFromPath(rel: string): Locator {
     return { kind: "chapter", id: last };
   }
 
-  const first = segments[0] ?? "";
+  const first = addressHead(rel);
   if (RESERVED.has(first)) {
     if (segments.length !== 2 || last === "") throw new ApiError(404, "entry not found");
     if (first === "npcs") return { kind: "npc", id: last };

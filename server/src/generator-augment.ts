@@ -55,6 +55,7 @@ import {
 import type { CheckedDraft } from "./naming-check";
 import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
+import { addressHead } from "./store/paths";
 import { readEntry } from "./store/read";
 import { patchEntry } from "./store/write";
 
@@ -396,7 +397,7 @@ export async function runAugment(
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
 function chapterOf(stored: EntryResponse): string {
-  return stored.path.split("/")[0] ?? "";
+  return addressHead(stored.path);
 }
 
 /**
