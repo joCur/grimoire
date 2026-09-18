@@ -41,11 +41,10 @@ unter `warnings`.
 `properties` ist **je Art** getypt, und zwar aus **derselben** Feldliste, aus
 der der Eigenschaften-Dialog gebaut wird (`shared/src/property-fields.ts`) —
 ein Modell kann also genau die Felder schreiben, die der DM auch bearbeiten
-kann, und keins mehr. Der **Eigenschaften-Block ist Sache des Servers**: er
-setzt ihn aus `properties` zusammen (`renderRaw`, derselbe Renderer, den jeder
-geschriebene Eintrag durchläuft), weshalb `quickstats: { wis: "+2" }`
-gequotet ist, weil der Renderer quotet — nicht weil das Modell daran gedacht
-hat.
+kann, und keins mehr. Der **Entwurf bleibt dieses Paar** — `properties` und
+`body` — von der Antwort bis in die Zeile (ADR #24): nichts setzt daraus einen
+Markdown-Text zusammen und nichts liest einen zurück, also kann auf diesem Weg
+auch nichts an einem Wert verloren gehen.
 
 Die Schemata liegen als **lesbares JSON** in `shared/schema/`, eines je Art
 und Lauf: `scene.schema.json`, `npc.schema.json`, `location.schema.json`,
@@ -83,10 +82,10 @@ Prozess):
   ausdrücken, also reist sie als **Liste** von `{ key, value }` und der Server
   faltet sie zurück in die Mapping-Form des Format-Vertrags.
 
-Warum nicht den gerenderten Eintrag selbst als Antwort? Weil damit die
-JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum, ein
-Satz davor, ein Abschiedssatz danach, zwei waagerechte Linien, die wie ein
-Eigenschaften-Block aussehen. Diese Hälfte kann keine API garantieren, sie
+Warum nicht den Eintrag als **einen** Markdown-Text als Antwort? Weil damit
+die JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum,
+ein Satz davor, ein Abschiedssatz danach, zwei waagerechte Linien, die wie
+Eigenschaften aussehen. Diese Hälfte kann keine API garantieren, sie
 müsste also von Hand toleriert werden — und jeder Fehlgriff ist eine
 Korrekturrunde oder stiller Datenverlust. Ein erzwungenes Objekt kann das
 alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht ein
@@ -213,9 +212,9 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
    und legt Treffer als `namingHints` ins Job-Ergebnis.
 6. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
    annehmen/ablehnen, Namens-Hinweise dezent daneben (kein Blocker).
-   Erst „Übernehmen“ schreibt auf die Platte.
+   Erst „Übernehmen“ schreibt in die Datenbank.
 
-## Kampagnenwissen (Issue #53)
+## Kampagnenwissen
 
 Gepflegt auf `/settings` je Kampagne, drei Arten: Namenskonvention
 (`Alt → Neu`), Fakt, Stilregel. Der Prompt stellt sie **vor** das Glossar,
@@ -293,10 +292,9 @@ Trennzeile ist Text — Degradation statt Fehler.
 ## NPC-Generator
 
 Gleiche Pipeline, eigener Endpoint (`POST /api/campaigns/:campaign/generate/npc`)
-und eigene Prompt-Assets (`npc-system-prompt.md`, `npc-example-output.json`
-— Few-Shot ist die Format-Referenz `examples/beispiel/npcs/fenn.md`).
-Zielformat: NPC-Entität aus README.md; Beziehungen nur auf existierende
-ids, Quickstats als gequotete Strings (das Plus überlebt YAML),
+und eigene Prompt-Assets (`npc-system-prompt.md` und `npc-example-output.json`
+als Few-Shot-Ziel). Zielformat: NPC-Entität aus README.md; Beziehungen nur auf
+existierende ids, Quickstats als gequotete Strings (das Plus überlebt),
 status alive als Normalfall. Ein Generator-Job pro Kampagne, egal ob
 Szenen oder NPC.
 

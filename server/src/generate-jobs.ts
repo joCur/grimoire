@@ -13,8 +13,8 @@
 //   - a finished job KEEPS its result until it is applied, discarded or
 //     replaced by the next run, so navigation/reload/restart of the tab
 //     costs nothing.
-//   - review edits live in the job too (draftEdits), so an edited draft
-//     survives the same way.
+//   - review edits live in the job too (draftEdits), one per draft and one
+//     half per edited half, so an edited draft survives the same way.
 //
 // THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
 // With the database as the single truth (ADR #13) the row is the obvious
@@ -44,6 +44,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type {
   AugmentResult,
+  DraftEdit,
   GenerateJob,
   GenerateJobPart,
   GenerateJobPipeline,
@@ -90,7 +91,7 @@ interface Job {
   error?: GenerateJobError;
   startedAt: string;
   finishedAt?: string;
-  draftEdits: Map<string, string>;
+  draftEdits: Map<string, DraftEdit>;
   /** The DM's review state — decisions, drops, written parts. */
   review: GenerateJobReview;
   /** Optimistic-concurrency token of that review state. */
@@ -229,14 +230,40 @@ function unpackPayload<T>(value: string | null): T | undefined {
   }
 }
 
-function unpackEdits(value: string): Map<string, string> {
-  const edits = new Map<string, string>();
+/**
+ * Parse the draft-edits column: one `DraftEdit` per draft path, each half
+ * type-checked on its own. Like every other payload here it DEGRADES — a
+ * value that is not an edit object, or an edit whose halves are of the wrong
+ * shape, is dropped rather than making the job unreachable.
+ *
+ * A value that carries NEITHER half is dropped too: an edit that changes
+ * nothing is not an edit, and keeping it would make the review believe the
+ * DM had touched that draft.
+ */
+function unpackEdits(value: string): Map<string, DraftEdit> {
+  const edits = new Map<string, DraftEdit>();
   const parsed = unpackPayload<Record<string, unknown>>(value);
   if (parsed === undefined) return edits;
-  for (const [key, markdown] of Object.entries(parsed)) {
-    if (typeof markdown === "string") edits.set(draftAddress(key), markdown);
+  for (const [key, raw] of Object.entries(parsed)) {
+    const edit = readDraftEdit(raw);
+    if (edit !== undefined) edits.set(draftAddress(key), edit);
   }
   return edits;
+}
+
+/** One stored draft edit, or undefined when the value is not one. */
+function readDraftEdit(value: unknown): DraftEdit | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const properties = raw.properties;
+  const body = raw.body;
+  const edit: DraftEdit = {
+    ...(properties !== null && typeof properties === "object" && !Array.isArray(properties)
+      ? { properties: properties as Record<string, unknown> }
+      : {}),
+    ...(typeof body === "string" ? { body } : {}),
+  };
+  return edit.properties === undefined && edit.body === undefined ? undefined : edit;
 }
 
 /** The review state of a job that has not been touched yet. */
@@ -1042,6 +1069,11 @@ export async function deleteJob(campaign: string): Promise<boolean> {
  * draft they are typing in), never the whole state — so two half-finished
  * reviews of different parts cannot overwrite each other inside one rev.
  *
+ * An `edits` entry merges the same way, half by half: it carries the half
+ * that changed (`properties` or `body`, see DraftEdit) and the other half of
+ * a stored edit survives — the fields card and the text editor of one draft
+ * save through the same endpoint.
+ *
  * `dropped` is the one exception: a set, sent whole, because "no longer
  * dropped" has to be expressible too. In `entries`, `fields` and `blocks` a
  * `null` value DELETES the key — back to undecided, and the only way to clear
@@ -1049,7 +1081,7 @@ export async function deleteJob(campaign: string): Promise<boolean> {
  * block ids).
  */
 export interface ReviewPatch {
-  edits?: Record<string, string>;
+  edits?: Record<string, DraftEdit>;
   entries?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
   fields?: Record<string, boolean | null>;
@@ -1117,8 +1149,11 @@ function assertKnownDraftPaths(job: Job, patch: ReviewPatch): void {
 
 /** Merge a patch into a job in memory (the transaction writes the result). */
 function applyReviewPatch(job: Job, patch: ReviewPatch): void {
-  for (const [path, markdown] of Object.entries(patch.edits ?? {})) {
-    job.draftEdits.set(draftAddress(path), markdown);
+  for (const [path, edit] of Object.entries(patch.edits ?? {})) {
+    const rel = draftAddress(path);
+    // Merged onto whatever is stored for that draft, so a patch that carries
+    // only the body keeps an earlier properties edit (see ReviewPatch).
+    job.draftEdits.set(rel, { ...job.draftEdits.get(rel), ...edit });
   }
   for (const [key, decision] of Object.entries(patch.entries ?? {})) {
     // `null` is undecided — the review's third state, which is why an

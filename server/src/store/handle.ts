@@ -1,9 +1,8 @@
 // The process-wide database handle.
 //
 // The database is the ONLY truth: every read and every write endpoint goes
-// through the store modules next to this file. The boot NO LONGER imports
-// anything — a fresh instance simply starts empty, and the markdown
-// importer lives on only as the dev/E2E tool `grimoire seed`.
+// through the store modules next to this file. The boot imports nothing — a
+// fresh instance simply starts empty.
 //
 // The handle is opened LAZILY rather than at module import, so that importing
 // the app for in-process tests stays free of side effects (no database file
@@ -14,7 +13,7 @@
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
 import type { GroupMigrationOutcome } from "../db/group-migration";
-import { failInterruptedJobs } from "../db/job-boot";
+import { failInterruptedJobs, failLegacyDraftJobs } from "../db/job-boot";
 
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
@@ -27,6 +26,11 @@ export interface StoreInfo {
    * runs the previous process took down with it.
    */
   interruptedJobs: number;
+  /**
+   * How many generator jobs this boot found with drafts in the pre-ADR-#24
+   * shape and had to fail — nothing is converted, the run is repeated.
+   */
+  legacyDraftJobs: number;
   /**
    * What the one-time `group_slug` -> `location` step changed
    * (db/group-migration.ts): the scenes whose address moved, the location
@@ -59,11 +63,16 @@ export async function initStore(options: { file?: string } = {}): Promise<Grimoi
     // crash is failed here — with a German sentence the app shows — instead of
     // being polled forever. Finished jobs are untouched and stay applyable.
     const interruptedJobs = failInterruptedJobs(handle.db);
+    // A job whose drafts are one markdown text per draft cannot be reviewed
+    // or accepted any more (ADR #24), so it is failed here with a message
+    // that says so instead of breaking the review it lands in.
+    const legacyDraftJobs = failLegacyDraftJobs(handle.db);
     opened = handle;
     info = {
       file,
       backend: handle.client.backend,
       interruptedJobs,
+      legacyDraftJobs,
       groupMigration: handle.groupMigration,
     };
     return handle.db;

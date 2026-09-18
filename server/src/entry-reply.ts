@@ -12,11 +12,12 @@
 //       hand-write the escaping of that entry, and a German quotation mark
 //       closed with an ASCII `"` ends the string. A correct scene,
 //       unparseable.
-//   the RENDERED ENTRY itself: that removes the escaping but puts TEXT
-//       PARSING in its place, and that half cannot be forced by any API — a
-//       fence, a leading sentence, a sign-off, two horizontal rules that look
-//       like a properties block. All of it would have to be tolerated by hand
-//       here, and a miss is a correction turn or silent data loss.
+//   the RENDERED ENTRY as one markdown text: that removes the escaping but
+//       puts TEXT PARSING in its place, and that half cannot be forced by any
+//       API — a fence, a leading sentence, a sign-off, two horizontal rules
+//       that look like a properties block. All of it would have to be
+//       tolerated by hand here, and a miss is a correction turn or silent
+//       data loss.
 //
 // The object is forced by the provider for every entry call now — Claude
 // gets the schema as a tool with `tool_choice`, an OpenAI-compatible endpoint
@@ -28,9 +29,9 @@
 // What this module does NOT do is judge content. It reads the object,
 // type-checks its `properties` against the kind's FIELD LIST
 // (@grimoire/shared/property-fields — the very list the properties dialog is
-// built from) and COMPOSES the entry the server would store. Everything
-// after that — a kebab `id`, a known scene type, references that resolve,
-// known callouts, the npc format rules — stays in the validators
+// built from) and hands on the properties/body pair the store speaks.
+// Everything after that — a kebab `id`, a known scene type, references that
+// resolve, known callouts, the npc format rules — stays in the validators
 // (./generator.ts, ./generate-pipeline.ts, ./generator-augment.ts).
 
 import { jsonrepair } from "jsonrepair";
@@ -43,7 +44,6 @@ import {
   type EntryMode,
   type PropertyFieldDef,
 } from "@grimoire/shared";
-import { renderRaw } from "./store/render";
 
 /** One entry reply, normalized: the object the server stores plus notes. */
 export interface EntryReply {
@@ -53,7 +53,7 @@ export interface EntryReply {
    * every field and `null` is how a model says it has nothing to put there.
    */
   properties: Record<string, unknown>;
-  /** The markdown below the properties block, verbatim as it will be stored. */
+  /** The markdown body, verbatim as it will be stored. */
   body: string;
   /** One note per entry; empty when there was nothing to report. */
   warnings: string[];
@@ -176,19 +176,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Read one entry reply: JSON in, the normalized object plus the COMPOSED
- * markdown out — or the error list for the correction turn.
+ * Read one entry reply: JSON in, the normalized `{ properties, body }` pair
+ * plus the warnings out — or the error list for the correction turn.
  *
- * The markdown is the server's own rendering (`renderRaw`, the same one every
- * written entry goes through), which is what makes the properties block the
- * server's business: `quickstats: { wis: "+2" }` is quoted because the
- * renderer quotes it, not because the model remembered to.
+ * Nothing is rendered on the way: the pair travels through the validators
+ * and into the store as the two halves it is, so a value the model wrote
+ * (`quickstats: { wis: "+2" }`) reaches the row exactly as it was read.
  */
 export function parseEntryReply(
   raw: string,
   kind: EntryKind,
   mode: EntryMode = "create",
-): { ok: true; reply: EntryReply; markdown: string } | { ok: false; errors: string[] } {
+): { ok: true; reply: EntryReply } | { ok: false; errors: string[] } {
   const parsed = parseJsonReply(raw);
   if (parsed === null || !isRecord(parsed.value)) {
     return { ok: false, errors: [NOT_AN_ENTRY_ERROR] };
@@ -210,17 +209,12 @@ export function parseEntryReply(
   const reply: EntryReply = {
     properties: read.properties,
     ignored: read.ignored,
-    // The body is stored the way the store keeps it: one trailing newline, and the
-    // blank line the renderer puts between the block and the first heading.
+    // The body is stored the way the store keeps it: no leading blank lines
+    // and exactly one trailing newline.
     body: `${(body as string).replace(/^\n+/, "").trimEnd()}\n`,
     warnings: parsed.repaired ? [...warnings, REPAIRED_ENTRY_WARNING] : warnings,
   };
-  return { ok: true, reply, markdown: composeEntry(reply) };
-}
-
-/** The entry as it will be stored: the composed block plus the body. */
-export function composeEntry(reply: EntryReply): string {
-  return renderRaw(reply.properties, `\n${reply.body}`);
+  return { ok: true, reply };
 }
 
 function normalizeWarnings(value: unknown, errors: string[]): string[] {

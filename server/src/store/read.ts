@@ -616,7 +616,7 @@ export function readByLocator(
 }
 
 /** GET /api/campaigns/:campaign/entries/<address> */
-export async function readParsedFile(campaign: string, rel: string): Promise<EntryResponse> {
+export async function readEntry(campaign: string, rel: string): Promise<EntryResponse> {
   const row = await requireCampaign(campaign);
   assertSafeAddress(rel); // 400 unsafe id/address
   const db = await getDb();

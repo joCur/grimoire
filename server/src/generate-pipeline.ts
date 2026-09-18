@@ -836,10 +836,7 @@ export async function runScenePart(
                 "zuordnen — diese Szene wurde aus dem ganzen Quelltext geschrieben.",
             ]),
       ],
-      namingHints: checkDraftsNaming(
-        [{ path: result.scene.path, markdown: result.scene.markdown }],
-        plan.ctx.namingRules,
-      ),
+      namingHints: checkDraftsNaming([result.scene], plan.ctx.namingRules),
       ...(cut.matched ? {} : { excerptFallback: true }),
     },
     usage: usageOf(result.usage, counter.count()),
@@ -878,7 +875,7 @@ export async function runEntryPart(
     provider,
     validate: (raw) => validateEntryReply(raw, entry, plan.ctx),
     correctionTail:
-      entry.kind === "npc" ? "die vollständige NPC-Datei enthalten" : "die vollständige Ort-Datei enthalten",
+      entry.kind === "npc" ? "den vollständigen NPC-Eintrag enthalten" : "den vollständigen Ort-Eintrag enthalten",
     onCall: counter.onCall,
   });
   return {
@@ -886,7 +883,13 @@ export async function runEntryPart(
       stub: result.stub,
       warnings: result.warnings,
       namingHints: checkDraftsNaming(
-        [{ path: stubPath(result.stub), markdown: result.stub.markdown }],
+        [
+          {
+            path: stubPath(result.stub),
+            properties: result.stub.properties,
+            body: result.stub.body,
+          },
+        ],
         plan.ctx.namingRules,
       ),
     },

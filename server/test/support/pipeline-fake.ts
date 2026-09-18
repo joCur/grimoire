@@ -1,41 +1,36 @@
-// The scripted provider of the generator tests, pipeline-aware (issue #102).
+// The scripted provider of the generator tests, pipeline-aware.
 //
-// Before this ticket a scene run was ONE provider call, so a test scripted one
-// batch reply per attempt: `useFake([badReply, goodReply])` meant "the first
-// answer is wrong, the second is right". The run is now the outline call plus
-// one call per scene and per suggested entry — but what a test WANTS to say is
-// still exactly that sentence, so the fake keeps the same script and routes it:
+// A scene run is the outline call plus one call per scene and per suggested
+// entry, but what a test WANTS to say is still "the first answer is wrong,
+// the second is right" — so the fake keeps one script per attempt and routes
+// it over the run's calls:
 //
 //   outline call   a SYNTHETIC outline derived from the scripted batch reply
 //                  (its scene ids/titles/types/locations and its entries).
 //                  Deriving it means a test does not have to hand-write an
-//                  outline to say something about a scene document — and a
-//                  batch reply whose ids are unusable still fails the run,
-//                  now at the outline step, with the same message.
+//                  outline to say something about a scene — and a batch reply
+//                  whose ids are unusable still fails the run, now at the
+//                  outline step, with the same message.
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
-//   scene part     the scripted reply's scene entry, as the REPLY OBJECT
-//                  `properties` (the entry's own properties,
-//                  parsed), `body`, and the batch reply's `warnings`.
+//   scene part     the scripted reply's scene entry, as the REPLY OBJECT:
+//                  `properties`, `body`, and the batch reply's `warnings`.
 //   entry part     the scripted reply's matching `entries` item, likewise.
 //   single call    the npc/augment run's scripted entry, likewise — a
 //                  reply that does NOT parse as a batch / `{ npc }` /
 //                  `{ entry }` object travels verbatim, which is what the
 //                  garbage and the truncation cases are about.
 //
-// The script keeps writing ENTRIES (`content`: markdown with a properties
-// block), because that is how a test says what a run is about in one literal.
-// The fake is what turns them into the object a schema-forced provider
-// delivers — so the correction turns, the replayed assistant turns and the
-// `rawReply` of an error body are all in the real shape. A `content` whose
-// properties block does not parse travels VERBATIM: that is a reply the run
-// has to fail on, and the failure is the test's subject.
+// A scripted entry is the PAIR an entry is (`{ properties, body }`, ADR #24),
+// so a script says in one literal exactly what the run is about and the fake
+// only has to add what a schema-forced provider adds: the `warnings` and, for
+// a key/value field, the list form the schema asks for. Nothing here renders
+// or parses an entry as one markdown text.
 //
 // Attempt N of a part reads script[N], so "bad, then good" still means one
-// correction turn — per part, which is the whole point of the ticket.
+// correction turn — per part.
 
-import { CORE_SCHEMA, load } from "js-yaml";
 import { PAIR_KEY, PAIR_VALUE, propertyFieldsFor } from "@grimoire/shared";
 import type {
   CompletionResult,
@@ -48,6 +43,12 @@ import type {
 /** A scripted reply: raw text, or text plus truncation/usage signals. */
 export type ScriptedReply = string | { text: string; truncated?: boolean; usage?: TokenUsage };
 
+/** One entry a script carries: the two halves of an entry. */
+export interface ScriptedEntry {
+  properties: Record<string, unknown>;
+  body: string;
+}
+
 export interface RecordedCall {
   req: GenerateRequest;
   corrections: CorrectionTurn[];
@@ -56,8 +57,8 @@ export interface RecordedCall {
 }
 
 interface BatchReply {
-  scenes: Array<{ content: string }>;
-  entries: Array<{ kind?: string; content: string }>;
+  scenes: Array<{ content: ScriptedEntry }>;
+  entries: Array<{ kind?: string; content: ScriptedEntry }>;
   warnings: string[];
 }
 
@@ -68,6 +69,19 @@ function textOf(reply: ScriptedReply): string {
 function completionOf(reply: ScriptedReply): CompletionResult {
   if (typeof reply === "string") return { text: reply, truncated: false };
   return { text: reply.text, truncated: reply.truncated ?? false, usage: reply.usage };
+}
+
+/** Is this value a scripted entry — both halves, in the right shape? */
+function isEntry(value: unknown): value is ScriptedEntry {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  const properties = entry.properties;
+  return (
+    properties !== null &&
+    typeof properties === "object" &&
+    !Array.isArray(properties) &&
+    typeof entry.body === "string"
+  );
 }
 
 /** The batch object inside a scripted reply, or null when there is none. */
@@ -87,18 +101,16 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
   const obj = parsed as Record<string, unknown>;
   if (!Array.isArray(obj.scenes)) return null;
   const scenes = obj.scenes.filter(
-    (s): s is { content: string } =>
-      s !== null && typeof s === "object" && typeof (s as { content?: unknown }).content === "string",
+    (s): s is { content: ScriptedEntry } =>
+      s !== null && typeof s === "object" && isEntry((s as { content?: unknown }).content),
   );
   if (scenes.length === 0) return null;
   return {
     scenes,
     entries: Array.isArray(obj.entries)
       ? obj.entries.filter(
-          (e): e is { kind?: string; content: string } =>
-            e !== null &&
-            typeof e === "object" &&
-            typeof (e as { content?: unknown }).content === "string",
+          (e): e is { kind?: string; content: ScriptedEntry } =>
+            e !== null && typeof e === "object" && isEntry((e as { content?: unknown }).content),
         )
       : [],
     warnings: Array.isArray(obj.warnings)
@@ -108,31 +120,19 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
 }
 
 /**
- * The REPLY OBJECT, built out of a scripted entry: the
- * properties block parsed into `properties`, everything below it as `body`,
- * plus the script's warnings. Returns null when the entry has no parseable
- * properties block — such a script is served verbatim, because a reply the
- * server cannot read is exactly what those cases test.
+ * The REPLY OBJECT of a scripted entry: its two halves plus the script's
+ * warnings — what a schema-forced provider delivers.
  *
  * `quickstats` (and any other key/value field) is turned into the `{ key,
  * value }` LIST the schema asks for — a free mapping cannot be expressed in
  * strict mode (shared/entry-schema.ts).
  */
 export function entryReply(
-  content: string,
+  entry: ScriptedEntry,
   warnings: readonly string[] = [],
   kind: "scene" | "npc" | "location" = "scene",
-): string | null {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(content);
-  if (match === null) return null;
-  let data: unknown;
-  try {
-    data = load(match[1]!, { schema: CORE_SCHEMA });
-  } catch {
-    return null;
-  }
-  if (data === null || typeof data !== "object" || Array.isArray(data)) return null;
-  const properties = { ...(data as Record<string, unknown>) };
+): string {
+  const properties = { ...entry.properties };
   for (const field of propertyFieldsFor(kind) ?? []) {
     if (field.control !== "pairs") continue;
     const value = properties[field.key];
@@ -141,20 +141,7 @@ export function entryReply(
       ([key, item]) => ({ [PAIR_KEY]: key, [PAIR_VALUE]: String(item) }),
     );
   }
-  return JSON.stringify({
-    properties,
-    body: (match[2] ?? "").replace(/^\n+/, "").replace(/\s*$/, "\n"),
-    warnings: [...warnings],
-  });
-}
-
-/** The reply object of a scripted entry, or the entry verbatim. */
-function replyOrVerbatim(
-  content: string,
-  warnings: readonly string[],
-  kind: "scene" | "npc" | "location",
-): string {
-  return entryReply(content, warnings, kind) ?? content;
+  return JSON.stringify({ properties, body: entry.body, warnings: [...warnings] });
 }
 
 /**
@@ -163,7 +150,7 @@ function replyOrVerbatim(
  * can say any of them. Null when the reply is not such an object, and then it
  * travels verbatim.
  */
-function singleEntry(reply: ScriptedReply): { content: string; warnings: string[] } | null {
+function singleEntry(reply: ScriptedReply): { content: ScriptedEntry; warnings: string[] } | null {
   if (typeof reply !== "string" && reply.truncated === true) return null;
   const raw = textOf(reply);
   const start = raw.indexOf("{");
@@ -181,7 +168,7 @@ function singleEntry(reply: ScriptedReply): { content: string; warnings: string[
     const value = obj[key];
     if (value === null || typeof value !== "object") continue;
     const content = (value as { content?: unknown }).content;
-    if (typeof content !== "string") continue;
+    if (!isEntry(content)) continue;
     return {
       content,
       warnings: Array.isArray(obj.warnings)
@@ -192,17 +179,17 @@ function singleEntry(reply: ScriptedReply): { content: string; warnings: string[
   return null;
 }
 
-/** One `key: value` line of a document's properties block. */
-function property(document: string, key: string): string | undefined {
-  const match = new RegExp(`^${key}:[ \\t]*(.+)$`, "m").exec(document);
-  return match?.[1]?.trim();
+/** One property of a scripted entry, as a string — the outline reads these. */
+function property(entry: ScriptedEntry, key: string): string | undefined {
+  const value = entry.properties[key];
+  return typeof value === "string" && value !== "" ? value : undefined;
 }
 
 /**
  * The first and the last sentence of the run's source text — the verbatim
  * quotes the outline names so the server's excerpt cut actually MATCHES. Every
  * scene gets the same pair, which cuts the whole source: a scripted test is
- * about the documents, not about which paragraph a scene came from, and a
+ * about the entries, not about which paragraph a scene came from, and a
  * fallback warning on every single case would be noise.
  */
 function excerptOf(sourceText: string): { first: string; last: string } | undefined {
@@ -256,8 +243,8 @@ function classify(req: GenerateRequest): { kind: "outline" | "scene" | "entry" |
     return { kind: "entry", id: req.context.targetId ?? "" };
   }
   // Which scene this call writes is its own section of the prompt's VARIABLE
-  // half since the review of issue #102 — inside the outline block it made
-  // every part a different cached prefix.
+  // half: inside the outline block it made every part a different cached
+  // prefix.
   const assigned = /^([a-z0-9-]+) /.exec(req.assignment ?? "");
   return { kind: "scene", id: assigned?.[1] ?? "" };
 }
@@ -315,7 +302,7 @@ export class PipelineFake implements LLMProvider {
         // run and an npc augment are the ones with key/value fields, so npc
         // is the honest default here (a scene/location entry simply has
         // no `pairs` field to convert).
-        text: replyOrVerbatim(entry.content, entry.warnings, "npc"),
+        text: entryReply(entry.content, entry.warnings, "npc"),
       };
     }
 
@@ -330,7 +317,7 @@ export class PipelineFake implements LLMProvider {
       const scene =
         batch.scenes.find((doc) => property(doc.content, "id") === part.id) ?? batch.scenes[0];
       return {
-        text: replyOrVerbatim(scene!.content, batch.warnings, "scene"),
+        text: entryReply(scene!.content, batch.warnings, "scene"),
         truncated: false,
         ...(typeof scripted === "string" || scripted.usage === undefined
           ? {}
@@ -343,7 +330,7 @@ export class PipelineFake implements LLMProvider {
       if (parseBatch(scripted) === null) return completionOf(scripted);
       // Otherwise the outline is derived from the script's FINAL intent — the
       // last reply that carries a batch object. A script says "first this
-      // document is wrong, then it is right"; the set of scenes and entries
+      // entry is wrong, then it is right"; the set of scenes and entries
       // the run is ABOUT is what the right one names.
       const batch = this.lastBatch();
       if (batch === null) return completionOf(scripted);
@@ -354,16 +341,16 @@ export class PipelineFake implements LLMProvider {
     // prompt's own schema.
     const batch = parseBatch(scripted) ?? this.lastBatch();
     if (batch === null) return completionOf(scripted);
-    const byId = (e: { content: string }) => property(e.content, "id") === part.id;
+    const byId = (e: { content: ScriptedEntry }) => property(e.content, "id") === part.id;
     // This attempt's own entry when it has one — by id, else the first one it
-    // carries, because an entry whose id is MISSING is exactly the document a
-    // test wants served. Only a reply with no entries at all falls back to
-    // the script's final intent.
+    // carries, because an entry whose id is MISSING is exactly the one a test
+    // wants served. Only a reply with no entries at all falls back to the
+    // script's final intent.
     const entry =
       batch.entries.find(byId) ?? batch.entries[0] ?? this.lastBatch()?.entries.find(byId);
     if (entry === undefined) return completionOf(scripted);
     return {
-      text: replyOrVerbatim(entry.content, [], entry.kind === "location" ? "location" : "npc"),
+      text: entryReply(entry.content, [], entry.kind === "location" ? "location" : "npc"),
       truncated: false,
       ...(typeof scripted === "string" || scripted.usage === undefined
         ? {}

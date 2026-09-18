@@ -2,9 +2,8 @@
 // (server/src/store/paths.ts is the schema): what the app links to and what
 // every response's `path` is.
 //
-// Its own module on purpose: parse.ts pulls in gray-matter, which has no
-// business in a browser bundle, so the app imports `@grimoire/shared/kind`
-// (types plus this function, no runtime dependencies).
+// Its own module on purpose: the app imports `@grimoire/shared/kind` — types
+// plus this function, no runtime dependencies — instead of the package root.
 
 import type { EntityKind } from "./types";
 

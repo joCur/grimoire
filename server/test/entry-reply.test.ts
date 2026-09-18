@@ -1,9 +1,9 @@
 // The entry reply: one schema-forced JSON object per kind.
 //
 // What this suite is about is the SEAM between the model and the store: the
-// object comes in, the normalized properties and the composed markdown come
-// out, and everything that is content — a kebab id, a known scene type,
-// references that resolve — belongs to the validators (generator.test.ts,
+// object comes in, the normalized properties and the body come out, and
+// everything that is content — a kebab id, a known scene type, references
+// that resolve — belongs to the validators (generator.test.ts,
 // generate-pipeline.test.ts, augment.test.ts).
 //
 // So the cases here are the ones the schema cannot cover:
@@ -11,19 +11,16 @@
 //     `response_format`, a model that answered prose or the raw entry the
 //     earlier slices of this ticket asked for),
 //   * the tolerant way in — a fence, prose around it, one `jsonrepair` pass,
-//   * `null` read as „not given", so the rendered properties block has no empty
-//     keys in it,
+//   * `null` read as „not given", so the properties carry no empty keys,
 //   * the `{ key, value }` list folded back into the `quickstats` mapping,
 //   * the PO case: a body whose German quotation marks are closed
 //     with an ASCII `"` travels byte for byte, because the transport escapes
 //     it and nobody hand-writes the JSON any more.
 
 import { describe, expect, test } from "bun:test";
-import { parseMarkdown } from "@grimoire/shared";
 import {
   NOT_AN_ENTRY_ERROR,
   REPAIRED_ENTRY_WARNING,
-  composeEntry,
   parseEntryReply,
   parseJsonReply,
   type EntryReply,
@@ -75,38 +72,30 @@ function errors(
 }
 
 describe("parseEntryReply", () => {
-  test("reads the object and composes the entry the server stores", () => {
+  test("reads the object as the two halves the store takes", () => {
     const reply = read(sceneObject());
     expect(reply.properties.id).toBe("night-watch-quay");
+    expect(reply.properties.title).toBe("Nachtwache am Kai");
+    expect(reply.properties.status).toBe("draft");
+    expect(reply.body.trim()).toBe(SCENE_BODY.trim());
     expect(reply.warnings).toEqual(["Der Quelltext nennt keinen DC — DC 13 gesetzt."]);
-
-    const markdown = composeEntry(reply);
-    // A real properties block, built by the store's own renderer — and the
-    // body below it, unchanged.
-    expect(markdown.startsWith("---\nid: night-watch-quay\n")).toBe(true);
-    const parsed = parseMarkdown(markdown, "01-salzhafen/night-watch-quay", 0);
-    expect(parsed.properties.title).toBe("Nachtwache am Kai");
-    expect(parsed.properties.status).toBe("draft");
-    expect(parsed.body.trim()).toBe(SCENE_BODY.trim());
   });
 
   test("the body survives the PO spelling byte for byte", () => {
     // The whole reason the reply is an object the TRANSPORT serializes: an
     // ASCII `"` inside a German quotation ends a hand-written JSON string,
-    // and answering with the rendered entry instead would trade that for
-    // guessing where the properties block ends. Here it is simply a
-    // character in a string.
+    // and answering with the entry as one markdown text would trade that for
+    // guessing where the properties end. Here it is simply a character in a
+    // string.
     expect(read(sceneObject()).body).toContain(PO_LINE);
-    expect(composeEntry(read(sceneObject()))).toContain(PO_LINE);
   });
 
-  test("a null value means the key is left out of the block", () => {
+  test("a null value means the key is left out", () => {
     const reply = read(sceneObject());
     // `trigger` and `location` were null, `handouts` an empty list.
     expect(Object.hasOwn(reply.properties, "trigger")).toBe(false);
     expect(Object.hasOwn(reply.properties, "location")).toBe(false);
     expect(Object.hasOwn(reply.properties, "handouts")).toBe(false);
-    expect(composeEntry(reply)).not.toContain("trigger:");
   });
 
   test("the properties keep the field list's order", () => {
@@ -133,10 +122,9 @@ describe("parseEntryReply", () => {
       warnings: [],
     });
     const reply = read(npc, "npc");
+    // The VALUES stay strings, which is the whole point of the detour: a
+    // bare `+2` would lose its plus on the way to a number.
     expect(reply.properties.quickstats).toEqual({ wis: "+2", "passive-perception": "13" });
-    // And the renderer quotes it, which is the whole point of the detour: a
-    // bare `+2` would lose its plus to YAML.
-    expect(composeEntry(reply)).toContain("quickstats: {wis: '+2'");
   });
 
   test("a fence, prose around it and a single repair all cost no correction turn", () => {
@@ -184,14 +172,13 @@ describe("parseEntryReply", () => {
     );
   });
 
-  test("a nullable field the schema HAS falls back to the parser's default", () => {
+  test("a nullable field the schema HAS falls back to the kind's default", () => {
     // Scene `type` and npc `status` are nullable in the schema (the prompt's
     // „nicht gegeben → null"), and the validators reject an absent one — so
-    // „null" has to mean what the shared parser has always made of such a
-    // entry, spelled out in the properties instead of left to every reader.
+    // „null" has to mean what such an entry has always meant, spelled out in
+    // the properties instead of left to every reader.
     const scene = read(sceneObject({ type: null }));
     expect(scene.properties.type).toBe("planned");
-    expect(composeEntry(scene)).toContain("type: planned");
 
     const npc = JSON.stringify({
       properties: { id: "grella", name: "Grella", status: null },
@@ -235,7 +222,6 @@ describe("parseEntryReply", () => {
     );
     const augmented = read(sceneObject({ mood: "düster" }), "scene", "augment");
     expect(Object.hasOwn(augmented.properties, "mood")).toBe(false);
-    expect(composeEntry(augmented)).not.toContain("mood");
     // …and it is still REPORTED, for the one validator that has a rule about
     // such a key (a location may not carry a `status`).
     expect(augmented.ignored).toEqual(["mood"]);

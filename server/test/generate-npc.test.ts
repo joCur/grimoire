@@ -20,8 +20,7 @@ import type {
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
-import { composeEntry } from "../src/entry-reply";
-import { entryReply } from "./support/pipeline-fake";
+import { entryReply, type ScriptedEntry } from "./support/pipeline-fake";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -121,69 +120,79 @@ const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
 // --- fixtures -------------------------------------------------------------------
 
 /** A prompt-conform NPC file for an npc the example campaign does NOT have. */
-function npcMarkdown(
+function npcDraft(
   over: {
     id?: string;
     name?: string | null;
     status?: string | null;
     chapter?: boolean;
-    quickstats?: string;
+    quickstats?: Record<string, unknown>;
     knowledge?: string;
     relations?: string[];
     notes?: string;
   } = {},
-): string {
+  drop: readonly string[] = [],
+): ScriptedEntry {
   const status = over.status === undefined ? "alive" : over.status;
   const name = over.name === undefined ? "Grella" : over.name;
-  return [
-    "---",
-    `id: ${over.id ?? "grella"}`,
-    ...(name === null ? [] : [`name: ${name}`]),
-    "role: Schmugglerin mit eigenen Plänen",
-    ...(over.chapter === true ? ["chapter: 01-salzhafen"] : []),
-    ...(status === null ? [] : [`status: ${status}`]),
-    'statblock: "Roll20: Grella"',
-    `quickstats: ${over.quickstats ?? '{ insight: "+3", deception: "+5" }'}`,
-    "voice: schnell, spöttisch — wird höflich, wenn sie lügt",
-    "appearance: geflickter Ölmantel, rußige Finger",
-    "---",
-    "",
-    "## Will",
-    "",
-    "Die Route durch die Nordbucht für sich allein — ohne Fenn.",
-    "",
-    "## Weiß",
-    "",
-    over.knowledge ?? "> [!secret] Kennt ein zweites Versteck unter dem Kai.",
-    "",
-    "## Beziehungen",
-    "",
-    ...(over.relations ?? ["- [[jorna]]: schuldet ihr einen Gefallen"]),
-    "",
-    "## Notizen",
-    "",
-    over.notes ?? "<!-- wird von der App im Review-Schritt befüllt -->",
-    "",
-  ].join("\n");
+  return without(
+    {
+      properties: {
+        id: over.id ?? "grella",
+        ...(name === null ? {} : { name }),
+        role: "Schmugglerin mit eigenen Plänen",
+        ...(over.chapter === true ? { chapter: "01-salzhafen" } : {}),
+        ...(status === null ? {} : { status }),
+        statblock: "Roll20: Grella",
+        quickstats: over.quickstats ?? { insight: "+3", deception: "+5" },
+        voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
+        appearance: "geflickter Ölmantel, rußige Finger",
+      },
+      body: [
+        "## Will",
+        "",
+        "Die Route durch die Nordbucht für sich allein — ohne Fenn.",
+        "",
+        "## Weiß",
+        "",
+        over.knowledge ?? "> [!secret] Kennt ein zweites Versteck unter dem Kai.",
+        "",
+        "## Beziehungen",
+        "",
+        ...(over.relations ?? ["- [[jorna]]: schuldet ihr einen Gefallen"]),
+        "",
+        "## Notizen",
+        "",
+        over.notes ?? "<!-- wird von der App im Review-Schritt befüllt -->",
+        "",
+      ].join("\n"),
+    },
+    drop,
+  );
+}
+
+/** The same draft without the named properties — a reply that omits a key. */
+function without(entry: ScriptedEntry, keys: readonly string[]): ScriptedEntry {
+  const properties = { ...entry.properties };
+  for (const key of keys) delete properties[key];
+  return { ...entry, properties };
 }
 
 /**
  * The reply object: the entry itself —
  * no address (the server addresses the npc as `npcs/<id>` with the
- * id from the properties). Written from the ENTRY a case describes and
- * turned into the reply object (support/pipeline-fake
- * `entryReply`); an entry that cannot be read is served verbatim,
- * because that is what such a case is about.
+ * id from the properties). Written from the DRAFT a case describes and
+ * turned into the reply object (support/pipeline-fake `entryReply`).
  */
-function npcReply(over: { content?: string; warnings?: string[] } = {}): string {
-  const entry = over.content ?? npcMarkdown();
+function npcReply(over: { content?: ScriptedEntry; warnings?: string[] } = {}): string {
+  const entry = over.content ?? npcDraft();
   const warnings = over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"];
-  return entryReply(entry, warnings, "npc") ?? entry;
+  return entryReply(entry, warnings, "npc");
 }
 
 /** A reply for a specific id (so a test that WRITES does not collide later). */
-function replyFor(id: string, over: Parameters<typeof npcMarkdown>[0] = {}): string {
-  return npcReply({ content: npcMarkdown({ id, ...over }) });
+function replyFor(id: string, over: Parameters<typeof npcDraft>[0] = {}): string {
+  return npcReply({ content: npcDraft({ id, ...over }) });
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -253,25 +262,19 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     const result = (await res.json()) as GenerateNpcResult;
 
     expect(result.npc.path).toBe("npcs/grella");
-    // The markdown is the SERVER's composition (the model
-    // sends properties and body, never a rendered block), so it is the
-    // store's own rendering — same keys, same body, the renderer's quoting.
-    expect(result.npc.markdown).toBe(
-      composeEntry({
-        properties: {
-          id: "grella",
-          name: "Grella",
-          role: "Schmugglerin mit eigenen Plänen",
-          status: "alive",
-          statblock: "Roll20: Grella",
-          quickstats: { insight: "+3", deception: "+5" },
-          voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
-          appearance: "geflickter Ölmantel, rußige Finger",
-        },
-        body: npcMarkdown().split("---\n")[2]!.replace(/^\n+/, ""),
-        warnings: [],
-      }),
-    );
+    // The draft is the PAIR the reply carried — the properties in contract
+    // order, the body verbatim. Nothing renders it into one text on the way.
+    expect(result.npc.properties).toEqual({
+      id: "grella",
+      name: "Grella",
+      role: "Schmugglerin mit eigenen Plänen",
+      status: "alive",
+      statblock: "Roll20: Grella",
+      quickstats: { insight: "+3", deception: "+5" },
+      voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
+      appearance: "geflickter Ölmantel, rußige Finger",
+    });
+    expect(result.npc.body).toBe(npcDraft().body);
     expect(result.npc.properties.id).toBe("grella");
     expect(result.npc.properties.name).toBe("Grella");
     expect(result.npc.properties.status).toBe("alive");
@@ -323,15 +326,14 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain('"die-graue"');
     // the correction turn names the NPC entry, not "alle Szenen und Stubs"
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständige NPC-Datei");
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständigen NPC-Eintrag");
   });
 
   test("an npc reply without an id is a correction turn, not the id npc", async () => {
-    // The reply carries NO `id`. The shared parser degrades a missing id to
-    // the address's last segment, so parsing the reply under the label
-    // `"npc"` — a kebab slug that passes the id pattern — would silently
-    // produce `npcs/npc`.
-    const bad = npcReply({ content: npcMarkdown().replace("id: grella\n", "") });
+    // The reply carries NO `id`, and the server addresses an npc by exactly
+    // that id — so there is nothing to fall back to and the missing key has
+    // to be the error it is.
+    const bad = npcReply({ content: npcDraft({}, ["id"]) });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
@@ -347,7 +349,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
   // --- the validation rules (each one a correction turn) ------------------------
 
   test("a relationship to an unknown npc triggers a correction turn, then succeeds", async () => {
-    const bad = npcReply({ content: npcMarkdown({ relations: ["- niemand: alter Feind"] }) });
+    const bad = npcReply({ content: npcDraft({ relations: ["- niemand: alter Feind"] }) });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
@@ -365,7 +367,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   test("a relationship line that is not `- [[<npc-id>]]: text` is an error", async () => {
     const errors = await firstValidationError([
-      npcReply({ content: npcMarkdown({ relations: ["- Jorna, die Hafenmeisterin"] }) }),
+      npcReply({ content: npcDraft({ relations: ["- Jorna, die Hafenmeisterin"] }) }),
     ]);
     expect(errors).toContain("ist keine \"- [[<npc-id>]]: <Text>\"-Zeile");
   });
@@ -376,7 +378,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     // after the brackets: a line that names an existing npc bare is the same
     // statement in the same place and must not come back as a correction.
     const fake = useFake([
-      npcReply({ content: npcMarkdown({ relations: ["- jorna: alte Bekannte"] }) }),
+      npcReply({ content: npcDraft({ relations: ["- jorna: alte Bekannte"] }) }),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(1);
@@ -384,14 +386,14 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   test("prose inside ## Beziehungen degrades instead of erroring", async () => {
     const fake = useFake([
-      npcReply({ content: npcMarkdown({ relations: ["Keine belegten Beziehungen."] }) }),
+      npcReply({ content: npcDraft({ relations: ["Keine belegten Beziehungen."] }) }),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(1);
   });
 
   test("an invalid status triggers a correction turn, then succeeds", async () => {
-    const bad = npcReply({ content: npcMarkdown({ status: "draft" }) });
+    const bad = npcReply({ content: npcDraft({ status: "draft" }) });
     const fake = useFake([bad, npcReply()]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(2);
@@ -404,27 +406,29 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
   test("a MISSING status is read as \"unknown\" — the schema allows null", async () => {
     // `status` is nullable in the reply schema (the prompt's „nicht gegeben →
     // null"), so an absent one is a legal answer and means what a status-less
-    // npc entry has always meant to the shared parser: `unknown`. Hard-failing
+    // npc entry has always meant: `unknown`. Hard-failing
     // here would make a schema-conform reply cost a correction turn.
-    const fake = useFake([npcReply({ content: npcMarkdown({ status: null }) })]);
+    const fake = useFake([npcReply({ content: npcDraft({ status: null }) })]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(1);
     const result = (await res.json()) as GenerateNpcResult;
-    expect(result.npc.markdown).toContain("status: unknown");
     expect(result.npc.properties.status).toBe("unknown");
   });
 
   test("only [!secret] inside ## Weiß — other known callouts elsewhere are fine", async () => {
     const errors = await firstValidationError([
-      npcReply({ content: npcMarkdown({ knowledge: "> [!note] Nur ein DM-Hinweis." }) }),
+      npcReply({ content: npcDraft({ knowledge: "> [!note] Nur ein DM-Hinweis." }) }),
     ]);
     expect(errors).toContain("## Weiß: nur [!secret] erlaubt");
 
     // the same callout OUTSIDE the section passes in one call
     const fake = useFake([
       npcReply({
-        content: `${npcMarkdown()}\n## Auftreten\n\n> [!note] Grella taucht erst nach der Bucht auf.\n`,
+        content: {
+          ...npcDraft(),
+          body: `${npcDraft().body}\n## Auftreten\n\n> [!note] Grella taucht erst nach der Bucht auf.\n`,
+        },
       }),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
@@ -433,7 +437,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   test("an unknown callout anywhere is an error", async () => {
     const errors = await firstValidationError([
-      npcReply({ content: npcMarkdown({ knowledge: "> [!danger] Sie lügt immer." }) }),
+      npcReply({ content: npcDraft({ knowledge: "> [!danger] Sie lügt immer." }) }),
     ]);
     expect(errors).toContain('unknown callout "[!danger]"');
   });
@@ -455,12 +459,12 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   test("an invented chapter and a filled ## Notizen are errors", async () => {
     expect(
-      await firstValidationError([npcReply({ content: npcMarkdown({ chapter: true }) })]),
+      await firstValidationError([npcReply({ content: npcDraft({ chapter: true }) })]),
     ).toContain('kein "chapter"');
 
     expect(
       await firstValidationError([
-        npcReply({ content: npcMarkdown({ notes: "Sie könnte die Schwester von Fenn sein." }) }),
+        npcReply({ content: npcDraft({ notes: "Sie könnte die Schwester von Fenn sein." }) }),
       ]),
     ).toContain("## Notizen bleibt leer");
   });
@@ -470,7 +474,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     // that is what has to be usable as one.
     for (const badId of ["Grella", "grella.txt", "grella/2", "trailing-"]) {
       expect(
-        await firstValidationError([npcReply({ content: npcMarkdown({ id: badId }) })]),
+        await firstValidationError([npcReply({ content: npcDraft({ id: badId }) })]),
       ).toContain("kebab-case id");
     }
   });
@@ -484,7 +488,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     // belongs, on the READ path for files a DM hand-wrote.
     expect(
       await firstValidationError([
-        npcReply({ content: npcMarkdown({ id: "namenlos", name: null }) }),
+        npcReply({ content: npcDraft({ id: "namenlos", name: null }) }),
       ]),
     ).toContain('"properties.name" fehlt');
   });
@@ -495,10 +499,10 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     // des Schemas", and the message says which three keys one has.
     for (const raw of [
       "kein Objekt",
-      npcMarkdown(),
+      "## Will\n\nnur Text, kein Objekt\n",
       "",
       JSON.stringify([{ properties: { id: "grella" } }]),
-      JSON.stringify({ npc: { content: npcMarkdown() } }),
+      JSON.stringify({ npc: { content: npcDraft() } }),
     ]) {
       expect(await firstValidationError([raw])).toContain("kein Objekt des Schemas");
     }
@@ -522,9 +526,11 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(1);
     const result = (await res.json()) as GenerateNpcResult;
-    // The entry is the SERVER's composition, and the warning is the run's.
-    expect(result.npc.markdown.startsWith("---\nid: grella")).toBe(true);
-    expect(result.npc.markdown).not.toContain("```");
+    // The draft is the reply's own pair, and the warning is the run's — the
+    // fence around the reply travels nowhere.
+    expect(result.npc.properties.id).toBe("grella");
+    expect(result.npc.body).toBe(npcDraft().body);
+    expect(result.npc.body).not.toContain("```");
     expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
   });
 
@@ -605,7 +611,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   test("usage is summed over the correction turn", async () => {
     const fake = useFake([
-      { text: npcReply({ content: npcMarkdown({ status: "draft" }) }), usage: usage(1000, 100) },
+      { text: npcReply({ content: npcDraft({ status: "draft" }) }), usage: usage(1000, 100) },
       { text: npcReply(), usage: usage(2000, 250) },
     ]);
     const res = await generateNpc(npcBody);
@@ -617,7 +623,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   test("LLM_CORRECTION_TURNS bounds the NPC run as well", async () => {
     process.env.LLM_CORRECTION_TURNS = "2";
-    const bad = npcReply({ content: npcMarkdown({ status: "draft" }) });
+    const bad = npcReply({ content: npcDraft({ status: "draft" }) });
     const fake = useFake([bad, bad, bad]);
     expect((await generateNpc(npcBody)).status).toBe(422);
     expect(fake.calls).toHaveLength(3);
@@ -758,7 +764,7 @@ describe("npc generate jobs", () => {
   test("a review edit accepts the npc draft path and rejects anything else", async () => {
     useFake([replyFor("job-drafts")]);
     await generateNpc(npcBody);
-    const edited = `${npcMarkdown({ id: "job-drafts" })}\nHandgeschriebene Ergänzung.\n`;
+    const edited = `${npcDraft({ id: "job-drafts" }).body}\nHandgeschriebene Ergänzung.\n`;
 
     // The review PATCH replaced `PUT …/job/drafts` and checks the same
     // known-path rule.
@@ -767,7 +773,7 @@ describe("npc generate jobs", () => {
       return app.request(`/api/campaigns/beispiel/generate/job/${current!.id}/review`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rev: current!.rev ?? 0, edits: { [path]: edited } }),
+        body: JSON.stringify({ rev: current!.rev ?? 0, edits: { [path]: { body: edited } } }),
       });
     };
 
@@ -776,9 +782,9 @@ describe("npc generate jobs", () => {
     expect(res.status).toBe(200);
 
     const job = await fetchJob();
-    expect(job!.draftEdits).toEqual({ "npcs/job-drafts": edited });
+    expect(job!.draftEdits).toEqual({ "npcs/job-drafts": { body: edited } });
     // the result itself is untouched — the edit sits next to it
-    expect(job!.npcResult!.npc.markdown).not.toBe(edited);
+    expect(job!.npcResult!.npc.body).not.toBe(edited);
   });
 });
 
@@ -835,7 +841,7 @@ describe("apply an npc draft", () => {
     // …and a client that posts the draft anyway gets a 409 with the path
     const before = await read("npcs/apply-happy");
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      npc: { path: "npcs/apply-happy", markdown: npcMarkdown({ id: "apply-happy" }) },
+      npc: { path: "npcs/apply-happy", ...npcDraft({ id: "apply-happy" }) },
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
@@ -850,21 +856,21 @@ describe("apply an npc draft", () => {
 
   test("400 re-validation: path, id, status, properties — nothing written", async () => {
     const cases: Array<[string, unknown]> = [
-      ["path outside npcs/", { path: "locations/x", markdown: npcMarkdown({ id: "x" }) }],
-      ["path traversal", { path: "npcs/../../etc/x", markdown: npcMarkdown({ id: "x" }) }],
-      ["uppercase id", { path: "npcs/Grella", markdown: npcMarkdown({ id: "Grella" }) }],
-      ["id mismatch", { path: "npcs/anders", markdown: npcMarkdown({ id: "grella" }) }],
-      ["no properties", { path: "npcs/anders", markdown: "## Will\n\nnur Text\n" }],
+      ["path outside npcs/", { path: "locations/x", ...npcDraft({ id: "x" }) }],
+      ["path traversal", { path: "npcs/../../etc/x", ...npcDraft({ id: "x" }) }],
+      ["uppercase id", { path: "npcs/Grella", ...npcDraft({ id: "Grella" }) }],
+      ["id mismatch", { path: "npcs/anders", ...npcDraft({ id: "grella" }) }],
+      ["properties of the wrong shape", { path: "npcs/anders", properties: "id: anders", body: "" }],
       [
         "invalid status",
-        { path: "npcs/anders", markdown: npcMarkdown({ id: "anders", status: "draft" }) },
+        { path: "npcs/anders", ...npcDraft({ id: "anders", status: "draft" }) },
       ],
       [
         "missing status",
-        { path: "npcs/anders", markdown: npcMarkdown({ id: "anders", status: null }) },
+        { path: "npcs/anders", ...npcDraft({ id: "anders", status: null }) },
       ],
-      ["empty markdown", { path: "npcs/anders", markdown: "" }],
-      ["unknown key", { path: "npcs/anders", markdown: npcMarkdown(), extra: 1 }],
+      ["body of the wrong shape", { path: "npcs/anders", properties: {}, body: 7 }],
+      ["unknown key", { path: "npcs/anders", ...npcDraft(), extra: 1 }],
       ["not an object", "npcs/anders"],
     ];
     for (const [what, npc] of cases) {

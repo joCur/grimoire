@@ -298,7 +298,7 @@ describe("GET /api/campaigns/:campaign/session", () => {
   });
 
   test("a DATE-ONLY `started` keeps a usable epoch time", async () => {
-    // A full YAML timestamp (js-yaml only reads the seconds form as a Date)
+    // A full timestamp, to the second
     // at exactly midnight is indistinguishable from a date-only value, so the
     // migration stored the DEGRADED string `yyyy-mm-dd` (shared/src/parse.ts)
     // — the only way this shape reaches the API. startedMs must not degrade

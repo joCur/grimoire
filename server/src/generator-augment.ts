@@ -7,7 +7,9 @@
 // naming check. Only three things differ, and they are the whole module:
 //
 //   1. the prompt carries the existing entry COMPLETE (properties + body)
-//      plus the DM's instruction, under the augmentation rule of
+//      — as prompt text, formatted by the transport (llm-provider.ts), never
+//      as a storage format — plus the DM's instruction, under the
+//      augmentation rule of
 //      generator/augment-system-prompt.md ("ergänze; Vorhandenes nur ändern,
 //      wenn Quellmaterial/Anweisung es verlangt"),
 //   2. the reply is turned into a PROPOSAL rather than into a draft entry:
@@ -50,10 +52,10 @@ import {
   withNamingHints,
   type CampaignContext,
 } from "./generator";
+import type { CheckedDraft } from "./naming-check";
 import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
-import { readParsedFile } from "./store/read";
-import { renderRaw } from "./store/render";
+import { readEntry } from "./store/read";
 import { patchEntry } from "./store/write";
 
 /** The correction turn's tail — what a corrected reply must still contain. */
@@ -72,7 +74,7 @@ const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
 
 /**
  * The cheap request checks of an augment target, without touching the LLM:
- * an unsafe address or an unknown entry answer through `readParsedFile`
+ * an unsafe address or an unknown entry answer through `readEntry`
  * (400/404), a kind that has no augment prompt answers 400.
  *
  * Exported for the same reason `assertGenerateTarget` is: POST
@@ -83,7 +85,7 @@ export async function readAugmentTarget(
   campaign: string,
   rel: string,
 ): Promise<{ kind: AugmentKind; stored: EntryResponse }> {
-  const stored = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
+  const stored = await readEntry(campaign, rel); // 400 unsafe, 404 unknown
   if (!isAugmentKind(stored.kind)) {
     throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc, location or scene only`);
   }
@@ -154,8 +156,8 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  *   * `## Beziehungen` is prose and nothing checks it at all.
  *
  * What IS checked is what would make the entry unreadable or would break the
- * data contract: parseable properties, an unchanged id, only known callouts,
- * a legal status per kind, quoted quickstats.
+ * data contract: an unchanged id, only known callouts, a legal status per
+ * kind, quoted quickstats.
  */
 function kindErrors(
   kind: AugmentKind,
@@ -166,7 +168,7 @@ function kindErrors(
   ignored: readonly string[] = [],
 ): void {
   if (kind === "npc") {
-    for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
+    for (const msg of npcStatusErrors(fm, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
     // Only a quickstats the proposal CHANGES is checked. The rule ("+2" as a
     // quoted string, or YAML eats the plus) is about what a MODEL writes; a
     // campaign that carries bare numbers from its own history — the example
@@ -372,9 +374,8 @@ export async function runAugment(
       sourceText,
       existingEntry: {
         path: target.stored.path,
-        // The prompt needs one coherent markdown text, so the stored entry's
-        // properties and body are rendered back together here.
-        markdown: renderRaw(target.stored.properties, target.stored.body),
+        properties: target.stored.properties,
+        body: target.stored.body,
       },
       ...(instruction === "" ? {} : { instruction }),
       // Forced like every other reply — in "augment" mode, which
@@ -388,12 +389,8 @@ export async function runAugment(
   });
   // The naming check runs on the PROPOSAL, as hints — never
   // a reason to fail a run. It reads the proposed entry, because that is
-  // the text the DM is about to accept.
-  return withNamingHints(
-    result,
-    [{ path: result.path, markdown: proposedEntry(result) }],
-    ctx.namingRules,
-  );
+  // what the DM is about to accept.
+  return withNamingHints(result, [proposedEntry(result)], ctx.namingRules);
 }
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
@@ -402,18 +399,19 @@ function chapterOf(stored: EntryResponse): string {
 }
 
 /**
- * The proposed body under the proposed properties — what the check reads.
+ * The proposed entry as the naming check reads it: the proposed body under
+ * the proposed properties, the two halves the accept would write.
  *
- * The properties go through the STORE'S OWN renderer, not through
- * `String(value)`: a list, a mapping or a `role` that contains ": " produces
- * YAML the parser cannot read, and the whole block then degrades into the
- * body — every hint would land on `body` with a line number that points at
- * nothing. Same renderer as a written entry, so the check reads the entry
- * the DM is about to accept.
+ * Only the keys the proposal CHANGES are here — that is what the proposal
+ * is. A key it leaves alone keeps a value the DM authored, and a hint about
+ * one of those would be about the campaign rather than about this run.
  */
-function proposedEntry(result: AugmentResult): string {
-  const properties = Object.fromEntries(result.properties.map((p) => [p.key, p.proposed]));
-  return renderRaw(properties, result.proposedBody);
+function proposedEntry(result: AugmentResult): CheckedDraft {
+  return {
+    path: result.path,
+    properties: Object.fromEntries(result.properties.map((p) => [p.key, p.proposed])),
+    body: result.proposedBody,
+  };
 }
 
 // --- accepting ---------------------------------------------------------------

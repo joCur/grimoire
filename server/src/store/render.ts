@@ -1,8 +1,7 @@
 // Rows → the API's entry shapes.
 //
-// Every read endpoint answers `ParsedFile`/`EntryResponse`: an address, a
-// `properties` mapping, a markdown body, and the concurrency token the client
-// sends back.
+// Every read endpoint answers an `EntryResponse`: an address, a `properties`
+// mapping, a markdown body, and the concurrency token the client sends back.
 //
 // Three rules hold this together:
 //
@@ -10,8 +9,8 @@
 //      nothing beside it: a stored entry has exactly the fields the contract
 //      names (db/schema.ts rule 1). The display-name fallbacks stay
 //      (`title`/`name` fall back to the id), applied once, here.
-//   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence. It is
-//      the editor's display value; no byte guarantees are made or needed.
+//   2. THE BODY IS A DETERMINISTIC RENDERING, not a stored byte sequence. It
+//      is the editor's display value; no byte guarantees are made or needed.
 //   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER. The app has
 //      always treated it as opaque, and the row version cannot collide
 //      inside one second.
@@ -24,8 +23,7 @@
 // npc's own text and travels verbatim — nothing about an npc is derived from
 // body text (db/schema.ts rule 3).
 
-import { CORE_SCHEMA, dump } from "js-yaml";
-import type { EntryResponse, ParsedFile } from "@grimoire/shared";
+import type { EntityKind, EntryResponse } from "@grimoire/shared";
 import { localDateTimeToMs } from "../clock";
 import { unpackJson, unpackStringArray } from "../db/schema";
 import {
@@ -165,22 +163,9 @@ function compact(entries: Array<[string, unknown]>): Record<string, unknown> {
   return out;
 }
 
-/**
- * An entry as ONE markdown text — YAML block plus body. Not part of the API:
- * the augment run hands the LLM the existing entry this way and validates the
- * proposal against the same rendering (generator-augment.ts).
- */
-export function renderRaw(properties: Record<string, unknown>, body: string): string {
-  if (Object.keys(properties).length === 0) return body;
-  // flowLevel 1 keeps nested collections inline ([a, b]) and CORE_SCHEMA
-  // leaves timestamp-like strings unquoted.
-  const yaml = dump(properties, { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 });
-  return `---\n${yaml}---\n${body}`;
-}
-
 function parsed(
   path: string,
-  kind: ParsedFile["kind"],
+  kind: EntityKind,
   properties: Record<string, unknown>,
   body: string,
   rev: number,

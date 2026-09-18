@@ -6,16 +6,16 @@
 // third module keeps that import graph a tree — the same split db/job-boot.ts
 // exists for.
 
-import { parseMarkdown } from "@grimoire/shared";
+import type { DraftEdit } from "@grimoire/shared";
 import { ApiError } from "./api-error";
 import { getJob, markWrittenInTx, openPartPaths } from "./generate-jobs";
 import {
   applyNpcTarget,
   applySceneTarget,
   applyStubTarget,
-  assertDraftId,
   draftAddress,
   jobChapterTarget,
+  storedDraftProperties,
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
@@ -58,6 +58,23 @@ import { applyDrafts } from "./store/write";
  *               open. „Verwerfen" (DELETE …/job) therefore removes only the
  *               open rest — what was written is an entry now, not a job.
  */
+/**
+ * One draft with the DM's review edit applied, half by half: a `properties`
+ * edit replaces the whole properties object, a `body` edit the whole body,
+ * and the half the edit does not carry keeps the model's own value (see
+ * DraftEdit). So a text edit cannot reset a field and a field edit cannot
+ * reset the text.
+ */
+function edit(
+  draft: { properties: Record<string, unknown>; body: string },
+  edited: DraftEdit | undefined,
+): { properties: Record<string, unknown>; body: string } {
+  return {
+    properties: edited?.properties ?? draft.properties,
+    body: edited?.body ?? draft.body,
+  };
+}
+
 export async function acceptJobParts(
   campaign: string,
   jobId: string,
@@ -88,10 +105,10 @@ export async function acceptJobParts(
   /** Every part of this run, by the path the review addresses it with. */
   const parts = new Map<string, { target: ApplyTarget; open: boolean; bulk: boolean }>();
   job.result?.scenes.forEach((scene, index) => {
-    const markdown = job.draftEdits.get(scene.path) ?? scene.markdown;
+    const edited = edit(scene, job.draftEdits.get(scene.path));
     const open = review.written[scene.path] === undefined && !dropped.has(scene.path);
     parts.set(scene.path, {
-      target: applySceneTarget({ path: scene.path, markdown }, index),
+      target: applySceneTarget({ path: scene.path, ...edited }, index),
       open,
       bulk: open,
     });
@@ -102,17 +119,17 @@ export async function acceptJobParts(
     const open =
       review.written[rel] === undefined && decision !== "rejected" && !dropped.has(rel);
     parts.set(rel, {
-      target: applyStubTarget(stub, index),
+      target: applyStubTarget({ ...stub, ...edit(stub, job.draftEdits.get(rel)) }, index),
       open,
       bulk: open && decision === "accepted",
     });
   });
   const npcDraft = job.npcResult?.npc;
   if (npcDraft !== undefined) {
-    const markdown = job.draftEdits.get(npcDraft.path) ?? npcDraft.markdown;
+    const edited = edit(npcDraft, job.draftEdits.get(npcDraft.path));
     const open = review.written[npcDraft.path] === undefined;
     parts.set(npcDraft.path, {
-      target: applyNpcTarget({ path: npcDraft.path, markdown }),
+      target: applyNpcTarget({ path: npcDraft.path, ...edited }),
       open,
       bulk: open,
     });
@@ -120,14 +137,14 @@ export async function acceptJobParts(
 
   /**
    * The run's own entries a scene REFERENCES and the DM has not rejected —
-   * see the selection rule above. Read off the draft markdown, so an edit of
-   * the scene in the review counts.
+   * see the selection rule above. Read off the draft's properties, so an
+   * edit of the scene in the review counts.
    */
   const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
   const referencedPartsOf = (rel: string): string[] => {
     const part = parts.get(rel);
     if (part === undefined || !scenePaths.has(rel)) return [];
-    const properties = parseMarkdown(part.target.markdown, rel, 0).properties;
+    const { properties } = part.target;
     const npcIds = Array.isArray(properties.npcs) ? properties.npcs : [];
     const location = properties.location;
     const candidates = [
@@ -185,13 +202,12 @@ export async function acceptJobParts(
   if (chapterFile !== null) targets.unshift(chapterFile);
 
   const drafts = targets.map((t) => {
-    const parsed = parseMarkdown(t.markdown, t.rel, 0);
-    assertDraftId(parsed.properties.id, t.rel);
+    const properties = storedDraftProperties(t.properties, t.rel);
     return {
       rel: t.rel,
-      address: draftAddress(t.rel, parsed.properties),
-      properties: parsed.properties,
-      body: parsed.body,
+      address: draftAddress(t.rel, properties),
+      properties,
+      body: t.body,
     };
   });
 

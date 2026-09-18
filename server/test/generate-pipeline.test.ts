@@ -898,18 +898,10 @@ test("the pipeline is not serialized for a single-call run", async () => {
     new PipelineFake([
       JSON.stringify({
         npc: {
-          content: [
-            "---",
-            "id: brakk",
-            "name: Brakk",
-            "status: alive",
-            "---",
-            "",
-            "## Will",
-            "",
-            "Ruhe am Kai.",
-            "",
-          ].join("\n"),
+          content: {
+            properties: { id: "brakk", name: "Brakk", status: "alive" },
+            body: "## Will\n\nRuhe am Kai.\n",
+          },
         },
         warnings: [],
       }),
