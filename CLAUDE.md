@@ -90,6 +90,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Issue-Verweise ebenso wie deutsche Begriffe in englischen Kommentaren —,
   nicht nur in den geänderten Zeilen. Dafür gibt es keinen eigenen
   Aufräum-PR.
+- Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
+  sie ermöglichen (Vorabprüfung, Constraint-Fehler am Schreibpfad), nicht ihr
+  SQL.
 - Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
   `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
   zusammengebaut zu werden.

@@ -13,8 +13,9 @@
 //   * a mention in TEXT — a `## Beziehungen` line, `[[slug]]` in prose —
 //     is neither: it stays visible text, with no entry and no error.
 //
-// The database-level half (the constraints themselves, the migration that
-// adds them) is test/db-migration-0014.test.ts.
+// The gate that runs before the constraints exist — the check that names
+// unresolvable references and aborts the start — is
+// test/reference-preflight.test.ts.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
