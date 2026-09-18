@@ -23,7 +23,7 @@ describe("hasBodyChanges", () => {
 
 describe("canEditEntryBody", () => {
   test("the maintained prose kinds are editable", () => {
-    for (const kind of ["scene", "npc", "location", "chapter", "glossary", "unknown"] as const) {
+    for (const kind of ["scene", "npc", "location", "chapter", "unknown"] as const) {
       expect(canEditEntryBody(kind)).toBe(true);
     }
   });
@@ -34,5 +34,12 @@ describe("canEditEntryBody", () => {
     expect(canEditEntryBody("session")).toBe(false);
     expect(canEditEntryBody("inbox")).toBe(false);
     expect(canEditEntryBody("campaign")).toBe(false);
+  });
+
+  test("the glossary is a list — no text editor", () => {
+    // It is maintained row by row on its own page, and the write path answers a
+    // body for it with 400 `body_not_editable` (ADR #23): an editor here could
+    // only offer a save that never succeeds.
+    expect(canEditEntryBody("glossary")).toBe(false);
   });
 });

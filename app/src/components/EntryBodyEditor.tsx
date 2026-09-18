@@ -54,6 +54,7 @@ import {
 import { useT } from "@/i18n";
 import {
   composerDraft,
+  composerDraftIn,
   composerIssues,
   draftBody,
   withDraftBlocks,
@@ -115,9 +116,11 @@ export function EntryBodyEditor({
   const edit = useEntryEdit(campaign, file.path, file.rev, {
     onSaved: onClose,
     onReload: (stored) => {
-      // The DM chose the stored text: the draft is replaced by it, both
-      // surfaces included, and there is nothing left to save.
-      setDraft(composerDraft(stored.body));
+      // The DM chose the stored text: the draft is replaced by it and there is
+      // nothing left to save. The SURFACE stays as it is — reseeding is an
+      // answer to a conflict, not a reason to move someone off the textarea
+      // they were writing in.
+      setDraft((current) => composerDraftIn(stored.body, current.mode));
       setBaseline(stored.body);
     },
     // The text feeds the tree's counts/titles and the search index, so neither

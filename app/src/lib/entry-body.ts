@@ -16,15 +16,20 @@ import type { EntityKind } from "@grimoire/shared/types";
  *
  *   session / inbox  no — append-only by design (ADR #4); a
  *                    free-hand rewrite of a log is not a maintenance action.
+ *   glossary         no — it is a list, maintained row by row on its own page;
+ *                    the write path refuses a body for it with 400
+ *                    `body_not_editable` (ADR #23), so an editor here could
+ *                    only ever lose the typed text.
  *   campaign         no — its header already carries an edit action for name
  *                    and description; one label, one meaning.
- *   everything else  yes: scene, npc, location, chapter (chapter entry),
- *                    glossary and whatever else the route is pointed at.
+ *   everything else  yes: scene, npc, location, chapter (chapter entry) and
+ *                    whatever else the route is pointed at.
  */
 export function canEditEntryBody(kind: EntityKind): boolean {
   switch (kind) {
     case "session":
     case "inbox":
+    case "glossary":
     case "campaign":
       return false;
     default:

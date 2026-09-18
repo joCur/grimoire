@@ -83,7 +83,12 @@ export function SceneRoute() {
   // the canonical address as the fallback for an entry whose properties
   // carries none.
   const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
-  const editing = editingId !== undefined && editingId === docId;
+  // Whether this entry has an editable text at all (canEditEntryBody). It
+  // gates the mode itself, not just the header trigger: a list entry like the
+  // glossary has no body to write, and an editor reached past the trigger —
+  // through `?edit=1` — could only offer a save the write path refuses.
+  const editable = data !== undefined && canEditEntryBody(data.kind);
+  const editing = editable && editingId !== undefined && editingId === docId;
   // Edit mode ENDS at a navigation. Leaving the entry drops the draft, so
   // coming back must not re-open the editor
   // unasked: an editor seeded from the server looks exactly like the one the DM
@@ -98,12 +103,12 @@ export function SceneRoute() {
   // a state of the page, and a reload or a back gesture must not re-open an editor
   // over a body the DM has meanwhile left.
   useEffect(() => {
-    if (!wantsEdit || docId === undefined) return;
+    if (!wantsEdit || docId === undefined || !editable) return;
     setEditingId(docId);
     const next = new URLSearchParams(searchParams);
     next.delete("edit");
     setSearchParams(next, { replace: true });
-  }, [wantsEdit, docId, searchParams, setSearchParams]);
+  }, [wantsEdit, docId, editable, searchParams, setSearchParams]);
 
   // The scene MOVED. A scene's group segment is its `location`,
   // so correcting the location rewrites the address — and every link written
@@ -149,9 +154,7 @@ export function SceneRoute() {
   // prose the DM maintains (canEditEntryBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
   const editAction =
-    canEditEntryBody(data.kind) && !editing ? (
-      <EntryBodyEditAction onEdit={() => setEditingId(docId)} />
-    ) : null;
+    editable && !editing ? <EntryBodyEditAction onEdit={() => setEditingId(docId)} /> : null;
   // The body slot of the article — the editor while edit mode is on, seeded
   // from the entry on screen (and re-keyed per path, so it never carries the
   // draft of another entry).

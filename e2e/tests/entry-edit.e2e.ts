@@ -77,17 +77,6 @@ function conflict(page: Page) {
  */
 async function openMarkdownEditor(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Bearbeiten" }).click();
-  await toMarkdownSurface(page);
-}
-
-/**
- * Switch the OPEN editor to the raw markdown surface.
- *
- * Needed on its own after adopting the stored entry: the reseeded draft starts
- * on the default surface again, so the textarea has to be asked for a second
- * time even though edit mode never ended.
- */
-async function toMarkdownSurface(page: Page): Promise<void> {
   // exact: the composer's per-card controls carry a numbered block name of
   // their own that starts with the same word.
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
@@ -295,12 +284,12 @@ test("a concurrent second write: the save reports the conflict, the second one w
   expect(stored.properties).toEqual(before.properties);
 
   // Reloading adopts what is stored: the draft is gone and there is nothing
-  // left to save. The reseeded draft starts on the default surface, so the
-  // textarea is asked for again to read the adopted text back byte for byte.
+  // left to save. The SURFACE stays as it was — the same textarea is still
+  // standing, now holding the adopted text byte for byte. Answering a conflict
+  // is not a reason to move the DM onto the other surface.
   await conflicted.reload.click();
   await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
-  await toMarkdownSurface(page);
   await expect(textarea).toHaveValue(otherBody);
   expect(await split(api, SCENE)).toEqual(stored);
 
@@ -368,7 +357,7 @@ test("a properties-only second write conflicts too — reloading adopts it", asy
   await expect(page.getByRole("button", { name: /^Status ändern, aktuell/ })).toHaveText(
     /Gespielt/,
   );
-  await toMarkdownSurface(page);
+  // Still the same textarea: reseeding keeps the surface.
   await expect(textarea).toHaveValue(before.body);
   // The sentence is gone, as the DM asked — nothing was written at all.
   expect(await split(api, SCENE)).toEqual(stored);
@@ -639,45 +628,29 @@ test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page 
 });
 
 
-test("the glossary refuses a text save instead of swallowing it", async ({ page, api }) => {
-  // The glossary is a LIST, kept on its own page, and there is no parser that
-  // reads text back into rows (ADR #23). So the one write path answers a body
-  // for it with 400 `body_not_editable` — and the DM gets that sentence
-  // instead of a save that appears to work and loses the terms.
-  //
-  // The reading view still offers an edit action here, so this refusal is what
-  // stands between a typed term and a silent loss. Nothing is written.
-  const before = await split(api, "glossary");
-
+test("the glossary offers no text editor — it is a list", async ({ page, api }) => {
+  // The glossary is a LIST, kept row by row on its own page, and there is no
+  // parser that reads text back into rows (ADR #23). So its reading view offers
+  // no edit action at all: an editor here could only ever produce a save the
+  // one write path refuses (400 `body_not_editable`, asserted on the endpoint
+  // itself in the test above).
   await page.goto("/campaigns/beispiel/entries/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
-
-  await openMarkdownEditor(page);
-  const textarea = page.getByRole("textbox", { name: TEXTAREA });
-  await expect(textarea).toBeVisible();
-  await textarea.fill(`${await textarea.inputValue()}- tide flat → Gezeitenwatt\n`);
-  const save = page.getByRole("button", { name: "Speichern" });
-  await expect(save).toBeEnabled();
-  await save.click();
-
-  // The server's own sentence, and it is not a conflict: neither reloading nor
-  // forcing would help, so the conflict line with its two answers stays away.
-  await expect(
-    page.getByText("Dieser Eintrag hat keinen bearbeitbaren Text — er wird als Liste gepflegt."),
-  ).toBeVisible();
-  await expect(conflict(page).line).toHaveCount(0);
-  // Nothing was written, and the typed draft is still on screen.
-  await expect(textarea).toHaveValue(/Gezeitenwatt/);
-  expect(await split(api, "glossary")).toEqual(before);
+  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 
   // The list endpoint is the way in — guarded by the same row version — and it
   // leaves the entry a list.
   await api.send("PUT", "campaigns/beispiel/glossary", {
     rev: (await api.file("glossary")).rev,
-    entries: [{ term: "tide flat", meaning: "Gezeitenwatt" }],
+    entries: [{ term: "tide flat", explanation: "Gezeitenwatt" }],
   });
   const glossary = await api.get<{ entries: Array<{ term: string }> }>(
     "campaigns/beispiel/glossary",
   );
   expect(glossary.entries.map((e) => e.term)).toEqual(["tide flat"]);
+  // And the reading view renders that list — still without an edit action.
+  await page.reload();
+  await expect(page.getByRole("article")).toContainText("Gezeitenwatt");
+  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 });

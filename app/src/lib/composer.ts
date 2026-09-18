@@ -70,6 +70,16 @@ export function composerDraft(body: string): ComposerDraft {
   return { mode: "blocks", blocks: parseBlocks(body) };
 }
 
+/**
+ * Seed the draft from a body on a GIVEN surface. Reseeding happens while the
+ * editor stands open — adopting the stored entry after a conflict — and the
+ * surface the DM is working on is theirs, not something a new seed may move.
+ * The markdown text is the body byte for byte; blocks are parsed as usual.
+ */
+export function composerDraftIn(body: string, mode: ComposerMode): ComposerDraft {
+  return mode === "markdown" ? { mode: "markdown", text: body } : composerDraft(body);
+}
+
 /** The markdown body the draft stands for — what „Speichern" writes. */
 export function draftBody(draft: ComposerDraft): string {
   return draft.mode === "markdown" ? draft.text : serializeBlocks(draft.blocks);
@@ -82,8 +92,7 @@ export function draftBody(draft: ComposerDraft): string {
  */
 export function withDraftMode(draft: ComposerDraft, mode: ComposerMode): ComposerDraft {
   if (draft.mode === mode) return draft;
-  const body = draftBody(draft);
-  return mode === "markdown" ? { mode: "markdown", text: body } : composerDraft(body);
+  return composerDraftIn(draftBody(draft), mode);
 }
 
 /** The textarea typed (markdown mode). */

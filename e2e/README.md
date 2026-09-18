@@ -353,14 +353,16 @@ gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
 fehlgeschlagener Refetch). Dazu die beiden Konflikt-Antworten in je einem
 Test — derselbe Aufbau, ein fremder Status-Write neben dem offenen Editor:
 „Neu laden" verwirft den Entwurf und zeigt gespeicherten Text samt geändertem
-Status, „Trotzdem speichern" schreibt den Text und lässt den fremden Status
-stehen. Ein Test belegt Eigenschaften und Text in EINER Anfrage direkt am
+Status — auf derselben Oberfläche, die Antwort auf einen Konflikt schiebt
+niemanden von der Textarea in den Composer —, „Trotzdem speichern" schreibt
+den Text und lässt den fremden Status stehen. Ein Test belegt Eigenschaften und Text in EINER Anfrage direkt am
 Schreibweg — ein Schritt der Zeilenversion, und keines der beiden Felder
 dabei ist 400 `nothing_to_write` —, weil keine Oberfläche der App heute beides
 in einem Speichern schickt. Die Listen-Adressen (Session, Eingang, Glossar)
-lehnen einen `body` mit 400 `body_not_editable` ab; beim Glossar bietet die
-Leseansicht noch einen Editor an, dessen Speichern genau daran scheitert —
-der Spec hält fest, dass die Absage sichtbar ist und nichts geschrieben wird. Jeder Test dort betritt den
+lehnen einen `body` mit 400 `body_not_editable` ab; das Glossar ist eine
+Liste, seine Leseansicht bietet darum gar keine Bearbeitung an — der Spec
+hält beides fest: keine Aktion in der Ansicht, und die Pflege läuft über den
+Listen-Endpoint. Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
 zusätzlich den Umzug ab: eine Szene, deren `location` sich geändert hat,
