@@ -19,7 +19,6 @@ import {
   type ChapterNode,
   type ChapterStatus,
   type EntryResponse,
-  type GlossaryResponse,
   type LocationSummary,
   type NpcStatus,
   type NpcSummary,
@@ -32,12 +31,10 @@ import {
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import { requireCampaign } from "./campaigns";
-import { promptInline } from "./knowledge";
 import { sessionSummaries } from "./session-rows";
 import type { GrimoireDb } from "../db/client";
 import {
   chapters,
-  glossary,
   locations,
   npcs,
   sceneNpcs,
@@ -63,7 +60,6 @@ import {
   renderScene,
   type CampaignRow,
   type ChapterRow,
-  type GlossaryRow,
   type LocationRow,
   type NpcRow,
   type SceneRow,
@@ -218,19 +214,6 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
 
 
 
-export function glossaryRows(db: GrimoireDb, campaign: string): GlossaryRow[] {
-  return db
-    .select({
-      term: glossary.term,
-      explanation: glossary.explanation,
-      pos: glossary.pos,
-      rev: glossary.rev,
-    })
-    .from(glossary)
-    .where(eq(glossary.campaignId, campaign))
-    .orderBy(asc(glossary.pos), asc(glossary.term))
-    .all() as GlossaryRow[];
-}
 
 
 /**
@@ -303,43 +286,4 @@ export async function readEntry(campaign: string, rel: string): Promise<EntryRes
   assertSafeAddress(rel); // 400 unsafe id/address
   const db = await getDb();
   return readByLocator(db, row, locatorFromPath(rel));
-}
-
-// --- GET /api/campaigns/:campaign/glossary ---------------------------------------------
-
-/**
- * GET /api/campaigns/:campaign/glossary -> `{ entries, rev }`.
- *
- * `rev` travels with it: the settings page edits this list, so it needs the
- * same guard token every other editable thing has. It is the LIST's counter
- * (`campaigns.glossary_rev`) and not `campaigns.version`, which every
- * unrelated write bumps — that would make a glossary edit the DM had open
- * unsaveable during a running session.
- */
-export async function readGlossary(campaign: string): Promise<GlossaryResponse> {
-  const row = await requireCampaign(campaign);
-  const db = await getDb();
-  return {
-    entries: glossaryRows(db, campaign).map((r) => ({
-      term: r.term,
-      explanation: r.explanation,
-    })),
-    rev: row.glossaryRev,
-  };
-}
-
-/**
- * The glossary as the generator's context block — the `EN → DE` lines the
- * prompt texts (generator.ts).
- */
-export async function glossaryText(campaign: string): Promise<string | undefined> {
-  const db = await getDb();
-  const rows = glossaryRows(db, campaign);
-  if (rows.length === 0) return undefined;
-  // Same one-line-per-entry guarantee the knowledge lines have (`promptInline`,
-  // below): the glossary is quoted into the same prompt and is no more
-  // trustworthy as a source of markdown structure.
-  return rows
-    .map((row) => `- ${promptInline(row.term)} → ${promptInline(row.explanation)}`)
-    .join("\n");
 }

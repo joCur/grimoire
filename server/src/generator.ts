@@ -63,7 +63,8 @@ import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-
 // nothing else is a data source.
 import { requireCampaign } from "./store/campaigns";
 import { knowledgeText, namingRules } from "./store/knowledge";
-import { buildTree, glossaryText } from "./store/read";
+import { glossaryText } from "./store/glossary";
+import { buildTree } from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
 import {
   addressHead,

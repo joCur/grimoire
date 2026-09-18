@@ -41,7 +41,8 @@ import {
   sessions,
 } from "./schema";
 import { campaignRow, indexCampaign } from "../store/campaigns";
-import { indexGlossaryTerm, insertDraft, PROPERTY_CONTRACT } from "../store/write";
+import { indexGlossaryTerm } from "../store/glossary";
+import { insertDraft, PROPERTY_CONTRACT } from "../store/write";
 import { logLineId } from "../store/body-parse";
 import { chapterPath, locationPath, npcPath, sceneAddress } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";

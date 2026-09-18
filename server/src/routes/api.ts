@@ -46,8 +46,9 @@ import { getBuildId } from "../config";
 import { ApiError } from "../api-error";
 import { campaignVersion, createCampaign, listCampaigns, requireCampaign } from "../store/campaigns";
 import { appendInboxEntry, markInboxLineDone, readInbox } from "../store/inbox";
+import { readGlossary, writeGlossary } from "../store/glossary";
 import { readKnowledge, writeKnowledge } from "../store/knowledge";
-import { buildTree, readGlossary, readEntry } from "../store/read";
+import { buildTree, readEntry } from "../store/read";
 import {
   appendLogEntry,
   continueSession,
@@ -73,7 +74,6 @@ import {
   createNpcStub,
   createScene,
   patchEntry,
-  writeGlossary,
 } from "../store/write";
 import { acceptJobParts } from "../generate-accept";
 import {

@@ -31,7 +31,6 @@ import {
   freeSlug,
   toSlug,
   type EntryResponse,
-  type GlossaryResponse,
   type PatchEntryRequest,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
@@ -42,7 +41,6 @@ import {
   campaigns,
   chapters,
   generateJobs,
-  glossary,
   locations,
   npcs,
   packJson,
@@ -85,10 +83,9 @@ import {
   sceneRowAt,
   sceneRowOf,
 } from "./entity-rows";
-import { indexEntity } from "./fts";
 import { expandBodyRefs } from "./refs";
 import { getDb } from "./handle";
-import { glossaryRows, readByLocator } from "./read";
+import { readByLocator } from "./read";
 import {
   addressIdentity,
   addressSegments,
@@ -205,22 +202,6 @@ function applyPatch(
 }
 
 
-
-export function indexGlossaryTerm(
-  tx: GrimoireDb,
-  campaign: string,
-  term: string,
-  explanation: string,
-): void {
-  indexEntity(tx, campaign, {
-    kind: "glossary",
-    entityId: term,
-    title: term,
-    ref: term,
-    tags: "",
-    body: explanation,
-  });
-}
 
 
 
@@ -820,70 +801,6 @@ function writeBodyIn(
   }
 }
 
-// --- the glossary table --------------------------------------------------------
-
-/** Replace the whole glossary of a campaign (PUT /glossary). */
-function writeGlossaryRows(
-  tx: GrimoireDb,
-  campaign: string,
-  entries: Array<{ term: string; explanation: string }>,
-): void {
-  // The whole list is replaced, so the index rows go in one statement rather
-  // than one per term — a term that disappears must not survive in search.
-  tx.run(sql`delete from search_fts where campaign_id = ${campaign} and kind = 'glossary'`);
-  tx.delete(glossary).where(eq(glossary.campaignId, campaign)).run();
-  const seen = new Set<string>();
-  let pos = 0;
-  for (const entry of entries) {
-    const term = entry.term.trim();
-    if (term === "" || seen.has(term)) continue; // first one wins
-    seen.add(term);
-    tx.insert(glossary)
-      .values({ campaignId: campaign, term, explanation: entry.explanation, pos: pos++ })
-      .run();
-    indexGlossaryTerm(tx, campaign, term, entry.explanation);
-  }
-}
-
-/**
- * PUT /api/campaigns/:campaign/glossary `{ entries, rev }` -> the stored list + its
- * fresh `rev`.
- *
- * The ORDER of `entries` is the stored order — that is what the settings
- * page's reordering writes: there is no separate "move" endpoint,
- * because a list this short is one entry and a move is simply a different
- * entry.
- *
- * `rev` is REQUIRED, for the reason every other editable thing has one: a
- * whole-list PUT without a guard is exactly the silent overwrite ADR #4
- * forbids. An `undefined` rev is refused by the endpoint, not defaulted here.
- */
-export async function writeGlossary(
-  campaign: string,
-  entries: Array<{ term: string; explanation: string }>,
-  rev: number,
-): Promise<GlossaryResponse> {
-  return mutate(campaign, (tx) => {
-    const row = requireCampaignRow(tx, campaign);
-    // A list guard, not an entry guard: the 409 carries the current `rev` and
-    // no entry, because the glossary is not one (ADR #26). The settings page
-    // reloads the list itself.
-    guardRev(row.glossaryRev, rev, "glossary changed");
-    writeGlossaryRows(tx, campaign, entries);
-    const nextRev = row.glossaryRev + 1;
-    tx.update(campaigns)
-      .set({ glossaryRev: nextRev })
-      .where(eq(campaigns.id, campaign))
-      .run();
-    return {
-      entries: glossaryRows(tx, campaign).map((r) => ({
-        term: r.term,
-        explanation: r.explanation,
-      })),
-      rev: nextRev,
-    };
-  });
-}
 
 
 
