@@ -142,7 +142,7 @@ describe("propertiesFieldsFor", () => {
 });
 
 describe("propertiesFormValues", () => {
-  test("a scene starts with exactly what stands in the file", () => {
+  test("a scene starts with exactly what its properties carry", () => {
     expect(propertiesFormValues(fields("scene"), SCENE_PROPERTIES)).toEqual({
       title: { kind: "text", text: "Von den Schmugglern erwischt" },
       type: { kind: "text", text: "contingency" },
@@ -217,7 +217,7 @@ describe("propertiesPatch", () => {
   const sceneFields = fields("scene");
   const npcFields = fields("npc");
 
-  /** The values of a file, with single fields overridden. */
+  /** The values of an entry, with single fields overridden. */
   function edited(
     fieldList: readonly PropertiesField[],
     properties: Record<string, unknown>,
@@ -234,7 +234,7 @@ describe("propertiesPatch", () => {
     expect(propertiesPatch(sceneFields, initial, { ...initial })).toEqual({});
   });
 
-  test("only the changed field is sent (everything else survives on disk)", () => {
+  test("only the changed field is sent (everything else survives stored)", () => {
     const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       status: { kind: "text", text: "played" },
     });
@@ -279,7 +279,7 @@ describe("propertiesPatch", () => {
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({ npcs: ["jorna", "fenn"] });
   });
 
-  test("an unknown reference id is saved verbatim (the file may follow later)", () => {
+  test("an unknown reference id is saved verbatim (the entry may follow later)", () => {
     const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       location: { kind: "text", text: "nordbucht" },
       npcs: { kind: "list", items: ["fenn", "kapitaen-torv"] },
@@ -374,7 +374,7 @@ describe("unfinished quickstat rows block the save", () => {
     quickstats: { kind: "pairs", entries },
   });
 
-  test("a file's own rows are fine — nothing to complain about", () => {
+  test("an entry's own rows are fine — nothing to complain about", () => {
     expect(propertiesFormIssues(npcFields, values, undefined, t)).toEqual({});
     // An empty row (the „Zeile hinzufügen“ state) and a name whose value was
     // cleared (= delete this key) are both legitimate.
@@ -666,7 +666,7 @@ describe("reference and select options", () => {
     sessions: [],
   };
 
-  test("the options are the ids that HAVE a file, labelled with their name", () => {
+  test("the options are the ids that HAVE an entry, labelled with their name", () => {
     expect(referenceOptions(tree, "npcs")).toEqual([
       { value: "fenn", label: "Fenn" },
       { value: "jorna", label: "Hafenmeisterin Jorna" },
@@ -687,7 +687,7 @@ describe("reference and select options", () => {
     expect(referenceLabel(options, "kapitaen-torv")).toBe(undefined);
   });
 
-  test("a select offers the value that stands in the file, known or not", () => {
+  test("a select offers the value the entry carries, known or not", () => {
     const known = [
       { value: "draft", label: "Entwurf" },
       { value: "ready", label: "Bereit" },
@@ -697,7 +697,7 @@ describe("reference and select options", () => {
     expect(selectOptions(known, "onhold")).toEqual([...known, { value: "onhold", label: "onhold" }]);
   });
 
-  test("the file's unknown value stays selectable after the DM clicked away", () => {
+  test("the entry's unknown value stays selectable after the DM clicked away", () => {
     const known = [
       { value: "draft", label: "Entwurf" },
       { value: "ready", label: "Bereit" },

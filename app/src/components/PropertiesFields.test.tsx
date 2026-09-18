@@ -1,7 +1,7 @@
 // Render tests for the properties controls (react-dom/server —
 // no DOM). What must hold is the degrade contract of the reference and select
 // fields: the existing ids are OFFERED (a <datalist>, never a closed list), an
-// id without a file stays typeable and visible, and a status value nobody knows
+// id without an entry stays typeable and visible, and a status value nobody knows
 // is an option of its own instead of being corrected away.
 
 import type { CampaignTree } from "@grimoire/shared/types";
@@ -135,14 +135,14 @@ describe("chips and selects", () => {
   });
 
   test("a hand-edited list keeps its duplicates, each removable on its own", () => {
-    // `tags: [social, social]` is a file the DM wrote by hand: it has to show
+    // `tags: [social, social]` is what the entry carries: it has to show
     // up as two chips, and clicking one X may not take both (index keys).
     const html = render(sceneField("tags"), { kind: "list", items: ["social", "social"] });
     expect(count(html, "<li")).toBe(2);
     expect(count(html, 'aria-label="social entfernen"')).toBe(2);
   });
 
-  test("a status the file carries but nobody knows is an option of its own", () => {
+  test("a status the entry carries but nobody knows is an option of its own", () => {
     const html = render(sceneField("status"), { kind: "text", text: "onhold" });
     expect(html).toContain('value="onhold"');
     expect(html).toContain("Bereit"); // the known options are still offered
@@ -151,7 +151,7 @@ describe("chips and selects", () => {
   });
 
   test("that unknown status stays in the list after the DM picked a known one", () => {
-    // The extra option comes from what the FILE held, not from the current
+    // The extra option comes from what the ENTRY held, not from the current
     // selection — otherwise the odd value is gone the moment it is left.
     const html = render(
       sceneField("status"),

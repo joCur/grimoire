@@ -680,7 +680,7 @@ export function referenceLabel(
 
 /**
  * The options a select shows: the known set, plus any unknown value the field
- * holds — the one the FILE came with (`initial`) first. The format degrades —
+ * holds — the one the ENTRY came with (`initial`) first. The format degrades —
  * a hand-written `status: onhold` must be visible and survive an unrelated
  * save, not be silently corrected to the first known option.
  *

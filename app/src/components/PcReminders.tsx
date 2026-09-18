@@ -1,4 +1,4 @@
-// „Für die Spieler" — the live aside's reminder list (issue #86).
+// The live aside's reminder list.
 //
 // The open `#pc` entries of log and inbox, grouped by character, as a
 // compact checkable list. It reads the SAME model the wrap-up page and the
@@ -37,10 +37,10 @@ export function PcReminders({ campaign }: { campaign: string }) {
       if (model.sessionPath === "") throw new Error("keine Session");
       return markLogLineSeen(campaign, model.sessionPath, entry.rawLine);
     },
-    onSuccess: (file) => {
+    onSuccess: (entry) => {
       setCleared(true);
-      queryClient.setQueryData(["entry", campaign, file.path], file);
-      void queryClient.invalidateQueries({ queryKey: ["entry", campaign, file.path] });
+      queryClient.setQueryData(["entry", campaign, entry.path], entry);
+      void queryClient.invalidateQueries({ queryKey: ["entry", campaign, entry.path] });
       // The done-state of a log line lives in the session's properties
       // — both session queries have to see the fresh one.
       void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });

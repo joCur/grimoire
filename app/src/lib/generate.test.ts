@@ -515,7 +515,7 @@ describe("npcIdError", () => {
     expect(npcIdError("gräfin", [], t)).toContain("Kleinbuchstaben");
   });
 
-  test("an id whose file exists is named as such — the server would 409", () => {
+  test("an id whose entry exists is named as such — the server would 409", () => {
     expect(npcIdError("fenn", ["fenn", "jorna"], t)).toContain("existiert schon");
     expect(npcIdError("grella", ["fenn", "jorna"], t)).toBeUndefined();
   });

@@ -1,5 +1,5 @@
-// "/campaigns/:campaign/entries/*" — the reading view of ONE file. For a scene that is
-// the scene article per the design reference (type overline, Literata title,
+// "/campaigns/:campaign/entries/*" — the reading view of ONE entry. For a
+// scene that is the scene article per the design reference (type overline, Literata title,
 // trigger row, chip row, markdown body — shared with the live view via
 // SceneArticle) plus a sticky right aside with the scene's NPC cards. Below
 // md: a back row to the chapter overview on top and the NPC cards stacked below
@@ -46,6 +46,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
+import { encodeAddress } from "@/lib/address";
 import { canEditEntryBody } from "@/lib/entry-body";
 import { propString, propStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
@@ -122,11 +123,9 @@ export function SceneRoute() {
   const navigate = useNavigate();
   useEffect(() => {
     if (canonical === undefined || canonical === path) return;
-    // Encoded PER SEGMENT, like every other entry link the app builds
-    // (lib/search.ts): the slashes are the address, everything else is a
-    // segment that may carry anything an id may carry.
-    const target = canonical.split("/").map(encodeURIComponent).join("/");
-    navigate(`/campaigns/${encodeURIComponent(campaign)}/entries/${target}`, { replace: true });
+    navigate(`/campaigns/${encodeURIComponent(campaign)}/entries/${encodeAddress(canonical)}`, {
+      replace: true,
+    });
   }, [campaign, canonical, path, navigate]);
 
   if (isPending) {
@@ -163,7 +162,7 @@ export function SceneRoute() {
     <EntryBodyEditor
       key={docId}
       campaign={campaign}
-      file={data}
+      entry={data}
       onClose={() => setEditingId(undefined)}
     />
   ) : undefined;
@@ -171,14 +170,14 @@ export function SceneRoute() {
   // fields (scene, npc, location, chapter); it renders nothing for the rest.
   // The tree feeds its reference fields (npc/location/chapter ids).
   const propertiesAction = (
-    <PropertiesAction campaign={campaign} file={data} tree={tree.data} />
+    <PropertiesAction campaign={campaign} entry={data} tree={tree.data} />
   );
   // The augment action — the third quiet action, for the kinds
   // that have an augment prompt (npc, location, scene); it renders nothing
   // for the rest, and it is desktop-only (mobile is the reading surface).
   // While the body editor runs it stays out of the way for the same reason
   // the edit action does: two writers on one body is not a review.
-  const augmentAction = editing ? null : <AugmentAction campaign={campaign} file={data} />;
+  const augmentAction = editing ? null : <AugmentAction campaign={campaign} entry={data} />;
   // The campaign entry's properties half is its own dialog — name and
   // description, the two values no typed form models — so it stands where the
   // properties action stands for every other kind, and under that name. The
@@ -205,7 +204,7 @@ export function SceneRoute() {
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
           {isScene ? (
             <SceneArticle
-              file={data}
+              entry={data}
               tree={tree.data}
               variant="scene"
               actions={articleActions}
@@ -224,7 +223,7 @@ export function SceneRoute() {
               }
             />
           ) : (
-            <EntityArticle file={data} actions={articleActions} body={bodyEditor} />
+            <EntityArticle entry={data} actions={articleActions} body={bodyEditor} />
           )}
         </div>
         {npcs.length > 0 && (

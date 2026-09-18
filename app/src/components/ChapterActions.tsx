@@ -91,7 +91,7 @@ export function ChapterActions({
               stops down the list. */}
           <PropertiesAction
             campaign={campaign}
-            file={entry}
+            entry={entry}
             tree={tree}
             triggerLabel={t("chapterOverview.chapter.properties")}
           />

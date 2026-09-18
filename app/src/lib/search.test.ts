@@ -41,7 +41,7 @@ describe("kindIcon", () => {
     expect(kindIcon("npc", true)).toBe(User);
   });
 
-  test("unknown kinds degrade to a generic file icon", () => {
+  test("unknown kinds degrade to a generic entry icon", () => {
     expect(kindIcon("session")).toBe(FileText);
   });
 });

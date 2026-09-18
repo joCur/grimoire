@@ -103,15 +103,15 @@ export function ReviewRoute() {
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
   const chapterPath = chapter?.path;
 
-  const chapterFile = useQuery({
+  const chapterEntry = useQuery({
     queryKey: ["entry", campaign, chapterPath],
     queryFn: () => fetchEntry(campaign, chapterPath as string),
     enabled: chapterPath !== undefined,
     retry: false,
   });
   const threads = useMemo(
-    () => parseChecklist(chapterFile.data?.body ?? "", THREADS_HEADING),
-    [chapterFile.data?.body],
+    () => parseChecklist(chapterEntry.data?.body ?? "", THREADS_HEADING),
+    [chapterEntry.data?.body],
   );
 
   const act = useMutation({
@@ -135,16 +135,16 @@ export function ReviewRoute() {
       }
       return written;
     },
-    onSuccess: (files, vars) => {
+    onSuccess: (entries, vars) => {
       // Every endpoint returns the fresh entry: seed, then invalidate on top.
-      for (const file of files) {
-        queryClient.setQueryData(["entry", campaign, file.path], file);
-        void queryClient.invalidateQueries({ queryKey: ["entry", campaign, file.path] });
+      for (const entry of entries) {
+        queryClient.setQueryData(["entry", campaign, entry.path], entry);
+        void queryClient.invalidateQueries({ queryKey: ["entry", campaign, entry.path] });
         // A log line's done-state lives in the session's properties, and
         // the live aside and the topbar read that session through the SESSION
         // queries — they have to see the fresh one too (same rule as
         // components/PcReminders).
-        if (file.path === model.sessionPath) {
+        if (entry.path === model.sessionPath) {
           void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
           void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
         }

@@ -49,7 +49,7 @@ const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 const ARRIVAL = "scene-lighthouse-arrival.json";
 const SMUGGLERS = "scene-smuggler-captured.json";
 
-/** The fixture entry as it lies on disk: the shape the API speaks. */
+/** The fixture entry as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
   return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
 }
@@ -96,7 +96,7 @@ describe("the draft and its two surfaces", () => {
       const raw = withDraftMode(blocks, "markdown");
       expect(raw.mode).toBe("markdown");
       if (raw.mode !== "markdown") throw new Error("unreachable");
-      // What the textarea shows IS the file — no normalization on the way in.
+      // What the textarea shows IS the body — no normalization on the way in.
       expect(raw.text).toBe(body);
       expect(draftBody(withDraftMode(raw, "blocks"))).toBe(body);
     }
@@ -250,7 +250,7 @@ describe("insert, move, remove", () => {
   });
 
   test("the first child of a childless section gets a blank line of room", () => {
-    // „## If: a" as the last line of a file has a gap of one newline; the child
+    // `## If: a` as the last line of a body has a gap of one newline; the child
     // would otherwise land directly under the heading.
     const blocks = parseBlocks("## Flow\n\n## If: sie fliehen\n");
     const target = section(blocks, 1);
@@ -263,7 +263,7 @@ describe("insert, move, remove", () => {
   });
 
   test("the first child of a section with children gets its blank line too", () => {
-    // A hand-written file may glue the first child to the heading; inserting
+    // A hand-written body may glue the first child to the heading; inserting
     // ABOVE that child must not glue the new block to the `## If:` line.
     const blocks = parseBlocks("## Flow\n\n## If: sie fliehen\ndrin\n");
     const target = section(blocks, 1);
@@ -279,11 +279,11 @@ describe("insert, move, remove", () => {
     const blocks = parseBlocks("## If: sie fliehen\ndrin\n");
     const target = section(blocks, 0);
     const next = insertAt(blocks, { sectionId: target.id, index: 1 }, makeText("danach"));
-    // The glued first line is the DM's file — only the new block gets room.
+    // The glued first line is the DM's text — only the new block gets room.
     expect(serializeBlocks(next)).toBe("## If: sie fliehen\ndrin\n\ndanach\n");
   });
 
-  test("moving swaps two neighbours and leaves the file's whitespace alone", () => {
+  test("moving swaps two neighbours and leaves the body's whitespace alone", () => {
     const body = fixtureBody(ARRIVAL);
     const blocks = parseBlocks(body);
     const moved = moveBy(blocks, at(blocks, 2).id, 1);
@@ -295,7 +295,7 @@ describe("insert, move, remove", () => {
       at(blocks, 4).id,
       at(blocks, 5).id,
     ]);
-    // Moving back restores the file byte for byte.
+    // Moving back restores the body byte for byte.
     expect(serializeBlocks(moveBy(moved, at(blocks, 2).id, -1))).toBe(body);
   });
 
@@ -334,7 +334,7 @@ describe("insert, move, remove", () => {
     expect(section(next, 2).children).toHaveLength(2);
     expect(section(next, 3).children).toEqual(section(blocks, 3).children);
     expect(serializeBlocks(next)).not.toContain("die morschen Bretter");
-    // The untouched second section is still in the file verbatim.
+    // The untouched second section is still in the body verbatim.
     expect(serializeBlocks(next)).toContain(section(blocks, 3).source ?? "");
   });
 
@@ -383,7 +383,7 @@ describe("what blocks a save", () => {
   test("…because the next parse really does pull it out of the section", () => {
     const { blocks } = withChild("## Flow\n\nnoch mehr");
     // This is the damage the issue prevents: the composer shows one section
-    // with one child, the file comes back with a heading and a paragraph
+    // with one child, the body comes back with a heading and a paragraph
     // OUTSIDE the branch.
     const reparsed = parseBlocks(serializeBlocks(blocks));
     expect(reparsed.map((block) => block.type)).toEqual([
@@ -414,7 +414,7 @@ describe("what blocks a save", () => {
     const blocks = parseBlocks("## If: sie lügen\n\n### Detail\n");
     const child = at(section(blocks, 0).children, 0);
     // The picker never offers level 2 inside a section, but the regler shows a
-    // level the FILE brought — the guard sits behind the UI, not in it.
+    // level the BODY brought — the guard sits behind the UI, not in it.
     expect(composerIssues(setHeadingDepth(blocks, child.id, 2), t)).not.toEqual({});
     expect(composerIssues(setHeadingDepth(blocks, child.id, 4), t)).toEqual({});
   });

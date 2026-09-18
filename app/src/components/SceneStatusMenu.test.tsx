@@ -57,7 +57,7 @@ describe("SceneStatusMenu", () => {
   test("while a write runs the trigger shows the target value dimmed", () => {
     const html = render({ status: "draft", pendingStatus: "ready" });
     expect(html).toContain("opacity-60");
-    // The pill shows the target, the menu still checks the value on disk.
+    // The pill shows the target, the menu still checks the stored value.
     expect(html).toMatch(/opacity-60">Bereit</);
     expect(html).toMatch(/aria-checked="true"[^>]*>.*?<span class="flex-1">Entwurf</);
   });

@@ -112,7 +112,7 @@ export async function writeChapterStatus(
   rev: number | undefined,
 ): Promise<RevWriteResult> {
   if (chapterStatusNeedsSwap(status)) {
-    return { ok: true, file: await setChapterActive(campaign, chapter) };
+    return { ok: true, entry: await setChapterActive(campaign, chapter) };
   }
   // Unreachable behind `chapterStatusWritable`; an assertion, not a path.
   if (rev === undefined) throw new Error("no version to write against");

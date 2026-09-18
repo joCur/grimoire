@@ -147,14 +147,14 @@ function Chapter({
 
   // The chapter goal lives in the chapter entry body — fetched lazily on
   // first expand; missing entry/heading degrades to no goal line.
-  const chapterFile = useQuery({
+  const chapterEntry = useQuery({
     queryKey: ["entry", campaign, chapter.path],
     queryFn: () => fetchEntry(campaign, chapter.path as string),
     enabled: open && chapter.path !== undefined,
     retry: false,
   });
-  const goal = chapterFile.data
-    ? firstParagraphOfSection(chapterFile.data.body, "Ziel des Kapitels")
+  const goal = chapterEntry.data
+    ? firstParagraphOfSection(chapterEntry.data.body, "Ziel des Kapitels")
     : undefined;
 
   return (
@@ -198,7 +198,7 @@ function Chapter({
           <ChapterActions
             campaign={campaign}
             chapter={chapter.id}
-            entry={chapterFile.data}
+            entry={chapterEntry.data}
             tree={tree}
           />
           {goal !== undefined && (

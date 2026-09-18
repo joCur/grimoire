@@ -82,7 +82,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
             })}
           </p>
         )}
-        {data !== undefined && <EntityArticle file={data} />}
+        {data !== undefined && <EntityArticle entry={data} />}
       </div>
       <div className="flex-none border-t border-border px-6 py-3 md:px-8">
         <Link

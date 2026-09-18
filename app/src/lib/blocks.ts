@@ -543,7 +543,7 @@ export function serializeBlocks(blocks: SceneBlock[]): string {
   const units = withoutEmpty(all);
   if (units.length === 0) return "";
 
-  // The line ending is a property of the FILE, so it is read from everything
+  // The line ending is a property of the BODY, so it is read from everything
   // that was there — the dropped units included.
   const eol = dominantEol(all);
   return units

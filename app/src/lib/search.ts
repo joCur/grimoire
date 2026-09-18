@@ -7,6 +7,7 @@ import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from 
 import type { LucideIcon } from "lucide-react";
 
 import type { MessageKey, Translate } from "@/i18n";
+import { encodeAddress } from "@/lib/address";
 
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
@@ -69,11 +70,9 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 /**
  * Route for a picked result. Every kind opens as an entry view
  * (/campaigns/:campaign/entries/<path>) — except the campaign itself, whose "view" is the
- * chapter overview. Path segments are encoded individually so umlauts and spaces in an address
- * survive, but the slashes stay routable.
+ * chapter overview.
  */
 export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "path">): string {
   if (result.kind === "campaign") return `/campaigns/${encodeURIComponent(campaign)}`;
-  const encodedPath = result.path.split("/").map(encodeURIComponent).join("/");
-  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodedPath}`;
+  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodeAddress(result.path)}`;
 }

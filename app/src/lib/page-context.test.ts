@@ -24,12 +24,12 @@ describe("pageContextCrumbs", () => {
       pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm", tree, de),
     ).toEqual([
       { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
-      // No location file for "hafen" — the slug stands as written.
+      // No location entry for "hafen" — the slug stands as written.
       { label: "hafen" },
     ]);
   });
 
-  test("a group WITH a location file shows the location's name", () => {
+  test("a group WITH a location entry shows the location's name", () => {
     expect(
       pageContextCrumbs("beispiel", "01-salzhafen/leuchtturm/aufstieg", tree, de),
     ).toEqual([
@@ -70,7 +70,7 @@ describe("pageContextCrumbs", () => {
     expect(labels).not.toContain("beispiel");
   });
 
-  test("files outside the hierarchy get no context line", () => {
+  test("entries outside the hierarchy get no context line", () => {
     for (const path of ["campaign", "sessions/2026-01-15", "inbox", "glossary"]) {
       expect(pageContextCrumbs("beispiel", path, tree, de)).toEqual([]);
     }

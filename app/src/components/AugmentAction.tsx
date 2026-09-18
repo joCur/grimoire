@@ -70,8 +70,8 @@ const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-mute
  * a scene's `title`), never the wire address. An address like `npcs/fenn` is
  * how the entry is addressed, not how it is known at the table.
  */
-function entryName(file: EntryResponse): string {
-  return propString(file.properties.name) ?? propString(file.properties.title) ?? file.path;
+function entryName(entry: EntryResponse): string {
+  return propString(entry.properties.name) ?? propString(entry.properties.title) ?? entry.path;
 }
 
 /**
@@ -95,31 +95,31 @@ function decidedSet(
 /** The two review surfaces — blocks (default) and the raw text diff. */
 type ReviewMode = "blocks" | "markdown";
 
-export function AugmentAction({ campaign, file }: { campaign: string; file: EntryResponse }) {
+export function AugmentAction({ campaign, entry }: { campaign: string; entry: EntryResponse }) {
   const t = useT();
-  // Open-BY-FILE, like the properties dialog: the reading route stays mounted
-  // across a navigation, and a dialog holding entry A while `file` already
-  // points at B would send A's decisions to B.
-  const entryKey = `${campaign}/${file.path}`;
-  const [openFile, setOpenFile] = useState<string>();
+  // Open-BY-ENTRY, like the properties dialog: the reading route stays
+  // mounted across a navigation, and a dialog holding entry A while `entry`
+  // already points at B would send A's decisions to B.
+  const entryKey = `${campaign}/${entry.path}`;
+  const [openEntry, setOpenEntry] = useState<string>();
   useEffect(() => {
-    setOpenFile(undefined);
+    setOpenEntry(undefined);
   }, [entryKey]);
-  if (!isAugmentKind(file.kind)) return null;
+  if (!isAugmentKind(entry.kind)) return null;
   return (
     <>
       <HeaderAction
         icon={Sparkles}
         label={t("augment.action")}
-        onClick={() => setOpenFile(entryKey)}
+        onClick={() => setOpenEntry(entryKey)}
         className="hidden md:inline-flex"
       />
-      {openFile === entryKey && (
+      {openEntry === entryKey && (
         <AugmentDialog
           key={entryKey}
           campaign={campaign}
-          file={file}
-          onClose={() => setOpenFile(undefined)}
+          entry={entry}
+          onClose={() => setOpenEntry(undefined)}
         />
       )}
     </>
@@ -128,11 +128,11 @@ export function AugmentAction({ campaign, file }: { campaign: string; file: Entr
 
 function AugmentDialog({
   campaign,
-  file,
+  entry,
   onClose,
 }: {
   campaign: string;
-  file: EntryResponse;
+  entry: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();
@@ -160,7 +160,7 @@ function AugmentDialog({
   // is reported as busy rather than silently adopted — one job per campaign
   // is the server's rule and the DM has to know whose job is in the way.
   const current = job.data;
-  const mine = current?.kind === "augment" && current.target === file.path;
+  const mine = current?.kind === "augment" && current.target === entry.path;
   // ANY foreign job blocks, not just a running one: a finished generator run
   // whose review nobody has looked at yet would be DELETED by the next start
   // (one job per campaign, and a start replaces a finished row). The DM has
@@ -170,7 +170,7 @@ function AugmentDialog({
   const proposal = mine ? current?.augmentResult : undefined;
 
   const start = useMutation({
-    mutationFn: () => startAugmentJob(campaign, { path: file.path, sourceText, instruction }),
+    mutationFn: () => startAugmentJob(campaign, { path: entry.path, sourceText, instruction }),
     onMutate: () => {
       setMessage(undefined);
       // From here on this run's job is EXPECTED — see `awaitingJob` above.
@@ -230,7 +230,7 @@ function AugmentDialog({
   // running one — never a mutation's `isPending`.
   const running =
     proposal === undefined && (starting || (mine && current?.status === "running"));
-  const name = entryName(file);
+  const name = entryName(entry);
 
   return (
     <Dialog
@@ -267,7 +267,7 @@ function AugmentDialog({
           {proposal !== undefined ? (
             <AugmentReview
               campaign={campaign}
-              file={file}
+              entry={entry}
               jobId={current?.id}
               job={current}
               proposal={proposal}
@@ -369,14 +369,14 @@ function AugmentDialog({
 
 function AugmentReview({
   campaign,
-  file,
+  entry,
   jobId,
   job,
   proposal,
   onDone,
 }: {
   campaign: string;
-  file: EntryResponse;
+  entry: EntryResponse;
   jobId: string | undefined;
   /** The job the proposal came from — it carries the DM's decisions. */
   job: GenerateJob | null | undefined;
@@ -437,7 +437,7 @@ function AugmentReview({
   // same transaction, which is the whole reason it exists. So the session is
   // handed that request instead, and the force action is not offered, because
   // that endpoint has no force.
-  const apply = useEntryEdit(campaign, file.path, file.rev, {
+  const apply = useEntryEdit(campaign, entry.path, entry.rev, {
     writeEntry: (request) =>
       applyAugment(campaign, {
         path: proposal.path,

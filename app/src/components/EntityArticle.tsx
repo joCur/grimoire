@@ -54,11 +54,11 @@ function ActionGroup({ children }: { children?: ReactNode }) {
  * actions and passes them in, exactly like the scene article's status control.
  */
 export function EntityArticle({
-  file,
+  entry,
   actions,
   body,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   actions?: ReactNode;
   /**
    * Replaces the rendered body — edit mode puts its markdown
@@ -67,44 +67,44 @@ export function EntityArticle({
   body?: ReactNode;
 }) {
   const t = useT();
-  const header = entityHeaderKind(file.kind);
-  const properties = file.properties;
+  const header = entityHeaderKind(entry.kind);
+  const properties = entry.properties;
   // npc/location entries carry `name`, chapter/campaign entries `title` — either
   // may be missing (degrade), then the path is the honest fallback.
   // A SESSION has no `title` and its id is opaque noise, so the heading is
   // derived from `started` instead of falling through to the path.
-  const fallback = file.kind === "session" ? sessionDateLabel(properties, t) : file.path;
+  const fallback = entry.kind === "session" ? sessionDateLabel(properties, t) : entry.path;
   const name = propString(properties.name) ?? propString(properties.title) ?? fallback;
   const title = propString(properties.title) ?? propString(properties.name) ?? fallback;
 
   return (
     <article className="w-full min-w-0">
       {header === "npc" ? (
-        <NpcHeader file={file} name={name} actions={actions} />
+        <NpcHeader entry={entry} name={name} actions={actions} />
       ) : header === "location" ? (
-        <LocationHeader file={file} name={name} actions={actions} />
+        <LocationHeader entry={entry} name={name} actions={actions} />
       ) : (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <Title>{title}</Title>
           <ActionGroup>{actions}</ActionGroup>
         </div>
       )}
-      {body ?? <Markdown>{file.body}</Markdown>}
+      {body ?? <Markdown>{entry.body}</Markdown>}
     </article>
   );
 }
 
 function NpcHeader({
-  file,
+  entry,
   name,
   actions,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {
   const t = useT();
-  const properties = file.properties;
+  const properties = entry.properties;
   const role = propString(properties.role);
   const status = propString(properties.status);
   const voice = propString(properties.voice);
@@ -156,16 +156,16 @@ function NpcHeader({
 }
 
 function LocationHeader({
-  file,
+  entry,
   name,
   actions,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {
   const t = useT();
-  const page = propString(file.properties["roll20-page"]);
+  const page = propString(entry.properties["roll20-page"]);
   return (
     <header className="mb-7 border-b border-border pb-5">
       <div className="flex flex-wrap items-start justify-between gap-3">

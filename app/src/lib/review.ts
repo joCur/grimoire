@@ -178,7 +178,7 @@ function isConventionTag(tag: string): boolean {
  * The character a `#pc` line names: the first hashtag that is not a
  * convention tag (`#pc #kaela` → `kaela`, `#kaela #pc` → `kaela`, already
  * lowercased by extractHashtags). Undefined when the line carries convention
- * tags only — the review files those under „Allgemein".
+ * tags only — the review groups those under its general heading.
  */
 export function pcGroupTag(tags: readonly string[]): string | undefined {
   return tags.find((tag) => !isConventionTag(tag));

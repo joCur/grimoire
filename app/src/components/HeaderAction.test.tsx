@@ -72,7 +72,7 @@ describe("the call sites", () => {
     };
     expect(
       renderToStaticMarkup(
-        <PropertiesAction campaign="beispiel" file={npc} tree={undefined} />,
+        <PropertiesAction campaign="beispiel" entry={npc} tree={undefined} />,
       ),
     ).toBe(
       renderToStaticMarkup(
@@ -83,7 +83,7 @@ describe("the call sites", () => {
 
   test("no Eigenschaften where there is no typed properties (session, inbox, campaign)", () => {
     for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
-      const file: EntryResponse = {
+      const entry: EntryResponse = {
         path: "x",
         kind,
         properties: {},
@@ -92,7 +92,7 @@ describe("the call sites", () => {
       };
       expect(
         renderToStaticMarkup(
-          <PropertiesAction campaign="beispiel" file={file} tree={undefined} />,
+          <PropertiesAction campaign="beispiel" entry={entry} tree={undefined} />,
         ),
       ).toBe("");
     }

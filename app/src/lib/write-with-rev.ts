@@ -1,4 +1,4 @@
-// The conflict protocol of ADR #4, in one place (issue #38).
+// The conflict protocol of ADR #4, in one place.
 //
 // Every write the app does carries the guard token of the EntryResponse the DM
 // was looking at, so a competing write answers 409 instead of being
@@ -7,12 +7,12 @@
 // fresh token.
 //
 // `rev` is the row's VERSION — an opaque token, which is all this module
-// treats it as, and one that two writes can never share (issue #37).
+// treats it as, and one that two writes can never share.
 //
-// Three write paths share exactly that shape — the status regler (#28), the
-// campaign metadata dialog (#34) and the body editor (#15). What differs is
-// only the request itself; the conflict handling is this module. Pure, no
-// react, no query imports.
+// Three write paths share exactly that shape — the status control, the
+// campaign dialog and the body editor. What differs is only the request
+// itself; the conflict handling is this module. Pure, no react, no query
+// imports.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 
@@ -20,37 +20,36 @@ import { ApiError } from "@/api";
 import type { MessageKey } from "@/i18n";
 
 /** True for the server's write conflict (409) — someone else wrote first. */
-export function isStaleFileError(error: unknown): boolean {
+export function isStaleEntryError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409;
 }
 
 /**
  * Shown inline (no toast) after a conflict; the next attempt uses the fresh
- * token. CATALOG KEYS since issue #69 — the copy lives in app/src/i18n, this
- * layer only names which sentence a path uses.
+ * token. CATALOG KEYS — the copy lives in app/src/i18n, this layer only names
+ * which sentence a path uses.
  *
- * The wording no longer says "extern": after the cutover the other writer is
- * another tab, the generator or a second request — not an editor on the entry
- * system, which does not exist any more.
+ * The other writer is another tab, the generator or a second request: since
+ * ADR #13 there is no writer outside the app.
  */
 export const STALE_FILE_MESSAGE: MessageKey = "write.stale";
 
 /**
  * Shown inline when a write failed for any reason OTHER than a conflict — the
- * default wording of every write path (a path with a narrower noun overrides
- * it, e.g. the status regler's „Status nicht gespeichert").
+ * default wording of every write path; a path with a narrower noun overrides
+ * it, like the status control's own message.
  */
 export const WRITE_FAILED_MESSAGE: MessageKey = "write.failed";
 
 export type RevWriteResult =
   /** Written: the server's fresh entry, ready to seed into the query cache. */
-  | { ok: true; file: EntryResponse }
+  | { ok: true; entry: EntryResponse }
   /**
-   * NOT written — the entry changed on the server (or appeared while a dialog was
-   * open). `file` is the re-read file when the reload succeeded (its rev
+   * NOT written — the entry changed on the server (or appeared while a dialog
+   * was open). `entry` is the re-read entry when the reload succeeded (its rev
    * makes the next attempt work); undefined when even the reload failed.
    */
-  | { ok: false; file?: EntryResponse };
+  | { ok: false; entry?: EntryResponse };
 
 /**
  * Run one rev-checked write. `write` is the API call including the rev;
@@ -63,15 +62,15 @@ export async function writeWithRev(
   reread: () => Promise<EntryResponse>,
 ): Promise<RevWriteResult> {
   try {
-    return { ok: true, file: await write() };
+    return { ok: true, entry: await write() };
   } catch (error) {
-    if (!isStaleFileError(error)) throw error;
+    if (!isStaleEntryError(error)) throw error;
     try {
-      return { ok: false, file: await reread() };
+      return { ok: false, entry: await reread() };
     } catch {
       // The reload failed too (server gone): the conflict message stands and
-      // the cache keeps the entry we had — the version poll (issue #8) brings
-      // the current one as soon as the server answers again.
+      // the cache keeps the entry we had — the version poll brings the
+      // current one as soon as the server answers again.
       return { ok: false };
     }
   }

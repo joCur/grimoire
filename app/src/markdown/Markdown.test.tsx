@@ -82,7 +82,7 @@ describe("Markdown pipeline rendering", () => {
 });
 
 // Raw HTML is dropped instead of printed (skipHtml): the
-// generator leaves `<!-- … -->` hints in the files, and they were showing up
+// generator leaves `<!-- … -->` hints in the bodies, and they were showing up
 // as visible text under `## Notizen`.
 describe("HTML in the body", () => {
   test("an HTML comment is invisible", () => {

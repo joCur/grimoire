@@ -21,14 +21,14 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
 export function SceneArticle({
-  file,
+  entry,
   tree,
   variant,
   statusControl,
   actions,
   body,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
@@ -42,9 +42,9 @@ export function SceneArticle({
 }) {
   const t = useT();
   const live = variant === "live";
-  const properties = file.properties;
+  const properties = entry.properties;
   // npc/location entries opened as an entry view carry `name` instead of `title`.
-  const title = propString(properties.title) ?? propString(properties.name) ?? file.path;
+  const title = propString(properties.title) ?? propString(properties.name) ?? entry.path;
   // Everything that is not explicitly a contingency reads as a planned
   // scene (degrade — "planned" is the unmarked case).
   const isContingency = propString(properties.type) === "contingency";
@@ -141,7 +141,7 @@ export function SceneArticle({
           </div>
         )
       )}
-      {body ?? <Markdown>{file.body}</Markdown>}
+      {body ?? <Markdown>{entry.body}</Markdown>}
     </article>
   );
 }

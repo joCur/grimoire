@@ -87,7 +87,7 @@ function textareaIdFor(path: string): string {
 
 export function EntryBodyEditor({
   campaign,
-  file,
+  entry,
   onClose,
 }: {
   campaign: string;
@@ -96,24 +96,24 @@ export function EntryBodyEditor({
    * its version is what the write is checked against. Mount this component per
    * path (`key`) so a navigation starts a new editing session.
    */
-  file: EntryResponse;
+  entry: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();
   // The block composer is the default surface (PO decision on #43): the DM
   // maintains prose in forms, the textarea is the fallback.
-  const [draft, setDraft] = useState(() => composerDraft(file.body));
+  const [draft, setDraft] = useState(() => composerDraft(entry.body));
   // The text the draft was seeded from — what "is there anything to save?" is
   // measured against. It belongs to the version the session writes against, so
   // it moves only when that version does, i.e. when the DM adopts the stored
   // entry after a conflict.
-  const [baseline, setBaseline] = useState(file.body);
+  const [baseline, setBaseline] = useState(entry.body);
   // Textarea (true) or rendered preview (false) — the markdown surface's own
   // toggle, unchanged. The block surface has no preview of its own: every card
   // already shows its content.
   const [editing, setEditing] = useState(true);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const edit = useEntryEdit(campaign, file.path, file.rev, {
+  const edit = useEntryEdit(campaign, entry.path, entry.rev, {
     onSaved: onClose,
     onReload: (stored) => {
       // The DM chose the stored text: the draft is replaced by it and there is
@@ -148,7 +148,7 @@ export function EntryBodyEditor({
     if (dirty) setConfirmDiscard(true);
     else onClose();
   };
-  const textareaId = textareaIdFor(file.path);
+  const textareaId = textareaIdFor(entry.path);
 
   return (
     <div>
@@ -196,7 +196,7 @@ export function EntryBodyEditor({
             blocks={draft.blocks}
             onChange={(blocks) => setDraft(withDraftBlocks(blocks))}
             idPrefix={textareaId}
-            label={file.path}
+            label={entry.path}
             issues={issues}
           />
         ) : (
@@ -205,7 +205,7 @@ export function EntryBodyEditor({
             onChange={(text) => setDraft(withDraftText(text))}
             editing={editing}
             id={textareaId}
-            label={t("bodyEditor.markdown.aria", { path: file.path })}
+            label={t("bodyEditor.markdown.aria", { path: entry.path })}
           />
         )}
       </EditorShell>

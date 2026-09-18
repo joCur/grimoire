@@ -23,7 +23,7 @@
 // Because the values and the version belong to one entry, the dialog is bound
 // to ONE path (same rule as the body editor): the reading route stays mounted
 // across a navigation — the command palette works over the modal, Back reopens
-// a cached entry — and a dialog holding entry A's values while `file` already
+// a cached entry — and a dialog holding entry A's values while `entry` already
 // points at B would patch A's diff into B. So the open state IS the entry
 // (campaign + path), and the content is keyed by it.
 
@@ -66,12 +66,12 @@ import { useEntryEdit } from "@/lib/use-entry-edit";
  */
 export function PropertiesAction({
   campaign,
-  file,
+  entry,
   tree,
   triggerLabel,
 }: {
   campaign: string;
-  file: EntryResponse;
+  entry: EntryResponse;
   /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
   /**
@@ -86,19 +86,19 @@ export function PropertiesAction({
   triggerLabel?: string;
 }) {
   const t = useT();
-  // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
+  // Open-BY-ENTRY, not a boolean: navigating away closes the dialog instead of
   // leaving it standing over another entry's reading view. Campaign AND path,
   // because two campaigns can hold the same relative path (`npcs/jorna`).
-  const entryKey = `${campaign}/${file.path}`;
-  const [openFile, setOpenFile] = useState<string>();
-  const open = openFile === entryKey;
+  const entryKey = `${campaign}/${entry.path}`;
+  const [openEntry, setOpenEntry] = useState<string>();
+  const open = openEntry === entryKey;
   // …and the state is dropped as well, so returning to the entry (Back into the
   // react-query cache) does not reopen a dialog nobody asked for.
   useEffect(() => {
-    setOpenFile(undefined);
+    setOpenEntry(undefined);
   }, [entryKey]);
-  const fields = propertiesFieldsFor(file.kind, t);
-  const kindLabel = propertiesKindLabel(file.kind, t);
+  const fields = propertiesFieldsFor(entry.kind, t);
+  const kindLabel = propertiesKindLabel(entry.kind, t);
   if (fields === undefined || kindLabel === undefined) return null;
 
   return (
@@ -106,7 +106,7 @@ export function PropertiesAction({
       <HeaderAction
         icon={SlidersHorizontal}
         label={triggerLabel ?? t("properties.action")}
-        onClick={() => setOpenFile(entryKey)}
+        onClick={() => setOpenEntry(entryKey)}
       />
       {open && (
         <PropertiesDialog
@@ -114,11 +114,11 @@ export function PropertiesAction({
           // remounts the dialog, so no held value can outlive its entry.
           key={entryKey}
           campaign={campaign}
-          file={file}
+          entry={entry}
           tree={tree}
           fields={fields}
           kindLabel={kindLabel}
-          onClose={() => setOpenFile(undefined)}
+          onClose={() => setOpenEntry(undefined)}
         />
       )}
     </>
@@ -127,14 +127,14 @@ export function PropertiesAction({
 
 function PropertiesDialog({
   campaign,
-  file,
+  entry,
   tree,
   fields,
   kindLabel,
   onClose,
 }: {
   campaign: string;
-  file: EntryResponse;
+  entry: EntryResponse;
   tree: CampaignTree | undefined;
   fields: readonly PropertiesField[];
   kindLabel: string;
@@ -146,7 +146,7 @@ function PropertiesDialog({
   // silently swallow the DM's change. It moves only when the DM adopts the
   // stored entry after a conflict, together with the session's version.
   const [initial, setInitial] = useState<FormValues>(() =>
-    propertiesFormValues(fields, file.properties),
+    propertiesFormValues(fields, entry.properties),
   );
   const [values, setValues] = useState<FormValues>(initial);
   // Text still standing in a chip input, per field key. It lives here so a
@@ -155,7 +155,7 @@ function PropertiesDialog({
   // Is a discard confirmation standing over the form?
   const [discardPending, setDiscardPending] = useState(false);
 
-  const save = useEntryEdit(campaign, file.path, file.rev, {
+  const save = useEntryEdit(campaign, entry.path, entry.rev, {
     onSaved: onClose,
     onReload: (stored) => {
       // Continue from what is stored: the form is refilled from that entry, so
@@ -174,7 +174,7 @@ function PropertiesDialog({
       // entry this dialog never read, whose cached copy would keep the old
       // status. So the whole entry cache goes for that kind, not just the
       // entry the write seeded.
-      ...(file.kind === "chapter" ? [["entry", campaign]] : []),
+      ...(entry.kind === "chapter" ? [["entry", campaign]] : []),
       ["tree", campaign],
       ["search", campaign],
     ],
@@ -196,7 +196,7 @@ function PropertiesDialog({
     Object.keys(patch).length > 0 &&
     !save.isSaving;
 
-  const id = propString(file.properties.id);
+  const id = propString(entry.properties.id);
   // Esc, the overlay, the cancel button and the X all come through here: with
   // something typed they ask first (house pattern of EntryBodyEditor), an
   // untouched form just closes.
@@ -232,7 +232,7 @@ function PropertiesDialog({
             {/* The two values the form does not own — shown, not editable. */}
             <p className="text-[12px] text-body-secondary">
               {t("properties.id")}{" "}
-              <span className="font-mono text-[12px] text-soft">{id ?? file.path}</span>
+              <span className="font-mono text-[12px] text-soft">{id ?? entry.path}</span>
             </p>
             {fields.map((field) => {
               const value = values[field.key];

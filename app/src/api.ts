@@ -17,6 +17,8 @@ import type {
   SearchResponse,
 } from "@grimoire/shared/types";
 
+import { encodeAddress } from "@/lib/address";
+
 export class ApiError extends Error {
   readonly status: number;
   /**
@@ -100,15 +102,9 @@ export function fetchEntry(campaign: string, path: string): Promise<EntryRespons
   return getJson<EntryResponse>(entriesUrl(campaign, path));
 }
 
-/**
- * The request path of one entry: the address is the URL path, one encoded
- * segment per address segment (`server/src/store/paths.ts` spells the
- * schema). Encoding per segment, not of the whole address — the separators
- * have to survive.
- */
+/** The request path of one entry: its address is the URL path. */
 function entriesUrl(campaign: string, path: string): string {
-  const address = path.split("/").map(encodeURIComponent).join("/");
-  return `/campaigns/${encodeURIComponent(campaign)}/entries/${address}`;
+  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodeAddress(path)}`;
 }
 
 /**

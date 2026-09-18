@@ -391,7 +391,7 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
   if (isError || !data) {
     return <p className="text-muted-foreground">{t("live.scene.unloadable")}</p>;
   }
-  return <SceneArticle file={data} tree={tree.data} variant="live" />;
+  return <SceneArticle entry={data} tree={tree.data} variant="live" />;
 }
 
 /** Log panel (newest first) pinned above the Schnellnotiz — recessed panel,

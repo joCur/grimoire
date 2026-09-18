@@ -24,7 +24,7 @@ export interface NavView {
   /** `:kind` of "/campaigns/:campaign/list/:kind", or "" when this is not a list view. */
   listKind?: string;
   /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not an entry view. */
-  filePath?: string;
+  entryPath?: string;
 }
 
 /**
@@ -46,7 +46,7 @@ export function navSection(view: NavView): NavSection | undefined {
       return "locations";
   }
 
-  const path = view.filePath ?? "";
+  const path = view.entryPath ?? "";
   if (path === "") return undefined;
   switch (kindFromAddress(path)) {
     case "scene":

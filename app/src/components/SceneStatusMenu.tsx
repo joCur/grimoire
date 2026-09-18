@@ -44,13 +44,13 @@ export function SceneStatusControl({
   const [open, setOpen] = useState(false);
   // Lazy rev for the chapter overview rows: only ever requested once the menu opens,
   // and served from the cache when the entry was read before.
-  const file = useQuery({
+  const entry = useQuery({
     queryKey: ["entry", campaign, path],
     queryFn: () => fetchEntry(campaign, path),
     enabled: open && rev === undefined && campaign !== "" && path !== "",
     retry: false,
   });
-  const knownRev = rev ?? file.data?.rev;
+  const knownRev = rev ?? entry.data?.rev;
   const { setStatus, pendingStatus, message } = useSceneStatusMutation(campaign, path, knownRev);
 
   return (
@@ -60,8 +60,8 @@ export function SceneStatusControl({
       pendingStatus={pendingStatus}
       // A row whose entry could not be read at all cannot be patched — the
       // display stays, the menu just does nothing.
-      disabled={file.isError}
-      message={message ?? (file.isError ? t("status.sceneUnloadable") : undefined)}
+      disabled={entry.isError}
+      message={message ?? (entry.isError ? t("status.sceneUnloadable") : undefined)}
       open={open}
       onOpenChange={setOpen}
       onSelect={setStatus}

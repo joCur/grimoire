@@ -5,7 +5,7 @@ import { navSection } from "./topbar-nav";
 /** Only one of the three view shapes is ever set at a time (route match). */
 const chapterOverview = { isChapterOverview: true };
 const list = (listKind: string) => ({ isChapterOverview: false, listKind });
-const file = (filePath: string) => ({ isChapterOverview: false, filePath });
+const entry = (entryPath: string) => ({ isChapterOverview: false, entryPath });
 
 describe("navSection", () => {
   test("the chapter overview is the Kapitel section", () => {
@@ -18,28 +18,28 @@ describe("navSection", () => {
     expect(navSection(list("scenes"))).toBe("chapters");
   });
 
-  test("a scene file belongs under Kapitel — grouped or directly in the chapter", () => {
-    expect(navSection(file("01-salzhafen/hafen/ankunft-leuchtturm"))).toBe("chapters");
-    expect(navSection(file("01-salzhafen/prolog"))).toBe("chapters");
-    expect(navSection(file("01-salzhafen"))).toBe("chapters");
+  test("a scene entry belongs under Kapitel — grouped or directly in the chapter", () => {
+    expect(navSection(entry("01-salzhafen/hafen/ankunft-leuchtturm"))).toBe("chapters");
+    expect(navSection(entry("01-salzhafen/prolog"))).toBe("chapters");
+    expect(navSection(entry("01-salzhafen"))).toBe("chapters");
   });
 
-  test("an NPC file is NPCs and a location file is Orte, whatever mentions them", () => {
-    expect(navSection(file("npcs/fenn"))).toBe("npcs");
-    expect(navSection(file("locations/leuchtturm"))).toBe("locations");
+  test("an NPC entry is NPCs and a location entry is Orte, whatever mentions them", () => {
+    expect(navSection(entry("npcs/fenn"))).toBe("npcs");
+    expect(navSection(entry("locations/leuchtturm"))).toBe("locations");
   });
 
   test("views that belong to no section are marked nowhere", () => {
     expect(navSection({ isChapterOverview: false })).toBeUndefined(); // generator, review
-    expect(navSection(file("campaign"))).toBeUndefined();
-    expect(navSection(file("sessions/2026-01-15"))).toBeUndefined();
-    expect(navSection(file("inbox"))).toBeUndefined();
-    expect(navSection(file("glossary"))).toBeUndefined();
+    expect(navSection(entry("campaign"))).toBeUndefined();
+    expect(navSection(entry("sessions/2026-01-15"))).toBeUndefined();
+    expect(navSection(entry("inbox"))).toBeUndefined();
+    expect(navSection(entry("glossary"))).toBeUndefined();
   });
 
   test("degrades: an unknown list kind or an unusable path marks nothing", () => {
     expect(navSection(list("dragons"))).toBeUndefined();
-    expect(navSection(file(""))).toBeUndefined();
-    expect(navSection(file("npcs"))).toBeUndefined();
+    expect(navSection(entry(""))).toBeUndefined();
+    expect(navSection(entry("npcs"))).toBeUndefined();
   });
 });
