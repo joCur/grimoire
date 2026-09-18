@@ -7,7 +7,7 @@
 // minute, which would jump a session's runtime by up to a minute per pause.
 //
 // Writing them is plain formatting with `date-fns` at the call site
-// (store/write.ts); only the way BACK carries a domain rule, and that is what
+// (store/sessions.ts); only the way BACK carries a domain rule, and that is what
 // lives here. The time ITSELF is `new Date()` at the call site — a test that
 // needs a fixed one fakes the system clock.
 //

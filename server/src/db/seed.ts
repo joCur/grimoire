@@ -9,7 +9,7 @@
 //
 //   1. THE STORE LAYER DOES THE WRITING wherever it has a path for it:
 //      chapter, scene, npc and location go through `insertDraft`
-//      (store/write.ts), so references, tags, handouts and the search index
+//      (store/drafts.ts), so references, tags, handouts and the search index
 //      are maintained by the same code a create endpoint runs. What has no
 //      endpoint because it is historic data — the campaign row, sessions with
 //      their pauses and log lines, the inbox list, the glossary — is written
@@ -299,7 +299,7 @@ export function seedCampaign(
     // (store/refs.ts), and while loading, half the entries a body points at
     // have no row yet.
     expandIndexedRefs(tx, campaignId);
-    // One bump for the whole load, like any other write (store/write.ts
+    // One bump for the whole load, like any other write (store/campaigns.ts
     // `mutate`): a client polling `GET /version` sees the campaign appear once.
     tx.update(campaigns)
       .set({ version: sql`${campaigns.version} + 1` })

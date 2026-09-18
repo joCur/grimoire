@@ -134,7 +134,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(chapter).toBeDefined();
     expect(chapter!.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
     expect(chapter!.status).toBe("active");
-    // A chapter's address is its id (store/read.ts buildTree).
+    // A chapter's address is its id (store/chapters.ts buildTree).
     expect(chapter!.path).toBe("01-salzhafen");
   });
 

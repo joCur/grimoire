@@ -1373,7 +1373,7 @@ export async function applyGenerated(
   }
 
   // The conflict check runs in the SAME transaction as the inserts — see
-  // store/write.ts `applyDrafts`. Asking here first would leave a window
+  // store/drafts.ts `applyDrafts`. Asking here first would leave a window
   // between "free" and "inserted" in which a target could appear, and the
   // documented `409 { conflicts }` would become a primary-key violation (a
   // 500). It asks by ADDRESS, i.e. by id, which is the key — so a draft that

@@ -51,5 +51,5 @@ export function indexEntity(db: GrimoireDb, campaignId: string, entity: IndexedE
 
 // NOTE: there is deliberately no "move the index row to a new id" helper. An
 // id never changes, and a changed display name is a full re-index — see
-// store/write.ts `reindexEntity`, which is the only place that knows what a
+// store/entity-rows.ts `reindexEntity`, which is the only place that knows what a
 // title means per kind.

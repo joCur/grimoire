@@ -153,7 +153,7 @@ describe("the pre-flight in front of the session timestamps", () => {
 
   test("an empty value is 'not set', not a problem", async () => {
     // A running session has no `ended` and an open pause no `to_ts`; a blank
-    // string reads the same way (store/read.ts `isEnded`).
+    // string reads the same way (@grimoire/shared `isEnded`).
     const client = await openSessionsDb();
     try {
       seedCanonical(client);
