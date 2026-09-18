@@ -26,7 +26,7 @@ import {
   listRowProblemReport,
 } from "../src/db/list-rows-preflight";
 import { closeStore, getDb, initStore } from "../src/store/handle";
-import { readInbox } from "../src/store/read";
+import { readInbox } from "../src/store/inbox";
 import { readSession } from "../src/store/sessions";
 import { seedCampaign } from "../src/db/seed";
 import { logLineId } from "../src/store/body-parse";

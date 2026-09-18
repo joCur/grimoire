@@ -32,7 +32,6 @@ import {
   toSlug,
   type EntryResponse,
   type GlossaryResponse,
-  type InboxResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
   type PatchEntryRequest,
@@ -47,7 +46,6 @@ import {
   chapters,
   generateJobs,
   glossary,
-  inboxEntries,
   locations,
   npcs,
   packJson,
@@ -93,13 +91,7 @@ import {
 import { indexEntity } from "./fts";
 import { expandBodyRefs } from "./refs";
 import { getDb } from "./handle";
-import {
-  glossaryRows,
-  inboxRows,
-  knowledgeEntry,
-  knowledgeRows,
-  readByLocator,
-} from "./read";
+import { glossaryRows, knowledgeEntry, knowledgeRows, readByLocator } from "./read";
 import {
   addressIdentity,
   addressSegments,
@@ -949,65 +941,6 @@ export async function writeKnowledge(
 
 
 
-// --- inbox ---------------------------------------------------------------------
-
-/**
- * POST /api/campaigns/:campaign/inbox — append one idea as a row.
- *
- * No heading row is written in front of the first one. A table has no
- * skeleton: `# Inbox` was the title of a text (ADR #26), and a row holding it
- * would read as an idea called "Inbox".
- */
-export async function appendInboxEntry(campaign: string, text: string): Promise<InboxResponse> {
-  return mutate(campaign, (tx) => {
-    tx.insert(inboxEntries)
-      .values({
-        campaignId: campaign,
-        pos: nextPos(inboxRows(tx, campaign)),
-        text,
-        done: 0,
-      })
-      .run();
-    return renderInbox(inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
-  });
-}
-
-/** The inbox's own guard token, bumped and returned (see read.ts). */
-function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
-  const next = (campaignRow(tx, campaign)?.inboxRev ?? 0) + 1;
-  tx.update(campaigns)
-    .set({ inboxRev: next })
-    .where(eq(campaigns.id, campaign))
-    .run();
-  return next;
-}
-
-/**
- * POST /api/campaigns/:campaign/review/inbox-done `{ id }` — the one
- * documented exception to the inbox's append-only rule: the idea is ticked
- * off. Idempotent (an idea already done answers unchanged); 404 when the
- * inbox has no row with that id.
- *
- * The id is the row's own (`InboxEntry.id`, the append counter). The review
- * reads the list and sends back what it read, so a miss is a real error —
- * the list moved on, or the caller made the id up.
- */
-export async function markInboxLineDone(campaign: string, id: string): Promise<InboxResponse> {
-  return mutate(campaign, (tx) => {
-    const rows = inboxRows(tx, campaign);
-    const rev = campaignRow(tx, campaign)?.inboxRev ?? 1;
-    const match = rows.find((row) => String(row.pos) === id);
-    if (match === undefined) throw new ApiError(404, "no such idea in the inbox");
-    // Already done means an earlier call succeeded. An idempotent repeat
-    // writes nothing, so the guard token stays as it is.
-    if (match.done !== 0) return renderInbox(rows, rev);
-    tx.update(inboxEntries)
-      .set({ done: 1 })
-      .where(and(eq(inboxEntries.campaignId, campaign), eq(inboxEntries.pos, match.pos)))
-      .run();
-    return renderInbox(inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
-  });
-}
 
 
 

@@ -30,7 +30,6 @@ import {
   type SceneStatus,
   type SceneSummary,
   type SceneType,
-  type InboxResponse,
   type SessionSummary,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
@@ -42,7 +41,6 @@ import {
   campaignKnowledge,
   chapters,
   glossary,
-  inboxEntries,
   locations,
   npcs,
   sceneNpcs,
@@ -63,14 +61,12 @@ import {
 import {
   renderCampaign,
   renderChapter,
-  renderInbox,
   renderLocation,
   renderNpc,
   renderScene,
   type CampaignRow,
   type ChapterRow,
   type GlossaryRow,
-  type InboxRow,
   type LocationRow,
   type NpcRow,
   type SceneRow,
@@ -224,31 +220,6 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
 
 
 
-
-/**
- * GET /api/campaigns/:campaign/inbox — the ideas plus the LIST's guard token.
- * An empty inbox is an empty list, not a missing one (200).
- */
-export async function readInbox(campaign: string): Promise<InboxResponse> {
-  const row = await requireCampaign(campaign);
-  const db = await getDb();
-  return renderInbox(inboxRows(db, campaign), row.inboxRev);
-}
-
-// --- GET /api/campaigns/:campaign/entries ------------------------------------------------
-
-export function inboxRows(db: GrimoireDb, campaign: string): InboxRow[] {
-  return db
-    .select({
-      pos: inboxEntries.pos,
-      text: inboxEntries.text,
-      done: inboxEntries.done,
-    })
-    .from(inboxEntries)
-    .where(eq(inboxEntries.campaignId, campaign))
-    .orderBy(asc(inboxEntries.pos))
-    .all() as InboxRow[];
-}
 
 export function glossaryRows(db: GrimoireDb, campaign: string): GlossaryRow[] {
   return db
