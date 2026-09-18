@@ -2,7 +2,8 @@
 //
 // A list of rows with its own guard token (`campaigns.glossary_rev`), read
 // and written as a whole — the order of the entries IS the stored order, so
-// reordering on the settings page is the same request as editing. A term is
+// reordering on the glossary page (/campaigns/:id/glossary) is the same
+// request as editing. A term is
 // searchable, so every write keeps its own index rows; and the same list
 // becomes a block of the generator's prompt.
 
@@ -36,7 +37,7 @@ export function glossaryRows(db: GrimoireDb, campaign: string): GlossaryRow[] {
 /**
  * GET /api/campaigns/:campaign/glossary -> `{ entries, rev }`.
  *
- * `rev` travels with it: the settings page edits this list, so it needs the
+ * `rev` travels with it: the glossary page edits this list, so it needs the
  * same guard token every other editable thing has. It is the LIST's counter
  * (`campaigns.glossary_rev`) and not `campaigns.version`, which every
  * unrelated write bumps — that would make a glossary edit the DM had open
@@ -100,7 +101,7 @@ export async function writeGlossary(
   return mutate(campaign, (tx) => {
     const row = requireCampaignRow(tx, campaign);
     // A list guard, not an entry guard: the 409 carries the current `rev` and
-    // no entry, because the glossary is not one (ADR #26). The settings page
+    // no entry, because the glossary is not one (ADR #26). The glossary page
     // reloads the list itself.
     guardRev(row.glossaryRev, rev, "glossary changed");
     writeGlossaryRows(tx, campaign, entries);

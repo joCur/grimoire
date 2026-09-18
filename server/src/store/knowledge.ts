@@ -1,5 +1,5 @@
-// Kampagnenwissen: the facts, style rules and naming conventions the DM
-// keeps on the settings page.
+// Campaign knowledge: the facts, style rules and naming conventions the DM
+// keeps on the campaign's knowledge page (/campaigns/:id/knowledge).
 //
 // A list of rows with its own guard token (`campaigns.knowledge_rev`), read
 // and written as a whole. Its second job is the generator's: the same rows

@@ -150,10 +150,10 @@ export function assertNpcRefs(tx: GrimoireDb, campaign: string, ids: readonly st
 
 /**
  * The scene a quick note names. `code` is `log_scene_unknown`; the sibling
- * code `played_scene_unknown` has no caller any more, because the played
- * list has no write path of its own (see ./sessions.ts `patchSession`) — it is
- * maintained by the note that named the scene, and this check is what stands
- * in front of that.
+ * code `played_scene_unknown` has no caller, because the played list has no
+ * write path of its own (see ./sessions.ts `patchSession`) — it is maintained
+ * by the note that named the scene, and this check is what stands in front of
+ * that.
  */
 export function assertSceneRef(
   tx: GrimoireDb,
@@ -245,13 +245,15 @@ export function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow):
 }
 
 /**
- * Re-index one entity from its current row — the index row's `title` too,
- * not only its id.
+ * Re-read the row of one entry and rebuild its search-index row from it,
+ * title included.
  *
- * `campaign` is a kind here because the campaign ENTRY is a referring body
- * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `campaign`
- * that says `[[jorna]]` has the resolved name in its index row, so it goes
- * stale with everybody else's.
+ * Called after a write that changed a name other bodies refer to: their
+ * indexed text spells that name out, so it is stale until they are rebuilt.
+ *
+ * `campaign` is one of the kinds because the campaign entry's body holds
+ * `[[references]]` like any other body (store/refs.ts `REF_BODY_KINDS`), and
+ * its index row spells their names out too.
  */
 export function reindexEntity(
   tx: GrimoireDb,

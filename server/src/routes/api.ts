@@ -546,7 +546,7 @@ api.post("/campaigns/:campaign/inbox", async (c) => {
 // separate move endpoint. Of duplicate terms the FIRST one wins. `rev` is
 // the list's guard token (the one GET /glossary hands out); a stale one is
 // 409 { code: "rev_conflict", rev } and writes nothing. No `entry` rides
-// along — the glossary is not one (ADR #26), and the settings page reloads
+// along — the glossary is not one (ADR #26), and the glossary page reloads
 // the list itself.
 //
 // This is the ONLY way the glossary is written: it has no address, so there

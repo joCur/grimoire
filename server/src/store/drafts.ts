@@ -32,40 +32,6 @@ import { isEmptyNpcRow, NPC_DEFAULT_STATUS } from "./npcs";
 import { addressIdentity, locatorFromPath, type Locator } from "./paths";
 import { asMap, asOptStr, asStr, asStrArray, assertNpcStatus, assertSceneClosedFields } from "./shared";
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // --- the generator's apply step ------------------------------------------------
 
 export interface EntityDraft {

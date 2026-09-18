@@ -196,8 +196,6 @@ function cmp(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-// --- GET /api/campaigns/:campaign/tree -------------------------------------------------
-
 export function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
   const npcRefs = db
     .select({ npcId: sceneNpcs.npcId })
