@@ -8,6 +8,9 @@
 //      its holes are filled,
 //   b) a PREPARED scene gains a new plot thread as ADDITIONAL blocks while
 //      every existing block comes back byte for byte,
+//   b2) a FILLED npc — the one entry whose stored shape differs from the
+//      reply shape (`quickstats` as a mapping vs. a `{ key, value }` list) —
+//      is augmented and keeps its stats as the mapping they are,
 //   c) rejecting the proposal writes nothing and takes the job with it,
 //   d) an entry that moves while the review is open answers 409 and nothing
 //      is written (ADR #4) — the review recovers on the re-read.
@@ -44,6 +47,9 @@ import { expect, test, type Api } from "../support/test";
 /** The prepared scene of the example campaign — the augment target of (b). */
 const SCENE = "01-salzhafen/bucht/smuggler-captured";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
+
+/** The example campaign's filled npc — the one that carries `quickstats`. */
+const FILLED_NPC = "npcs/jorna";
 
 /** The empty npc — created, never filled in. */
 const EMPTY_NPC = "spitzel";
@@ -201,6 +207,34 @@ test("prepared scene: the new thread is added, every existing block survives", a
   // Path 2: the added branch renders as a real `## If:` section.
   await expect(page.locator("details[data-if-section]")).toHaveCount(3);
   await expect(page.getByText(AUGMENT_THREAD_CONDITION)).toBeVisible();
+});
+
+test("an npc with quickstats: the run passes and the mapping stays a mapping", async ({
+  page,
+  api,
+}) => {
+  // Jorna is the entry whose STORED shape differs from the reply shape:
+  // `quickstats` is a mapping in the store and a `{ key, value }` list in a
+  // reply. The stub echoes the properties the prompt showed it — so a prompt
+  // that shows the wrong one ends this run in a 422 instead of a review.
+  const before = await api.file(FILLED_NPC);
+  expect(before.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+
+  await page.goto(`/campaigns/beispiel/entries/${FILLED_NPC}`);
+  await startAugment(page);
+
+  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+    timeout: 30_000,
+  });
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+
+  // The body grew, and the stats the DM authored are still the mapping they
+  // were — values included, bare numbers and all.
+  const after = await api.file(FILLED_NPC);
+  expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
+  expect(after.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+  expect(after.properties.name).toBe(before.properties.name);
 });
 
 test("block decisions survive a reload — the review state is on the job", async ({

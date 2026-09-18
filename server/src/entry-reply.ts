@@ -33,6 +33,11 @@
 // Everything after that — a kebab `id`, a known scene type, references that
 // resolve, known callouts, the npc format rules — stays in the validators
 // (./generator.ts, ./generate-pipeline.ts, ./generator-augment.ts).
+//
+// The conversion goes BOTH ways here, and on purpose: `toReplyProperties`
+// writes stored properties in the reply's shape, which is what an augment
+// prompt shows the model of the entry it works on. The two directions are one
+// contract, so they are one module.
 
 import { jsonrepair } from "jsonrepair";
 import {
@@ -368,7 +373,7 @@ function pairsValue(field: PropertyFieldDef, value: unknown, errors: string[]): 
     errors.push(shape);
     return undefined;
   }
-  const out: Record<string, string> = {};
+  const out: Record<string, unknown> = {};
   for (const item of value) {
     if (!isRecord(item)) {
       errors.push(shape);
@@ -376,12 +381,56 @@ function pairsValue(field: PropertyFieldDef, value: unknown, errors: string[]): 
     }
     const key = item[PAIR_KEY];
     const text = item[PAIR_VALUE];
-    if (typeof key !== "string" || typeof text !== "string") {
+    if (typeof key !== "string" || !isPairValue(text)) {
       errors.push(shape);
       return undefined;
     }
     if (key.trim() === "") continue;
-    out[key.trim()] = text.trim();
+    // A NUMBER keeps its type instead of being stringified: an augment run is
+    // shown the entry it works on (`toReplyProperties`) and a value echoed
+    // back unchanged must not come out rewritten. That a MODEL writes its
+    // values as strings is the schema's rule, and `quickstatsErrors`
+    // (./generator.ts) is what enforces it on a value a run really changes.
+    out[key.trim()] = typeof text === "string" ? text.trim() : text;
   }
   return Object.keys(out).length === 0 ? undefined : out;
+}
+
+/** A pair value the store keeps: a string, or a number a campaign carries. */
+function isPairValue(value: unknown): value is string | number {
+  return typeof value === "string" || (typeof value === "number" && Number.isFinite(value));
+}
+
+/**
+ * The STORED properties of an entry in the shape a REPLY has — the reverse of
+ * `normalizeProperties` above and its pair: an augment run puts the existing
+ * entry into the prompt (llm-provider.ts `formatExistingEntry`), and the
+ * model has to read it in the shape the schema then forces it to write back.
+ *
+ * `pairs` is the one shape that differs, so it is the one thing converted:
+ * the stored mapping becomes the `{ key, value }` LIST. Values travel
+ * VERBATIM — a stored `2` is shown as `2` — because the prompt shows the
+ * entry as it is instead of correcting it. Every other key, the DM's own
+ * extra ones included, is passed through untouched.
+ */
+export function toReplyProperties(
+  kind: EntryKind,
+  stored: Record<string, unknown>,
+): Record<string, unknown> {
+  const pairKeys = new Set(
+    (propertyFieldsFor(kind) ?? [])
+      .filter((field) => field.control === "pairs")
+      .map((field) => field.key),
+  );
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(stored)) {
+    out[key] =
+      pairKeys.has(key) && isRecord(value)
+        ? Object.entries(value).map(([pairKey, pairValue]) => ({
+            [PAIR_KEY]: pairKey,
+            [PAIR_VALUE]: pairValue,
+          }))
+        : value;
+  }
+  return out;
 }

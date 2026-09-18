@@ -374,6 +374,7 @@ export async function runAugment(
       sourceText,
       existingEntry: {
         path: target.stored.path,
+        kind: target.kind,
         properties: target.stored.properties,
         body: target.stored.body,
       },

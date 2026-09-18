@@ -31,7 +31,10 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
+import type { EntryKind } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
+
+import { toReplyProperties } from "./entry-reply";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
@@ -75,17 +78,20 @@ export interface GenerateRequest {
    */
   assignment?: string;
   /**
-   * The entry an AUGMENT run works on: its address and its two halves, the
-   * properties and the body, exactly as the store holds them. Absent for the
-   * two runs that create something — and then the prompt has no such
-   * section.
+   * The entry an AUGMENT run works on: its address, its kind and its two
+   * halves, the properties and the body, exactly as the store holds them.
+   * Absent for the two runs that create something — and then the prompt has
+   * no such section.
    *
    * The transport decides how it LOOKS in the prompt
    * (`formatExistingEntry`): the entry travels as data here, and turning it
-   * into prompt text is formatting, not a storage format.
+   * into prompt text is formatting, not a storage format. The `kind` is what
+   * that formatting needs to know which properties a reply shapes differently
+   * from the store.
    */
   existingEntry?: {
     path: string;
+    kind: EntryKind;
     properties: Record<string, unknown>;
     body: string;
   };
@@ -264,15 +270,26 @@ export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
  * `body` pair as pretty-printed JSON — the very shape the reply is forced
  * into, so the model reads the entry the way it has to write it back.
  *
+ * „The way it has to write it back" is why the properties go through
+ * `toReplyProperties` (entry-reply.ts) first: a `pairs` field is STORED as a
+ * mapping (`{ "insight": 2 }`) and REPLIED as a `{ key, value }` list, and a
+ * model shown the mapping answers with the mapping — which its own schema
+ * then rejects.
+ *
  * This is formatting and nothing else. Nothing parses this text again: the
  * proposal is validated against the entry's own halves
  * (generator-augment.ts), and the store never sees it.
  */
 export function formatExistingEntry(entry: {
+  kind: EntryKind;
   properties: Record<string, unknown>;
   body: string;
 }): string {
-  return JSON.stringify({ properties: entry.properties, body: entry.body }, null, 2);
+  return JSON.stringify(
+    { properties: toReplyProperties(entry.kind, entry.properties), body: entry.body },
+    null,
+    2,
+  );
 }
 
 // The prompt content is German on purpose — the pipeline's target language
@@ -292,8 +309,8 @@ export function formatExistingEntry(entry: {
  *
  * The Claude provider marks the constant half (and the system prompt) with
  * `cache_control: ephemeral`; everything else joins the two with the same
- * blank line `buildPrompt` always used, so a single-call run sees a prompt
- * that is byte for byte the one it saw before this ticket.
+ * blank line `buildPrompt` joins with, so a single-call run sees one prompt
+ * and the split costs it not a single character.
  */
 export function buildPromptParts(req: GenerateRequest): { constant: string; variable: string } {
   const npcList = req.context.npcs.map((n) => `${n.id} (${n.name})`).join(", ");

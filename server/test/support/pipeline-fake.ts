@@ -31,7 +31,8 @@
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part.
 
-import { PAIR_KEY, PAIR_VALUE, propertyFieldsFor } from "@grimoire/shared";
+import type { EntryKind } from "@grimoire/shared";
+import { toReplyProperties } from "../../src/entry-reply";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -125,23 +126,20 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
  *
  * `quickstats` (and any other key/value field) is turned into the `{ key,
  * value }` LIST the schema asks for — a free mapping cannot be expressed in
- * strict mode (shared/entry-schema.ts).
+ * strict mode (shared/entry-schema.ts). The conversion is the server's own
+ * (`toReplyProperties`), the same one an augment prompt shows the model, so a
+ * script cannot write a shape no provider could deliver.
  */
 export function entryReply(
   entry: ScriptedEntry,
   warnings: readonly string[] = [],
-  kind: "scene" | "npc" | "location" = "scene",
+  kind: EntryKind = "scene",
 ): string {
-  const properties = { ...entry.properties };
-  for (const field of propertyFieldsFor(kind) ?? []) {
-    if (field.control !== "pairs") continue;
-    const value = properties[field.key];
-    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
-    properties[field.key] = Object.entries(value as Record<string, unknown>).map(
-      ([key, item]) => ({ [PAIR_KEY]: key, [PAIR_VALUE]: String(item) }),
-    );
-  }
-  return JSON.stringify({ properties, body: entry.body, warnings: [...warnings] });
+  return JSON.stringify({
+    properties: toReplyProperties(kind, entry.properties),
+    body: entry.body,
+    warnings: [...warnings],
+  });
 }
 
 /**

@@ -8,8 +8,8 @@
 //
 // So the cases here are the ones the schema cannot cover:
 //   * a reply that is not the object at all (an endpoint that ignored
-//     `response_format`, a model that answered prose or the raw entry the
-//     earlier slices of this ticket asked for),
+//     `response_format`, a model that answered prose or one rendered entry
+//     with a properties block on top),
 //   * the tolerant way in — a fence, prose around it, one `jsonrepair` pass,
 //   * `null` read as „not given", so the properties carry no empty keys,
 //   * the `{ key, value }` list folded back into the `quickstats` mapping,
@@ -18,13 +18,30 @@
 //     it and nobody hand-writes the JSON any more.
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   NOT_AN_ENTRY_ERROR,
   REPAIRED_ENTRY_WARNING,
   parseEntryReply,
   parseJsonReply,
+  toReplyProperties,
   type EntryReply,
 } from "../src/entry-reply";
+
+/**
+ * The stored properties of the example campaign's Jorna — read from the
+ * fixture instead of copied, because the point of the round-trip case is that
+ * the shapes a REAL entry carries survive: `quickstats` as a mapping, and its
+ * values as the bare numbers the campaign has always held.
+ */
+const JORNA = (() => {
+  const file = join(import.meta.dir, "..", "..", "fixtures", "beispiel", "npc-jorna.json");
+  const entry = JSON.parse(readFileSync(file, "utf8")) as {
+    properties: Record<string, unknown>;
+  };
+  return entry.properties;
+})();
 
 /** The PO case: opening U+201E, closed with the ASCII `"`. */
 const PO_LINE = '„Wer nachts hier steht, hat was zu verbergen", murrt die Wache.';
@@ -127,6 +144,28 @@ describe("parseEntryReply", () => {
     expect(reply.properties.quickstats).toEqual({ wis: "+2", "passive-perception": "13" });
   });
 
+  test("the stored properties in reply shape are the pair list", () => {
+    expect(toReplyProperties("npc", JORNA)).toEqual({
+      ...JORNA,
+      quickstats: [
+        { key: "insight", value: 2 },
+        { key: "passive-perception", value: 12 },
+      ],
+    });
+  });
+
+  test("jorna's properties round-trip stored → reply → stored unchanged", () => {
+    const shown = toReplyProperties("npc", JORNA);
+    const back = read(
+      JSON.stringify({ properties: shown, body: "## Will\n\nX\n", warnings: [] }),
+      "npc",
+    ).properties;
+    // Values included: the example campaign carries bare numbers from its own
+    // history, and an augment run that merely echoes them back must not turn
+    // a 2 into a "2".
+    expect(back).toEqual(JORNA);
+  });
+
   test("a fence, prose around it and a single repair all cost no correction turn", () => {
     expect(read(`Hier ist die Szene:\n\n\`\`\`json\n${sceneObject()}\n\`\`\`\n`).properties.id).toBe(
       "night-watch-quay",
@@ -141,7 +180,7 @@ describe("parseEntryReply", () => {
     for (const raw of [
       "",
       "kein Objekt",
-      // The raw-entry format of this ticket's earlier slices.
+      // One rendered entry, properties block and all — not the reply object.
       "---\nid: night-watch-quay\nstatus: draft\n---\n\n## Flow\n",
       JSON.stringify([sceneObject()]),
       JSON.stringify({ body: "## Flow\n", warnings: [] }),

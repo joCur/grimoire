@@ -169,7 +169,12 @@ describe("prompt assembly", () => {
       glossary: "cove → Bucht",
       context: { npcs: [{ id: "jorna", name: "Jorna" }], locations: [] },
       sourceText: "A spy among the smugglers.",
-      existingEntry: { path: NPC, properties: { id: "jorna" }, body: "## Will\n\nX\n" },
+      existingEntry: {
+        path: NPC,
+        kind: "npc",
+        properties: { id: "jorna" },
+        body: "## Will\n\nX\n",
+      },
       instruction: "Führe einen Handlungsstrang um den Spitzel ein",
     });
     expect(prompt).toContain(EXISTING_ENTRY_HEADING);
@@ -186,6 +191,35 @@ describe("prompt assembly", () => {
     expect(prompt.indexOf(EXISTING_ENTRY_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
   });
 
+  test("the existing entry stands in the prompt in the REPLY shape", async () => {
+    const stored = await read(NPC);
+    const prompt = buildPrompt({
+      systemPrompt: "SYS",
+      fewShotTarget: "FEWSHOT",
+      knowledge: "",
+      glossary: "",
+      context: { npcs: [], locations: [] },
+      sourceText: "",
+      existingEntry: {
+        path: NPC,
+        kind: "npc",
+        properties: stored.properties,
+        body: stored.body,
+      },
+      instruction: "Ergänze einen Handlungsstrang",
+    });
+    // `quickstats` is a mapping in the store and a `{ key, value }` LIST in a
+    // reply — the model is shown the shape it has to write back, values
+    // verbatim, and never the stored mapping it would otherwise imitate into
+    // a reply its own schema rejects.
+    expect(prompt).toContain('"quickstats": [');
+    expect(prompt).toContain('"key": "insight"');
+    expect(prompt).toContain('"value": 2');
+    expect(prompt).not.toContain('"insight": 2');
+    // Everything else is the entry as it is stored.
+    expect(prompt).toContain('"name": "Hafenmeisterin Jorna"');
+  });
+
   test("a run with only an instruction has no Quelltext section", () => {
     const prompt = buildPrompt({
       systemPrompt: "SYS",
@@ -194,7 +228,7 @@ describe("prompt assembly", () => {
       glossary: "",
       context: { npcs: [], locations: [] },
       sourceText: "",
-      existingEntry: { path: NPC, properties: { id: "jorna" }, body: "" },
+      existingEntry: { path: NPC, kind: "npc", properties: { id: "jorna" }, body: "" },
       instruction: "Ergänze die Stimme",
     });
     expect(prompt).not.toContain("## Quelltext");
@@ -768,6 +802,81 @@ describe("one job per campaign, whatever its kind", () => {
     expect(fake.calls.length).toBeGreaterThan(1);
     // A failed run writes nothing at all.
     expect((await read(NPC)).rev).toBe(before.rev);
+  });
+});
+
+// --- the entry as the prompt shows it ----------------------------------------
+
+/**
+ * A provider that answers with EXACTLY the entry its own prompt showed it,
+ * plus one new section — the model that imitates what it reads, which is what
+ * both a real model and the E2E stub do.
+ *
+ * It is the only way to test the prompt and the reader against each other:
+ * a scripted reply says what a test believes the prompt contains, while this
+ * one reads the prompt the run really assembled.
+ */
+class EchoingProvider implements LLMProvider {
+  readonly name = "echoing";
+  shown: Record<string, unknown> = {};
+  async complete(req: GenerateRequest): Promise<CompletionResult> {
+    const prompt = buildPrompt(req);
+    const fence = /```json\n([\s\S]*?)```/.exec(
+      prompt.slice(prompt.indexOf(EXISTING_ENTRY_HEADING)),
+    );
+    if (fence === null) throw new Error("EchoingProvider: the prompt shows no entry");
+    const entry = JSON.parse(fence[1]!) as { properties: Record<string, unknown>; body: string };
+    this.shown = entry.properties;
+    return {
+      text: JSON.stringify({
+        properties: entry.properties,
+        body: `${entry.body}\n## If: Jorna wird misstrauisch\n\nSie schickt den Lotsen vor.\n`,
+        warnings: [],
+      }),
+      truncated: false,
+    };
+  }
+}
+
+describe("an entry whose stored shape differs from the reply shape", () => {
+  test("jorna's quickstats survive prompt, reply and accept", async () => {
+    const stored = await read(NPC);
+    expect(stored.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+    const provider = new EchoingProvider();
+    setProviderForTests(provider);
+
+    const job = await runAugmentJob({ path: NPC, instruction: "Handlungsstrang ergänzen" });
+    // The reply is the shown properties, verbatim — so a run that fails here
+    // failed on the SHAPE the prompt showed, which is the whole case.
+    expect(job.error?.body.code).toBeUndefined();
+    expect(job.status).toBe("done");
+    // The prompt shows the reply's pair LIST, never the stored mapping.
+    expect(provider.shown.quickstats).toEqual([
+      { key: "insight", value: 2 },
+      { key: "passive-perception", value: 12 },
+    ]);
+
+    const result = job.augmentResult as AugmentResult;
+    expect(result.proposedBody).toContain("## If: Jorna wird misstrauisch");
+    // Read back into the stored shape, the echo IS the stored value — so the
+    // proposal has nothing to say about `quickstats`.
+    expect(result.properties.map((p) => p.key)).not.toContain("quickstats");
+
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment/apply`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: NPC,
+        rev: stored.rev,
+        body: result.proposedBody,
+        jobId: job.id,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const written = await read(NPC);
+    expect(written.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+    expect(written.body).toContain("## If: Jorna wird misstrauisch");
+    expect(written.body).toContain("## Will");
   });
 });
 
