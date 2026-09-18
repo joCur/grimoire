@@ -25,19 +25,22 @@
 // and a forced `response_format` do the job, and a prefilled brace in front
 // of a reply the API already shapes is only in the way.
 //
-// Two facts travel WITH the text, because only the transport can see them
-// (issue #18): whether the model hit its output cap (`finish_reason: length`
+// Two facts travel WITH the text, because only the transport can see them:
+// whether the model hit its output cap (`finish_reason: length`
 // / `stop_reason: max_tokens` — a truncated reply is unfixable by a
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
+import type { EntryKind } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
+
+import { toReplyProperties } from "./entry-reply";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
   fewShotTarget: string; // generator/example-output.json (npc run: npc-example-output.json)
   /**
-   * The campaign-knowledge lines (issue #53), already rendered and with
+   * The campaign-knowledge lines, already rendered and with
    * `[[slug]]` references resolved (store/read.ts knowledgeText). `""` means
    * the campaign has none — the prompt then has no knowledge section at all,
    * so a campaign that never uses the feature sees the prompt unchanged.
@@ -45,16 +48,16 @@ export interface GenerateRequest {
   knowledge: string;
   glossary: string; // the campaign's glossary as `term → explanation` lines ("" when empty)
   context: {
-    /** Target chapter of a scene run; absent for an NPC run (issue #21). */
+    /** Target chapter of a scene run; absent for an NPC run. */
     chapter?: string;
     npcs: Array<{ id: string; name: string }>;
     locations: Array<{ id: string; name: string }>;
     /** Id the DM pinned for the generated file (NPC run) — absent: free choice. */
     targetId?: string;
   };
-  sourceText: string; // English source text ("" when a run has none — issue #36)
+  sourceText: string; // English source text ("" when a run has none)
   /**
-   * The run's OUTLINE, rendered as prompt lines (issue #102): every scene id
+   * The run's OUTLINE, rendered as prompt lines: every scene id
    * with its title/type/location and every suggested entry. It travels with
    * each per-scene and per-entry call so cross references can only ever name
    * ids that exist — and it is part of the CONSTANT prefix, which is what
@@ -64,7 +67,7 @@ export interface GenerateRequest {
    */
   outline?: string;
   /**
-   * WHICH part of the outline this one call writes (issue #102), as prompt
+   * WHICH part of the outline this one call writes, as prompt
    * lines. It belongs to the VARIABLE half on purpose: the outline block is
    * identical for every call of a run and is therefore cacheable, and a
    * per-part marker inside it would make every part's prefix a different
@@ -75,12 +78,23 @@ export interface GenerateRequest {
    */
   assignment?: string;
   /**
-   * The entry an AUGMENT run works on (issue #36): its complete current
-   * entry as one markdown text, properties block included, under its address. Absent for the
-   * two runs that create something — and then the prompt has no such section,
-   * so a scene/npc run sees the prompt exactly as before.
+   * The entry an AUGMENT run works on: its address, its kind and its two
+   * halves, the properties and the body, exactly as the store holds them.
+   * Absent for the two runs that create something — and then the prompt has
+   * no such section.
+   *
+   * The transport decides how it LOOKS in the prompt
+   * (`formatExistingEntry`): the entry travels as data here, and turning it
+   * into prompt text is formatting, not a storage format. The `kind` is what
+   * that formatting needs to know which properties a reply shapes differently
+   * from the store.
    */
-  existingEntry?: { path: string; markdown: string };
+  existingEntry?: {
+    path: string;
+    kind: EntryKind;
+    properties: Record<string, unknown>;
+    body: string;
+  };
   /**
    * The DM's free instruction of an augment run („Führe einen Handlungsstrang
    * um den Schmuggler-Spitzel ein"). Either this or `sourceText` is there —
@@ -120,7 +134,7 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   /**
-   * How many of `inputTokens` came out of the prompt cache (issue #110).
+   * How many of `inputTokens` came out of the prompt cache.
    * Reporting only — it is what tells us whether caching actually engages on
    * a routed model, and it is absent when the endpoint says nothing about it.
    * NOT part of the job totals: a cached token was still sent, so the run's
@@ -144,7 +158,7 @@ export interface LLMProvider {
   /**
    * Effective output cap in tokens, or undefined when the endpoint's own
    * default applies. Read-only reporting only — the truncation message names
-   * it so the DM knows which value to raise (issue #18).
+   * it so the DM knows which value to raise.
    */
   readonly maxTokens?: number;
   /** One completion: prompt (+ prior correction turns) -> raw model reply. */
@@ -171,8 +185,8 @@ function normalizeUsage(
 }
 
 /**
- * Claude's usage, with the CACHE buckets folded into the input count (issue
- * #102): with `cache_control` in play the API reports the cached prefix under
+ * Claude's usage, with the CACHE buckets folded into the input count: with
+ * `cache_control` in play the API reports the cached prefix under
  * `cache_read_input_tokens` / `cache_creation_input_tokens` and leaves
  * `input_tokens` with the uncached tail only. Summing them keeps the review's
  * „~N Tokens" the honest size of what was sent — caching makes a run cheaper,
@@ -197,7 +211,7 @@ export function claudeUsage(raw: unknown): TokenUsage | undefined {
  * cached prefix there (unlike the Messages API, which splits it out), so the
  * only extra thing to pick up is how much of it was a cache hit — OpenRouter
  * and OpenAI both report it under `prompt_tokens_details.cached_tokens`
- * (issue #110). Absent on endpoints that do not cache, and never fatal.
+ *. Absent on endpoints that do not cache, and never fatal.
  */
 export function openAIUsage(raw: unknown): TokenUsage | undefined {
   const base = normalizeUsage(raw, "prompt_tokens", "completion_tokens");
@@ -212,7 +226,7 @@ export function openAIUsage(raw: unknown): TokenUsage | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * The heading of the campaign-knowledge block (issue #53 AK2). The WORDING is
+ * The heading of the campaign-knowledge block. The WORDING is
  * the contract — it is what makes the block binding rather than advisory, so
  * it is a constant the prompt test asserts on and not an inline string.
  *
@@ -225,16 +239,16 @@ export const KNOWLEDGE_HEADING =
 
 /**
  * Heading of the augment run's „this is what already stands there" block
- * (issue #36). A constant for the same reason KNOWLEDGE_HEADING is one: the
+ *. A constant for the same reason KNOWLEDGE_HEADING is one: the
  * prompt test asserts on it, and the E2E stub reads the prompt by it.
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
 
-/** Heading of the DM's free instruction of an augment run (issue #36). */
+/** Heading of the DM's free instruction of an augment run. */
 export const INSTRUCTION_HEADING = "## Anweisung des DM";
 
 /**
- * Heading of the run's outline block (issue #102). A constant for the same
+ * Heading of the run's outline block. A constant for the same
  * reason the others are: the prompt test asserts on it and the E2E stub reads
  * the prompt by it — it is how the stub tells an outline call from a
  * per-scene one.
@@ -243,7 +257,7 @@ export const OUTLINE_HEADING = "## Gliederung des Durchlaufs — verbindlich, id
 
 /**
  * Heading of the line that says WHICH scene of the outline this call writes
- * (issue #102). It stands in the VARIABLE half, above the excerpt: the
+ *. It stands in the VARIABLE half, above the excerpt: the
  * outline block above it is byte-identical for every part of a run, which is
  * what makes the cached prefix worth anything. A constant for the same reason
  * the others are — the prompt test asserts on it and the E2E stub reads the
@@ -251,11 +265,38 @@ export const OUTLINE_HEADING = "## Gliederung des Durchlaufs — verbindlich, id
  */
 export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
 
+/**
+ * The existing entry of an augment run, as PROMPT TEXT: the `properties` and
+ * `body` pair as pretty-printed JSON — the very shape the reply is forced
+ * into, so the model reads the entry the way it has to write it back.
+ *
+ * „The way it has to write it back" is why the properties go through
+ * `toReplyProperties` (entry-reply.ts) first: a `pairs` field is STORED as a
+ * mapping (`{ "insight": 2 }`) and REPLIED as a `{ key, value }` list, and a
+ * model shown the mapping answers with the mapping — which its own schema
+ * then rejects.
+ *
+ * This is formatting and nothing else. Nothing parses this text again: the
+ * proposal is validated against the entry's own halves
+ * (generator-augment.ts), and the store never sees it.
+ */
+export function formatExistingEntry(entry: {
+  kind: EntryKind;
+  properties: Record<string, unknown>;
+  body: string;
+}): string {
+  return JSON.stringify(
+    { properties: toReplyProperties(entry.kind, entry.properties), body: entry.body },
+    null,
+    2,
+  );
+}
+
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
 /**
- * The prompt in TWO halves (issue #102) — the split prompt caching hangs off:
+ * The prompt in TWO halves — the split prompt caching hangs off:
  *
  *   constant  everything that is the same for every call of a run: the
  *             campaign knowledge, the glossary, the context lists, the
@@ -268,8 +309,8 @@ export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
  *
  * The Claude provider marks the constant half (and the system prompt) with
  * `cache_control: ephemeral`; everything else joins the two with the same
- * blank line `buildPrompt` always used, so a single-call run sees a prompt
- * that is byte for byte the one it saw before this ticket.
+ * blank line `buildPrompt` joins with, so a single-call run sees one prompt
+ * and the split costs it not a single character.
  */
 export function buildPromptParts(req: GenerateRequest): { constant: string; variable: string } {
   const npcList = req.context.npcs.map((n) => `${n.id} (${n.name})`).join(", ");
@@ -284,7 +325,7 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     req.glossary,
     "## Kontext",
     // Only the lines that HAVE a value: an NPC run has no target chapter,
-    // and a pinned id only exists when the DM typed one (issue #21).
+    // and a pinned id only exists when the DM typed one.
     [
       ...(req.context.chapter === undefined ? [] : [`chapter: ${req.context.chapter}`]),
       `npcs: ${npcList || "(keine)"}`,
@@ -292,16 +333,17 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),
     ].join("\n"),
     "## Referenz-Zieldatei (Few-Shot)",
-    // The few-shot is a REPLY now: every prompt's
-    // example is the JSON object its schema describes, so the fence says json
-    // and the model sees the shape it will be forced into. (The augment run's
-    // „Bestehender Eintrag" below stays markdown — that one IS an entry.)
+    // The few-shot is a REPLY: every prompt's example is the JSON object its
+    // schema describes, so the fence says json and the model sees the shape
+    // it will be forced into. The augment run's „Bestehender Eintrag" below
+    // is shown in that same shape, so the model reads the entry the way it
+    // has to answer about it.
     "```json",
     req.fewShotTarget,
     "```",
     // The outline stands below the few-shot and above what this call is
     // about: the model has to know which ids exist before it reads the
-    // excerpt it has to write from (issue #102).
+    // excerpt it has to write from.
     ...(req.outline === undefined || req.outline.trim() === ""
       ? []
       : [OUTLINE_HEADING, req.outline]),
@@ -312,21 +354,21 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     ...(req.assignment === undefined || req.assignment.trim() === ""
       ? []
       : [ASSIGNMENT_HEADING, req.assignment]),
-    // The augment run's two extra sections (issue #36). They stand BELOW the
+    // The augment run's two extra sections. They stand BELOW the
     // few-shot (which is the FORMAT reference) and ABOVE the source text: the
     // model has to know what the entry is before it reads what to add to it.
     ...(req.existingEntry === undefined
       ? []
       : [
           `${EXISTING_ENTRY_HEADING} (${req.existingEntry.path})`,
-          "```markdown",
-          req.existingEntry.markdown,
+          "```json",
+          formatExistingEntry(req.existingEntry),
           "```",
         ]),
     ...(req.instruction === undefined || req.instruction.trim() === ""
       ? []
       : [INSTRUCTION_HEADING, req.instruction]),
-    // A run may have an instruction and no source text (issue #36); an empty
+    // A run may have an instruction and no source text; an empty
     // heading would be one the model has to interpret against nothing.
     ...(req.sourceText.trim() === "" ? [] : ["## Quelltext", req.sourceText]),
   ].join("\n\n");
@@ -359,7 +401,7 @@ function buildMessages(
 /**
  * The same turns as `buildMessages`, but with the first user turn SPLIT into
  * content parts so the constant half can carry a `cache_control` breakpoint
- * (issue #110). OpenRouter passes the field through to the provider; for the
+ *. OpenRouter passes the field through to the provider; for the
  * routed Anthropic models that breakpoint is the only way to get caching,
  * and a run of a whole chapter re-sends that half once per scene.
  *
@@ -546,7 +588,7 @@ export interface OpenAICompatOptions {
   forceJson?: boolean;
   /**
    * Mark the constant prompt half with an explicit `cache_control` breakpoint
-   * (issue #110). Default OFF, because a plain `/chat/completions` server is
+   *. Default OFF, because a plain `/chat/completions` server is
    * free to reject an unknown message field — the factory switches it on for
    * OpenRouter, where it is what makes caching happen at all for the routed
    * Anthropic models (they cache only on an explicit breakpoint).
@@ -755,7 +797,7 @@ function parseMaxTokens(env: NodeJS.ProcessEnv): number | undefined {
 }
 
 /**
- * `LLM_FORCE_JSON` (issue #20): JSON mode is ON unless it is explicitly
+ * `LLM_FORCE_JSON`: JSON mode is ON unless it is explicitly
  * switched off. Off wins only for the unambiguous "no" values — an
  * unrecognized value keeps the default instead of silently disabling the
  * forcing (same spirit as parseMaxTokens: config junk must not change
@@ -767,7 +809,7 @@ function parseForceJson(env: NodeJS.ProcessEnv): boolean {
 }
 
 /**
- * `LLM_PROMPT_CACHE` (issue #110): explicit cache breakpoints are ON for
+ * `LLM_PROMPT_CACHE`: explicit cache breakpoints are ON for
  * OpenRouter and OFF for every other OpenAI-compatible endpoint, and this
  * variable overrides that either way. Two reasons for a switch rather than a
  * hard-coded yes: a routed model may reject the extra message field (same

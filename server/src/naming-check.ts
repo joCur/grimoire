@@ -37,7 +37,7 @@
 // and a naming convention is about wording. Renaming an entity is the rename
 // endpoint's job, not a generator hint.
 
-import { parseMarkdown, type NamingHint } from "@grimoire/shared";
+import type { NamingHint } from "@grimoire/shared";
 
 /**
  * Properties whose value is PROSE and therefore in scope. Everything not
@@ -45,8 +45,8 @@ import { parseMarkdown, type NamingHint } from "@grimoire/shared";
  *
  * `name` and `title` are both here because a scene has a title and an npc a
  * name, and a run produces either kind of draft. One consequence worth
- * knowing: the shared parser falls back to the ID when a display name is
- * missing (shared/src/parse.ts), so a title-less draft is checked against
+ * knowing: a draft whose display name is missing carries its id there
+ * instead (the validators fill it in), so such a draft is checked against
  * its id. That is not a bug to guard against — the id is then literally what
  * the chapter overview shows the DM.
  */
@@ -179,40 +179,38 @@ function excerpt(line: string): string {
   return trimmed.length <= EXCERPT_LIMIT ? trimmed : `${trimmed.slice(0, EXCERPT_LIMIT)}…`;
 }
 
+/** One draft as the check reads it: its address, its properties, its body. */
+export interface CheckedDraft {
+  path: string;
+  properties: Record<string, unknown>;
+  body: string;
+}
+
 /**
  * Check ONE draft against the campaign's naming conventions.
  *
- * `markdown` is the complete draft file (properties block included) — the
- * same string the review shows and apply writes, so the check can never
- * disagree with what the DM is looking at. It is parsed with the shared
- * parser; a body that does not parse degrades to "everything is body", which
- * still gets searched.
+ * The draft arrives as the two halves the review shows and apply writes —
+ * its properties and its body — so the check can never disagree with what
+ * the DM is looking at.
  *
  * At most ONE finding per rule per line: a convention broken three times in
  * one sentence is one thing to fix, and three identical rows in the review
  * would only bury the other hints.
  */
-export function checkDraftNaming(
-  path: string,
-  markdown: string,
-  rules: readonly NamingRule[],
-): NamingHint[] {
+export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule[]): NamingHint[] {
   if (rules.length === 0) return [];
-  // The path/rev arguments are the parser's entry identity and irrelevant
-  // here: the check reads `properties` and `body`, nothing that depends on
-  // which KIND the entry is.
-  const parsed = parseMarkdown(markdown, path, 0);
+  const { path } = draft;
   const hints: NamingHint[] = [];
 
   for (const rule of rules) {
     // Properties first: a wrong title is the thing the DM sees in the chapter overview.
     for (const key of CHECKED_PROPERTIES) {
-      const value = parsed.properties[key];
+      const value = draft.properties[key];
       if (typeof value !== "string") continue;
       if (findRuleHits(value, rule).length === 0) continue;
       hints.push({ from: rule.from, to: rule.to, path, field: key, excerpt: excerpt(value) });
     }
-    const lines = parsed.body.split("\n");
+    const lines = draft.body.split("\n");
     for (const [index, line] of lines.entries()) {
       if (findRuleHits(line, rule).length === 0) continue;
       hints.push({
@@ -234,8 +232,8 @@ export function checkDraftNaming(
  * between two polls of the same job.
  */
 export function checkDraftsNaming(
-  drafts: ReadonlyArray<{ path: string; markdown: string }>,
+  drafts: readonly CheckedDraft[],
   rules: readonly NamingRule[],
 ): NamingHint[] {
-  return drafts.flatMap((draft) => checkDraftNaming(draft.path, draft.markdown, rules));
+  return drafts.flatMap((draft) => checkDraftNaming(draft, rules));
 }

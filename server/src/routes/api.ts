@@ -30,6 +30,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   isKnowledgeKind,
   KNOWLEDGE_KINDS,
+  type DraftEdit,
   type KnowledgeEntry,
 } from "@grimoire/shared";
 import { getBuildId } from "../config";
@@ -41,7 +42,7 @@ import {
   readActiveSession,
   readGlossary,
   readKnowledge,
-  readParsedFile,
+  readEntry,
   requireCampaign,
 } from "../store/read";
 import { searchCampaign } from "../store/search";
@@ -223,7 +224,7 @@ api.get("/campaigns/:campaign/tree", async (c) => c.json(await buildTree(c.req.p
 // The campaign's own address is `campaign`, so this is the shorter spelling of
 // GET /campaigns/:campaign/entries/campaign and answers exactly the same body.
 api.get("/campaigns/:campaign", async (c) =>
-  c.json(await readParsedFile(c.req.param("campaign"), "campaign")),
+  c.json(await readEntry(c.req.param("campaign"), "campaign")),
 );
 
 // GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
@@ -234,7 +235,7 @@ api.get("/campaigns/:campaign", async (c) =>
 // would make a glossary the DM had just emptied unreachable from the
 // editor). Their `rev` is that ENTRY's own counter, not campaigns.version.
 api.get("/campaigns/:campaign/entries/*", async (c) =>
-  c.json(await readParsedFile(c.req.param("campaign"), entryAddress(c))),
+  c.json(await readEntry(c.req.param("campaign"), entryAddress(c))),
 );
 
 // GET /api/campaigns/:campaign/session -> EntryResponse of the ACTIVE session,
@@ -699,8 +700,27 @@ function reviewRecord<T>(
   return out;
 }
 
-const isMarkdown = (v: unknown): v is string => typeof v === "string";
-const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
+/**
+ * One draft edit of a review patch: the halves the DM changed. `properties`
+ * replaces that draft's whole properties object, `body` its whole body, and
+ * an entry that carries neither half is nothing to store — see DraftEdit.
+ */
+const isDraftEdit = (v: unknown): v is DraftEdit => {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  const raw = v as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (key !== "properties" && key !== "body") return false;
+  }
+  const properties = raw.properties;
+  if (
+    properties !== undefined &&
+    (properties === null || typeof properties !== "object" || Array.isArray(properties))
+  ) {
+    return false;
+  }
+  if (raw.body !== undefined && typeof raw.body !== "string") return false;
+  return properties !== undefined || raw.body !== undefined;
+};
 /** A field/block decision, or `null` for no decision any more. */
 const isDecidedFlag = (v: unknown): v is boolean | null => v === null || typeof v === "boolean";
 /** `null` is undecided again — the review's third state. */
@@ -851,8 +871,9 @@ api.post("/campaigns/:campaign/generate/augment/apply", async (c) => {
 
 // PATCH /api/campaigns/:campaign/generate/job/:id/review { rev, edits?, entries?,
 // dropped?, fields?, blocks? } -> the job.
-// The review state of a run lives ON THE JOB: the edited
-// text per draft, the decision per suggested entry, the dropped scenes and
+// The review state of a run lives ON THE JOB: the edited halves per draft
+// (`{ "<path>": { properties?, body? } }`), the decision per suggested
+// entry, the dropped scenes and
 // (for an augment run) the decision per property/block. Everything merges,
 // so the app sends the ONE thing that just changed — text debounced,
 // decisions immediately.
@@ -869,7 +890,7 @@ api.patch("/campaigns/:campaign/generate/job/:id/review", async (c) => {
     throw new ApiError(400, "rev must be a non-negative integer");
   }
   const patch: ReviewPatch = {};
-  if (body.edits !== undefined) patch.edits = reviewRecord(body.edits, "edits", isMarkdown);
+  if (body.edits !== undefined) patch.edits = reviewRecord(body.edits, "edits", isDraftEdit);
   if (body.entries !== undefined) {
     patch.entries = reviewRecord(body.entries, "entries", isDecision);
   }
@@ -972,8 +993,10 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 // POST /api/campaigns/:campaign/generate/apply
 // { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
 // Writes the reviewed drafts — synchronous on purpose: this is a short
-// write, and the DM waits for its result. Re-validates server-side
-// (properties parses, status draft, safe paths); 409 { conflicts } when any
+// write, and the DM waits for its result. Every draft is
+// `{ path, properties, body }` (a stub `{ kind, id, name, properties, body }`)
+// and is re-validated server-side (status draft, safe paths, the id matching
+// the address); 409 { conflicts } when any
 // target entry exists — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create the chapter entry
 // when it is missing, in the same all-or-nothing batch (the app's

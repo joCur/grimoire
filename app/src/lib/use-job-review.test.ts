@@ -1,4 +1,4 @@
-// The review's patch queue (issue #97 review, findings 1 and 2).
+// The review's patch queue.
 //
 // Tested through `createReviewQueue`, the plain half of use-job-review.ts:
 // the two properties that matter here are invisible to a rendering test —
@@ -8,6 +8,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
+import type { DraftEdit } from "@grimoire/shared/types";
+
 import type { ReviewPatch } from "@/lib/generate";
 import {
   createReviewQueue,
@@ -20,7 +22,7 @@ interface Harness {
   sent: ReviewPatch[];
   statuses: ReviewSaveStatus[];
   /** What the optimistic copy currently shows, per edited path. */
-  shown: Record<string, string>;
+  shown: Record<string, DraftEdit>;
   rereads: number;
   /** The next send's outcome; `undefined` resolves. */
   fail?: unknown;
@@ -57,13 +59,13 @@ describe("flush", () => {
   test("resolves only after the debounced edit has really landed", async () => {
     const h = harness();
     // A long debounce — an un-awaited flush would leave the edit in the
-    // queue, which is exactly how „Übernehmen" lost it.
+    // queue, which is exactly how the accept lost it.
     const queue = createReviewQueue(h.io, 10_000);
-    queue.edit("01-salzhafen/hafen/kai", "im Regen");
+    queue.edit("01-salzhafen/hafen/kai", { body: "im Regen" });
     expect(h.sent).toEqual([]);
 
     await queue.flush();
-    expect(h.sent).toEqual([{ edits: { "01-salzhafen/hafen/kai": "im Regen" } }]);
+    expect(h.sent).toEqual([{ edits: { "01-salzhafen/hafen/kai": { body: "im Regen" } } }]);
     expect(last(h.statuses)).toBe("saved");
   });
 
@@ -79,11 +81,13 @@ describe("flush", () => {
   test("everything pending goes in ONE patch, and requests are serialized", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
-    queue.edit("a", "one");
-    queue.edit("b", "two");
+    queue.edit("a", { body: "one" });
+    queue.edit("b", { body: "two" });
     queue.decide({ dropped: ["c"] });
     await queue.flush();
-    expect(h.sent).toEqual([{ edits: { a: "one", b: "two" }, dropped: ["c"] }]);
+    expect(h.sent).toEqual([
+      { edits: { a: { body: "one" }, b: { body: "two" } }, dropped: ["c"] },
+    ]);
   });
 });
 
@@ -93,7 +97,7 @@ describe("a failed patch", () => {
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new Error("network");
 
-    queue.edit("kai", "im Regen");
+    queue.edit("kai", { body: "im Regen" });
     await queue.flush();
     expect(h.sent).toEqual([]);
     expect(last(h.statuses)).toBe("error");
@@ -102,8 +106,8 @@ describe("a failed patch", () => {
 
     // The next flush retries it — nothing was lost.
     await queue.flush();
-    expect(h.sent).toEqual([{ edits: { kai: "im Regen" } }]);
-    expect(h.shown).toEqual({ kai: "im Regen" });
+    expect(h.sent).toEqual([{ edits: { kai: { body: "im Regen" } } }]);
+    expect(h.shown).toEqual({ kai: { body: "im Regen" } });
     expect(last(h.statuses)).toBe("saved");
   });
 
@@ -111,18 +115,18 @@ describe("a failed patch", () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new Error("network");
-    queue.edit("kai", "im Regen");
+    queue.edit("kai", { body: "im Regen" });
     await queue.flush();
     expect(last(h.statuses)).toBe("error");
 
-    // A LATER decision succeeds — but the failed text is still waiting, so
-    // „Gespeichert" would be a lie about the review as a whole.
+    // A LATER decision succeeds — but the failed edit is still waiting, so
+    // reporting the review as saved would be a lie about it as a whole.
     queue.decide({ entries: { "npcs/grella": "accepted" } });
     await queue.flush();
     expect(last(h.statuses)).toBe("saved");
     // …and the retried edit went along with it.
     expect(h.sent).toEqual([
-      { edits: { kai: "im Regen" }, entries: { "npcs/grella": "accepted" } },
+      { edits: { kai: { body: "im Regen" } }, entries: { "npcs/grella": "accepted" } },
     ]);
   });
 

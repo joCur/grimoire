@@ -70,9 +70,9 @@ interface BlockCommon {
   source?: string;
   /**
    * Whitespace-only run that PRECEDED the block. The parser sets it on the
-   * first block only (a body handed over by gray-matter starts with the blank
-   * line after the properties fence), which is why insertBlock/removeBlock/
-   * moveBlock hand it along when the head of the list changes.
+   * first block only — a body that starts with blank lines keeps them — which
+   * is why insertBlock/removeBlock/moveBlock hand it along when the head of
+   * the list changes.
    */
   lead?: string;
   /**
@@ -339,8 +339,8 @@ function takeGap(lines: Line[], last: number): Gap {
 export function parseBlocks(body: string): SceneBlock[] {
   const lines = splitLines(body);
 
-  // Whitespace before the first block. gray-matter hands over the blank line
-  // that followed the properties fence, so this is the normal case.
+  // Whitespace before the first block: a body that opens with blank lines
+  // keeps them, verbatim and in front of the list.
   let start = 0;
   let lead = "";
   while (start < lines.length && isBlank(lineAt(lines, start).text)) {
@@ -521,14 +521,16 @@ interface Unit {
  * the fixtures and separated by one blank line; the last one gets a single
  * trailing newline, because every body in the data set ends with exactly one.
  *
- * Two rules about EMPTINESS, both of them „the body gets what the DM meant,
+ * Two rules about EMPTINESS, both of them saying that the body gets what
+ * the DM meant,
  * the composer keeps what the DM is working on":
  *
  *   * An edited or constructed block that renders to NOTHING contributes
  *     nothing at all — not even its separator. The card stays on screen (it is
  *     draft state, and a freshly inserted block is empty by definition), it
  *     just does not write a stray blank line into the body, and it therefore
- *     also cannot vanish differently on the way through „Markdown" and back.
+ *     also cannot vanish differently on the way through the raw surface
+ *     and back.
  *     Parsing never produces such a block; only editing does.
  *   * An edited LAST block that ended the body without a newline gets one:
  *     every body in the data set ends with exactly one. A body that genuinely
@@ -563,8 +565,8 @@ export function serializeBlocks(blocks: SceneBlock[]): string {
  * belongs to the position in the list, never to the block that happens to sit
  * there (same rule as the list operations below):
  *
- *   * `lead` (for the first block: the blank line gray-matter left behind the
- *     properties fence) moves forward to whatever is first now,
+ *   * `lead` (the whitespace the body opens with) moves forward to whatever
+ *     is first now,
  *   * a dropped unit at the END of the list gives its gap — the body's own
  *     terminator — to the unit that is last now, so emptying the last block
  *     leaves `A\n` and not `A\n\n`.
@@ -643,7 +645,7 @@ export function blockMarkdown(block: SceneBlock): string {
  * `blockMarkdown` deliberately answers for the block's own line only (the
  * composer edits the heading and the children as separate cards, and the
  * serializer flattens them itself). Anywhere a section has to be shown or
- * compared as ONE thing — the augment review's block cards, issue #36 — that
+ * compared as ONE thing — the augment review's block cards — that
  * answer is a truncation: the section's body simply is not in it. This is
  * that other question.
  *
@@ -759,9 +761,9 @@ export function withChildren(block: IfSectionBlock, children: SceneBlock[]): IfS
 // --- list operations ---------------------------------------------------------
 //
 // Whitespace is POSITIONAL, not part of the block: `lead` is the whitespace in
-// front of the list (for a body from gray-matter: the blank line after the
-// properties fence), the last gap is the body's terminator ("\n", or "" for a
-// body without a final newline) and the gaps in between are separators.
+// front of the list (the blank lines a body opens with), the last gap is the
+// body's terminator ("\n", or "" for a body without a final newline) and the
+// gaps in between are separators.
 //
 // So a structural change permutes the block bodies and leaves that scaffolding
 // where it is. Moving the first block must not drag the leading blank line
@@ -849,7 +851,7 @@ export function moveBlock(blocks: SceneBlock[], from: number, to: number): Scene
 // The UI labels of the block types. The six callout names are the format's own
 // (grammar.ts, CALLOUT_LABEL_KEYS — the words the reading view shows); only the
 // composer's four structural names are added here. The words live in the
-// catalog and the translator is PASSED IN (issue #69): this module must not
+// catalog and the translator is PASSED IN: this module must not
 // decide which language the UI is in (CLAUDE.md/i18n/index.ts).
 
 /** Label of one callout kind — for a "new block" picker, where there is no block yet. */

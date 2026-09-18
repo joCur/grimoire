@@ -482,6 +482,26 @@ export function propertiesPatch(
 }
 
 /**
+ * The whole properties object a patch produces on top of a base — for the
+ * callers that cannot send a patch at all. The generator review is one: its
+ * draft is not an entry yet, and what it stores per draft is the complete
+ * properties object, so the form's diff has to be folded back into the
+ * values it was measured against. `null` is the patch's delete marker here
+ * too: the key is dropped, not written as an empty value.
+ */
+export function applyPropertiesPatch(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete out[key];
+    else out[key] = value;
+  }
+  return out;
+}
+
+/**
  * What is WRONG in the form right now, per field key — the line the control
  * shows under itself, and the reason the save action stays disabled.
  *

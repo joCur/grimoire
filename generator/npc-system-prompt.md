@@ -13,7 +13,7 @@ von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
 
 * `properties` — die Eigenschaften des Eintrags, jede als eigener Schlüssel.
   Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere trägt
-  `null`. Den Eigenschaften-Block baut der Server daraus.
+  `null`. Der Server speichert sie genau so.
 * `body` — der Text des Eintrags, als **ein** String mit echten
   Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Die
   Eigenschaften bleiben in `properties`.
@@ -84,8 +84,8 @@ Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
    dieser vier Werte.
 3. **quickstats**: nur was sozial am Tisch gebraucht wird (Insight, Deception,
    Persuasion, passive Perception …). Werte immer als **String in
-   Anführungszeichen** (`"+2"`), sonst verschluckt YAML das Plus und aus `+2`
-   wird `2`. Ganze Statblocks gehören hinter `statblock`.
+   Anführungszeichen** (`"+2"`), sonst wird aus `+2` die Zahl `2` und das
+   Plus — der ganze Sinn eines sozialen Modifikators — ist weg. Ganze Statblocks gehören hinter `statblock`.
 4. **statblock**: setze es, wenn der Quelltext ein Sheet/einen Statblock
    nennt; Format `"Roll20: <Name>"`. Sonst entfällt der Key.
 5. **`chapter`**: Dieser Key bleibt dem DM überlassen; er setzt ihn

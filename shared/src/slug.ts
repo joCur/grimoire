@@ -10,9 +10,8 @@
 // server has to derive the same one and propose a free variant on a
 // collision, so the three copies became one module.
 //
-// Its own file, no runtime dependencies: the package root pulls in
-// gray-matter (parse.ts), which has no business in a browser bundle, so the
-// app imports `@grimoire/shared/slug` the way it imports `/kind`.
+// Its own file, no runtime dependencies, so the app imports
+// `@grimoire/shared/slug` the way it imports `/kind`.
 
 /** Entity ids are kebab slugs: lowercase, digits, single dashes. */
 export const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;

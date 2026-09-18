@@ -6,9 +6,11 @@
 //   working the spinner while the SERVER's job runs (correction turns happen
 //           inside that job, generator/README.md)
 //   review  the drafts of a finished job: rendered through the SAME markdown
-//           pipeline as a real scene, editable as raw markdown, stubs
-//           accepted/rejected one by one. NOTHING is written yet.
-//   done    the paths POST /generate/apply wrote — all as drafts
+//           pipeline as a real scene, editable as properties plus body in the
+//           forms and on the surfaces the entry itself is edited with
+//           (DraftEditor), stubs accepted/rejected one by one. NOTHING is
+//           written yet.
+//   done    the addresses the accept wrote — all as drafts
 //
 // The route has TWO modes, picked by the quiet chip row above
 // the input form: scenes (scene drafts for a chapter) and npc (one npc
@@ -34,16 +36,18 @@
 //
 // Local state is only what the server cannot know: the current edit buffers
 // (mirrored into the job, debounced, so they survive too), which cards are
-// in edit mode, the stub decisions, and the paths a finished apply wrote.
+// in edit mode, the stub decisions, and the addresses a finished accept
+// wrote.
 // Stub decisions are deliberately NOT persisted — re-deciding two rows is
 // cheap, and nothing written is lost.
 
+import { kindFromAddress } from "@grimoire/shared/kind";
 import type {
   CampaignTree,
+  DraftEdit,
   GenerateJob,
   GenerateJobPart,
   GenerateResult,
-  GeneratedNpcDraft,
   GeneratedStub,
   NamingHint,
 } from "@grimoire/shared/types";
@@ -73,10 +77,8 @@ import {
   startGenerateJob,
   startGenerateNpcJob,
 } from "@/api";
-import {
-  MarkdownEditorSurface,
-  MarkdownEditorToggle,
-} from "@/components/MarkdownEditor";
+import { DraftEditor } from "@/components/DraftEditor";
+import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
@@ -98,7 +100,7 @@ import {
   jobMode,
   jobPipelineParts,
   jobProgress,
-  markdownBody,
+  draftOf,
   newChapterId,
   npcIdError,
   openParts,
@@ -118,6 +120,7 @@ import { promptKnowledgeCount } from "@/lib/entry-list";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/markdown/Markdown";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
 type Target = { kind: "chapter"; id: string } | { kind: "new" };
@@ -224,10 +227,10 @@ export function GenerateRoute() {
   const trimmedNpcId = npcId.trim();
   const npcIdMessage = npcIdError(trimmedNpcId, npcIds, t);
 
-  // The TYPING overlay, nothing more: the saved text lives on the job
-  // (`job.draftEdits`) and this only keeps the textarea from lagging behind
-  // the keystroke while the debounced patch is on its way.
-  const [edits, setEdits] = useState<Record<string, string>>({});
+  // The TYPING overlay, nothing more: the saved edits live on the job
+  // (`job.draftEdits`) and this only keeps the fields from lagging behind the
+  // keystroke while the debounced patch is on its way.
+  const [edits, setEdits] = useState<Record<string, DraftEdit>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [written, setWritten] = useState<string[]>();
 
@@ -292,9 +295,17 @@ export function GenerateRoute() {
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
   const acceptedStubs = stubs.filter((s) => decisions[stubKey(s)] === "accepted");
-  /** The text of one draft: what is being typed, else the job's, else the model's. */
-  const draftText = (path: string, fallback: string): string =>
-    edits[path] ?? job?.draftEdits[path] ?? fallback;
+  /**
+   * One draft as the review shows it: what the run produced, with the job's
+   * stored edit and then the local buffer laid over it.
+   */
+  const draftFor = (generated: { path: string; properties: Record<string, unknown>; body: string }) =>
+    draftOf(generated, job?.draftEdits[generated.path], edits[generated.path]);
+  /** One half of a draft changed: local first, then debounced into the job. */
+  const editDraft = (path: string, edit: DraftEdit): void => {
+    setEdits((previous) => ({ ...previous, [path]: { ...previous[path], ...edit } }));
+    review.edit(path, edit);
+  };
   /** What is still reviewable — the accept-all and discard actions work on it. */
   const rest = openParts(job);
   const progress = jobProgress(job);
@@ -918,7 +929,7 @@ export function GenerateRoute() {
             never on a result being there: in a pipelined
             run the parts are the review's spine and the drafts only fill it
             in, so a run whose sole reviewable part FAILED has something to
-            show (its error and its „Erneut versuchen") while `result` is
+            show (its error and its retry action) while `result` is
             still empty. Gating on the result rendered that state as an empty
             page, and the run only became visible on a reload. */}
         {phase === "review" && jobKind === "scene" && (
@@ -932,7 +943,7 @@ export function GenerateRoute() {
                   live region per part card. */}
               <span aria-live="polite" className="text-[13px] text-muted-foreground">
                 {/* While the RUN is still going its own progress is the more
-                    useful number — „2 von 3 Szenen fertig";
+                    useful number — how many parts of the run are done;
                     once it is finished, the review's is. */}
                 {runProgress ??
                   (progress.written === 0
@@ -982,7 +993,7 @@ export function GenerateRoute() {
 
             {/* The parts in OUTLINE order: a finished one is its
                 draft, an open one a status card, a failed one its error plus
-                „Erneut versuchen". A run without parts — an older job — falls
+                its retry action. A run without parts — an older job — falls
                 back to the plain draft list below. */}
             {sceneParts.map((part) => {
               const scene = part.status === "done" ? sceneOfPart(part) : undefined;
@@ -1007,8 +1018,8 @@ export function GenerateRoute() {
                   cardRef={(el) => partCards.current.set(part.key, el)}
                   campaign={campaign}
                   path={scene.path}
-                  properties={scene.properties}
-                  markdown={draftText(scene.path, scene.markdown)}
+                  properties={draftFor(scene).properties}
+                  body={draftFor(scene).body}
                   tree={tree.data}
                   state={partState(job, scene.path)}
                   writtenAt={reviewState.written[scene.path]}
@@ -1017,11 +1028,9 @@ export function GenerateRoute() {
                   onToggleEditing={() =>
                     setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
                   }
-                  onChange={(markdown) => {
-                    setEdits((prev) => ({ ...prev, [scene.path]: markdown }));
-                    review.edit(scene.path, markdown);
-                  }}
-                  onBlur={review.flush}
+                  onPropertiesChange={(properties) => editDraft(scene.path, { properties })}
+                  onBodyChange={(body) => editDraft(scene.path, { body })}
+                  onFlush={review.flush}
                   onAccept={() => apply.mutate([scene.path])}
                   onDrop={() =>
                     review.decide({
@@ -1040,8 +1049,8 @@ export function GenerateRoute() {
                 key={scene.path}
                 campaign={campaign}
                 path={scene.path}
-                properties={scene.properties}
-                markdown={draftText(scene.path, scene.markdown)}
+                properties={draftFor(scene).properties}
+                body={draftFor(scene).body}
                 tree={tree.data}
                 state={partState(job, scene.path)}
                 writtenAt={reviewState.written[scene.path]}
@@ -1050,14 +1059,10 @@ export function GenerateRoute() {
                 onToggleEditing={() =>
                   setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
                 }
-                onChange={(markdown) => {
-                  // Local first (the textarea must not lag), then debounced
-                  // into the JOB — that copy is what survives a navigation.
-                  setEdits((prev) => ({ ...prev, [scene.path]: markdown }));
-                  review.edit(scene.path, markdown);
-                }}
-                // Leaving the field is the last cheap moment to be sure.
-                onBlur={review.flush}
+                onPropertiesChange={(properties) => editDraft(scene.path, { properties })}
+                onBodyChange={(body) => editDraft(scene.path, { body })}
+                // Leaving a field is the last cheap moment to be sure.
+                onFlush={review.flush}
                 onAccept={() => apply.mutate([scene.path])}
                 onDrop={() =>
                   review.decide({
@@ -1228,8 +1233,10 @@ export function GenerateRoute() {
             <NamingHints hints={npcResult.namingHints} t={t} />
 
             <NpcDraftCard
-              draft={npcResult.npc}
-              markdown={draftText(npcResult.npc.path, npcResult.npc.markdown)}
+              path={npcResult.npc.path}
+              properties={draftFor(npcResult.npc).properties}
+              body={draftFor(npcResult.npc).body}
+              tree={tree.data}
               editing={editing[npcResult.npc.path] === true}
               onToggleEditing={() =>
                 setEditing((prev) => ({
@@ -1237,11 +1244,11 @@ export function GenerateRoute() {
                   [npcResult.npc.path]: prev[npcResult.npc.path] !== true,
                 }))
               }
-              onChange={(markdown) => {
-                setEdits((prev) => ({ ...prev, [npcResult.npc.path]: markdown }));
-                review.edit(npcResult.npc.path, markdown);
-              }}
-              onBlur={review.flush}
+              onPropertiesChange={(properties) =>
+                editDraft(npcResult.npc.path, { properties })
+              }
+              onBodyChange={(body) => editDraft(npcResult.npc.path, { body })}
+              onFlush={review.flush}
             />
 
             {conflicts.length > 0 && (
@@ -1397,7 +1404,8 @@ function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Transla
                 : t("generate.review.namingWhereBody", { path: hint.path, line: hint.line })}
             </p>
             {/* The line itself, so the DM can judge the hit without opening
-                the draft — the check's whole claim is „it says this here". */}
+                the draft — the check's whole claim is that the draft says
+                this. */}
             <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
               {hint.excerpt}
             </p>
@@ -1584,17 +1592,18 @@ function PartCard({
 }
 
 /**
- * One draft as a card: title/pill/edit toggle, mono target path, the chip row
- * from the properties, then either the rendered body (same markdown pipeline
- * as a real scene) or the raw markdown in a mono textarea. Title and chips
- * come from the properties the SERVER parsed — raw edits show up in the
- * preview and on apply, not in the card's header.
+ * One draft as a card: title/pill/edit toggle, mono target address, the chip
+ * row from the properties, then either the rendered body (same markdown
+ * pipeline as a real scene) or the draft editor — the properties in their
+ * form, the body on the entry editor's surfaces. Title and chips read the
+ * properties the card is given, so a field the DM changes shows up in the
+ * header as well.
  */
 function SceneCard({
   campaign,
   path,
   properties,
-  markdown,
+  body,
   tree,
   state,
   writtenAt,
@@ -1602,15 +1611,16 @@ function SceneCard({
   editing,
   cardRef,
   onToggleEditing,
-  onChange,
-  onBlur,
+  onPropertiesChange,
+  onBodyChange,
+  onFlush,
   onAccept,
   onDrop,
 }: {
   campaign: string;
   path: string;
   properties: Record<string, unknown>;
-  markdown: string;
+  body: string;
   tree: CampaignTree | undefined;
   /** What became of this scene — written parts are read-only. */
   state: PartState;
@@ -1625,8 +1635,9 @@ function SceneCard({
    */
   cardRef?: (el: HTMLElement | null) => void;
   onToggleEditing: () => void;
-  onChange: (markdown: string) => void;
-  onBlur: () => void;
+  onPropertiesChange: (properties: Record<string, unknown>) => void;
+  onBodyChange: (body: string) => void;
+  onFlush: () => void;
   onAccept: () => void;
   onDrop: () => void;
 }) {
@@ -1639,7 +1650,7 @@ function SceneCard({
   const isContingency = fmString(properties.type) === "contingency";
   const location = locationName(tree, fmString(properties.location));
   const tags = fmStringArray(properties.tags);
-  const textareaId = `gen-raw-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  const editorId = `gen-draft-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
   const written = state === "written";
 
   return (
@@ -1659,13 +1670,13 @@ function SceneCard({
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
           {statusLabel}
         </span>
-        {/* A written part is not editable here (Nicht-
-            Ziele): it is an entry now, and the normal editor owns it. */}
+        {/* A written part is not editable here: it is an entry now, and the
+            reading view's own editor owns it. */}
         {!written && (
           <MarkdownEditorToggle
             editing={editing}
             onToggleEditing={onToggleEditing}
-            controlsId={textareaId}
+            controlsId={editorId}
           />
         )}
       </div>
@@ -1695,16 +1706,20 @@ function SceneCard({
           </span>
         ))}
       </div>
-      <MarkdownEditorSurface
-        editing={editing && !written}
-        id={textareaId}
-        value={markdown}
-        onChange={onChange}
-        onBlur={onBlur}
-        label={t("generate.review.rawLabel", { title })}
-        // A draft is a whole entry — the preview renders the body only.
-        preview={markdownBody(markdown)}
-      />
+      {editing && !written ? (
+        <DraftEditor
+          path={path}
+          kind={kindFromAddress(path)}
+          properties={properties}
+          body={body}
+          tree={tree}
+          onPropertiesChange={onPropertiesChange}
+          onBodyChange={onBodyChange}
+          onFlush={onFlush}
+        />
+      ) : (
+        <Markdown>{body}</Markdown>
+      )}
       <PartActions
         campaign={campaign}
         state={state}
@@ -1793,33 +1808,39 @@ function PartActions({
  * EntryResponse of an entry that EXISTS, and nothing is written yet.
  *
  * Same two views as a scene draft: the rendered body through the normal
- * markdown pipeline, or the raw markdown in a mono textarea.
+ * markdown pipeline, or the draft editor over properties and body.
  */
 function NpcDraftCard({
-  draft,
-  markdown,
+  path,
+  properties,
+  body,
+  tree,
   editing,
   onToggleEditing,
-  onChange,
-  onBlur,
+  onPropertiesChange,
+  onBodyChange,
+  onFlush,
 }: {
-  draft: GeneratedNpcDraft;
-  markdown: string;
+  path: string;
+  properties: Record<string, unknown>;
+  body: string;
+  tree: CampaignTree | undefined;
   editing: boolean;
   onToggleEditing: () => void;
-  onChange: (markdown: string) => void;
-  onBlur: () => void;
+  onPropertiesChange: (properties: Record<string, unknown>) => void;
+  onBodyChange: (body: string) => void;
+  onFlush: () => void;
 }) {
   const t = useT();
-  const fm = draft.properties;
-  const name = fmString(fm.name) ?? draft.path;
+  const fm = properties;
+  const name = fmString(fm.name) ?? path;
   const status = fmString(fm.status);
   const role = fmString(fm.role);
   const voice = fmString(fm.voice);
   const appearance = fmString(fm.appearance);
   const statblock = fmString(fm.statblock);
   const quickstats = fmQuickstats(fm.quickstats);
-  const textareaId = `gen-raw-${draft.path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  const editorId = `gen-draft-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
 
   return (
     <div className="my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6">
@@ -1835,10 +1856,10 @@ function NpcDraftCard({
         <MarkdownEditorToggle
           editing={editing}
           onToggleEditing={onToggleEditing}
-          controlsId={textareaId}
+          controlsId={editorId}
         />
       </div>
-      <p className="mb-3.5 font-mono text-[11.5px] text-faint">{draft.path}</p>
+      <p className="mb-3.5 font-mono text-[11.5px] text-faint">{path}</p>
       <div className="mb-2 border-b border-border pb-4">
         {role !== undefined && (
           <p className="text-[13.5px] leading-[1.5] text-muted-foreground">{role}</p>
@@ -1867,16 +1888,20 @@ function NpcDraftCard({
           </p>
         )}
       </div>
-      <MarkdownEditorSurface
-        editing={editing}
-        id={textareaId}
-        value={markdown}
-        onChange={onChange}
-        onBlur={onBlur}
-        label={t("generate.review.rawLabel", { title: name })}
-        // A draft is a whole entry — the preview renders the body only.
-        preview={markdownBody(markdown)}
-      />
+      {editing ? (
+        <DraftEditor
+          path={path}
+          kind={kindFromAddress(path)}
+          properties={properties}
+          body={body}
+          tree={tree}
+          onPropertiesChange={onPropertiesChange}
+          onBodyChange={onBodyChange}
+          onFlush={onFlush}
+        />
+      ) : (
+        <Markdown>{body}</Markdown>
+      )}
     </div>
   );
 }

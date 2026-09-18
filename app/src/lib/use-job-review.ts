@@ -1,10 +1,10 @@
-// Writing the review state back to the job (issue #97).
+// Writing the review state back to the job.
 //
 // The review used to keep everything in component state; a navigation, a
 // reload or a second tab threw it away. Now the JOB is the state and this
 // module is the one place that writes to it:
 //
-//   text        debounced (~600 ms) while the DM types, and FLUSHED before
+//   draft edits debounced (~600 ms) while the DM types, and FLUSHED before
 //               anything can lose it — on blur, on unmount (which covers a
 //               route change, because the review unmounts with the route)
 //               and on a page hide. No `useBlocker`: a blocker asks the DM
@@ -29,13 +29,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GenerateJob } from "@grimoire/shared/types";
+import type { DraftEdit, GenerateJob } from "@grimoire/shared/types";
 
 import { ApiError, patchJobReview } from "@/api";
-import { mergeReviewPatch, type ReviewPatch } from "@/lib/generate";
+import { mergeDraftEdits, mergeReviewPatch, type ReviewPatch } from "@/lib/generate";
 import { generateJobKey } from "@/lib/use-generate-job";
 
-/** Debounce before a typed review edit is pushed into the job. */
+/** Debounce before a review edit is pushed into the job. */
 export const REVIEW_DEBOUNCE_MS = 600;
 
 /** What the quiet status line says. */
@@ -43,22 +43,25 @@ export type ReviewSaveStatus = "idle" | "saving" | "saved" | "conflict" | "error
 
 export interface JobReviewSync {
   status: ReviewSaveStatus;
-  /** A text edit — debounced; the caller keeps the textarea's own value. */
-  edit: (path: string, markdown: string) => void;
+  /**
+   * An edit of one draft — one or both halves, debounced; the caller keeps
+   * its own buffer so the field does not lag behind the keystroke.
+   */
+  edit: (path: string, edit: DraftEdit) => void;
   /** A decision — sent right away. */
   decide: (patch: ReviewPatch) => void;
   /**
    * Send whatever is still pending now (blur, unmount, page hide) and
-   * RESOLVE when it has landed. „Übernehmen" awaits this: the accept reads
-   * `draftEdits` on the server, so a debounced text patch that is still in
-   * flight would be read one request too late and then deleted together
-   * with the job (issue #97 review, finding 1).
+   * RESOLVE when it has landed. The accept action awaits this: the server
+   * reads `draftEdits` when the accept arrives, so a debounced edit still in
+   * flight would be read one request too late and then deleted together with
+   * the job.
    */
   flush: () => Promise<void>;
   /**
    * Another writer won — say so in the same quiet line a patch conflict uses
-   * and re-read the job. The ACCEPT has the same rev guard as the patch
-   * (issue #97 review, finding 3), and its 409 deserves the same answer.
+   * and re-read the job. The ACCEPT has the same rev guard as the patch, and
+   * its 409 deserves the same answer.
    */
   signalConflict: () => void;
 }
@@ -67,7 +70,7 @@ function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
   return {
     ...into,
     ...patch,
-    edits: { ...into.edits, ...patch.edits },
+    edits: mergeDraftEdits(into.edits ?? {}, patch.edits),
     entries: { ...into.entries, ...patch.entries },
     fields: { ...into.fields, ...patch.fields },
     blocks: { ...into.blocks, ...patch.blocks },
@@ -102,7 +105,7 @@ export interface ReviewQueueIo {
 }
 
 export interface ReviewQueue {
-  edit: (path: string, markdown: string) => void;
+  edit: (path: string, edit: DraftEdit) => void;
   decide: (patch: ReviewPatch) => void;
   flush: () => Promise<void>;
 }
@@ -133,9 +136,9 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
     chain = chain.then(async () => {
       try {
         await io.send(patch);
-        // Sticky until the queue is EMPTY: a success while a failed patch
-        // is waiting for its retry must not say „Gespeichert" over a review
-        // half of which is not on the server (issue #97 review, finding 2).
+        // Sticky until the queue is EMPTY: a success while a failed patch is
+        // waiting for its retry must not report a saved review half of which
+        // is not on the server.
         io.status(Object.keys(prune(pending)).length === 0 ? "saved" : "saving");
       } catch (error) {
         // A 409 is the house conflict protocol: nothing was written, the
@@ -149,9 +152,9 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
         // Any other failure: the optimistic copy is rolled back — the cache
         // must not claim what the server refused — and the patch goes BACK
         // into the queue. The next keystroke, the next decision, the flush
-        // before „Übernehmen" or the debounce armed here retries it.
-        // Dropping it (and then calling the next success „Gespeichert") is
-        // how an edit was lost without anyone being told.
+        // before an accept or the debounce armed here retries it.
+        // Dropping it — and then letting the next success report a saved
+        // review — is how an edit is lost without anyone being told.
         undo?.();
         pending = mergePatch(patch, pending);
         io.status("error");
@@ -162,8 +165,8 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
   };
 
   return {
-    edit: (path, markdown) => {
-      pending = mergePatch(pending, { edits: { [path]: markdown } });
+    edit: (path, edit) => {
+      pending = mergePatch(pending, { edits: { [path]: edit } });
       io.status("saving");
       cancelTimer();
       timer = setTimeout(() => void send(), delayMs);

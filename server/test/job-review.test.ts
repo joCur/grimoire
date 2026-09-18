@@ -34,47 +34,48 @@ const ADDRESS_A = "01-salzhafen/leuchtturm/treffen-am-kai";
 const ADDRESS_B = "01-salzhafen/leuchtturm/nacht-am-kai";
 const STUB_PATH = "npcs/grella";
 
-function sceneMarkdown(id: string, title: string): string {
-  return [
-    "---",
-    `id: ${id}`,
-    `title: ${title}`,
-    "type: planned",
-    "chapter: 01-salzhafen",
-    "location: leuchtturm",
-    "npcs: [fenn]",
-    "tags: [social]",
-    "status: draft",
-    "---",
-    "",
-    "## Flow",
-    "",
-    "Fenn wartet am Kai.",
-    "",
-  ].join("\n");
+interface Draft {
+  properties: Record<string, unknown>;
+  body: string;
 }
 
-const STUB_MARKDOWN = [
-  "---",
-  "id: grella",
-  "name: Grella",
-  "role: Schmugglerin mit eigenen Plänen",
-  "chapter: 01-salzhafen",
-  "status: alive",
-  "---",
-  "",
-  "## Will",
-  "",
-  "Im Quelltext nur erwähnt.",
-  "",
-].join("\n");
+const SCENE_BODY = "## Flow\n\nFenn wartet am Kai.\n";
+
+function sceneDraft(id: string, title: string, chapter = "01-salzhafen"): Draft {
+  return {
+    properties: {
+      id,
+      title,
+      type: "planned",
+      chapter,
+      location: "leuchtturm",
+      npcs: ["fenn"],
+      tags: ["social"],
+      status: "draft",
+    },
+    body: SCENE_BODY,
+  };
+}
+
+function npcStub(chapter = "01-salzhafen"): Draft {
+  return {
+    properties: {
+      id: "grella",
+      name: "Grella",
+      role: "Schmugglerin mit eigenen Plänen",
+      chapter,
+      status: "alive",
+    },
+    body: "## Will\n\nIm Quelltext nur erwähnt.\n",
+  };
+}
 
 const REPLY = JSON.stringify({
   scenes: [
-    { content: sceneMarkdown("treffen-am-kai", "Treffen am Kai") },
-    { content: sceneMarkdown("nacht-am-kai", "Nacht am Kai") },
+    { content: sceneDraft("treffen-am-kai", "Treffen am Kai") },
+    { content: sceneDraft("nacht-am-kai", "Nacht am Kai") },
   ],
-  entries: [{ kind: "npc", content: STUB_MARKDOWN }],
+  entries: [{ kind: "npc", content: npcStub() }],
   warnings: [],
 });
 
@@ -154,13 +155,13 @@ test("a fresh job carries an empty review state and rev 0", async () => {
 test("the patch merges text, decisions and drops — and bumps the rev", async () => {
   let job = await runJob();
 
-  job = await patch(job, { edits: { [SCENE_A]: "edited body" } });
-  expect(job.draftEdits[SCENE_A]).toBe("edited body");
+  job = await patch(job, { edits: { [SCENE_A]: { body: "edited body" } } });
+  expect(job.draftEdits[SCENE_A]).toEqual({ body: "edited body" });
   expect(job.rev).toBe(1);
 
   // Only what the patch names moves — the earlier edit stays.
   job = await patch(job, { entries: { [STUB_PATH]: "rejected" }, dropped: [SCENE_B] });
-  expect(job.draftEdits[SCENE_A]).toBe("edited body");
+  expect(job.draftEdits[SCENE_A]).toEqual({ body: "edited body" });
   expect(job.review?.entries[STUB_PATH]).toBe("rejected");
   expect(job.review?.dropped).toEqual([SCENE_B]);
   expect(job.rev).toBe(2);
@@ -204,18 +205,18 @@ test("a field or block value that is neither a boolean nor null is a 400", async
 
 test("a stale rev is a 409 rev_conflict carrying the current rev; nothing is written", async () => {
   const job = await runJob();
-  await patch(job, { edits: { [SCENE_A]: "first" } });
+  await patch(job, { edits: { [SCENE_A]: { body: "first" } } });
 
   // The second tab still holds rev 0.
   const res = await send("PATCH", `/api/campaigns/beispiel/generate/job/${job.id}/review`, {
     rev: 0,
-    edits: { [SCENE_A]: "second" },
+    edits: { [SCENE_A]: { body: "second" } },
   });
   expect(res.status).toBe(409);
   const body = (await res.json()) as { code: string; rev: number };
   expect(body.code).toBe("rev_conflict");
   expect(body.rev).toBe(1);
-  expect((await fetchJob())?.draftEdits[SCENE_A]).toBe("first");
+  expect((await fetchJob())?.draftEdits[SCENE_A]).toEqual({ body: "first" });
 });
 
 test("a patch for another job id is a 404", async () => {
@@ -227,7 +228,7 @@ test("a patch for another job id is a 404", async () => {
 test("the review state comes back from the row — the round trip a restart makes", async () => {
   const started = await runJob();
   const job = await patch(started, {
-    edits: { [SCENE_A]: "survives" },
+    edits: { [SCENE_A]: { body: "survives" } },
     entries: { [STUB_PATH]: "accepted" },
     dropped: [SCENE_B],
   });
@@ -235,7 +236,7 @@ test("the review state comes back from the row — the round trip a restart make
   // A restart is nothing but a fresh read of the row: the process keeps no
   // review state of its own, which is the whole point of the column.
   const again = await fetchJob();
-  expect(again?.draftEdits[SCENE_A]).toBe("survives");
+  expect(again?.draftEdits[SCENE_A]).toEqual({ body: "survives" });
   expect(again?.review?.entries[STUB_PATH]).toBe("accepted");
   expect(again?.review?.dropped).toEqual([SCENE_B]);
   expect(again?.rev).toBe(job.rev);
@@ -260,14 +261,23 @@ test('„Diesen übernehmen" writes only the selection and marks it on the job',
   expect(after?.result?.scenes).toHaveLength(2);
 });
 
-test("the edited text is what a partial accept writes", async () => {
+test("the edited halves are what a partial accept writes", async () => {
   let job = await runJob();
   job = await patch(job, {
-    edits: { [SCENE_A]: sceneMarkdown("treffen-am-kai", "Treffen am Kai").replace("Fenn wartet am Kai.", "Fenn wartet im Regen.") },
+    edits: {
+      [SCENE_A]: {
+        properties: {
+          ...sceneDraft("treffen-am-kai", "Treffen im Regen").properties,
+        },
+        body: SCENE_BODY.replace("Fenn wartet am Kai.", "Fenn wartet im Regen."),
+      },
+    },
   });
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
   const res = await app.request(entriesUrl("beispiel", ADDRESS_A));
-  expect(((await res.json()) as { body: string }).body).toContain("Fenn wartet im Regen.");
+  const stored = (await res.json()) as { body: string; properties: Record<string, unknown> };
+  expect(stored.body).toContain("Fenn wartet im Regen.");
+  expect(stored.properties.title).toBe("Treffen im Regen");
 });
 
 test("accepting the same part twice answers 200 with nothing written", async () => {
@@ -434,10 +444,10 @@ const NEW_CHAPTER = "03-drachenbrut";
 // run's, so the drafts have to name this one.
 const NEW_CHAPTER_REPLY = JSON.stringify({
   scenes: [
-    { content: sceneMarkdown("treffen-am-kai", "Treffen am Kai").replace("01-salzhafen", NEW_CHAPTER) },
-    { content: sceneMarkdown("nacht-am-kai", "Nacht am Kai").replace("01-salzhafen", NEW_CHAPTER) },
+    { content: sceneDraft("treffen-am-kai", "Treffen am Kai", NEW_CHAPTER) },
+    { content: sceneDraft("nacht-am-kai", "Nacht am Kai", NEW_CHAPTER) },
   ],
-  entries: [{ kind: "npc", content: STUB_MARKDOWN.replace("01-salzhafen", NEW_CHAPTER) }],
+  entries: [{ kind: "npc", content: npcStub(NEW_CHAPTER) }],
   warnings: [],
 });
 

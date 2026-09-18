@@ -23,19 +23,19 @@
 // the stub stays stateless and can serve several test workers at once:
 //
 //   - a "## Bestehender Eintrag" section in the prompt        -> augment run
-//     (issue #36; the reply echoes that entry and adds to it)
+//     (the reply echoes that entry and adds to it)
 //   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
 //     (the reply's scene path uses exactly that chapter)
 //   - no chapter line                                            -> npc run
-//     (a `vorgegebene id: <id>` line pins the target file name)
+//     (a `vorgegebene id: <id>` line pins the id of the entry)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
 //   - TRIGGER.truncated in the source text -> finish_reason "length"
 //   - TRIGGER.slow in the source text      -> the reply is HELD (SLOW_REPLY_MS)
-//     so a spec can observe a job while it is really running (issue #23)
+//     so a spec can observe a job while it is really running
 //
-// Since issue #102 a SCENE run is not one call any more but a pipeline, and
-// the stub answers each of its calls (told apart by the prompt):
+// A SCENE run is not one call but a pipeline, and the stub answers each of its
+// calls (told apart by the prompt):
 //
 //   - the system prompt is the OUTLINE prompt                 -> outline call
 //   - the prompt carries the outline and a `chapter:` line    -> a SCENE part
@@ -91,6 +91,7 @@ import {
   outlineReply,
   partFailNonce,
   scenePartReply,
+  type ExistingEntry,
 } from "./replies";
 
 /** Fake token counts — the UI shows them, so they must look plausible. */
@@ -118,7 +119,7 @@ function sourceText(prompt: string): string {
 }
 
 /**
- * The campaign-knowledge block of the prompt (issue #53), or "" when the
+ * The campaign-knowledge block of the prompt, or "" when the
  * prompt has no such section — which is the normal case and what every
  * campaign without knowledge produces.
  *
@@ -164,22 +165,41 @@ const ASSIGNED_SCENE = /## Diese Szene schreibst du jetzt\n+([a-z0-9-]+) /;
 const partCalls = new Map<string, number>();
 
 /**
- * The augment run's target (issue #36): the address out of the „Bestehender
- * Eintrag" heading, and the entry's markdown out of the fenced block right
- * below it. Returns null when the prompt has no such section — which is
+ * The augment run's target: the address out of the „Bestehender Eintrag"
+ * heading, and the entry itself out of the fenced JSON block right below it —
+ * the `{ properties, body }` pair, which is the very shape the reply is forced
+ * into (ADR #24). Returns null when the prompt has no such section — which is
  * every create run, and then nothing about the stub changes.
  */
-function existingEntry(prompt: string): { path: string; markdown: string } | null {
+function existingEntry(prompt: string): { path: string; entry: ExistingEntry } | null {
   const start = prompt.indexOf(EXISTING_ENTRY_HEADING);
   if (start === -1) return null;
   const rest = prompt.slice(start + EXISTING_ENTRY_HEADING.length);
   const address = /^[ \t]*\(([^)]+)\)/.exec(rest);
-  const fence = /```markdown\n([\s\S]*?)```/.exec(rest);
+  const fence = /```json\n([\s\S]*?)```/.exec(rest);
   if (address === null || fence === null) return null;
-  // buildPrompt joins its sections with a blank line, so the fenced block
-  // arrives padded. The entry itself starts at its properties block.
-  const markdown = fence[1]!.replace(/^\n+/, "").replace(/\n+$/, "\n");
-  return { path: address[1]!.trim(), markdown };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fence[1]!);
+  } catch {
+    // Not readable as an entry, so not an augment prompt as far as the stub
+    // is concerned: it falls through to the create branches, which fails a
+    // spec visibly instead of answering half an augment.
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const { properties, body } = parsed as Record<string, unknown>;
+  return {
+    path: address[1]!.trim(),
+    entry: {
+      properties: isRecord(properties) ? properties : {},
+      body: typeof body === "string" ? body : "",
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export interface StubDecision {
@@ -202,7 +222,7 @@ export interface StubDecision {
   pauseMs?: number;
 }
 
-/** The system message of the request — which PROMPT the call is (issue #102). */
+/** The system message of the request — which PROMPT the call is. */
 function systemPrompt(messages: ChatMessage[]): string {
   return messages.find((m) => m.role === "system")?.content ?? "";
 }
@@ -221,12 +241,12 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const three = source.includes(TRIGGER.threeScenes);
   const asciiQuotes = source.includes(TRIGGER.asciiQuotes);
   // Only the PARTS are late; the outline answers at once, so the run reaches
-  // `running` with its parts still pending (issue #102 review).
+  // `running` with its parts still pending.
   const latePart = source.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0;
 
-  // Issue #36: an augment run is the one prompt that carries an EXISTING
-  // entry. It is checked FIRST — a scene augment also carries a `chapter:`
-  // line, and that line is what tells a create run apart from an npc one.
+  // An augment run is the one prompt that carries an EXISTING entry. It is
+  // checked FIRST — a scene augment also carries a `chapter:` line, and that
+  // line is what tells a create run apart from an npc one.
   const existing = existingEntry(prompt);
   if (existing !== null) {
     return {
@@ -240,12 +260,12 @@ export function decide(messages: ChatMessage[]): StubDecision {
       pauseMs: latePart,
       reply: invalid
         ? invalidAugmentReply(existing.path)
-        : augmentReply(existing.path, existing.markdown, knowledge),
+        : augmentReply(existing.path, existing.entry, knowledge),
     };
   }
 
-  // Issue #102: the OUTLINE call. Recognized by its own system prompt, which
-  // is the honest signal — it is the only call that has no outline to read.
+  // The OUTLINE call. Recognized by its own system prompt, which is the honest
+  // signal — it is the only call that has no outline to read.
   if (system.includes("System-Prompt: Gliederung")) {
     return {
       kind: "outline",
@@ -289,8 +309,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
             ? SLOW_REPLY_MS
             : 0,
         // A FAILING part answers at once even when the others are late: that
-        // is the shape in which the only reviewable thing is an error
-        // (issue #102 review).
+        // is the shape in which the only reviewable thing is an error.
         pauseMs: fails ? 0 : latePart,
         reply:
           invalid || fails
@@ -302,8 +321,8 @@ export function decide(messages: ChatMessage[]): StubDecision {
     return { kind: "entry", truncated, delayMs, reply: entryPartReply(kind) };
   }
 
-  // Everything left is the single-call NPC run (issue #21): no chapter, and a
-  // `vorgegebene id` line when the DM pinned the file name.
+  // Everything left is the single-call NPC run: no chapter, and a
+  // `vorgegebene id` line when the DM pinned the id of the entry.
   const pinned = matchLine(prompt, "vorgegebene id");
   return {
     kind: "npc",
@@ -357,7 +376,7 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
           // spec wants to catch WHILE it runs, and the provider has no client
           // timeout — so the reply simply never comes. The socket dies with
           // the server process that asked, which is exactly the restart the
-          // spec is testing (issue #23).
+          // spec is testing.
           console.log(`stub-llm: holding the reply (${decision.delayMs}ms budget)`);
           const held = setTimeout(() => res.destroy(), decision.delayMs);
           held.unref?.();

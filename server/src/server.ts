@@ -81,6 +81,14 @@ if (import.meta.main) {
         "marked as failed (restart the run).",
     );
   }
+  // Drafts are `{ properties, body }` (ADR #24); a job whose stored drafts
+  // are one markdown text each is failed rather than converted.
+  if (info !== undefined && info.legacyDraftJobs > 0) {
+    console.log(
+      `${info.legacyDraftJobs} generate job(s) carried drafts in the old format — ` +
+        "marked as failed (start the run again).",
+    );
+  }
 
   // Production: serve the Vite build from the same process (deployment is one
   // container, DECISIONS #5). In dev app/dist does not exist — Vite serves the

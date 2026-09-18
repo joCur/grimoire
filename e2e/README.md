@@ -40,6 +40,14 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
   Eintrags `properties`. Ein veraltetes `rev` antwortet mit 409
   `rev_conflict` und trägt den aktuellen Eintrag mit.
+- **Ein Entwurf des Generators ist ein Paar aus `properties` und `body`**
+  (ADR #24) — auf der Leitung `{ path, properties, body }`, ein Feld
+  `markdown` gibt es nicht. Änderungen des Prüfschritts reisen **je Hälfte**:
+  `edits: { "<adresse>": { properties?, body? } }` im Review-PATCH,
+  `draftEdits` in derselben Form am Job. Die genannte Hälfte ersetzt die des
+  Entwurfs vollständig, die andere bleibt die des Modells; eine unberührte
+  Hälfte wird nie mitgeschickt. Nichts in der Suite — Stub und Fixtures
+  eingeschlossen — baut aus den Hälften einen Text oder liest einen zurück.
 - **Ein Eintrag hat EINEN Schreibweg** (ADR #23):
   `PATCH /api/campaigns/:campaign/entries/<adresse>` mit
   `{ rev, properties?, body?, force? }`. Eigenschaften und Text zusammen sind
@@ -192,7 +200,11 @@ Welche Antwort kommt, entscheidet ausschließlich der Prompt — der Stub hält
 keinen Zustand und kann mehrere Worker parallel bedienen:
 
 - ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
-  (der Ergänzen-Lauf). Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
+  (der Ergänzen-Lauf). Der Eintrag steht dort als JSON-Block
+  (`{ properties, body }`, Prompt-Formatierung aus
+  `server/src/llm-provider.ts`) — genau die Form, in die die Antwort gezwungen
+  wird; der Stub liest ihn mit `JSON.parse` und nicht aus einem Text.
+  Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
   bei einem LEEREN NPC (angelegt und nicht gefüllt) werden
   `role`/`voice` gefüllt und ein Körper geschrieben, bei allem anderen kommt
   genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
@@ -276,9 +288,18 @@ mehrere Schreibwege auf ihm liegen:
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
 DEMSELBEN Datenverzeichnis: der erste startet einen Lauf bzw. bringt ihn zu
 Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
-da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
-`failed` mit „Server wurde während des Laufs neu gestartet — Job neu starten"
-statt als endloser Spinner.
+da (Ergebnis, Review-Edits in der Form je Hälfte) und wird mit beiden
+bearbeiteten Hälften übernommen; ein **laufender** steht als `failed` mit
+„Server wurde während des Laufs neu gestartet — Job neu starten" statt als
+endloser Spinner. Ein dritter Fall dort ist das **alte Entwurfsformat**: eine
+Job-Zeile, deren Entwürfe als `markdown` und deren `draftEdits` als Strings
+liegen, ist nach dem Boot `failed` mit `job_draft_format` und die Oberfläche
+sagt es in einem Satz — nichts wird konvertiert (ADR #24). Diese Zeile wird
+gepflanzt, weil kein Code im Repo diese Form noch schreibt: der Lauf des
+ersten Boots ist echt, zwischen den Boots wird sein Payload zurückdatiert.
+Das ist die **einzige** Stelle der Suite, die direkt in eine Datenbank
+schreibt — es läuft in dem Moment niemand darauf, und es gibt keine API für
+eine veraltete Zeile.
 
 `tests/generator-pipeline.e2e.ts` ist die **Pipeline-Hälfte** von Pfad 6
 die Pipeline: ein Lauf mit drei Szenen, von denen eine fehlschlägt — die anderen
@@ -291,7 +312,24 @@ wieder startbar, weil die Gliederung mit der Zeile zurückkommt. Die Gliederung
 selbst kommt in keiner Zusicherung vor — sie wird dem Nutzer nie gezeigt.
 
 `tests/generator.e2e.ts` deckt zusätzlich den **Prüfzustand**
-ab: Entwurf bearbeiten → Seite verlassen → zurück → der Text ist da; einen
+ab: Entwurf bearbeiten → Seite verlassen → zurück → beide Hälften sind da
+(ein Eigenschaften-Feld und eine Zeile Text, am Job als
+`draftEdits[<adresse>].properties` und `.body` nachgelesen), und das
+Übernehmen schreibt den bearbeiteten Titel UND den bearbeiteten Text. Zwei
+Tests daneben halten die Trennung fest: eine Änderung nur an den
+Eigenschaften lässt den Text des Laufs Byte für Byte stehen, eine Änderung
+nur am Text lässt jede Eigenschaft des Laufs stehen. Jeder von ihnen braucht
+einen eigenen Lauf — beide schreiben am Ende dieselbe Szene, und ein zweites
+Übernehmen auf eine bestehende Adresse ist ein 409.
+
+Wer dort an die Textarea will, geht über den Umschalter: „Bearbeiten" öffnet
+die zwei Bereiche „Eigenschaften" (`role="region"`) und „Text", und der
+Text-Bereich startet auf den Blöcken — erst „Markdown" in der Gruppe
+„Editiermodus" bringt die Textarea, deren Name „Text von &lt;adresse&gt;"
+lautet. Gespeichert wird implizit (entprellt, auf Blur geflusht); das
+Beobachtbare ist die stille Statuszeile.
+
+Weiter im Prüfzustand: einen
 vorgeschlagenen Eintrag entscheiden → Reload → die Entscheidung steht; eine
 Szene einzeln übernehmen („Diesen übernehmen") → der Rest bleibt prüfbar und
 die Fortschrittszeile sagt „1 von 3 übernommen" → „Rest übernehmen" schreibt

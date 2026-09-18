@@ -301,6 +301,8 @@ export const de = {
   "server.body_not_editable":
     "Dieser Eintrag hat keinen bearbeitbaren Text — er wird als Liste gepflegt.",
   "server.job_restarted": "Server wurde während des Laufs neu gestartet — Job neu starten.",
+  "server.job_draft_format":
+    "Dieser Lauf stammt aus einem älteren Entwurfsformat und kann nicht mehr übernommen werden — bitte neu erzeugen.",
   "server.llm_truncated":
     "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}) oder Quelltext verkleinern.",
   "server.llm_invalid": "Antwort hat die mechanische Prüfung nicht bestanden.",
@@ -709,7 +711,11 @@ export const de = {
   "generate.review.plannedScene": "Geplante Szene",
   "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Markdown von {title}",
+  // The draft editor of a review card: the properties in the form of the
+  // properties dialog, the body on the surfaces of the entry editor.
+  "generate.review.propertiesHeading": "Eigenschaften",
+  "generate.review.bodyHeading": "Text",
+  "generate.review.bodyLabel": "Text von {path}",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",

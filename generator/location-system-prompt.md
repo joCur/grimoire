@@ -13,7 +13,7 @@ von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
 
 * `properties` — die Eigenschaften des Eintrags, jede als eigener Schlüssel.
   Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere trägt
-  `null`. Den Eigenschaften-Block baut der Server daraus.
+  `null`. Der Server speichert sie genau so.
 * `body` — der Text des Eintrags, als **ein** String mit echten
   Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Die
   Eigenschaften bleiben in `properties`.
@@ -124,5 +124,5 @@ locations: bucht (Die Schmugglerbucht)
 `locations/leuchtturm` mit `name`, `chapter: 01-salzhafen`,
 `roll20-page: "Leuchtturm"`, `## Beim ersten Betreten` als `[!readaloud]`,
 `## Atmosphäre` (in Eile verlassen, `[[jorna]]` als Referenz),
-`## Wer ist hier` (niemand) und leerem `## Notizen`. Das Referenz-Dokument
+`## Wer ist hier` (niemand) und leerem `## Notizen`. Das Referenz-Beispiel
 liegt dem Prompt als `location-example-output.json` bei.

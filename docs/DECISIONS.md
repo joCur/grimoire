@@ -73,8 +73,8 @@ Fehler mechanisch (Komma am Ende, einfache Anführungszeichen): eine
 deterministische Reparatur vor der Validierung ist deutlich billiger als eine
 Korrekturrunde, die den ganzen Prompt erneut sendet. Die Regeln selbst bleiben
 unangetastet, und ein reparierter Lauf trägt eine Warnung. Weitere
-Abhängigkeiten braucht es nicht — den Eigenschaften-Block eines Eintrags
-rendert der Server mit dem Renderer des Stores.
+Abhängigkeiten braucht es nicht — die Antwort trägt die Eigenschaften und den
+Text getrennt, genau so, wie der Store sie hält (ADR #24).
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe ADR #7).
 
@@ -809,8 +809,6 @@ gleichzeitig die Referenz dafür, was die API antwortet.
 
 - Die Spalte `extra` entfällt: sie hielt Felder, die nur ein Import
   mitbringen konnte.
-- `shared/src/parse.ts` bleibt als Entwurfs-Parser des Generators, solange der
-  Generator Markdown mit Eigenschaften-Block liefert.
 - Die Planungsentscheidung F5 („kein zweites Datenformat für Fixtures") ist
   zurückgezogen: es gibt genau ein Fixture-Format, und es ist das Format der
   API.
@@ -924,3 +922,50 @@ Spalten geparst wurde.
   Session ist eine Zwischenlösung, solange diese Listen noch eine
   Eintrags-Adresse haben; die Adresse fällt in einer eigenen Entscheidung,
   damit fällt der Code.
+
+## 24. Der Generator kennt kein Markdown-Zwischenformat
+
+**Entscheidung:** Ein Entwurf des Generators ist von der Antwort des Modells
+bis in die Zeile ein Paar aus `properties` und `body`. Der Server setzt daraus
+nirgends einen Markdown-Text mit Eigenschaften davor zusammen und liest
+nirgends einen zurück: die Antwort liefert die beiden Hälften, die Validierung
+liest sie, der Prüfschritt zeigt sie, und die Schreibschicht bekommt sie
+unverändert. Änderungen des DM werden **je Hälfte** gespeichert
+(`draftEdits: { "<adresse>": { properties?, body? } }`): die genannte Hälfte
+ersetzt die des Entwurfs vollständig, die andere bleibt die des Modells. Auf
+der Leitung heißt ein Entwurf `{ path, properties, body }`; ein Feld
+`markdown` gibt es nicht mehr. Der bestehende Eintrag, den ein
+Ergänzen-Lauf dem Modell zeigt, ist **Prompt-Formatierung** und wird dort
+gebaut, wo der Prompt gebaut wird (`server/src/llm-provider.ts`) — kein
+Speicherformat.
+
+**Kontext:** Der Generator antwortet seit ADR #20 mit einem erzwungenen
+JSON-Objekt (`properties`, `body`, `warnings`). Trotzdem rannte jeder Entwurf
+danach durch einen Renderer und einen Parser: der Server baute aus dem Objekt
+einen Markdown-Text, trug ihn als `markdown` durch Job, Prüfschritt und
+Änderungen des DM, und beim Übernehmen wurde derselbe Text wieder in
+Eigenschaften und Text zerlegt. Die Runde konnte nur verlieren — eine
+Eigenschaft, die als YAML anders zurückkommt, als sie hineingegangen ist
+(ein Datum, ein `+2`, ein Doppelpunkt in einem Satz), ein Block, der beim
+Parsen degradiert und den ganzen Text zum Body macht. Und seit ADR #13 ist
+die Zeile die Wahrheit: es gibt keinen Leser dieses Textes außer dem
+Generator selbst.
+
+**Folgen:**
+
+- `shared/src/parse.ts` ist gelöscht, mit ihm die Abhängigkeiten
+  `gray-matter` (shared) und `js-yaml` (server). Nichts im Repo parst
+  Eigenschaften mehr aus Text.
+- `ParsedFile` entfällt; `EntryResponse` steht für sich. Der Renderer des
+  Stores rendert die Hälften einer Zeile, nicht mehr einen Eintrag als einen
+  Text.
+- Ein Job, dessen gespeicherte Entwürfe oder Änderungen in der alten Form
+  liegen, wird beim Start als `failed` markiert (`code:
+  "job_draft_format"`) — nicht konvertiert. Zurückparsen wäre genau die
+  Runde, die diese Entscheidung abschafft, und ein Lauf kostet ein paar
+  Token; ein halb konvertierter Entwurf kostet einen falschen Eintrag in der
+  Kampagne.
+- `POST …/generate/apply`, `POST …/generate/job/:id/accept` und `PATCH
+  …/generate/job/:id/review` sprechen die Objektform. Das ist ein Bruch der
+  Schnittstelle, und er ist keiner in der Praxis: ein Entwurf lebt nur
+  zwischen einem Lauf und seinem Übernehmen.

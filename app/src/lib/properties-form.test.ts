@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import type { CampaignTree, EntityKind } from "@grimoire/shared/types";
 
 import {
+  applyPropertiesPatch,
   canSubmitProperties,
   commitPendingText,
   locationRef,
@@ -179,6 +180,36 @@ describe("propertiesFormValues", () => {
     });
     expect(values["roll20-page"]).toEqual({ kind: "text", text: "12" });
     expect(values.chapter).toEqual({ kind: "text", text: "" });
+  });
+});
+
+describe("applyPropertiesPatch", () => {
+  // What a caller needs that cannot send a patch at all — the generator
+  // review, whose draft is stored as a whole properties object.
+  test("folds the diff back into the values it was measured against", () => {
+    const sceneFields = fields("scene");
+    const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
+    const current = { ...initial, status: { kind: "text" as const, text: "played" } };
+    const whole = applyPropertiesPatch(
+      SCENE_PROPERTIES,
+      propertiesPatch(sceneFields, initial, current),
+    );
+    expect(whole.status).toBe("played");
+    expect(whole.title).toBe(SCENE_PROPERTIES.title);
+  });
+
+  test("a cleared field drops the key instead of writing an empty value", () => {
+    expect(applyPropertiesPatch({ title: "Ankunft", trigger: "wenn" }, { trigger: null })).toEqual({
+      title: "Ankunft",
+    });
+  });
+
+  test("keys the form does not know survive untouched", () => {
+    const base = { title: "Ankunft", "prep-time": "20min" };
+    expect(applyPropertiesPatch(base, { title: "Neu" })).toEqual({
+      title: "Neu",
+      "prep-time": "20min",
+    });
   });
 });
 

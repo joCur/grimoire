@@ -91,6 +91,12 @@ export const ERROR_CODES = [
   "body_not_editable",
   /** 503, generator: the server was restarted while the job was running. */
   "job_restarted",
+  /**
+   * 409, generator: the job's drafts predate the current draft format (ADR
+   * #24) and cannot be reviewed or accepted — the run has to be started
+   * again.
+   */
+  "job_draft_format",
   /** 422, generator: the model's reply hit the token ceiling. `{ maxTokens }` */
   "llm_truncated",
   /** 422, generator: the reply failed mechanical validation after the retries. */

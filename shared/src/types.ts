@@ -1,4 +1,5 @@
-// Entity types for the Grimoire markdown data format.
+// Entity types of the Grimoire data model: an entry is its properties plus
+// its markdown body (README).
 // This is the code mirror of the format contract in /README.md — keep both
 // in sync; changes here need a matching README edit (and vice versa).
 //
@@ -155,16 +156,6 @@ export type EntityKind =
   | "glossary"
   | "unknown";
 
-/** One parsed entry. `path` is its address within the campaign. */
-export interface ParsedFile<F = Record<string, unknown>> {
-  path: string;
-  kind: EntityKind;
-  properties: F;
-  /** Markdown body without the properties block. */
-  body: string;
-  /** Optimistic-concurrency token: PATCH sends it back, server 409s on mismatch. */
-  rev: number;
-}
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
 
@@ -276,8 +267,20 @@ export interface CampaignTree {
   sessions: SessionSummary[];
 }
 
-/** GET /api/:campaign/entry?path=… (and GET /api/:campaign/session) */
-export interface EntryResponse extends ParsedFile {
+/**
+ * GET /api/:campaign/entry?path=… (and GET /api/:campaign/session) — ONE
+ * entry: its address, its kind, its properties, its markdown body and the
+ * guard token a PATCH sends back.
+ */
+export interface EntryResponse {
+  /** The entry's address within the campaign (server/src/store/paths.ts). */
+  path: string;
+  kind: EntityKind;
+  properties: Record<string, unknown>;
+  /** The entry's markdown text. */
+  body: string;
+  /** Optimistic-concurrency token: PATCH sends it back, server 409s on mismatch. */
+  rev: number;
   /**
    * SESSIONS ONLY: `started` as epoch milliseconds, read in
    * the SERVER's timezone. The properties value stays the zone-less string
@@ -364,10 +367,10 @@ export interface SearchResponse {
 export interface GeneratedSceneDraft {
   /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured". */
   path: string;
-  /** The complete markdown including the properties block. */
-  markdown: string;
-  /** The parsed properties (always `status: draft`), for the review UI. */
+  /** The draft's properties (always `status: draft`). */
   properties: Record<string, unknown>;
+  /** The draft's markdown body. */
+  body: string;
 }
 
 /**
@@ -379,8 +382,10 @@ export interface GeneratedStub {
   kind: "npc" | "location";
   id: string;
   name: string;
-  /** The complete stub markdown including the properties block. */
-  markdown: string;
+  /** The stub's properties. */
+  properties: Record<string, unknown>;
+  /** The stub's markdown body. */
+  body: string;
 }
 
 /**
@@ -428,10 +433,10 @@ export interface GenerateResult {
 export interface GeneratedNpcDraft {
   /** Campaign-relative target path, always "npcs/<kebab-id>". */
   path: string;
-  /** The complete markdown including the properties block. */
-  markdown: string;
-  /** The parsed properties (id/name/status guaranteed), for the review UI. */
+  /** The draft's properties (id/name/status guaranteed). */
   properties: Record<string, unknown>;
+  /** The draft's markdown body. */
+  body: string;
 }
 
 /**
@@ -597,6 +602,21 @@ export interface GenerateJobError {
 }
 
 /**
+ * What the DM changed about ONE draft in the review — kept on the job and
+ * sent by PATCH …/generate/job/:id/review, keyed by the draft's path.
+ *
+ * A draft is properties plus body, and an edit carries whichever half
+ * changed: `properties` REPLACES the draft's whole properties object (the
+ * fields card edits every field at once), `body` replaces its whole body.
+ * The half that is absent keeps the model's own value, so a text edit cannot
+ * silently reset a field and a field edit cannot reset the text.
+ */
+export interface DraftEdit {
+  properties?: Record<string, unknown>;
+  body?: string;
+}
+
+/**
  * GET /api/:campaign/generate/job — the one generate job of a campaign.
  * The run outlives the browser tab: POST /generate answers
  * `202 { jobId }` and the result waits here until it is applied, discarded
@@ -643,9 +663,10 @@ export interface GenerateJob {
    * Review edits kept server-side, keyed by the draft's campaign-relative
    * path (PATCH …/generate/job/:id/review) — so an edited draft survives a
    * reload as well. Empty until the DM edits something; applied ON TOP of
-   * `result.scenes` (or of `npcResult.npc`) by the review UI.
+   * `result.scenes` (or of `npcResult.npc`) by the review UI, half by half
+   * (see DraftEdit).
    */
-  draftEdits: Record<string, string>;
+  draftEdits: Record<string, DraftEdit>;
   /**
    * Optimistic-concurrency token of the REVIEW STATE. Every
    * `PATCH …/review` sends the rev it read and gets a 409
@@ -657,8 +678,8 @@ export interface GenerateJob {
   /**
    * Everything the DM DID in the review, kept on the job, so a
    * navigation, a reload, a second tab and a server restart all show the
-   * same state. `draftEdits` holds the edited TEXT; this holds the
-   * decisions. Absent on a payload from an older server — the UI treats
+   * same state. `draftEdits` holds the edited HALVES of a draft; this holds
+   * the decisions. Absent on a payload from an older server — the UI treats
    * that as "nothing decided yet".
    */
   review?: GenerateJobReview;

@@ -5,10 +5,10 @@
 import type {
   CampaignSummary,
   CampaignTree,
+  DraftEdit,
   EntryResponse,
   GenerateJob,
   GenerateJobStarted,
-  GeneratedStub,
   GlossaryEntry,
   GlossaryResponse,
   InstanceSettings,
@@ -195,8 +195,8 @@ export function putKnowledge(
  * one and a dialog that edits both in one transaction.
  *
  * `properties` is flat — a value sets the key, `null` deletes it, an unknown
- * key is a 400. `body` is the markdown GET hands out (the entry without its
- * properties block); the glossary and the inbox have no editable text and
+ * key is a 400. `body` is the markdown GET hands out — the entry's text, with
+ * its properties beside it; the glossary and the inbox have no editable text and
  * answer 400 `body_not_editable`. Neither field present is a 400
  * `nothing_to_write`.
  *
@@ -538,8 +538,7 @@ export function createLocation(
  * Start a generator run for one chapter — a BACKGROUND job:
  * the server answers 202 with the job id and the result is fetched via
  * fetchGenerateJob. Nothing is written (generator/README.md); `newChapter`
- * allows a chapter directory that does not exist yet (created by
- * applyDrafts below).
+ * allows a chapter that does not exist yet (the accept creates it).
  *
  * A 409 is NOT an error here: it means a job for this campaign is already
  * running, and its id is the answer to "start a run" — the view adopts the
@@ -723,7 +722,7 @@ export async function patchJobReview(
   jobId: string,
   rev: number,
   patch: {
-    edits?: Record<string, string>;
+    edits?: Record<string, DraftEdit>;
     entries?: Record<string, "accepted" | "rejected" | null>;
     dropped?: string[];
     fields?: Record<string, boolean | null>;
@@ -783,48 +782,3 @@ export function retryJobPart(
   return postJson<GenerateJob>(path, {});
 }
 
-/**
- * Write the reviewed drafts (all or nothing): the possibly edited scene
- * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
- * server also creates `<chapter>` when it is missing.
- * ApiError 409 carries the existing paths in `details.conflicts` — nothing
- * was written then.
- *
- * `jobId` hands the server the job these drafts came from: a successful
- * apply discards it (the drafts are written — nothing left to restore).
- */
-export function applyDrafts(
-  campaign: string,
-  input: {
-    scenes: Array<{ path: string; markdown: string }>;
-    stubs: GeneratedStub[];
-    chapter?: string;
-    chapterTitle?: string;
-    jobId?: string;
-  },
-): Promise<{ written: string[] }> {
-  return postJson<{ written: string[] }>(`/campaigns/${encodeURIComponent(campaign)}/generate/apply`, {
-    scenes: input.scenes,
-    stubs: input.stubs,
-    ...(input.chapter === undefined || input.chapterTitle === undefined
-      ? {}
-      : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
-    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
-  });
-}
-
-/**
- * Write the reviewed NPC draft — the same apply endpoint as the
- * scene drafts: it re-validates server-side (path, id, status, parseable
- * properties), answers 409 with `details.conflicts` when the entry already
- * exists (nothing written), and drops the job the draft came from.
- */
-export function applyNpcDraft(
-  campaign: string,
-  input: { npc: { path: string; markdown: string }; jobId?: string },
-): Promise<{ written: string[] }> {
-  return postJson<{ written: string[] }>(`/campaigns/${encodeURIComponent(campaign)}/generate/apply`, {
-    npc: input.npc,
-    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
-  });
-}

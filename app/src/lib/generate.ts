@@ -1,26 +1,26 @@
-// Pure helpers for the generator view (issue #12). Everything here is
+// Pure helpers for the generator view. Everything here is
 // derivation and formatting — no fetching, no state:
 //
 //   - the "Neues Kapitel" flow needs a chapter id BEFORE anything exists:
 //     the next free numeric prefix from the tree plus a kebab slug of the
 //     title (the path preview shows exactly what apply will create). Since
-//     issue #22 that preview is an editable field: the suggestion is only a
+//     that preview is an editable field: the suggestion is only a
 //     suggestion, the DM may name the directory freely — so the id also
 //     needs a client-side check (chapterIdError) and the rule for when the
 //     suggestion still follows the title (chapterIdValue).
-//   - the review preview renders the body of a draft the user may have
-//     edited as raw markdown, so the properties block has to be split off
-//     client-side (same rule as the server's parser: it degrades, it never
-//     throws).
+//   - the edits the review keeps on the job: one record per draft path, each
+//     half (properties, body) a whole replacement of what the run produced,
+//     merged here exactly the way the server merges them.
 //   - the count labels for the context hint and the apply button — from the
-//     catalog since issue #69, with the translator PASSED IN (the lib layer
+//     out of the catalog, with the translator PASSED IN (the lib layer
 //     must not decide which language the UI is in, see i18n/index.ts).
-//   - the run's token spend as one quiet line (issue #18), formatted from
+//   - the run's token spend as one quiet line, formatted from
 //     whatever the server sent — a successful run and a 422 both carry it.
-//   - which of the view's states the server's job puts us in (issue #19),
+//   - which of the view's states the server's job puts us in,
 //     and the error body of a failed job.
 
 import type {
+  DraftEdit,
   GenerateJob,
   GenerateJobPart,
   GenerateJobReview,
@@ -92,8 +92,7 @@ const RESERVED_CHAPTER_IDS = new Set(["npcs", "locations", "sessions"]);
 
 /**
  * Is this string usable as a chapter directory name? Returns the error text
- * for the field in the UI language, or undefined when the id is fine
- * (issue #22).
+ * for the field in the UI language, or undefined when the id is fine.
  *
  * The bar is the server's: a chapter id is ONE safe, non-hidden path segment
  * (assertSafeChapterId) and not a reserved directory. On top of that the
@@ -119,7 +118,7 @@ export function chapterIdError(id: string, t: Translate): string | undefined {
 }
 
 /**
- * Is this string usable as an npc id (issue #21)? The npc generator's `id`
+ * Is this string usable as an npc id? The npc generator's `id`
  * field is OPTIONAL — an empty field means "the model chooses" and is
  * therefore not an error. Everything else follows the same bar as a chapter
  * id (the server's kebab pattern) plus the one check only the client can do
@@ -140,7 +139,7 @@ export function npcIdError(
 }
 
 /**
- * What the chapter-id field shows (issue #22 AK4): the manually entered
+ * What the chapter-id field shows: the manually entered
  * value once the DM has touched the field, the derived suggestion until
  * then. `manual === undefined` IS the untouched state — and because the view
  * maps an emptied field back to undefined, clearing the field lets the
@@ -151,23 +150,6 @@ export function chapterIdValue(
   manual: string | undefined,
 ): string {
   return manual ?? suggestion ?? "";
-}
-
-/**
- * Body of a complete draft (properties block stripped) — the same
- * shape the server's parser returns, so the review preview can run the
- * normal markdown pipeline over an edited draft. Degrades: without a
- * parseable block the whole text IS the body.
- */
-export function markdownBody(markdown: string): string {
-  if (!markdown.startsWith("---\n") && !markdown.startsWith("---\r\n")) return markdown;
-  const lines = markdown.split("\n");
-  for (let i = 1; i < lines.length; i++) {
-    if ((lines[i] as string).trimEnd() === "---") {
-      return lines.slice(i + 1).join("\n").replace(/^\r?\n/, "");
-    }
-  }
-  return markdown;
 }
 
 /**
@@ -185,7 +167,7 @@ export function applySummary(sceneCount: number, stubCount: number, t: Translate
  *
  * Only the two COUNTS that come from the tree. The campaign knowledge and the
  * glossary used to be part of the same ICU sentence; since they are pages of
- * their own (issue #53, PO feedback on PR #87) they are LINKS, and a link
+ * their own page they are LINKS, and a link
  * cannot live inside a formatted string without either splitting the pattern
  * or rendering markup out of the catalog. The view composes the line from this
  * half and the two below (routes/generate.tsx).
@@ -195,10 +177,11 @@ export function contextHint(npcCount: number, locationCount: number, t: Translat
 }
 
 /**
- * The knowledge half of that line: how many entries travel (issue #53 AK5).
+ * The knowledge half of that line: how many entries travel.
  *
  * The COUNT and not a yes/no like the glossary: the DM comes back here right
- * after writing a rule, and „3 Wissens-Einträge" is what confirms it arrived.
+ * after writing a rule, and the number of knowledge entries is what confirms
+ * it arrived.
  * Count with `promptKnowledgeCount` (lib/entry-list.ts) — a half-typed
  * convention is stored but skipped by the prompt.
  */
@@ -220,8 +203,8 @@ export function stringField(value: unknown): string | undefined {
 /**
  * Thousands grouping, done by hand: Intl needs full ICU data, and a runtime
  * without it would silently print "12400" instead of "12.400". The separator
- * itself is locale data and therefore comes from the catalog („." in German,
- * "," in English) — the rule does not.
+ * itself is locale data and therefore comes from the catalog (a dot in
+ * German, a comma in English) — the rule does not.
  */
 function groupedNumber(n: number, separator: string): string {
   return Math.round(n)
@@ -229,7 +212,7 @@ function groupedNumber(n: number, separator: string): string {
     .replace(/\B(?=(\d{3})+(?!\d))/g, separator);
 }
 
-// --- the view's state, derived from the server's job (issue #19) ----------
+// --- the view's state, derived from the server's job --------------------
 
 /**
  * The generator view's states. `checking` is the first job lookup on mount —
@@ -241,13 +224,13 @@ export type GeneratePhase = "checking" | "input" | "working" | "review" | "done"
 /**
  * Has the job of the run we just started shown up?
  *
- * The view shows „Entwürfe werden generiert …" for exactly as long as the
+ * The view shows its working state for exactly as long as the
  * answer is no — and THAT is the whole question the stall got wrong. It used
  * the START REQUEST's lifetime instead: while `POST /generate` was in flight
  * the spinner won, even though the job it created was already readable and
  * `done`. With a fast model the run finishes before its own 202 arrives, so
  * the DM sat in front of a finished run for as long as that response took —
- * and when it took long enough, „indefinitely" (the report of 15.09.). The
+ * and when it took long enough, indefinitely. The
  * job is the truth about the run; the request that started it is not.
  *
  * Telling the run's job from the one that was there BEFORE the click needs no
@@ -259,7 +242,7 @@ export type GeneratePhase = "checking" | "input" | "working" | "review" | "done"
 export function runJobArrived(input: {
   /** Id of the job in the cache; null when there is none. */
   jobId: string | null;
-  /** Id of the job that was in the cache when „Entwürfe generieren" was clicked. */
+  /** Id of the job in the cache when the generate action was clicked. */
   staleJobId: string | null;
   /** The id the start request answered with — a 202's or an adopted 409's. */
   startedJobId?: string;
@@ -280,7 +263,7 @@ export function generatePhase(input: {
   applied: boolean;
   /**
    * A run was started and its OWN job has not shown up yet (runJobArrived).
-   * Deliberately not „the POST is in flight": see runJobArrived.
+   * Deliberately not the lifetime of the POST: see runJobArrived.
    */
   starting: boolean;
   /** The job lookup answered at least once (data or error). */
@@ -288,8 +271,8 @@ export function generatePhase(input: {
   /** Status of the campaign's job; undefined when there is none. */
   jobStatus?: GenerateJob["status"];
   /**
-   * A RUNNING run already has something to review (issue #102): at least one
-   * part is done, or one has failed and needs „Erneut versuchen". Both are
+   * A RUNNING run already has something to review: at least one part is
+   * done, or one has failed and offers its retry action. Both are
    * things the DM can act on, so the view is the review, not the spinner.
    */
   hasParts?: boolean;
@@ -297,16 +280,16 @@ export function generatePhase(input: {
   if (input.applied) return "done";
   if (input.starting) return "working";
   if (!input.jobChecked) return "checking";
-  // A pipelined run (issue #102) reaches the review BEFORE it is finished:
-  // the moment one part produced something, that part is reviewable and
-  // acceptable while the others are still going (AK2). Only a run with
+  // A pipelined run reaches the review BEFORE it is finished: the moment one
+  // part produced something, that part is reviewable and acceptable while
+  // the others are still going. Only a run with
   // nothing to show yet is still the spinner.
   if (input.jobStatus === "running") return input.hasParts === true ? "review" : "working";
   if (input.jobStatus === "done") return "review";
   return "input";
 }
 
-// --- generator mode (issue #21) --------------------------------------------
+// --- generator mode --------------------------------------------------------
 
 /** Which kind of run the generator view is set up for. */
 export type GenerateMode = "scene" | "npc";
@@ -365,7 +348,7 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
   });
 }
 
-// --- the review state on the job (issue #97) --------------------------------
+// --- the review state on the job -------------------------------------------
 //
 // Everything the DM does in the review — the edited text, the decision per
 // suggested entry, the dropped scenes, the per field/block decisions of an
@@ -393,7 +376,7 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
 
 /** What one `PATCH …/review` changes — the same merge the server does. */
 export interface ReviewPatch {
-  edits?: Record<string, string>;
+  edits?: Record<string, DraftEdit>;
   entries?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
   fields?: Record<string, boolean | null>;
@@ -406,8 +389,46 @@ export interface ReviewPatch {
  * server does (generate-jobs.ts `applyReviewPatch`), including the one
  * asymmetry: `dropped` is a set sent whole, everything else merges per key,
  * and a `null` value — in `entries`, `fields` and `blocks` alike — means
- * „wieder offen" and deletes the key.
+ * that the decision is open again, which deletes the key.
  */
+/**
+ * What the review shows for one draft: the generated properties and body with
+ * every edit laid on top, in order — the job's stored edit first, the buffer
+ * the DM is typing in last. An edit half that is absent leaves the generated
+ * one standing.
+ */
+export function draftOf(
+  generated: { properties: Record<string, unknown>; body: string },
+  ...edits: Array<DraftEdit | undefined>
+): { properties: Record<string, unknown>; body: string } {
+  let out = generated;
+  for (const edit of edits) {
+    if (edit === undefined) continue;
+    out = {
+      properties: edit.properties ?? out.properties,
+      body: edit.body ?? out.body,
+    };
+  }
+  return out;
+}
+
+/**
+ * Merge draft edits PER PATH and per half: a properties edit must not drop a
+ * body edit that is already on the job, and the other way round. Each half
+ * that a patch carries replaces its counterpart whole (that is what a half
+ * means, see DraftEdit); a half the patch leaves out keeps what is there.
+ */
+export function mergeDraftEdits(
+  into: Record<string, DraftEdit>,
+  patch?: Record<string, DraftEdit>,
+): Record<string, DraftEdit> {
+  const out = { ...into };
+  for (const [path, edit] of Object.entries(patch ?? {})) {
+    out[path] = { ...out[path], ...edit };
+  }
+  return out;
+}
+
 /** Merge boolean decisions; `null` deletes the key (the server does this). */
 function mergeFlags(
   into: Record<string, boolean>,
@@ -430,7 +451,7 @@ export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): Generate
   }
   return {
     ...job,
-    draftEdits: { ...job.draftEdits, ...(patch.edits ?? {}) },
+    draftEdits: mergeDraftEdits(job.draftEdits, patch.edits),
     review: {
       entries,
       dropped: patch.dropped === undefined ? review.dropped : [...new Set(patch.dropped)],
@@ -468,7 +489,7 @@ export function jobParts(job: GenerateJob | null | undefined): string[] {
 }
 
 /**
- * How far a partially accepted run got — „2 von 3 übernommen" in the topbar
+ * How far a partially accepted run got — the accepted count in the topbar
  * and on the generator page. `total` counts every part the run produced,
  * `written` the ones already accepted; a run nobody has accepted anything of
  * reports 0 and shows no progress at all.
@@ -486,20 +507,19 @@ export function jobProgress(job: GenerateJob | null | undefined): {
 }
 
 /**
- * „1 von 3 übernommen" — the same count, but measured against ALL parts of
- * the RUN (issue #102 review).
+ * The same count as jobProgress, but measured against ALL parts of the RUN.
  *
  * `jobProgress` counts what the run has PRODUCED, which is the whole truth
  * for a single-call run and only half of it for a pipeline: while parts are
  * still going, their drafts are not in the result yet, so a run of three
- * scenes with two finished and one accepted reported „1 von 2 übernommen"
- * right next to „2 von 3 Szenen fertig". The DM thinks in parts of the run,
+ * scenes with two finished and one accepted counted one of two right next to
+ * a run progress of two of three. The DM thinks in parts of the run,
  * not in parts that happen to have answered already.
  *
  * `Math.max` because the two counts do not have to agree in the other
  * direction either: a suggested entry the DM accepted is a part of the
- * review without being a part of the outline, and „3 von 2" would be worse
- * than the confusion this fixes.
+ * review without being a part of the outline, and a count above its own
+ * total would be worse than the confusion this fixes.
  */
 export function acceptProgress(job: GenerateJob | null | undefined): {
   written: number;
@@ -511,16 +531,16 @@ export function acceptProgress(job: GenerateJob | null | undefined): {
   return { written: progress.written, total: Math.max(parts.length, progress.total) };
 }
 
-/** The parts „Alle übernehmen" would write: everything still open. */
+/** The parts a bulk accept would write: everything still open. */
 export function openParts(job: GenerateJob | null | undefined): string[] {
   return jobParts(job).filter((path) => partState(job, path) === "open");
 }
 
-// --- the pipeline of a scene run (issue #102) --------------------------------
+// --- the pipeline of a scene run -------------------------------------------
 //
 // The run's parts are what the review is laid out by: a done part renders as
 // the draft it produced, a running one as a status card, a failed one as its
-// error plus „Erneut versuchen". The OUTLINE is never here — the server does
+// error plus its retry action. The OUTLINE is never here — the server does
 // not send it, because it is an internal step and the DM never edits it.
 
 /** The parts of a run, in outline order; empty for a single-call run. */
@@ -562,18 +582,18 @@ export function partPath(job: GenerateJob | null | undefined, part: GenerateJobP
 }
 
 /**
- * „2 von 3 Szenen fertig" — how far the RUN got, which is a different
- * question from „2 von 3 übernommen" (jobProgress, issue #97). Undefined when
+ * How far the RUN got, which is a different question from how much of it was
+ * accepted (jobProgress). Undefined when
  * the run has no parts or every part is settled: a finished run needs no
  * progress line, it needs its drafts.
  *
- * It counts EVERY part, because that is what „is the run still going" is
- * measured against. Counting only the scenes while the line was shown for as
- * long as any part was open froze it at „3 von 3 Szenen fertig" for the whole
- * entry half of a run — and that line REPLACES the review's own progress in
- * the header, so the run looked stuck and the „N von M übernommen" was hidden
- * behind it. The wording follows what is actually counted: „Szenen" only when
- * every part is a scene, „Teile" as soon as suggested entries are among them.
+ * It counts EVERY part, because that is what the question whether the run is
+ * still going is measured against. Counting only the scenes while the line was shown for as
+ * long as any part was open froze it at all scenes done for the whole entry
+ * half of a run — and that line REPLACES the review's own progress in the
+ * header, so the run looked stuck and the accepted count was hidden behind
+ * it. The wording follows what is actually counted: scenes only when every
+ * part is a scene, parts as soon as suggested entries are among them.
  */
 export function pipelineProgress(
   job: GenerateJob | null | undefined,
@@ -589,8 +609,8 @@ export function pipelineProgress(
 }
 
 /**
- * „~12.400 Tokens · 5 Aufrufe" — what the whole run has cost so far, summed
- * over every part INCLUDING the outline call (issue #102 AK5). Undefined when
+ * What the whole run has cost so far as one quiet line, summed over every
+ * part INCLUDING the outline call. Undefined when
  * there is nothing to report; a run that made calls but whose endpoint reports
  * no tokens still shows the call count, because that number is always true.
  */

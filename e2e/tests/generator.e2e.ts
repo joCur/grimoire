@@ -13,6 +13,8 @@
 // (e2e/fixtures/stub-llm.ts) through the real OpenAICompatProvider and
 // validates the reply mechanically exactly as in production.
 
+import type { Locator, Page } from "@playwright/test";
+
 import {
   ASCII_QUOTE_LINE,
   LOCATION_STUB_ID,
@@ -25,7 +27,7 @@ import {
   SCENE_TITLE,
   TRIGGER,
 } from "../fixtures/replies";
-import { expect, test } from "../support/test";
+import { expect, test, type Api } from "../support/test";
 
 /**
  * How the REVIEW addresses the draft: `<chapter>/<id>`, built by the server
@@ -45,6 +47,29 @@ mole while Fenn's crew shifts a cargo before dawn.`;
 const NPC_SOURCE = `Brakk Ironhand, an ageing fisherman who knows every sandbank
 of the north bay. He has seen strangers carrying crates at night and keeps
 quiet out of fear.`;
+
+/** A title no reply fixture spells, so only a DM edit can put it on screen. */
+const EDITED_TITLE = "Nachtwache am Kai, im Regen";
+
+/** One stored edit of a draft: the halves the DM replaced, each of them whole. */
+interface DraftEdit {
+  properties?: Record<string, unknown>;
+  body?: string;
+}
+
+/**
+ * The raw text surface of an open draft editor. „Bearbeiten" lands on the block
+ * cards (the default surface), so the textarea costs one more click on the mode
+ * toggle of the text region.
+ */
+async function markdownTextarea(card: Locator): Promise<Locator> {
+  const text = card.getByRole("region", { name: "Text" });
+  await text
+    .getByRole("group", { name: "Editiermodus" })
+    .getByRole("button", { name: "Markdown" })
+    .click();
+  return text.getByRole("textbox", { name: `Text von ${DRAFT_PATH}` });
+}
 
 test("scene run: job, review, apply — the draft is stored and in the chapter overview", async ({
   page,
@@ -126,7 +151,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene Einträge\)$/ }).click();
 
   // Done state lists exactly what was written — the ADDRESSES, so the DM sees
-  // where the scene actually landed and not the model's file name.
+  // where the scene actually landed and not the id the model proposed.
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   await expect(page.getByText(SCENE_PATH)).toBeVisible();
 
@@ -326,11 +351,19 @@ test("review state survives navigation and reload; parts are accepted one by one
     timeout: 30_000,
   });
 
-  // (1) Edit the draft, leave the page, come back: the text is there. This is
-  // the loss being guarded against: component state alone would not survive.
+  // (1) Edit BOTH halves of the draft, leave the page, come back: they are
+  // there. This is the loss being guarded against: component state alone would
+  // not survive. The two halves are stored separately (ADR #24), so the test
+  // touches one field and one line and then reads the job back.
   const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
-  const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
+
+  const title = card.getByRole("region", { name: "Eigenschaften" }).getByLabel("Titel");
+  await expect(title).toHaveValue(SCENE_TITLE);
+  await title.fill(EDITED_TITLE);
+  await title.blur();
+
+  const textarea = await markdownTextarea(card);
   const edited = (await textarea.inputValue()).replace(
     "Die Flut zieht sich",
     "Die Flut zieht sich im Regen",
@@ -340,10 +373,21 @@ test("review state survives navigation and reload; parts are accepted one by one
   await textarea.blur();
   await expect(page.getByText("Gespeichert")).toBeVisible();
 
+  // The job row carries one edit per half under the draft's address, and only
+  // the halves that were touched.
+  const stored = await api.get<{ draftEdits: Record<string, DraftEdit> }>(
+    "campaigns/beispiel/generate/job",
+  );
+  expect(stored.draftEdits[DRAFT_PATH]!.properties).toMatchObject({ title: EDITED_TITLE });
+  expect(stored.draftEdits[DRAFT_PATH]!.body).toContain("Die Flut zieht sich im Regen");
+
   await page.goto("/campaigns/beispiel");
   await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
   await expect(page.getByText("Die Flut zieht sich im Regen")).toBeVisible();
+  // The edited title is what the card is headed with now — the review reads
+  // the edit, not the model's properties.
+  await expect(page.getByRole("heading", { level: 2, name: EDITED_TITLE })).toBeVisible();
 
   // (2) A decision about a suggested entry survives a RELOAD (a second tab
   // sees the same, for the same reason: it is a row).
@@ -377,14 +421,127 @@ test("review state survives navigation and reload; parts are accepted one by one
     .click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   expect(await api.exists(SCENE_PATH)).toBe(true);
-  // The edit really is what was written.
-  expect(await api.body(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
+  // Both edits really are what was written — the accept takes the edited half
+  // where there is one and the model's half everywhere else.
+  const written = await api.file(SCENE_PATH);
+  expect(written.body).toContain("Die Flut zieht sich im Regen");
+  expect(written.properties.title).toBe(EDITED_TITLE);
+  // …and the untouched fields of the edited half are still the run's.
+  expect(written.properties.status).toBe("draft");
+  expect(written.properties.location).toBe(LOCATION_STUB_ID);
   // Both entries carry their NAME, so they were written as proposed.
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
   // Nothing is left open, so the job is gone.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
+
+// An edit REPLACES the half it names and leaves the other one the model's
+// (ADR #24). The two directions are one claim seen from two sides, and the
+// pair is what a shared markdown text made impossible: touching a property
+// rewrote the whole draft, and a text edit re-parsed every property.
+//
+// A test apiece, because each needs a run of its own: both write the same
+// scene at the end, and a second accept onto an existing address is a 409.
+
+test("a properties-only edit keeps the body the run produced", async ({ page, api }) => {
+  const card = await runAndOpenDraftEditor(page);
+  const bodyOfRun = await generatedSceneBody(api);
+
+  const title = card.getByRole("region", { name: "Eigenschaften" }).getByLabel("Titel");
+  await title.fill(EDITED_TITLE);
+  await title.blur();
+  await expect(page.getByText("Gespeichert")).toBeVisible();
+
+  // Only the half that was touched is stored at all — an untouched half is
+  // never sent.
+  const edit = await storedDraftEdit(api);
+  expect(Object.keys(edit)).toEqual(["properties"]);
+  expect(edit.properties).toMatchObject({ title: EDITED_TITLE });
+
+  await acceptWholeRun(page);
+  const scene = await api.file(SCENE_PATH);
+  expect(scene.properties.title).toBe(EDITED_TITLE);
+  // Byte for byte the body of the run: nothing round-tripped it.
+  expect(scene.body).toBe(bodyOfRun);
+});
+
+test("a body-only edit keeps the properties the run produced", async ({ page, api }) => {
+  const OWN_LINE = "Eine Zeile, die nur der DM schrieb.";
+  const card = await runAndOpenDraftEditor(page);
+  const propertiesOfRun = await generatedSceneProperties(api);
+
+  const textarea = await markdownTextarea(card);
+  await textarea.fill(`${await textarea.inputValue()}\n${OWN_LINE}\n`);
+  await textarea.blur();
+  await expect(page.getByText("Gespeichert")).toBeVisible();
+
+  const edit = await storedDraftEdit(api);
+  expect(Object.keys(edit)).toEqual(["body"]);
+  expect(edit.body).toContain(OWN_LINE);
+
+  await acceptWholeRun(page);
+  const scene = await api.file(SCENE_PATH);
+  expect(scene.body).toContain(OWN_LINE);
+  // Every property is the run's, title included — the edit named the body.
+  expect(scene.properties).toEqual(propertiesOfRun);
+});
+
+/** Start the standard run and open „Bearbeiten" on its scene draft. */
+async function runAndOpenDraftEditor(page: Page): Promise<Locator> {
+  await page.goto("/campaigns/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
+  await card.getByRole("button", { name: "Bearbeiten" }).click();
+  return card;
+}
+
+/** The scene draft as the RUN produced it — the job's result, not the edits. */
+async function generatedScene(api: Api): Promise<{ properties: Record<string, unknown>; body: string }> {
+  const job = await api.get<{
+    result: { scenes: { path: string; properties: Record<string, unknown>; body: string }[] };
+  }>("campaigns/beispiel/generate/job");
+  return job.result.scenes.find((scene) => scene.path === DRAFT_PATH)!;
+}
+
+async function generatedSceneBody(api: Api): Promise<string> {
+  return (await generatedScene(api)).body;
+}
+
+async function generatedSceneProperties(api: Api): Promise<Record<string, unknown>> {
+  return (await generatedScene(api)).properties;
+}
+
+/** The stored edit of the scene draft. */
+async function storedDraftEdit(api: Api): Promise<DraftEdit> {
+  const job = await api.get<{ draftEdits: Record<string, DraftEdit> }>(
+    "campaigns/beispiel/generate/job",
+  );
+  return job.draftEdits[DRAFT_PATH]!;
+}
+
+/**
+ * Accept the whole run: both suggested entries, then the bulk accept. The
+ * scene NAMES them, and a scene cannot be written while a reference names
+ * nothing (ADR #19), so they have to be decided first.
+ */
+async function acceptWholeRun(page: Page): Promise<void> {
+  for (const targetPath of [`npcs/${NPC_STUB_ID}`, `locations/${LOCATION_STUB_ID}`]) {
+    await page
+      .locator("div")
+      .filter({ hasText: targetPath })
+      .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+      .last()
+      .getByRole("button", { name: "Annehmen" })
+      .click();
+  }
+  await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+}
 
 test("„Verwerfen\" drops only the open rest — what was accepted stays", async ({ page, api }) => {
   await page.goto("/campaigns/beispiel/generate");

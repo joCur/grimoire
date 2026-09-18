@@ -62,22 +62,12 @@ describe("MarkdownEditorSurface", () => {
     expect(html).toContain("<h2");
     expect(html).toContain("Der Leuchtturm ist dunkel.");
   });
-
-  test("a separate preview string wins over the value (generator drafts)", () => {
-    const html = surface({
-      editing: false,
-      value: "---\nid: arrival\n---\n\nNur der Körper.\n",
-      preview: "Nur der Körper.\n",
-    });
-    expect(html).toContain("Nur der Körper.");
-    expect(html).not.toContain("id: arrival");
-  });
 });
 
 describe("EditorShell", () => {
   // The frame the callers compose themselves: the reading view puts its mode
-  // switch and its Speichern/Abbrechen in here (EntryBodyEditor), the generator
-  // its chips and its own actions. The shell owns the toolbar row, nothing else.
+  // switch and its save/cancel actions in here (EntryBodyEditor). The shell
+  // owns the toolbar row, nothing else.
   const shell = (editing: boolean) =>
     renderToStaticMarkup(
       <EditorShell

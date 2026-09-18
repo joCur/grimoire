@@ -16,15 +16,19 @@
 //      cannot succeed and a correction turn resends the whole prompt plus
 //      the previous reply — the most expensive retry there is.
 //   5. the app shows the result as a review preview — generating writes
-//      NOTHING; only POST /generate/apply touches the disk, and it
+//      NOTHING; only POST /generate/apply stores anything, and it
 //      re-validates server-side instead of trusting the client.
+//
+// A DRAFT IS `{ properties, body }` from the reply to the store (ADR #24):
+// nothing here renders an entry into one markdown text and nothing parses
+// one back.
 //
 // Steps 1-4 run in the BACKGROUND: POST /generate starts a
 // job (./generate-jobs) and answers 202, the result waits in the job store
 // until it is applied or discarded. runGenerate itself is unchanged by that
 // — it is the job runner's one call.
 //
-// There is a SECOND run kind next to scenes: one NPC file
+// There is a SECOND run kind next to scenes: one NPC entry
 // from source material (runGenerateNpc, POST /generate/npc). It shares
 // everything that is mechanics — provider factory, correction turns,
 // truncation fail-fast, usage accounting, the reply split (runPipeline) and
@@ -38,26 +42,23 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CORE_SCHEMA, dump } from "js-yaml";
 import {
   CALLOUT_KINDS,
   NPC_STATUSES,
   SCENE_TYPES,
   kindFromAddress,
-  parseMarkdown,
   type GenerateNpcResult,
   type GenerateUsage,
   type GeneratedSceneDraft,
   type GeneratedStub,
   type NamingHint,
-  type ParsedFile,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
-import { composeEntry, parseEntryReply, type EntryReply } from "./entry-reply";
-import { checkDraftsNaming, type NamingRule } from "./naming-check";
+import { parseEntryReply, type EntryReply } from "./entry-reply";
+import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
 import {
@@ -424,36 +425,24 @@ function addressId(rel: string): string {
 }
 
 /**
- * "Properties parseable" through the shared parser: the parser never
- * throws, it DEGRADES — a missing or broken block leaves the whole raw text
- * as the body. So: parseable iff the content opens a block and the parser
- * actually split it off.
+ * The properties of a draft as the review and the store read them: the `id`
+ * spelled out, and the display name fallen back to it.
+ *
+ * The fallback is the format's (README: a scene/chapter shows its `title`, an
+ * npc/location its `name`, and an entry that names none is shown under its
+ * id). It is applied HERE, once, where the draft is built — a reply may
+ * legitimately omit the display name, and everything downstream reads the
+ * properties as they are.
  */
-/**
- * Re-parse an entry under the ADDRESS the server derives from the `id`
- * inside it. The shared parser fills a missing `name`/`title`
- * from the address's last segment, so once the id is known the entry has
- * to be parsed again under its real address — otherwise a reply that
- * legitimately omits the display name degrades to a placeholder nobody chose.
- */
-export function reparseAtAddress(
-  content: string,
+function draftProperties(
+  properties: Record<string, unknown>,
   id: string,
-  address: (id: string) => string,
-): ParsedFile {
-  return parseMarkdown(content, address(id), 0);
-}
-
-export function parseWithProperties(
-  content: string,
-  rel: string,
-): { parsed: ParsedFile; error?: string } {
-  const parsed = parseMarkdown(content, rel, 0);
-  if (!content.startsWith("---\n") && !content.startsWith("---\r\n")) {
-    return { parsed, error: "missing properties block" };
-  }
-  if (parsed.body === content) return { parsed, error: "properties is not parseable YAML" };
-  return { parsed };
+  nameKey: "title" | "name",
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...properties, id };
+  const name = out[nameKey];
+  if (typeof name !== "string" || name === "") out[nameKey] = id;
+  return out;
 }
 
 /**
@@ -521,11 +510,7 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     return null;
   }
   const id = fmId;
-  // The entry the server would store, composed from the reply object
-  // (./entry-reply) — the properties block is the renderer's, not the
-  // model's.
-  const markdown = composeEntry(entry.reply);
-  const reparsed = reparseAtAddress(markdown, id, kind === "npc" ? npcPath : locationPath);
+  const properties = draftProperties(fm, id, "name");
   const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
@@ -534,8 +519,9 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
   return {
     kind,
     id,
-    name: typeof reparsed.properties.name === "string" ? reparsed.properties.name : id,
-    markdown,
+    name: typeof properties.name === "string" ? properties.name : id,
+    properties,
+    body: entry.reply.body,
   };
 }
 
@@ -578,7 +564,6 @@ export function validateSceneEntry(input: {
   // id is the one thing the model decides here, so it is the one thing
   // validated as an address would be.
   const fm = reply.properties;
-  const content = composeEntry(reply);
   const fmId = declaredId(fm);
   if (fmId === undefined) {
     errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
@@ -601,7 +586,6 @@ export function validateSceneEntry(input: {
     return null;
   }
   seenIds.add(fmId);
-  const reparsed = reparseAtAddress(content, fmId, (id) => scenePath(chapter, "", id));
 
   if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
     errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
@@ -652,8 +636,8 @@ export function validateSceneEntry(input: {
 
   return {
     path: scenePath(chapter, "", fmId),
-    markdown: content,
-    properties: reparsed.properties,
+    properties: draftProperties(fm, fmId, "title"),
+    body: reply.body,
   };
 }
 
@@ -833,7 +817,7 @@ export function validateNpcReply(
 ): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
   const read = parseEntryReply(raw, "npc");
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `npc: ${e}`) };
-  const { reply, markdown } = read;
+  const { reply } = read;
   const errors: string[] = [];
 
   const fm = reply.properties;
@@ -841,7 +825,7 @@ export function validateNpcReply(
   if (fmId === undefined) {
     return {
       ok: false,
-      errors: ['npc: "id" fehlt — die Datei muss ihre kebab-case id nennen'],
+      errors: ['npc: "id" fehlt — der Eintrag muss seine kebab-case id nennen'],
     };
   }
   if (!ENTITY_ID_PATTERN.test(fmId)) {
@@ -851,10 +835,7 @@ export function validateNpcReply(
     };
   }
   const id = fmId;
-  // Re-parsed under the address the server will use, so the shared parser's
-  // degrade rules (a missing `name` falls back to the address's last
-  // segment) see the same address they always did — see reparseAtAddress.
-  const reparsed = reparseAtAddress(markdown, id, npcPath);
+  const properties = draftProperties(fm, id, "name");
   const label = `npc "${id}"`;
   if (pinnedId !== undefined && id !== pinnedId) {
     errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
@@ -866,13 +847,13 @@ export function validateNpcReply(
     );
   }
 
-  // `name` is NOT checked: the shared parser degrades a missing display name
-  // to the id (README/parse.ts), so there is nothing mechanical left to
-  // complain about — the prompt asks for one, the format survives without it.
+  // `name` is NOT checked: a missing display name degrades to the id
+  // (`draftProperties`), so there is nothing mechanical left to complain
+  // about — the prompt asks for one, the format survives without it.
   if (Object.hasOwn(fm, "chapter")) {
     errors.push(`${label}: kein "chapter" — der NPC-Lauf kennt kein Ziel-Kapitel`);
   }
-  for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
+  for (const msg of npcStatusErrors(fm, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
   for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
 
   for (const kind of unknownCallouts(reply.body)) {
@@ -888,7 +869,7 @@ export function validateNpcReply(
   return {
     ok: true,
     result: {
-      npc: { path: npcPath(id), markdown, properties: reparsed.properties },
+      npc: { path: npcPath(id), properties, body: reply.body },
       warnings: reply.warnings,
     },
   };
@@ -921,7 +902,7 @@ export function buildCorrectionMessage(
   ].join("\n\n");
 }
 
-const NPC_CORRECTION_TAIL = "die vollständige NPC-Datei enthalten";
+const NPC_CORRECTION_TAIL = "den vollständigen NPC-Eintrag enthalten";
 
 // --- run accounting ----------------------------------------------------------
 
@@ -1003,7 +984,7 @@ export function stubPath(stub: GeneratedStub): string {
  */
 export function withNamingHints<T extends { namingHints?: NamingHint[] }>(
   result: T,
-  drafts: ReadonlyArray<{ path: string; markdown: string }>,
+  drafts: readonly CheckedDraft[],
   rules: readonly NamingRule[],
 ): T {
   const namingHints = checkDraftsNaming(drafts, rules);
@@ -1121,24 +1102,40 @@ export async function runGenerateNpc(
     validate: (raw) => validateNpcReply(raw, ctx, npcId),
     correctionTail: NPC_CORRECTION_TAIL,
   });
-  return withNamingHints(
-    result,
-    [{ path: result.npc.path, markdown: result.npc.markdown }],
-    ctx.namingRules,
-  );
+  return withNamingHints(result, [result.npc], ctx.namingRules);
 }
 
 // --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
 
-const SCENE_ITEM_KEYS = new Set(["path", "markdown", "properties"]);
-const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
+const SCENE_ITEM_KEYS = new Set(["path", "properties", "body"]);
+const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "properties", "body"]);
 /** Same three keys as a scene draft — the client may pass the draft verbatim. */
 const NPC_ITEM_KEYS = SCENE_ITEM_KEYS;
 
-/** One validated file ready to be written. */
+/** One validated entry ready to be written. */
 export interface ApplyTarget {
   rel: string;
-  markdown: string;
+  properties: Record<string, unknown>;
+  body: string;
+}
+
+/**
+ * The `properties`/`body` pair of one apply item. A draft is those two halves
+ * and nothing else, so this is the whole shape check — no text is parsed on
+ * the way in any more, and a body is allowed to be empty (an entry whose
+ * content is entirely in its properties is a legal entry).
+ */
+function itemHalves(
+  item: Record<string, unknown>,
+  label: string,
+): { properties: Record<string, unknown>; body: string } {
+  const properties = item.properties;
+  if (!isPlainObject(properties)) {
+    throw new ApiError(400, `${label}.properties must be an object`);
+  }
+  const body = item.body;
+  if (typeof body !== "string") throw new ApiError(400, `${label}.body must be a string`);
+  return { properties, body };
 }
 
 function assertKnownKeys(item: Record<string, unknown>, allowed: Set<string>, label: string): void {
@@ -1157,11 +1154,8 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, SCENE_ITEM_KEYS, label);
   const rel = item.path;
-  const markdown = item.markdown;
   if (typeof rel !== "string") throw new ApiError(400, `${label}.path must be a string`);
-  if (typeof markdown !== "string" || markdown === "") {
-    throw new ApiError(400, `${label}.markdown must be a non-empty string`);
-  }
+  const { properties, body } = itemHalves(item, label);
   assertSafeAddress(rel); // 400 on traversal/absolute/hidden
   // `<chapter>/<id>` and nothing else: the group segment of
   // a scene address is its `location`, which the SERVER derives on the way in
@@ -1181,48 +1175,40 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
     throw new ApiError(400, `${label}.path: "${segments[1]!}" is not a scene id`);
   }
   // Re-validation (apply is a separate request — never trust the client):
-  // the properties must still parse and the draft must still be a draft.
-  const { parsed, error } = parseWithProperties(markdown, rel);
-  if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
-  if (parsed.properties.status !== "draft") {
+  // the draft must still be a draft.
+  if (properties.status !== "draft") {
     throw new ApiError(400, `${label}: "status" must be "draft"`);
   }
-  return { rel, markdown };
+  return { rel, properties, body };
 }
 
 /**
  * Deep-validate the `npc` item of the apply body -> write target.
  * Re-validated on the way in, exactly like a scene draft and for the same
  * reason (apply is a separate request — never trust the client): the target
- * path, parseable properties, the id matching the file name and a valid
- * NpcStatus. The rules that shape the MODEL's reply (relationship targets,
- * `[!secret]`-only inside `## Weiß`) are deliberately not re-run here — from
- * here on the DM is the author of the markdown, and their raw edit must not
- * be rejected for a prompt rule.
+ * address, the id matching it and a valid NpcStatus. The rules that shape the
+ * MODEL's reply (relationship targets, `[!secret]`-only inside `## Weiß`) are
+ * deliberately not re-run here — from here on the DM is the author of the
+ * entry, and their own edit must not be rejected for a prompt rule.
  */
 export function applyNpcTarget(item: unknown): ApplyTarget {
   const label = "npc";
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, NPC_ITEM_KEYS, label);
   const rel = item.path;
-  const markdown = item.markdown;
   if (typeof rel !== "string") throw new ApiError(400, `${label}.path must be a string`);
-  if (typeof markdown !== "string" || markdown === "") {
-    throw new ApiError(400, `${label}.markdown must be a non-empty string`);
-  }
+  const { properties, body } = itemHalves(item, label);
   if (!NPC_PATH_PATTERN.test(rel)) {
     throw new ApiError(400, `${label}.path must be "npcs/<kebab-case-id>"`);
   }
   assertSafeAddress(rel); // defense in depth — the pattern rules escapes out
-  const { parsed, error } = parseWithProperties(markdown, rel);
-  if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
   const id = addressId(rel);
-  if (parsed.properties.id !== id) {
+  if (properties.id !== id) {
     throw new ApiError(400, `${label}: properties id does not match the address`);
   }
-  const statusError = npcStatusErrors(parsed.properties, "NPC-Dateien")[0];
+  const statusError = npcStatusErrors(properties, "NPC-Einträge")[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
-  return { rel, markdown };
+  return { rel, properties, body };
 }
 
 /** Deep-validate one stub item of the apply body -> write target. */
@@ -1232,7 +1218,6 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   assertKnownKeys(item, STUB_ITEM_KEYS, label);
   const kind = item.kind;
   const id = item.id;
-  const markdown = item.markdown;
   // Narrowed to the literal union on purpose — the status re-validation
   // below is kind-specific.
   if (kind !== "npc" && kind !== "location") {
@@ -1241,18 +1226,14 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
     throw new ApiError(400, `${label}.id must be a kebab-case slug`);
   }
-  if (typeof markdown !== "string" || markdown === "") {
-    throw new ApiError(400, `${label}.markdown must be a non-empty string`);
-  }
+  const { properties, body } = itemHalves(item, label);
   const rel = kind === "npc" ? npcPath(id) : locationPath(id);
   assertSafeAddress(rel); // defense in depth — the slug check above rules escapes out
-  const { parsed, error } = parseWithProperties(markdown, rel);
-  if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
   // Re-validation, same as for scenes: a client payload must not sneak a
   // stub status past the reply validation.
-  const statusError = stubStatusErrors(kind, parsed.properties)[0];
+  const statusError = stubStatusErrors(kind, properties)[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
-  return { rel, markdown };
+  return { rel, properties, body };
 }
 
 /**
@@ -1311,11 +1292,7 @@ export async function newChapterTarget(
   const rel = chapterPath(chapter);
   // An existing chapter is not a conflict — idempotent, as before.
   if (await chapterExists(campaign, chapter)) return null;
-  const yaml = dump(
-    { id: chapter, title, status: "planned" },
-    { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
-  );
-  return { rel, markdown: `---\n${yaml}---\n` };
+  return { rel, properties: { id: chapter, title, status: "planned" }, body: "" };
 }
 
 /**
@@ -1370,8 +1347,7 @@ export async function applyGenerated(
   if (chapterFile !== null) targets.unshift(chapterFile);
 
   const drafts = targets.map((t) => {
-    const parsed = parseMarkdown(t.markdown, t.rel, 0);
-    assertDraftId(parsed.properties.id, t.rel);
+    const properties = storedDraftProperties(t.properties, t.rel);
     // The ADDRESS the entity will have (store/paths) — for a scene that is
     // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because
     // that is the key `insertDraft` writes under. The model's last segment is
@@ -1381,9 +1357,9 @@ export async function applyGenerated(
     // primary-key violation.
     return {
       rel: t.rel,
-      address: draftAddress(t.rel, parsed.properties),
-      properties: parsed.properties,
-      body: parsed.body,
+      address: draftAddress(t.rel, properties),
+      properties,
+      body: t.body,
     };
   });
 
@@ -1410,17 +1386,35 @@ export async function applyGenerated(
 }
 
 /**
- * The `id` of a draft BECOMES THE PRIMARY KEY of the inserted row (and, for a
- * scene, the id segment of its address). It arrives from a client payload and
- * was taken on trust: `id: ""` inserted a row nothing can address, and
- * `id: "a/b"` inserted one whose address parses as a different path — both
- * unreachable through `GET /entries`, i.e. content written and lost in the same
- * request. A properties that HAS an `id` must therefore carry a usable one;
- * a draft without the key keeps falling back to its address segment, which
- * the address validation already constrains.
+ * The properties a draft is STORED with, checked and degraded in one step.
  *
- * 422 like the generator's other content rejections: the payload is
- * well-formed, its CONTENT is unusable.
+ * The `id` BECOMES THE PRIMARY KEY of the inserted row (and, for a scene, the
+ * id segment of its address). It arrives from a client payload and was taken
+ * on trust: `id: "a/b"` inserted a row whose address parses as a different
+ * path — unreachable through `GET /entries`, i.e. content written and lost in
+ * the same request. So an `id` that is THERE has to be usable.
+ *
+ * A BLANK one is not there: it is dropped here, and the store then falls the
+ * id back to the address's last segment — the only stable identity such a
+ * draft has, and an address the validation has already constrained.
+ */
+export function storedDraftProperties(
+  properties: Record<string, unknown>,
+  rel: string,
+): Record<string, unknown> {
+  const id = properties.id;
+  if (typeof id === "string" && id.trim() === "") {
+    const rest = { ...properties };
+    delete rest.id;
+    return rest;
+  }
+  assertDraftId(id, rel);
+  return properties;
+}
+
+/**
+ * The id rule itself — 422 like the generator's other content rejections: the
+ * payload is well-formed, its CONTENT is unusable.
  */
 export function assertDraftId(id: unknown, rel: string): void {
   if (id === undefined) return;

@@ -163,12 +163,18 @@ Die Pfade:
    Pause → beenden → Nachbereitung
 5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
-   in den Kapiteln; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
-   Glossar auf `/settings` pflegen — anlegen, bearbeiten, löschen,
-   umsortieren, 409 — und der Lauf danach: Wissen im mitgeschickten
-   Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise in
-   „Entwürfe prüfen", „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
-   ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
+   in den Kapiteln; plus 409-/Fehlerpfad. Ein Entwurf ist ein Paar aus
+   Eigenschaften und Text (ADR #24): „Bearbeiten" öffnet beide Hälften —
+   Eigenschaften-Felder wie im Eigenschaften-Dialog, den Text auf den
+   Oberflächen des Eintrags-Editors —, gespeichert wird **je Hälfte**, und
+   „Übernehmen" schreibt die bearbeitete Hälfte plus die unberührte des
+   Modells. Dazu Kampagnenwissen und Glossar auf ihren eigenen Seiten (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen —
+   anlegen, bearbeiten, löschen, umsortieren, 409 — und der Lauf danach:
+   Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
+   Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
+   Server-Neustart (fertiger Job übersteht ihn und bleibt übernehmbar,
+   laufender wird als `failed` gemeldet, und ein Job im alten Entwurfsformat
+   wird beim Start als `failed` abgelehnt statt konvertiert)
 7. Eigenschaften-Dialog/Status-Regler inkl. 409-Konflikt: der Dialog zeigt
    die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
    Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine
