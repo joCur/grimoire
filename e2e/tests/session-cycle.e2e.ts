@@ -356,7 +356,7 @@ test("session start, quick note, pause, end — log and entry follow", async ({
   ).toHaveCount(0);
 });
 
-test("a #pc quick note becomes a reminder in the aside and is ticked off there (issue #86)", async ({
+test("a #pc quick note becomes a reminder in the aside and is ticked off there", async ({
   page,
   api,
 }) => {

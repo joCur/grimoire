@@ -17,7 +17,7 @@ export function setNow(fn: (() => Date) | null): void {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** `yyyy-mm-dd` in local time — the session file name / id. */
+/** `yyyy-mm-dd` in local time — the id of a session. */
 export function localDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -36,9 +36,9 @@ export function localDateTime(d: Date): string {
 }
 
 /**
- * `yyyy-mm-ddTHH:MM:SS` in local time — the `pauses` timestamps (issue #40
- * AK8) and `started`/`ended` (issue #58). Same zone-less convention as
- * localDateTime, one field wider: these values are all read back as durations,
+ * `yyyy-mm-ddTHH:MM:SS` in local time — the `pauses` timestamps and
+ * `started`/`ended`. Same zone-less convention as localDateTime, one field
+ * wider: these values are all read back as durations,
  * and a minute-precise value rounds DOWN to the start of its minute — a pause
  * would jump the runtime by up to a minute, and a session started at second 50
  * showed 0:00:50 on the timer's very first tick. The shared parser keeps
@@ -51,9 +51,9 @@ export function localDateTimeSeconds(d: Date): string {
 
 /**
  * The inverse of localDateTime: a zone-less `started`/`ended` value as epoch
- * milliseconds, interpreted in the SERVER's timezone (issue #40).
+ * milliseconds, interpreted in the SERVER's timezone.
  *
- * The file format stays zone-less on purpose (hand-editable, README), but
+ * The stored string stays zone-less on purpose (README), but
  * only the server knows which wall clock those digits belong to — a browser
  * in another timezone would compute a session runtime that is hours off. So
  * the server ships the interpretation alongside the string (EntryResponse

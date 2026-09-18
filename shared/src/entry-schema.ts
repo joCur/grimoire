@@ -26,7 +26,7 @@
 // (./property-fields), so the fields a model may write and the fields the DM
 // can edit cannot drift apart.
 //
-// STRICT MODE rules those files, because the OpenAI-compatible path sends
+// STRICT MODE rules those schemas, because the OpenAI-compatible path sends
 // `strict: true` and a schema it rejects is a permanent downgrade for the
 // whole process:
 //

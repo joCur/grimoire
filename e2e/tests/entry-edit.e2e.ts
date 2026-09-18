@@ -537,7 +537,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
-  // Nothing reached the disk.
+  // Nothing was written.
   expect(await split(api, SCENE)).toEqual(before);
 });
 

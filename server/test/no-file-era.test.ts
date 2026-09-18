@@ -126,6 +126,21 @@ const EXCEPTIONS: readonly Exception[] = [
     rule: "file-word-for-an-entry",
     reason: "`fixtures/beispiel/<stem>.json` on disk, the input the seed run reads",
   },
+  {
+    phrase: "database file",
+    rule: "file-word-for-an-entry",
+    reason: "`GRIMOIRE_DATA/grimoire.db`, the one file the store opens (ADR #13)",
+  },
+  {
+    phrase: "prompt file",
+    rule: "file-word-for-an-entry",
+    reason: "a `generator/*.md` prompt asset, read from disk on the first run",
+  },
+  {
+    phrase: "static-files",
+    rule: "file-word-for-an-entry",
+    reason: "the module that serves the built app's assets — real files over HTTP",
+  },
 ];
 
 /**
@@ -242,17 +257,13 @@ const RULES: readonly Rule[] = [
     meaning: "an entry is an Eintrag with Eigenschaften and Text — never a Datei",
   },
   {
-    // The English word, over the two trees that have retired it: the app and
-    // the e2e suite read and write ENTRIES through the API and touch no entry
-    // on disk, so "file" there is either a real file of the repo — a module, a
-    // spec, a fixture, each an exception above — or an entry called by the
-    // wrong name. `server/src` and `shared/src` are out of scope: they open
-    // the database file, serve assets and read the fixtures, and still name
-    // entries files in their own comments.
+    // The English word, over the WHOLE repo. Nothing reads or writes an entry
+    // on disk any more, so "file" is either a real file — a module, a spec, a
+    // fixture, the database, a prompt asset, the app build, each named by one
+    // of the phrase exceptions above — or an entry called by the wrong name.
     id: "file-word-for-an-entry",
     pattern: /\bfiles?\b/i,
     meaning: "an entry has properties, a body and an address — it is not a file",
-    only: ["app/src", "e2e"],
   },
   {
     id: "chokidar",

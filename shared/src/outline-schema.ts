@@ -42,7 +42,7 @@ export const MAX_OUTLINE_ENTRIES = 12;
 export const OUTLINE_ENTRY_KINDS = ["npc", "location"] as const;
 
 /**
- * The id rule as PROSE for the model, as the schema files spell it out. It is
+ * The id rule as PROSE for the model, as the schema modules spell it out. It is
  * not a schema `pattern`: OpenAI's strict mode rejects `pattern` (and
  * `minItems`/`maxItems`) outright, and a rejected schema means a permanent
  * silent downgrade to plain `json_object` for the whole process — the guard

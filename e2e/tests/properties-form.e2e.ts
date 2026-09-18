@@ -556,7 +556,7 @@ test("Abbrechen and Esc ask before they throw typed values away", async ({ page,
   await confirm.getByRole("button", { name: "Verwerfen" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // The reading view is as it was, and nothing reached the disk.
+  // The reading view is as it was, and nothing was written.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   expect(await split(api, SCENE)).toEqual(before);
 });

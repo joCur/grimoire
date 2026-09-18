@@ -1,16 +1,16 @@
-// THE SLUG RULE — one place, both sides (issue #56).
+// THE SLUG RULE — one place, both sides.
 //
 // Entity ids are kebab-case slugs: the README calls them the stable reference
 // keys of the format ("id … NIE ändern"), the database uses them as primary
 // keys, and every address is built from them (store/paths.ts). Until now the
 // rule was written down three times — `ENTITY_SLUG` in the server's
 // store/write.ts, a copy in the app's lib/entity.ts, and the German
-// transliteration in the app's lib/review.ts (the npc-stub dialog). With
-// issue #56 the app DERIVES an id from a typed title for five kinds and the
-// server has to derive the same one and propose a free variant on a
-// collision, so the three copies became one module.
+// transliteration in the app's lib/review.ts (the npc-stub dialog). The app
+// DERIVES an id from a typed title for five kinds and the server has to
+// derive the same one and propose a free variant on a collision, so the
+// three copies became one module.
 //
-// Its own file, no runtime dependencies, so the app imports
+// Its own module, no runtime dependencies, so the app imports
 // `@grimoire/shared/slug` the way it imports `/kind`.
 
 /** Entity ids are kebab slugs: lowercase, digits, single dashes. */

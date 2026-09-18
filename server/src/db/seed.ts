@@ -1,6 +1,6 @@
 // Seeding a campaign from JSON entries.
 //
-// One entry per file, in the shape the API speaks: `properties` and `body`,
+// One entry per fixture file, in the shape the API speaks: `properties` and `body`,
 // exactly as `GET /entry` returns them. The seed is therefore not a second
 // data format — it is the API's own shape written down, which is what makes
 // it readable next to a response and reviewable in a diff.
@@ -104,7 +104,7 @@ const LOAD_ORDER: SeedEntry["kind"][] = [
 
 /** The stem a seeded entry came from — named in every error this module throws. */
 export interface SeedSource {
-  /** File name without the `.json` extension, e.g. `session-2026-01-15`. */
+  /** The fixture file name without its `.json` extension, e.g. `session-2026-01-15`. */
   stem: string;
   entry: SeedEntry;
 }
@@ -198,7 +198,7 @@ function asInboxEntry(where: string, value: unknown): SeedInboxEntry {
 }
 
 /**
- * Read one campaign directory: every `*.json` in it, sorted BY FILE NAME.
+ * Read one campaign directory: every fixture file in it, sorted BY NAME.
  * The name itself carries no meaning — it is only what makes the order
  * deterministic and what an error message and `seedStore({ without })` name
  * an entry by.
@@ -207,17 +207,17 @@ export async function readFixtureCampaign(dir: string): Promise<SeedEntry[]> {
   return (await readFixtureSources(dir)).map((source) => source.entry);
 }
 
-/** `readFixtureCampaign`, with the file stem each entry came from. */
+/** `readFixtureCampaign`, with the fixture file stem each entry came from. */
 export async function readFixtureSources(dir: string): Promise<SeedSource[]> {
   const names = (await readdir(dir))
     .filter((name) => name.endsWith(".json"))
     .sort((a, b) => a.localeCompare(b, "en"));
   const sources: SeedSource[] = [];
   for (const name of names) {
-    const file = path.join(dir, name);
+    const jsonPath = path.join(dir, name);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(await readFile(file, "utf8"));
+      parsed = JSON.parse(await readFile(jsonPath, "utf8"));
     } catch (error) {
       fail(name, `not readable as JSON — ${error instanceof Error ? error.message : error}`);
     }
@@ -465,7 +465,7 @@ function writeGlossaryRows(
 
 /**
  * Seed every SUBDIRECTORY of `root` as one campaign, in name order. That is
- * the whole layout: a directory is a campaign, the files in it are its
+ * the whole layout: a directory is a campaign, the fixture files in it are its
  * entries.
  */
 export async function seedFixtures(

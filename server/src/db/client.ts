@@ -11,7 +11,7 @@
 // nothing runtime-specific and only duck-types its client, so the twenty
 // lines of `construct()` from that driver are reproduced here against our own
 // `SqliteClient`. Same dialect, same session, same migrator — the only thing
-// that changes is who opens the file. See ADR #13.
+// that changes is who opens the database file. See ADR #13.
 
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
@@ -42,7 +42,7 @@ export interface OpenDb {
   groupMigration: GroupMigrationOutcome;
 }
 
-/** Directory of the committed migration SQL files. */
+/** Directory of the committed migration SQL. */
 export const MIGRATIONS_DIR = path.resolve(
   fileURLToPath(new URL(".", import.meta.url)),
   "migrations",
@@ -52,7 +52,7 @@ export const MIGRATIONS_DIR = path.resolve(
  * PRAGMAs, applied to every connection:
  *
  *   journal_mode=WAL   — readers never block the writer. WAL is a per-DATABASE
- *                        setting and persists in the file, but it is set on
+ *                        setting and persists in the database file, but it is set on
  *                        every open anyway so a database created elsewhere is
  *                        pulled into WAL too. See docs/DEPLOYMENT.md for the
  *                        bind-mount caveat.

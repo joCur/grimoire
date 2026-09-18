@@ -162,7 +162,7 @@ export interface PromptAssets {
 
 /**
  * The two asset pairs: scenes and NPCs have their own prompt and
- * their own few-shot target file, cached per kind after the first read.
+ * their own few-shot target, cached per kind after the first read.
  */
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
@@ -175,18 +175,18 @@ export const ASSET_FILES = {
     fewShotTarget: "location-example-output.json",
   },
   // The OUTLINE step of a pipelined scene run: its own prompt
-  // and its own few-shot (a worked example outline, not a target file).
+  // and its own few-shot (a worked example outline, not a target draft).
   outline: {
     systemPrompt: "outline-system-prompt.md",
     fewShotTarget: "outline-example-output.json",
   },
   // The output-schema section that turns the scene prompt into
   // single-scene-from-outline mode. No few-shot of its own — the
-  // per-scene call sends the scene example file — so, like `augment`, this
+  // per-scene call sends the scene example asset — so, like `augment`, this
   // entry carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
   // The augment run's OWN system prompt. It has no few-shot of
-  // its own — the run sends the TARGET KIND's example file — so this entry
+  // its own — the run sends the TARGET KIND's example asset — so this entry
   // carries the system prompt alone and `loadPromptAssets` is not the right
   // shape for it; see loadAsset below.
   augment: { systemPrompt: "augment-system-prompt.md" },
@@ -196,7 +196,7 @@ const promptAssets = new Map<string, PromptAssets>();
 
 /**
  * The kinds that have a prompt PAIR. `augment` and `sceneSingle` do not: the
- * first sends the target kind's example file, the second is only an output
+ * first sends the target kind's example asset, the second is only an output
  * schema spliced into the scene prompt.
  */
 type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle">;
@@ -204,23 +204,23 @@ type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
   if (cached !== undefined) return cached;
-  const files = ASSET_FILES[kind];
+  const names = ASSET_FILES[kind];
   const assets: PromptAssets = {
-    systemPrompt: await readFile(path.join(GENERATOR_DIR, files.systemPrompt), "utf8"),
-    fewShotTarget: await readFile(path.join(GENERATOR_DIR, files.fewShotTarget), "utf8"),
+    systemPrompt: await readFile(path.join(GENERATOR_DIR, names.systemPrompt), "utf8"),
+    fewShotTarget: await readFile(path.join(GENERATOR_DIR, names.fewShotTarget), "utf8"),
   };
   promptAssets.set(kind, assets);
   return assets;
 }
 
-/** One prompt asset by FILE NAME, cached — the augment run mixes two pairs. */
+/** One prompt asset by its name in `generator/`, cached — the augment run mixes two pairs. */
 const assetCache = new Map<string, string>();
 
-export async function loadAsset(file: string): Promise<string> {
-  const cached = assetCache.get(file);
+export async function loadAsset(name: string): Promise<string> {
+  const cached = assetCache.get(name);
   if (cached !== undefined) return cached;
-  const text = await readFile(path.join(GENERATOR_DIR, file), "utf8");
-  assetCache.set(file, text);
+  const text = await readFile(path.join(GENERATOR_DIR, name), "utf8");
+  assetCache.set(name, text);
   return text;
 }
 
@@ -295,18 +295,18 @@ export async function assertGenerateTarget(
 }
 
 /**
- * The id of an existing npc file, for the collision check of an NPC run —
+ * The id of an existing npc entry, for the collision check of an NPC run —
  * a request-level 409 before a single token is spent.
  * `assertSafeAddress` is not enough here: the id must be a kebab slug,
- * because it becomes the file name AND the reference key.
+ * because it becomes the address AND the reference key.
  */
 export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * Cheap request checks of an NPC run: unsafe campaign id -> 400, unknown
- * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose file
+ * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose entry
  * already exists -> 409 (never overwrite, a non-goal: enriching an
- * existing NPC file). Exported for the same reason as assertGenerateTarget:
+ * existing NPC entry). Exported for the same reason as assertGenerateTarget:
  * POST /generate/npc runs it BEFORE it creates a background job.
  */
 export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<void> {
@@ -315,7 +315,7 @@ export async function assertNpcGenerateTarget(campaign: string, npcId?: string):
   if (!NPC_ID_PATTERN.test(npcId)) throw new ApiError(400, "invalid npc id");
   const rel = npcPath(npcId);
   if (await draftTargetExists(campaign, rel)) {
-    throw new ApiError(409, "npc file already exists", { path: rel });
+    throw new ApiError(409, "npc entry already exists", { path: rel });
   }
 }
 
@@ -645,7 +645,7 @@ export function validateSceneEntry(input: {
 
 // --- mechanical validation of an NPC reply -----------------------------------
 
-/** The only legal target of an NPC run — the id IS the file name. */
+/** The only legal target of an NPC run — the id IS the address. */
 const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
 
 /** The sections of the NPC format that carry rules (README "Entität: NPC"). */
@@ -718,8 +718,8 @@ function relationErrors(body: string, ctx: CampaignContext): string[] {
 
 /**
  * Inside `## Weiß` only `[!secret]` belongs (that section is the aggregated
- * player-unknown knowledge). Other KNOWN callouts elsewhere in the file are
- * fine; unknown ones are reported once for the whole file by unknownCallouts.
+ * player-unknown knowledge). Other KNOWN callouts elsewhere in the body are
+ * fine; unknown ones are reported once for the whole body by unknownCallouts.
  */
 function knowledgeCalloutErrors(body: string): string[] {
   const section = sectionBody(body, KNOWLEDGE_SECTION);
@@ -1070,9 +1070,9 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
  * validation, with the same correction turns, the same truncation fail-fast
  * and the same usage accounting as a scene run (runPipeline). Writes NOTHING;
- * the draft goes into the review and only apply touches the disk.
+ * the draft goes into the review and only apply writes.
  *
- * `npcId` is the DM's optional pin: it decides the target file name and is
+ * `npcId` is the DM's optional pin: it decides the target id and is
  * checked for collisions BEFORE the provider is called. Without it the model
  * picks the id (and a collision becomes a correction turn).
  */
@@ -1344,9 +1344,9 @@ export async function applyGenerated(
   ];
   if (targets.length === 0) throw new ApiError(400, "nothing to apply");
 
-  // The chapter file comes first — the drafts live inside it.
-  const chapterFile = await newChapterTarget(campaign, chapter, chapterTitle);
-  if (chapterFile !== null) targets.unshift(chapterFile);
+  // The chapter entry comes first — the drafts live inside it.
+  const chapterEntry = await newChapterTarget(campaign, chapter, chapterTitle);
+  if (chapterEntry !== null) targets.unshift(chapterEntry);
 
   const drafts = targets.map((t) => {
     const properties = storedDraftProperties(t.properties, t.rel);

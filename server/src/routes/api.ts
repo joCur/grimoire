@@ -5,7 +5,7 @@
 // endpoint is described right above its route, and there is no second list
 // anywhere that could drift away from it.
 //
-// WHAT `path` MEANS: an ADDRESS, not a file name — no `.md`, no extension at
+// WHAT `path` MEANS: an ADDRESS, not a path on disk — no `.md`, no extension at
 // all. The complete schema is in ../store/paths.ts:
 //
 //   campaign · inbox · glossary · <chapter> ·

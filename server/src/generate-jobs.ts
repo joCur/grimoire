@@ -314,7 +314,7 @@ function unpackReview(value: string): GenerateJobReview {
  * point of persisting it — so its draft paths can be spelled in TWO older
  * schemes, and neither is a legal target:
  *
- *   * an ADDRESS carries no file extension, and a `.md`
+ *   * an ADDRESS carries no extension, and a `.md`
  *     path is rejected outright by the NPC apply pattern (400 on the
  *     accept) or would insert a scene row whose id nothing can address.
  *   * a scene draft's path is `<chapter>/<id>`: the group

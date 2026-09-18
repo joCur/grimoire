@@ -1,4 +1,4 @@
-// Instance settings (issue #69) — GET/PUT /api/settings.
+// Instance settings — GET/PUT /api/settings.
 //
 // Grimoire is a single-user tool, so there is exactly ONE settings object and
 // it needs no table of its own: the existing `meta` key/value table carries it

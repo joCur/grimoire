@@ -29,7 +29,7 @@ export default defineConfig({
   use: {
     // Dark mode is the primary mode (CLAUDE.md, Qualitäts-Boden).
     colorScheme: "dark",
-    // GERMAN IS FIXED for the suite (issue #69). Without a stored setting the
+    // GERMAN IS FIXED for the suite. Without a stored setting the
     // app follows `navigator.language`, and Playwright's own default is
     // en-US — which would flip every text locator in here to English at once.
     // German is also the primary UI language (CLAUDE.md), so this is the real

@@ -1,5 +1,5 @@
-// FTS5 index maintenance (issue #57, planning section 2: "Pflege explizit
-// aus der Store-Schicht").
+// FTS5 index maintenance, kept explicitly from the store layer
+// rather than by triggers.
 //
 // No triggers on purpose: the six indexed kinds live in six tables with six
 // different notions of "title", and a trigger per table would put that

@@ -1,7 +1,7 @@
 // The read side of the store: every GET the API answers, as database queries.
 //
 // The shapes are unchanged — `CampaignSummary[]`, `CampaignTree`,
-// `EntryResponse` — and so is every ordering rule the file-tree reader had
+// `EntryResponse` — and so is every ordering rule the pre-database reader had
 // (chapters by their migration order, npcs/locations by name, sessions newest
 // first, scene groups by slug). What changed is that the orderings are now
 // SQL instead of a directory walk, and that the guard token `rev` is the
@@ -10,7 +10,7 @@
 // The active-session logic is the one piece of behaviour worth calling out:
 // it is the SAME definition as before (the last STARTED session that is not
 // ended, so a session past midnight stays active), lifted from a newest-first
-// file scan to a query over `sessions`. The shared predicates (`isEnded`)
+// directory scan to a query over `sessions`. The shared predicates (`isEnded`)
 // still decide, so a blank `ended` still counts as running.
 
 import { and, asc, desc, eq } from "drizzle-orm";
@@ -418,7 +418,7 @@ function pickLatest(rows: SessionRow[]): SessionRow | undefined {
 
 /**
  * The ACTIVE session row: the last STARTED one that is not ended. With
- * `includeEnded` it is simply the last started session — the file the review
+ * `includeEnded` it is simply the last started session — the row the review
  * harvests, which may be yesterday's when the evening ran past midnight.
  */
 export function pickSession(

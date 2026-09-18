@@ -6,7 +6,7 @@
 // server's own door to them). Everything that wanted a chapter segment, a last
 // segment or a segment count used to write `rel.split("/")` itself, which meant
 // the sentence "an address is a `/`-separated list of segments" stood in ten
-// files and could be got subtly wrong in each — a filter here, an `?? ""`
+// modules and could be got subtly wrong in each — a filter here, an `?? ""`
 // there.
 //
 // It lives in shared/ and not next to the schema because the app needs it too

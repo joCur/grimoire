@@ -712,7 +712,7 @@ function replaceSceneRefs(
  * Re-index one entity from its current row — the index row's `title` too,
  * not only its id.
  *
- * `campaign` is a kind here because the campaign FILE is a referring body
+ * `campaign` is a kind here because the campaign ENTRY is a referring body
  * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `campaign`
  * that says `[[jorna]]` has the resolved name in its index row, so it goes
  * stale with everybody else's.
@@ -2215,7 +2215,7 @@ export async function applyDrafts(
         .filter((draft) => draftTargetExistsIn(tx, campaign, draft.address))
         .map((draft) => draft.rel);
       if (conflicts.length > 0) {
-        throw new ApiError(409, "target files already exist", { conflicts });
+        throw new ApiError(409, "target entries already exist", { conflicts });
       }
       for (const draft of inReferenceOrder(drafts)) insertDraft(tx, campaign, draft);
       if (onWritten !== undefined) {
@@ -2229,7 +2229,7 @@ export async function applyDrafts(
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (isConstraintViolation(error)) {
-      throw new ApiError(409, "target files already exist", {
+      throw new ApiError(409, "target entries already exist", {
         conflicts: drafts.map((draft) => draft.rel),
       });
     }

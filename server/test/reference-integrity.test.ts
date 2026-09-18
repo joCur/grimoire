@@ -400,7 +400,7 @@ describe("the generator's apply step", () => {
           body: "\n## Was passiert\n\nEtwas.\n",
         },
       ]),
-    ).rejects.toMatchObject({ status: 409, message: "target files already exist" });
+    ).rejects.toMatchObject({ status: 409, message: "target entries already exist" });
     // The scene that was already there is untouched.
     expect((await getFile(SCENE)).properties.title).toBe("Ankunft am Leuchtturm");
   });

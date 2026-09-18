@@ -81,7 +81,7 @@ const revColumn = () => integer("rev").notNull().default(1);
  * @grimoire/shared changes the constraint, and no enum is ever spelled twice.
  *
  * `sql.raw` because the values go into the table DEFINITION, where a bound
- * parameter has no meaning — the migration file has to carry the literals.
+ * parameter has no meaning — the migration SQL has to carry the literals.
  * They come from a `const` tuple of identifiers, never from a request.
  *
  * `nullable` adds the `is null` arm: a column that may hold nothing must
@@ -384,7 +384,7 @@ export const locations = sqliteTable(
 
 /**
  * One game session. `started`/`ended` keep the zone-less wall-clock strings
- * of the file format (rule 6); the epoch reading stays the server's job.
+ * of the README's writing rules; the epoch reading stays the server's job.
  * An `ended` that is NULL or blank means the session runs (session-state.ts).
  *
  * IDENTITY (PO decision): the id of a NEW session is an OPAQUE
@@ -424,7 +424,7 @@ export const sessions = sqliteTable(
      * when it was written.
      *
      * NOT a wall-clock string like `started`: this is bookkeeping of the
-     * database, never file content, and the file format has no field for it.
+     * database, never entry content, and an entry has no property for it.
      * It is also STRICTLY INCREASING per campaign rather than a plain
      * `Date.now()` (store/write.ts `nextCreatedAt`) — a clock that stands
      * still or jumps back must not make two rows unorderable.
@@ -576,11 +576,11 @@ export const sessionScenesPlayed = sqliteTable(
 
 /**
  * One line of the campaign inbox. Same append-only-plus-one-exception rule as
- * the file had (README: a done entry is rewritten to `- [x] …`) — here that
+ * the inbox text had (README: a done entry is rewritten to `- [x] …`) — here that
  * exception is the `done` flag.
  *
  * As in `log_entries`, `raw` is the line verbatim and the only guaranteed
- * content: the inbox file also holds headings and prose, and those keep their
+ * content: the inbox text also holds headings and prose, and those keep their
  * place in the list with `text` NULL instead of being thrown away.
  */
 export const inboxEntries = sqliteTable(

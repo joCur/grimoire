@@ -561,7 +561,7 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the entry alo
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
-  // Nothing reached the disk.
+  // Nothing was written.
   expect(await split(api, SCENE)).toEqual(before);
 });
 

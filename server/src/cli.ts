@@ -6,7 +6,7 @@
 // The server boots EMPTY — a fresh installation has no content, and creating
 // a campaign in the app is the normal way to start. `seed` is for the
 // development and test data: it loads the committed `fixtures/` tree, where a
-// directory is a campaign and each file in it is one entry in the shape the
+// directory is a campaign and each fixture file in it is one entry in the shape the
 // API speaks (db/seed.ts).
 //
 // Deliberately thin: argument parsing, a readable report, an exit code. A
@@ -27,7 +27,7 @@ const DEFAULT_SOURCE = path.resolve(PACKAGE_DIR, "../fixtures");
 const USAGE = `grimoire — Grimoire maintenance CLI
 
   grimoire seed [dir]   Load JSON campaign entries into the database.
-                        One subdirectory per campaign, one file per entry.
+                        One subdirectory per campaign, one fixture file per entry.
                         dir defaults to ${DEFAULT_SOURCE}
                         Target database: GRIMOIRE_DATA/grimoire.db
                         (currently ${getDbFile()})

@@ -37,9 +37,9 @@ if (import.meta.main) {
   void store;
   const info = (await import("./store/handle")).storeInfo();
   console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
-  // The one-time step that turned the file era's group
-  // directories into `location` references. It names EVERY scene whose
-  // address moved — an old link still resolves (the app follows the
+  // The one-time step that turned the group directories of the
+  // pre-database storage into `location` references. It names EVERY scene
+  // whose address moved — an old link still resolves (the app follows the
   // response's `path`), but a DM who wrote one down should see it.
   const groupMigration = info?.groupMigration;
   if (groupMigration !== undefined && groupMigration.moved.length > 0) {
@@ -102,7 +102,7 @@ if (import.meta.main) {
   }
 }
 
-// Bun serves this automatically when the file is the entrypoint; the app
+// Bun serves this automatically when this file is the entrypoint; the app
 // object itself stays runtime-neutral (see Node alternative above).
 export default {
   port: PORT,

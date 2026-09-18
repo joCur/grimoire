@@ -553,7 +553,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     const res = await generateNpc({ ...npcBody, id: "fenn" });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
-      error: "npc file already exists",
+      error: "npc entry already exists",
       path: "npcs/fenn",
     });
     expect(fake.calls).toHaveLength(0);
@@ -845,7 +845,7 @@ describe("apply an npc draft", () => {
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
-      error: "target files already exist",
+      error: "target entries already exist",
       conflicts: ["npcs/apply-happy"],
     });
     const after = await read("npcs/apply-happy");

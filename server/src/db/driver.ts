@@ -1,7 +1,6 @@
-// The SQLite driver layer — the ONE file that knows which runtime we are on.
+// The SQLite driver layer — the ONE module that knows which runtime we are on.
 //
-// WHY THIS FILE EXISTS (deviation from planning #52 Fassung 3, section 1,
-// recorded in ADR #13):
+// WHY THIS MODULE EXISTS (a deviation from the planning, recorded in ADR #13):
 //
 // The planning assumed `node:sqlite` is available on Bun as well ("Bun
 // ≥1.1.14, Node ≥22.5") and that drizzle ships a `drizzle-orm/node-sqlite`
@@ -27,8 +26,8 @@
 //
 // Both backends are wrapped into ONE interface (`SqliteClient`) with
 // identical parameter and row handling, and `test/db-smoke.test.ts` proves
-// FTS5, transactions and UPSERT behave the same on both runtimes (issue #54
-// AK5). If either backend ever drifts, that test is the early warning.
+// FTS5, transactions and UPSERT behave the same on both runtimes. If either
+// backend ever drifts, that test is the early warning.
 //
 // The interface is deliberately the surface drizzle's portable
 // `drizzle-orm/bun-sqlite/session` needs — that session module only

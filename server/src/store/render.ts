@@ -372,7 +372,7 @@ export function renderSession(
 /**
  * The inbox body from its rows, in `pos` order. Every row's `raw` is the line
  * verbatim — including the headings the format's skeleton carries — and a
- * blank line is put after a heading so the rendering reads like the file did.
+ * blank line is put after a heading so the rendering reads like the inbox text did.
  */
 export function renderInboxBody(rows: InboxRow[]): string {
   if (rows.length === 0) return "";

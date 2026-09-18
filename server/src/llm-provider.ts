@@ -52,7 +52,7 @@ export interface GenerateRequest {
     chapter?: string;
     npcs: Array<{ id: string; name: string }>;
     locations: Array<{ id: string; name: string }>;
-    /** Id the DM pinned for the generated file (NPC run) — absent: free choice. */
+    /** Id the DM pinned for the generated entry (NPC run) — absent: free choice. */
     targetId?: string;
   };
   sourceText: string; // English source text ("" when a run has none)
