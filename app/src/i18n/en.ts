@@ -275,6 +275,8 @@ export const en: Messages = {
     "The model's reply was cut off — raise LLM_MAX_TOKENS (currently: {max}) or shorten the source text.",
   "server.llm_invalid": "The reply did not pass the mechanical validation.",
   "server.llm_truncated.defaultCap": "the endpoint default",
+  "server.status_not_allowed": 'There is no status “{value}” — allowed are {allowed}.',
+  "server.scene_type_not_allowed": 'There is no scene type “{value}” — allowed are {allowed}.',
 
   "server.kind.entry": "The entry",
   "server.kind.campaign": "Campaign",
