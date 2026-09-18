@@ -170,7 +170,17 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // their own — a reference never creates one.
     expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
-    expect(t.sessions[0]!.scenes_played).toEqual(["lighthouse-arrival"]);
+    // A tree entry for a session is its identifying HEAD: when it ran, and
+    // nothing of its content. The log and the played scenes come from the
+    // session itself (GET /sessions/:id) — a session is not an entry, and the
+    // tree is a navigation index (ADR #26).
+    expect(t.sessions[0]).toEqual({
+      id: "2026-01-15",
+      started: "2026-01-15T19:30:00",
+      startedMs: new Date(2026, 0, 15, 19, 30).getTime(),
+      ended: "2026-01-15T22:45:00",
+      endedMs: new Date(2026, 0, 15, 22, 45).getTime(),
+    });
     // sessions sort newest first
     const ids = t.sessions.map((s) => s.id);
     expect(ids).toEqual([...ids].sort().reverse());
@@ -240,23 +250,19 @@ describe("GET /api/campaigns/:campaign/entries", () => {
     expect(body.properties.name).toBe("Der Leuchtturm von Salzhafen");
   });
 
-  test("serves the two list entries from their rows: inbox and glossary", async () => {
-    // They have no entity row of their own; the campaign's version counter is
-    // their guard token (store/read.ts readByLocator).
-    const inbox = await app.request(entriesUrl("beispiel", "inbox"));
-    expect(inbox.status).toBe(200);
-    const inboxBody = (await inbox.json()) as EntryResponse;
-    expect(inboxBody.kind).toBe("inbox");
-    expect(inboxBody.body).toContain("- ");
-
-    const glossary = await app.request(entriesUrl("beispiel", "glossary"));
-    expect(glossary.status).toBe(200);
-    expect(((await glossary.json()) as EntryResponse).kind).toBe("glossary");
+  test("the three LIST addresses are 404 — they are not entries", async () => {
+    // A session, the inbox and the glossary have their own endpoints and no
+    // address at all (ADR #26), so these read like any other address the
+    // schema does not describe. `inbox`, `glossary` and `sessions` stay
+    // RESERVED all the same, so no chapter can claim one.
+    for (const rel of ["inbox", "glossary", "sessions/2026-01-15", "sessions"]) {
+      expect((await app.request(entriesUrl("beispiel", rel))).status).toBe(404);
+    }
   });
 
   test("404 for unknown entry and unknown campaign", async () => {
     expect((await app.request(entriesUrl("beispiel", "01-salzhafen/nope"))).status).toBe(404);
-    expect((await app.request(entriesUrl("nope", "inbox"))).status).toBe(404);
+    expect((await app.request(entriesUrl("nope", "campaign"))).status).toBe(404);
   });
 
   test("a STALE scene address resolves and answers with the current one", async () => {

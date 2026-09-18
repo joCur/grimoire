@@ -6,6 +6,11 @@
 // Plus the freshness claim: what the APP just wrote is findable IMMEDIATELY —
 // the search index is maintained in the same transaction as the write, so
 // there is no watcher to wait for.
+//
+// And what the index HOLDS: the five entry kinds plus the glossary terms.
+// A glossary term is a row of a list (ADR #26), so its hit carries `kind` and
+// `id` and no address — the palette opens it through the glossary page.
+// Sessions and ideas are not indexed at all, so no query can produce one.
 
 import { expect, test } from "../support/test";
 
@@ -92,6 +97,48 @@ test("content the APP just wrote is findable right away", async ({
   await hit.click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/entries/${SCENE.replace(/\./g, "\\.")}$`));
   await expect(page.getByRole("article")).toContainText(WORD);
+});
+
+test("a glossary hit opens the glossary page — no address, and none needed", async ({
+  page,
+  api,
+}) => {
+  const TERM = "smugglers' cove";
+
+  // On the wire: the hit names its row by `kind` and `id`, and carries NO
+  // `path`. An address here would 404 for whoever followed it.
+  const { results } = await api.get<{
+    results: { kind: string; id: string; path?: string; title: string }[];
+  }>("campaigns/beispiel/search?q=smugglers");
+  const glossary = results.filter((hit) => hit.kind === "glossary");
+  expect(glossary).toHaveLength(1);
+  expect(glossary[0]?.id).toBe(TERM);
+  expect(glossary[0]).not.toHaveProperty("path");
+
+  // In the palette: the term shows with its list's label and opens the
+  // glossary page, where the row actually lives.
+  await page.goto("/campaigns/beispiel");
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByRole("combobox").fill("smugglers");
+  const hit = page.getByRole("option").filter({ hasText: TERM });
+  await expect(hit).toHaveCount(1);
+  await expect(hit).toContainText("Glossar");
+  await hit.click();
+
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
+  await expect(page.getByText(TERM)).toBeVisible();
+});
+
+test("sessions and ideas are not in the index, so they never turn up", async ({ api }) => {
+  // Words that appear ONLY in the example campaign's session log and in its
+  // one idea. Indexing those lists would be its own feature; until then a
+  // query for their words finds nothing.
+  for (const query of ["Dorfschmied", "Schmugglerwerkzeug", "Metta"]) {
+    const { results } = await api.get<{ results: { kind: string }[] }>(
+      `campaigns/beispiel/search?q=${encodeURIComponent(query)}`,
+    );
+    expect(results.filter((hit) => hit.kind === "session" || hit.kind === "inbox")).toEqual([]);
+  }
 });
 
 test("⌘K says so when nothing matches, and Esc closes it", async ({ page }) => {

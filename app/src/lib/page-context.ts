@@ -30,8 +30,9 @@ export interface ContextCrumb {
 
 /**
  * Context crumbs for one entry view, outermost first. Empty for everything
- * that has no place in the hierarchy (the campaign entry, sessions, inbox,
- * glossary) — the nav's section marking is context enough there.
+ * that has no place in the hierarchy (the campaign entry, and any address the
+ * schema does not describe) — the nav's section marking is context enough
+ * there.
  *
  * Scene: `<chapter title> › <group>`, the chapter linking to the chapter
  * overview. The group part is the scene's middle segment resolved like a

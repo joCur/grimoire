@@ -564,7 +564,10 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   expect(after.properties).toEqual(before.properties);
 });
 
-test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
+test("location and chapter offer the editor; the list addresses are gone", async ({
+  page,
+  api,
+}) => {
   // The kinds whose prose the DM maintains offer the body editor …
   for (const rel of ["locations/leuchtturm", "01-salzhafen"]) {
     await page.goto(`/campaigns/beispiel/entries/${rel}`);
@@ -575,40 +578,20 @@ test("location and chapter offer the editor, session and inbox do not", async ({
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
   }
 
-  // … the append-only logs do not: a free-hand rewrite of a log is not a
-  // maintenance action (ADR #4).
-  await page.goto("/campaigns/beispiel/entries/sessions/2026-01-15");
-  await expect(page.getByRole("article")).toContainText("Spuren gefunden");
-  // A session's heading is its DATE, derived from `started` — the id is opaque
-  // and is never shown. (This fixture still carries the old date-shaped id,
-  // which must make no difference to the heading.)
-  await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
-    "Session vom 15.01.2026",
-  );
-  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
-
-  await page.goto("/campaigns/beispiel/entries/inbox");
-  await expect(page.getByRole("article")).toContainText("Der Dorfschmied repariert");
-  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
-
-  // And the rule belongs to the ENDPOINT, not to the hidden button: a body on
-  // one of the list addresses is refused by the one write path itself, with a
-  // CURRENT version, so nothing but the body rule can be what turned it down.
-  // They grow by rows through their own endpoints (ADR #23).
+  // … and the three LISTS have no address at all any more (ADR #26). There is
+  // no entry to hide an edit action on, and no `body` left to refuse: the
+  // address itself answers 404 like any other the schema does not describe.
+  // No redirect and no alias — this is the ONE place the suite asserts it.
   for (const rel of ["sessions/2026-01-15", "inbox", "glossary"]) {
-    const before = await split(api, rel);
-    const current = await api.entry(rel);
-    const res = await api.fetch(
-      `campaigns/beispiel/entries/${rel.split("/").map(encodeURIComponent).join("/")}`,
-      {
-        method: "PATCH",
+    const address = rel.split("/").map(encodeURIComponent).join("/");
+    for (const method of ["GET", "PATCH"] as const) {
+      const res = await api.fetch(`campaigns/beispiel/entries/${address}`, {
+        method,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rev: current.rev, body: "\nAlles neu.\n" }),
-      },
-    );
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: "body_not_editable", path: rel });
-    expect(await split(api, rel)).toEqual(before);
+        body: method === "GET" ? undefined : JSON.stringify({ rev: 1, body: "\nAlles neu.\n" }),
+      });
+      expect(res.status).toBe(404);
+    }
   }
 });
 
@@ -651,29 +634,23 @@ test("the campaign entry has both halves: a body editor and its metadata dialog"
 });
 
 
-test("the glossary offers no text editor — it is a list", async ({ page, api }) => {
-  // The glossary is a LIST, kept row by row on its own page, and there is no
-  // parser that reads text back into rows (ADR #23). So its reading view offers
-  // no edit action at all: an editor here could only ever produce a save the
-  // one write path refuses (400 `body_not_editable`, asserted on the endpoint
-  // itself in the test above).
-  await page.goto("/campaigns/beispiel/entries/glossary");
-  await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
-  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
-  await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
+test("the glossary is written as a list, on its own page", async ({ page, api }) => {
+  // The glossary is a LIST with its own endpoint and its own guard token, and
+  // it has no entry address to edit as text. Its own page is where the DM
+  // keeps it — row by row, never as markdown.
+  type Glossary = { entries: { term: string; explanation: string }[]; rev: number };
+  const before = await api.get<Glossary>("campaigns/beispiel/glossary");
+  expect(before.entries.map((e) => e.term)).toContain("lighthouse keeper");
 
-  // The list endpoint is the way in — guarded by the same row version — and it
-  // leaves the entry a list.
   await api.send("PUT", "campaigns/beispiel/glossary", {
-    rev: (await api.entry("glossary")).rev,
+    rev: before.rev,
     entries: [{ term: "tide flat", explanation: "Gezeitenwatt" }],
   });
-  const glossary = await api.get<{ entries: Array<{ term: string }> }>(
-    "campaigns/beispiel/glossary",
-  );
-  expect(glossary.entries.map((e) => e.term)).toEqual(["tide flat"]);
-  // And the reading view renders that list — still without an edit action.
-  await page.reload();
-  await expect(page.getByRole("article")).toContainText("Gezeitenwatt");
-  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
+  const after = await api.get<Glossary>("campaigns/beispiel/glossary");
+  expect(after.entries.map((e) => e.term)).toEqual(["tide flat"]);
+
+  // The glossary page shows that list, and carries no markdown editor.
+  await page.goto("/campaigns/beispiel/glossary");
+  await expect(page.getByText("Gezeitenwatt")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 });

@@ -67,6 +67,22 @@ export const en: Messages = {
   "session.date": "Session of {date}",
   "session.date.unknown": "Session",
 
+  // --- the reading page of one session --------------------------------------
+  "session.page.crumb": "Sessions",
+  "session.page.loading": "Loading session …",
+  "session.page.notLoadable": "Session not loadable — check the server and reload.",
+  "session.page.started": "Start",
+  "session.page.ended": "End",
+  "session.page.stillRunning": "still running",
+  "session.page.timeUnknown": "unknown",
+  "session.page.runtime": "Play time",
+  "session.page.log": "Log",
+  "session.page.log.empty": "Nothing was noted down in this session.",
+  "session.page.pauses": "Pauses",
+  "session.page.pauseRow": "{from} – {to} ({duration})",
+  "session.page.scenes": "Scenes played",
+  "session.page.scenes.empty": "No scene marked as played.",
+
   // --- create dialogs -------------------------------------------------------
   "create.failed": "Not created — check the server.",
   "create.useSuggestion": "Use “{id}”",
@@ -398,10 +414,11 @@ export const en: Messages = {
   "live.session.unloadable": "Session not loadable — check the server and reload.",
   "live.session.none": "No session is running.",
   // The one start conflict the live route turns into a question: an OLDER
-  // session nobody ended. One sentence per variant — the path is a parameter,
-  // never a fragment between two halves.
+  // session nobody ended. One sentence per variant — the session is a
+  // parameter, never a fragment between two halves.
   "live.session.olderRunning": "An older session is still running — end it first.",
-  "live.session.olderRunning.withPath": "An older session is still running ({path}) — end it first.",
+  "live.session.olderRunning.withSession":
+    "An older session is still running ({session}) — end it first.",
   "live.session.endOld": "End the old session",
 
   // The "For the players" reminder list of the aside.
@@ -427,8 +444,6 @@ export const en: Messages = {
     "Go through the entries of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters).
   "review.progress": "{seen} of {total} reviewed",
-  "review.hashUnavailable":
-    "Reviewed state of the log lines unavailable — open Grimoire via localhost or https.",
   "review.loading": "Loading entries …",
   "review.empty": "No tagged entries in this session — nothing to review.",
 
@@ -531,6 +546,9 @@ export const en: Messages = {
   "kind.location": "Location",
   "kind.chapter": "Chapter",
   "kind.campaign": "Campaign",
+  "kind.session": "Session",
+  "kind.inbox": "Idea",
+  "kind.glossary": "Glossary",
   "markdown.ref.aria": "{kind}: {name}",
 
 

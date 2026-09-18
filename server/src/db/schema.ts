@@ -483,18 +483,17 @@ export const sessionPauses = sqliteTable(
 );
 
 /**
- * One line of a session's `## Log`. APPEND-ONLY stays the rule; `pos` is the
+ * One line of a session's log. APPEND-ONLY stays the rule; `pos` is the
  * append counter and the key.
  *
- * `raw` is the line exactly as it was written and is the only NOT NULL
- * content column: a line the log grammar does not recognise (a hand-typed
- * note, a `- Pause` marker in an older spelling) keeps its `raw` and leaves
- * `at`/`sceneId`/`text` NULL rather than being dropped or guessed at.
+ * COLUMNS ONLY: the row holds the note's time, the scene it was taken in, its
+ * text and the review flag. There is no markdown line beside them — the log
+ * is a table the API answers as rows (ADR #26), and a row that carried both a
+ * line and its parse had two truths about one note.
  *
- * `hash` is the short hash (first 8 hex chars of SHA-256 over `raw`) the
- * review step used to mark lines as seen. It is kept because it is the id the
- * app's review already speaks — but `reviewed` is a plain flag on the row
- * rather than a hash list in the session's properties.
+ * `hash` is the row's stable ID, the short hash of its canonical line
+ * (store/body-parse.ts). The review names a line by it, and `reviewed` is a
+ * plain flag on the row rather than a hash list beside the session.
  */
 export const logEntries = sqliteTable(
   "log_entries",
@@ -502,19 +501,17 @@ export const logEntries = sqliteTable(
     campaignId: text("campaign_id").notNull(),
     sessionId: text("session_id").notNull(),
     pos: integer("pos").notNull(),
-    raw: text("raw").notNull(),
-    /** `HH:MM` as written; NULL for a line that carries no timestamp. */
+    /** `HH:MM` local, the time the note was taken; NULL when it carries none. */
     at: text("at"),
     /**
-     * Scene context in parentheses — a foreign key (rule 3), null for a line
-     * that names no scene. A line whose parentheses hold something else
-     * keeps them in `raw` and leaves this column null: the text of a note is
-     * never thrown away over a reference it did not mean.
+     * The scene the note was taken in — a foreign key (rule 3), null for a
+     * note that names none. The endpoint checks the reference, so a note is
+     * never refused or thinned out over a scene it did not mean.
      */
     sceneId: text("scene_id"),
-    /** The line's text without time and scene prefix; NULL for a raw-only line. */
-    text: text("text"),
-    /** Short hash of `raw` — the review's stable line id. */
+    /** The note as the DM typed it, hashtags included (README's vocabulary). */
+    text: text("text").notNull().default(""),
+    /** The row's stable id — see the note above. */
     hash: text("hash").notNull().default(""),
     reviewed: integer("reviewed").notNull().default(0),
   },
@@ -576,22 +573,23 @@ export const sessionScenesPlayed = sqliteTable(
 // --- inbox ------------------------------------------------------------------
 
 /**
- * One line of the campaign inbox. Same append-only-plus-one-exception rule as
- * the inbox text had (README: a done entry is rewritten to `- [x] …`) — here that
- * exception is the `done` flag.
+ * One idea in the campaign inbox. Append-only with one exception, the `done`
+ * flag — the DM ticks an idea off in the review and nothing else rewrites a
+ * row.
  *
- * As in `log_entries`, `raw` is the line verbatim and the only guaranteed
- * content: the inbox text also holds headings and prose, and those keep their
- * place in the list with `text` NULL instead of being thrown away.
+ * COLUMNS ONLY, as in `log_entries`: the text and the flag. The inbox is a
+ * table the API answers as rows (ADR #26), so it holds no headings, no prose
+ * and no list markers — those were the skeleton of a text that no longer
+ * exists.
  */
 export const inboxEntries = sqliteTable(
   "inbox_entries",
   {
     campaignId: text("campaign_id").notNull(),
+    /** The append counter, the key — and the row's id on the wire. */
     pos: integer("pos").notNull(),
-    raw: text("raw").notNull(),
-    /** The entry text without the list/checkbox marker; NULL for a raw-only line. */
-    text: text("text"),
+    /** The idea as the DM typed it, hashtags included. */
+    text: text("text").notNull().default(""),
     done: integer("done").notNull().default(0),
   },
   (t) => [

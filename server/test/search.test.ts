@@ -186,15 +186,18 @@ describe("reference queries", () => {
   });
 
   test("glossary terms are indexed too: 'lighthouse keeper'", async () => {
-    // New with the cutover — the glossary is a TABLE now (planning F6), so it
-    // is a searchable kind instead of one opaque markdown body.
+    // The glossary is a TABLE, so a term is a searchable row instead of one
+    // opaque markdown body.
     const results = await search("lighthouse keeper");
     const entry = results.find((r) => r.kind === "glossary");
-    expect(entry).toMatchObject({
-      id: "lighthouse keeper",
-      title: "lighthouse keeper",
-      path: "glossary",
-    });
+    // A LIST row carries `kind` and `id` and NO `path`: it has no address
+    // (ADR #26), and one that named nothing would 404 the moment somebody
+    // followed it. The app opens such a hit through its list.
+    expect(entry).toMatchObject({ id: "lighthouse keeper", title: "lighthouse keeper" });
+    expect(entry?.path).toBeUndefined();
+    // An ENTRY hit, by contrast, carries its address — asserted on a query
+    // that finds one.
+    expect((await search("Leuchtturm")).find((r) => r.kind === "scene")?.path).toBeDefined();
     // the explanation is the body, so it is searchable from the German side
     expect(
       (await search("Leuchtturmwärter")).some((r) => r.kind === "glossary"),

@@ -178,8 +178,11 @@ test("scene properties: chips, reference and status land in the entry — nothin
   ).toHaveCount(0);
   // The old address still names the scene and reports the new one.
   expect((await api.entry(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
-  // `[[…]]` references resolve over ids, so the session log is untouched.
-  expect(await api.body("sessions/2026-01-15")).toContain("lighthouse-arrival");
+  // References resolve over ids, so the session's log rows are untouched — a
+  // row still names the scene it was taken in by that id.
+  expect((await api.session("2026-01-15")).log.map((row) => row.sceneId)).toContain(
+    "lighthouse-arrival",
+  );
 
   // Stored: the three changed fields …
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "draft");
@@ -605,7 +608,7 @@ test("navigating away closes the dialog — no diff of entry A lands in entry B"
   expect(await split(api, SCENE)).toEqual(scene);
 });
 
-test("Ort and Kapitel have the form too — session and inbox do not", async ({
+test("Ort and Kapitel have the form too — the campaign brings its own", async ({
   page,
 }) => {
   // The four kinds with typed properties offer it …
@@ -625,19 +628,9 @@ test("Ort and Kapitel have the form too — session and inbox do not", async ({
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // … the app-managed and append-only entries do not (ADR #4), and neither does
-  // the glossary, which has no typed properties to offer. Asserted only after
-  // the content is on screen, so this cannot pass on a still-loading page.
-  const withoutForm: [string, string][] = [
-    ["sessions/2026-01-15", "Spuren gefunden"],
-    ["inbox", "Der Dorfschmied repariert"],
-    ["glossary", "Übersetzungs-Glossar"],
-  ];
-  for (const [rel, marker] of withoutForm) {
-    await page.goto(`/campaigns/beispiel/entries/${rel}`);
-    await expect(page.getByRole("article")).toContainText(marker);
-    await expect(page.getByRole("button", { name: "Eigenschaften" })).toHaveCount(0);
-  }
+  // The three LISTS never reach this view: they have no address (ADR #26),
+  // so there is no reading view on which a properties form could be missing.
+  // The 404 of those addresses is asserted once, in entry-edit.e2e.ts.
 
   // The campaign entry brings its OWN properties half: its name and
   // description are the two values no typed form models, so its dialog stands

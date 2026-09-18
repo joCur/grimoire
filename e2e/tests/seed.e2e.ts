@@ -38,7 +38,8 @@ interface TreeResponse {
   chapters: { id: string; title: string; groups: { slug: string; scenes: { path: string; id: string; title: string }[] }[] }[];
   npcs: { path: string; id: string }[];
   locations: { path: string }[];
-  sessions: { path: string }[];
+  /** A session SUMMARY — id and timestamps, no address (ADR #26). */
+  sessions: { id: string; started: string }[];
 }
 
 /** What GET /api/:campaign/glossary answers. */
@@ -85,7 +86,8 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const bucht = await api.entry("locations/bucht");
   expect(bucht.properties.name).toBe("Die Nordbucht");
   expect(bucht.properties.chapter).toBe("01-salzhafen");
-  expect(tree.sessions.map((s) => s.path)).toEqual(["sessions/2026-01-15"]);
+  // A session in the tree is a SUMMARY: its id and when it ran, no address.
+  expect(tree.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
 
   // --- a scene body, callouts and If-sections included ----------------------
   const scene = await api.entry(SCENE);
@@ -102,13 +104,55 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(npc.body).toContain("Das Leuchtfeuer muss wieder brennen");
   expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
 
-  // --- the session ----------------------------------------------------------
-  const session = await api.entry("sessions/2026-01-15");
-  expect(session.body).toContain("Spuren gefunden");
+  // --- the session: its own TABLE, read through its own endpoint ------------
+  const session = await api.session("2026-01-15");
+  expect(session.started).toBe("2026-01-15T19:30:00");
+  expect(session.ended).toBe("2026-01-15T22:45:00");
+  expect(session.scenesPlayed).toEqual(["lighthouse-arrival"]);
+  // The log arrives as rows, with the columns the fixture spells — nothing is
+  // parsed back out of a rendered line.
+  expect(session.log).toEqual([
+    {
+      id: expect.any(String),
+      at: "19:52",
+      sceneId: "lighthouse-arrival",
+      text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+      reviewed: false,
+    },
+    {
+      id: expect.any(String),
+      at: "21:10",
+      sceneId: "lighthouse-arrival",
+      text: "Improvisiert: Fischerin „Old Metta“ am Steg #npc",
+      reviewed: false,
+    },
+    {
+      id: expect.any(String),
+      at: "22:40",
+      text: "Cliffhanger: Lichter in der Bucht gesichtet #thread",
+      reviewed: false,
+    },
+  ]);
+  // A pause is an INTERVAL, with the server's epoch reading beside each
+  // wall clock.
+  expect(session.pauses).toEqual([
+    {
+      from: "2026-01-15T20:30:00",
+      fromMs: expect.any(Number),
+      to: "2026-01-15T21:10:00",
+      toMs: expect.any(Number),
+    },
+  ]);
 
-  // --- the inbox ------------------------------------------------------------
-  const inbox = await api.entry("inbox");
-  expect(inbox.body).toContain("Der Dorfschmied repariert");
+  // --- the inbox: its own TABLE too -----------------------------------------
+  const inbox = await api.inbox();
+  expect(inbox.entries).toEqual([
+    {
+      id: expect.any(String),
+      text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+      done: false,
+    },
+  ]);
 
   // --- the glossary: its own TABLE ------------------------------------------
   const glossary = await api.get<GlossaryResponse>("campaigns/beispiel/glossary");

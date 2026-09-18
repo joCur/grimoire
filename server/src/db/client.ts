@@ -23,6 +23,7 @@ import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
 import { assertMigrationReady } from "./reference-preflight";
+import { assertListRowsReady } from "./list-rows-preflight";
 import { assertStatusesReady } from "./status-preflight";
 import { assertTimestampsReady } from "./timestamp-preflight";
 import { schema } from "./schema";
@@ -121,6 +122,11 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // value, instead of failing halfway through the rebuild. Also a no-op once
   // the constraints are in place.
   assertStatusesReady(client);
+  // And the gate in front of migration 0018, which drops the markdown line
+  // beside a log or inbox row: a row whose `text` the old parse left empty
+  // would turn into an empty note there, so it is REFUSED here with the line
+  // it was written as. A no-op once the column is gone.
+  assertListRowsReady(client);
   const db = buildDrizzle(client);
   migrateDb(db);
   // And the gate in front of the session timestamps: a `started`, `ended` or

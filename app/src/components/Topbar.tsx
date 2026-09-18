@@ -60,8 +60,7 @@
 // still has unharvested entries, and the generator entry on the chapter
 // overview with its run indicator.
 
-import type { EntryResponse } from "@grimoire/shared/types";
-import { isSessionEmpty } from "@grimoire/shared/session-state";
+import type { SessionResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
@@ -115,7 +114,7 @@ import {
   campaignLabel,
   settingsCampaign,
 } from "@/lib/campaign";
-import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
+import { sessionElapsedLabel, sessionIsEmpty, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
 import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
@@ -405,7 +404,7 @@ export function Topbar() {
  * at its `ended` (the chip is gone by then, but a cache race must not tick
  * backwards).
  */
-function useElapsedLabel(session: EntryResponse): string | undefined {
+function useElapsedLabel(session: SessionResponse): string | undefined {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1_000);
@@ -467,7 +466,7 @@ function sessionChipState({
   offersStart,
   showsError,
 }: {
-  session: { data: EntryResponse | null | undefined; isError: boolean };
+  session: { data: SessionResponse | null | undefined; isError: boolean };
   offersStart: boolean;
   showsError: boolean;
 }): SessionChipState {
@@ -517,7 +516,7 @@ function SessionChip({
   mode,
 }: {
   campaign: string;
-  session: EntryResponse | undefined;
+  session: SessionResponse | undefined;
   state: SessionChipState;
   mode: "link" | "menu";
 }) {
@@ -550,7 +549,7 @@ function SessionRunningChip({
   mode,
 }: {
   campaign: string;
-  session: EntryResponse;
+  session: SessionResponse;
   mode: "link" | "menu";
 }) {
   const t = useT();
@@ -654,7 +653,7 @@ function SessionMenuChip({
   paused,
 }: {
   campaign: string;
-  session: EntryResponse;
+  session: SessionResponse;
   label: string;
   elapsed: string | undefined;
   paused: boolean;
@@ -663,7 +662,7 @@ function SessionMenuChip({
   const navigate = useNavigate();
   const [discardOpen, setDiscardOpen] = useState(false);
   // ONE entry, two directions: the pause endpoints open and
-  // close a `pauses` interval in the session — the log line comes with it, and
+  // close a `pauses` interval in the session — the log row comes with it, and
   // the runtime really stops instead of only being annotated.
   const pause = useSessionWrite(campaign, () =>
     paused ? continueSession(campaign) : pauseSession(campaign),
@@ -723,7 +722,7 @@ function SessionMenuChip({
           </DropdownMenuItem>
           {/* Only while the session is EMPTY — the mis-click's undo, gone
               the moment the evening has content. */}
-          {isSessionEmpty(session.properties, session.body) && (
+          {sessionIsEmpty(session) && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -763,7 +762,7 @@ function MobileSessionRow({
   session,
 }: {
   campaign: string;
-  session: EntryResponse;
+  session: SessionResponse;
 }) {
   const t = useT();
   return (

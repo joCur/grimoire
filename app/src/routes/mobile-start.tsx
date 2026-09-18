@@ -6,7 +6,7 @@
 // left out: recents would need server-side persistence (no localStorage —
 // the server is the truth) and there is no recents endpoint yet.
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookA, Bookmark, ChevronRight, Lightbulb, MapPin, Search, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { useT, type MessageKey } from "@/i18n";
 import { useCampaignMeta } from "@/lib/use-campaign";
+import { inboxKey } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
 
 export function MobileStart({ campaign }: { campaign: string }) {
@@ -142,18 +143,23 @@ function BrowseRow({
 }
 
 /** Inbox capture: textarea + brass submit action, quiet text confirmation
- * (no animation — reduced-motion safe by construction). */
+ * (no animation — reduced-motion safe by construction). The answer is the
+ * whole inbox, so the wrap-up and the live aside see the new idea at once. */
 function InboxCard({ campaign }: { campaign: string }) {
   const t = useT();
   const inputId = useId();
   const [text, setText] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const queryClient = useQueryClient();
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const inbox = useMutation({
     mutationFn: (line: string) => appendInbox(campaign, line),
-    onSuccess: () => {
+    onSuccess: (answer) => {
+      // The answer is the whole list, so the wrap-up and the live aside know
+      // about the new idea without a second request.
+      queryClient.setQueryData(inboxKey(campaign), answer);
       setText("");
       setConfirmed(true);
       clearTimeout(timer.current);

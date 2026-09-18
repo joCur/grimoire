@@ -22,7 +22,12 @@
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { and, eq } from "drizzle-orm";
-import type { EntryResponse } from "@grimoire/shared";
+import type {
+  EntryResponse,
+  InboxResponse,
+  SessionResponse,
+  SessionSummary,
+} from "@grimoire/shared";
 import { app } from "../src/server";
 import type { GrimoireDb } from "../src/db/client";
 import { scenes as scenesTable, sessions as sessionsTable } from "../src/db/schema";
@@ -71,6 +76,32 @@ async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
   const res = await postJson(url, body);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
+}
+
+/** A POST that answers a SESSION — the verbs and the log append. */
+async function postSession(url: string, body?: unknown): Promise<SessionResponse> {
+  const res = await postJson(url, body);
+  expect(res.status).toBe(200);
+  return (await res.json()) as SessionResponse;
+}
+
+/** A POST that answers the INBOX list. */
+async function postInbox(url: string, body?: unknown): Promise<InboxResponse> {
+  const res = await postJson(url, body);
+  expect(res.status).toBe(200);
+  return (await res.json()) as InboxResponse;
+}
+
+async function getSession(id: string, campaign = "beispiel"): Promise<SessionResponse> {
+  const res = await app.request(`/api/campaigns/${campaign}/sessions/${id}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as SessionResponse;
+}
+
+async function getInbox(campaign = "beispiel"): Promise<InboxResponse> {
+  const res = await app.request(`/api/campaigns/${campaign}/inbox`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as InboxResponse;
 }
 
 /**
@@ -166,13 +197,15 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
 
   // A row always renders its properties (store/render.ts). The 400 for the
   // two properties-less kinds below is what guards this corner.
-  test("400 for inbox and glossary — lists of rows, not entities", async () => {
-    for (const rel of ["inbox", "glossary"]) {
-      const before = await getEntry(rel);
-      const res = await patchEntry(rel, { rev: before.rev, properties: { status: "x" } });
-      expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toContain("no properties");
-      expect(await getEntry(rel)).toEqual(before);
+  test("404 for the LIST addresses — they are not entries at all", async () => {
+    // The inbox, the glossary and a session have their own endpoints and no
+    // address (ADR #26), so a patch at one of these reads like a patch at any
+    // other address the schema does not describe. There is no
+    // `body_not_editable` in front of it any more: nothing to refuse a body
+    // FOR, because nothing is there.
+    for (const rel of ["inbox", "glossary", "sessions/2026-01-15"]) {
+      expect((await patchEntry(rel, { rev: 1, properties: { status: "x" } })).status).toBe(404);
+      expect((await patchEntry(rel, { rev: 1, body: "\n- alles neu\n" })).status).toBe(404);
     }
   });
 
@@ -263,30 +296,33 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
 
 describe("POST /api/campaigns/:campaign/session/start", () => {
   test("creates today's session with the documented shape", async () => {
-    const entry = await postOk("/api/campaigns/beispiel/session/start");
-    expect(entry.kind).toBe("session");
-    // The id is an OPAQUE random string (a UUID): the entry's address and
-    // nothing else. What is asserted about it is that it IS the address and
-    // that it carries no calendar date.
-    const id = String(entry.properties.id);
-    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(entry.path).toBe(`sessions/${id}`);
-    expect(entry.properties.started).toBe("2026-08-19T21:05:00");
-    expect(entry.properties.scenes_played).toEqual([]);
-    // The skeleton is the one the format prescribes — the `## Log` section is
-    // rendered from (still zero) log rows.
-    expect(entry.properties).toEqual({ id, started: "2026-08-19T21:05:00", scenes_played: [] });
-    expect(entry.body).toBe("\n## Log\n");
+    const session = await postSession("/api/campaigns/beispiel/session/start");
+    // The id is an OPAQUE random string (a UUID) and the session's key.
+    // What is asserted about it is that it carries no calendar date.
+    expect(session.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    // A fresh session is empty ROWS, not an empty text: no log, no pauses,
+    // no played scenes, and no `properties`/`body`/`path` at all — a session
+    // is not an entry (ADR #26).
+    expect(session).toEqual({
+      id: session.id,
+      started: "2026-08-19T21:05:00",
+      startedMs: new Date(2026, 7, 19, 21, 5).getTime(),
+      pauses: [],
+      log: [],
+      scenesPlayed: [],
+      rev: 1,
+    });
     // A fresh row starts at rev 1, and the GET agrees.
-    expect(entry.rev).toBe(1);
-    expect((await getEntry(entry.path)).rev).toBe(1);
+    expect((await getSession(session.id)).rev).toBe(1);
   });
 
   test("two starts hand out two DIFFERENT ids", async () => {
-    const first = await postOk("/api/campaigns/beispiel/session/start");
-    await postOk("/api/campaigns/beispiel/session/end");
-    const second = await postOk("/api/campaigns/beispiel/session/start");
-    expect(second.properties.id).not.toBe(first.properties.id);
+    const first = await postSession("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/session/end");
+    const second = await postSession("/api/campaigns/beispiel/session/start");
+    expect(second.id).not.toBe(first.id);
   });
 
   // `started` carries SECONDS, not just minutes. Rounded down to the start of
@@ -294,54 +330,52 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
   // end→start that reads like the old session kept counting.
   test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
     setSystemTime(new Date(2026, 7, 19, 21, 5, 50));
-    const entry = await postOk("/api/campaigns/beispiel/session/start");
-    expect(entry.properties.started).toBe("2026-08-19T21:05:50");
+    const session = await postSession("/api/campaigns/beispiel/session/start");
+    expect(session.started).toBe("2026-08-19T21:05:50");
     // …and what the app actually clocks — startedMs vs. the same instant — is
     // zero, not 50 seconds.
-    expect(entry.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
+    expect(session.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
   });
 
   test("a session started on the REAL system clock has an elapsed under 2s", async () => {
     setSystemTime(); // the real clock, the surface this matters on
     const before = Date.now();
-    const entry = await postOk("/api/campaigns/beispiel/session/start");
-    expect(entry.startedMs).toBeDefined();
-    expect(entry.startedMs as number).toBeGreaterThanOrEqual(before - 1000);
-    expect(Date.now() - (entry.startedMs as number)).toBeLessThan(2000);
+    const session = await postSession("/api/campaigns/beispiel/session/start");
+    expect(session.startedMs).toBeDefined();
+    expect(session.startedMs as number).toBeGreaterThanOrEqual(before - 1000);
+    expect(Date.now() - (session.startedMs as number)).toBeLessThan(2000);
   });
 
   test("second start on the same day is idempotent (nothing reset)", async () => {
-    const first = await postOk("/api/campaigns/beispiel/session/start");
+    const first = await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 30));
-    const again = await postOk("/api/campaigns/beispiel/session/start");
-    expect(again.properties.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
+    const again = await postSession("/api/campaigns/beispiel/session/start");
+    expect(again.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
     // Idempotent all the way down: no write happened, so the token stands.
     expect(again.rev).toBe(first.rev);
   });
 
   test("after the end a start creates a SECOND session with an empty log", async () => {
-    const first = await postOk("/api/campaigns/beispiel/session/start");
-    await postOk("/api/campaigns/beispiel/log", { text: "Runde eins" });
-    await postOk("/api/campaigns/beispiel/session/end");
+    const first = await postSession("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/log", { text: "Runde eins" });
+    await postSession("/api/campaigns/beispiel/session/end");
     setSystemTime(new Date(2026, 7, 19, 23, 30));
-    const second = await postOk("/api/campaigns/beispiel/session/start");
+    const second = await postSession("/api/campaigns/beispiel/session/start");
     // A second session of the SAME DAY is simply another opaque id.
-    expect(second.path).not.toBe(first.path);
-    // Own id, own `started`, and the log skeleton is EMPTY — the runtime of
-    // the new session starts at 0 instead of inheriting the first evening's.
-    expect(second.properties).toEqual({
-      id: second.properties.id,
-      started: "2026-08-19T23:30:00",
-      scenes_played: [],
-    });
-    expect(second.body).toBe("\n## Log\n");
+    expect(second.id).not.toBe(first.id);
+    // Own id, own `started`, and the log is EMPTY — the runtime of the new
+    // session starts at 0 instead of inheriting the first evening's.
+    expect(second.started).toBe("2026-08-19T23:30:00");
+    expect(second.ended).toBeUndefined();
+    expect(second.log).toEqual([]);
+    expect(second.scenesPlayed).toEqual([]);
     expect(second.rev).toBe(1);
   });
 
   test("409 session_running when an OLDER session is still open", async () => {
     // A start on the NEXT day must not open a second session silently — the
     // app offers to end the old one.
-    const open = await postOk("/api/campaigns/beispiel/session/start");
+    const open = await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 20, 20, 0));
     const res = await postJson("/api/campaigns/beispiel/session/start");
     expect(res.status).toBe(409);
@@ -349,78 +383,95 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
       error: expect.any(String),
       code: "session_running",
       // "Older" is decided by the DATE PART OF `started` now — the id says
-      // nothing about a day.
-      path: open.path,
+      // nothing about a day — and the body names the session by ID, because
+      // there is no address to hand back.
+      id: open.id,
     });
     // …and nothing was created for the new day: the campaign still has only
     // the committed fixture's session and this one.
-    const tree = (await (await app.request("/api/campaigns/beispiel/tree")).json()) as {
-      sessions: unknown[];
-    };
-    expect(tree.sessions).toHaveLength(2);
+    const list = (await (
+      await app.request("/api/campaigns/beispiel/sessions")
+    ).json()) as SessionSummary[];
+    expect(list).toHaveLength(2);
   });
 });
 
 describe("POST /api/campaigns/:campaign/log", () => {
-  // NOTE: a log line lands in the ACTIVE session — the last
-  // started row without `ended`. Each case starts one; "no session at all"
-  // is covered under session/end below.
-  test("appends `- HH:MM (sceneId) text` under ## Log", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
+  // NOTE: a log row lands in the ACTIVE session — the last started row
+  // without `ended`. Each case starts one; "no session at all" is covered
+  // under session/end below.
+  test("appends one ROW: time, scene and text as columns", async () => {
+    await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 12));
-    const entry = await postOk("/api/campaigns/beispiel/log", {
+    const session = await postSession("/api/campaigns/beispiel/log", {
       text: "Spuren am Strand #thread",
       sceneId: "lighthouse-arrival",
     });
-    expect(entry.body).toBe("\n## Log\n\n- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n");
+    // The hashtag stays INSIDE the text: it is body vocabulary, so the note
+    // travels as the DM typed it.
+    expect(session.log).toEqual([
+      {
+        id: expect.any(String),
+        at: "21:12",
+        sceneId: "lighthouse-arrival",
+        text: "Spuren am Strand #thread",
+        reviewed: false,
+      },
+    ]);
   });
 
-  test("omits the parens without sceneId and appends after existing entries", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
+  test("no sceneId leaves the column out, and rows append behind each other", async () => {
+    await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 12));
-    await postOk("/api/campaigns/beispiel/log", {
+    await postSession("/api/campaigns/beispiel/log", {
       text: "Spuren am Strand #thread",
       sceneId: "lighthouse-arrival",
     });
     setSystemTime(new Date(2026, 7, 19, 21, 20));
-    const entry = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
-    // Append order is the rows' `pos` order — a log line is never rewritten.
-    expect(
-      entry.body.endsWith("- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n- 21:20 Pause\n"),
-    ).toBe(true);
+    const session = await postSession("/api/campaigns/beispiel/log", { text: "Pause" });
+    // Append order is the rows' `pos` order — a log row is never rewritten.
+    expect(session.log.map((l) => [l.at, l.sceneId, l.text])).toEqual([
+      ["21:12", "lighthouse-arrival", "Spuren am Strand #thread"],
+      ["21:20", undefined, "Pause"],
+    ]);
   });
 
-  test("multi-line text collapses to a single log line", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
+  test("multi-line text collapses to a single note", async () => {
+    await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 25));
-    const entry = await postOk("/api/campaigns/beispiel/log", { text: "  Zeile eins\n   Zeile zwei  " });
-    expect(entry.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
+    const session = await postSession("/api/campaigns/beispiel/log", {
+      text: "  Zeile eins\n   Zeile zwei  ",
+    });
+    expect(session.log.at(-1)?.text).toBe("Zeile eins Zeile zwei");
   });
 
-  test("the line goes into ## Log, above the session's other sections", async () => {
-    // `## Log` is rendered from `log_entries` and the rest of the session's
-    // prose follows it (store/render.ts renderSessionBody). The invariant: a
-    // note does not land in, or clobber, the DM's own sections. It is
-    // asserted on the fixture session, made the running one for the purpose.
-    // "beenden" is final, so no endpoint resumes a session and the row is
-    // opened directly here: the SUBJECT of the case is the log append, not
-    // the state machine.
+  test("a note lands in the running session and touches nothing else of it", async () => {
+    // The invariant: a note appends a row and leaves the session's own prose
+    // and its earlier rows alone. Asserted on the fixture session, made the
+    // running one for the purpose — "beenden" is final, so no endpoint
+    // resumes a session and the row is opened directly here: the SUBJECT of
+    // the case is the log append, not the state machine.
     db.update(sessionsTable)
       .set({ ended: null })
       .where(eq(sessionsTable.id, "2026-01-15"))
       .run();
     setSystemTime(new Date(2026, 0, 15, 23, 0));
-    const entry = await postOk("/api/campaigns/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
-    expect(entry.path).toBe("sessions/2026-01-15");
-    expect(entry.body).toContain(
-      "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
-    );
-    // Threads content untouched
-    expect(entry.body).toContain("- [ ] Wer bezahlt die Schmuggler?");
+    const session = await postSession("/api/campaigns/beispiel/log", {
+      text: "Nachtrag nach dem Cliffhanger",
+    });
+    expect(session.id).toBe("2026-01-15");
+    expect(session.log.map((l) => l.text)).toEqual([
+      "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+      "Improvisiert: Fischerin „Old Metta“ am Steg #npc",
+      "Cliffhanger: Lichter in der Bucht gesichtet #thread",
+      "Nachtrag nach dem Cliffhanger",
+    ]);
+    // The session's own pauses are untouched by a log append.
+    expect(session.pauses).toHaveLength(1);
   });
 
   test("400 on empty or missing text", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/session/start");
     expect((await postJson("/api/campaigns/beispiel/log", { text: "" })).status).toBe(400);
     expect((await postJson("/api/campaigns/beispiel/log", { text: "   \n " })).status).toBe(400);
     expect((await postJson("/api/campaigns/beispiel/log", {})).status).toBe(400);
@@ -428,99 +479,104 @@ describe("POST /api/campaigns/:campaign/log", () => {
   });
 });
 
-describe("scenes_played maintenance (POST log with sceneId)", () => {
-  test("first log with a sceneId adds it to scenes_played", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
-    const entry = await postOk("/api/campaigns/beispiel/log", {
+describe("scenesPlayed maintenance (POST log with sceneId)", () => {
+  test("first log with a sceneId adds it to scenesPlayed", async () => {
+    await postSession("/api/campaigns/beispiel/session/start");
+    const session = await postSession("/api/campaigns/beispiel/log", {
       text: "Ankunft",
       sceneId: "lighthouse-arrival",
     });
-    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
-    // The played scene is a row, and rendering it back did not disturb the log
-    expect(entry.body).toBe("\n## Log\n\n- 21:05 (lighthouse-arrival) Ankunft\n");
+    expect(session.scenesPlayed).toEqual(["lighthouse-arrival"]);
+    expect(session.log).toHaveLength(1);
   });
 
   test("second log with the same sceneId does not duplicate", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
-    await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
+    await postSession("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/log", {
+      text: "Ankunft",
+      sceneId: "lighthouse-arrival",
+    });
     setSystemTime(new Date(2026, 7, 19, 21, 10));
-    const entry = await postOk("/api/campaigns/beispiel/log", {
+    const session = await postSession("/api/campaigns/beispiel/log", {
       text: "Immer noch da",
       sceneId: "lighthouse-arrival",
     });
-    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
-    // The log, however, grows — both lines are there, in order.
-    expect(entry.body.endsWith("- 21:05 (lighthouse-arrival) Ankunft\n- 21:10 (lighthouse-arrival) Immer noch da\n")).toBe(
-      true,
-    );
+    expect(session.scenesPlayed).toEqual(["lighthouse-arrival"]);
+    // The log, however, grows — both rows are there, in order.
+    expect(session.log.map((l) => l.text)).toEqual(["Ankunft", "Immer noch da"]);
   });
 
   test("a different sceneId is appended in first-played order", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
-    await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
+    await postSession("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/log", {
+      text: "Ankunft",
+      sceneId: "lighthouse-arrival",
+    });
     setSystemTime(new Date(2026, 7, 19, 21, 10));
-    await postOk("/api/campaigns/beispiel/log", { text: "Erwischt", sceneId: "smuggler-captured" });
+    await postSession("/api/campaigns/beispiel/log", {
+      text: "Erwischt",
+      sceneId: "smuggler-captured",
+    });
     setSystemTime(new Date(2026, 7, 19, 21, 15));
     // Playing the FIRST scene again must not reorder the list — the order is
     // "first played", not "last played" (it is the review's reading order).
-    const entry = await postOk("/api/campaigns/beispiel/log", {
+    const session = await postSession("/api/campaigns/beispiel/log", {
       text: "Zurück am Turm",
       sceneId: "lighthouse-arrival",
     });
-    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
+    expect(session.scenesPlayed).toEqual(["lighthouse-arrival", "smuggler-captured"]);
   });
 
-  test("log without sceneId leaves scenes_played untouched", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
-    await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
+  test("log without sceneId leaves scenesPlayed untouched", async () => {
+    await postSession("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/log", {
+      text: "Ankunft",
+      sceneId: "lighthouse-arrival",
+    });
     setSystemTime(new Date(2026, 7, 19, 21, 15));
-    const entry = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
-    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
-    expect(entry.body.endsWith("- 21:15 Pause\n")).toBe(true);
+    const session = await postSession("/api/campaigns/beispiel/log", { text: "Pause" });
+    expect(session.scenesPlayed).toEqual(["lighthouse-arrival"]);
+    expect(session.log.at(-1)?.sceneId).toBeUndefined();
   });
-
-  // `scenes_played` is rendered from `session_scenes_played` and therefore
-  // always present (empty list included, asserted in the session/start case
-  // above).
 });
 
 describe("POST /api/campaigns/:campaign/session/end", () => {
   test("sets ended, log untouched", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 21, 25));
-    await postOk("/api/campaigns/beispiel/log", { text: "Zeile eins Zeile zwei" });
+    await postSession("/api/campaigns/beispiel/log", { text: "Zeile eins Zeile zwei" });
     setSystemTime(new Date(2026, 7, 19, 23, 45));
-    const entry = await postOk("/api/campaigns/beispiel/session/end");
-    expect(entry.properties.ended).toBe("2026-08-19T23:45:00");
-    expect(Object.keys(entry.properties)).toEqual(["id", "started", "ended", "scenes_played"]);
-    expect(entry.properties.started).toBe("2026-08-19T21:05:00");
-    // the log line appended earlier survives verbatim
-    expect(entry.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
+    const session = await postSession("/api/campaigns/beispiel/session/end");
+    expect(session.ended).toBe("2026-08-19T23:45:00");
+    expect(session.endedMs).toBe(new Date(2026, 7, 19, 23, 45).getTime());
+    expect(session.started).toBe("2026-08-19T21:05:00");
+    // the log row appended earlier survives verbatim
+    expect(session.log.map((l) => l.text)).toEqual(["Zeile eins Zeile zwei"]);
   });
 
   test("second end keeps the first ended (idempotent)", async () => {
-    await postOk("/api/campaigns/beispiel/session/start");
+    await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 23, 45));
-    const first = await postOk("/api/campaigns/beispiel/session/end");
+    const first = await postSession("/api/campaigns/beispiel/session/end");
     setSystemTime(new Date(2026, 7, 19, 23, 59));
-    const second = await postOk("/api/campaigns/beispiel/session/end");
-    expect(second.properties.ended).toBe("2026-08-19T23:45:00");
+    const second = await postSession("/api/campaigns/beispiel/session/end");
+    expect(second.ended).toBe("2026-08-19T23:45:00");
     // Idempotent means no write: the guard token stands still.
     expect(second.rev).toBe(first.rev);
   });
 
   test("end stays idempotent across days, log is refused", async () => {
-    const started = await postOk("/api/campaigns/beispiel/session/start");
+    const started = await postSession("/api/campaigns/beispiel/session/start");
     setSystemTime(new Date(2026, 7, 19, 23, 45));
-    await postOk("/api/campaigns/beispiel/session/end");
+    await postSession("/api/campaigns/beispiel/session/end");
     // With nothing running, `end` falls back to the LAST STARTED session —
     // ended or not — and keeps its `ended`. That is what makes "Session
     // beenden" safe to press twice, also after midnight.
     setSystemTime(new Date(2026, 7, 22, 22, 0));
-    const entry = await postOk("/api/campaigns/beispiel/session/end");
-    expect(entry.path).toBe(started.path);
-    expect(entry.properties.ended).toBe("2026-08-19T23:45:00");
-    // A log line, however, is STRICTLY the running session's business: a note
+    const session = await postSession("/api/campaigns/beispiel/session/end");
+    expect(session.id).toBe(started.id);
+    expect(session.ended).toBe("2026-08-19T23:45:00");
+    // A log row, however, is STRICTLY the running session's business: a note
     // typed after the end is refused, not appended to the closed log.
     const log = await postJson("/api/campaigns/beispiel/log", { text: "verloren" });
     expect(log.status).toBe(404);
@@ -536,29 +592,32 @@ describe("POST /api/campaigns/:campaign/session/end", () => {
 });
 
 describe("POST /api/campaigns/:campaign/inbox", () => {
-  test("appends `- text` to the existing inbox", async () => {
-    const before = await getEntry("inbox");
-    const after = await postOk("/api/campaigns/beispiel/inbox", { text: "Schmied beobachten #thread" });
-    // Append-only: the existing rendering is a PREFIX of the new one.
-    expect(after.body.startsWith(before.body.replace(/\n$/, ""))).toBe(true);
-    expect(after.body.endsWith("- Schmied beobachten #thread\n")).toBe(true);
-    // visible in a subsequent GET with the fresh token
-    const entry = await getEntry("inbox");
-    expect(entry.body).toBe(after.body);
-    expect(entry.rev).toBe(after.rev);
+  test("appends one idea as a row and answers the whole list", async () => {
+    const before = await getInbox();
+    const after = await postInbox("/api/campaigns/beispiel/inbox", {
+      text: "Schmied beobachten #thread",
+    });
+    // Append-only: the existing rows are a PREFIX of the new list, and the
+    // new idea is the last row.
+    expect(after.entries.slice(0, before.entries.length)).toEqual(before.entries);
+    expect(after.entries.at(-1)).toEqual({
+      id: expect.any(String),
+      text: "Schmied beobachten #thread",
+      done: false,
+    });
+    // The list's own guard token moved, and a subsequent GET agrees.
+    expect(after.rev).toBeGreaterThan(before.rev);
+    expect(await getInbox()).toEqual(after);
   });
 
-  test("creates the inbox with a # Inbox heading when there is none", async () => {
-    // A campaign with no inbox rows at all: the inbox is an EMPTY entry, not
-    // a missing one — GET answers 200 — and the first entry brings the
-    // heading the format opens the inbox with.
+  test("the first idea of an empty inbox is one row, with no heading in front", async () => {
+    // A campaign with no inbox rows at all: the inbox is an EMPTY list, not a
+    // missing one — GET answers 200 — and the first idea is one row. No
+    // heading row is written in front of it: a table has no skeleton.
     await withFreshCampaign(async () => {
-      expect(await entryStatus("inbox", FRESH)).toBe(200);
-      const res = await postJson(`/api/campaigns/${FRESH}/inbox`, { text: "Erste Idee" });
-      expect(res.status).toBe(200);
-      const entry = (await res.json()) as EntryResponse;
-      expect(entry.body).toBe("\n# Inbox\n\n- Erste Idee\n");
-      expect(entry.properties).toEqual({ id: "inbox" });
+      expect((await getInbox(FRESH)).entries).toEqual([]);
+      const list = await postInbox(`/api/campaigns/${FRESH}/inbox`, { text: "Erste Idee" });
+      expect(list.entries).toEqual([{ id: "0", text: "Erste Idee", done: false }]);
     });
   });
 
@@ -712,22 +771,6 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
     const after = await patchOk(SCENE, { rev: before.rev, body: "" });
     expect(after.body).toBe("");
     expect(after.properties).toEqual(before.properties);
-  });
-
-  test("the list addresses take no body — glossary, inbox and a session", async () => {
-    // A glossary term, an idea and a log line are ROWS, edited through
-    // PUT /glossary, POST /inbox and POST /log. A body for one of them
-    // could only be a misunderstanding, and silently ignoring it would look
-    // like a save (DECISIONS #4, ADR #23).
-    for (const rel of ["glossary", "inbox", "sessions/2026-01-15"]) {
-      const before = await getEntry(rel);
-      const res = await patchEntry(rel, { rev: before.rev, body: "\n- alles neu\n" });
-      expect(res.status).toBe(400);
-      const error = (await res.json()) as { code: string; path: string };
-      expect(error.code).toBe("body_not_editable");
-      expect(error.path).toBe(rel);
-      expect(await getEntry(rel)).toEqual(before);
-    }
   });
 
   test("409 on a stale token carries the current one and writes nothing", async () => {

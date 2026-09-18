@@ -70,7 +70,7 @@ import {
   ApiError,
   acceptJobParts,
   deleteGenerateJob,
-  fetchEntry,
+  fetchGlossary,
   fetchKnowledge,
   fetchTree,
   retryJobPart,
@@ -157,12 +157,12 @@ export function GenerateRoute() {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  // Only for the context hint: the server sends glossary along with the
-  // prompt when it exists (generator/README.md step 1). A missing entry is a
-  // 404 and means "no glossary" — not an error worth retrying.
+  // Only for the context hint: the server sends the glossary along with the
+  // prompt when there is one (generator/README.md step 1). An empty list means
+  // "no glossary" — not an error worth retrying.
   const glossary = useQuery({
-    queryKey: ["entry", campaign, "glossary"],
-    queryFn: () => fetchEntry(campaign, "glossary"),
+    queryKey: ["glossary", campaign],
+    queryFn: () => fetchGlossary(campaign),
     enabled: campaign !== "",
     retry: false,
   });
@@ -814,7 +814,11 @@ export function GenerateRoute() {
               </Link>
               <span aria-hidden>·</span>
               <Link to={`/campaigns/${campaign}/glossary`} className={CONTEXT_LINK}>
-                {t(glossary.isSuccess ? "generate.input.glossary" : "generate.input.noGlossary")}
+                {t(
+                  (glossary.data?.entries.length ?? 0) > 0
+                    ? "generate.input.glossary"
+                    : "generate.input.noGlossary",
+                )}
               </Link>
             </p>
 

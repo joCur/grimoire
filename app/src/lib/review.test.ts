@@ -1,29 +1,21 @@
-// Unit tests of the review helpers (issue #10). The hash test is the
-// important one: the short hash MUST byte-match the server
-// (server/src/campaign-write.ts `shortLineHash`, asserted in
-// server/test/review-api.test.ts) — the app compares its own WebCrypto
-// digest against the `reviewed` list the server wrote.
+// Unit tests of the review helpers: the hashtag vocabulary of log and inbox
+// rows, the grouping of player-character notes and the chapter's thread
+// checklist. Rows arrive from the server and are marked done by their id, so
+// there is no list-out-of-text parsing left to test.
 
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 
 import {
   deriveNpcSlug,
   extractHashtags,
   firstReviewTag,
-  harvestInboxEntries,
   groupByPcTag,
   hasPcTag,
-  inboxNoteEntries,
-  inboxPcEntries,
   pcGroupTag,
   isNpcSlug,
   isReviewTag,
   npcNameFromText,
   parseChecklist,
-  parseInboxEntries,
-  shortLineHash,
-  shortLineHashes,
   stripHashtags,
 } from "./review";
 
@@ -59,9 +51,9 @@ describe("firstReviewTag", () => {
     for (const tag of ["date", "idee", ""]) expect(isReviewTag(tag)).toBe(false);
   });
 
-  test("inbox rule: the entry's tag list keeps every tag in order", () => {
-    // use-review names an inbox entry by its first tag, unless a harvest tag
-    // appears later in the line (see harvestInboxEntries consumers).
+  test("inbox rule: the row's tag list keeps every tag in order", () => {
+    // use-review names an inbox row by its first tag, unless a harvest tag
+    // appears later in the text.
     expect(extractHashtags("Idee zum Hafen #idee #npc")).toEqual(["idee", "npc"]);
   });
 });
@@ -74,87 +66,12 @@ describe("stripHashtags", () => {
     expect(stripHashtags("#thread Lichter #loot in der Bucht")).toBe("Lichter in der Bucht");
   });
 
-  test("a line of nothing but hashtags keeps its text", () => {
+  test("a row of nothing but hashtags keeps its text", () => {
     expect(stripHashtags("#thread")).toBe("#thread");
   });
 });
 
-describe("parseInboxEntries", () => {
-  const body = `
-## Eingang
-
-- 2026-01-10 Idee: Der Dorfschmied repariert Schmugglerwerkzeug #thread
-- [x] 2026-01-09 Alte Idee #thread
-- [ ] 2026-01-11 Offene Idee #npc
-- Ohne Datum und ohne Tag
-  - eingerückt, kein Eintrag #thread
-Kein Listeneintrag #thread
-`;
-
-  test("parses date, tags, display text and the done marker", () => {
-    const entries = parseInboxEntries(body);
-    expect(entries).toHaveLength(4);
-    expect(entries[0]).toEqual({
-      index: 3,
-      raw: "- 2026-01-10 Idee: Der Dorfschmied repariert Schmugglerwerkzeug #thread",
-      text: "Idee: Der Dorfschmied repariert Schmugglerwerkzeug",
-      tags: ["thread"],
-      done: false,
-      date: "2026-01-10",
-    });
-    expect(entries[1]?.done).toBe(true);
-    expect(entries[1]?.text).toBe("Alte Idee");
-    expect(entries[2]?.done).toBe(false);
-    expect(entries[2]?.tags).toEqual(["npc"]);
-    expect(entries[3]?.tags).toEqual([]);
-  });
-
-  test("keeps the raw line byte-identical (inbox-done matches it exactly)", () => {
-    const raw = parseInboxEntries(body).map((e) => e.raw);
-    for (const line of raw) expect(body.split("\n")).toContain(line);
-  });
-
-  test("skips indented lines and non-list lines", () => {
-    const texts = parseInboxEntries(body).map((e) => e.text);
-    expect(texts).not.toContain("eingerückt, kein Eintrag");
-    expect(texts).not.toContain("Kein Listeneintrag");
-  });
-
-  test("degrades: no list lines yields an empty list", () => {
-    expect(parseInboxEntries("")).toEqual([]);
-    expect(parseInboxEntries("---\nid: inbox\n---\n\n## Eingang\n")).toEqual([]);
-  });
-});
-
-describe("harvestInboxEntries", () => {
-  const body = [
-    "- 2026-01-10 Offen #thread",
-    "- [x] 2026-01-09 Erledigt #thread",
-    "- Ohne Tag",
-  ].join("\n");
-
-  test("skips `- [x]` lines and untagged lines", () => {
-    expect(harvestInboxEntries(body).map((e) => e.text)).toEqual(["Offen"]);
-  });
-
-  test("keeps a done line that was acted on in this session", () => {
-    expect(harvestInboxEntries(body, new Set([1])).map((e) => e.text)).toEqual([
-      "Offen",
-      "Erledigt",
-    ]);
-  });
-});
-
-describe("player-character notes (issue #86)", () => {
-  const body = [
-    "- 2026-01-10 Geburtstags-Item für Kaela #pc #kaela",
-    "- 2026-01-10 Rückblende vorbereiten #PC #Brann",
-    "- 2026-01-10 Allen eine Karte geben #pc",
-    "- 2026-01-10 Kein PC-Eintrag #pcs",
-    "- 2026-01-10 Auch keiner #npc",
-    "- [x] 2026-01-09 Schon erledigt #pc #kaela",
-  ].join("\n");
-
+describe("player-character notes", () => {
   test("hasPcTag matches the exact tag only", () => {
     expect(hasPcTag(extractHashtags("Item #pc #kaela"))).toBe(true);
     // `#pc` inside a longer tag is a DIFFERENT tag — no match.
@@ -177,7 +94,7 @@ describe("player-character notes (issue #86)", () => {
   });
 
   test("pcGroupTag skips the convention tags — those are no character names", () => {
-    // The harvest tags (README) and `#date` describe the LINE, not a person.
+    // The harvest tags (README) and `#date` describe the ROW, not a person.
     expect(pcGroupTag(extractHashtags("Notiz #pc #thread"))).toBeUndefined();
     expect(pcGroupTag(extractHashtags("Notiz #npc #pc"))).toBeUndefined();
     expect(pcGroupTag(extractHashtags("Notiz #pc #date"))).toBeUndefined();
@@ -187,38 +104,29 @@ describe("player-character notes (issue #86)", () => {
     expect(pcGroupTag(extractHashtags("Notiz #pc #kaela #thread"))).toBe("kaela");
   });
 
-  test("inboxPcEntries returns the open #pc lines only", () => {
-    expect(inboxPcEntries(body).map((e) => e.text)).toEqual([
-      "Geburtstags-Item für Kaela",
-      "Rückblende vorbereiten",
-      "Allen eine Karte geben",
-    ]);
+  test("a #pc row wins over the harvest tag it also carries", () => {
+    // The two predicates the review model branches on, in that order.
+    const tags = extractHashtags("Rückblende für Kaela #pc #thread");
+    expect(hasPcTag(tags)).toBe(true);
+    expect(firstReviewTag("Rückblende für Kaela #pc #thread")).toBe("thread");
   });
 
-  test("a #pc line is in neither the harvest nor the notes section", () => {
-    // On the PARSED tags, not on the raw text: a `#pc` at the end of a line
-    // carries no trailing space and a substring check would miss it.
-    const entries = [...harvestInboxEntries(body), ...inboxNoteEntries(body)];
-    expect(entries.filter((entry) => hasPcTag(entry.tags)).map((entry) => entry.raw)).toEqual(
-      [],
-    );
-    expect(harvestInboxEntries(body).map((e) => e.text)).toEqual([
-      "Kein PC-Eintrag",
-      "Auch keiner",
-    ]);
-  });
-
-  test("keeps a #pc line ticked off in this sitting", () => {
-    expect(inboxPcEntries(body, new Set([5])).map((e) => e.text)).toContain("Schon erledigt");
-  });
-
-  test("groupByPcTag groups in first-appearance order, Allgemein last", () => {
-    const grouped = groupByPcTag(inboxPcEntries(body), (line) => pcGroupTag(line.tags));
+  test("groupByPcTag groups in first-appearance order, the general group last", () => {
+    const rows = [
+      { text: "Geburtstags-Item für Kaela", tags: ["pc", "kaela"] },
+      { text: "Rückblende vorbereiten", tags: ["pc", "brann"] },
+      { text: "Allen eine Karte geben", tags: ["pc"] },
+      { text: "Karte für Kaela", tags: ["pc", "kaela"] },
+    ];
+    const grouped = groupByPcTag(rows, (row) => pcGroupTag(row.tags));
     expect(grouped.map((g) => g.tag)).toEqual(["kaela", "brann", undefined]);
-    expect(grouped[0]?.entries.map((e) => e.text)).toEqual(["Geburtstags-Item für Kaela"]);
+    expect(grouped[0]?.entries.map((e) => e.text)).toEqual([
+      "Geburtstags-Item für Kaela",
+      "Karte für Kaela",
+    ]);
   });
 
-  test("groupByPcTag yields no Allgemein group when every entry has a tag", () => {
+  test("groupByPcTag yields no general group when every entry has a tag", () => {
     const grouped = groupByPcTag(
       [{ tag: "kaela" }, { tag: "kaela" }],
       (entry) => entry.tag,
@@ -228,38 +136,6 @@ describe("player-character notes (issue #86)", () => {
 
   test("an empty list yields no groups", () => {
     expect(groupByPcTag([], () => undefined)).toEqual([]);
-  });
-});
-
-describe("inboxNoteEntries", () => {
-  const body = [
-    "- 2026-01-10 Offen #thread",
-    "- [x] 2026-01-09 Notiz erledigt",
-    "- 2026-01-11 Ohne Tag",
-    "- Auch ohne Tag",
-  ].join("\n");
-
-  test("returns only the open UNTAGGED lines (issue #85)", () => {
-    expect(inboxNoteEntries(body).map((e) => e.text)).toEqual(["Ohne Tag", "Auch ohne Tag"]);
-  });
-
-  test("keeps the date of the inbox convention", () => {
-    expect(inboxNoteEntries(body)[0]?.date).toBe("2026-01-11");
-  });
-
-  test("keeps a note ticked off in this sitting", () => {
-    expect(inboxNoteEntries(body, new Set([1])).map((e) => e.text)).toEqual([
-      "Notiz erledigt",
-      "Ohne Tag",
-      "Auch ohne Tag",
-    ]);
-  });
-
-  test("tagged and untagged lines partition the open inbox", () => {
-    const tagged = harvestInboxEntries(body).map((e) => e.raw);
-    const notes = inboxNoteEntries(body).map((e) => e.raw);
-    expect(tagged.filter((raw) => notes.includes(raw))).toEqual([]);
-    expect(tagged.length + notes.length).toBe(3);
   });
 });
 
@@ -334,41 +210,4 @@ describe("npc slug derivation", () => {
       expect(isNpcSlug(bad)).toBe(false);
     }
   });
-});
-
-describe("shortLineHash", () => {
-  // Same line as server/test/review-api.test.ts — the known vector.
-  const LINE =
-    "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision";
-
-  test("matches the documented vector (8 hex chars of SHA-256)", async () => {
-    expect(await shortLineHash(LINE)).toBe("fb75a8cd");
-  });
-
-  test("byte-matches node's sha-256 prefix, umlauts included", async () => {
-    const lines = [
-      LINE,
-      '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin "Old Metta" am Steg #npc',
-      "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread",
-      "- Ölfässer, Straße, Käse #loot",
-    ];
-    for (const line of lines) {
-      const expected = createHash("sha256").update(line, "utf8").digest("hex").slice(0, 8);
-      expect(await shortLineHash(line)).toBe(expected);
-    }
-  });
-
-  test("shortLineHashes maps every line, duplicates collapsed", async () => {
-    const map = await shortLineHashes([LINE, LINE, "- x #thread"]);
-    expect(Object.keys(map)).toEqual([LINE, "- x #thread"]);
-    expect(map[LINE]).toBe(await shortLineHash(LINE));
-  });
-});
-
-// Lead follow-up: a leading em dash is log formatting, not content.
-import { test as leadTest, expect as leadExpect } from "bun:test";
-leadTest("stripHashtags drops a leading em dash", () => {
-  leadExpect(stripHashtags("— Cliffhanger: Lichter in der Bucht #thread")).toBe(
-    "Cliffhanger: Lichter in der Bucht",
-  );
 });

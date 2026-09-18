@@ -14,8 +14,6 @@
 // else. The types stay widened all the same, because a READER still has to
 // render whatever an older database hands it.
 
-import type { SessionPause } from "./session-state";
-
 /** A scene's lifecycle states. A CHECK constraint holds the column to them. */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
 export type SceneStatus = (typeof SCENE_STATUSES)[number];
@@ -123,45 +121,19 @@ export interface ChapterProperties {
 }
 
 /**
- * Session entries are app-managed (`sessions/<id>`, where `<id>` is an
- * opaque random string — everything displayable about a
- * session comes from `started`).
- * Timestamps are strings — YAML would otherwise parse bare ISO dates as
- * Date objects; the parser normalizes them back to strings.
+ * The kinds that are ENTRIES: a row with an address, properties and a text
+ * (server/src/store/paths.ts). A session, the inbox and the glossary are NOT
+ * among them — they are lists with their own endpoints (ADR #26).
  */
-export interface SessionProperties {
-  id: string;
-  started?: string;
-  ended?: string;
-  scenes_played?: string[];
-  /**
-   * Pause intervals of the session (app-managed):
-   * `[{ from: yyyy-mm-ddTHH:MM:SS, to?: … }]` in the same zone-less
-   * local-time convention as started/ended. An entry without `to` is the
-   * running pause. Read it through `sessionPauses` (session-state.ts), which
-   * carries the degrade rules.
-   */
-  pauses?: SessionPause[];
-  /**
-   * Short hashes of log lines seen in the review step (app-managed). One
-   * entry is the first 8 hex chars of SHA-256 over the RAW log line — this
-   * keeps `## Log` strictly append-only and survives reordering
-   * (README, "Entität: Session").
-   */
-  reviewed?: string[];
-  [key: string]: unknown;
-}
+export type EntryKind = "campaign" | "chapter" | "scene" | "npc" | "location";
 
-export type EntityKind =
-  | "scene"
-  | "npc"
-  | "location"
-  | "chapter"
-  | "campaign"
-  | "session"
-  | "inbox"
-  | "glossary"
-  | "unknown";
+/**
+ * Everything the SEARCH INDEX holds: the entry kinds plus the LIST kinds. A
+ * hit can be a glossary term, and such a hit names a row of a list — it has
+ * no entry address to offer (see SearchResult), so the two sets stay apart.
+ * `unknown` is what an address the schema does not describe reads as.
+ */
+export type EntityKind = EntryKind | "session" | "inbox" | "glossary" | "unknown";
 
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
@@ -257,12 +229,110 @@ export interface LocationSummary {
   chapter?: string;
 }
 
+/**
+ * One session in a LIST — `GET /api/campaigns/:campaign/sessions` and the
+ * campaign tree. It is the identifying head of `SessionResponse`: what a list
+ * shows of a session is its id and when it ran.
+ *
+ * No address and no `scenes_played`: a session is not an entry (ADR #26), and
+ * its log and its played scenes come from the session itself.
+ */
 export interface SessionSummary {
-  path: string;
+  /** Opaque id — `GET /api/campaigns/:campaign/sessions/<id>` reads it. */
   id: string;
-  started?: string;
+  /** Zone-less local wall clock `yyyy-mm-ddTHH:MM:SS`; empty when never set. */
+  started: string;
+  /** The server's epoch reading of `started`; absent when it says nothing. */
+  startedMs?: number;
+  /** Absent while the session runs. */
   ended?: string;
-  scenes_played: string[];
+  /** The server's epoch reading of `ended`. */
+  endedMs?: number;
+}
+
+/**
+ * One pause interval of a session. The strings are the zone-less wall clock
+ * the columns hold; the `…Ms` values are the SERVER's reading of them — only
+ * the server knows which wall clock those digits belong to, so a client in
+ * another timezone still computes the right runtime. A missing `to` is the
+ * RUNNING pause: the clock stands.
+ */
+export interface SessionPauseInterval {
+  from: string;
+  fromMs?: number;
+  to?: string;
+  toMs?: number;
+}
+
+/**
+ * One line of a session's log. APPEND-ONLY, and structured: `text` is the
+ * note as the DM typed it, hashtags included — they are body vocabulary
+ * (README) and belong to the text, not beside it.
+ */
+export interface SessionLogEntry {
+  /** The row's stable id — what `POST /review/seen` names the line by. */
+  id: string;
+  /** `HH:mm` local, the time the note was taken. */
+  at: string;
+  /** The scene the note was taken in; absent when it names none. */
+  sceneId?: string;
+  text: string;
+  reviewed: boolean;
+}
+
+/**
+ * ONE SESSION, as every session endpoint answers it: `GET …/session`,
+ * `GET …/sessions/:id`, the four session verbs, `POST …/log`,
+ * `POST …/review/seen` and `PATCH …/sessions/:id`.
+ *
+ * A session is a table, not an entry (ADR #26): no address, no `properties`
+ * map, no markdown text. Its log is a list of rows and its pauses are
+ * intervals, each with the server's epoch reading beside the string.
+ */
+export interface SessionResponse extends SessionSummary {
+  pauses: SessionPauseInterval[];
+  log: SessionLogEntry[];
+  /** Scene ids in the order they were played; a revisited scene stands twice. */
+  scenesPlayed: string[];
+  /** Guard token of the session row — `PATCH …/sessions/:id` sends it back. */
+  rev: number;
+}
+
+/** One idea in the inbox. */
+export interface InboxEntry {
+  /** The row's stable id — what `POST /review/inbox-done` names it by. */
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/**
+ * THE INBOX — `GET …/inbox`, `POST …/inbox` and
+ * `POST …/review/inbox-done`: a list of rows plus the LIST's own guard token
+ * (`campaigns.inbox_rev`), not an entry with a text.
+ */
+export interface InboxResponse {
+  entries: InboxEntry[];
+  rev: number;
+}
+
+/**
+ * The body of `PATCH /api/campaigns/:campaign/sessions/:id` — the timestamps
+ * of a session, the only fields of it the DM edits by hand (a mistyped start,
+ * a forgotten pause).
+ *
+ * `rev` is the guard token the session was read with; a mismatch is the same
+ * 409 `rev_conflict` every other write answers. At least one of the three
+ * fields has to be there, otherwise 400 `nothing_to_write`. The log and
+ * `scenesPlayed` are not among them: they grow through their own endpoints.
+ */
+export interface PatchSessionRequest {
+  rev: number;
+  started?: string;
+  /** `null` clears it — the session runs again. */
+  ended?: string | null;
+  /** Replaces the whole list; an entry without `to` is the running pause. */
+  pauses?: Array<{ from: string; to?: string | null }>;
 }
 
 /** GET /api/:campaign/tree */
@@ -275,42 +345,24 @@ export interface CampaignTree {
 }
 
 /**
- * GET /api/:campaign/entry?path=… (and GET /api/:campaign/session) — ONE
- * entry: its address, its kind, its properties, its markdown body and the
- * guard token a PATCH sends back.
+ * GET /api/campaigns/:campaign/entries/<address> — ONE entry: its address,
+ * its kind, its properties, its markdown body and the guard token a PATCH
+ * sends back.
+ *
+ * Only the five ENTRY kinds are answered this way. A session, the inbox and
+ * the glossary have no entry address at all (ADR #26) — they answer
+ * `SessionResponse`, `InboxResponse` and `GlossaryResponse` on their own
+ * endpoints, and the epoch readings a session needs travel there.
  */
 export interface EntryResponse {
   /** The entry's address within the campaign (server/src/store/paths.ts). */
   path: string;
-  kind: EntityKind;
+  kind: EntryKind;
   properties: Record<string, unknown>;
   /** The entry's markdown text. */
   body: string;
   /** Optimistic-concurrency token: PATCH sends it back, server 409s on mismatch. */
   rev: number;
-  /**
-   * SESSIONS ONLY: `started` as epoch milliseconds, read in
-   * the SERVER's timezone. The properties value stays the zone-less string
-   * the format uses — this is the server's interpretation of it, so a client
-   * in a different timezone still computes the right session runtime.
-   * Undefined when there is no usable `started`.
-   */
-  startedMs?: number;
-  /** SESSIONS ONLY: `ended` as epoch milliseconds (see startedMs). */
-  endedMs?: number;
-  /**
-   * SESSIONS ONLY: the total length of the session's
-   * CLOSED `pauses` intervals in milliseconds, computed by the server for the
-   * same reason as startedMs — the strings are zone-less. Absent when the
-   * session has no usable closed pause.
-   */
-  pausedMs?: number;
-  /**
-   * SESSIONS ONLY: start of the OPEN pause interval as epoch
-   * milliseconds — present exactly while the session is paused, so the client
-   * needs no parsing of its own to freeze the clock.
-   */
-  pausedSinceMs?: number;
 }
 
 /**
@@ -345,15 +397,19 @@ export interface PatchEntryRequest {
 
 /**
  * One row of GET /api/:campaign/search (the response wraps them as
- * `{ results: SearchResult[] }`, see SearchResponse). Only scenes, npcs,
- * locations, chapters and the campaign entry are indexed — see
- * server/src/search-index.ts.
+ * `{ results: SearchResult[] }`, see SearchResponse). Indexed are the five
+ * entry kinds and the glossary terms — see server/src/store/fts.ts.
  */
 export interface SearchResult {
   kind: EntityKind;
   id: string;
   title: string;
-  path: string;
+  /**
+   * The entry's address — present ONLY for the entry kinds. A glossary,
+   * inbox or session hit names a row of a LIST (ADR #26), and a list row has
+   * no address: such a hit is opened through its list, by `kind` and `id`.
+   */
+  path?: string;
   /** Fuse.js score: 0 is a perfect match, values grow toward 1. */
   score: number;
   /** ~120 chars of body context around the first literal query hit. */

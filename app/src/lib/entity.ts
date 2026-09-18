@@ -15,9 +15,8 @@ import { propString } from "@/lib/properties";
  *
  *   scene              -> the scene article (type overline, trigger, chips)
  *   npc / location     -> their own entity headers
- *   everything else    -> title + body (chapter, campaign, session, inbox,
- *                         glossary, unknown) — quiet and generic, never the
- *                         scene overline.
+ *   everything else    -> title + body (chapter, campaign, unknown) — quiet
+ *                         and generic, never the scene overline.
  */
 export type EntityHeaderKind = "scene" | "npc" | "location" | "titled";
 
@@ -40,7 +39,7 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
  * transliteration are not two copies. Re-exported here because this is where
  * the app's callers look for it: the properties form
  * (does an unknown value become an entry or stay free text?), its `npcs` list
- * (is this an id at all?) and the review's #npc lines.
+ * (is this an id at all?) and the review's #npc rows.
  */
 export { isEntityId } from "@grimoire/shared/slug";
 

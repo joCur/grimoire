@@ -9,7 +9,7 @@
 // Sections are the three campaign-wide entry points, not entity kinds: a scene
 // entry belongs under Chapters because that is where the DM finds it, an NPC
 // entry under NPCs no matter which chapter mentions it. Views that are not
-// part of any section (generator, review, the campaign entry, sessions, inbox,
+// part of any section (generator, review, the campaign entry, a session, the
 // glossary) are marked nowhere — an arbitrary highlight would be a lie.
 
 import { kindFromAddress } from "@grimoire/shared/kind";
@@ -57,7 +57,7 @@ export function navSection(view: NavView): NavSection | undefined {
     case "location":
       return "locations";
     default:
-      // campaign entry, session, inbox, glossary, unknown — no section.
+      // The campaign entry and anything unknown — no section.
       return undefined;
   }
 }

@@ -40,7 +40,7 @@ import {
   outlineJsonSchema,
 } from "../src/outline-schema";
 import {
-  ENTRY_KINDS,
+  GENERATED_ENTRY_KINDS,
   entryJsonSchema,
   entryReplySchema,
   entrySchemaName,
@@ -83,7 +83,7 @@ function at(schema: Record<string, unknown>, path: string[]): Record<string, unk
 
 /** The `properties` half of an entry schema, field by field. */
 function entryFields(
-  kind: (typeof ENTRY_KINDS)[number],
+  kind: (typeof GENERATED_ENTRY_KINDS)[number],
   mode: EntryMode,
 ): Record<string, Record<string, unknown>> {
   return at(entryJsonSchema(kind, mode), ["properties", "properties", "properties"]) as Record<
@@ -107,7 +107,7 @@ const MODES: EntryMode[] = ["create", "augment"];
 
 describe("the entry schemas", () => {
   test("the properties ARE the kind's field list, in order, plus the id", () => {
-    for (const kind of ENTRY_KINDS) {
+    for (const kind of GENERATED_ENTRY_KINDS) {
       for (const mode of MODES) {
         expect(Object.keys(entryFields(kind, mode)), `${kind}/${mode}`).toEqual([
           "id",
@@ -118,7 +118,7 @@ describe("the entry schemas", () => {
   });
 
   test("every field carries its control's type, its values, and its nullability", () => {
-    for (const kind of ENTRY_KINDS) {
+    for (const kind of GENERATED_ENTRY_KINDS) {
       for (const mode of MODES) {
         const fields = entryFields(kind, mode);
         for (const def of PROPERTY_FIELDS[kind as PropertiesKind]) {
@@ -166,7 +166,7 @@ describe("the entry schemas", () => {
     expect(entrySchemaName("location", "create")).toBe("location");
     // The augment run prefixes the same kind: the correction turn names the
     // schema, so the name the model was handed says kind AND run.
-    for (const kind of ENTRY_KINDS) {
+    for (const kind of GENERATED_ENTRY_KINDS) {
       expect(entrySchemaName(kind, "augment")).toBe(`augmented_${kind}`);
     }
   });
@@ -213,7 +213,7 @@ describe("the outline schema", () => {
 
 describe("every schema", () => {
   const all = [
-    ...ENTRY_KINDS.flatMap((kind) =>
+    ...GENERATED_ENTRY_KINDS.flatMap((kind) =>
       MODES.map((mode) => [`${kind}/${mode}`, entryJsonSchema(kind, mode)] as const),
     ),
     ["outline", outlineJsonSchema()] as const,

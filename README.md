@@ -1,12 +1,15 @@
 # Grimoire — Datenmodell & Konventionen
 
 Grimoire speichert eine Kampagne in einer SQLite-Datenbank
-(`GRIMOIRE_DATA/grimoire.db`). Alles darin ist ein **Eintrag**: eine
-Kampagne, ein Kapitel, eine Szene, ein NPC, ein Ort, eine Session. Jeder
-Eintrag besteht aus **Eigenschaften** — den Feldern, die die App im
-Eigenschaften-Dialog zeigt (Titel, Status, Ort, …) — und einem **Text** in
-Markdown. Dazu kommen drei Listen ohne Text: die **Ideen**, das **Glossar**
-und das **Kampagnenwissen**.
+(`GRIMOIRE_DATA/grimoire.db`). Ein **Eintrag** ist eine Kampagne, ein
+Kapitel, eine Szene, ein NPC oder ein Ort. Jeder Eintrag besteht aus
+**Eigenschaften** — den Feldern, die die App im Eigenschaften-Dialog zeigt
+(Titel, Status, Ort, …) — und einem **Text** in Markdown.
+
+Dazu kommen vier **Listen**, die keine Einträge sind und keinen Text haben
+(ADR #26): die **Sessions**, die **Ideen**, das **Glossar** und das
+**Kampagnenwissen**. Sie sind Tabellen, werden als Listen gepflegt und haben
+keine Adresse — jede antwortet auf ihren eigenen Endpoints.
 
 Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
 README beschreibt, was in den Feldern stehen darf und was der Text
@@ -30,9 +33,6 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 | Szene | `<kapitel-id>/<orts-id>/<szenen-id>` — ohne Ort: `<kapitel-id>/<szenen-id>` |
 | NPC | `npcs/<id>` |
 | Ort | `locations/<id>` |
-| Session | `sessions/<id>` |
-| Ideen | `inbox` |
-| Glossar | `glossary` |
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
@@ -45,11 +45,21 @@ Szenen nach Ort; Szenen ohne Ort stehen unter „Ohne Ort". Ändert der DM den
 Ort einer Szene, ändert sich ihre Adresse — die alte bleibt auflösbar, der
 Server antwortet mit der aktuellen und die App ersetzt die URL.
 
-Kampagnenwissen (`/campaigns/<kampagne>/knowledge`) und Glossar
-(`/campaigns/<kampagne>/glossary`) sind Listen, die der Generator als Kontext
-bekommt; sie werden auf ihren eigenen Seiten gepflegt und über
-`GET/PUT /api/campaigns/<kampagne>/knowledge` bzw. `/glossary` gelesen und
-geschrieben.
+**Sessions, Ideen und Glossar haben keine Adresse** — sie sind Tabellen, die
+als Listen gepflegt werden, und antworten auf ihren eigenen Endpoints
+(ADR #26):
+
+| Liste | Lesen | Schreiben |
+| ----- | ----- | --------- |
+| Session | `GET …/session[?includeEnded=1]` (die laufende, sonst `null`), `GET …/sessions`, `GET …/sessions/<id>` | `POST …/session/start`, `/end`, `/pause`, `/continue`, `/discard`, `POST …/log`, `PATCH …/sessions/<id>` |
+| Ideen | `GET …/inbox` | `POST …/inbox`, `POST …/review/inbox-done` |
+| Glossar | `GET …/glossary` | `PUT …/glossary` |
+| Kampagnenwissen | `GET …/knowledge` | `PUT …/knowledge` |
+
+Glossar und Kampagnenwissen bekommt der Generator als Kontext; beide werden
+auf ihren eigenen Seiten gepflegt. Die Segmente `sessions`, `inbox` und
+`glossary` bleiben trotzdem **reserviert**, damit kein Kapitel eine dieser ids
+belegt und mit dem Pfad seiner Liste kollidiert.
 
 Alles Kampagnenabhängige hängt unter der Kampagne — in der API
 `/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` (ADR #22).
@@ -146,26 +156,37 @@ Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
 
 ### Session
 
-Sessions verwaltet die App; der DM schreibt nur ins Log.
+Eine Session ist **kein Eintrag**, sondern eine Zeile mit ihren Listen
+(ADR #26); die App verwaltet sie, der DM schreibt nur ins Log. So antwortet
+sie:
 
 | Feld | Bedeutung |
 | ---- | --------- |
 | `id` | opake Zufalls-id (UUID); Reihenfolge und Datum kommen aus `started` |
 | `started` | Start, sekundengenau, zonenlose Lokalzeit (`yyyy-mm-ddTHH:MM:SS`) |
-| `ended` | gesetzt bei „Session beenden" |
-| `pauses` | Liste `{from, to}`; ein Eintrag ohne `to` ist die laufende Pause — die Uhr steht |
-| `scenes_played` | Szenen-ids, automatisch gepflegt |
-| `reviewed` | Kurzhashes (erste 8 Hex-Zeichen von SHA-256) der gesichteten Log-Zeilen |
+| `startedMs` | dieselbe Zeit als Epochen-Wert, gelesen in der Zeitzone des Servers |
+| `ended` / `endedMs` | gesetzt bei „Session beenden" |
+| `pauses` | Liste `{ from, fromMs, to?, toMs? }`; ein Eintrag ohne `to` ist die laufende Pause — die Uhr steht |
+| `log` | Liste `{ id, at, sceneId?, text, reviewed }`, append-only |
+| `scenesPlayed` | Szenen-ids in Spielreihenfolge, automatisch gepflegt |
+| `rev` | Wächter-Token für `PATCH …/sessions/<id>` |
 
-- `## Log` ist append-only: `- HH:MM (scene-id) Text #hashtags`. Zeitstempel
-  und Szenen-Kontext setzt die App. Pause und „Weiter" schreiben die Zeilen
-  `— Pause` und `— Weiter` — das Log bleibt die lesbare Chronik des Abends.
-- `## Threads`: Checkliste offener Fäden, in der Nachbereitung befüllt.
-- Timer = (`ended` ?? jetzt) − `started` − Summe der Pausen. Den Epochen-Wert
-  der zonenlosen Zeitstempel liefert der Server; der Client hält keinen
-  laufenden Zustand.
-- `reviewed` hasht die **rohe** Log-Zeile, damit `## Log` strikt append-only
-  bleibt.
+- Eine Log-Zeile sind **Spalten**, keine Markdown-Zeile: Zeitstempel und
+  Szenen-Kontext setzt die App, die Hashtags stehen im Text. `id` ist die
+  stabile Kennung der Zeile — der Kurzhash (erste 8 Hex-Zeichen von SHA-256)
+  ihrer kanonischen Zeile `- HH:MM (szenen-id) Text` —, und `POST
+  …/review/seen` benennt eine Zeile damit.
+- Pause und „Weiter" schreiben **keine** Log-Zeile: eine Pause ist ein
+  Eintrag in `pauses` und sonst nichts — die Markierung im Log war dieselbe
+  Pause ein zweites Mal.
+- `PATCH …/sessions/<id>` ändert nur `started`, `ended` und `pauses` — die
+  von Hand korrigierbaren Zeiten. Log und `scenesPlayed` wachsen über ihre
+  eigenen Endpoints.
+- Der freie Text der Session (`## Threads`, in der Nachbereitung befüllt)
+  bleibt am Kapitel bzw. an der Zeile und ist kein Teil dieser Antwort.
+- Timer = (`ended` ?? jetzt) − `started` − Summe der geschlossenen Pausen.
+  Den Epochen-Wert der zonenlosen Zeitstempel liefert der Server; der Client
+  rechnet nur noch mit Zahlen und hält keinen laufenden Zustand.
 
 ## Referenzen zeigen auf vorhandene Einträge
 
@@ -282,8 +303,10 @@ kein Kampagneninhalt.
 
 ## Ideen
 
-Die Ideen-Liste (`inbox`) ist append-only und sessionunabhängig, mit denselben
-Hashtags wie das Log. Die Nachbereitung zeigt sie zusammen mit dem Log.
+Die Ideen-Liste ist append-only und sessionunabhängig, mit denselben Hashtags
+wie das Log. Eine Idee ist eine Zeile `{ id, text, done }`; `GET …/inbox`
+antwortet mit der Liste und ihrem eigenen Wächter-Token `rev`. Die
+Nachbereitung zeigt sie zusammen mit dem Log.
 
 ## Nachbereitung
 
@@ -293,8 +316,9 @@ Hashtags wie das Log. Die Nachbereitung zeigt sie zusammen mit dem Log.
 - „NPC-Stub anlegen" erzeugt den NPC `npcs/<id>` mit `status: alive` (wer am
   Tisch auftaucht, lebt) und dem Log-Text unter `## Notizen`. Existiert die
   id, meldet die App den Konflikt statt zu überschreiben.
-- Erledigte Ideen werden zu `- [x] …` — die eine Ausnahme vom Append-only der
-  Ideen, damit sie nicht in jeder künftigen Nachbereitung wieder auftauchen.
+- „Idee abhaken" setzt `done` auf der genannten Zeile (`POST
+  …/review/inbox-done { id }`) — die eine Ausnahme vom Append-only der Ideen,
+  damit sie nicht in jeder künftigen Nachbereitung wieder auftauchen.
 
 ## Schreibregeln
 
@@ -341,7 +365,10 @@ in `shared/schema/`; Details in `generator/README.md`.
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
 strukturierten Felder unter `properties` und der Text als ein String unter
-`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert.
+`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert,
+als Zeilen mit ihren Spalten: eine Log-Zeile ist
+`{ at, sceneId?, text, reviewed? }`, eine Idee `{ text, done? }`. Eine
+Markdown-Zeile steht in keiner von beiden.
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 

@@ -5,7 +5,9 @@
 // operator's log block, and `assertMigrationReady` aborts the start with it.
 //
 // The gate runs on the raw client while the references are still open, so the
-// database here is built BY HAND in that open shape. A database that has been
+// database here is built BY HAND in that open shape: the tables and columns
+// the gate READS, and nothing else — a column the check never looks at would
+// only be a second, drifting copy of the schema. A database that has been
 // through the boot path has nothing left to check, and that half is asserted
 // against `openDb`.
 //
@@ -24,7 +26,7 @@ import {
   relationHeadingReport,
 } from "../src/db/reference-preflight";
 
-/** The schema as it stands with the references still open. */
+/** The tables the gate reads, with the references still open. */
 async function openReferencesDb(): Promise<SqliteClient> {
   const client = await openSqlite(":memory:");
   client.exec("PRAGMA foreign_keys = ON");
@@ -32,15 +34,15 @@ async function openReferencesDb(): Promise<SqliteClient> {
     create table campaigns (id text primary key, name text not null default '');
     create table chapters (
       campaign_id text not null, id text not null, title text not null default '',
-      status text, body text not null default '', extra text not null default '{}',
-      pos integer not null default 0, rev integer not null default 1,
+      status text,
+      body text not null default '', pos integer not null default 0, rev integer not null default 1,
       primary key (campaign_id, id),
       foreign key (campaign_id) references campaigns(id) on update cascade on delete cascade
     );
     create table locations (
       campaign_id text not null, id text not null, name text not null default '',
       chapter_id text, roll20_page text, body text not null default '',
-      extra text not null default '{}', rev integer not null default 1,
+      rev integer not null default 1,
       primary key (campaign_id, id),
       foreign key (campaign_id) references campaigns(id) on update cascade on delete cascade
     );
@@ -48,8 +50,8 @@ async function openReferencesDb(): Promise<SqliteClient> {
       campaign_id text not null, id text not null, name text not null default '',
       role text, chapter_id text, status text not null default 'unknown', statblock text,
       quickstats text not null default '{}', voice text, appearance text,
-      body text not null default '', extra text not null default '{}',
-      rev integer not null default 1,
+     
+      body text not null default '', rev integer not null default 1,
       primary key (campaign_id, id),
       foreign key (campaign_id) references campaigns(id) on update cascade on delete cascade
     );
@@ -64,8 +66,8 @@ async function openReferencesDb(): Promise<SqliteClient> {
       campaign_id text not null, id text not null, chapter_id text,
       title text not null default '', type text not null default 'planned', trigger text,
       location text, status text not null default 'draft', handouts text not null default '[]',
-      body text not null default '', extra text not null default '{}',
-      pos integer not null default 0, rev integer not null default 1,
+     
+      body text not null default '', pos integer not null default 0, rev integer not null default 1,
       primary key (campaign_id, id),
       foreign key (campaign_id) references campaigns(id) on update cascade on delete cascade
     );
@@ -85,15 +87,14 @@ async function openReferencesDb(): Promise<SqliteClient> {
     );
     create table sessions (
       campaign_id text not null, id text not null, started text, ended text,
-      body text not null default '', extra text not null default '{}',
-      rev integer not null default 1, created_at integer not null default 0,
+     
+      body text not null default '', rev integer not null default 1, created_at integer not null default 0,
       primary key (campaign_id, id),
       foreign key (campaign_id) references campaigns(id) on update cascade on delete cascade
     );
     create table log_entries (
       campaign_id text not null, session_id text not null, pos integer not null,
-      raw text not null, at text, scene_id text, text text,
-      hash text not null default '', reviewed integer not null default 0,
+      at text, scene_id text, text text, reviewed integer not null default 0,
       primary key (campaign_id, session_id, pos),
       foreign key (campaign_id, session_id) references sessions(campaign_id, id)
         on update cascade on delete cascade
@@ -123,8 +124,8 @@ function seedResolvable(client: SqliteClient): void {
     insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'ankunft', 'jorna', 0);
     insert into scene_tags (campaign_id, scene_id, tag, pos) values ('beispiel', 'ankunft', 'social', 0);
     insert into sessions (campaign_id, id, started) values ('beispiel', 's1', '2026-01-15T19:30');
-    insert into log_entries (campaign_id, session_id, pos, raw, at, scene_id, text, hash)
-      values ('beispiel', 's1', 0, '- 19:52 (ankunft) Spuren', '19:52', 'ankunft', 'Spuren', 'abc');
+    insert into log_entries (campaign_id, session_id, pos, at, scene_id, text)
+      values ('beispiel', 's1', 0, '19:52', 'ankunft', 'Spuren');
     insert into session_scenes_played (campaign_id, session_id, scene_id, pos)
       values ('beispiel', 's1', 'ankunft', 0);
   `);
@@ -279,8 +280,8 @@ describe("the pre-flight in front of the constraints", () => {
           values ('beispiel', 'holm', 'Holm', '99-weg');
         insert into locations (campaign_id, id, name, chapter_id)
           values ('beispiel', 'mole', 'Mole', '99-weg');
-        insert into log_entries (campaign_id, session_id, pos, raw, scene_id)
-          values ('beispiel', 's1', 1, '- 20:00 (weg) x', 'weg');
+        insert into log_entries (campaign_id, session_id, pos, scene_id)
+          values ('beispiel', 's1', 1, 'weg');
         insert into session_scenes_played (campaign_id, session_id, scene_id, pos)
           values ('beispiel', 's1', 'weg', 1);
       `);

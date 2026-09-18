@@ -1,75 +1,33 @@
-// Session helpers for the live mode: the log-line parser, the elapsed
-// timer and the epoch readings of `started`/`ended`. Pure functions —
-// unit-tested, no react or query imports here.
+// Session helpers for the live mode and the session reading page: the
+// elapsed timer, the pause arithmetic and the session's readable date. Pure
+// functions — unit-tested, no react or query imports here.
 //
-// There is NO client-side date guessing here: WHICH session is the active
+// There is NO parsing of session text any more: the session endpoints answer
+// ROWS (`log`, `pauses`, `scenesPlayed`), so the app reads what it needs
+// instead of re-deriving it from a rendered log.
+//
+// There is no client-side date guessing either: WHICH session is the active
 // one is always the server's answer (GET /campaigns/:campaign/session, with
 // ?includeEnded=1 for the review — see lib/use-session.ts). A session past
 // midnight is YESTERDAY's session, and a browser in another timezone than
 // the server would get both the session and the runtime wrong.
 
-import { isPaused, openPause, sessionPauses } from "@grimoire/shared/session-state";
+import type { SessionPauseInterval, SessionResponse } from "@grimoire/shared/types";
 
 import { formatDate, type Translate } from "@/i18n/format";
 
-export interface LogEntry {
-  /** `HH:MM` — undefined for degraded raw lines. */
-  time?: string;
-  /** Scene id from the `(sceneId)` group; pauses and free notes have none. */
-  sceneId?: string;
-  text: string;
-  /**
-   * The line as it stands in the log (trimmed — the write API never emits
-   * indented log lines). The review hashes THIS string for the session's
-   * `reviewed` list, so it must travel alongside the parsed form.
-   */
-  raw: string;
-}
-
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** `- HH:MM (sceneId) text` — the sceneId group is optional (pause lines …). */
-const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
-
 /**
- * The lines of the `## Log` section as entries, in log order. Degrade
- * rules: a line that does not match the log-line shape becomes a raw text
- * entry (no time, no sceneId), a missing Log section yields an empty list —
- * never an error.
- */
-export function parseLogEntries(body: string): LogEntry[] {
-  const lines = body.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^##\s*Log\s*$/i.test(line.trim()));
-  if (start === -1) return [];
-  const entries: LogEntry[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = (lines[i] ?? "").trim();
-    if (line === "") continue;
-    if (/^#{1,6}(\s|$)/.test(line)) break; // next section ends the log
-    const m = LOG_LINE.exec(line);
-    if (m !== null) {
-      const entry: LogEntry = { time: m[1] ?? "", text: m[3] ?? "", raw: line };
-      if (m[2] !== undefined) entry.sceneId = m[2];
-      entries.push(entry);
-    } else {
-      entries.push({ text: line, raw: line });
-    }
-  }
-  return entries;
-}
-
-/**
- * Parse `yyyy-mm-ddTHH:MM(:ss)?` as the BROWSER's local time — the fallback
- * reading of `started`/`ended` for a server that does not ship the epoch
- * values (see sessionStartMs). Undefined when the value does not parse.
+ * Parse `yyyy-mm-ddTHH:MM(:ss)?` as the BROWSER's local time. The session
+ * endpoints carry the server's epoch readings, so this is not used for them
+ * any more — what is left is the campaign list's `lastSessionStarted`, the one
+ * timestamp that arrives as a bare string (lib/campaign.ts). Undefined when
+ * the value does not parse.
  *
- * SECONDS are read when present — the `pauses` timestamps carry them, and
- * a reading that dropped them would be up to a minute off per pause.
- *
- * A DATE-ONLY `yyyy-mm-dd` is read as 00:00: a session started at exactly
- * midnight is written as `…T00:00`, and the YAML normalization cannot tell
- * that apart from a date-only value (shared/src/parse.ts) — so requiring a
- * time part would make the timer disappear silently at midnight.
+ * SECONDS are read when present. A DATE-ONLY `yyyy-mm-dd` is read as 00:00 —
+ * a session started at exactly midnight is written without a time part, and
+ * requiring one would make the value silently unusable at midnight.
  */
 export function parseLocalDateTime(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
@@ -87,67 +45,61 @@ export function parseLocalDateTime(value: unknown): number | undefined {
 }
 
 /**
- * Start / end of a session as epoch milliseconds.
+ * The bit of a session the timer helpers need — so the topbar chip, the live
+ * view and the reading page share one set of rules, and a session SUMMARY
+ * (which carries no pauses) works with them too.
  *
- * The SERVER's reading wins (`startedMs`/`endedMs` of the EntryResponse): the
- * format is zone-less on purpose, and only the server knows the timezone
- * those wall-clock digits were written in — computing them in the browser
- * gave a runtime that was hours off whenever the two differ. The local parse
- * stays as the fallback for a response without the epoch fields.
+ * Every epoch reading is optional, exactly as the session endpoints answer
+ * them: the server puts one beside a timestamp only when it could read that
+ * timestamp. A session without a readable start has no runtime, and that is
+ * the honest answer rather than a clock counting from 1970.
  */
-export function sessionStartMs(session: SessionTimes | undefined): number | undefined {
-  if (session === undefined) return undefined;
-  return session.startedMs ?? parseLocalDateTime(session.properties?.started);
-}
-
-/** End of a session as epoch milliseconds — see sessionStartMs. */
-export function sessionEndMs(session: SessionTimes | undefined): number | undefined {
-  if (session === undefined) return undefined;
-  return session.endedMs ?? parseLocalDateTime(session.properties?.ended);
-}
-
-/** The bit of a session EntryResponse the helpers here need. */
 export interface SessionTimes {
   startedMs?: number;
   endedMs?: number;
-  /** Sum of the CLOSED pause intervals (server arithmetic). */
-  pausedMs?: number;
-  /** Start of the OPEN pause interval — present exactly while paused. */
-  pausedSinceMs?: number;
-  properties?: Record<string, unknown>;
+  pauses?: readonly SessionPauseInterval[];
 }
 
 /**
- * Total paused time in milliseconds — the server's sum, with a local fallback
- * from the `pauses` properties for a response that carries no `pausedMs`
- * (same fallback rule as sessionStartMs; degraded entries are dropped by the
- * shared `sessionPauses`).
+ * Total paused time in milliseconds: the sum of the CLOSED intervals whose
+ * wall clock the server could read. An interval without an epoch reading
+ * contributes nothing rather than an invented number.
  */
 export function sessionPausedMs(session: SessionTimes | undefined): number {
-  if (session === undefined) return 0;
-  if (session.pausedMs !== undefined) return session.pausedMs;
   let sum = 0;
-  for (const pause of sessionPauses(session.properties)) {
-    if (pause.to === undefined) continue;
-    const from = parseLocalDateTime(pause.from);
-    const to = parseLocalDateTime(pause.to);
-    if (from === undefined || to === undefined) continue;
-    sum += Math.max(0, to - from);
+  for (const pause of session?.pauses ?? []) {
+    if (pause.toMs === undefined || pause.fromMs === undefined) continue;
+    sum += Math.max(0, pause.toMs - pause.fromMs);
   }
   return sum;
 }
 
-/** Start of the running pause, or undefined when the session is not paused. */
+/**
+ * Start of the running pause, or undefined when the session is not paused.
+ * The LAST open interval wins — the same rule the server writes with.
+ */
 export function sessionPausedSinceMs(session: SessionTimes | undefined): number | undefined {
-  if (session === undefined) return undefined;
-  if (session.pausedSinceMs !== undefined) return session.pausedSinceMs;
-  const open = openPause(session.properties);
-  return open === undefined ? undefined : parseLocalDateTime(open.from);
+  const open = (session?.pauses ?? []).filter((pause) => pause.toMs === undefined);
+  return open[open.length - 1]?.fromMs;
 }
 
 /** True while the session is paused — the chip's dimmed state. */
 export function sessionIsPaused(session: SessionTimes | undefined): boolean {
-  return sessionPausedSinceMs(session) !== undefined || isPaused(session?.properties);
+  return sessionPausedSinceMs(session) !== undefined;
+}
+
+/**
+ * True when a session holds NOTHING the DM would miss: no log row and no
+ * played scene. Only such a session may be DISCARDED — the same rule the
+ * server enforces, so the action is never offered for a 409.
+ */
+export function sessionIsEmpty(session: SessionResponse): boolean {
+  return session.log.length === 0 && session.scenesPlayed.length === 0;
+}
+
+/** True when the session is finished — `ended` is set and not blank. */
+export function sessionIsEnded(session: Pick<SessionResponse, "ended">): boolean {
+  return session.ended !== undefined && session.ended.trim() !== "";
 }
 
 /**
@@ -157,17 +109,18 @@ export function sessionIsPaused(session: SessionTimes | undefined): boolean {
  *
  * Pauses are deducted, and while one runs the clock STANDS: the reference
  * point is then the moment the pause began, so a re-render a minute later
- * shows the same number. `ended` and an open pause together (only reachable by
- * hand-editing) take the earlier of the two, so the value can never grow past
- * the end. Undefined when the session says nothing usable about `started`.
+ * shows the same number. `ended` and an open pause together take the earlier
+ * of the two, so the value can never grow past the end. Undefined when there
+ * is no session, and when its start carries no epoch reading — there is
+ * nothing to count from.
  */
 export function sessionElapsedMs(
   session: SessionTimes | undefined,
   nowMs: number,
 ): number | undefined {
-  const startedMs = sessionStartMs(session);
+  const startedMs = session?.startedMs;
   if (startedMs === undefined) return undefined;
-  const stops = [sessionEndMs(session), sessionPausedSinceMs(session)].filter(
+  const stops = [session?.endedMs, sessionPausedSinceMs(session)].filter(
     (v): v is number => v !== undefined,
   );
   const reference = stops.length === 0 ? nowMs : Math.min(...stops);
@@ -194,7 +147,7 @@ export function formatDuration(ms: number): string {
 
 /**
  * The session's runtime as `H:MM:SS` — the label the chip shows. Undefined
- * when there is no usable `started` (the chip then says "läuft").
+ * when there is no session to time.
  */
 export function sessionElapsedLabel(
   session: SessionTimes | undefined,
@@ -205,7 +158,7 @@ export function sessionElapsedLabel(
 }
 
 /**
- * The session's HEADING — "Session vom 15.01.2026".
+ * The session's HEADING — its date.
  *
  * The session id is an opaque random string, so everything displayable about
  * a session is derived from `started`. Formatted from the wall-clock digits of
@@ -213,15 +166,14 @@ export function sessionElapsedLabel(
  * zone-less on purpose (README), and re-reading it in the browser's timezone
  * is how a session that started at 23:30 ends up dated the next day.
  *
- * Falls back to a plain "Session" when there is no usable `started` — the
- * honest answer for an imported entry, and better than the raw id, which is
- * 36 characters of noise.
+ * Falls back to the bare word when there is no usable `started` — the honest
+ * answer, and better than the raw id, which is 36 characters of noise.
  */
 export function sessionDateLabel(
-  properties: Record<string, unknown> | undefined,
+  session: { started?: string } | undefined,
   t: Translate,
 ): string {
-  const started = properties?.started;
+  const started = session?.started;
   const m = typeof started === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(started.trim()) : null;
   if (m === null) return t("session.date.unknown");
   // The DATE itself goes through `Intl` in the selected language:
@@ -229,4 +181,14 @@ export function sessionDateLabel(
   // zone-less parts as a LOCAL date, so the day never shifts by a timezone.
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return t("session.date", { date: formatDate(t.locale, date) });
+}
+
+/**
+ * The wall-clock time of a session timestamp as `HH:MM` — what the reading
+ * page puts next to "started" and "ended". Taken from the string's own digits
+ * for the same reason the date label is. Undefined when there is no time part.
+ */
+export function sessionTimeLabel(value: string | undefined): string | undefined {
+  const m = typeof value === "string" ? /[T ](\d{1,2}):(\d{2})/.exec(value.trim()) : null;
+  return m === null ? undefined : `${pad(Number(m[1]))}:${m[2] ?? "00"}`;
 }

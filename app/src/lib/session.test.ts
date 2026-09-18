@@ -3,84 +3,38 @@ import { describe, expect, test } from "bun:test";
 import {
   formatElapsed,
   parseLocalDateTime,
-  parseLogEntries,
+  sessionDateLabel,
   sessionElapsedLabel,
   sessionElapsedMs,
-  sessionEndMs,
+  sessionIsEnded,
   sessionIsPaused,
   sessionPausedMs,
-  sessionDateLabel,
   sessionPausedSinceMs,
-  sessionStartMs,
+  sessionTimeLabel,
 } from "./session";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
-// take the translator as an argument, so a test says so explicitly instead of
-// leaning on a default.
+// The language the assertions below are written in: the helpers take the
+// translator as an argument, so a test says so explicitly instead of leaning
+// on a default.
 const t = translator("de");
 
-describe("parseLogEntries", () => {
-  const body = `
-## Log
-
-- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision
-- 20:30 — Pause
-- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread
-
-## Threads
-
-- [ ] Wer bezahlt die Schmuggler?
-`;
-
-  test("parses lines with sceneId", () => {
-    const entries = parseLogEntries(body);
-    expect(entries[0]).toEqual({
-      time: "19:52",
-      sceneId: "lighthouse-arrival",
-      text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
-      raw: "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
-    });
-  });
-
-  test("parses pause and free lines without sceneId", () => {
-    const entries = parseLogEntries(body);
-    expect(entries[1]).toEqual({ time: "20:30", text: "— Pause", raw: "- 20:30 — Pause" });
-    expect(entries[2]).toEqual({
-      time: "22:40",
-      text: "— Cliffhanger: Lichter in der Bucht gesichtet #thread",
-      raw: "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread",
-    });
-  });
-
-  test("stops at the next section heading", () => {
-    expect(parseLogEntries(body)).toHaveLength(3);
-  });
-
-  test("degrades garbage lines to raw text entries", () => {
-    const entries = parseLogEntries("## Log\n\nkein Listenpunkt\n- ohne Zeitstempel\n");
-    expect(entries).toEqual([
-      { text: "kein Listenpunkt", raw: "kein Listenpunkt" },
-      { text: "- ohne Zeitstempel", raw: "- ohne Zeitstempel" },
-    ]);
-  });
-
-  test("missing Log section yields an empty list", () => {
-    expect(parseLogEntries("## Notizen\n\n- 19:00 irgendwas\n")).toEqual([]);
-    expect(parseLogEntries("")).toEqual([]);
-  });
-
-  test("a fresh session log (heading only) yields an empty list", () => {
-    expect(parseLogEntries("\n## Log\n")).toEqual([]);
-  });
-});
+// A pause as the session endpoints send it: the wall-clock strings plus the
+// server's epoch reading of them.
+function pause(fromMs: number, toMs?: number) {
+  return {
+    from: new Date(fromMs).toISOString(),
+    fromMs,
+    ...(toMs === undefined ? {} : { to: new Date(toMs).toISOString(), toMs }),
+  };
+}
 
 describe("parseLocalDateTime", () => {
-  test("parses the write API's local datetime format", () => {
+  test("parses the wall-clock datetime format", () => {
     expect(parseLocalDateTime("2026-01-15T19:30")).toBe(new Date(2026, 0, 15, 19, 30).getTime());
   });
 
-  test("a date-only value is midnight (issue #40: the degraded `…T00:00`)", () => {
+  test("a date-only value is midnight", () => {
     expect(parseLocalDateTime("2026-01-15")).toBe(new Date(2026, 0, 15, 0, 0).getTime());
   });
 
@@ -88,40 +42,6 @@ describe("parseLocalDateTime", () => {
     expect(parseLocalDateTime("gestern Abend")).toBeUndefined();
     expect(parseLocalDateTime(undefined)).toBeUndefined();
     expect(parseLocalDateTime(1234)).toBeUndefined();
-  });
-});
-
-describe("sessionStartMs / sessionEndMs (issue #40)", () => {
-  test("the SERVER's epoch reading wins over the local parse", () => {
-    // A browser two hours off the server would compute 19:30 in ITS zone;
-    // the server's value is the truth and must be used as it is.
-    const serverMs = new Date(2026, 0, 15, 17, 30).getTime();
-    const session = {
-      startedMs: serverMs,
-      endedMs: serverMs + 3 * 3_600_000,
-      properties: { started: "2026-01-15T19:30", ended: "2026-01-15T22:30" },
-    };
-    expect(sessionStartMs(session)).toBe(serverMs);
-    expect(sessionEndMs(session)).toBe(serverMs + 3 * 3_600_000);
-  });
-
-  test("falls back to the local parse when the server sends no epoch fields", () => {
-    const session = { properties: { started: "2026-01-15T19:30" } };
-    expect(sessionStartMs(session)).toBe(new Date(2026, 0, 15, 19, 30).getTime());
-    expect(sessionEndMs(session)).toBeUndefined();
-  });
-
-  test("a midnight start still yields a time — the timer must not vanish", () => {
-    // The properties string degraded to a plain date (shared/src/parse.ts).
-    expect(sessionStartMs({ properties: { started: "2026-01-15" } })).toBe(
-      new Date(2026, 0, 15, 0, 0).getTime(),
-    );
-  });
-
-  test("no session, no properties, no usable value -> undefined", () => {
-    expect(sessionStartMs(undefined)).toBeUndefined();
-    expect(sessionStartMs({})).toBeUndefined();
-    expect(sessionStartMs({ properties: {} })).toBeUndefined();
   });
 });
 
@@ -146,9 +66,8 @@ describe("formatElapsed", () => {
   });
 });
 
-// The runtime with pauses deducted (issue #40 AK8). Every epoch value the
-// server ships is used as-is; the properties fallback is only for a response
-// without them.
+// The runtime with pauses deducted. Every epoch value comes from the server
+// and is used as it is — the app never re-reads a zone-less string for it.
 describe("sessionElapsedMs (pauses deducted)", () => {
   const started = new Date(2026, 0, 15, 19, 0).getTime();
   const now = started + 60 * 60_000; // 20:00
@@ -159,22 +78,34 @@ describe("sessionElapsedMs (pauses deducted)", () => {
   });
 
   test("ONE closed pause is subtracted", () => {
-    const session = { startedMs: started, pausedMs: 10 * 60_000 };
+    const session = {
+      startedMs: started,
+      pauses: [pause(started + 10 * 60_000, started + 20 * 60_000)],
+    };
     expect(sessionElapsedMs(session, now)).toBe(50 * 60_000);
     expect(sessionElapsedLabel(session, now)).toBe("0:50:00");
     expect(sessionIsPaused(session)).toBe(false);
   });
 
-  test("SEVERAL pauses: the server's sum is subtracted once", () => {
-    const session = { startedMs: started, pausedMs: 10 * 60_000 + 5 * 60_000 + 30_000 };
+  test("SEVERAL pauses: every closed interval is subtracted", () => {
+    const session = {
+      startedMs: started,
+      pauses: [
+        pause(started + 10 * 60_000, started + 20 * 60_000),
+        pause(started + 30 * 60_000, started + 35 * 60_000),
+        pause(started + 40 * 60_000, started + 40 * 60_000 + 30_000),
+      ],
+    };
     expect(sessionElapsedLabel(session, now)).toBe("0:44:30");
   });
 
   test("while a pause runs the clock STANDS", () => {
     const session = {
       startedMs: started,
-      pausedMs: 10 * 60_000,
-      pausedSinceMs: started + 45 * 60_000, // paused at 19:45
+      pauses: [
+        pause(started + 10 * 60_000, started + 20 * 60_000),
+        pause(started + 45 * 60_000), // paused at 19:45, still open
+      ],
     };
     expect(sessionIsPaused(session)).toBe(true);
     // 45 min wall clock − 10 min earlier pause, and it stays there …
@@ -186,89 +117,82 @@ describe("sessionElapsedMs (pauses deducted)", () => {
     const session = {
       startedMs: started,
       endedMs: started + 3 * 60 * 60_000,
-      pausedMs: 20 * 60_000,
+      pauses: [pause(started + 10 * 60_000, started + 30 * 60_000)],
     };
     expect(sessionElapsedLabel(session, now + 10 * 60 * 60_000)).toBe("2:40:00");
   });
 
-  test("`ended` plus an open pause (hand-edited): the EARLIER one wins", () => {
+  test("`ended` plus an open pause: the EARLIER one wins", () => {
     const session = {
       startedMs: started,
       endedMs: started + 3 * 60 * 60_000,
-      pausedSinceMs: started + 60 * 60_000,
+      pauses: [pause(started + 60 * 60_000)],
     };
     expect(sessionElapsedLabel(session, now)).toBe("1:00:00");
   });
 
-  test("no usable `started` -> no runtime at all", () => {
+  test("no session -> no runtime at all", () => {
     expect(sessionElapsedMs(undefined, now)).toBeUndefined();
-    expect(sessionElapsedMs({ properties: {} }, now)).toBeUndefined();
-    expect(sessionElapsedLabel({}, now)).toBeUndefined();
+    expect(sessionElapsedLabel(undefined, now)).toBeUndefined();
   });
 
   test("never negative: a `started` in the future clamps at 0:00:00", () => {
     expect(sessionElapsedLabel({ startedMs: now + 60_000 }, now)).toBe("0:00:00");
     // …and so does a pause sum larger than the wall-clock span.
-    expect(sessionElapsedLabel({ startedMs: started, pausedMs: 99 * 60 * 60_000 }, now)).toBe(
-      "0:00:00",
-    );
+    expect(
+      sessionElapsedLabel(
+        { startedMs: started, pauses: [pause(started, started + 99 * 60 * 60_000)] },
+        now,
+      ),
+    ).toBe("0:00:00");
   });
 });
 
-describe("sessionPausedMs / sessionPausedSinceMs — the properties fallback", () => {
-  test("sums the closed intervals of `pauses` when the server sent no epochs", () => {
-    const session = {
-      properties: {
-        started: "2026-01-15T19:00",
-        pauses: [
-          { from: "2026-01-15T19:10:00", to: "2026-01-15T19:20:30" },
-          { from: "2026-01-15T19:40:00", to: "2026-01-15T19:45:00" },
-        ],
-      },
-    };
-    expect(sessionPausedMs(session)).toBe(10 * 60_000 + 30_000 + 5 * 60_000);
-    expect(sessionPausedSinceMs(session)).toBeUndefined();
-    expect(sessionElapsedLabel(session, new Date(2026, 0, 15, 20, 0).getTime())).toBe("0:44:30");
-  });
+describe("sessionPausedMs / sessionPausedSinceMs", () => {
+  const started = new Date(2026, 0, 15, 19, 0).getTime();
 
-  test("an open interval freezes the clock; degraded entries are ignored", () => {
+  test("sums the CLOSED intervals only", () => {
     const session = {
-      properties: {
-        started: "2026-01-15T19:00",
-        pauses: ["kaputt", { from: "gestern" }, { from: "2026-01-15T19:30:00" }],
-      },
+      startedMs: started,
+      pauses: [
+        pause(started + 10 * 60_000, started + 20 * 60_000),
+        pause(started + 40 * 60_000),
+      ],
     };
-    expect(sessionPausedMs(session)).toBe(0);
-    expect(sessionPausedSinceMs(session)).toBe(new Date(2026, 0, 15, 19, 30).getTime());
+    expect(sessionPausedMs(session)).toBe(10 * 60_000);
+    expect(sessionPausedSinceMs(session)).toBe(started + 40 * 60_000);
     expect(sessionIsPaused(session)).toBe(true);
-    expect(sessionElapsedLabel(session, new Date(2026, 0, 15, 21, 0).getTime())).toBe("0:30:00");
   });
 
-  test("the SERVER's values win over the properties", () => {
+  test("the LAST open interval is the running pause", () => {
     const session = {
-      startedMs: new Date(2026, 0, 15, 19, 0).getTime(),
-      pausedMs: 60_000,
-      properties: {
-        started: "2026-01-15T19:00",
-        pauses: [{ from: "2026-01-15T19:10", to: "2026-01-15T19:50" }],
-      },
+      startedMs: started,
+      pauses: [pause(started + 10 * 60_000), pause(started + 40 * 60_000)],
     };
-    expect(sessionPausedMs(session)).toBe(60_000);
+    expect(sessionPausedSinceMs(session)).toBe(started + 40 * 60_000);
   });
 
   test("no pauses at all -> 0 and not paused", () => {
     expect(sessionPausedMs(undefined)).toBe(0);
-    expect(sessionPausedMs({ properties: {} })).toBe(0);
-    expect(sessionIsPaused({ properties: {} })).toBe(false);
-    expect(sessionPausedSinceMs({})).toBeUndefined();
+    expect(sessionPausedMs({ startedMs: started })).toBe(0);
+    expect(sessionIsPaused({ startedMs: started })).toBe(false);
+    expect(sessionPausedSinceMs({ startedMs: started })).toBeUndefined();
+  });
+});
+
+describe("sessionIsEnded", () => {
+  test("a set `ended` finishes the session, a blank one does not", () => {
+    expect(sessionIsEnded({ ended: "2026-01-15T23:30:00" })).toBe(true);
+    expect(sessionIsEnded({})).toBe(false);
+    expect(sessionIsEnded({ ended: "   " })).toBe(false);
   });
 });
 
 describe("sessionDateLabel", () => {
   test("the heading of a session is its `started` date, German format", () => {
     expect(sessionDateLabel({ started: "2026-01-15T19:30:00" }, t)).toBe("Session vom 15.01.2026");
-    // Minute-precise (older entries) and date-only (the midnight degradation)
-    // read the same — only the date part is used.
+    // Minute-precise and date-only (the midnight degradation) read the same —
+    // only the date part is used.
     expect(sessionDateLabel({ started: "2026-01-15T19:30" }, t)).toBe("Session vom 15.01.2026");
     expect(sessionDateLabel({ started: "2026-01-15" }, t)).toBe("Session vom 15.01.2026");
   });
@@ -278,10 +202,20 @@ describe("sessionDateLabel", () => {
   });
 
   test("the opaque id is never the label — no `started`, no date", () => {
-    const id = "019a4f3c-6d21-7b8e-9c04-5f1ab2d7e380";
-    expect(sessionDateLabel({ id }, t)).toBe("Session");
-    expect(sessionDateLabel({ id, started: "gestern abend" }, t)).toBe("Session");
-    expect(sessionDateLabel({ started: 20260115 }, t)).toBe("Session");
+    expect(sessionDateLabel({}, t)).toBe("Session");
+    expect(sessionDateLabel({ started: "gestern abend" }, t)).toBe("Session");
     expect(sessionDateLabel(undefined, t)).toBe("Session");
+  });
+});
+
+describe("sessionTimeLabel", () => {
+  test("the wall-clock time of a timestamp, zero-padded", () => {
+    expect(sessionTimeLabel("2026-01-15T19:30:00")).toBe("19:30");
+    expect(sessionTimeLabel("2026-01-15T9:05")).toBe("09:05");
+  });
+
+  test("no time part, no label", () => {
+    expect(sessionTimeLabel("2026-01-15")).toBeUndefined();
+    expect(sessionTimeLabel(undefined)).toBeUndefined();
   });
 });

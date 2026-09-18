@@ -31,7 +31,7 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
-import type { EntryKind } from "@grimoire/shared";
+import type { GeneratedEntryKind } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
 
 import { toReplyProperties } from "./entry-reply";
@@ -91,7 +91,7 @@ export interface GenerateRequest {
    */
   existingEntry?: {
     path: string;
-    kind: EntryKind;
+    kind: GeneratedEntryKind;
     properties: Record<string, unknown>;
     body: string;
   };
@@ -281,7 +281,7 @@ export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
  * (generator-augment.ts), and the store never sees it.
  */
 export function formatExistingEntry(entry: {
-  kind: EntryKind;
+  kind: GeneratedEntryKind;
   properties: Record<string, unknown>;
   body: string;
 }): string {

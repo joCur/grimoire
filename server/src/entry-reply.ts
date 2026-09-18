@@ -45,7 +45,7 @@ import {
   PAIR_VALUE,
   isNotGiven,
   propertyFieldsFor,
-  type EntryKind,
+  type GeneratedEntryKind,
   type EntryMode,
   type PropertyFieldDef,
 } from "@grimoire/shared";
@@ -190,7 +190,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function parseEntryReply(
   raw: string,
-  kind: EntryKind,
+  kind: GeneratedEntryKind,
   mode: EntryMode = "create",
 ): { ok: true; reply: EntryReply } | { ok: false; errors: string[] } {
   const parsed = parseJsonReply(raw);
@@ -250,7 +250,7 @@ function normalizeWarnings(value: unknown, errors: string[]): string[] {
  * also knows whether the id may be a NEW one.
  */
 function normalizeProperties(
-  kind: EntryKind,
+  kind: GeneratedEntryKind,
   mode: EntryMode,
   raw: Record<string, unknown>,
   errors: string[],
@@ -316,7 +316,7 @@ function normalizeProperties(
  * these in, reject an absent scene `type` / npc `status` outright. The
  * default is the pre-cutover behaviour, restored where the key is composed.
  */
-const PROPERTY_DEFAULTS: Partial<Record<EntryKind, Record<string, string>>> = {
+const PROPERTY_DEFAULTS: Partial<Record<GeneratedEntryKind, Record<string, string>>> = {
   // "planned" is the unmarked case; a contingency scene says so explicitly.
   scene: { type: "planned" },
   // "unknown" is what a status-less npc means — never "alive", which would be
@@ -414,7 +414,7 @@ function isPairValue(value: unknown): value is string | number {
  * extra ones included, is passed through untouched.
  */
 export function toReplyProperties(
-  kind: EntryKind,
+  kind: GeneratedEntryKind,
   stored: Record<string, unknown>,
 ): Record<string, unknown> {
   const pairKeys = new Set(

@@ -2,14 +2,14 @@
 // the NPC/location/titled headers and the one rule behind them —
 // the scene type overline never appears above a non-scene.
 
-import type { EntityKind, EntryResponse } from "@grimoire/shared/types";
+import type { EntryKind, EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { EntityArticle } from "./EntityArticle";
 
 function entry(
-  kind: EntityKind,
+  kind: EntryKind,
   properties: Record<string, unknown>,
   body = "",
 ): EntryResponse {
@@ -143,10 +143,10 @@ describe("EntityArticle — location and titled entities", () => {
     expect(render(jorna)).not.toMatch(/<span class="[^"]*gap-2[^"]*"><\/span>/);
   });
 
-  test("campaign and unknown kinds render the same quiet titled header", () => {
-    expect(render(entry("campaign", { id: "beispiel", name: "Beispiel" }))).toContain("Beispiel");
-    const unknown = render(entry("unknown", {}, "Freitext.\n"));
-    expect(unknown).toContain("Freitext.");
-    expect(unknown).not.toContain("Geplante Szene");
+  test("the campaign renders the quiet titled header", () => {
+    const campaign = render(entry("campaign", { id: "beispiel", name: "Beispiel" }, "Freitext.\n"));
+    expect(campaign).toContain("Beispiel");
+    expect(campaign).toContain("Freitext.");
+    expect(campaign).not.toContain("Geplante Szene");
   });
 });

@@ -51,7 +51,9 @@ export function useCampaignVersion(campaign: string): void {
     // "active-session" rides along: a session ended in another
     // tab, a hand-edited `ended`, or simply midnight passing must reach the
     // global live indicator without a reload.
-    // "last-session" is the review's session (ended or not) — same reasoning.
+    // "last-session" is the review's session (ended or not) — same reasoning,
+    // and "session"/"sessions"/"inbox" are the reads of one evening, the list
+    // of evenings and the ideas thrown in from the phone.
     // "knowledge"/"glossary" are campaign reads like the rest:
     // the two content pages have to learn about a write from another tab.
     // NOTE what that means for an OPEN row there: the list under it changes.
@@ -64,6 +66,9 @@ export function useCampaignVersion(campaign: string): void {
       "search",
       "active-session",
       "last-session",
+      "session",
+      "sessions",
+      "inbox",
       "knowledge",
       "glossary",
     ]) {

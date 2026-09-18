@@ -2,9 +2,9 @@
 //
 // The open `#pc` entries of log and inbox, grouped by character, as a
 // compact checkable list. It reads the SAME model the wrap-up page and the
-// topbar counter read (lib/use-review) and does the same two writes: a log
-// line gets its `reviewed` hash, an inbox line its `- [x]`. Nothing is
-// adopted here — a PC note is a reminder for the table, not campaign content.
+// topbar counter read (lib/use-review) and does the same two writes: a log row
+// is marked reviewed, an inbox row done. Nothing is adopted here — a PC note
+// is a reminder for the table, not campaign content.
 //
 // The list renders only when there is something to remind of: an empty
 // heading in the aside would cost the space the log needs. Once the LAST
@@ -12,15 +12,15 @@
 // fall to the body — it becomes a focusable "Alles erledigt" line that takes
 // the focus over.
 
-import type { EntryResponse } from "@grimoire/shared/types";
+import type { InboxResponse, SessionResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { markInboxLineDone, markLogLineSeen } from "@/api";
 import { useT } from "@/i18n";
 import type { ReviewEntry } from "@/lib/use-review";
-import { pcGroups, useReviewEntries } from "@/lib/use-review";
-import { activeSessionKey, lastStartedSessionKey } from "@/lib/use-session";
+import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
+import { seedSession } from "@/lib/use-session";
 
 export function PcReminders({ campaign }: { campaign: string }) {
   const t = useT();
@@ -32,19 +32,17 @@ export function PcReminders({ campaign }: { campaign: string }) {
   const [cleared, setCleared] = useState(false);
 
   const done = useMutation({
-    mutationFn: (entry: ReviewEntry): Promise<EntryResponse> => {
-      if (entry.source === "inbox") return markInboxLineDone(campaign, entry.rawLine);
-      if (model.sessionPath === "") throw new Error("keine Session");
-      return markLogLineSeen(campaign, model.sessionPath, entry.rawLine);
+    mutationFn: (entry: ReviewEntry): Promise<SessionResponse | InboxResponse> => {
+      if (entry.source === "inbox") return markInboxLineDone(campaign, entry.id);
+      if (model.sessionId === "") throw new Error("no session to mark in");
+      return markLogLineSeen(campaign, model.sessionId, entry.id);
     },
-    onSuccess: (entry) => {
+    onSuccess: (answer) => {
       setCleared(true);
-      queryClient.setQueryData(["entry", campaign, entry.path], entry);
-      void queryClient.invalidateQueries({ queryKey: ["entry", campaign, entry.path] });
-      // The done-state of a log line lives in the session's properties
-      // — both session queries have to see the fresh one.
-      void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
-      void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
+      // The done-state of a log row lives in the session, an idea's in the
+      // inbox — the answer is the fresh one either way.
+      if ("log" in answer) seedSession(queryClient, campaign, answer);
+      else queryClient.setQueryData(inboxKey(campaign), answer);
     },
   });
 

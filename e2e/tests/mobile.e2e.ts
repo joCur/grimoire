@@ -51,11 +51,20 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect(inbox).toHaveValue("");
-  await expect.poll(() => api.body("inbox")).toContain(`- ${IDEA}`);
-  // Append-only: the line that was already there survives.
-  await expect
-    .poll(() => api.body("inbox"))
-    .toContain("- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug");
+  // The idea is a ROW of the inbox list, appended at the end, and the list
+  // answers with its own guard token. Append-only: the row that was already
+  // there survives, and nothing is ticked off.
+  await expect.poll(() => api.inbox()).toEqual({
+    rev: expect.any(Number),
+    entries: [
+      {
+        id: expect.any(String),
+        text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+        done: false,
+      },
+      { id: expect.any(String), text: IDEA, done: false },
+    ],
+  });
 
   // --- search and reading view ---------------------------------------------
   await page.getByRole("button", { name: "Szenen, NPCs, Orte suchen …" }).click();
@@ -82,7 +91,7 @@ test.describe("with a session open since yesterday", () => {
     page,
   }) => {
     // The session is the server's answer, not something the client derives
-    // from today's date — it comes out of the seeded entry.
+    // from today's date — it comes out of the seeded session row.
     await page.goto("/campaigns/beispiel");
     // The same chip the desktop topbar carries — in link mode, in the mobile
     // row: one tap back into the session.

@@ -4,14 +4,15 @@
 // at the end. Reached after a session is ended and from the quiet chapter
 // overview affordance.
 //
-// The server is the truth: every action writes through the review
-// endpoints, the returned EntryResponse is seeded into the cache and the
-// query invalidated on top. The ONLY client state is cosmetic — which action
-// a card got in this sitting (the server stores done/not-done, not which
-// action) and which threads were adopted here (the "neu" chip).
+// The server is the truth: every action writes through the review endpoints,
+// and what comes back — the chapter or npc entry that was written, plus the
+// session or the inbox the row was ticked off in — is seeded into the caches.
+// The ONLY client state is cosmetic: which action a card got in this sitting
+// (the server stores done/not-done, not which action) and which threads were
+// adopted here (the "neu" chip).
 // Mobile: the desk task stays usable — one column, stacked cards.
 
-import type { EntryResponse } from "@grimoire/shared/types";
+import type { EntryResponse, InboxResponse, SessionResponse } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -35,8 +36,8 @@ import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
-import { pcGroups, useReviewEntries } from "@/lib/use-review";
-import { activeSessionKey, lastStartedSessionKey } from "@/lib/use-session";
+import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
+import { seedSession } from "@/lib/use-session";
 
 type ActionKind = ReviewActionKind;
 
@@ -44,6 +45,13 @@ interface ActVars {
   entry: ReviewEntry;
   action: ActionKind;
   npc?: { id: string; name?: string };
+}
+
+/** What one card action wrote: the entries it created plus the ticked source. */
+interface ActResult {
+  written: EntryResponse[];
+  session?: SessionResponse;
+  inbox?: InboxResponse;
 }
 
 /** The H2 the chapter's checklist lives under — a FORMAT token of the
@@ -115,39 +123,36 @@ export function ReviewRoute() {
   );
 
   const act = useMutation({
-    mutationFn: async ({ entry, action, npc }: ActVars): Promise<EntryResponse[]> => {
+    mutationFn: async ({ entry, action, npc }: ActVars): Promise<ActResult> => {
       const written: EntryResponse[] = [];
       if (action === "thread") {
-        if (chapter === undefined) throw new Error("kein Kapitel");
+        if (chapter === undefined) throw new Error("no chapter to adopt into");
         written.push(await adoptThread(campaign, chapter.id, entry.text));
       } else if (action === "npc") {
-        if (npc === undefined) throw new Error("keine id");
+        if (npc === undefined) throw new Error("no npc id");
         written.push(await ensureNpc(campaign, npc.id, npc.name, entry.text));
       }
       // Only after the harvest succeeded is the source marked done.
       if (entry.source === "log") {
-        // The path comes from the server (the last started session — which
-        // may be yesterday's session). Without it there is nothing to patch.
-        if (model.sessionPath === "") throw new Error("keine Session");
-        written.push(await markLogLineSeen(campaign, model.sessionPath, entry.rawLine));
-      } else {
-        written.push(await markInboxLineDone(campaign, entry.rawLine));
+        // The session comes from the server (the last started one — which may
+        // be yesterday's). Without it there is nothing to mark.
+        if (model.sessionId === "") throw new Error("no session to mark in");
+        return { written, session: await markLogLineSeen(campaign, model.sessionId, entry.id) };
       }
-      return written;
+      return { written, inbox: await markInboxLineDone(campaign, entry.id) };
     },
-    onSuccess: (entries, vars) => {
-      // Every endpoint returns the fresh entry: seed, then invalidate on top.
-      for (const entry of entries) {
+    onSuccess: (result, vars) => {
+      // Every endpoint returns what it wrote: seed, then invalidate on top.
+      for (const entry of result.written) {
         queryClient.setQueryData(["entry", campaign, entry.path], entry);
         void queryClient.invalidateQueries({ queryKey: ["entry", campaign, entry.path] });
-        // A log line's done-state lives in the session's properties, and
-        // the live aside and the topbar read that session through the SESSION
-        // queries — they have to see the fresh one too (same rule as
-        // components/PcReminders).
-        if (entry.path === model.sessionPath) {
-          void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
-          void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
-        }
+      }
+      // A log row's done-state lives in the session, an idea's in the inbox —
+      // the live aside and the topbar read both, so they see the fresh answer
+      // (same rule as components/PcReminders).
+      if (result.session !== undefined) seedSession(queryClient, campaign, result.session);
+      if (result.inbox !== undefined) {
+        queryClient.setQueryData(inboxKey(campaign), result.inbox);
       }
       // A new thread section or NPC entry can change the tree, too.
       if (vars.action !== "dismiss") {
@@ -238,12 +243,6 @@ export function ReviewRoute() {
             <p className="mb-8 text-[13px] text-muted-foreground md:hidden">
               {model.progressLabel}
             </p>
-
-            {model.hashUnavailable && (
-              <p className="mb-6 text-[12.5px] text-muted-foreground">
-                {t("review.hashUnavailable")}
-              </p>
-            )}
 
             {model.isPending ? (
               <p className="text-[14px] text-muted-foreground">{t("review.loading")}</p>

@@ -43,6 +43,25 @@ export function sceneTitle(
 }
 
 /**
+ * Resolve a scene id to its ADDRESS via the tree — what a link to that scene
+ * needs. Undefined for an id the tree does not know, so a caller renders the
+ * title as plain text instead of linking into nothing (degrade).
+ */
+export function scenePath(
+  tree: CampaignTree | undefined,
+  sceneId: string | undefined,
+): string | undefined {
+  if (sceneId === undefined) return undefined;
+  for (const chapter of tree?.chapters ?? []) {
+    for (const group of chapter.groups) {
+      const scene = group.scenes.find((s) => s.id === sceneId);
+      if (scene !== undefined) return scene.path;
+    }
+  }
+  return undefined;
+}
+
+/**
  * The campaign's display label: the `name` from its optional `campaign`,
  * else the id — which is the directory name and stays the key in
  * every URL. Never returns an empty string.

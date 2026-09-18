@@ -42,15 +42,18 @@ import {
   type ErrorKind,
   type EntryResponse,
   type GlossaryResponse,
+  type InboxResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
   type PatchEntryRequest,
+  type PatchSessionRequest,
+  type SessionResponse,
 } from "@grimoire/shared";
 import { format } from "date-fns";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import { logLineShortHash } from "./body-parse";
+import { logLineId, logLineShortHash } from "./body-parse";
 import { LOCAL_DATE_TIME_SECONDS, LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "./time";
 import {
   campaignKnowledge,
@@ -99,7 +102,6 @@ import {
   RESERVED_SEGMENTS,
   sceneAddress,
   scenePath,
-  sessionPath,
   CAMPAIGN_PATH,
   type Locator,
 } from "./paths";
@@ -107,7 +109,6 @@ import {
   campaignDisplayName,
   renderCampaign,
   renderChapter,
-  renderGlossary,
   renderInbox,
   renderLocation,
   renderNpc,
@@ -552,9 +553,11 @@ function assertNpcRefs(tx: GrimoireDb, campaign: string, ids: readonly string[])
 }
 
 /**
- * A scene a session names — the scene of a quick note, or one in the played
- * list. Two codes for one check, because the two sentences differ: one is
- * about the note being written, the other about a list being saved.
+ * The scene a quick note names. `code` is `log_scene_unknown`; the sibling
+ * code `played_scene_unknown` has no caller any more, because the played
+ * list has no write path of its own (see ./write.ts `patchSession`) — it is
+ * maintained by the note that named the scene, and this check is what stands
+ * in front of that.
  */
 function assertSceneRef(
   tx: GrimoireDb,
@@ -808,7 +811,13 @@ const NPC_KEYS = [
 const LOCATION_KEYS = ["id", "name", "chapter", "roll20-page"] as const;
 const CHAPTER_KEYS = ["id", "title", "status"] as const;
 const CAMPAIGN_KEYS = ["id", "name", "description"] as const;
-const SESSION_KEYS = ["id", "started", "ended", "scenes_played", "pauses", "reviewed"] as const;
+/**
+ * A session is not an entry and has no properties patch (ADR #26). The list
+ * survives for the SEED, which writes historic sessions from this shape
+ * (db/seed.ts) — `reviewed` is not among them, because the review flag sits
+ * on the log row it belongs to.
+ */
+const SESSION_KEYS = ["id", "started", "ended", "scenes_played", "pauses"] as const;
 
 /** The same lists by kind, for callers that look one up (db/seed.ts). */
 export const PROPERTY_CONTRACT = {
@@ -880,15 +889,6 @@ export async function patchEntry(
       code: "nothing_to_write",
     });
   }
-  // A stopgap, in place only while these lists still carry an entry address:
-  // they get their own read endpoints, and with that address this guard goes.
-  if (markdown !== undefined && BODYLESS_KINDS.has(locator.kind)) {
-    throw new ApiError(
-      400,
-      `${locator.kind} carries a list, not a text — use its own endpoints`,
-      { code: "body_not_editable", path: rel },
-    );
-  }
   return mutate(campaign, (tx) => {
     const guard =
       request.force === true
@@ -909,14 +909,6 @@ export async function patchEntry(
     return written;
   });
 }
-
-/**
- * The addresses whose content is a LIST OF ROWS rather than a text: the
- * glossary, the inbox, and a session (its log). Each is edited through its
- * own endpoint, so a `body` for one of them could only be a
- * misunderstanding — and a silently ignored one would look like a save.
- */
-const BODYLESS_KINDS: ReadonlySet<Locator["kind"]> = new Set(["glossary", "inbox", "session"]);
 
 /**
  * A non-empty body gets its closing newline. The text is handed to a
@@ -1139,22 +1131,6 @@ function patchLocator(
       indexLocation(tx, campaign, next);
       return renderLocation(next);
     }
-    case "session": {
-      const row = sessionRow(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "session changed");
-      rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, SESSION_KEYS);
-      const props = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
-      patchSessionRow(tx, campaign, row, props);
-      const updated = sessionRow(tx, campaign, row.id);
-      return renderSessionRow(tx, campaign, updated ?? row);
-    }
-    case "inbox":
-    case "glossary":
-      // Neither is an entity with properties: both are lists of rows
-      // (schema.ts), so there is nothing a patch could mean here.
-      throw new ApiError(400, "this entry has no properties — it is a list of rows");
   }
 }
 
@@ -1179,13 +1155,12 @@ function refTags(tx: GrimoireDb, campaign: string, sceneId: string): string[] {
 }
 
 /**
- * The pause rows a patched `pauses` list becomes, in the order they will be
- * stored. An entry without `from` is not a pause and drops out — the
- * positions close up behind it, so `pos` stays a gap-less sequence.
+ * The pause rows a `pauses` patch becomes, in the order they will be stored.
+ * An entry without `from` is not a pause and drops out — the positions close
+ * up behind it, so `pos` stays a gap-less sequence.
  *
  * Both ends go through the timestamp guard here rather than at the insert,
- * because the whole list is checked before the first row of the patch is
- * written.
+ * because the whole list is checked before the first row is written.
  */
 function patchedPauses(value: unknown): { fromTs: string; toTs: string | null }[] {
   const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
@@ -1203,73 +1178,74 @@ function patchedPauses(value: unknown): { fromTs: string; toTs: string | null }[
 }
 
 /**
- * Write a patched session properties back onto the row and its child tables.
- * `pauses` and `scenes_played` are lists in the format and tables here;
- * `reviewed` is a hash list in the format and a flag on the log row.
+ * PATCH /api/campaigns/:campaign/sessions/:id `{ rev, started?, ended?,
+ * pauses? }` — the TIMESTAMPS of a session, which is everything about it the
+ * DM edits by hand: a start typed into the wrong hour, a pause that was
+ * never closed.
+ *
+ * The log and `scenesPlayed` are not patchable. They grow through their own
+ * endpoints (`POST /log`, the review actions), and a whole-list write of an
+ * append-only log is not an edit anybody asked for.
+ *
+ * Three rules, the same ones every guarded write follows:
+ *
+ *   * a field that is ABSENT keeps its stored value; `ended: null` clears it
+ *     and the session runs again, and `pauses` replaces the whole list.
+ *   * EVERY timestamp of the request is checked before the first write, so a
+ *     refusal (400 `timestamp_not_allowed`) refuses the whole patch and not
+ *     its tail.
+ *   * a stale `rev` is 409 `rev_conflict` carrying the current `rev` and the
+ *     current SESSION, so the conflict dialog shows what is in the way
+ *     without a second request. The key is `session` and not `entry`: a
+ *     session is not an entry (ADR #26).
  */
-function patchSessionRow(
-  tx: GrimoireDb,
+export async function patchSession(
   campaign: string,
-  row: SessionRow,
-  props: Record<string, unknown>,
-): void {
-  // Every timestamp of the patch is checked BEFORE the first write, so a
-  // refusal is a refusal of the whole patch and not of its tail.
-  const started = asOptStr(props.started);
-  const ended = asOptStr(props.ended);
-  assertTimestamp(started, "started");
-  assertTimestamp(ended, "ended");
-  const nextPauses = patchedPauses(props.pauses);
-
-  tx.update(sessions)
-    .set({ started, ended, rev: row.rev + 1 })
-    .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
-    .run();
-
-  const played = asStrArray(props.scenes_played);
-  for (const sceneId of played) {
-    if (sceneId === "") continue;
-    assertSceneRef(tx, campaign, sceneId, "played_scene_unknown");
+  id: string,
+  request: PatchSessionRequest,
+): Promise<SessionResponse> {
+  const touches =
+    request.started !== undefined || request.ended !== undefined || request.pauses !== undefined;
+  if (!touches) {
+    throw new ApiError(400, "nothing to write — send started, ended or pauses", {
+      code: "nothing_to_write",
+    });
   }
-  tx.delete(sessionScenesPlayed)
-    .where(
-      and(
-        eq(sessionScenesPlayed.campaignId, campaign),
-        eq(sessionScenesPlayed.sessionId, row.id),
-      ),
-    )
-    .run();
-  played.forEach((sceneId, pos) => {
-    if (sceneId === "") return;
-    tx.insert(sessionScenesPlayed)
-      .values({ campaignId: campaign, sessionId: row.id, sceneId, pos })
-      .run();
-  });
+  return mutate(campaign, (tx) => {
+    const row = sessionRow(tx, campaign, id);
+    if (row === undefined) throw new ApiError(404, "session not found");
+    if (row.rev !== request.rev) {
+      throw new ApiError(409, "session changed — reload before saving", {
+        code: "rev_conflict",
+        rev: row.rev,
+        session: renderSessionRow(tx, campaign, row),
+      });
+    }
+    const started = request.started === undefined ? row.started : asOptStr(request.started);
+    const ended = request.ended === undefined ? row.ended : asOptStr(request.ended);
+    assertTimestamp(started, "started");
+    assertTimestamp(ended, "ended");
+    const nextPauses =
+      request.pauses === undefined ? undefined : patchedPauses(request.pauses);
 
-  tx.delete(sessionPauses)
-    .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, row.id)))
-    .run();
-  nextPauses.forEach((pause, pos) => {
-    tx.insert(sessionPauses)
-      .values({ campaignId: campaign, sessionId: row.id, pos, ...pause })
+    tx.update(sessions)
+      .set({ started, ended, rev: row.rev + 1 })
+      .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, id)))
       .run();
-  });
 
-  const reviewed = new Set(asStrArray(props.reviewed));
-  for (const entry of logRows(tx, campaign, row.id)) {
-    const flag = reviewed.has(entry.hash) ? 1 : 0;
-    if (flag === entry.reviewed) continue;
-    tx.update(logEntries)
-      .set({ reviewed: flag })
-      .where(
-        and(
-          eq(logEntries.campaignId, campaign),
-          eq(logEntries.sessionId, row.id),
-          eq(logEntries.pos, entry.pos),
-        ),
-      )
-      .run();
-  }
+    if (nextPauses !== undefined) {
+      tx.delete(sessionPauses)
+        .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, id)))
+        .run();
+      nextPauses.forEach((pause, pos) => {
+        tx.insert(sessionPauses)
+          .values({ campaignId: campaign, sessionId: id, pos, ...pause })
+          .run();
+      });
+    }
+    const updated = sessionRow(tx, campaign, id);
+    return renderSessionRow(tx, campaign, updated ?? { ...row, rev: row.rev + 1 });
+  });
 }
 
 // --- the body half of a write ----------------------------------------------
@@ -1390,11 +1366,9 @@ function writeGlossaryRows(
  * because a list this short is one entry and a move is simply a different
  * entry.
  *
- * `rev` is REQUIRED, for the reason every other editable
- * entry has one: the settings page and the markdown editor can hold the
- * same glossary open, and a whole-list PUT without a guard is exactly the
- * silent overwrite ADR #4 forbids. An `undefined` rev is refused by the
- * endpoint, not defaulted here.
+ * `rev` is REQUIRED, for the reason every other editable thing has one: a
+ * whole-list PUT without a guard is exactly the silent overwrite ADR #4
+ * forbids. An `undefined` rev is refused by the endpoint, not defaulted here.
  */
 export async function writeGlossary(
   campaign: string,
@@ -1403,10 +1377,11 @@ export async function writeGlossary(
 ): Promise<GlossaryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireCampaignRow(tx, campaign);
-    guardEntryRev(tx, campaign, { kind: "glossary" }, row.glossaryRev, rev, "glossary changed");
+    // A list guard, not an entry guard: the 409 carries the current `rev` and
+    // no entry, because the glossary is not one (ADR #26). The settings page
+    // reloads the list itself.
+    guardRev(row.glossaryRev, rev, "glossary changed");
     writeGlossaryRows(tx, campaign, entries);
-    // Same entry, same guard token: an editor holding `glossary` must
-    // see a changed `rev` after this.
     const nextRev = row.glossaryRev + 1;
     tx.update(campaigns)
       .set({ glossaryRev: nextRev })
@@ -1565,7 +1540,7 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
  *     an empty log and a runtime that starts at 0. The former 409
  *     `session_ended` and POST /session/resume are gone with it.
  */
-export async function startSession(campaign: string): Promise<EntryResponse> {
+export async function startSession(campaign: string): Promise<SessionResponse> {
   return mutate(campaign, (tx) => {
     const d = new Date();
     const today = format(d, LOCAL_DATE);
@@ -1581,7 +1556,7 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
     if (active !== undefined && startedDate(active.started) !== today) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
-        path: sessionPath(active.id),
+        id: active.id,
       });
     }
     if (active !== undefined) return renderSessionRow(tx, campaign, active);
@@ -1606,7 +1581,7 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
  * nothing running it falls back to the last started session and keeps its
  * existing `ended`; an OPEN pause is closed by the end.
  */
-export async function endSession(campaign: string): Promise<EntryResponse> {
+export async function endSession(campaign: string): Promise<SessionResponse> {
   return mutate(campaign, (tx) => {
     const row = pickSession(tx, campaign, false) ?? pickSession(tx, campaign, true);
     if (row === undefined) throw new ApiError(404, "no active session");
@@ -1646,65 +1621,47 @@ function closeOpenPauses(
 }
 
 /**
- * Append one log line row (append-only: existing rows are never rewritten).
+ * Append one log row (append-only: existing rows are never rewritten).
  *
- * The parenthesis group is a PARSE COLUMN of the line, not something the DM
- * wrote as a reference: a note that happens to begin with "(…)" would
- * otherwise name a scene nobody meant. So it becomes the scene reference
- * only when a scene of that id exists, and stays part of `raw` otherwise —
- * the text of a note is never refused or thrown away over that. The
- * reference a quick note MEANS arrives as the endpoint's own `sceneId` and
- * is checked there.
+ * The row is written as COLUMNS — time, scene, text — and its id is the hash
+ * of the canonical line those columns spell (./body-parse). Nothing composes
+ * a markdown line to store, and nothing parses one back: a note that begins
+ * with "(…)" is text like any other, and the scene a note MEANS arrives as
+ * this function's own `sceneId`, checked by the caller.
  */
-function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: string): void {
+function appendLogRow(
+  tx: GrimoireDb,
+  campaign: string,
+  sessionId: string,
+  at: string,
+  sceneId: string | null,
+  text: string,
+): void {
   const rows = logRows(tx, campaign, sessionId);
-  const parts = logLineParts(tx, campaign, raw);
   tx.insert(logEntries)
     .values({
       campaignId: campaign,
       sessionId,
       pos: nextPos(rows),
-      raw,
-      at: parts.at,
-      sceneId: parts.sceneId,
-      text: parts.text,
-      hash: logLineShortHash(raw),
+      at,
+      sceneId,
+      text,
+      hash: logLineId(at, sceneId, text),
       reviewed: 0,
     })
     .run();
 }
 
-/** `- HH:MM (scene-id) text` — the grammar the app's live log view reads. */
-const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
-
 /**
- * The parsed columns of one raw log line: its time, the scene it names and
- * its text. Everything is NULL for a line the grammar does not recognise —
- * `raw` is then all there is, and that is by design.
- *
- * Also what the seed writes historic log rows with (db/seed.ts), so a seeded
- * line and an appended one are decomposed by the same code.
- */
-export function logLineParts(
-  tx: GrimoireDb,
-  campaign: string,
-  raw: string,
-): { at: string | null; sceneId: string | null; text: string | null } {
-  const m = LOG_LINE.exec(raw);
-  const marker = m?.[2] ?? null;
-  return {
-    at: m?.[1] ?? null,
-    sceneId: marker !== null && sceneRowOf(tx, campaign, marker) !== undefined ? marker : null,
-    text: m?.[3] ?? null,
-  };
-}
-
-/**
- * POST /session/pause — really STOP the clock: an open
- * `pauses` interval plus the `— Pause` log line, in the same transaction.
+ * POST /session/pause — really STOP the clock: one open `pauses` interval.
  * Idempotent: pausing a paused session changes nothing.
+ *
+ * No log row is written for it. A pause IS a `session_pauses` row, and the
+ * `— Pause` line the log used to carry was the same pause written a second
+ * time — a marker the reader of a text needed and a reader of rows does not
+ * (ADR #26).
  */
-export async function pauseSession(campaign: string): Promise<EntryResponse> {
+export async function pauseSession(campaign: string): Promise<SessionResponse> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
     const pauses = pauseRows(tx, campaign, row.id);
@@ -1719,33 +1676,37 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
         toTs: null,
       })
       .run();
-    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Pause`);
-    bumpSessionRev(tx, campaign, row);
-    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
-  });
-}
-
-/** POST /session/continue — close the open interval and log `— Weiter`. */
-export async function continueSession(campaign: string): Promise<EntryResponse> {
-  return mutate(campaign, (tx) => {
-    const row = requireActive(tx, campaign);
-    const d = new Date();
-    if (!closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS))) {
-      return renderSessionRow(tx, campaign, row);
-    }
-    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Weiter`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
 }
 
 /**
- * POST /session/discard — DELETE the active session, the undo
- * of a mis-clicked "Session starten". Allowed only while it is EMPTY (no log
- * row, no played scene, no hand-written body); everything else is ended, not
- * deleted -> 409 `session_not_empty`.
+ * POST /session/continue — close the open interval. It ends a PAUSE, not a
+ * session. No log row either, for the reason above.
  */
-export async function discardSession(campaign: string): Promise<{ path: string }> {
+export async function continueSession(campaign: string): Promise<SessionResponse> {
+  return mutate(campaign, (tx) => {
+    const row = requireActive(tx, campaign);
+    const d = new Date();
+    if (!closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS))) {
+      return renderSessionRow(tx, campaign, row);
+    }
+    bumpSessionRev(tx, campaign, row);
+    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
+  });
+}
+
+/**
+ * POST /session/discard — DELETE the active session, the undo of a mis-clicked
+ * "Session starten". Allowed only while it is EMPTY (no log row, no played
+ * scene, no hand-written body); everything else is ended, not deleted -> 409
+ * `session_not_empty`.
+ *
+ * It answers `{ id }`, the session that is gone. Not an address: a session
+ * never had one to hand back (ADR #26).
+ */
+export async function discardSession(campaign: string): Promise<{ id: string }> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
     const log = logRows(tx, campaign, row.id);
@@ -1755,13 +1716,13 @@ export async function discardSession(campaign: string): Promise<{ path: string }
     if (!empty) {
       throw new ApiError(409, "this session has content — end it instead of discarding it", {
         code: "session_not_empty",
-        path: sessionPath(row.id),
+        id: row.id,
       });
     }
     tx.delete(sessions)
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
       .run();
-    return { path: sessionPath(row.id) };
+    return { id: row.id };
   });
 }
 
@@ -1775,10 +1736,10 @@ export async function appendLogEntry(
   campaign: string,
   text: string,
   sceneId?: string,
-): Promise<EntryResponse> {
-  // The scene marker is a PARSE COLUMN of the log line (`- HH:MM (id) text`),
-  // so an id carrying `)` — or a space, or a newline — would shift `text` and
-  // `sceneId` apart on the way back in. Same slug rule as `createNpcStub`.
+): Promise<SessionResponse> {
+  // A scene is referenced by its id, and an id is a slug — the same rule
+  // `createNpcStub` holds. The column is a foreign key, so a value outside
+  // that shape could only be a client bug.
   if (sceneId !== undefined && !ENTITY_SLUG.test(sceneId)) {
     throw new ApiError(400, "sceneId must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
@@ -1787,8 +1748,7 @@ export async function appendLogEntry(
     // The note's scene is a reference: it has to name a scene that exists,
     // and nothing is created for it.
     if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
-    const raw = `- ${format(new Date(), LOCAL_TIME)}${sceneId ? ` (${sceneId})` : ""} ${text}`;
-    appendLogRow(tx, campaign, row.id, raw);
+    appendLogRow(tx, campaign, row.id, format(new Date(), LOCAL_TIME), sceneId ?? null, text);
     if (sceneId !== undefined) {
       const played = playedScenes(tx, campaign, row.id);
       if (!played.includes(sceneId)) {
@@ -1810,29 +1770,23 @@ export async function appendLogEntry(
 // --- inbox ---------------------------------------------------------------------
 
 /**
- * POST /api/campaigns/:campaign/inbox — append `- text`. The `## Eingang`-less first
- * entry gets the `# Inbox` heading row the rendering opens with, so the
- * rendered inbox still reads like the list it was.
+ * POST /api/campaigns/:campaign/inbox — append one idea as a row.
+ *
+ * No heading row is written in front of the first one. A table has no
+ * skeleton: `# Inbox` was the title of a text (ADR #26), and a row holding it
+ * would read as an idea called "Inbox".
  */
-export async function appendInboxEntry(campaign: string, text: string): Promise<EntryResponse> {
+export async function appendInboxEntry(campaign: string, text: string): Promise<InboxResponse> {
   return mutate(campaign, (tx) => {
-    const rows = inboxRows(tx, campaign);
-    if (rows.length === 0) {
-      tx.insert(inboxEntries)
-        .values({ campaignId: campaign, pos: 0, raw: "# Inbox", text: null, done: 0 })
-        .run();
-    }
-    const current = inboxRows(tx, campaign);
     tx.insert(inboxEntries)
       .values({
         campaignId: campaign,
-        pos: nextPos(current),
-        raw: `- ${text}`,
+        pos: nextPos(inboxRows(tx, campaign)),
         text,
         done: 0,
       })
       .run();
-    return renderInbox(campaign, inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
+    return renderInbox(inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
   });
 }
 
@@ -1847,89 +1801,70 @@ function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
 }
 
 /**
- * POST /api/campaigns/:campaign/review/inbox-done — the one documented exception to the
- * inbox's append-only rule: the entry is marked done. Idempotent; 404 when
- * the line is not in the inbox. The line is matched against the row's `raw`,
- * which is the byte-for-byte line the entry had.
+ * POST /api/campaigns/:campaign/review/inbox-done `{ id }` — the one
+ * documented exception to the inbox's append-only rule: the idea is ticked
+ * off. Idempotent (an idea already done answers unchanged); 404 when the
+ * inbox has no row with that id.
+ *
+ * The id is the row's own (`InboxEntry.id`, the append counter). The review
+ * reads the list and sends back what it read, so a miss is a real error —
+ * the list moved on, or the caller made the id up.
  */
-export async function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
-  const doneForm = (l: string) =>
-    l.startsWith("- [ ] ") ? `- [x] ${l.slice(6)}` : `- [x] ${l.slice(2)}`;
+export async function markInboxLineDone(campaign: string, id: string): Promise<InboxResponse> {
   return mutate(campaign, (tx) => {
     const rows = inboxRows(tx, campaign);
     const rev = campaignRow(tx, campaign)?.inboxRev ?? 1;
-    const match = rows.find((row) => row.raw === line);
-    if (match === undefined) {
-      // The done form already stored means an earlier call succeeded. An
-      // idempotent repeat changes nothing, so the guard token stays as it is.
-      if (!line.startsWith("- [x]") && rows.some((row) => row.raw === doneForm(line))) {
-        return renderInbox(campaign, rows, rev);
-      }
-      throw new ApiError(404, "line not found in inbox");
-    }
-    if (line.startsWith("- [x]")) return renderInbox(campaign, rows, rev);
+    const match = rows.find((row) => String(row.pos) === id);
+    if (match === undefined) throw new ApiError(404, "no such idea in the inbox");
+    // Already done means an earlier call succeeded. An idempotent repeat
+    // writes nothing, so the guard token stays as it is.
+    if (match.done !== 0) return renderInbox(rows, rev);
     tx.update(inboxEntries)
-      .set({ raw: doneForm(line), done: 1 })
+      .set({ done: 1 })
       .where(and(eq(inboxEntries.campaignId, campaign), eq(inboxEntries.pos, match.pos)))
       .run();
-    return renderInbox(campaign, inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
+    return renderInbox(inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
   });
 }
 
 // --- review actions ------------------------------------------------------------
 
 /**
- * POST /api/campaigns/:campaign/review/seen — mark one log line as reviewed. The
- * `reviewed` properties hash list became a flag on the log row (schema.ts),
- * and the hash is still the id the app speaks: the line is hashed exactly as
- * sent and the row with that hash gets the flag.
+ * POST /api/campaigns/:campaign/review/seen `{ sessionId, logId }` — mark one
+ * log row as reviewed. `reviewed` is a flag on the row (db/schema.ts), and
+ * `logId` is the row's own id (`SessionLogEntry.id`).
  *
- * CONTRACT of the answer's `marked` flag: true means a row now carries the
- * flag (it was set here, or an earlier call had already set it), false means
- * NO LOG LINE OF THIS SESSION HASHES TO THE LINE THAT WAS SENT — the session
- * moved on, or the caller did not send the line byte for byte. The entry
- * version grew an orphan `reviewed` entry for that case; the row version
- * cannot, and staying silent about it would hide a client bug behind a 200.
- * The app sends the row's own `raw` (app/src/lib/use-review.ts), so `false`
- * is not a state it reaches — which is exactly why it must be visible.
+ * Idempotent: a row that already carries the flag is answered unchanged, and
+ * nothing is written, so the session's guard token stands.
+ *
+ * 404 when the session has no row with that id. The review reads the log and
+ * sends back an id it read, so a miss is the session having moved on or a
+ * caller inventing ids — both worth saying out loud instead of hiding behind
+ * a 200 that changed nothing.
  */
 export async function markLogLineSeen(
   campaign: string,
-  rel: string,
-  line: string,
-): Promise<EntryResponse & { marked: boolean }> {
-  assertSafeAddress(rel);
-  const segments = addressSegments(rel);
-  if (segments.length !== 2 || segments[0] !== "sessions") {
-    throw new ApiError(400, "path must be a sessions/<id> address");
-  }
-  const sessionId = segments[1] ?? "";
-  const hash = logLineShortHash(line);
+  sessionId: string,
+  logId: string,
+): Promise<SessionResponse> {
   return mutate(campaign, (tx) => {
     const row = sessionRow(tx, campaign, sessionId);
-    if (row === undefined) throw new ApiError(404, "entry not found");
-    const entry = logRows(tx, campaign, sessionId).find((l) => l.hash === hash);
-    if (entry === undefined) {
-      return { ...renderSessionRow(tx, campaign, row), marked: false };
-    }
-    if (entry.reviewed === 0) {
-      tx.update(logEntries)
-        .set({ reviewed: 1 })
-        .where(
-          and(
-            eq(logEntries.campaignId, campaign),
-            eq(logEntries.sessionId, sessionId),
-            eq(logEntries.pos, entry.pos),
-          ),
-        )
-        .run();
-      bumpSessionRev(tx, campaign, row);
-      return {
-        ...renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 }),
-        marked: true,
-      };
-    }
-    return { ...renderSessionRow(tx, campaign, row), marked: true };
+    if (row === undefined) throw new ApiError(404, "session not found");
+    const entry = logRows(tx, campaign, sessionId).find((l) => l.hash === logId);
+    if (entry === undefined) throw new ApiError(404, "no such log entry in this session");
+    if (entry.reviewed !== 0) return renderSessionRow(tx, campaign, row);
+    tx.update(logEntries)
+      .set({ reviewed: 1 })
+      .where(
+        and(
+          eq(logEntries.campaignId, campaign),
+          eq(logEntries.sessionId, sessionId),
+          eq(logEntries.pos, entry.pos),
+        ),
+      )
+      .run();
+    bumpSessionRev(tx, campaign, row);
+    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
 }
 

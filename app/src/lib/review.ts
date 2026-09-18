@@ -1,8 +1,9 @@
-// Pure helpers of the review view — the "Session-Nachbereitung" (issue #10,
-// formerly "Fünf Minuten Ernte"; the harvest metaphor lives on in code only):
-// hashtag handling, the inbox list-line parser, the "Offene Fäden"
-// checklist parser, the NPC-slug derivation for the stub dialog and the
-// short hash that marks a log line as reviewed. No react, no query imports.
+// Pure helpers of the review view: hashtag handling, the grouping of
+// player-character notes, the chapter's thread checklist parser and the
+// NPC-slug derivation for the stub dialog. No react, no query imports.
+//
+// Log rows and inbox rows arrive as ROWS from the server and are marked done
+// by their id, so nothing here parses a list out of text any more.
 //
 // Everything degrades (README): unparsable input yields empty results or
 // passes through unchanged, never an error.
@@ -12,8 +13,8 @@ import { toSlug } from "@grimoire/shared/slug";
 import { isEntityId } from "@/lib/entity";
 
 /**
- * The log/inbox hashtags the review harvests (README, "Hashtags im Log").
- * `#date` is deliberately NOT one of them — in-game dates are no harvest.
+ * The log/inbox hashtags the review harvests (README). `#date` is deliberately
+ * NOT one of them — in-game dates are no harvest.
  */
 export const REVIEW_TAGS = ["thread", "npc", "loot", "decision"] as const;
 
@@ -33,133 +34,41 @@ export function tagAllowsNpc(tag: string): boolean {
 }
 
 /**
- * The player-character tag (issue #86, README): `#pc` marks a note ABOUT a
- * player character. It is deliberately not part of REVIEW_TAGS — a `#pc`
- * line is no harvest (no thread, no NPC stub), it is a reminder for the
- * table. Where both appear (`#pc #thread`), `#pc` wins.
+ * The player-character tag (README): `#pc` marks a note ABOUT a player
+ * character. It is deliberately not part of REVIEW_TAGS — a `#pc` row is no
+ * harvest (no thread, no NPC stub), it is a reminder for the table. Where both
+ * appear (`#pc #thread`), `#pc` wins.
  */
 export const PC_TAG = "pc";
 
 // `#tag` — letters/digits (unicode: `#öl` works), then also `_`/`-`.
 const HASHTAG = /#([\p{L}\p{N}][\p{L}\p{N}_-]*)/gu;
 
-/** All hashtags of a line, lowercased, in order (without the `#`). */
+/** All hashtags of a row's text, lowercased, in order (without the `#`). */
 export function extractHashtags(text: string): string[] {
   return [...text.matchAll(HASHTAG)].map((m) => (m[1] ?? "").toLowerCase());
 }
 
-/** The first hashtag from REVIEW_TAGS — the log-line filter of the review. */
+/** The first hashtag from REVIEW_TAGS — the row filter of the review. */
 export function firstReviewTag(text: string): string | undefined {
   return extractHashtags(text).find(isReviewTag);
 }
 
 /**
- * Display text of an entry: hashtags removed, whitespace collapsed
- * (prototype: `text.replace(/\s*#\w+/g, '')`). A line that is nothing but
- * hashtags keeps its original text — an empty card would be worse.
+ * Display text of a row: hashtags removed, whitespace collapsed. A row that is
+ * nothing but hashtags keeps its original text — an empty card would be worse.
  */
 export function stripHashtags(text: string): string {
   const stripped = text
     .replace(/\s*#[\p{L}\p{N}][\p{L}\p{N}_-]*/gu, "")
     .replace(/\s{2,}/g, " ")
-    .trim()
-    // A leading em dash is log-line formatting (scene-less notes), not content.
-    .replace(/^[—–-]\s+/, "");
+    .trim();
   return stripped === "" ? text.trim() : stripped;
 }
 
-// --- inbox lines --------------------------------------------------------------
+// --- player-character notes ---------------------------------------------------
 
-export interface InboxLine {
-  /** Line index inside the body — stable identity: `inbox-done` rewrites the
-   *  line in place, appends go to the end. */
-  index: number;
-  /** The line EXACTLY as it stands in the body — `/review/inbox-done`
-   *  matches it byte for byte. */
-  raw: string;
-  /** Display text: checkbox marker, leading date and hashtags removed. */
-  text: string;
-  /** Leading `yyyy-mm-dd` of the inbox convention, when present. */
-  date?: string;
-  tags: string[];
-  /** `- [x] …` — already harvested in an earlier review. */
-  done: boolean;
-}
-
-const CHECKBOX = /^\[([ xX])\]\s*/;
-const LEADING_DATE = /^(\d{4}-\d{2}-\d{2})\s+/;
-
-/**
- * All top-level `- ` list lines of inbox (properties-stripped body), in
- * log order. Indented lines are skipped: the write API only accepts lines
- * starting with `- `. Nothing is filtered here — see harvestInboxEntries.
- */
-export function parseInboxEntries(body: string): InboxLine[] {
-  const out: InboxLine[] = [];
-  // Exact split (not /\r?\n/): the raw line has to match the log byte for byte.
-  body.split("\n").forEach((raw, index) => {
-    if (!raw.startsWith("- ")) return;
-    let rest = raw.slice(2);
-    let done = false;
-    const marker = CHECKBOX.exec(rest);
-    if (marker !== null) {
-      done = (marker[1] ?? " ") !== " ";
-      rest = rest.slice(marker[0].length);
-    }
-    const dateMatch = LEADING_DATE.exec(rest);
-    if (dateMatch !== null) rest = rest.slice(dateMatch[0].length);
-    const entry: InboxLine = {
-      index,
-      raw,
-      text: stripHashtags(rest),
-      tags: extractHashtags(rest),
-      done,
-    };
-    const date = dateMatch?.[1];
-    if (date !== undefined) entry.date = date;
-    out.push(entry);
-  });
-  return out;
-}
-
-/**
- * The inbox lines the review offers: only tagged ones (untagged ideas stay
- * in the inbox — prototype), and `- [x] …` lines only when they were acted
- * on in THIS browser session (`keepDone`, so a card does not vanish under
- * the cursor). Everything else stays out so harvested ideas never resurface
- * in a later review (README, inbox exception). `#pc` lines are NOT part of
- * the harvest — they have their own section (issue #86).
- */
-export function harvestInboxEntries(
-  body: string,
-  keepDone: ReadonlySet<number> = new Set<number>(),
-): InboxLine[] {
-  return openInboxLines(body, keepDone).filter(
-    (line) => line.tags.length > 0 && !hasPcTag(line.tags),
-  );
-}
-
-/**
- * The UNTAGGED open inbox lines — the review's „Notizen" section (issue #85).
- * Ideas thrown in on the go carry no hashtag, and before #85 they had no way
- * out of the inbox at all. Same done-rule as the tagged half: a line
- * ticked off in an earlier review stays out, one ticked off in THIS sitting
- * (`keepDone`) keeps its card.
- */
-export function inboxNoteEntries(
-  body: string,
-  keepDone: ReadonlySet<number> = new Set<number>(),
-): InboxLine[] {
-  return openInboxLines(body, keepDone).filter((line) => line.tags.length === 0);
-}
-
-function openInboxLines(body: string, keepDone: ReadonlySet<number>): InboxLine[] {
-  return parseInboxEntries(body).filter((line) => !line.done || keepDone.has(line.index));
-}
-
-// --- player-character notes (issue #86) ---------------------------------------
-
-/** Does this line carry `#pc`? (`#pcs`/`#npc` are other tags — no match.) */
+/** Does this row carry `#pc`? (`#pcs`/`#npc` are other tags — no match.) */
 export function hasPcTag(tags: readonly string[]): boolean {
   return tags.includes(PC_TAG);
 }
@@ -167,32 +76,24 @@ export function hasPcTag(tags: readonly string[]): boolean {
 /**
  * Tags that belong to the log/inbox CONVENTION (README) and can therefore
  * never be a character name: `#pc` itself, the four harvest tags and `#date`.
- * `#pc #thread` is a PC reminder that also mentions a thread — not a note
- * about a character called „thread".
+ * A row tagged `#pc #thread` is a reminder that also mentions a thread — not a
+ * note about a character named after that tag.
  */
 function isConventionTag(tag: string): boolean {
   return tag === PC_TAG || tag === "date" || isReviewTag(tag);
 }
 
 /**
- * The character a `#pc` line names: the first hashtag that is not a
+ * The character a `#pc` row names: the first hashtag that is not a
  * convention tag (`#pc #kaela` → `kaela`, `#kaela #pc` → `kaela`, already
- * lowercased by extractHashtags). Undefined when the line carries convention
+ * lowercased by extractHashtags). Undefined when the row carries convention
  * tags only — the review groups those under its general heading.
  */
 export function pcGroupTag(tags: readonly string[]): string | undefined {
   return tags.find((tag) => !isConventionTag(tag));
 }
 
-/** The open inbox lines carrying `#pc` — the review's „Spielercharaktere". */
-export function inboxPcEntries(
-  body: string,
-  keepDone: ReadonlySet<number> = new Set<number>(),
-): InboxLine[] {
-  return openInboxLines(body, keepDone).filter((line) => hasPcTag(line.tags));
-}
-
-/** One group of the „Spielercharaktere" section. */
+/** One group of the player-character section. */
 export interface PcGroup<T> {
   /** The second tag, or undefined for the „Allgemein" group. */
   tag: string | undefined;
@@ -270,7 +171,7 @@ const QUOTED = /["“„»'‚]([^"“”„«»'‚‘]{2,40})["”“«'‘]/u
 const CAPITALIZED = /\p{Lu}[\p{L}'-]*(?:\s+\p{Lu}[\p{L}'-]*){0,2}/gu;
 
 /**
- * The name a log line probably introduces: a quoted name wins
+ * The name a log row probably introduces: a quoted name wins
  * (`Improvisiert: Fischerin "Old Metta" am Steg` → `Old Metta`), otherwise
  * the first run of capitalized words that is not a label ending in `:`.
  * Undefined when nothing looks like a name — the dialog then starts empty.
@@ -291,10 +192,10 @@ export function npcNameFromText(text: string): string | undefined {
 
 /**
  * Kebab-case slug of a display name (German transliteration, diacritics
- * folded); an empty string when nothing usable is left. The rule moved to
- * `@grimoire/shared/slug` with issue #56 — the create dialogs derive ids the
- * same way and the SERVER has to agree with them — and is re-exported here
- * for the callers that already read it from this module.
+ * folded); an empty string when nothing usable is left. The rule lives in
+ * `@grimoire/shared/slug` — the create dialogs derive ids the same way and the
+ * SERVER has to agree with them — and is re-exported here for the callers that
+ * already read it from this module.
  */
 export { toSlug };
 
@@ -303,29 +204,4 @@ export { toSlug };
 export function deriveNpcSlug(text: string): string {
   const name = npcNameFromText(text);
   return name === undefined ? "" : toSlug(name);
-}
-
-// --- reviewed short hash ------------------------------------------------------
-
-/**
- * The `reviewed` entry of a log line: first 8 hex chars of SHA-256 over the
- * UTF-8 bytes of the RAW line (README; server: campaign-write.ts
- * `shortLineHash`). Byte-identical to the server — the app only compares
- * hashes it computed the same way.
- */
-export async function shortLineHash(line: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(line));
-  return [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, 8);
-}
-
-/** line → short hash for a batch of raw log lines (duplicates collapse). */
-export async function shortLineHashes(
-  lines: readonly string[],
-): Promise<Record<string, string>> {
-  const unique = [...new Set(lines)];
-  const hashes = await Promise.all(unique.map(shortLineHash));
-  return Object.fromEntries(unique.map((line, i) => [line, hashes[i] as string]));
 }
