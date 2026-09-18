@@ -15,7 +15,6 @@
 
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
-  isEnded,
   isKnowledgeKind,
   type CampaignTree,
   type ChapterNode,
@@ -32,13 +31,12 @@ import {
   type SceneSummary,
   type SceneType,
   type InboxResponse,
-  type SessionResponse,
   type SessionSummary,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import { requireCampaign } from "./campaigns";
-import { compareSessionsNewestFirst, sessionOrderKey } from "./shared";
+import { sessionSummaries } from "./session-rows";
 import type { GrimoireDb } from "../db/client";
 import {
   campaignKnowledge,
@@ -46,15 +44,10 @@ import {
   glossary,
   inboxEntries,
   locations,
-  logEntries,
   npcs,
   sceneNpcs,
   sceneTags,
   scenes,
-  sessionPauses,
-  sessionScenesPlayed,
-  sessions,
-
 } from "../db/schema";
 import { getDb } from "./handle";
 import { expandBodyRefs } from "./refs";
@@ -74,18 +67,13 @@ import {
   renderLocation,
   renderNpc,
   renderScene,
-  renderSession,
-  sessionSummary,
   type CampaignRow,
   type ChapterRow,
   type GlossaryRow,
   type InboxRow,
   type LocationRow,
-  type LogRow,
   type NpcRow,
-  type PauseRow,
   type SceneRow,
-  type SessionRow,
 } from "./render";
 
 /** Lexicographic (code-unit) compare — locale-independent, stable. */
@@ -234,149 +222,8 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   };
 }
 
-// --- session helpers ---------------------------------------------------------
-
-export function playedScenes(db: GrimoireDb, campaign: string, sessionId: string): string[] {
-  return db
-    .select({ sceneId: sessionScenesPlayed.sceneId })
-    .from(sessionScenesPlayed)
-    .where(
-      and(
-        eq(sessionScenesPlayed.campaignId, campaign),
-        eq(sessionScenesPlayed.sessionId, sessionId),
-      ),
-    )
-    .orderBy(asc(sessionScenesPlayed.pos))
-    .all()
-    .map((r) => r.sceneId);
-}
-
-export function pauseRows(db: GrimoireDb, campaign: string, sessionId: string): PauseRow[] {
-  return db
-    .select({
-      pos: sessionPauses.pos,
-      fromTs: sessionPauses.fromTs,
-      toTs: sessionPauses.toTs,
-    })
-    .from(sessionPauses)
-    .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, sessionId)))
-    .orderBy(asc(sessionPauses.pos))
-    .all() as PauseRow[];
-}
-
-export function logRows(db: GrimoireDb, campaign: string, sessionId: string): LogRow[] {
-  return db
-    .select({
-      pos: logEntries.pos,
-      at: logEntries.at,
-      sceneId: logEntries.sceneId,
-      text: logEntries.text,
-      hash: logEntries.hash,
-      reviewed: logEntries.reviewed,
-    })
-    .from(logEntries)
-    .where(and(eq(logEntries.campaignId, campaign), eq(logEntries.sessionId, sessionId)))
-    .orderBy(asc(logEntries.pos))
-    .all() as LogRow[];
-}
-
-export function sessionRow(
-  db: GrimoireDb,
-  campaign: string,
-  id: string,
-): SessionRow | undefined {
-  return db
-    .select()
-    .from(sessions)
-    .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, id)))
-    .all()[0] as SessionRow | undefined;
-}
 
 
-function pickLatest(rows: SessionRow[]): SessionRow | undefined {
-  const candidates = rows.filter((row) => sessionOrderKey(row) !== undefined);
-  if (candidates.length === 0) return undefined;
-  return [...candidates].sort(compareSessionsNewestFirst)[0];
-}
-
-/**
- * The ACTIVE session row: the last STARTED one that is not ended. With
- * `includeEnded` it is simply the last started session — the row the review
- * harvests, which may be yesterday's when the evening ran past midnight.
- */
-export function pickSession(
-  db: GrimoireDb,
-  campaign: string,
-  includeEnded: boolean,
-): SessionRow | undefined {
-  const rows = db
-    .select()
-    .from(sessions)
-    .where(eq(sessions.campaignId, campaign))
-    .all() as SessionRow[];
-  const candidates = includeEnded ? rows : rows.filter((r) => !isEnded({ ended: r.ended }));
-  return pickLatest(candidates);
-}
-
-export function renderSessionRow(
-  db: GrimoireDb,
-  campaign: string,
-  row: SessionRow,
-): SessionResponse {
-  return renderSession(
-    row,
-    pauseRows(db, campaign, row.id),
-    logRows(db, campaign, row.id),
-    playedScenes(db, campaign, row.id),
-  );
-}
-
-/** Every session of a campaign as a list head, NEWEST FIRST. */
-export function sessionSummaries(db: GrimoireDb, campaign: string): SessionSummary[] {
-  return (
-    db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
-  )
-    .sort(compareSessionsNewestFirst)
-    .map(sessionSummary);
-}
-
-/**
- * GET /api/campaigns/:campaign/sessions — the campaign's sessions, newest
- * first (`started`, with the row's insertion time as the tie-break: several
- * sessions per day are possible and the opaque id orders nothing).
- */
-export async function listSessions(campaign: string): Promise<SessionSummary[]> {
-  await requireCampaign(campaign);
-  return sessionSummaries(await getDb(), campaign);
-}
-
-/**
- * GET /api/campaigns/:campaign/session — the ACTIVE session, or NULL when
- * none runs. With `includeEnded` it is the last STARTED session, ended or
- * not, and null only when the campaign has no session at all.
- *
- * `null` and not a 404: "no session is running" is the ordinary state of a
- * campaign between two evenings, and a 404 would make every reader
- * special-case an answer that means nothing is wrong.
- */
-export async function readActiveSession(
-  campaign: string,
-  includeEnded = false,
-): Promise<SessionResponse | null> {
-  await requireCampaign(campaign);
-  const db = await getDb();
-  const row = pickSession(db, campaign, includeEnded);
-  return row === undefined ? null : renderSessionRow(db, campaign, row);
-}
-
-/** GET /api/campaigns/:campaign/sessions/:id — 404 for an unknown id. */
-export async function readSession(campaign: string, id: string): Promise<SessionResponse> {
-  await requireCampaign(campaign);
-  const db = await getDb();
-  const row = sessionRow(db, campaign, id);
-  if (row === undefined) throw new ApiError(404, "session not found");
-  return renderSessionRow(db, campaign, row);
-}
 
 /**
  * GET /api/campaigns/:campaign/inbox — the ideas plus the LIST's guard token.
