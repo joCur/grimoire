@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@grimoire/shared": "workspace:*",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.3",
     "jsonrepair": "3.15.0"

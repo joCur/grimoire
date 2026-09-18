@@ -324,7 +324,7 @@ export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
  * The epoch interpretation of a session's zone-less timestamps — unchanged
  * arithmetic, unchanged reason: only the SERVER knows which wall
  * clock those digits belong to, so it ships the reading alongside the
- * strings. `local-time.ts` is untouched by the cutover.
+ * strings (local-time.ts reads them).
  */
 export function sessionTimes(
   row: SessionRow,

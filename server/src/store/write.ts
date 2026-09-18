@@ -12,9 +12,9 @@
 //     the same `rev` cannot both go through. `force` is the documented way
 //     past it and writes only the fields the request carries;
 //   * the session state machine has its answers and codes
-//     (`session_running`, `session_not_empty`), and `local-time.ts` owns the
-//     formatting — session ids, `started`/`ended` and log times are zone-less
-//     local strings produced by the server;
+//     (`session_running`, `session_not_empty`), and the local-time formats
+//     are the ones from `local-time.ts` — session ids, `started`/`ended` and
+//     log times are zone-less local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
 //     rows through their own endpoints, and the one documented exception
 //     (an inbox entry marked done) is the `done` flag.
@@ -46,9 +46,10 @@ import {
   type KnowledgeResponse,
   type PatchEntryRequest,
 } from "@grimoire/shared";
+import { format } from "date-fns";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
-import { localDate, localDateTimeSeconds, localTime } from "../local-time";
+import { LOCAL_DATE, LOCAL_DATE_TIME_SECONDS, LOCAL_TIME } from "../local-time";
 import type { GrimoireDb } from "../db/client";
 import { logLineShortHash } from "./body-parse";
 import {
@@ -1515,7 +1516,7 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
 export async function startSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const d = new Date();
-    const today = localDate(d);
+    const today = format(d, LOCAL_DATE);
     const active = pickSession(tx, campaign, false);
     // "Is the running session TODAY's?" is answered by `started`, not by the
     // id — the id is opaque and says nothing about a day.
@@ -1537,7 +1538,7 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
       .values({
         campaignId: campaign,
         id,
-        started: localDateTimeSeconds(d),
+        started: format(d, LOCAL_DATE_TIME_SECONDS),
         createdAt: nextCreatedAt(tx, campaign),
       })
       .run();
@@ -1559,8 +1560,8 @@ export async function endSession(campaign: string): Promise<EntryResponse> {
     if (row === undefined) throw new ApiError(404, "no active session");
     if (isEnded({ ended: row.ended })) return renderSessionRow(tx, campaign, row);
     const d = new Date();
-    closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d));
-    const ended = localDateTimeSeconds(d);
+    closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS));
+    const ended = format(d, LOCAL_DATE_TIME_SECONDS);
     tx.update(sessions)
       .set({ ended, rev: row.rev + 1 })
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
@@ -1662,11 +1663,11 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
         campaignId: campaign,
         sessionId: row.id,
         pos: nextPos(pauses),
-        fromTs: localDateTimeSeconds(d),
+        fromTs: format(d, LOCAL_DATE_TIME_SECONDS),
         toTs: null,
       })
       .run();
-    appendLogRow(tx, campaign, row.id, `- ${localTime(d)} — Pause`);
+    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Pause`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
@@ -1677,10 +1678,10 @@ export async function continueSession(campaign: string): Promise<EntryResponse> 
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
     const d = new Date();
-    if (!closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d))) {
+    if (!closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS))) {
       return renderSessionRow(tx, campaign, row);
     }
-    appendLogRow(tx, campaign, row.id, `- ${localTime(d)} — Weiter`);
+    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Weiter`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
@@ -1734,7 +1735,7 @@ export async function appendLogEntry(
     // The note's scene is a reference: it has to name a scene that exists,
     // and nothing is created for it.
     if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
-    const raw = `- ${localTime(new Date())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
+    const raw = `- ${format(new Date(), LOCAL_TIME)}${sceneId ? ` (${sceneId})` : ""} ${text}`;
     appendLogRow(tx, campaign, row.id, raw);
     if (sceneId !== undefined) {
       const played = playedScenes(tx, campaign, row.id);

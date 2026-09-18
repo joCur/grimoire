@@ -9,7 +9,7 @@
 // gets a fresh in-memory database seeded from the JSON entries in `fixtures/`
 // (test/support/store.ts), and the system time is faked per case.
 //
-// Pause timestamps are stored VERBATIM as `localDateTimeSeconds` writes them,
+// Pause timestamps are stored VERBATIM in the `LOCAL_DATE_TIME_SECONDS` shape,
 // so a `:00` second survives — which is what several assertions below spell
 // out second-precise.
 
