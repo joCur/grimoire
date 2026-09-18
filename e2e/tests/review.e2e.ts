@@ -159,7 +159,7 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await noteCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(noteCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(progress).toHaveText("1 von 5 gesichtet");
-  // The line is ticked off in the inbox document itself.
+  // The line is ticked off in the inbox entry itself.
   await expect.poll(() => api.body("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
 
   // The chapter overview affordance counts the same entries the page does.
@@ -208,7 +208,7 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("1 von 5 gesichtet");
-  // The line is ticked off in the inbox document itself.
+  // The line is ticked off in the inbox entry itself.
   await expect
     .poll(() => api.body("inbox"))
     .toContain(`- [x] ${PC_TEXT} #pc #kaela`);

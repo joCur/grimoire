@@ -598,7 +598,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
   }
 });
 
-test("editing the campaign metadata updates header, switcher and the file", async ({
+test("editing the campaign metadata updates header, switcher and the entry", async ({
   page,
   api,
 }) => {
@@ -686,7 +686,7 @@ test.describe("a campaign without a name", () => {
   });
 });
 
-test("the campaign reading view carries the same edit action", async ({
+test("the campaign reading view carries the same dialog, under its properties name", async ({
   page,
   api,
 }) => {
@@ -695,8 +695,12 @@ test("the campaign reading view carries the same edit action", async ({
     "Der Leuchtturm von Salzhafen",
   );
 
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  // Same dialog, same write — only the trigger is named after what else stands
+  // in that header: there the edit action belongs to the body, so the
+  // name/description half takes the properties name.
+  await page.getByRole("button", { name: "Eigenschaften" }).click();
   const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Kampagne bearbeiten");
   await dialog.getByLabel("Name", { exact: true }).fill("Aus der Leseansicht");
   await dialog.getByRole("button", { name: "Speichern" }).click();
 

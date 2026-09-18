@@ -61,7 +61,7 @@ async function openProperties(page: Page) {
   return dialog;
 }
 
-test("scene properties: chips, reference and status land in the file — nothing else moves", async ({
+test("scene properties: chips, reference and status land in the entry — nothing else moves", async ({
   page,
   api,
 }) => {
@@ -97,11 +97,11 @@ test("scene properties: chips, reference and status land in the file — nothing
   const location = dialog.getByLabel("Ort");
   await expect(location).toHaveValue("leuchtturm");
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toBeVisible();
-  // Its suggestions SUGGEST, they do not close the field: the ids that have a
-  // file, offered through a native <datalist>. (No role reaches a datalist
+  // Its suggestions SUGGEST, they do not close the field: the ids that have an
+  // entry, offered through a native <datalist>. (No role reaches a datalist
   // option, so this is the one place the spec uses the DOM id the field
   // builds for its list.)
-  const suggestions = dialog.locator("#fm-location-options option");
+  const suggestions = dialog.locator("#prop-location-options option");
   // The three locations the campaign has: the two of the example data plus
   // the one created above.
   await expect(suggestions).toHaveCount(3);
@@ -146,7 +146,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   await save.click();
 
   // The dialog closes and the reading view is already on the new values: the
-  // patch answers with the written file and the mutation seeds it.
+  // patch answers with the written entry and the mutation seeds it.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const article = page.getByRole("article");
   await expect(article).toContainText("#stealth");
@@ -448,9 +448,9 @@ test("clearing a field deletes the key instead of writing an empty value", async
   await expect(article).not.toContainText("Handout:");
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toHaveCount(0);
 
-  // On disk both keys are GONE, not emptied: no `location:` and no
-  // `handouts: []` left behind. (The dialog closes only after the write
-  // answered, so the file is settled here.)
+  // In the stored row both keys are GONE, not emptied: no `location` and no
+  // empty `handouts` left behind. (The dialog closes only after the write
+  // answered, so the entry is settled here.)
   const after = await split(api, SCENE);
   expect(after.properties.location).toBeUndefined();
   expect(after.properties.handouts).toBeUndefined();
@@ -561,7 +561,7 @@ test("Abbrechen and Esc ask before they throw typed values away", async ({ page,
   expect(await split(api, SCENE)).toEqual(before);
 });
 
-test("navigating away closes the dialog — no diff of file A lands in file B", async ({
+test("navigating away closes the dialog — no diff of entry A lands in entry B", async ({
   page,
   api,
 }) => {
@@ -571,7 +571,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // Type into the SCENE's form, then leave the file WITHOUT closing it: the
+  // Type into the SCENE's form, then leave the entry WITHOUT closing it: the
   // ⌘K hotkey is a window listener, so the palette opens over the modal and
   // navigates the route underneath it — this is a click path, not a theory.
   const sceneDialog = await openProperties(page);
@@ -583,7 +583,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
 
-  // The dialog is gone with its file — it may not stand over another file's
+  // The dialog is gone with its entry — it may not stand over another entry's
   // reading view, holding the frozen values (and the rev) of the one it left.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -596,7 +596,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await expect(npcDialog.getByLabel(/^Name/)).toHaveValue("Hafenmeisterin Jorna");
   await expect(npcDialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
 
-  // A save from here writes THIS file only.
+  // A save from here writes THIS entry only.
   await npcDialog.getByLabel("Rolle").fill(role);
   await npcDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -605,7 +605,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   expect(await split(api, SCENE)).toEqual(scene);
 });
 
-test("Ort and Kapitel have the form too — campaign file, session and inbox do not", async ({
+test("Ort and Kapitel have the form too — session and inbox do not", async ({
   page,
 }) => {
   // The four kinds with typed properties offer it …
@@ -625,7 +625,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // … the app-managed and append-only files do not (ADR #4), and neither does
+  // … the app-managed and append-only entries do not (ADR #4), and neither does
   // the glossary, which has no typed properties to offer. Asserted only after
   // the content is on screen, so this cannot pass on a still-loading page.
   const withoutForm: [string, string][] = [
@@ -639,16 +639,49 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     await expect(page.getByRole("button", { name: "Eigenschaften" })).toHaveCount(0);
   }
 
-  // The campaign file keeps its ONE dialog: its name/description
-  // ARE its properties, so a second form next to it would be two ways to
-  // write the same two keys.
+  // The campaign entry brings its OWN properties half: its name and
+  // description are the two values no typed form models, so its dialog stands
+  // under the properties name, and there is no generic form beside it.
+  // The edit action there belongs to the body, like a chapter's.
   await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
-  await expect(page.getByRole("button", { name: "Eigenschaften" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  const campaignProperties = page.getByRole("button", { name: "Eigenschaften" });
+  await expect(campaignProperties).toHaveCount(1);
+  await campaignProperties.click();
   await expect(page.getByRole("dialog")).toContainText("Kampagne bearbeiten");
+});
+
+test("a status outside the closed list is refused and writes nothing", async ({ api }) => {
+  // The four status columns and the scene type are CHECK constraints of their
+  // columns (ADR #25), so the one write path refuses a foreign value with a
+  // 400 and its own code instead of letting SQLite fail. The form can only
+  // ever offer the allowed positions — this asserts the rule on the endpoint,
+  // which is what protects the column against the generator and a direct
+  // write as well.
+  const before = await split(api, SCENE);
+  const current = await api.file(SCENE);
+  const response = await api.fetch(
+    `campaigns/beispiel/entries/${SCENE.split("/").map(encodeURIComponent).join("/")}`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rev: current.rev, properties: { status: "halbfertig" } }),
+    },
+  );
+  expect(response.status).toBe(400);
+  // The body carries what the sentence in the app needs: which column, the
+  // value that was written, and the positions in column order.
+  expect(await response.json()).toMatchObject({
+    code: "status_not_allowed",
+    kind: "scene",
+    value: "halbfertig",
+    allowed: ["draft", "ready", "played", "dropped"],
+  });
+  // A refusal writes nothing — neither half moved, and the guard token stands.
+  expect(await split(api, SCENE)).toEqual(before);
+  expect((await api.file(SCENE)).rev).toBe(current.rev);
 });
 
 // Critical path 8: the same form at phone size. The dialog is the only place

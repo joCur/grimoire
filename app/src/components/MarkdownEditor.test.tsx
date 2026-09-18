@@ -87,7 +87,7 @@ describe("EditorShell", () => {
           onChange={() => {}}
           editing={editing}
           id="entry-body-scene"
-          label="Markdown-Text der Datei"
+          label="Markdown-Text von 01-salzhafen/leuchtturm/lighthouse-arrival"
         />
       </EditorShell>,
     );

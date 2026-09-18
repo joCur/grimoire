@@ -377,7 +377,11 @@ und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und das
 Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
-`scene-rendering.e2e.ts`.
+`scene-rendering.e2e.ts`. Und weil Status und Typ seit ADR #25
+`CHECK`-Constraints ihrer Spalten sind, hält ein Test im selben Spec die Regel
+direkt am Schreibweg fest: ein `status` außerhalb der geschlossenen Liste ist
+ein 400 mit `code: "status_not_allowed"` samt `kind`, `value` und `allowed`,
+und der Eintrag bleibt unverändert — auch die Zeilenversion.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
@@ -400,7 +404,12 @@ in einem Speichern schickt. Die Listen-Adressen (Session, Eingang, Glossar)
 lehnen einen `body` mit 400 `body_not_editable` ab; das Glossar ist eine
 Liste, seine Leseansicht bietet darum gar keine Bearbeitung an — der Spec
 hält beides fest: keine Aktion in der Ansicht, und die Pflege läuft über den
-Listen-Endpoint. Jeder Test dort betritt den
+Listen-Endpoint. Der Kampagnen-Eintrag ist der Gegenfall und hat beide
+Hälften: ein Test öffnet `campaign`, ändert den Text über denselben Editor
+wie bei einem Kapitel, speichert und liest ihn gerendert und über die API
+zurück (die Eigenschaften kommen dabei unverändert heraus); die Aktion
+„Eigenschaften" daneben öffnet weiterhin den Dialog „Kampagne bearbeiten",
+denn Name und Beschreibung modelliert kein getipptes Formular. Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
 zusätzlich den Umzug ab: eine Szene, deren `location` sich geändert hat,
