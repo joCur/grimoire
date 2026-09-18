@@ -103,13 +103,13 @@ export type SeedEntry =
   | {
       kind: "session";
       properties: Record<string, unknown>;
-      /** Log lines as written, `- HH:MM (scene-id) text`. */
-      log?: { raw: string; reviewed?: boolean }[];
+      /** Log ROWS — time, scene and text as columns, never a markdown line. */
+      log?: { at: string; sceneId?: string; text: string; reviewed?: boolean }[];
       body?: string;
     }
   | {
       kind: "inbox";
-      entries: ({ raw: string } | { text: string; done?: boolean })[];
+      entries: { text: string; done?: boolean }[];
     }
   | {
       kind: "glossary";
@@ -149,6 +149,49 @@ export interface ApiEntry {
   rev: number;
 }
 
+/** One log row of a session — columns, never a markdown line (ADR #26). */
+export interface ApiLogEntry {
+  /** The row's stable id — what `POST /review/seen` names the line by. */
+  id: string;
+  at: string;
+  sceneId?: string;
+  text: string;
+  reviewed: boolean;
+}
+
+/**
+ * ONE SESSION as every session endpoint answers it. A session has no address
+ * and no `properties` map: it is a table, so its log, its pauses and its
+ * played scenes come back as rows and lists.
+ */
+export interface ApiSession {
+  id: string;
+  started: string;
+  startedMs?: number;
+  ended?: string;
+  endedMs?: number;
+  pauses: { from: string; fromMs?: number; to?: string; toMs?: number }[];
+  log: ApiLogEntry[];
+  scenesPlayed: string[];
+  /** Guard token of the session row. */
+  rev: number;
+}
+
+/** The identifying head of a session, as `GET …/sessions` lists it. */
+export interface ApiSessionSummary {
+  id: string;
+  started: string;
+  startedMs?: number;
+  ended?: string;
+  endedMs?: number;
+}
+
+/** The ideas as `GET …/inbox` answers them: rows plus the list's guard token. */
+export interface ApiInbox {
+  entries: { id: string; text: string; done: boolean }[];
+  rev: number;
+}
+
 /**
  * Typed access to the test's own server: the database is the truth, and the
  * API is how one looks at it — the same way the app does.
@@ -171,14 +214,25 @@ export interface Api {
   /** Whether the address names an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
   /**
-   * Path of the ACTIVE session — or, with `includeEnded`, of the last started
-   * one. `undefined` when the campaign has no such session.
+   * The ACTIVE session — or, with `includeEnded`, the last started one.
+   * `undefined` when the campaign has no such session: the endpoint answers
+   * 200 with a `null` body, because "nothing runs" is an ordinary state.
    *
    * A session id the app starts is an opaque random string, so no spec can
    * spell one out: "the session the app just started" is a question only the
    * server can answer, and this asks it.
    */
-  sessionPath(includeEnded?: boolean): Promise<string | undefined>;
+  activeSession(includeEnded?: boolean): Promise<ApiSession | undefined>;
+  /** Id of the active session (see `activeSession`), or undefined. */
+  sessionId(includeEnded?: boolean): Promise<string | undefined>;
+  /** ONE session by its id; throws when the id names none (404). */
+  session(id: string): Promise<ApiSession>;
+  /** Whether a session with that id exists (404 = no). */
+  sessionExists(id: string): Promise<boolean>;
+  /** Every session of the campaign, newest first. */
+  sessions(): Promise<ApiSessionSummary[]>;
+  /** The ideas with the list's guard token. */
+  inbox(): Promise<ApiInbox>;
   /**
    * The ONE write path of an entry: PATCH the address with `rev` and at least
    * one of `properties` and `body` (ADR #23). Fields and text together are one
@@ -282,8 +336,9 @@ export async function startGrimoireServer(
       },
     });
     try {
-      // localhost (not 127.0.0.1): the review view hashes log lines with
-      // WebCrypto, which needs a secure context.
+      // localhost (not 127.0.0.1): it is a SECURE CONTEXT, so the browser
+      // APIs that require one — the callout's copy button reaches for
+      // `navigator.clipboard` — behave as they do in production.
       const url = `http://localhost:${port}`;
       await waitForHttp(`${url}/api/campaigns`, proc, `server:${port}`, 20_000);
       return {
@@ -299,17 +354,12 @@ export async function startGrimoireServer(
 }
 
 /**
- * `sessions/<today>` — the address of a session entry a spec SEEDS itself.
+ * The date-shaped id of a session a spec SEEDS itself.
  *
- * NOT the address of a session the app starts: those ids are opaque random
- * strings and only the server knows them (`api.sessionPath`). A date-shaped
- * id stays perfectly legal, which is why a seeded session may spell one.
+ * NOT the id of a session the app starts: those are opaque random strings and
+ * only the server knows them (`api.sessionId`). A date-shaped id stays
+ * perfectly legal, which is why a seeded session may spell one.
  */
-export function todaySessionPath(d = new Date()): string {
-  return `sessions/${todaySessionId(d)}`;
-}
-
-/** The date-shaped id of a seeded session for that day (see above). */
 export function todaySessionId(d = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -322,6 +372,11 @@ export function todaySessionId(d = new Date()): string {
 function entriesPath(campaign: string, rel: string): string {
   const address = rel.split("/").map(encodeURIComponent).join("/");
   return `campaigns/${encodeURIComponent(campaign)}/entries/${address}`;
+}
+
+/** The API path of ONE session — its own endpoint, not an entry address. */
+function sessionsPath(campaign: string, id: string): string {
+  return `campaigns/${encodeURIComponent(campaign)}/sessions/${encodeURIComponent(id)}`;
 }
 
 /** The `api` helper for any server URL (the fixture is this, bound). */
@@ -372,13 +427,29 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
       return true;
     },
-    async sessionPath(includeEnded = false) {
-      const response = await fetchApi(
-        `campaigns/${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`,
-      );
-      if (response.status === 404) return undefined;
-      if (!response.ok) throw new Error(`GET /session: HTTP ${response.status}`);
-      return ((await response.json()) as ApiEntry).path;
+    async activeSession(includeEnded = false) {
+      const path = `campaigns/${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`;
+      // "Nothing runs" is a null body, not a status — so it is read as a
+      // value here, exactly as the app reads it.
+      return (await api.get<ApiSession | null>(path)) ?? undefined;
+    },
+    async sessionId(includeEnded = false) {
+      return (await api.activeSession(includeEnded))?.id;
+    },
+    session(id) {
+      return api.get<ApiSession>(sessionsPath(campaign, id));
+    },
+    async sessionExists(id) {
+      const response = await fetchApi(sessionsPath(campaign, id));
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error(`GET session ${id}: HTTP ${response.status}`);
+      return true;
+    },
+    sessions() {
+      return api.get<ApiSessionSummary[]>(`campaigns/${encodeURIComponent(campaign)}/sessions`);
+    },
+    inbox() {
+      return api.get<ApiInbox>(`campaigns/${encodeURIComponent(campaign)}/inbox`);
     },
     async patchEntry(rel, change) {
       const rev = change.rev ?? (await api.entry(rel)).rev;

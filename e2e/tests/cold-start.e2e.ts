@@ -124,10 +124,10 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   expect(sceneDoc.properties.status).toBe("draft");
 
   // --- start the session, use the scene live --------------------------------
-  expect(await api.sessionPath()).toBeUndefined();
+  expect(await api.sessionId()).toBeUndefined();
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/live$`));
-  expect(await api.sessionPath()).toMatch(/^sessions\/.+$/);
+  expect(await api.sessionId()).toBeDefined();
 
   // The scene created three steps ago is the live view's default selection,
   // its text is on screen, and a quick note lands in the session's log.
@@ -143,12 +143,12 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const note = "Gruppe klopft an die Turmtür";
   await page.getByRole("textbox", { name: "Schnellnotiz" }).fill(note);
   await page.keyboard.press("Enter");
-  const sessionPath = (await api.sessionPath()) ?? "";
+  const sessionId = (await api.sessionId()) ?? "";
   await expect(async () => {
-    expect(await api.body(sessionPath)).toContain(note);
+    expect((await api.session(sessionId)).log.map((row) => row.text)).toContain(note);
   }).toPass();
   // The note carried the scene, so the session knows what was played.
-  expect(await api.body(sessionPath)).toContain("ankunft-am-leuchtturm");
+  expect((await api.session(sessionId)).scenesPlayed).toContain("ankunft-am-leuchtturm");
 });
 
 test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", async ({

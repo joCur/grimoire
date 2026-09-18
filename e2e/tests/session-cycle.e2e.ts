@@ -1,13 +1,13 @@
 // Critical path 4: the session cycle; see CLAUDE.md.
 //
-// start → quick note → log + scenes_played → NPC/location drawer → back into
-// the session via the global live indicator → pause (the clock stops) →
+// start → quick note → log row + scenesPlayed → NPC/location drawer → back
+// into the session via the global live indicator → pause (the clock stops) →
 // resume (it ticks again) → end → review → and the restart: ending is FINAL,
 // so starting a session again on the same day opens a SECOND, separate
-// session (own entry under its own id, empty log, timer at 0) instead of
+// session (own row under its own id, empty log, timer at 0) instead of
 // re-opening the closed one. There is no resuming a closed session.
 //
-// Plus its undo at the very start: discarding a session deletes the entry of
+// Plus its undo at the very start: discarding a session deletes the row of
 // a session that has nothing in it — its own test below.
 //
 // And the live nav's own grouping: a scene whose STATUS is
@@ -15,13 +15,21 @@
 // played one, stays openable there, and never becomes the default
 // selection.
 //
-// Every claim is checked twice: once in the UI and once in the stored entry
+// Every claim is checked twice: once in the UI and once in the stored session
 // (the server is the truth, the app keeps no state of its own).
 //
+// A session is a TABLE, not an entry (ADR #26): it has no address, and what
+// the session endpoints answer are rows — `log` with one row per note,
+// `pauses` as intervals, `scenesPlayed` as a sequence. So every claim about
+// storage here reads a field, never a rendered text.
+//
 // A session id is an OPAQUE random string, so this spec never spells one out:
-// every session path comes from the server (`api.sessionPath()`). That is
-// also the honest test — the app itself never derives the address its notes
-// land in either.
+// it always comes from the server (`api.sessionId()`). That is also the
+// honest test — the app itself never derives the session its notes land in
+// either.
+//
+// A PAUSE is an interval and nothing else: pausing writes no log row, so the
+// evidence for it is `pauses` plus the chip's paused state.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -80,14 +88,14 @@ async function sessionMenuItem(page: Page, name: string) {
   return page.getByRole("menuitem", { name });
 }
 
-test("session start, quick note, pause, end — log and entry follow", async ({
+test("session start, quick note, pause, end — log and session row follow", async ({
   page,
   api,
 }) => {
   await page.goto("/campaigns/beispiel");
 
-  // No session running yet — the session entry is created by the button.
-  expect(await api.sessionPath()).toBeUndefined();
+  // No session running yet — the session row is created by the button.
+  expect(await api.sessionId()).toBeUndefined();
 
   // ONE session control across ALL states: the offer to start and the running
   // session are the SAME chip in the SAME slot — same height, same right edge,
@@ -99,10 +107,10 @@ test("session start, quick note, pause, end — log and entry follow", async ({
   await startChip.click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
-  // WHICH address the session lives under is the server's answer — the id is
+  // WHICH session the notes land in is the server's answer — the id is
   // opaque and carries no date to reconstruct.
-  const sessionPath = (await api.sessionPath()) ?? "";
-  expect(sessionPath).toMatch(/^sessions\/.+$/);
+  const sessionId = (await api.sessionId()) ?? "";
+  expect(sessionId).not.toBe("");
 
   // The topbar carries ONE session control: the chip, brass, with the running
   // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
@@ -154,7 +162,7 @@ test("session start, quick note, pause, end — log and entry follow", async ({
     page.getByText("Noch keine Einträge — die Schnellnotiz unten landet hier."),
   ).toBeVisible();
 
-  await expect.poll(() => api.properties(sessionPath)).toHaveProperty("scenes_played", []);
+  await expect.poll(async () => (await api.session(sessionId)).scenesPlayed).toEqual([]);
 
   // …and while it is empty, the session menu offers to discard it.
   await expect(await sessionMenuItem(page, "Session verwerfen")).toBeVisible();
@@ -170,15 +178,23 @@ test("session start, quick note, pause, end — log and entry follow", async ({
   await expect(log).toBeVisible();
   await expect(quickNote).toHaveValue("");
 
-  // …and the session gained the line plus the played scene id.
+  // …and the session gained one log ROW plus the played scene id. The row's
+  // columns say what the old rendered line had to encode in a grammar: the
+  // time, the scene it was taken in, and the note as the DM typed it.
+  await expect.poll(async () => (await api.session(sessionId)).log).toEqual([
+    {
+      id: expect.any(String),
+      at: expect.stringMatching(/^\d{2}:\d{2}$/),
+      sceneId: "lighthouse-arrival",
+      text: NOTE,
+      reviewed: false,
+    },
+  ]);
   await expect
-    .poll(() => api.body(sessionPath))
-    .toMatch(/- \d{2}:\d{2} \(lighthouse-arrival\) Gruppe verhandelt mit Jorna am Fuß der Treppe #thread/);
-  await expect
-    .poll(async () => (await api.properties(sessionPath)).scenes_played)
+    .poll(async () => (await api.session(sessionId)).scenesPlayed)
     .toEqual(["lighthouse-arrival"]);
 
-  // The played checkmark comes from scenes_played — never faked client-side.
+  // The played checkmark comes from scenesPlayed — never faked client-side.
   await expect(nav.getByText("Gespielt")).toBeAttached();
 
   // The session has content now — discarding it is no longer on offer; the
@@ -242,12 +258,12 @@ test("session start, quick note, pause, end — log and entry follow", async ({
 
   // --- pause: the clock really STOPS ----------------------------------------
   await (await sessionMenuItem(page, "Pause")).click();
-  await expect(page.getByText("— Pause")).toBeVisible();
-  await expect.poll(() => api.body(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
-  // The interval is in the entry, still open (no `to` yet) …
-  await expect
-    .poll(async () => (await api.properties(sessionPath)).pauses)
-    .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/) }]);
+  // A pause is ONE thing: an interval on the session, still open (no `to`
+  // yet). It writes no log row, so the log is still the single note …
+  await expect.poll(async () => (await api.session(sessionId)).pauses).toEqual([
+    { from: expect.stringMatching(/^[\d\-T:]+$/), fromMs: expect.any(Number) },
+  ]);
+  expect((await api.session(sessionId)).log).toHaveLength(1);
 
   // … the chip is the same chip, dimmed, and says so.
   const pausedChip = page.getByRole("button", { name: /Session pausiert/ }).first();
@@ -263,11 +279,15 @@ test("session start, quick note, pause, end — log and entry follow", async ({
 
   // --- weiter: the same menu entry, the other direction ---------------------
   await (await sessionMenuItem(page, "Weiter")).click();
-  await expect(page.getByText("— Weiter")).toBeVisible();
   // The interval is closed (`to` written) …
-  await expect
-    .poll(async () => (await api.properties(sessionPath)).pauses)
-    .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/), to: expect.stringMatching(/^[\d\-T:]+$/) }]);
+  await expect.poll(async () => (await api.session(sessionId)).pauses).toEqual([
+    {
+      from: expect.stringMatching(/^[\d\-T:]+$/),
+      fromMs: expect.any(Number),
+      to: expect.stringMatching(/^[\d\-T:]+$/),
+      toMs: expect.any(Number),
+    },
+  ]);
   // … the chip is brass again, and the clock ticks once more.
   const runningAgain = sessionMenuChip(page);
   await expect(runningAgain).toBeVisible();
@@ -276,17 +296,19 @@ test("session start, quick note, pause, end — log and entry follow", async ({
     .poll(() => runningAgain.textContent(), { timeout: 5_000 })
     .not.toBe(resumed);
 
-  // Both log lines are in the session — the readable chronicle of the evening.
-  const withPause = await api.body(sessionPath);
-  expect(withPause).toMatch(/- \d{2}:\d{2} — Pause/);
-  expect(withPause).toMatch(/- \d{2}:\d{2} — Weiter/);
+  // The pause round trip left the LOG alone: the note is still the only row.
+  // The pause lives in `pauses`, and putting it in both places would be the
+  // same pause twice.
+  const afterPause = await api.session(sessionId);
+  expect(afterPause.log.map((row) => row.text)).toEqual([NOTE]);
+  expect(afterPause.pauses).toHaveLength(1);
 
   // --- end -> review -------------------------------------------------------
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
   await expect
-    .poll(async () => (await api.properties(sessionPath)).ended)
+    .poll(async () => (await api.session(sessionId)).ended)
     .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
 
   // The harvest card for the tagged note is waiting there.
@@ -296,7 +318,7 @@ test("session start, quick note, pause, end — log and entry follow", async ({
   // --- ending is FINAL, and a restart is a NEW session --------
   // The chip offers a plain start action right after the end — nothing that
   // resumes anywhere — and that press opens a SECOND session of the same
-  // day: own entry under its own id, empty log, timer back at 0. The first
+  // day: own row under its own id, empty log, timer back at 0. The first
   // session keeps its `ended`, its log and its pauses.
   await page.goto("/campaigns/beispiel");
   const startAgain = page.getByRole("button", { name: "Session starten" });
@@ -311,22 +333,20 @@ test("session start, quick note, pause, end — log and entry follow", async ({
   await expect(sessionMenuChip(page)).toContainText(/\b0:00:0[0-4]\b/);
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
-  await expect(page.getByText("— Pause")).toHaveCount(0);
-  // … it lives in its OWN entry, under a DIFFERENT opaque id …
-  const secondPath = (await api.sessionPath()) ?? "";
-  expect(secondPath).toMatch(/^sessions\/.+$/);
-  expect(secondPath).not.toBe(sessionPath);
-  const second = await api.entry(secondPath);
-  expect(second.properties.ended).toBeUndefined();
-  expect(second.properties.pauses).toBeUndefined();
-  expect(second.body).not.toContain(NOTE);
+  // … it lives in its OWN row, under a DIFFERENT opaque id …
+  const secondId = (await api.sessionId()) ?? "";
+  expect(secondId).not.toBe("");
+  expect(secondId).not.toBe(sessionId);
+  const second = await api.session(secondId);
+  expect(second.ended).toBeUndefined();
+  expect(second.pauses).toEqual([]);
+  expect(second.log).toEqual([]);
+  expect(second.scenesPlayed).toEqual([]);
   // … and the first session is untouched: still ended, log and pauses intact.
-  const first = await api.entry(sessionPath);
-  expect(first.properties.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
-  expect(first.body).toContain(NOTE);
-  expect(first.properties.pauses).toEqual([
-    { from: expect.stringMatching(/^[\d\-T:]+$/), to: expect.stringMatching(/^[\d\-T:]+$/) },
-  ]);
+  const first = await api.session(sessionId);
+  expect(first.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+  expect(first.log.map((row) => row.text)).toEqual([NOTE]);
+  expect(first.pauses).toHaveLength(1);
 
   // The two sessions stay separate under writing: a note now lands in the
   // SECOND one only, and its own pause is its own.
@@ -334,20 +354,22 @@ test("session start, quick note, pause, end — log and entry follow", async ({
   const secondNoteField = page.getByLabel("Schnellnotiz");
   await secondNoteField.fill(SECOND_NOTE);
   await secondNoteField.press("Enter");
-  await expect.poll(() => api.body(secondPath)).toContain(SECOND_NOTE);
-  expect(await api.body(sessionPath)).not.toContain(SECOND_NOTE);
-  await (await sessionMenuItem(page, "Pause")).click();
   await expect
-    .poll(async () => (await api.properties(secondPath)).pauses)
-    .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/) }]);
+    .poll(async () => (await api.session(secondId)).log.map((row) => row.text))
+    .toEqual([SECOND_NOTE]);
+  expect((await api.session(sessionId)).log.map((row) => row.text)).toEqual([NOTE]);
+  await (await sessionMenuItem(page, "Pause")).click();
+  await expect.poll(async () => (await api.session(secondId)).pauses).toEqual([
+    { from: expect.stringMatching(/^[\d\-T:]+$/), fromMs: expect.any(Number) },
+  ]);
   // The first session's pause list did not grow.
-  expect((await api.properties(sessionPath)).pauses).toHaveLength(1);
+  expect((await api.session(sessionId)).pauses).toHaveLength(1);
 
   // Ending the second one leads to the review of the SECOND session — the
   // harvest works on the LAST STARTED session, which is this one.
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
-  await expect.poll(async () => (await api.properties(secondPath)).ended).toBeDefined();
+  await expect.poll(async () => (await api.session(secondId)).ended).toBeDefined();
   await expect(
     page.getByText("Zweite Runde: die Gruppe bricht zum Leuchtturm auf"),
   ).toBeVisible();
@@ -366,7 +388,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const sessionPath = (await api.sessionPath()) ?? "";
+  const sessionId = (await api.sessionId()) ?? "";
 
   const aside = page.getByRole("complementary");
   // Nothing to remind of yet — the list is not rendered at all.
@@ -381,7 +403,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   const item = list.getByRole("button", { name: /Kaela bekommt den Brief/ });
   await expect(item).toBeVisible();
 
-  // Ticking it off marks the log line reviewed — and the reminder is gone.
+  // Ticking it off marks the log ROW reviewed — and the reminder is gone.
   // The region does NOT vanish under the keyboard focus: it becomes the
   // all-done line, which takes the focus over (quality floor).
   await item.click();
@@ -389,10 +411,14 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   await expect(emptied).toContainText("Alles erledigt.");
   await expect(emptied.getByRole("button", { name: /Kaela bekommt den Brief/ })).toHaveCount(0);
   await expect(emptied.getByText("Alles erledigt.")).toBeFocused();
-  await expect.poll(() => api.properties(sessionPath)).toHaveProperty("reviewed");
+  // The flag sits on the ROW the review named by its id — the session has no
+  // `reviewed` property of its own.
+  await expect
+    .poll(async () => (await api.session(sessionId)).log.map((row) => row.reviewed))
+    .toEqual([true]);
 });
 
-test("session verwerfen — the mis-click's undo removes the empty entry", async ({
+test("session verwerfen — the mis-click's undo removes the empty row", async ({
   page,
   api,
 }) => {
@@ -401,10 +427,10 @@ test("session verwerfen — the mis-click's undo removes the empty entry", async
   // The start action hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const sessionPath = (await api.sessionPath()) ?? "";
-  expect(await api.exists(sessionPath)).toBe(true);
+  const sessionId = (await api.sessionId()) ?? "";
+  expect(await api.sessionExists(sessionId)).toBe(true);
 
-  // It asks first — the entry is deleted, and that is what the dialog says.
+  // It asks first — the row is deleted, and that is what the dialog says.
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Leere Session verwerfen?");
@@ -413,7 +439,7 @@ test("session verwerfen — the mis-click's undo removes the empty entry", async
   // Abbrechen changes nothing at all.
   await dialog.getByRole("button", { name: "Abbrechen" }).click();
   await expect(dialog).toBeHidden();
-  expect(await api.exists(sessionPath)).toBe(true);
+  expect(await api.sessionExists(sessionId)).toBe(true);
 
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
@@ -423,8 +449,8 @@ test("session verwerfen — the mis-click's undo removes the empty entry", async
   await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
   // … no session chip is left over …
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
-  // … and the session entry is gone.
-  await expect.poll(() => api.exists(sessionPath)).toBe(false);
+  // … and the session row is gone.
+  await expect.poll(() => api.sessionExists(sessionId)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
   // The new session gets a FRESH id, never the discarded one back: an
@@ -432,11 +458,11 @@ test("session verwerfen — the mis-click's undo removes the empty entry", async
   // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const restarted = (await api.sessionPath()) ?? "";
-  expect(restarted).toMatch(/^sessions\/.+$/);
-  expect(restarted).not.toBe(sessionPath);
-  expect(await api.exists(restarted)).toBe(true);
-  expect(await api.exists(sessionPath)).toBe(false);
+  const restarted = (await api.sessionId()) ?? "";
+  expect(restarted).not.toBe("");
+  expect(restarted).not.toBe(sessionId);
+  expect(await api.sessionExists(restarted)).toBe(true);
+  expect(await api.sessionExists(sessionId)).toBe(false);
 });
 
 // The third state of the ONE session control: an unreachable session lookup.
@@ -564,9 +590,9 @@ test.describe("played/dropped scenes in the live nav", () => {
     const quickNote = page.getByLabel("Schnellnotiz");
     await quickNote.fill("Der Kontorschreiber rückt die Bücher heraus #thread");
     await quickNote.press("Enter");
-    const sessionPath = (await api.sessionPath()) ?? "";
+    const sessionId = (await api.sessionId()) ?? "";
     await expect
-      .poll(async () => (await api.properties(sessionPath)).scenes_played)
+      .poll(async () => (await api.session(sessionId)).scenesPlayed)
       .toContain("harbor-office-talk");
     await expect(
       nav.getByRole("group", { name: "Gespielt" }).getByText("Gespielt"),
@@ -584,4 +610,48 @@ test.describe("played/dropped scenes in the live nav", () => {
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
     await expect(page.getByLabel("Schnellnotiz")).toBeVisible();
   });
+});
+
+// The READING page of a past evening: `/campaigns/:campaign/sessions/:id`.
+// A session has no entry address, so this is the only way to look at one —
+// and what it shows are the rows the endpoint answers, not a rendered log.
+test("the session page shows a past evening's rows; the old address is gone", async ({
+  page,
+  api,
+}) => {
+  // The fixture session of the example campaign: three log rows, one closed
+  // pause, one played scene.
+  await page.goto("/campaigns/beispiel/sessions/2026-01-15");
+
+  // The heading is the DATE, derived from `started` — the id is opaque and is
+  // never shown.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session vom 15.01.2026");
+
+  // The LOG, row by row: the time, the scene the note was taken in (by its
+  // TITLE, resolved through the tree) and the note as it was typed.
+  const log = page.getByRole("region", { name: "Log" });
+  await expect(log).toContainText("19:52");
+  await expect(log).toContainText("Spuren gefunden, Gruppe will sofort zur Bucht");
+  await expect(log).toContainText("Improvisiert: Fischerin „Old Metta“ am Steg");
+  // The scene is a LINK into its entry — the row's `sceneId` never shows.
+  await expect(log.getByRole("link", { name: "Ankunft am Leuchtturm" }).first()).toHaveAttribute(
+    "href",
+    "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival",
+  );
+  await expect(log).not.toContainText("lighthouse-arrival");
+  // The third row names no scene, so it stands with its text alone.
+  await expect(log).toContainText("Cliffhanger: Lichter in der Bucht gesichtet");
+
+  // The PAUSE is an interval with its duration — 20:30 to 21:10 is 40 minutes.
+  const pauses = page.getByRole("region", { name: "Pausen" });
+  await expect(pauses).toContainText("0:40:00");
+
+  // The PLAYED SCENES, as links into their entries.
+  const scenes = page.getByRole("region", { name: "Gespielte Szenen" });
+  await expect(scenes.getByRole("link", { name: "Ankunft am Leuchtturm" })).toBeVisible();
+
+  // The old ENTRY address of the same session answers 404 — no redirect, no
+  // alias (ADR #26).
+  const res = await api.fetch("campaigns/beispiel/entries/sessions/2026-01-15");
+  expect(res.status).toBe(404);
 });

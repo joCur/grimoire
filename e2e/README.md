@@ -15,8 +15,9 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   nichts).
 - **Die Fixtures sind EINGABE**, einmal pro Test gelesen. `fixtures/beispiel`
   hält die Beispielkampagne als **ein JSON pro Eintrag**, genau in der Form,
-  die die API spricht (`{ kind, properties, body }`, dazu `log` für eine
-  Session und `entries` für Eingang und Glossar). Ein Test, der Inhalte
+  die die API spricht (`{ kind, properties, body }`, dazu `log` als **Zeilen**
+  `{ at, sceneId?, text, reviewed? }` für eine Session und `entries` für
+  Eingang und Glossar — auch dort Zeilen, kein Markdown). Ein Test, der Inhalte
   braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } }, without: ["session-2026-01-15"] } })`.
@@ -157,6 +158,18 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   Token und spielt damit den „zweiten Schreiber"; `api.writeBody` und
   `api.patchProperties` sind die zwei bequemen Fälle davon und geben das neue
   Token zurück.
+
+  Für die **Listen** gibt es eigene Helfer, weil sie keine Adresse haben
+  (ADR #26): `api.activeSession(includeEnded?)` und `api.sessionId(…)` (die
+  laufende bzw. zuletzt gestartete — `undefined`, wenn nichts läuft; der
+  Endpoint antwortet dafür 200 mit `null`), `api.session(id)`,
+  `api.sessionExists(id)`, `api.sessions()` und `api.inbox()`. Jede
+  Behauptung über eine Session oder eine Idee liest ein **Feld** —
+  `log`, `pauses`, `scenesPlayed`, `entries[].done` —, nie einen gerenderten
+  Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
+  kein Spec schreibt eine hin, sie kommt immer vom Server.
+  `todaySessionId()` ist die datumsförmige id einer Session, die ein Spec
+  **selbst seedet**.
 - `db` — liest `grimoire.db` dieses Tests über den Treiber des Servers
   (`server/src/db/driver.ts`, keine zweite SQLite-Abhängigkeit). Nur für
   Behauptungen, die die API nicht machen kann — etwa Zeilenzahlen
@@ -284,6 +297,31 @@ mehrere Schreibwege auf ihm liegen:
 | 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`        |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
+Die Pfade 3, 4, 5 und 8 arbeiten auf den **Listen-Endpoints** (ADR #26) und
+lesen darum Zeilen statt Texte:
+
+- **Pfad 3** (`search.e2e.ts`): indexiert sind die fünf Eintrags-Arten und die
+  Glossar-Begriffe. Ein Glossar-Treffer trägt `kind` + `id` und **kein**
+  `path` — der Spec prüft das auf der Leitung und klickt ihn danach in der
+  Palette auf `/campaigns/beispiel/glossary`. Sessions und Ideen sind nicht
+  indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
+  erwartet keinen Treffer.
+- **Pfad 4** (`session-cycle.e2e.ts`): die Schnellnotiz wird eine Log-**Zeile**
+  mit `at`, `sceneId` und dem Text, wie der DM ihn getippt hat; `scenesPlayed`
+  wächst in derselben Anfrage. Eine **Pause ist ein Intervall** in `pauses`
+  und schreibt keine Log-Zeile — der Beweis ist die unveränderte Länge des
+  Logs plus der Chip-Zustand `paused`. Dazu die Leseseite einer vergangenen
+  Session (`/campaigns/beispiel/sessions/2026-01-15`): Log-Zeilen mit
+  Szenen-Links, die geschlossene Pause mit ihrer Dauer, die gespielten
+  Szenen — und die alte Eintrags-Adresse derselben Session als 404.
+- **Pfad 5** (`review.e2e.ts`): Review und Ideen benennen ihre Zeilen per
+  `id`, also liest der Spec das `reviewed` der getroffenen Log-Zeile und das
+  `done` der abgehakten Idee — und prüft, dass keine andere Zeile das Flag
+  trägt.
+- **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Zeile, angehängt;
+  der Spec vergleicht die ganze `InboxResponse` samt `rev`, womit
+  Append-only und „nichts abgehakt" in einer Zusicherung stehen.
+
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 und
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
 DEMSELBEN Datenverzeichnis: der erste startet einen Lauf bzw. bringt ihn zu
@@ -355,7 +393,8 @@ Dazu ein Spec, der auf keinem der zehn Pfade liegt, sondern auf der Naht
 darunter: `tests/seed.e2e.ts`, auf dem Seed-Werkzeug. Er belegt zweierlei —
 dass eine frische Instanz **leer** startet (der Boot lädt nichts) und dass
 `grimoire seed` die Fixtures vollständig einliest (Tree, Szenenkörper, NPC,
-Session, Eingang, Glossar, `seeded: beispiel` auf stdout), während ein
+Session, Eingang, Glossar, `seeded: beispiel` auf stdout — die drei Listen
+Zeile für Zeile über ihre eigenen Endpoints gelesen), während ein
 **zweiter** Lauf ablehnt, weil die Datenbank schon Kampagnen hält: gleiche
 Zeilenzahlen, gleicher Inhalt. Er braucht eigene Boots und benutzt darum
 `startGrimoireServer`/`seedCampaigns` direkt statt der `server`-Fixture.
@@ -374,8 +413,9 @@ Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 `properties-form.e2e.ts` prüft dort auch den UMZUG: `location`
 ändern verschiebt die Szene, die URL wird ersetzt, die Kapitelübersicht
-sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und das
-Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
+sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und die
+Log-Zeilen der Session bleiben gültig (ihr `sceneId` nennt die Szene über ihre
+id, nicht über ihre Adresse). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 `scene-rendering.e2e.ts`. Und weil Status und Typ seit ADR #25
 `CHECK`-Constraints ihrer Spalten sind, hält ein Test im selben Spec die Regel
@@ -400,11 +440,13 @@ niemanden von der Textarea in den Composer —, „Trotzdem speichern" schreibt
 den Text und lässt den fremden Status stehen. Ein Test belegt Eigenschaften und Text in EINER Anfrage direkt am
 Schreibweg — ein Schritt der Zeilenversion, und keines der beiden Felder
 dabei ist 400 `nothing_to_write` —, weil keine Oberfläche der App heute beides
-in einem Speichern schickt. Die Listen-Adressen (Session, Eingang, Glossar)
-lehnen einen `body` mit 400 `body_not_editable` ab; das Glossar ist eine
-Liste, seine Leseansicht bietet darum gar keine Bearbeitung an — der Spec
-hält beides fest: keine Aktion in der Ansicht, und die Pflege läuft über den
-Listen-Endpoint. Der Kampagnen-Eintrag ist der Gegenfall und hat beide
+in einem Speichern schickt. Die drei Listen (Session, Eingang, Glossar) haben
+seit ADR #26 **keine Adresse**: `entries/sessions/<id>`, `entries/inbox` und
+`entries/glossary` antworten 404 — keine Umleitung, kein Alias. Genau das hält
+der Spec an EINER Stelle fest (GET und PATCH, alle drei); es gibt keinen
+`body` mehr, für den ein `body_not_editable` zu senden wäre. Die Pflege des
+Glossars läuft über seinen Listen-Endpoint und seine eigene Seite, was
+derselbe Spec belegt. Der Kampagnen-Eintrag ist der Gegenfall und hat beide
 Hälften: ein Test öffnet `campaign`, ändert den Text über denselben Editor
 wie bei einem Kapitel, speichert und liest ihn gerendert und über die API
 zurück (die Eigenschaften kommen dabei unverändert heraus); die Aktion

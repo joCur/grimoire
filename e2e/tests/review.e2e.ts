@@ -4,22 +4,20 @@
 // Adopt a thread → chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
 //
-// TODAY's session is the harvest's data, so it is SEEDED as an entry of its
-// own (the same lines the live view would have written — path 4 covers the
+// TODAY's session is the harvest's data, so it is SEEDED as a session of its
+// own (the same rows the live view would have written — path 4 covers the
 // writing itself).
 //
-// The source chip of a log line names the SCENE by its title (resolved via
-// the tree), not by the id in the log line.
+// Sessions and ideas are LISTS (ADR #26): the review reads rows and names
+// them back by their id — `POST /review/seen { sessionId, logId }` and
+// `POST /review/inbox-done { id }` — so every assertion about what was
+// harvested reads a row's `reviewed`/`done` flag, not a rendered text.
+//
+// The source chip of a log row names the SCENE by its title (resolved via
+// the tree), not by the row's `sceneId`.
 
-import {
-  expect,
-  test,
-  todaySessionId,
-  todaySessionPath,
-  type SeedEntry,
-} from "../support/test";
+import { expect, test, todaySessionId, type SeedEntry } from "../support/test";
 
-const THREAD_LINE = "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread";
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
 const INBOX_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
@@ -28,7 +26,7 @@ const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
 /** A note ABOUT a player character — `#pc` plus the name tag. */
 const PC_TEXT = "Geburtstags-Item für Kaela vorbereiten";
 
-/** Today's session with the three tagged log lines the review harvests. */
+/** Today's session with the three tagged log rows the review harvests. */
 function sessionEntry(id: string): SeedEntry {
   return {
     kind: "session",
@@ -40,10 +38,13 @@ function sessionEntry(id: string): SeedEntry {
     },
     log: [
       {
-        raw: "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+        at: "19:52",
+        sceneId: "lighthouse-arrival",
+        text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
       },
-      { raw: `- 21:10 (lighthouse-arrival) ${NPC_TEXT} #npc` },
-      { raw: THREAD_LINE },
+      { at: "21:10", sceneId: "lighthouse-arrival", text: `${NPC_TEXT} #npc` },
+      // No scene: the source chip of this row stays bare.
+      { at: "22:40", text: `${THREAD_TEXT} #thread` },
     ],
     body: "",
   };
@@ -68,10 +69,10 @@ const PAST_MIDNIGHT = (() => {
       ended: `${today}T01:40:00`,
       scenes_played: ["lighthouse-arrival"],
     },
-    log: [{ raw: THREAD_LINE }],
+    log: [{ at: "22:40", text: `${THREAD_TEXT} #thread` }],
     body: "",
   };
-  return { path: `sessions/${yesterday}`, entry };
+  return { id: yesterday, entry };
 })();
 
 test("adopting a thread lands in the chapter, the inbox line gets ticked off", async ({
@@ -84,7 +85,7 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   // The topbar carries the harvest progress (the page repeats it below md).
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
 
-  // Three tagged log lines + the tagged inbox line of the example campaign.
+  // Three tagged log rows + the tagged idea of the example campaign.
   await expect(progress).toHaveText("0 von 4 gesichtet");
   await expect(page.getByText("Noch keine offenen Handlungsstränge in diesem Kapitel.")).toHaveCount(0);
   // The chapter already carries one open thread.
@@ -92,8 +93,8 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
 
   // --- adopt the #thread log line -----------------------------------------
   const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
-  // This line was logged without a scene marker, so the chip stays bare
-  // (the scene part only appears when the line names one).
+  // This row carries no `sceneId`, so the chip stays bare (the scene part
+  // only appears when the row names one).
   await expect(threadCard.getByText("Log", { exact: true })).toBeVisible();
   await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
 
@@ -106,19 +107,27 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   await expect
     .poll(() => api.body("01-salzhafen"))
     .toContain(`- [ ] ${THREAD_TEXT}`);
-  // … and the source line is marked as seen via its short hash.
-  await expect.poll(() => api.properties(todaySessionPath())).toHaveProperty("reviewed");
+  // … and the source ROW carries the flag: the review named it by the `id`
+  // the log handed out, so exactly that row is marked and no other.
+  await expect
+    .poll(async () =>
+      (await api.session(todaySessionId())).log
+        .filter((row) => row.reviewed)
+        .map((row) => row.text),
+    )
+    .toEqual([`${THREAD_TEXT} #thread`]);
 
-  // --- tick off the inbox line --------------------------------------------
+  // --- tick off the idea ---------------------------------------------------
   const inboxCard = page.locator("div").filter({ hasText: INBOX_TEXT }).last();
   await expect(inboxCard.getByText("Idee", { exact: true })).toBeVisible();
   await inboxCard.getByRole("button", { name: "Verwerfen" }).click();
 
   await expect(inboxCard.getByText("Verworfen")).toBeVisible();
   await expect(progress).toHaveText("2 von 4 gesichtet");
+  // `done` is a column of the row, not a checkbox marker in a text.
   await expect
-    .poll(() => api.body("inbox"))
-    .toMatch(/- \[x\] 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread/);
+    .poll(async () => (await api.inbox()).entries.map((row) => [row.done, row.text]))
+    .toEqual([[true, expect.stringContaining(INBOX_TEXT)]]);
 
   // "Fertig" goes back to the chapters.
   await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
@@ -138,7 +147,10 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await page.getByLabel("Ideen").fill(NOTE_TEXT);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
-  await expect.poll(() => api.body("inbox")).toContain(`- ${NOTE_TEXT}`);
+  // The idea arrives as its own row, appended to the list.
+  await expect
+    .poll(async () => (await api.inbox()).entries.map((row) => row.text))
+    .toContain(NOTE_TEXT);
 
   // At the desk it shows up in the session review — in its own untagged-entries
   // section, and counted with everything else (one source for page and topbar).
@@ -159,8 +171,12 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await noteCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(noteCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(progress).toHaveText("1 von 5 gesichtet");
-  // The line is ticked off in the inbox entry itself.
-  await expect.poll(() => api.body("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
+  // The ROW is ticked off — and only that one.
+  await expect
+    .poll(async () =>
+      (await api.inbox()).entries.filter((row) => row.done).map((row) => row.text),
+    )
+    .toEqual([NOTE_TEXT]);
 
   // The chapter overview affordance counts the same entries the page does.
   await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
@@ -208,10 +224,12 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("1 von 5 gesichtet");
-  // The line is ticked off in the inbox entry itself.
+  // The ROW is ticked off, hashtags and all — the text is stored as typed.
   await expect
-    .poll(() => api.body("inbox"))
-    .toContain(`- [x] ${PC_TEXT} #pc #kaela`);
+    .poll(async () =>
+      (await api.inbox()).entries.filter((row) => row.done).map((row) => row.text),
+    )
+    .toEqual([`${PC_TEXT} #pc #kaela`]);
 
   // Back at the desk the chapter overview affordance counts what is still open.
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -219,12 +237,12 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
-test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
+test("creating an NPC entry from a #npc log row", async ({ page, api }) => {
   await page.goto("/campaigns/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
-  // The source chip names the SCENE the line was logged under, resolved from
-  // the tree — never the `(lighthouse-arrival)` id of the log line.
+  // The source chip names the SCENE the row was logged under, resolved from
+  // the tree — never the row's `sceneId`.
   await expect(npcCard.getByText("Log · Ankunft am Leuchtturm")).toBeVisible();
   await expect(npcCard.getByText("lighthouse-arrival")).toHaveCount(0);
   await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
@@ -240,7 +258,7 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   const stub = await api.entry("npcs/old-metta");
   expect(stub.properties.id).toBe("old-metta");
   expect(stub.properties.name).toBe("Old Metta");
-  // The log line said nothing about the NPC's state, so the entry claims
+  // The log row said nothing about the NPC's state, so the entry claims
   // nothing either.
   expect(stub.properties.status).toBe("unknown");
   expect(stub.body).toContain("## Notizen");
@@ -281,7 +299,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
     // The evening of yesterday was ENDED after midnight, so `ended` sits on
     // YESTERDAY's session and there is none for today at all: the server is
     // what names the session (GET /session?includeEnded=1), not the date.
-    const rel = PAST_MIDNIGHT.path;
+    const yesterday = PAST_MIDNIGHT.id;
 
     await page.goto("/campaigns/beispiel/review");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
@@ -290,10 +308,12 @@ test.describe("with yesterday's session, ended after midnight", () => {
     await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
     await expect(threadCard.getByText("Als Handlungsstrang übernommen")).toBeVisible();
 
-    // The `reviewed` hash lands in YESTERDAY's session — the one that is
-    // running — and no session was invented for today.
-    await expect.poll(() => api.properties(rel)).toHaveProperty("reviewed");
-    expect(await api.exists(todaySessionPath())).toBe(false);
+    // The `reviewed` flag lands on the row of YESTERDAY's session — the one
+    // the server named — and no session was invented for today.
+    await expect
+      .poll(async () => (await api.session(yesterday)).log.map((row) => row.reviewed))
+      .toEqual([true]);
+    expect(await api.sessionExists(todaySessionId())).toBe(false);
     await expect
       .poll(() => api.body("01-salzhafen"))
       .toContain(`- [ ] ${THREAD_TEXT}`);

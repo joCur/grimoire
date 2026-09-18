@@ -76,10 +76,15 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
 - Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>`,
-  `<kapitel>/<szenen-id>`, `sessions/<id>`, `campaign`, `glossary`); das
-  Schema steht in
+  `<kapitel>/<szenen-id>`, `locations/<id>`, `campaign`); das Schema steht in
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
   Eintrags `properties`, sein Markdown `body`.
+- Sessions, Ideen und Glossar sind **Listen, keine Einträge** (ADR #26): sie
+  haben keine Adresse und antworten ihre eigene Form über ihre eigenen
+  Endpoints (`…/session`, `…/sessions`, `…/sessions/<id>`, `…/inbox`,
+  `…/glossary`) — Zeilen mit Spalten, kein `body`, kein `properties`-Map. Die
+  Segmente `sessions`, `inbox` und `glossary` bleiben in `RESERVED_SEGMENTS`
+  reserviert; als Eintrags-Adresse antworten sie 404.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
@@ -161,10 +166,18 @@ Die Pfade:
 
 1. Auto-Einstieg `/` → Kapitel lädt die Kampagne
 2. Szene lesen: Callouts, If-Sections, NPC-Karten der Referenzszenen
-3. ⌘K-Suche findet und öffnet
-4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
-   Pause → beenden → Nachbereitung
-5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken
+3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Eintrags-Arten und die
+   Glossar-Begriffe. Ein Glossar-Treffer nennt seine Zeile mit `kind` + `id`
+   ohne Adresse und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
+   nicht indexiert
+4. Session-Zyklus: starten → Schnellnotiz → Log-**Zeile** (mit `sceneId`) +
+   `scenesPlayed` → Pause (ein Intervall, keine Log-Zeile) → beenden →
+   Nachbereitung. Dazu die Leseseite einer vergangenen Session
+   (`/campaigns/:id/sessions/<session-id>`)
+5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken.
+   Review und Ideen benennen ihre Zeilen per `id`
+   (`review/seen { sessionId, logId }`, `review/inbox-done { id }`) — eine
+   unbekannte id ist 404, kein stilles 200
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
    in den Kapiteln; plus 409-/Fehlerpfad. Ein Entwurf ist ein Paar aus
    Eigenschaften und Text (ADR #24): „Bearbeiten" öffnet beide Hälften —
@@ -183,7 +196,8 @@ Die Pfade:
    Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine
    gleichzeitige Textänderung übersteht das). Der Status-Regler selbst hat
    keine Konflikt-Aktionen: er meldet den veralteten Stand, der DM lädt neu.
-8. Mobil-Startfläche + Ideen-Einwurf bei 390px
+8. Mobil-Startfläche + Ideen-Einwurf bei 390px: die Idee wird eine Zeile der
+   Ideen-Liste (`InboxResponse`), angehängt, nichts abgehakt
 9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe Konfliktzeile
    statt still überschreiben. „Neu laden" verwirft den Entwurf und übernimmt
