@@ -709,7 +709,11 @@ export const de = {
   "generate.review.plannedScene": "Geplante Szene",
   "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Markdown von {title}",
+  // The draft editor of a review card: the properties in the form of the
+  // properties dialog, the body on the surfaces of the entry editor.
+  "generate.review.propertiesHeading": "Eigenschaften",
+  "generate.review.bodyHeading": "Text",
+  "generate.review.bodyLabel": "Text von {path}",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",

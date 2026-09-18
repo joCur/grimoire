@@ -645,7 +645,9 @@ export const en: Messages = {
   "generate.review.plannedScene": "Planned scene",
   "generate.review.contingency": "Contingency scene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Markdown of {title}",
+  "generate.review.propertiesHeading": "Properties",
+  "generate.review.bodyHeading": "Text",
+  "generate.review.bodyLabel": "Text of {path}",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
   "generate.usage.group": ",",
   // --- generator: the pipeline ---------------------------------------------

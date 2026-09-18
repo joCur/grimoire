@@ -89,7 +89,8 @@ describe("roundtrip over the fixtures", () => {
 
   test("`[[slug]]` references survive the roundtrip untouched", () => {
     // The composer needs NO special case for references — they are ordinary
-    // text — but „ordinary text" is a claim, and this is what pins it: the
+    // text — but that it is ordinary text is a claim, and this is what pins
+    // it: the
     // brackets must come back out of the editor exactly as they went in, in
     // prose, in a callout, in an if-section and in a heading.
     const body = [
@@ -392,7 +393,8 @@ describe("degenerate input roundtrips", () => {
 describe("an emptied block writes nothing at all", () => {
   // renderBlock gives "" for a text/raw block without text, and a block that
   // renders to nothing must not leave its separator behind: `A\n\n\n` is a
-  // stray blank line that would also disappear on the way through „Markdown".
+  // stray blank line that would also disappear on the way through the raw
+  // surface.
   test("an edited-empty text block leaves no blank line behind", () => {
     const blocks = parseBlocks("A\n\nB\n");
     const b = blocks[1];

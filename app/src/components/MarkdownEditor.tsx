@@ -1,16 +1,15 @@
-// The markdown editor: a mono textarea and the rendered preview of the SAME
-// markdown pipeline the reading view uses, switched by one quiet toggle.
+// The markdown editor: a mono textarea over a BODY and the rendered preview of
+// the same markdown pipeline the reading view uses, switched by one quiet
+// toggle.
 //
-// The generator review (one toggle per draft card) and the reading view's
-// edit mode share it — same surface, so „Bearbeiten" feels identical wherever
-// the DM meets it.
+// The generator review's draft editor and the reading view's edit mode share
+// it — same surface, so editing feels identical wherever the DM meets it.
 //
 // Three parts, and every caller composes them itself: the TOGGLE, the SURFACE
-// and the framed EditorShell around them. Nothing here is a composed
-// „whole editor" — the generator cards put the toggle in the card header and
-// the surface below the chip row (they are not siblings), and the reading view
-// puts a mode switch and its Speichern/Abbrechen into the same toolbar. A
-// pre-composed block would fit neither.
+// and the framed EditorShell around them. Nothing here is a composed whole
+// editor — the generator's draft editor puts the toggle in a heading row over
+// the surface, and the reading view puts a mode switch and its save/cancel
+// actions into the same toolbar. A pre-composed block would fit neither.
 //
 // No local state: the caller owns `value` and `editing`, because both outlive
 // this component (the generator mirrors edits into its server job, the reading
@@ -24,7 +23,7 @@ import { useT } from "@/i18n";
 import { Markdown } from "@/markdown/Markdown";
 
 /**
- * Bearbeiten ⇄ Vorschau. `controlsId` is the textarea's id — announced as the
+ * Edit ⇄ preview. `controlsId` is the textarea's id — announced as the
  * controlled region only while it exists (in preview mode there is no
  * textarea to point at).
  */
@@ -63,16 +62,9 @@ export interface MarkdownEditorSurfaceProps {
   /** aria-label of the textarea; include the entry/draft name so labels stay unique. */
   label: string;
   /**
-   * What the preview renders, when that is not `value` itself. The generator
-   * edits a draft as one markdown text WITH its properties block, but previews
-   * only the body (lib/generate.ts `markdownBody`). The reading view edits the
-   * body alone, so it leaves this unset and the preview renders `value`.
-   */
-  preview?: string;
-  /**
    * Leaving the textarea. The generator review uses it to FLUSH its
-   * debounced save (issue #97): blur is the last cheap moment before a
-   * click can take the DM somewhere else.
+   * debounced save: blur is the last cheap moment before a click can take
+   * the DM somewhere else.
    */
   onBlur?: () => void;
 }
@@ -84,7 +76,6 @@ export function MarkdownEditorSurface({
   editing,
   id,
   label,
-  preview,
   onBlur,
 }: MarkdownEditorSurfaceProps) {
   return editing ? (
@@ -98,7 +89,7 @@ export function MarkdownEditorSurface({
       className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
     />
   ) : (
-    <Markdown>{preview ?? value}</Markdown>
+    <Markdown>{value}</Markdown>
   );
 }
 
@@ -107,9 +98,9 @@ export function MarkdownEditorSurface({
  * caller's actions right) over whatever surface is on screen. Wraps at narrow
  * widths so the actions drop below the controls instead of shrinking.
  *
- * Shared with the block composer (issue #43), which puts its own controls in
- * the toolbar and its block list below — one frame, so „Bearbeiten" looks the
- * same whichever surface the DM is on.
+ * Shared with the block composer, which puts its own controls in the toolbar
+ * and its block list below — one frame, so editing looks the same whichever
+ * surface the DM is on.
  */
 export function EditorShell({
   controls,

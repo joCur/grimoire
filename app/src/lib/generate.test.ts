@@ -1,6 +1,6 @@
-// Unit tests for the generator view's derivations (issue #12): the
+// Unit tests for the generator view's derivations: the
 // new-chapter id (numeric prefix + kebab slug), the client-side properties
-// split the review preview needs, the German labels — and (issue #19) which
+// edits a review keeps per draft, the labels — and which
 // state the server's job puts the view in.
 
 import { describe, expect, test } from "bun:test";
@@ -31,7 +31,8 @@ import {
   hasReviewableParts,
   jobErrorBody,
   jobMode,
-  markdownBody,
+  draftOf,
+  mergeDraftEdits,
   newChapterId,
   nextChapterPrefix,
   npcIdError,
@@ -189,26 +190,40 @@ describe("chapterIdValue", () => {
   });
 });
 
-describe("markdownBody", () => {
-  const file = ["---", "id: kai", "title: Am Kai", "---", "", "## Flow", "", "Text.", ""].join("\n");
+describe("draftOf and mergeDraftEdits", () => {
+  const generated = { properties: { title: "Am Kai", status: "draft" }, body: "## Flow\n" };
 
-  test("splits the properties block off", () => {
-    expect(markdownBody(file)).toBe("## Flow\n\nText.\n");
+  test("the generated draft stands where no edit touched it", () => {
+    expect(draftOf(generated, undefined, undefined)).toEqual(generated);
+    expect(draftOf(generated, { body: "Neu.\n" })).toEqual({
+      properties: generated.properties,
+      body: "Neu.\n",
+    });
   });
 
-  test("keeps everything after the FIRST closing marker", () => {
-    const withRule = "---\nid: x\n---\n\nText.\n\n---\n\nMehr.\n";
-    expect(markdownBody(withRule)).toBe("Text.\n\n---\n\nMehr.\n");
+  test("the local buffer wins over the edit stored on the job", () => {
+    expect(
+      draftOf(generated, { body: "gespeichert" }, { body: "im Tippen" }).body,
+    ).toBe("im Tippen");
+    // The halves are independent: a body buffer leaves stored properties be.
+    expect(
+      draftOf(generated, { properties: { title: "Am Kai (neu)" } }, { body: "im Tippen" }),
+    ).toEqual({ properties: { title: "Am Kai (neu)" }, body: "im Tippen" });
   });
 
-  test("degrades: no block, or an unclosed one, is all body", () => {
-    expect(markdownBody("## Nur Text\n")).toBe("## Nur Text\n");
-    expect(markdownBody("---\nid: x\n\nkein Ende\n")).toBe("---\nid: x\n\nkein Ende\n");
-    expect(markdownBody("")).toBe("");
-  });
-
-  test("handles CRLF files", () => {
-    expect(markdownBody("---\r\nid: x\r\n---\r\n\r\nText.\r\n")).toBe("Text.\r\n");
+  test("a patch merges per address AND per half", () => {
+    const before = { "01-x/a": { properties: { title: "A" } } };
+    const after = mergeDraftEdits(before, { "01-x/a": { body: "Text" } });
+    expect(after["01-x/a"]).toEqual({ properties: { title: "A" }, body: "Text" });
+    // A half the patch carries replaces its counterpart whole.
+    expect(mergeDraftEdits(after, { "01-x/a": { body: "Anders" } })["01-x/a"]).toEqual({
+      properties: { title: "A" },
+      body: "Anders",
+    });
+    // And an untouched address is left alone.
+    expect(mergeDraftEdits(before, { "01-x/b": { body: "B" } })["01-x/a"]).toEqual(
+      before["01-x/a"],
+    );
   });
 });
 
@@ -227,7 +242,7 @@ describe("labels", () => {
     expect(contextHint(1, 0, t)).toBe("1 NPC \u00b7 0 Orte");
   });
 
-  test("knowledgeHint COUNTS the knowledge entries (issue #53 AK5)", () => {
+  test("knowledgeHint COUNTS the knowledge entries", () => {
     // A count, not a yes/no: the DM comes here right after writing a rule and
     // the number is what confirms it travels. Zero says so in words — the
     // line has to read as a sentence either way.
@@ -297,7 +312,7 @@ describe("usageLabel", () => {
   });
 });
 
-// --- the view's state, derived from the server's job (issue #19) -----------
+// --- the view's state, derived from the server's job ----------------------
 
 describe("generatePhase", () => {
   const base = { applied: false, starting: false, jobChecked: true };
@@ -430,7 +445,7 @@ describe("jobErrorBody", () => {
   });
 });
 
-// --- generator mode (issue #21) ---------------------------------------------
+// --- generator mode --------------------------------------------------------
 
 describe("jobMode", () => {
   const job = (kind?: string) =>
@@ -506,7 +521,7 @@ describe("npcIdError", () => {
   });
 });
 
-// --- the review state on the job (issue #97) --------------------------------
+// --- the review state on the job -------------------------------------------
 
 describe("review state mapping", () => {
   const job = (over: Partial<GenerateJob> = {}): GenerateJob =>
@@ -520,10 +535,10 @@ describe("review state mapping", () => {
       rev: 0,
       result: {
         scenes: [
-          { path: "01-x/a", markdown: "a", properties: {} },
-          { path: "01-x/b", markdown: "b", properties: {} },
+          { path: "01-x/a", properties: {}, body: "a" },
+          { path: "01-x/b", properties: {}, body: "b" },
         ],
-        stubs: [{ kind: "npc", id: "grella", name: "Grella", markdown: "s" }],
+        stubs: [{ kind: "npc", id: "grella", name: "Grella", properties: {}, body: "s" }],
         warnings: [],
       },
       ...over,
@@ -542,14 +557,14 @@ describe("review state mapping", () => {
 
   test("a patch merges per key — and `null` puts a decision back to open", () => {
     let next = mergeReviewPatch(job(), { entries: { "npcs/grella": "accepted" } });
-    next = mergeReviewPatch(next, { edits: { "01-x/a": "typed" } });
+    next = mergeReviewPatch(next, { edits: { "01-x/a": { body: "typed" } } });
     expect(next.review?.entries).toEqual({ "npcs/grella": "accepted" });
-    expect(next.draftEdits["01-x/a"]).toBe("typed");
+    expect(next.draftEdits["01-x/a"]).toEqual({ body: "typed" });
 
     next = mergeReviewPatch(next, { entries: { "npcs/grella": null } });
     expect(next.review?.entries).toEqual({});
-    // The unrelated half is untouched — that is what „merge" has to mean.
-    expect(next.draftEdits["01-x/a"]).toBe("typed");
+    // The unrelated half is untouched — that is what merging has to mean.
+    expect(next.draftEdits["01-x/a"]).toEqual({ body: "typed" });
   });
 
   test("`null` clears a field or block decision, mirroring the server", () => {
@@ -598,7 +613,7 @@ describe("review state mapping", () => {
         job({
           result: undefined,
           kind: "npc",
-          npcResult: { npc: { path: "npcs/brakk", markdown: "m", properties: {} }, warnings: [] },
+          npcResult: { npc: { path: "npcs/brakk", properties: {}, body: "m" }, warnings: [] },
         }),
       ),
     ).toEqual(["npcs/brakk"]);
@@ -633,7 +648,7 @@ describe("review state mapping", () => {
   });
 });
 
-// --- the pipeline of a scene run (issue #102) --------------------------------
+// --- the pipeline of a scene run -------------------------------------------
 
 describe("the run's parts", () => {
   /** A scene job with three scene parts in outline order. */
@@ -670,13 +685,13 @@ describe("the run's parts", () => {
     expect(generatePhase({ ...base, hasParts: true })).toBe("review");
     expect(hasReviewableParts(job(["running", "pending", "pending"]))).toBe(false);
     expect(hasReviewableParts(job(["done", "running", "pending"]))).toBe(true);
-    // A FAILED part is reviewable too — it carries „Erneut versuchen“.
+    // A FAILED part is reviewable too — it carries its retry action.
     expect(hasReviewableParts(job(["failed", "running", "pending"]))).toBe(true);
   });
 
   test("the poll survives the window in which there is NO job yet", () => {
-    // The regression this guards (issue #102 review): right after „Entwürfe
-    // generieren" a GET can overtake the new row and answer 404 → `null`. A
+    // The regression this guards: right after the run was started a GET can
+    // overtake the new row and answer 404 → `null`. A
     // `null` is not a running job, so the interval went off and nothing ever
     // switched it back on — the view sat on the spinner until a reload.
     expect(generateJobPollMs(job(["running"]))).toBe(GENERATE_JOB_POLL_MS);
@@ -735,13 +750,13 @@ describe("the run's parts", () => {
     expect(pipelineProgress(null, t)).toBeUndefined();
   });
 
-  test("„übernommen“ counts against every part of the RUN (issue #102 review)", () => {
+  test("„übernommen“ counts against every part of the RUN", () => {
     // Two of three parts answered, and the DM took one of them.
     const run = job(["done", "done", "running"], {
       result: {
         scenes: [
-          { path: "01-salzhafen/s0", markdown: "a", properties: {} },
-          { path: "01-salzhafen/s1", markdown: "b", properties: {} },
+          { path: "01-salzhafen/s0", properties: {}, body: "a" },
+          { path: "01-salzhafen/s1", properties: {}, body: "b" },
         ],
         stubs: [],
         warnings: [],
@@ -766,8 +781,8 @@ describe("the run's parts", () => {
     // part of the outline — the total never falls below what is written.
     const withStub = job(["done"], {
       result: {
-        scenes: [{ path: "01-salzhafen/s0", markdown: "a", properties: {} }],
-        stubs: [{ kind: "npc", id: "grella", name: "Grella", markdown: "s" }],
+        scenes: [{ path: "01-salzhafen/s0", properties: {}, body: "a" }],
+        stubs: [{ kind: "npc", id: "grella", name: "Grella", properties: {}, body: "s" }],
         warnings: [],
       },
       review: {
