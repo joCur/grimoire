@@ -32,8 +32,6 @@ import {
   toSlug,
   type EntryResponse,
   type GlossaryResponse,
-  type KnowledgeEntry,
-  type KnowledgeResponse,
   type PatchEntryRequest,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
@@ -41,7 +39,6 @@ import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
 import { logLineShortHash } from "./body-parse";
 import {
-  campaignKnowledge,
   campaigns,
   chapters,
   generateJobs,
@@ -91,7 +88,7 @@ import {
 import { indexEntity } from "./fts";
 import { expandBodyRefs } from "./refs";
 import { getDb } from "./handle";
-import { glossaryRows, knowledgeEntry, knowledgeRows, readByLocator } from "./read";
+import { glossaryRows, readByLocator } from "./read";
 import {
   addressIdentity,
   addressSegments,
@@ -888,53 +885,6 @@ export async function writeGlossary(
   });
 }
 
-// --- the campaign_knowledge table ----------------------------------------------
-
-/**
- * PUT /api/campaigns/:campaign/knowledge `{ entries, rev }` -> the stored list + its
- * fresh `rev`.
- *
- * Exactly the glossary's contract, deliberately: the DM edits both lists on
- * the same page, so "the whole list plus its guard token" is ONE thing to
- * understand instead of two. The list is replaced rather than diffed — which
- * is what makes reordering, deleting and editing the same request — and
- * `pos` is handed out fresh from the array order.
- *
- * ENTRIES ARE NOT DROPPED HERE for being half-filled: an empty `to` is a
- * convention the DM has not finished typing, and swallowing it on save would
- * lose work. The PROMPT skips those lines instead (read.ts knowledgeText),
- * which is where an incomplete rule can actually do damage.
- */
-export async function writeKnowledge(
-  campaign: string,
-  entries: KnowledgeEntry[],
-  rev: number,
-): Promise<KnowledgeResponse> {
-  return mutate(campaign, (tx) => {
-    const row = requireCampaignRow(tx, campaign);
-    guardRev(row.knowledgeRev, rev, "campaign knowledge changed");
-    tx.delete(campaignKnowledge).where(eq(campaignKnowledge.campaignId, campaign)).run();
-    let pos = 0;
-    for (const entry of entries) {
-      tx.insert(campaignKnowledge)
-        .values({
-          campaignId: campaign,
-          pos: pos++,
-          kind: entry.kind,
-          fromText: entry.from,
-          toText: entry.to,
-          text: entry.text,
-        })
-        .run();
-    }
-    const nextRev = row.knowledgeRev + 1;
-    tx.update(campaigns)
-      .set({ knowledgeRev: nextRev })
-      .where(eq(campaigns.id, campaign))
-      .run();
-    return { entries: knowledgeRows(tx, campaign).map(knowledgeEntry), rev: nextRev };
-  });
-}
 
 
 
