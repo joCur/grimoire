@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/joCur/grimoire/compare/v0.7.0...v0.8.0) (2026-09-18)
+
+
+### Features
+
+* **app:** Kennung im Anlege-Dialog per Stift selbst setzen ([#123](https://github.com/joCur/grimoire/issues/123)) ([#155](https://github.com/joCur/grimoire/issues/155)) ([2efe51b](https://github.com/joCur/grimoire/commit/2efe51bfdc81d976d9f780492488b28450726c67))
+
 ## [0.7.0](https://github.com/joCur/grimoire/compare/v0.6.0...v0.7.0) (2026-09-18)
 
 
