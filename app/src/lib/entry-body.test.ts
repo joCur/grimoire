@@ -28,12 +28,17 @@ describe("canEditEntryBody", () => {
     }
   });
 
-  test("the append-only kinds and the campaign entry are not", () => {
-    // Logs and the inbox are append-only by design; the campaign entry has its
-    // own edit action for name and description.
+  test("the campaign entry is prose like a chapter", () => {
+    // Its name and description stay with the campaign dialog; the text below
+    // them is written like any other entry's.
+    expect(canEditEntryBody("campaign")).toBe(true);
+  });
+
+  test("the append-only kinds are not", () => {
+    // Logs and the inbox are append-only by design; a free-hand rewrite of a
+    // log is not a maintenance action.
     expect(canEditEntryBody("session")).toBe(false);
     expect(canEditEntryBody("inbox")).toBe(false);
-    expect(canEditEntryBody("campaign")).toBe(false);
   });
 
   test("the glossary is a list — no text editor", () => {

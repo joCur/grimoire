@@ -24,7 +24,8 @@
 // properties per field, body per block, nothing written until accepted.
 //
 // The properties action next to it is the properties half: a form over
-// all typed fields of the kind. It stays available while the body editor runs;
+// all typed fields of the kind — for the campaign entry, the dialog over its
+// name and description. It stays available while the body editor runs;
 // each of them is its own editing session, so a save from one while the other
 // stands asks what to do instead of overwriting it.
 
@@ -178,17 +179,20 @@ export function SceneRoute() {
   // While the body editor runs it stays out of the way for the same reason
   // the edit action does: two writers on one body is not a review.
   const augmentAction = editing ? null : <AugmentAction campaign={campaign} file={data} />;
+  // The campaign entry's properties half is its own dialog — name and
+  // description, the two values no typed form models — so it stands where the
+  // properties action stands for every other kind, and under that name. The
+  // body next to it is prose the DM edits like a chapter's.
+  const campaignMetaAction =
+    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} as="properties" /> : null;
   const articleActions = (
     <>
       {editAction}
       {propertiesAction}
+      {campaignMetaAction}
       {augmentAction}
     </>
   );
-  // The campaign entry's header carries the metadata edit action instead:
-  // its name/description are what this page shows, and its id is fixed.
-  const headerActions =
-    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : articleActions;
 
   return (
     <>
@@ -220,7 +224,7 @@ export function SceneRoute() {
               }
             />
           ) : (
-            <EntityArticle file={data} actions={headerActions} body={bodyEditor} />
+            <EntityArticle file={data} actions={articleActions} body={bodyEditor} />
           )}
         </div>
         {npcs.length > 0 && (

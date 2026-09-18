@@ -1,6 +1,14 @@
-// The edit action for the campaign's name and description — offered on the
+// The dialog for the campaign's name and description — offered on the
 // chapter overview header and in the campaign entry's reading view, the two
 // places where those two values are on screen.
+//
+// Its trigger is named after what else stands in that header. On the chapter
+// overview it is the only edit there is, so it is called „Bearbeiten". In the
+// campaign entry's reading view the body editor owns that label, and the
+// dialog is the properties half of the same pair as everywhere else — so it
+// takes the properties name and glyph there. Two triggers with one name on one
+// surface are ambiguous for a screen reader and for a keyboard user counting
+// Tab stops.
 //
 // Both values are properties of the campaign entry, so one guarded write
 // carries them (lib/use-entry-edit.ts). The version it is checked against is
@@ -22,7 +30,7 @@
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { PenLine } from "lucide-react";
+import { PenLine, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { fetchCampaigns, fetchEntry } from "@/api";
@@ -48,14 +56,31 @@ import {
 import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /** The quiet trigger; the dialog itself mounts only while it is open. */
-export function CampaignMetaAction({ campaign }: { campaign: string }) {
+export function CampaignMetaAction({
+  campaign,
+  as = "edit",
+}: {
+  campaign: string;
+  /**
+   * How the trigger is NAMED, per surface: the plain edit action where it is
+   * the only one, the properties action where the body editor stands next to
+   * it. The dialog is the same either way — same form, same editing session,
+   * same 409.
+   */
+  as?: "edit" | "properties";
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   if (campaign === "") return null;
+  const properties = as === "properties";
 
   return (
     <>
-      <HeaderAction icon={PenLine} label={t("common.edit")} onClick={() => setOpen(true)} />
+      <HeaderAction
+        icon={properties ? SlidersHorizontal : PenLine}
+        label={properties ? t("properties.action") : t("common.edit")}
+        onClick={() => setOpen(true)}
+      />
       {open && <CampaignMetaDialog campaign={campaign} onClose={() => setOpen(false)} />}
     </>
   );

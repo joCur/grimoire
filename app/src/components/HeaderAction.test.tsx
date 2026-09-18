@@ -1,9 +1,9 @@
-// Issue #38: the header triggers („Bearbeiten" for the body, for the campaign
-// metadata, „Eigenschaften") were byte-identical copies. What must hold
-// is that they STAY one component — so each call site is compared against a
-// live render of the equivalent <HeaderAction …/> instead of against frozen
-// markup (pinning lucide-react/react-dom byte output would break on every
-// dependency bump without a single pixel moving).
+// The header triggers of the reading view — the edit action for the body, the
+// campaign dialog, the properties action — are ONE component. That is what is
+// asserted here: each call site is compared against a live render of the
+// equivalent <HeaderAction …/> instead of against frozen markup (pinning
+// lucide-react/react-dom byte output would break on every dependency bump
+// without a single pixel moving).
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
@@ -48,13 +48,21 @@ describe("the call sites", () => {
     );
   });
 
-  test("Bearbeiten of the campaign metadata is the shared trigger", () => {
+  test("Bearbeiten of the campaign dialog is the shared trigger", () => {
     expect(renderToStaticMarkup(<CampaignMetaAction campaign="beispiel" />)).toBe(
       headerAction("Bearbeiten"),
     );
   });
 
-  test("Eigenschaften (issue #42) is the shared trigger with its own glyph", () => {
+  test("the campaign dialog takes the properties name next to the body editor", () => {
+    expect(renderToStaticMarkup(<CampaignMetaAction campaign="beispiel" as="properties" />)).toBe(
+      renderToStaticMarkup(
+        <HeaderAction icon={SlidersHorizontal} label="Eigenschaften" onClick={() => {}} />,
+      ),
+    );
+  });
+
+  test("Eigenschaften is the shared trigger with its own glyph", () => {
     const npc: EntryResponse = {
       path: "npcs/jorna",
       kind: "npc",
