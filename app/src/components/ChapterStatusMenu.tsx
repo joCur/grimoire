@@ -4,7 +4,7 @@
 // message. What differs is the write behind it, and that is the whole reason
 // this module exists:
 //
-//   `planned` / `done`   PATCH /properties on the chapter entry, rev-guarded
+//   `planned` / `done`   a properties write on the chapter entry, rev-guarded
 //                        like every other properties write.
 //   `active`             POST /chapters/:id/active — ONE call for ONE decision
 //                        about TWO chapters, so the campaign never has two

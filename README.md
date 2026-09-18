@@ -62,10 +62,10 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder. Sie
 heißen auf der Leitung `properties`; die App zeigt sie im
-Eigenschaften-Dialog, und `PATCH /properties` ändert genau die Felder, die
-der DM angefasst hat. Felder, die ein Eintrag mitbringt und die seine Art
-nicht kennt, bleiben erhalten und lassen sich ändern oder löschen; neue legt
-die API nicht an (400).
+Eigenschaften-Dialog, und `PATCH /api/campaigns/<kampagne>/entries/<adresse>`
+ändert genau die Felder, die der DM angefasst hat. Felder, die ein Eintrag
+mitbringt und die seine Art nicht kennt, bleiben erhalten und lassen sich
+ändern oder löschen; neue legt die API nicht an (400).
 
 ### Kampagne
 
@@ -300,8 +300,11 @@ Hashtags wie das Log. Die Nachbereitung zeigt sie zusammen mit dem Log.
 
 - Geschrieben wird ausschließlich über die API (jeder Endpoint ist in
   `server/src/routes/api.ts` an seiner Route dokumentiert): Log, Ideen,
-  `PATCH /properties`, Text-Edits,
-  Nachbereitung, Generator-Entwürfe.
+  Nachbereitung, Generator-Entwürfe — und für einen Eintrag der eine
+  Schreibweg `PATCH /api/campaigns/<kampagne>/entries/<adresse>`, der
+  Eigenschaften, Text oder beides in einem Zug schreibt (ADR #23).
+  Glossar, Kampagnenwissen und Ideen sind Listen und werden über ihre
+  eigenen Endpoints gepflegt; einen Text nehmen sie nicht an.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu

@@ -180,12 +180,31 @@ export interface Api {
    */
   sessionPath(includeEnded?: boolean): Promise<string | undefined>;
   /**
-   * PUT the body with a FRESH guard token: a second writer, not a race. Returns
-   * the new token. This is how a spec provokes the app's 409 — an entry only
-   * ever changes through the API.
+   * The ONE write path of an entry: PATCH the address with `rev` and at least
+   * one of `properties` and `body` (ADR #23). Fields and text together are one
+   * write against one `rev`. `force` writes the given fields on top of the row
+   * as it stands instead of refusing a stale `rev`.
+   *
+   * Pass `rev` to write against a token the spec already holds — that is how a
+   * test writes with the SAME token an editing surface is holding. Omitted, the
+   * helper reads the current token first and so plays the second writer.
+   */
+  patchEntry(
+    rel: string,
+    change: {
+      rev?: number;
+      properties?: Record<string, unknown>;
+      body?: string;
+      force?: boolean;
+    },
+  ): Promise<ApiFile>;
+  /**
+   * Replace the body with a FRESH guard token: a second writer, not a race.
+   * Returns the new token. This is how a spec provokes the app's 409 — an entry
+   * only ever changes through the API.
    */
   writeBody(rel: string, body: string): Promise<number>;
-  /** PATCH /properties with a fresh guard token; returns the new token. */
+  /** Set properties with a fresh guard token; returns the new token. */
   patchProperties(rel: string, patch: Record<string, unknown>): Promise<number>;
 }
 
@@ -361,22 +380,21 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       if (!response.ok) throw new Error(`GET /session: HTTP ${response.status}`);
       return ((await response.json()) as ApiFile).path;
     },
-    async writeBody(rel, body) {
-      const current = await api.file(rel);
-      const written = await api.send<ApiFile>("PUT", entriesPath(campaign, rel), {
-        rev: current.rev,
-        body,
+    async patchEntry(rel, change) {
+      const rev = change.rev ?? (await api.file(rel)).rev;
+      const { properties, body, force } = change;
+      return api.send<ApiFile>("PATCH", entriesPath(campaign, rel), {
+        rev,
+        ...(properties === undefined ? {} : { properties }),
+        ...(body === undefined ? {} : { body }),
+        ...(force === undefined ? {} : { force }),
       });
-      return written.rev;
+    },
+    async writeBody(rel, body) {
+      return (await api.patchEntry(rel, { body })).rev;
     },
     async patchProperties(rel, patch) {
-      const current = await api.file(rel);
-      const written = await api.send<ApiFile>("PATCH", `campaigns/${campaign}/properties`, {
-        path: rel,
-        rev: current.rev,
-        patch,
-      });
-      return written.rev;
+      return (await api.patchEntry(rel, { properties: patch })).rev;
     },
   };
   return api;

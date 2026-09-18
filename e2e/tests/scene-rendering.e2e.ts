@@ -180,10 +180,10 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   // the id has to have an entry (ADR #19).
   const scene = "01-salzhafen/bucht/smuggler-captured";
   const patchLocation = async (value: string, rev: number): Promise<Response> =>
-    api.fetch("campaigns/beispiel/properties", {
+    api.fetch(`campaigns/beispiel/entries/${scene}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: scene, rev, patch: { location: value } }),
+      body: JSON.stringify({ rev, properties: { location: value } }),
     });
 
   // An id nothing holds: refused, and no entry appears for it.

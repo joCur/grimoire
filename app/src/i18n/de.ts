@@ -234,10 +234,9 @@ export const de = {
   "entryList.edit": "„{name}“ bearbeiten",
   "entryList.remove": "„{name}“ löschen",
   "entryList.removed": "Eintrag gelöscht",
-  // The two actions next to `write.stale`. Reloading is always possible;
-  // re-aiming the draft only when the opened entry is still in the list that
-  // came back (components/EntryListPage.tsx).
-  "entryList.reload": "Neu laden",
+  // Re-aiming the draft is offered only when the opened entry is still in the
+  // list that came back (components/EntryListPage.tsx); reloading is the
+  // shared `editConflict.reload`.
   "entryList.applyDraft": "Entwurf behalten & auf aktuelle Liste anwenden",
   "entryList.confirmDelete.title": "Eintrag löschen?",
   "entryList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
@@ -297,7 +296,10 @@ export const de = {
     'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
   "server.session_not_empty": "Diese Session hat Inhalt — beenden statt verwerfen.",
-  "server.rev_conflict": "Inzwischen extern geändert — neu laden vor dem Speichern.",
+  "server.rev_conflict": "Inzwischen geändert — neu laden vor dem Speichern.",
+  "server.nothing_to_write": "Nichts zu speichern.",
+  "server.body_not_editable":
+    "Dieser Eintrag hat keinen bearbeitbaren Text — er wird als Liste gepflegt.",
   "server.job_restarted": "Server wurde während des Laufs neu gestartet — Job neu starten.",
   "server.llm_truncated":
     "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}) oder Quelltext verkleinern.",
@@ -333,6 +335,12 @@ export const de = {
   "write.failed": "Nicht gespeichert — Server prüfen",
   "write.properties.failed": "Eigenschaften nicht gespeichert — Server prüfen",
   "write.status.failed": "Status nicht gespeichert — Server prüfen",
+  // The conflict line every editing surface shows (components/EditConflict.tsx)
+  // and its two answers. The line only STATES it; the answers are controls,
+  // because a refused write leaves the draft on screen and nothing decided.
+  "editConflict.line": "Inzwischen geändert",
+  "editConflict.reload": "Neu laden",
+  "editConflict.force": "Trotzdem speichern",
   "status.change.aria": "Status ändern, aktuell {current}",
   "status.sceneUnloadable": "Szene nicht ladbar",
 

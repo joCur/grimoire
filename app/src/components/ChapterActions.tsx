@@ -8,14 +8,14 @@
 //
 //   PROPERTIES   title and status — the SHARED properties dialog
 //                (components/PropertiesAction). Its chapter form already has
-//                exactly these two fields, its rev is frozen when it opens,
+//                exactly these two fields, it runs the same editing session,
 //                and its 409 keeps the typed values. Reusing it is the point:
 //                a second chapter form is how the wording and the conflict
 //                handling drift apart.
 //   EDIT         the chapter entry's TEXT, which is where the goal line the
 //                overview shows comes from. Its own dialog (not the reading
 //                view's inline editor — the overview is a list, it does not
-//                turn into an editing surface), same rev protocol.
+//                turn into an editing surface), same editing session.
 //
 // Setting the active chapter is NOT a third action here: the status control in
 // the chapter's heading row (components/ChapterStatusMenu) already offers the
@@ -35,6 +35,7 @@ import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 
+import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
 import { PropertiesAction } from "@/components/PropertiesAction";
 import { Button } from "@/components/ui/button";
@@ -46,8 +47,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useT } from "@/i18n";
-import { chapterBodyChanged, chapterMetaPath, writeChapterBody } from "@/lib/chapter-meta";
-import { useRevWriteMutation } from "@/lib/use-rev-write";
+import {
+  chapterBodyChanged,
+  chapterBodyToWrite,
+  chapterMetaPath,
+} from "@/lib/chapter-meta";
+import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /** The chapter's display name — its id when the title is missing or empty. */
 function chapterLabel(entry: EntryResponse, chapter: string): string {
@@ -112,21 +117,17 @@ export function ChapterActions({
 /**
  * The edit dialog — the chapter's markdown text, where the goal lives.
  *
- * The rev is frozen at the first render with an entry, for the reason the
- * campaign dialog spells out (lib/campaign-meta.ts `seedCampaignMetaBase`):
- * the 5s version poll refetches this entry while the dialog stands, and
- * following it would turn a concurrent edit into a silent overwrite instead of
- * a 409. It moves only after a conflict, to the version the re-read brought,
- * and the typed text stays.
+ * The version it writes against is the one the dialog opened with, held by the
+ * editing session: the 5s version poll refetches this entry while the dialog
+ * stands, and following it would turn a concurrent edit into a silent
+ * overwrite instead of the 409 that asks.
  *
- * The BASELINE the "nothing changed" check compares against is frozen in the
- * same breath, and for the same reason (the properties dialog's `initial`
- * does it too): it is the text that belongs to the frozen rev. Reading the
- * entry's text live meant the poll could move the baseline under the dialog —
- * a second writer whose text happened to equal what the DM had typed disabled
- * the save button, so the DM's own version was never written and nothing said
- * why; and after a conflict the re-read text became the baseline, which
- * disabled the retry that was supposed to write on top of it.
+ * The BASELINE the "nothing changed" check compares against belongs to that
+ * same version, so it moves only when the DM adopts the stored entry. Reading
+ * the entry's text live meant the poll could move the baseline under the
+ * dialog — a second writer whose text happened to equal what the DM had typed
+ * disabled the save button, so the DM's own version was never written and
+ * nothing said why.
  */
 function ChapterBodyDialog({
   campaign,
@@ -141,31 +142,26 @@ function ChapterBodyDialog({
 }) {
   const t = useT();
   const [body, setBody] = useState(entry.body);
-  // Both frozen at open, and moved only by a conflict re-read below — the
-  // baseline always belongs to the rev the next save is checked against.
-  const [rev, setRev] = useState(entry.rev);
+  // The text the draft was seeded from — it always belongs to the version the
+  // next save is checked against, so it moves with it and only with it.
   const [baseline, setBaseline] = useState(entry.body);
 
-  const save = useRevWriteMutation<void>({
-    write: () => writeChapterBody(campaign, chapter, body, rev),
-    entryKey: ["entry", campaign, chapterMetaPath(chapter)],
+  const save = useEntryEdit(campaign, chapterMetaPath(chapter), entry.rev, {
+    onSaved: onClose,
+    onReload: (stored) => {
+      // Continue from what is stored: text and baseline together, so there is
+      // nothing left to save until the DM types again.
+      setBody(stored.body);
+      setBaseline(stored.body);
+    },
     // The goal line lives in the overview's tree, and the text is indexed.
     invalidateOnSuccess: [
       ["tree", campaign],
       ["search", campaign],
     ],
-    onSaved: onClose,
-    onConflict: (reread) => {
-      // The typed text stays; what moves is what the next attempt writes
-      // against — rev and baseline together.
-      if (reread !== undefined) {
-        setRev(reread.rev);
-        setBaseline(reread.body);
-      }
-    },
   });
 
-  const canSubmit = !save.isPending;
+  const canSubmit = !save.isSaving;
 
   return (
     <Dialog
@@ -182,7 +178,7 @@ function ChapterBodyDialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            save.write();
+            save.save({ body: chapterBodyToWrite(body) });
           }}
           className="mt-4 flex flex-col gap-3.5"
         >
@@ -202,6 +198,12 @@ function ChapterBodyDialog({
             {save.message ?? ""}
           </p>
 
+          {/* A refused write asks instead of deciding: the typed text is
+              untouched and both answers stand above the buttons. */}
+          {save.conflict !== undefined && (
+            <EditConflict onReload={save.reload} onForce={save.forceSave} busy={save.isSaving} />
+          )}
+
           <div className="flex items-center justify-end gap-2">
             <DialogClose asChild>
               <Button
@@ -217,7 +219,7 @@ function ChapterBodyDialog({
               disabled={!canSubmit || !chapterBodyChanged(body, baseline)}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {save.isPending ? t("common.saving") : t("common.save")}
+              {save.isSaving ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </form>

@@ -14,7 +14,7 @@
 //      properties per field with the current value next to it, and the
 //      proposed body whole,
 //   3. accepting writes into the existing row with a `rev` guard, in ONE
-//      transaction (store/write.ts `writePropertiesAndBody`) — it never
+//      transaction (store/write.ts `patchEntry`) — it never
 //      create the entry, it only fills it.
 //
 // WHY THE PROPOSAL CARRIES WHOLE BODIES and not a block list: the block model
@@ -54,7 +54,7 @@ import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { readParsedFile } from "./store/read";
 import { renderRaw } from "./store/render";
-import { writePropertiesAndBody } from "./store/write";
+import { patchEntry } from "./store/write";
 
 /** The correction turn's tail — what a corrected reply must still contain. */
 const AUGMENT_CORRECTION_TAIL = "den vollständigen ergänzten Eintrag enthalten";
@@ -460,5 +460,10 @@ export async function applyAugment(
   // The kind gate again — apply is a separate request and must never trust
   // the client to have come through the dialog.
   await readAugmentTarget(campaign, rel);
-  return writePropertiesAndBody(campaign, rel, rev, fields, markdown, jobId);
+  return patchEntry(
+    campaign,
+    rel,
+    { rev, properties: fields, ...(markdown === undefined ? {} : { body: markdown }) },
+    jobId,
+  );
 }

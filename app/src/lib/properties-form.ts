@@ -8,7 +8,7 @@
 //   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
 //      list per kind, `id` deliberately absent (it is fixed at creation,
 //      ADR #21) and the kind itself as well (it is derived from the path).
-//   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
+//   2. Only what the DM CHANGED is patched. The entry write re-emits the
 //      whole YAML block from the parsed entry, so every key we do not send
 //      keeps its value — unknown keys of an imported entry included. Sending
 //      an unchanged field would be a no-op at best and a type/format change at
@@ -34,14 +34,12 @@ import {
 } from "@grimoire/shared/property-fields";
 import { toSlug } from "@grimoire/shared/slug";
 
-import { fetchEntry, patchProperties } from "@/api";
 import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/properties";
 import { chapterStatusOptions } from "@/lib/chapter-status";
 import { sceneStatusOptions } from "@/lib/scene-status";
-import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /**
  * How one field is edited:
@@ -71,10 +69,10 @@ export interface FieldOption {
 export interface PropertiesField {
   /** The properties key, verbatim (`roll20-page` included). */
   key: string;
-  /** German label above the control. */
+  /** The translated label above the control. */
   label: string;
   control: FieldControl;
-  /** Quiet German line under the control; the format's own note in most cases. */
+  /** Quiet line under the control; the format's own note in most cases. */
   hint?: string;
   /** A field the entity cannot lose (`title`/`name`) — blank blocks the save. */
   required?: boolean;
@@ -446,7 +444,7 @@ function patchValue(value: FieldValue): unknown {
 }
 
 /**
- * The PATCH /properties patch: ONLY the fields whose value actually moved.
+ * The properties patch: ONLY the fields whose value actually moved.
  * A field that ended up empty is sent as `null` (the server deletes the key),
  * everything else as its value. Keys the form does not know are never in here,
  * so an imported entry keeps them.
@@ -687,21 +685,3 @@ export function selectOptions(
   return extras.length === 0 ? options : [...options, ...extras];
 }
 
-// --- the write ---------------------------------------------------------------
-
-/**
- * Save the patch. The 409 handling — nothing was written, the entry is re-read
- * once so the next save carries the fresh rev — is the shared
- * protocol of write-with-rev.ts. Every other failure throws.
- */
-export function writePropertiesForm(
-  campaign: string,
-  path: string,
-  rev: number,
-  patch: Record<string, unknown>,
-): Promise<RevWriteResult> {
-  return writeWithRev(
-    () => patchProperties(campaign, { path, rev, patch }),
-    () => fetchEntry(campaign, path),
-  );
-}

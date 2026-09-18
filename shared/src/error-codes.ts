@@ -67,8 +67,28 @@ export const ERROR_CODES = [
   "session_running",
   /** 409, session discard: the session already carries content. `{ path }` */
   "session_not_empty",
-  /** 409, any rev-checked write: the entry changed underneath. `{ rev }` */
+  /**
+   * 409, any rev-checked write: the entry changed underneath. `{ rev }`, and
+   * for the writes of one entry also `{ entry }` — the current
+   * `EntryResponse`, so the app can show what is there instead of fetching
+   * it again.
+   */
   "rev_conflict",
+  /**
+   * 400, entry write: neither `properties` nor `body` was sent — the request
+   * asks for no change at all. No parameters.
+   */
+  "nothing_to_write",
+  /**
+   * 400, entry write: the address carries a LIST, not a text — the glossary,
+   * the inbox, and a session's log. They are edited through their own
+   * endpoints, so a `body` on them would silently do nothing. `{ path }`
+   *
+   * This code is a stopgap: it exists only while these lists still carry an
+   * entry address at all. They get their own read endpoints and views, and
+   * with that address the guard and this code go away.
+   */
+  "body_not_editable",
   /** 503, generator: the server was restarted while the job was running. */
   "job_restarted",
   /** 422, generator: the model's reply hit the token ceiling. `{ maxTokens }` */

@@ -304,6 +304,36 @@ export interface EntryResponse extends ParsedFile {
 }
 
 /**
+ * The body of PATCH /api/campaigns/:campaign/entries/<address> — the ONE
+ * write of an entry (ADR #23).
+ *
+ * `rev` is the guard token of the entry as it was read; a mismatch is a 409
+ * that carries the current `rev` AND the current entry. At least one of
+ * `properties` and `body` has to be there, and both together are ONE write:
+ * the fields dialog and the text editor of one entry save through the same
+ * request, and the row changes once — `rev` steps once either way, so it is
+ * the answer's `rev` that goes into the next request, never `rev + 1`.
+ */
+export interface PatchEntryRequest {
+  /** The `rev` the client read — the optimistic-concurrency token. */
+  rev: number;
+  /**
+   * The fields to change. Only the named keys are touched, and `null`
+   * removes a key. A key the entry's kind has no field for is a 400.
+   */
+  properties?: Record<string, unknown>;
+  /** The new markdown body, replacing the stored one completely. */
+  body?: string;
+  /**
+   * Write the given fields on top of whatever the row holds NOW instead of
+   * refusing on a stale `rev` — the DM's answer to the conflict dialog. Only
+   * the fields in this request are written, so a status somebody else
+   * changed meanwhile survives a forced text save.
+   */
+  force?: boolean;
+}
+
+/**
  * One row of GET /api/:campaign/search (the response wraps them as
  * `{ results: SearchResult[] }`, see SearchResponse). Only scenes, npcs,
  * locations, chapters and the campaign entry are indexed — see

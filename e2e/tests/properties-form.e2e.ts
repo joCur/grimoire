@@ -32,7 +32,8 @@ import { expect, test, type Api } from "../support/test";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 const NPC = "npcs/jorna";
-const STALE_MESSAGE = "Inzwischen geändert — neu laden";
+/** The shared conflict line (EditConflict) — the only role="alert" of the app. */
+const CONFLICT_LINE = "Inzwischen geändert";
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
@@ -299,13 +300,26 @@ test("a CLEARED Kapitel blocks the save in the dialog — no round trip", async 
   expect(await api.properties(SCENE)).toHaveProperty("chapter", "01-salzhafen");
 });
 
-test("a second writer: the save reports the conflict, the second click writes", async ({
+/**
+ * The dialog's conflict line with its two actions.
+ *
+ * "Trotzdem speichern" contains the dialog's own save label, so the save button
+ * has to be addressed exactly — otherwise the two match as one.
+ */
+function conflict(dialog: Locator) {
+  const line = dialog.getByRole("alert").filter({ hasText: CONFLICT_LINE });
+  return {
+    line,
+    reload: line.getByRole("button", { name: "Neu laden" }),
+    force: line.getByRole("button", { name: "Trotzdem speichern" }),
+  };
+}
+
+test("a second writer: the dialog offers reloading, and it shows what is stored", async ({
   page,
   api,
 }) => {
   const before = await split(api, SCENE);
-  // The external editor changed the title AND the body while the dialog was
-  // open — both have to survive the DM's save, because neither is in the patch.
   const externalTitle = "Ankunft am Leuchtturm (von Hand)";
   const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
@@ -318,43 +332,92 @@ test("a second writer: the save reports the conflict, the second click writes", 
   await tags.press("Enter");
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toBeVisible();
 
-  // A second writer changes title AND body under the open dialog, through the
-  // same API with a FRESH token. No race to win: the dialog holds the token it
-  // opened with until a conflict tells it otherwise, so the version poll
-  // cannot make this write succeed silently.
-  await api.patchProperties(SCENE, { title: externalTitle });
-  await api.writeBody(SCENE, externalBody);
+  // A second writer changes title AND body under the open dialog — in ONE
+  // request, because that is what the one write path is (ADR #23). A fresh
+  // token, so it succeeds; the dialog holds the version its editing session
+  // started from, so the version poll cannot make the DM's write succeed
+  // silently.
+  await api.patchEntry(SCENE, {
+    properties: { title: externalTitle },
+    body: externalBody,
+  });
 
-  const save = dialog.getByRole("button", { name: "Speichern" });
+  const save = dialog.getByRole("button", { name: "Speichern", exact: true });
   await save.click();
 
-  // Refused, and said so — quietly, in the dialog's own message line.
-  await expect(dialog.getByText(STALE_MESSAGE)).toBeVisible();
+  // Refused, with both answers under the fields that still hold the draft.
+  const conflicted = conflict(dialog);
+  await expect(conflicted.line).toBeVisible();
+  await expect(conflicted.reload).toBeVisible();
+  await expect(conflicted.force).toBeVisible();
   // The dialog stays open and the typed chip survives — that is the point.
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toBeVisible();
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
-  // Nothing was written: the external content stands, untouched.
-  const conflicted = await split(api, SCENE);
-  expect(conflicted.properties.tags).not.toContain("konflikt");
-  expect(conflicted.properties.title).toBe(externalTitle);
-  expect(conflicted.body).toBe(externalBody);
+  // Nothing was written: the other writer's content stands, untouched.
+  const stored = await split(api, SCENE);
+  expect(stored.properties.tags).not.toContain("konflikt");
+  expect(stored.properties.title).toBe(externalTitle);
+  expect(stored.body).toBe(externalBody);
 
-  // The dialog re-read the file, so the SAME click works now — and it is a
-  // PATCH: only the DM's key travels, so the external title and the external
-  // body are still there afterwards.
+  // Reloading shows the CURRENT values: the external title is in the field, the
+  // draft chip is gone, and nothing was written on the way.
+  await conflicted.reload.click();
+  await expect(conflicted.line).toHaveCount(0);
+  await expect(dialog.getByLabel("Titel")).toHaveValue(externalTitle);
+  await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toHaveCount(0);
+  expect(await split(api, SCENE)).toEqual(stored);
+
+  // From the adopted version the DM's chip saves in one click, and the save is
+  // still a patch of the dialog's fields only: the external body survives.
+  await tags.fill("konflikt");
+  await tags.press("Enter");
   await save.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(dialog.getByText(STALE_MESSAGE)).toHaveCount(0);
 
   await expect.poll(async () => (await api.properties(SCENE)).tags).toContain("konflikt");
   const after = await split(api, SCENE);
-  expect(after.properties.tags).toEqual(["social", "travel", "konflikt"]);
+  expect(after.properties.tags).toEqual([...(before.properties.tags as string[]), "konflikt"]);
   expect(after.properties.title).toBe(externalTitle);
   expect(after.body).toBe(externalBody);
-  // And the reading view shows the file as it now is — external title
-  // included, since the patch response is the whole file.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(externalTitle);
   await expect(page.getByRole("article")).toContainText("#konflikt");
+});
+
+test("a forced save writes the dialog's fields only — a concurrent body survives", async ({
+  page,
+  api,
+}) => {
+  const before = await split(api, SCENE);
+  const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
+
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+
+  const tags = dialog.getByLabel("Tags");
+  await tags.fill("erzwungen");
+  await tags.press("Enter");
+  await expect(dialog.getByRole("button", { name: "erzwungen entfernen" })).toBeVisible();
+
+  // The second writer touches only the TEXT — the dialog's own fields are not
+  // in its request at all.
+  await api.writeBody(SCENE, externalBody);
+
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  const conflicted = conflict(dialog);
+  await expect(conflicted.line).toBeVisible();
+
+  // Forcing writes the refused fields on top of the row as it stands. This
+  // dialog carries `properties` only, so the body it never saw is untouched.
+  await conflicted.force.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expect.poll(async () => (await api.properties(SCENE)).tags).toContain("erzwungen");
+  const after = await split(api, SCENE);
+  expect(after.properties.tags).toEqual([...(before.properties.tags as string[]), "erzwungen"]);
+  expect(after.properties.title).toBe(before.properties.title);
+  // The assertion this test exists for, read back through the API.
+  expect(after.body).toBe(externalBody);
+  await expect(page.getByRole("article")).toContainText("#erzwungen");
 });
 
 test("clearing a field deletes the key instead of writing an empty value", async ({

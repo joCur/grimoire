@@ -1,27 +1,27 @@
-// „Mit KI ergänzen" (issue #36) — the third quiet action in an entry's header,
-// next to „Bearbeiten" and „Eigenschaften". Same vocabulary, same size, no new
+// The augment action — the third quiet action in an entry's header, next to
+// the edit and the properties action. Same vocabulary, same size, no new
 // chrome: the topbar does not grow, and the reading view gains one word.
 //
 // The flow is three states in ONE dialog, because it is one errand:
 //
-//   Eingabe   Quelltext (EN) and/or a free instruction — at least one of them.
+//   input     source text and/or a free instruction — at least one of them.
 //             Submitting starts a SERVER job (ADR #10) and answers right away.
-//   Läuft     the job is polled through the shared generate-job query, so the
+//   running   the job is polled through the shared generate-job query, so the
 //             tab may be closed, navigated away from, or reloaded; a finished
 //             proposal is still here afterwards, and so is a restart.
-//   Review    the proposal, on the two levels the ticket asks for:
-//               properties per FIELD  „Vorhanden | Vorschlag" with
-//                                     Übernehmen/Behalten,
-//               body per BLOCK        the Block-Composer's own blocks, with a
+//   review    the proposal, on two levels:
+//               properties per FIELD  stored value beside proposed one, take
+//                                     or keep,
+//               body per BLOCK        the block composer's own blocks, with a
 //                                     word diff INSIDE a changed block, plus a
-//                                     „Markdown" tab carrying a line/word diff over
-//                                     the whole body.
+//                                     raw tab carrying a line/word diff over
+//                                     the whole text.
 //
-// DEFAULTS are the ticket's own sentence, „nie stilles Überschreiben": what is
-// empty or new is preselected, what is filled is kept. Accepting writes ONE
-// request (properties + body, one transaction, one rev guard); a 409 is the
-// house conflict protocol — nothing was written, the entry is re-read and the
-// next attempt carries the fresh token.
+// DEFAULTS never overwrite silently: what is empty or new is preselected, what
+// is filled is kept. Accepting writes ONE request (properties + text, one
+// transaction, one version guard) and, on a conflict, asks — nothing was
+// written, and continuing from the stored text re-cuts the whole proposal
+// against it.
 //
 // The action is DESKTOP-ONLY (`hidden md:inline-flex`): mobile is the reading,
 // searching and inbox surface (UI-BRIEF), and a block-by-block diff review is
@@ -38,7 +38,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { applyAugment, deleteGenerateJob, fetchEntry, startAugmentJob } from "@/api";
+import { applyAugment, deleteGenerateJob, startAugmentJob } from "@/api";
+import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
@@ -59,16 +60,15 @@ import { fmString } from "@/lib/properties";
 import { reviewOf, runJobArrived } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
-import { useRevWriteMutation } from "@/lib/use-rev-write";
+import { useEntryEdit } from "@/lib/use-entry-edit";
 import { cn } from "@/lib/utils";
-import { writeWithRev } from "@/lib/write-with-rev";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
 
 /**
  * What the dialog CALLS the entry: the name the DM gave it (an npc's `name`,
- * a scene's `title`), never the wire address. „npcs/fenn" is how the entry is
- * addressed, not how it is known at the table.
+ * a scene's `title`), never the wire address. An address like `npcs/fenn` is
+ * how the entry is addressed, not how it is known at the table.
  */
 function entryName(file: EntryResponse): string {
   return fmString(file.properties.name) ?? fmString(file.properties.title) ?? file.path;
@@ -76,9 +76,9 @@ function entryName(file: EntryResponse): string {
 
 /**
  * What is accepted right now: the computed DEFAULT set, overridden by every
- * decision the job carries (issue #97). Absent from the record means the DM
- * has not touched that field/block, so the default still stands — which is
- * what keeps „nie stilles Überschreiben" true after a reload.
+ * decision the job carries. Absent from the record means the DM has not
+ * touched that field/block, so the default still stands — which is what keeps
+ * "never overwrite silently" true after a reload.
  */
 function decidedSet(
   defaults: ReadonlySet<string>,
@@ -137,8 +137,8 @@ function AugmentDialog({
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  // `awaitingJob` is on from the click on „Ergänzen" until the job of THAT
-  // run is readable, and it carries the id that was in the cache at the click
+  // `awaitingJob` is on from the click on the submit button until the job of
+  // THAT run is readable, and it carries the id that was in the cache at the click
   // — because that is the one the new job does NOT have (lib/generate.ts
   // runJobArrived). It is the running view's first half and the poll loop's
   // reason to live at the same time, and those two have to be ONE flag: a GET
@@ -157,7 +157,7 @@ function AugmentDialog({
 
   // The job belongs to this dialog only when it is an augment run for THIS
   // entry. Anything else (a scene run someone started on the generator page)
-  // is reported as „busy" rather than silently adopted — one job per campaign
+  // is reported as busy rather than silently adopted — one job per campaign
   // is the server's rule and the DM has to know whose job is in the way.
   const current = job.data;
   const mine = current?.kind === "augment" && current.target === file.path;
@@ -203,7 +203,7 @@ function AugmentDialog({
     onError: () => setMessage(t("augment.discard.failed")),
   });
 
-  // The window between the click and „this run's job is readable" — and
+  // The window between the click and "this run's job is readable" — and
   // NOTHING more: the moment the job answers, the JOB decides the phase, even
   // while its own 202 is still on the way. With a fast model the run is
   // finished before that response arrives, and taking the start request's
@@ -321,9 +321,10 @@ function AugmentDialog({
         </p>
 
         {/* One footer per PHASE — never the input's buttons over a running
-            job. While the run is on, „Ergänzen" would start nothing (one job
-            per campaign) and „Abbrechen" would read like a stop: the only
-            honest controls there are „Lauf verwerfen" and the close cross.
+            job. While the run is on, the submit button would start nothing
+            (one job per campaign) and the cancel button would read like a
+            stop: the only honest controls there are discarding the run and
+            the close cross.
             The review brings its own footer. */}
         {proposal === undefined && (
           <div className="flex items-center justify-end gap-2">
@@ -391,8 +392,8 @@ function AugmentReview({
   // what is new, keep what is filled).
   const review = useJobReview(campaign, job);
   const stored = reviewOf(job);
-  // The body the proposal is diffed AGAINST. It starts as the one the run
-  // saw and moves only after a conflict — see `onConflict` below.
+  // The text the proposal is diffed AGAINST. It starts as the one the run saw
+  // and moves only when the DM continues from what is stored (`onReload`).
   const [currentBody, setCurrentBody] = useState(proposal.currentBody);
   const changes = useMemo(
     () => alignBlocks(currentBody, proposal.proposedBody),
@@ -410,10 +411,6 @@ function AugmentReview({
   const acceptedFields = decidedSet(fieldDefaults, stored.fields);
   const [mode, setMode] = useState<ReviewMode>("blocks");
   const [showUnchanged, setShowUnchanged] = useState(false);
-  // Frozen at review time and advanced only after a conflict — the same rule
-  // the properties dialog follows, so the 5s version poll cannot turn an
-  // external write into a silent overwrite.
-  const [base, setBase] = useState(file.rev);
   const [rejectMessage, setRejectMessage] = useState<string>();
   // The review takes the focus when it replaces the running state: the button
   // that had it is gone, and focus on <body> announces nothing at all.
@@ -434,47 +431,46 @@ function AugmentReview({
   const bodyChanged = body !== currentBody;
   const canApply = bodyChanged || Object.keys(patch).length > 0;
 
-  // The accept is an ORDINARY rev-checked write (issue #38's shared layer):
-  // the written entry seeds the cache, tree AND search are invalidated — ⌘K
-  // must not keep the text the proposal replaced — and the 409 protocol is
-  // the house one.
-  const apply = useRevWriteMutation<{ rev: number; properties?: typeof patch; body?: string }>({
-    write: (variables) =>
-      writeWithRev(
-        () =>
-          applyAugment(campaign, {
-            path: proposal.path,
-            ...variables,
-            ...(jobId === undefined ? {} : { jobId }),
-          }),
-        () => fetchEntry(campaign, file.path),
-      ),
-    entryKey: ["entry", campaign, file.path],
+  // The accept is an ordinary editing session over the entry — same held
+  // version, same conflict answer as every other editing surface — but it does
+  // NOT go through the entry write: the accept endpoint discards the job in the
+  // same transaction, which is the whole reason it exists. So the session is
+  // handed that request instead, and the force action is not offered, because
+  // that endpoint has no force.
+  const apply = useEntryEdit(campaign, file.path, file.rev, {
+    writeEntry: (request) =>
+      applyAugment(campaign, {
+        path: proposal.path,
+        rev: request.rev,
+        ...(request.properties === undefined ? {} : { properties: request.properties }),
+        ...(request.body === undefined ? {} : { body: request.body }),
+        ...(jobId === undefined ? {} : { jobId }),
+      }),
+    canForce: false,
+    // The command palette must not keep the text the proposal replaced.
     invalidateOnSuccess: [
       ["tree", campaign],
       ["search", campaign],
       generateJobKey(campaign),
     ],
     onSaved: onDone,
-    onConflict: (reread) => {
-      // 409: nothing was written, and the OTHER writer's text is now the
-      // truth. Re-align the proposal against it and re-derive the defaults —
-      // keeping the decisions that were cut against the stale body would
-      // overwrite that writer on the next attempt, silently.
-      if (reread === undefined) return;
+    onReload: (storedEntry) => {
+      // Continue from what is stored: the other writer's text is the truth
+      // now, so the proposal is re-cut against it and the defaults are
+      // re-derived — keeping decisions that were cut against the stale text
+      // would overwrite that writer on the next attempt, silently.
+      //
       // The stored decisions are keyed by BLOCK ID, and the ids come out of
-      // the alignment — re-cutting against the new body renames them. A
-      // decision left behind under an old id would either apply to whatever
-      // block inherits that id or sit on the job forever, so they are
-      // cleared FIRST (issue #97 review, finding 5) and the defaults are
+      // the alignment — re-cutting renames them. A decision left behind under
+      // an old id would either apply to whatever block inherits that id or sit
+      // on the job forever, so they are cleared FIRST and the defaults are
       // re-derived after.
       const stale = Object.keys(stored.blocks);
       if (stale.length > 0) {
         review.decide({ blocks: Object.fromEntries(stale.map((id) => [id, null])) });
       }
-      setBase(reread.rev);
-      setCurrentBody(reread.body);
-      setBlockDefaults(defaultAccepted(alignBlocks(reread.body, proposal.proposedBody)));
+      setCurrentBody(storedEntry.body);
+      setBlockDefaults(defaultAccepted(alignBlocks(storedEntry.body, proposal.proposedBody)));
     },
   });
 
@@ -610,6 +606,11 @@ function AugmentReview({
       <p aria-live="polite" className="min-h-[17px] pt-3 text-[12px] text-destructive">
         {message ?? ""}
       </p>
+      {/* A refused accept asks instead of deciding: every decision above is
+          untouched until the DM continues from what is stored. */}
+      {apply.conflict !== undefined && (
+        <EditConflict onReload={apply.reload} onForce={apply.forceSave} busy={apply.isSaving} />
+      )}
       <div className="flex items-center justify-end gap-2 pt-1">
         {/* Every decision above is saved on the job (issue #97) — said here
             as quietly as in the generator review, and with the same words. */}
@@ -624,24 +625,23 @@ function AugmentReview({
         </Button>
         <Button
           type="button"
-          disabled={!canApply || apply.isPending}
+          disabled={!canApply || apply.isSaving}
           onClick={() =>
-            apply.write({
-              rev: base,
+            apply.save({
               ...(Object.keys(patch).length === 0 ? {} : { properties: patch }),
               ...(bodyChanged ? { body } : {}),
             })
           }
           className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
         >
-          {t(apply.isPending ? "common.saving" : "augment.accept")}
+          {t(apply.isSaving ? "common.saving" : "augment.accept")}
         </Button>
       </div>
     </div>
   );
 }
 
-/** „Vorhanden | Vorschlag" for one properties field. */
+/** The stored value beside the proposed one, for one properties field. */
 function PropertyRow({
   field,
   accepted,
@@ -734,7 +734,7 @@ function blockSource(change: BlockChange): string {
  * Word-level diff: only what moved is highlighted, the rest is neutral.
  *
  * Colour is never the only cue — a removed run is struck through and an added
- * one is announced, so „hinzugefügt"/„entfernt" reaches a reader who sees no
+ * one is announced, so "added"/"removed" reaches a reader who sees no
  * highlight at all.
  */
 function WordDiffText({ tokens, t }: { tokens: DiffToken[]; t: Translate }) {
@@ -842,13 +842,12 @@ function StateBadge({
 }
 
 /**
- * Übernehmen ⇄ Behalten — two real buttons with aria-pressed, no select.
+ * Take ⇄ keep — two real buttons with aria-pressed, no select.
  *
  * The VISIBLE word stays the screen's vocabulary, but the accessible name
- * carries the unit („Übernehmen: role", „Behalten: Falls-Abschnitt"): a
- * review of a dozen decisions plus the footer button otherwise offers a
- * dozen identical „Übernehmen" to a screen reader, and the footer's is the
- * one that writes.
+ * carries the unit it decides on: a review of a dozen decisions plus the
+ * footer button otherwise offers a dozen identically named controls to a
+ * screen reader, and the footer's is the one that writes.
  */
 function DecisionToggle({
   accepted,

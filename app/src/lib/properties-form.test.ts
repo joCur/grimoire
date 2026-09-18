@@ -1,13 +1,11 @@
-// The rules of the „Eigenschaften“ form: the field list per kind,
-// the diff that decides what is patched at all, and the representation a
-// cleared field is written in. Everything here is pure except the last block,
-// which drives the write through a faked fetch (same shape as
-// campaign-meta.test.ts).
+// The rules of the properties form: the field list per kind, the diff that
+// decides what is patched at all, and the representation a cleared field is
+// written in. All pure — the write itself is the shared editing session
+// (lib/use-entry-edit.ts).
 
-import { afterEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, EntityKind, EntryResponse } from "@grimoire/shared/types";
+import { describe, expect, test } from "bun:test";
+import type { CampaignTree, EntityKind } from "@grimoire/shared/types";
 
-import { ApiError } from "@/api";
 import {
   canSubmitProperties,
   commitPendingText,
@@ -22,7 +20,6 @@ import {
   referenceLabel,
   referenceOptions,
   selectOptions,
-  writePropertiesForm,
   type FieldOption,
   type FormValues,
   type PropertiesField,
@@ -692,103 +689,5 @@ describe("reference and select options", () => {
     ]);
     // A known initial adds nothing.
     expect(selectOptions(known, "draft", "ready")).toBe(known);
-  });
-});
-
-// --- the write ---------------------------------------------------------------
-
-const realFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
-
-interface Call {
-  url: string;
-  method: string;
-  body: unknown;
-}
-
-/** Answer the first request with `first`, every later one with `then`. */
-function answer(
-  first: { status: number; body: unknown },
-  then: { status: number; body: unknown } = first,
-): Call[] {
-  const calls: Call[] = [];
-  globalThis.fetch = ((url: string, init?: RequestInit) => {
-    const chosen = calls.length === 0 ? first : then;
-    calls.push({
-      url,
-      method: init?.method ?? "GET",
-      body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
-    });
-    return Promise.resolve(
-      new Response(JSON.stringify(chosen.body), {
-        status: chosen.status,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-  }) as unknown as typeof fetch;
-  return calls;
-}
-
-const FILE: EntryResponse = {
-  path: "npcs/fenn",
-  kind: "npc",
-  properties: NPC_PROPERTIES,
-  body: "",
-  rev: 42,
-};
-
-describe("writePropertiesForm", () => {
-  test("PATCHes the file with the rev the dialog was seeded with", async () => {
-    const calls = answer({ status: 200, body: FILE });
-    const result = await writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "Kundschafter" });
-    expect(result).toEqual({ ok: true, file: FILE });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/properties");
-    expect(calls[0]?.body).toEqual({
-      path: "npcs/fenn",
-      rev: 42,
-      patch: { role: "Kundschafter" },
-    });
-  });
-
-  test("the request carries the patch and nothing besides it", async () => {
-    const calls = answer({ status: 200, body: FILE });
-    await writePropertiesForm("beispiel", "01-salzhafen/bucht/smuggler-captured", 7, {
-      location: "der-alte-hafen",
-    });
-    expect(calls[0]?.body).toEqual({
-      path: "01-salzhafen/bucht/smuggler-captured",
-      rev: 7,
-      patch: { location: "der-alte-hafen" },
-    });
-  });
-
-  test("409 means nothing was written; the file is re-read for the next attempt", async () => {
-    const calls = answer(
-      { status: 409, body: { error: "file changed on disk", rev: 99 } },
-      { status: 200, body: { ...FILE, rev: 99 } },
-    );
-    const result = await writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "X" });
-    expect(result.ok).toBe(false);
-    expect(result.file?.rev).toBe(99);
-    expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe("/api/campaigns/beispiel/entries/npcs/fenn");
-  });
-
-  test("a failed reload after the conflict keeps the conflict, not a crash", async () => {
-    answer({ status: 409, body: { error: "file changed on disk" } });
-    expect(await writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "X" })).toEqual({
-      ok: false,
-    });
-  });
-
-  test("every other failure throws (the dialog shows the error line)", async () => {
-    answer({ status: 500, body: { error: "boom" } });
-    await expect(
-      writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "X" }),
-    ).rejects.toBeInstanceOf(ApiError);
   });
 });

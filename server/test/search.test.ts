@@ -205,7 +205,7 @@ describe("reference queries (issue #57 AK5)", () => {
 // --- index maintenance ------------------------------------------------------
 
 describe("the index follows every write", () => {
-  test("a body written through PUT /entry is searchable immediately", async () => {
+  test("a body written through the entry PATCH is searchable immediately", async () => {
     // The guarantee that replaced invalidateCampaign(): the write and the
     // index row are one transaction, so there is no window in which the DM
     // cannot find what they just typed.
@@ -214,7 +214,7 @@ describe("the index follows every write", () => {
 
     const file = await readFile(rel);
     const res = await app.request(entriesUrl("beispiel", rel), {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         rev: file.rev,
@@ -232,14 +232,10 @@ describe("the index follows every write", () => {
     expect(await search("bucht-kapitaen")).toEqual([]);
 
     const file = await readFile(rel);
-    const res = await app.request("/api/campaigns/beispiel/properties", {
+    const res = await app.request(entriesUrl("beispiel", rel), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        path: rel,
-        rev: file.rev,
-        patch: { name: "Bucht-Kapitaen Fenn" },
-      }),
+      body: JSON.stringify({ rev: file.rev, properties: { name: "Bucht-Kapitaen Fenn" } }),
     });
     expect(res.status).toBe(200);
 
@@ -248,15 +244,14 @@ describe("the index follows every write", () => {
   });
 
   test("a properties patch does not un-index an npc's relationship note", async () => {
-    // The two npc writers indexed different text (patch: the stripped body,
-    // body save: the full one), so an unrelated status change dropped
-    // `## Beziehungen` out of the index. ONE rule now: the full document.
+    // ONE rule for the indexed text of an npc: the whole entry. A status
+    // change must not drop `## Beziehungen` out of the index.
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
     const file = await readFile("npcs/fenn");
-    const res = await app.request("/api/campaigns/beispiel/properties", {
+    const res = await app.request(entriesUrl("beispiel", "npcs/fenn"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "npcs/fenn", rev: file.rev, patch: { status: "dead" } }),
+      body: JSON.stringify({ rev: file.rev, properties: { status: "dead" } }),
     });
     expect(res.status).toBe(200);
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);

@@ -47,17 +47,17 @@ async function patchFm(rel: string, patch: Record<string, unknown>): Promise<Ent
 /** The raw answer of a properties patch — for the cases that are refused. */
 async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Response> {
   const before = await getFile(rel);
-  return app.request("/api/campaigns/beispiel/properties", {
+  return app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, rev: before.rev, patch }),
+    body: JSON.stringify({ rev: before.rev, properties: patch }),
   });
 }
 
-async function putBody(rel: string, body: string): Promise<EntryResponse> {
+async function patchBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
   const res = await app.request(entriesUrl("beispiel", rel), {
-    method: "PUT",
+    method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: before.rev, body }),
   });
@@ -252,7 +252,7 @@ describe("a mention in text is not a reference", () => {
     const npc = await getFile(NPC);
     const seeded = "- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus";
     expect(npc.body).toContain(seeded);
-    const written = await putBody(
+    const written = await patchBody(
       NPC,
       npc.body.replace(seeded, `${seeded}\n- holm: schuldet ihm Geld`),
     );
@@ -264,7 +264,7 @@ describe("a mention in text is not a reference", () => {
 
   test("an unknown `[[slug]]` in prose stays visible text", async () => {
     const scene = await getFile(SCENE);
-    const written = await putBody(SCENE, `${scene.body}\nWer ist [[niemand]]?\n`);
+    const written = await patchBody(SCENE, `${scene.body}\nWer ist [[niemand]]?\n`);
     expect(written.body).toContain("Wer ist [[niemand]]?");
     expect(await fileStatus("npcs/niemand")).toBe(404);
     expect((await tree()).npcs.some((n) => n.id === "niemand")).toBe(false);

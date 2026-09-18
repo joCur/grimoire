@@ -543,9 +543,10 @@ function EntryListBody<T>({
           {status.kind === "saved" && t("entryList.saved")}
           {status.kind === "stale" && (
             <>
-              {t("write.stale")}
-              {/* The two honest next steps, as controls rather than as advice.
-                  „Speichern" stays OFF until one of them is taken: retrying
+              {t("editConflict.line")}
+              {/* The two honest next steps of THIS surface, as controls rather
+                  than as advice — a list has no "write it on top anyway". The
+                  save button stays off until one of them is taken: retrying
                   against a list that moved is how the draft ends up on a
                   neighbouring entry. */}
               <button
@@ -557,7 +558,7 @@ function EntryListBody<T>({
                 }}
                 className={STALE_ACTION}
               >
-                {t("entryList.reload")}
+                {t("editConflict.reload")}
               </button>
               {canApplyDraft && (
                 <button type="button" disabled={busy} onClick={applyDraft} className={STALE_ACTION}>

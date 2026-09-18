@@ -21,9 +21,10 @@ export class ApiError extends Error {
   readonly status: number;
   /**
    * The server's JSON error body when there was one — the endpoints answer
-   * `{ error, … }` and put the interesting parts next to it (`conflicts` on
-   * 409, `validationErrors`/`rawReply`/`usage` on the generator's 422,
-   * `rev` on a properties conflict).
+   * `{ error, … }` and put the interesting parts next to it (`code`,
+   * `validationErrors`/`rawReply`/`usage` on the generator's 422, and on a
+   * write conflict the current `rev` plus the current `entry` — read out by
+   * `revConflict` below).
    */
   readonly details: Record<string, unknown>;
 
@@ -186,60 +187,93 @@ export function putKnowledge(
   });
 }
 
-// --- write endpoints (session/log) ------------------------------------------
+// --- the one write path of an entry ----------------------------------------
 
 /**
- * Set/delete properties keys of one entry (used by the scene-status
- * control). `patch` is flat: a value sets the key,
- * `null` deletes it. `rev` is the optimistic-concurrency token and must be
- * the one from the EntryResponse the UI is showing — when the entry changed
- * since, the server answers 409 with the current `rev` in `ApiError.details`
- * and writes nothing.
+ * What one guarded write carries. Only the fields that are present are
+ * written, so the same request serves a properties-only patch, a text-only
+ * one and a dialog that edits both in one transaction.
+ *
+ * `properties` is flat — a value sets the key, `null` deletes it, an unknown
+ * key is a 400. `body` is the markdown GET hands out (the entry without its
+ * properties block); the glossary and the inbox have no editable text and
+ * answer 400 `body_not_editable`. Neither field present is a 400
+ * `nothing_to_write`.
+ *
+ * `rev` is the optimistic-concurrency token of the entry the editing session
+ * started from. When the row moved since, the server writes NOTHING and
+ * answers 409 with its current version AND the current entry — `revConflict`
+ * reads both out. `force: true` writes the given fields on top of the current
+ * row instead, which is the deliberate force action of the conflict UI.
  *
  * A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
  * name an entry that exists; the server answers 400 with the code the app
- * turns into „bitte zuerst anlegen" and writes nothing.
+ * turns into its "create it first" sentence and writes nothing.
+ *
+ * Defined here rather than in @grimoire/shared until the shared package
+ * carries the request type.
  */
-export async function patchProperties(
-  campaign: string,
-  input: {
-    path: string;
-    rev: number;
-    patch: Record<string, unknown>;
-  },
-): Promise<EntryResponse> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/properties`;
-  const response = await fetch(`/api${path}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw await failure(`PATCH /api${path}`, response);
-  return (await response.json()) as EntryResponse;
+export interface PatchEntryRequest {
+  rev: number;
+  properties?: Record<string, unknown>;
+  body?: string;
+  force?: boolean;
 }
 
-/**
- * Replace the markdown BODY of one entry, properties untouched (the
- * reading view's edit mode). `body` is what GET /entries hands out: the entry
- * without its properties block. `rev` is the same optimistic-concurrency
- * token as above and must come from the EntryResponse the editor was seeded
- * from — on a mismatch the server answers 409 with the current `rev` in
- * `ApiError.details` and writes nothing.
- */
-export async function putEntryBody(
+/** The single write path of one entry. */
+export async function patchEntry(
   campaign: string,
   path: string,
-  body: string,
-  rev: number,
+  request: PatchEntryRequest,
 ): Promise<EntryResponse> {
   const url = entriesUrl(campaign, path);
   const response = await fetch(`/api${url}`, {
-    method: "PUT",
+    method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev, body }),
+    body: JSON.stringify(request),
   });
-  if (!response.ok) throw await failure(`PUT /api${url}`, response);
+  if (!response.ok) throw await failure(`PATCH /api${url}`, response);
   return (await response.json()) as EntryResponse;
+}
+
+/** The server's state at the moment it refused the write. */
+export interface RevConflict {
+  /** The row's current version — what a retry would have to carry. */
+  rev: number;
+  /**
+   * The current entry, so the UI can show and adopt what is stored without a
+   * second request. Undefined when the 409 body did not carry one (an older
+   * server, or a write path that only reports the version) — the caller then
+   * degrades to re-reading the entry itself.
+   */
+  entry?: EntryResponse;
+}
+
+/**
+ * Read a write conflict out of a rejection: the 409 of every guarded write,
+ * with the version and entry the server answered with. `undefined` for
+ * anything else, so a caller can branch on it without knowing the status.
+ *
+ * Degrades per the house rule: a 409 whose body is missing or shaped
+ * differently still counts as a conflict, just without the details.
+ */
+export function revConflict(error: unknown): RevConflict | undefined {
+  if (!(error instanceof ApiError) || error.status !== 409) return undefined;
+  const { rev, entry } = error.details;
+  return {
+    rev: typeof rev === "number" ? rev : Number.NaN,
+    ...(isEntryResponse(entry) ? { entry } : {}),
+  };
+}
+
+function isEntryResponse(value: unknown): value is EntryResponse {
+  if (value === null || typeof value !== "object") return false;
+  const candidate = value as Partial<EntryResponse>;
+  return (
+    typeof candidate.path === "string" &&
+    typeof candidate.body === "string" &&
+    typeof candidate.rev === "number"
+  );
 }
 
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
@@ -436,7 +470,7 @@ export function createCampaign(input: {
 }
 
 /**
- * „Aktiv" on a chapter's status control — ONE call, because it is one
+ * Setting a chapter active from its status control — ONE call, because it is one
  * decision about two chapters: this one becomes `active` and the one that was
  * active goes back to `planned`. Doing it as two properties patches from here
  * would leave a window in which the campaign has two active chapters, and the
@@ -584,11 +618,11 @@ export async function startGenerateNpcJob(
 }
 
 /**
- * Start an augment run („Mit KI ergänzen"): an entry that already
+ * Start an augment run from an entry's augment action: an entry that already
  * exists plus source material and/or an instruction, and the model proposes
  * the filled-in version. Same job model as the create runs — 202 { jobId },
  * the proposal is fetched via fetchGenerateJob (`kind: "augment"`,
- * `augmentResult`), and a 409 carrying a jobId means „a generator job is
+ * `augmentResult`), and a 409 carrying a jobId means "a generator job is
  * already running for this campaign" and is ADOPTED instead of shown as an
  * error (the review then simply belongs to that job).
  *
@@ -707,8 +741,8 @@ export async function patchJobReview(
 }
 
 /**
- * Accept PART of a finished run: „Diesen übernehmen" for one
- * scene or one suggested entry, „Alle übernehmen" without a selection.
+ * Accept PART of a finished run: one scene or one suggested entry, or all of
+ * them when nothing is selected.
  * Answers what it wrote (draft path -> the address it landed at) and
  * whether the job is gone because nothing is open any more. `rev` is the
  * review rev as the caller read it: a 409 `rev_conflict` means another tab
@@ -733,7 +767,7 @@ export function acceptJobParts(
 }
 
 /**
- * „Erneut versuchen" for ONE part of a pipelined scene run.
+ * The retry action for ONE part of a pipelined scene run.
  * Restarts that part only — the outline stays, the finished parts stay
  * reviewable — and answers the job with the part back in `running`, so the
  * view can seed its cache without an extra read.

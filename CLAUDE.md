@@ -169,12 +169,21 @@ Die Pfade:
    Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise in
    „Entwürfe prüfen", „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
-7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
+7. Eigenschaften-Dialog/Status-Regler inkl. 409-Konflikt: der Dialog zeigt
+   die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
+   Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine
+   gleichzeitige Textänderung übersteht das). Der Status-Regler selbst hat
+   keine Konflikt-Aktionen: er meldet den veralteten Stand, der DM lädt neu.
 8. Mobil-Startfläche + Ideen-Einwurf bei 390px
 9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
-   sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still
-   überschreiben (seit ADR #13 gibt es keine externe Dateiänderung mehr —
-   der Guard ist die Zeilenversion `rev`)
+   sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe Konfliktzeile
+   statt still überschreiben. „Neu laden" verwirft den Entwurf und übernimmt
+   den gespeicherten Stand, „Trotzdem speichern" schreibt nur den Text, sodass
+   eine fremd geänderte Eigenschaft bleibt. Weil Eigenschaften und Text EINE
+   Zeile und EINEN Wächter teilen (ADR #23), ist auch ein reiner
+   Eigenschaften-Write eines Zweitschreibers ein Konflikt — der Status neben
+   dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
+   es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
     Szene befüllen → Session starten → Szene in der Session-Ansicht

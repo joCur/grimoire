@@ -39,6 +39,8 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
   rev_conflict: "server.rev_conflict",
+  nothing_to_write: "server.nothing_to_write",
+  body_not_editable: "server.body_not_editable",
   job_restarted: "server.job_restarted",
   llm_truncated: "server.llm_truncated",
   llm_invalid: "server.llm_invalid",
@@ -122,12 +124,19 @@ function paramsFor(
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
       return { max: max ?? t("server.llm_truncated.defaultCap") };
     }
+    // The codes whose sentence names a RULE rather than a value, so there is
+    // no parameter to check for. The two refusals of the entry write belong
+    // here: one says the request carried no field to write, the other that
+    // this kind of entry is maintained as a list. The address the second one
+    // carries is addressing — the DM is already looking at that entry.
     case "chapter_required":
     case "session_running":
     case "session_not_empty":
     case "rev_conflict":
     case "job_restarted":
     case "llm_invalid":
+    case "nothing_to_write":
+    case "body_not_editable":
       return {};
   }
 }

@@ -42,39 +42,20 @@ async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
   return (await app.request(entriesUrl(campaign, rel))).status;
 }
 
-async function patchReq(body: unknown): Promise<Response> {
-  return app.request("/api/campaigns/beispiel/properties", {
+/**
+ * The one write of an entry: PATCH of its address. `rel` is the address, the
+ * rest is the request body — the cases send exactly what the app sends.
+ */
+async function patchEntry(rel: string, body: unknown, campaign = "beispiel"): Promise<Response> {
+  return app.request(entriesUrl(campaign, rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 }
 
-async function patchOk(body: unknown): Promise<EntryResponse> {
-  const res = await patchReq(body);
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
-}
-
-/** PATCH /properties of any campaign (patchReq is bound to `beispiel`). */
-async function patchJson(url: string, body: unknown): Promise<Response> {
-  return app.request(url, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-async function putFile(rel: string, body: unknown): Promise<Response> {
-  return app.request(entriesUrl("beispiel", rel), {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-async function putOk(rel: string, body: unknown): Promise<EntryResponse> {
-  const res = await putFile(rel, body);
+async function patchOk(rel: string, body: unknown, campaign = "beispiel"): Promise<EntryResponse> {
+  const res = await patchEntry(rel, body, campaign);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -118,13 +99,13 @@ afterEach(() => {
   dropStore();
 });
 
-describe("PATCH /api/campaigns/:campaign/properties", () => {
+describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () => {
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   test("happy path: only named keys change, key order stable, body untouched", async () => {
     const before = await getFile(SCENE);
 
-    const after = await patchOk({ path: SCENE, rev: before.rev, patch: { status: "played" } });
+    const after = await patchOk(SCENE, { rev: before.rev, properties: { status: "played" } });
     expect(after.properties.status).toBe("played");
 
     // Key order: the contract order of the kind, nothing added or removed.
@@ -155,10 +136,9 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
 
   test("400 for a key the entry has no field for — nothing is written", async () => {
     const before = await getFile(SCENE);
-    const res = await app.request("/api/campaigns/beispiel/properties", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: SCENE, rev: before.rev, patch: { review_note: "x" } }),
+    const res = await patchEntry(SCENE, {
+      rev: before.rev,
+      properties: { review_note: "x" },
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("review_note");
@@ -170,17 +150,16 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
     // CAN happen is a form sending the whole properties back, `id` included
     // — and that must not orphan every reference to the entity.
     const before = await getFile(SCENE);
-    const res = await patchReq({ path: SCENE, rev: before.rev, patch: { id: "neu" } });
+    const res = await patchEntry(SCENE, { rev: before.rev, properties: { id: "neu" } });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("id is the primary key");
     // Refused means refused: the row did not move.
     expect((await getFile(SCENE)).rev).toBe(before.rev);
     // An id patch that changes NOTHING is a no-op, not an error — that is what
     // "send the form back unchanged" looks like.
-    const same = await patchOk({
-      path: SCENE,
+    const same = await patchOk(SCENE, {
       rev: before.rev,
-      patch: { id: "lighthouse-arrival", status: "played" },
+      properties: { id: "lighthouse-arrival", status: "played" },
     });
     expect(same.properties.id).toBe("lighthouse-arrival");
     expect(same.properties.status).toBe("played");
@@ -191,21 +170,20 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
   test("400 for inbox and glossary — lists of rows, not entities", async () => {
     for (const rel of ["inbox", "glossary"]) {
       const before = await getFile(rel);
-      const res = await patchReq({ path: rel, rev: before.rev, patch: { status: "x" } });
+      const res = await patchEntry(rel, { rev: before.rev, properties: { status: "x" } });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain("no properties");
       expect(await getFile(rel)).toEqual(before);
     }
   });
 
-  test("campaign is patchable through the same endpoint (issue #17)", async () => {
+  test("the campaign entry is patchable through the same endpoint", async () => {
     const rel = "campaign";
     const before = await getFile(rel);
     expect(before.kind).toBe("campaign");
-    const after = await patchOk({
-      path: rel,
+    const after = await patchOk(rel, {
       rev: before.rev,
-      patch: { description: "Neue Kurzbeschreibung." },
+      properties: { description: "Neue Kurzbeschreibung." },
     });
     expect(after.properties.description).toBe("Neue Kurzbeschreibung.");
     expect(after.properties.name).toBe("Der Leuchtturm von Salzhafen");
@@ -221,15 +199,22 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
 
   test("409 on a stale token carries the current one and writes nothing", async () => {
     const before = await getFile(SCENE);
-    const res = await patchReq({
-      path: SCENE,
+    const res = await patchEntry(SCENE, {
       rev: before.rev - 1,
-      patch: { status: "ready" },
+      properties: { status: "ready" },
     });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; rev: number };
+    const body = (await res.json()) as {
+      error: string;
+      code: string;
+      rev: number;
+      entry: EntryResponse;
+    };
     expect(typeof body.error).toBe("string");
+    expect(body.code).toBe("rev_conflict");
     expect(body.rev).toBe(before.rev);
+    // The conflict hands the app the entry it collided with.
+    expect(body.entry).toEqual(before);
     // and nothing was written — same row, same token
     expect(await getFile(SCENE)).toEqual(before);
   });
@@ -238,17 +223,19 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
     const before = await getFile(SCENE);
     const bad = [
       {}, // missing everything
-      { path: SCENE, rev: before.rev }, // missing patch
-      { path: SCENE, rev: "later", patch: {} }, // rev not a number
-      { path: SCENE, rev: before.rev, patch: ["status"] }, // patch not an object
-      { path: SCENE, rev: before.rev, patch: {}, extra: 1 }, // unknown key
-      { path: 42, rev: before.rev, patch: {} }, // path not a string
+      { rev: before.rev }, // neither properties nor body
+      { rev: before.rev, properties: {} }, // an empty patch writes nothing
+      { rev: "later", properties: { status: "ready" } }, // rev not a number
+      { rev: before.rev, properties: ["status"] }, // properties not an object
+      { rev: before.rev, body: 42 }, // body not a string
+      { rev: before.rev, body: "x", force: "yes" }, // force not a boolean
+      { rev: before.rev, properties: {}, extra: 1 }, // unknown key
     ];
     for (const b of bad) {
-      expect((await patchReq(b)).status).toBe(400);
+      expect((await patchEntry(SCENE, b)).status).toBe(400);
     }
     // non-JSON body
-    const res = await app.request("/api/campaigns/beispiel/properties", {
+    const res = await app.request(entriesUrl("beispiel", SCENE), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: "no json",
@@ -259,19 +246,19 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
   });
 
   test("address safety and missing rows behave like the read API", async () => {
-    expect(
-      (await patchReq({ path: "../../etc/passwd.md", rev: 1, patch: {} })).status,
-    ).toBe(400);
+    const field = { rev: 1, properties: { status: "ready" } };
+    // A `..` segment never reaches the store: every URL parser on the way
+    // resolves it away, so what arrives is a different, ordinary address
+    // nobody has. The probe uses a neutral traversal target — only the `..`
+    // segments matter.
+    expect((await patchEntry("../../vertraulich/notizen", field)).status).toBe(404);
     // An address the schema does not describe is simply not there.
-    expect((await patchReq({ path: "notes.txt", rev: 1, patch: {} })).status).toBe(404);
-    expect(
-      (await patchReq({ path: "01-salzhafen/nope", rev: 1, patch: {} })).status,
-    ).toBe(404);
-    // A path naming the WRONG chapter for an existing scene id is a stale
-    // link: 404, exactly as GET answers it (store/read.ts readByLocator).
-    expect(
-      (await patchReq({ path: "02-nebel/lighthouse-arrival.md", rev: 1, patch: {} })).status,
-    ).toBe(404);
+    expect((await patchEntry("notes.txt", field)).status).toBe(404);
+    expect((await patchEntry("01-salzhafen/nope", field)).status).toBe(404);
+    // An address naming the WRONG chapter for an existing scene id is a
+    // stale link: 404, exactly as GET answers it (store/read.ts
+    // readByLocator).
+    expect((await patchEntry("02-nebel/lighthouse-arrival.md", field)).status).toBe(404);
   });
 });
 
@@ -587,26 +574,29 @@ describe("POST /api/campaigns/:campaign/inbox", () => {
   });
 });
 
-// The metadata dialog writes name/description through PATCH /properties —
+// The metadata dialog writes name/description through the entry PATCH —
 // the ONE write path. The campaign ROW always exists, GET /entry always
 // answers with an entry and a guard token, and naming a campaign that has no
 // name is an ordinary patch.
-describe("naming a campaign that has none (issue #62)", () => {
-  test("PATCH /properties sets name and description on an unnamed campaign", async () => {
+describe("naming a campaign that has none", () => {
+  test("the PATCH sets name and description on an unnamed campaign", async () => {
     await withFreshCampaign(async () => {
       // Unnamed: the entry exists and shows the ID as its display name,
       // which is exactly what GET /campaigns says too (both synthesize).
       const before = await getFile("campaign", FRESH);
       expect(before.properties).toEqual({ id: FRESH, name: FRESH });
 
-      const res = await patchJson(`/api/campaigns/${FRESH}/properties`, {
-        path: "campaign",
-        rev: before.rev,
-        patch: {
-          name: "Die Aschekönige",
-          description: "Eine Wüstenkampagne um verschüttete Städte.",
+      const res = await patchEntry(
+        "campaign",
+        {
+          rev: before.rev,
+          properties: {
+            name: "Die Aschekönige",
+            description: "Eine Wüstenkampagne um verschüttete Städte.",
+          },
         },
-      });
+        FRESH,
+      );
       expect(res.status).toBe(200);
       const file = (await res.json()) as EntryResponse;
       expect(file.path).toBe("campaign");
@@ -634,11 +624,11 @@ describe("naming a campaign that has none (issue #62)", () => {
   test("a blank description is DELETED with null, not written as an empty key", async () => {
     await withFreshCampaign(async () => {
       const before = await getFile("campaign", FRESH);
-      const res = await patchJson(`/api/campaigns/${FRESH}/properties`, {
-        path: "campaign",
-        rev: before.rev,
-        patch: { name: "Nur ein Name", description: null },
-      });
+      const res = await patchEntry(
+        "campaign",
+        { rev: before.rev, properties: { name: "Nur ein Name", description: null } },
+        FRESH,
+      );
       expect(res.status).toBe(200);
       const file = (await res.json()) as EntryResponse;
       expect(Object.keys(file.properties)).toEqual(["id", "name"]);
@@ -649,10 +639,9 @@ describe("naming a campaign that has none (issue #62)", () => {
 
   test("a stale token is a 409 — the existing name is never touched", async () => {
     const before = await getFile("campaign");
-    const res = await patchJson("/api/campaigns/beispiel/properties", {
-      path: "campaign",
+    const res = await patchEntry("campaign", {
       rev: before.rev - 1,
-      patch: { name: "Überschrieben" },
+      properties: { name: "Überschrieben" },
     });
     expect(res.status).toBe(409);
     expect(await getFile("campaign")).toEqual(before);
@@ -663,11 +652,11 @@ describe("naming a campaign that has none (issue #62)", () => {
   });
 });
 
-// Body writes: content editing in the app. The invariant under
-// test everywhere here is that a body write is ONLY a body write — the
-// properties of the row comes back unchanged, key for key and value for
-// value.
-describe("PUT /api/campaigns/:campaign/entries", () => {
+// Text writes: content editing in the app. The invariant under
+// test everywhere here is that a write carrying only `body` is ONLY a text
+// write — the properties of the row come back unchanged, key for key and
+// value for value.
+describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
   const REFERENCE = "01-salzhafen/bucht/smuggler-captured";
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
@@ -677,7 +666,7 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
     expect(before.body).toContain("> [!check] Charisma (Deception)");
     expect(before.body).toContain("## If: sie lügen");
 
-    const after = await putOk(REFERENCE, { rev: before.rev, body: before.body });
+    const after = await patchOk(REFERENCE, { rev: before.rev, body: before.body });
     expect(after.body).toBe(before.body);
     expect(after.properties).toEqual(before.properties);
     // A write is a write, so the rev moves — the token is opaque and
@@ -689,10 +678,10 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
   test("unknown callouts and headings survive a write verbatim", async () => {
     const before = await getFile(REFERENCE);
     const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
-    const after = await putOk(REFERENCE, { rev: before.rev, body });
+    const after = await patchOk(REFERENCE, { rev: before.rev, body });
     expect(after.body).toBe(body);
     // and back again, character for character
-    const back = await putOk(REFERENCE, { rev: after.rev, body: before.body });
+    const back = await patchOk(REFERENCE, { rev: after.rev, body: before.body });
     expect(back.body).toBe(before.body);
     expect(back.properties).toEqual(before.properties);
   });
@@ -701,7 +690,7 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
     const before = await getFile(SCENE);
     const body = "\n## Flow\n\nKomplett neu geschrieben.\n";
 
-    const after = await putOk(SCENE, { rev: before.rev, body });
+    const after = await patchOk(SCENE, { rev: before.rev, body });
     expect(after.path).toBe(SCENE);
     expect(after.kind).toBe("scene");
     expect(after.body).toBe(body);
@@ -715,41 +704,36 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
 
   test("a body without a trailing newline gets exactly one", async () => {
     const before = await getFile(SCENE);
-    const after = await putOk(SCENE, { rev: before.rev, body: "\nOhne Newline" });
+    const after = await patchOk(SCENE, { rev: before.rev, body: "\nOhne Newline" });
     expect(after.body).toBe("\nOhne Newline\n");
   });
 
   test("an empty body leaves the properties alone", async () => {
     const before = await getFile(SCENE);
-    const after = await putOk(SCENE, { rev: before.rev, body: "" });
+    const after = await patchOk(SCENE, { rev: before.rev, body: "" });
     expect(after.body).toBe("");
     expect(after.properties).toEqual(before.properties);
   });
 
-  test("glossary: the edited markdown is parsed back into rows", async () => {
-    // The glossary is a TABLE (planning F6), so a body write is the one PUT
-    // that decomposes what it is given — through the same parser every other
-    // writer uses, so the rows are the same however the edit arrived.
-    const before = await getFile("glossary");
-    expect(before.body).toContain("- lighthouse keeper → Leuchtturmwärter");
-    const body = "\n- tide pool → Gezeitentümpel\n- harbour master → Hafenmeisterin\n";
-    const after = await putOk("glossary", { rev: before.rev, body });
-    expect(after.body).toBe(body);
-    // …and the structured endpoint sees the same list, in the same order.
-    const glossary = (await (await app.request("/api/campaigns/beispiel/glossary")).json()) as {
-      entries: Array<{ term: string; explanation: string }>;
-    };
-    expect(glossary.entries).toEqual([
-      { term: "tide pool", explanation: "Gezeitentümpel" },
-      { term: "harbour master", explanation: "Hafenmeisterin" },
-    ]);
-    // The whole list was replaced — the fixture's terms are gone, not merged.
-    expect(after.body).not.toContain("lighthouse keeper");
+  test("the list addresses take no body — glossary, inbox and a session", async () => {
+    // A glossary term, an idea and a log line are ROWS, edited through
+    // PUT /glossary, POST /inbox and POST /log. A body for one of them
+    // could only be a misunderstanding, and silently ignoring it would look
+    // like a save (DECISIONS #4, ADR #23).
+    for (const rel of ["glossary", "inbox", "sessions/2026-01-15"]) {
+      const before = await getFile(rel);
+      const res = await patchEntry(rel, { rev: before.rev, body: "\n- alles neu\n" });
+      expect(res.status).toBe(400);
+      const error = (await res.json()) as { code: string; path: string };
+      expect(error.code).toBe("body_not_editable");
+      expect(error.path).toBe(rel);
+      expect(await getFile(rel)).toEqual(before);
+    }
   });
 
   test("409 on a stale token carries the current one and writes nothing", async () => {
     const before = await getFile(SCENE);
-    const res = await putFile(SCENE, { rev: before.rev - 1, body: "\nZu spät\n" });
+    const res = await patchEntry(SCENE, { rev: before.rev - 1, body: "\nZu spät\n" });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; rev: number };
     expect(typeof body.error).toBe("string");
@@ -757,35 +741,20 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
     expect(await getFile(SCENE)).toEqual(before);
   });
 
-  test("400 for the append-only kinds — session logs and inbox", async () => {
-    // DECISIONS #4: they grow by ROWS through POST /log and POST /inbox; a
-    // free-hand body rewrite is not a maintenance action, and the rule lives
-    // in the endpoint, not only in the UI that hides the button.
-    for (const rel of ["sessions/2026-01-15", "inbox"]) {
-      const before = await getFile(rel);
-      const res = await putFile(rel, { rev: before.rev, body: "\nAlles neu.\n" });
-      expect(res.status).toBe(400);
-      expect(await getFile(rel)).toEqual(before);
-    }
-  });
-
   test("400 on malformed bodies", async () => {
     const before = await getFile(SCENE);
     const bad = [
-      {}, // missing everything
-      { rev: before.rev }, // missing body
       { rev: "später", body: "x" }, // rev not a number
-      { rev: before.rev, body: 42 }, // body not a string
       { rev: before.rev, body: ["x"] }, // body not a string
       { rev: before.rev, body: null }, // body not a string
       { rev: before.rev, body: "x", patch: {} }, // unknown key
       { rev: before.rev, body: "x", path: SCENE }, // the address is the url now
     ];
     for (const b of bad) {
-      expect((await putFile(SCENE, b)).status).toBe(400);
+      expect((await patchEntry(SCENE, b)).status).toBe(400);
     }
     const res = await app.request(entriesUrl("beispiel", SCENE), {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json" },
       body: "no json",
     });
@@ -795,31 +764,89 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
   });
 
   test("address safety and missing rows behave like the read API", async () => {
-    expect((await putFile("/etc/passwd", { rev: 1, body: "x" })).status).toBe(400);
-    expect((await putFile(".hidden/x", { rev: 1, body: "x" })).status).toBe(400);
+    const text = { rev: 1, body: "x" };
+    expect((await patchEntry("/etc/passwd", text)).status).toBe(400);
+    expect((await patchEntry(".hidden/x", text)).status).toBe(400);
     // No extension rule — 404, not 400.
-    expect((await putFile("notes.txt", { rev: 1, body: "x" })).status).toBe(404);
-    expect((await putFile("01-salzhafen/nope", { rev: 1, body: "x" })).status).toBe(
-      404,
-    );
-    // A `..` segment is resolved by the URL before the server sees it, so what
-    // arrives is an ordinary address nobody has — 404, like the read side.
-    expect(
-      (await putFile("01-salzhafen/hafen/../hafen/x", { rev: 1, body: "x" })).status,
-    ).toBe(404);
+    expect((await patchEntry("notes.txt", text)).status).toBe(404);
+    expect((await patchEntry("01-salzhafen/nope", text)).status).toBe(404);
+    // A `..` segment never reaches the store: the URL resolves it away, so
+    // the address that arrives is an ordinary one nobody has — 404, like the
+    // read side, and nothing is written either way.
+    expect((await patchEntry("01-salzhafen/../../beispiel/inbox", text)).status).toBe(404);
     // A stale link — right scene id, wrong chapter — is 404 on write just as
     // it is on read (store/read.ts readByLocator).
-    expect(
-      (await putFile("02-nebel/lighthouse-arrival.md", { rev: 1, body: "x" })).status,
-    ).toBe(404);
+    expect((await patchEntry("02-nebel/lighthouse-arrival.md", text)).status).toBe(404);
   });
 
   test("404 for an unknown campaign", async () => {
     const res = await app.request(entriesUrl("nope", "a.md"), {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rev: 1, body: "x" }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// The two halves in ONE request — what the text editor and the properties
+// dialog both save through, and the refusals that keep a no-op from looking
+// like a save.
+describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () => {
+  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+
+  async function campaignVersion(): Promise<number> {
+    const res = await app.request("/api/campaigns/beispiel/version");
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { version: number }).version;
+  }
+
+  test("fields and text in one call", async () => {
+    const before = await getFile(SCENE);
+    const versionBefore = await campaignVersion();
+    const after = await patchOk(SCENE, {
+      rev: before.rev,
+      properties: { status: "played", trigger: "Sie betreten den Turm" },
+      body: "\n## Flow\n\nEin Satz.\n",
+    });
+    expect(after.properties.status).toBe("played");
+    expect(after.properties.trigger).toBe("Sie betreten den Turm");
+    expect(after.body).toBe("\n## Flow\n\nEin Satz.\n");
+    // ONE write: the rev steps exactly once, however much the request
+    // carried. Two steps would leak the two statements this used to be.
+    expect(after.rev).toBe(before.rev + 1);
+    expect(await getFile(SCENE)).toEqual(after);
+    // …and the campaign version counts one change too, not two.
+    expect(await campaignVersion()).toBe(versionBefore + 1);
+  });
+
+  test("neither half is nothing_to_write, with the code", async () => {
+    const before = await getFile(SCENE);
+    for (const body of [{ rev: before.rev }, { rev: before.rev, properties: {} }]) {
+      const res = await patchEntry(SCENE, body);
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { code: string }).code).toBe("nothing_to_write");
+    }
+    expect(await getFile(SCENE)).toEqual(before);
+  });
+
+  test("force keeps a field somebody else changed while replacing the text", async () => {
+    const read = await getFile(SCENE);
+    // The second tab changes a field; the first tab still holds `read.rev`.
+    const other = await patchEntry(SCENE, {
+      rev: read.rev,
+      properties: { status: "played" },
+    });
+    expect(other.status).toBe(200);
+
+    const forced = await patchOk(SCENE, {
+      rev: read.rev,
+      body: "\n## Flow\n\nTrotzdem gespeichert.\n",
+      force: true,
+    });
+    expect(forced.body).toBe("\n## Flow\n\nTrotzdem gespeichert.\n");
+    // Only what the request carried was written — the status survived.
+    expect(forced.properties.status).toBe("played");
+    expect(await getFile(SCENE)).toEqual(forced);
   });
 });

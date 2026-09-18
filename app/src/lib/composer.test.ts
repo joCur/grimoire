@@ -25,6 +25,7 @@ import {
 } from "./blocks";
 import {
   composerDraft,
+  composerDraftIn,
   composerIssues,
   draftBody,
   headingDepths,
@@ -125,6 +126,21 @@ describe("the draft and its two surfaces", () => {
     const raw = withDraftMode(edited, "markdown");
     if (raw.mode !== "markdown") throw new Error("unreachable");
     expect(raw.text).toBe("> [!note] neu\n");
+  });
+
+  test("reseeding keeps the surface — adopting the stored text is not a switch", () => {
+    // The editor reseeds while it stands open (adopting the stored entry after
+    // a conflict). Whoever was on the textarea stays on it, and gets the
+    // stored body byte for byte; whoever was in the composer stays there.
+    const stored = fixtureBody(ARRIVAL);
+    const raw = composerDraftIn(stored, "markdown");
+    expect(raw.mode).toBe("markdown");
+    if (raw.mode !== "markdown") throw new Error("unreachable");
+    expect(raw.text).toBe(stored);
+
+    const blocks = composerDraftIn(stored, "blocks");
+    expect(blocks.mode).toBe("blocks");
+    expect(draftBody(blocks)).toBe(stored);
   });
 
   test("an empty body is a draft the composer can still be typed into", () => {

@@ -6,7 +6,7 @@
 //   1. CONTRACT FIELDS ARE COLUMNS, and there is nothing beside them.
 //      Everything README.md names for an entity gets its own column; a key
 //      the contract does not name has no field behind it and is refused
-//      (`PATCH /properties` answers 400, and so does a seed). The contract
+//      (the entry PATCH answers 400, and so does a seed). The contract
 //      lists live once, in store/write.ts `PROPERTY_CONTRACT`.
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
@@ -81,10 +81,11 @@ export const campaigns = sqliteTable("campaigns", {
   version: integer("version").notNull().default(1),
   rev: revColumn(),
   /**
-   * The glossary's PROSE PREAMBLE — the text above the first term, which
-   * belongs to no term (see store/body-parse.ts `parseGlossaryBody`). It has no
-   * row of its own and would be lost on every save, so it lives here and is
-   * rendered back in front of the term list. Empty for the usual glossary.
+   * The glossary's PROSE PREAMBLE — text above the first term that belongs
+   * to no term. It has no row of its own, so it lives here and is rendered
+   * back in front of the term list. Nothing writes it any more (the glossary
+   * is edited as a list, ADR #23); what an older instance stored is still
+   * shown. Empty for the usual glossary.
    */
   glossaryIntro: text("glossary_intro").notNull().default(""),
   /**

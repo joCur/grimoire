@@ -1,16 +1,12 @@
-// Campaign name and description from the UI — the rules behind the
-// „Bearbeiten" dialog of the campaign entry.
+// Campaign name and description from the UI — the rules behind the edit dialog
+// of the campaign entry.
 //
-// One write path: PATCH /properties with the `rev` the dialog read, so an edit
-// that happened meanwhile answers 409 instead of being overwritten. Every
-// campaign has its entry (it is the campaign row), so GET /entry?path=campaign
-// always answers with values and a `rev` — there is no "create" case.
+// The write is the shared editing session (lib/use-entry-edit.ts): both values
+// are properties of the campaign entry, so one guarded PATCH carries them.
+// Every campaign HAS that entry (it is the campaign row), so reading it always
+// answers with values and a version — there is no "create" case.
 //
-// Everything here is pure or a plain API call — no react, no query imports,
-// so the rules are unit-testable.
-
-import { fetchEntry, patchProperties } from "@/api";
-import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
+// Everything here is pure, so the rules are unit-testable.
 
 /** Address of the campaign entry. */
 export const CAMPAIGN_META_PATH = "campaign";
@@ -38,37 +34,6 @@ export function canSubmitCampaignMeta(values: CampaignMetaValues): boolean {
   return values.name.trim() !== "";
 }
 
-/** The version the open dialog writes against. */
-export interface CampaignMetaBase {
-  rev: number;
-}
-
-/** What the entry query knows: the entry, or nothing yet. */
-export type CampaignMetaAnswer = { rev: number } | undefined;
-
-/**
- * Decide the base version ONCE, at the first answer of the entry query.
- *
- * The entry query keeps refetching while the dialog is open — the 5s version
- * poll invalidates it — so reading its `rev` at save time would let a
- * concurrent edit of the campaign entry advance the base silently: the save
- * would overwrite that edit instead of answering 409. Same trap the body
- * editor avoids (`shouldAdvanceBase` in entry-body.ts), same answer: hold the
- * first `rev`.
- *
- * `undefined` in, `undefined` out means "no answer yet, nothing to write
- * against". Once frozen the base never moves on its own — only the conflict
- * re-read replaces it, knowingly, in the caller.
- */
-export function seedCampaignMetaBase(
-  base: CampaignMetaBase | undefined,
-  answer: CampaignMetaAnswer,
-): CampaignMetaBase | undefined {
-  if (base !== undefined) return base;
-  if (answer === undefined) return undefined;
-  return { rev: answer.rev };
-}
-
 /**
  * The name to PREFILL the dialog with. A stored name that is literally the id
  * is what an UNNAMED campaign looks like — the server synthesizes the id as
@@ -81,24 +46,3 @@ export function prefillCampaignName(campaign: string, name: string | undefined):
   return name;
 }
 
-/**
- * Save name/description. `rev` is the guard token of the campaign entry the
- * dialog is showing. A 409 means nothing was written (it changed
- * meanwhile); the shared protocol of write-with-rev.ts re-reads it so the
- * next attempt carries the truth. Everything else throws.
- */
-export function writeCampaignMeta(
-  campaign: string,
-  values: CampaignMetaValues,
-  rev: number,
-): Promise<RevWriteResult> {
-  return writeWithRev(
-    () =>
-      patchProperties(campaign, {
-        path: CAMPAIGN_META_PATH,
-        rev,
-        patch: campaignMetaPatch(values),
-      }),
-    () => fetchEntry(campaign, CAMPAIGN_META_PATH),
-  );
-}

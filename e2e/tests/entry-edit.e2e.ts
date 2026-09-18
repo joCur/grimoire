@@ -1,20 +1,26 @@
 // Critical path 9: editing an entry's markdown body in the app — open → change
-// the body → save → rendered; 409 on a CONCURRENT SECOND WRITE means reload
-// instead of a silent overwrite; see CLAUDE.md.
+// the body → save → rendered; 409 on a CONCURRENT SECOND WRITE offers the two
+// answers instead of silently overwriting; see CLAUDE.md.
 //
 // The database is the only truth (ADR #13), so "someone changed the entry
 // outside" cannot happen — the conflict this path is about is a second write
-// through the API while the editor stands open. The write goes through
-// PUT /entry with its guard token, the properties block must come out
-// byte-identical, and every assertion reads the entry back through the API.
+// through the API while the editor stands open. The write goes through the ONE
+// write path of an entry, PATCH /entries/<address> with `rev` (ADR #23); the
+// properties block must come out byte-identical, and every assertion reads the
+// entry back through the API.
 //
 // Unlike the status control (critical path 7) the conflict is DETERMINISTIC:
-// the editor freezes the guard token it was seeded from, on purpose, so the
-// ~5s version poll cannot heal the staleness while the DM types. No retry loop.
+// the editing session holds the version it started from and sends it with every
+// attempt, so the ~5s version poll cannot heal the staleness while the DM
+// types. No retry loop.
 //
-// The other half of that freeze is what must NOT become a conflict: the status
-// control right next to the editor writes a new version of the same body, and
-// the DM's own click may not answer their save with the stale-revision notice.
+// Because fields and text share ONE row and ONE version, a second write that
+// touched only the properties is a conflict just like a text one — a status set
+// next to the open editor is not adopted behind the DM's back. A refused save
+// keeps the draft and offers exactly two answers, and the spec drives both:
+// reloading adopts the stored entry, forcing writes only the fields this
+// request carries, so the other writer's properties survive a forced text save.
+//
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
 // open editor down.
@@ -32,7 +38,8 @@ import { expect, test, type Api } from "../support/test";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 const NPC = "npcs/jorna";
-const STALE_MESSAGE = "Inzwischen geändert — neu laden";
+/** The shared conflict line (EditConflict) — the only role="alert" of the app. */
+const CONFLICT_LINE = "Inzwischen geändert";
 /** aria-label of the raw-markdown textarea (EntryBodyEditor). */
 const TEXTAREA = "Markdown-Text von";
 
@@ -40,6 +47,22 @@ const TEXTAREA = "Markdown-Text von";
 async function split(api: Api, rel: string) {
   const { properties, body } = await api.file(rel);
   return { properties, body };
+}
+
+/**
+ * The conflict line of the surface under test, with its two actions.
+ *
+ * Scoped to the alert role on purpose: the status control next to the editor
+ * has a stale message of its own whose wording starts with the same words, and
+ * a plain text match would not tell the two apart.
+ */
+function conflict(page: Page) {
+  const line = page.getByRole("alert").filter({ hasText: CONFLICT_LINE });
+  return {
+    line,
+    reload: line.getByRole("button", { name: "Neu laden" }),
+    force: line.getByRole("button", { name: "Trotzdem speichern" }),
+  };
 }
 
 /**
@@ -238,43 +261,67 @@ test("a concurrent second write: the save reports the conflict, the second one w
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
 
-  // A SECOND WRITE lands while the editor stands open: the same PUT /entry the
-  // app uses, with a token fetched a moment ago, so it succeeds and bumps the
-  // row. No race to win — the editor holds the token it started from until a
-  // conflict tells it otherwise, so the version poll cannot make the app's
-  // write succeed silently.
+  // A SECOND WRITE lands while the editor stands open: the same PATCH the app
+  // uses, with a token fetched a moment ago, so it succeeds and bumps the row.
+  // No race to win — the editing session holds the version it started from
+  // until the DM answers the conflict, so the version poll cannot make the
+  // app's write succeed silently.
   await api.writeBody(SCENE, otherBody);
   await textarea.fill(`${before.body}\n${mine}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
-  // Refused, and said so — quietly, in the editor's own message line.
-  await expect(page.getByText(STALE_MESSAGE)).toBeVisible();
+  // Refused, and said so — quietly, under the editor that holds the draft,
+  // with both honest answers as controls.
+  const conflicted = conflict(page);
+  await expect(conflicted.line).toBeVisible();
+  await expect(conflicted.reload).toBeVisible();
+  await expect(conflicted.force).toBeVisible();
   // The editor stays open and the typed text survives — that is the point.
   await expect(textarea).toHaveValue(`${before.body}\n${mine}\n`);
   // Nothing was written: the other writer's body stands, untouched.
-  const conflicted = await split(api, SCENE);
-  expect(conflicted.body).toBe(otherBody);
-  expect(conflicted.properties).toEqual(before.properties);
+  const stored = await split(api, SCENE);
+  expect(stored.body).toBe(otherBody);
+  expect(stored.properties).toEqual(before.properties);
 
-  // The editor re-read the file, so the SAME click works now — deliberately
-  // on top of the other writer's body: the DM saw the message and decided.
+  // Reloading adopts what is stored: the draft is gone and there is nothing
+  // left to save. The SURFACE stays as it was — the same textarea is still
+  // standing, now holding the adopted text byte for byte. Answering a conflict
+  // is not a reason to move the DM onto the other surface.
+  await conflicted.reload.click();
+  await expect(conflicted.line).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await expect(textarea).toHaveValue(otherBody);
+  expect(await split(api, SCENE)).toEqual(stored);
+
+  // And from that adopted version the DM's sentence saves in one click —
+  // deliberately on top of the other writer's body: they saw it and decided.
+  await textarea.fill(`${otherBody}${mine}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(textarea).toHaveCount(0);
-  await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
+  await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
   await expect.poll(() => api.body(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
   expect(after.properties).toEqual(before.properties);
-  expect(after.body).toBe(`${before.body}\n${mine}\n`);
-  expect(after.body).not.toContain("Von einem zweiten Schreiber");
+  expect(after.body).toBe(`${otherBody}${mine}\n`);
 });
 
-test("the status control next to the editor is no conflict for the own save", async ({
+// Fields and text are ONE row and ONE version (ADR #23), so a write that
+// touched only the properties makes an open editor's version stale exactly like
+// a text write does. That is deliberate: there is no "text-neutral" change the
+// editor may adopt on its own, because adopting one means writing the draft
+// against a row the DM has not seen.
+//
+// The status control right next to the editor is the everyday way this happens,
+// and it is the DM's own click — so the conflict has to be answerable, not just
+// reported. These two tests are the same setup and the two answers.
+test("a properties-only second write conflicts too — reloading adopts it", async ({
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const opened = await api.file(SCENE);
+  const before = { properties: opened.properties, body: opened.body };
   const mine = "Während des Statuswechsels geschrieben.";
 
   await page.goto(SCENE_URL);
@@ -283,25 +330,115 @@ test("the status control next to the editor is no conflict for the own save", as
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${mine}\n`);
 
-  // The pill stays usable while the editor runs — and its PATCH
-  // bumps the entry's rev without touching one byte of the body.
-  const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
-  await trigger.click();
-  await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
-  await expect(trigger).toHaveText(/Gespielt/);
-  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
+  // The status of THIS scene is set out of band, with a token fetched a moment
+  // ago: one properties key, not one byte of the body — and the row's version
+  // moves all the same.
+  const bumped = await api.patchProperties(SCENE, { status: "played" });
+  expect(bumped).toBe(opened.rev + 1);
 
-  // The DM's OWN change must not come back as a stale revision: a new
-  // version with an identical body is adopted, a changed body still 409s.
   await page.getByRole("button", { name: "Speichern" }).click();
+
+  // Refused, with both answers offered.
+  const conflicted = conflict(page);
+  await expect(conflicted.line).toBeVisible();
+  await expect(conflicted.reload).toBeVisible();
+  await expect(conflicted.force).toBeVisible();
+  await expect(textarea).toHaveValue(`${before.body}\n${mine}\n`);
+  // Nothing of the draft was written.
+  const stored = await split(api, SCENE);
+  expect(stored.body).toBe(before.body);
+  expect(stored.properties.status).toBe("played");
+
+  // Reloading drops the draft and continues from what is stored: the saved
+  // text is back in the textarea and the changed status is on the page.
+  await conflicted.reload.click();
+  await expect(conflicted.line).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Status ändern, aktuell/ })).toHaveText(
+    /Gespielt/,
+  );
+  // Still the same textarea: reseeding keeps the surface.
+  await expect(textarea).toHaveValue(before.body);
+  // The sentence is gone, as the DM asked — nothing was written at all.
+  expect(await split(api, SCENE)).toEqual(stored);
+});
+
+test("a forced save writes only the text — the other writer's status survives", async ({
+  page,
+  api,
+}) => {
+  const before = await split(api, SCENE);
+  const mine = "Trotz des Statuswechsels gespeichert.";
+
+  await page.goto(SCENE_URL);
+  await openMarkdownEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await expect(textarea).toHaveValue(before.body);
+  await textarea.fill(`${before.body}\n${mine}\n`);
+
+  await api.patchProperties(SCENE, { status: "played" });
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  const conflicted = conflict(page);
+  await expect(conflicted.line).toBeVisible();
+
+  // Forcing writes the refused fields on top of the row as it stands — and this
+  // editor carries the body only, so the status set in between is untouched.
+  await conflicted.force.click();
   await expect(textarea).toHaveCount(0);
-  await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
+  await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
   await expect.poll(() => api.body(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
   expect(after.properties.status).toBe("played");
+  expect(after.properties).toEqual({ ...before.properties, status: "played" });
+  // And the page agrees, without a reload.
+  await expect(page.getByRole("button", { name: /^Status ändern, aktuell/ })).toHaveText(
+    /Gespielt/,
+  );
+});
+
+// No dialog of the app edits fields and text in the same save today (the
+// properties dialog sends `properties`, the body editor and the chapter text
+// dialog send `body`), so the pair in ONE request is asserted where it lives:
+// on the write path itself. One PATCH, one transaction, ONE step of the
+// version — how much a request carried is not readable from `rev`.
+test("properties and body in ONE write are one version step", async ({ api }) => {
+  const opened = await api.file(SCENE);
+  const before = { properties: opened.properties, body: opened.body };
+  const rev = opened.rev;
+  const body = `${before.body}\nIn einem Zug mit den Eigenschaften geschrieben.\n`;
+
+  const written = await api.patchEntry(SCENE, {
+    rev,
+    properties: { status: "played", tags: ["social", "travel", "zusammen"] },
+    body,
+  });
+
+  expect(written.rev).toBe(rev + 1);
+  expect(written.body).toBe(body);
+  expect(written.properties.status).toBe("played");
+
+  const after = await split(api, SCENE);
+  expect(after.body).toBe(body);
+  expect(after.properties).toEqual({
+    ...before.properties,
+    status: "played",
+    tags: ["social", "travel", "zusammen"],
+  });
+
+  // Neither half alone is a save: a request that changes nothing is refused
+  // rather than counted as a write.
+  const empty = await api.fetch(`campaigns/beispiel/entries/${SCENE}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: written.rev }),
+  });
+  expect(empty.status).toBe(400);
+  expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
+  expect((await api.file(SCENE)).rev).toBe(written.rev);
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
@@ -454,15 +591,23 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   await expect(page.getByRole("article")).toContainText("Der Dorfschmied repariert");
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
-  // And the rule belongs to the ENDPOINT, not to the hidden button: a
-  // hand-made PUT on an append-only file is refused, nothing is written.
-  for (const rel of ["sessions/2026-01-15", "inbox"]) {
+  // And the rule belongs to the ENDPOINT, not to the hidden button: a body on
+  // one of the list addresses is refused by the one write path itself, with a
+  // CURRENT version, so nothing but the body rule can be what turned it down.
+  // They grow by rows through their own endpoints (ADR #23).
+  for (const rel of ["sessions/2026-01-15", "inbox", "glossary"]) {
     const before = await split(api, rel);
-    const res = await page.request.put(
-      `/api/campaigns/beispiel/entries/${rel.split("/").map(encodeURIComponent).join("/")}`,
-      { data: { rev: Date.now(), body: "\nAlles neu.\n" } },
+    const current = await api.file(rel);
+    const res = await api.fetch(
+      `campaigns/beispiel/entries/${rel.split("/").map(encodeURIComponent).join("/")}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rev: current.rev, body: "\nAlles neu.\n" }),
+      },
     );
-    expect(res.status()).toBe(400);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "body_not_editable", path: rel });
     expect(await split(api, rel)).toEqual(before);
   }
 });
@@ -482,43 +627,30 @@ test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page 
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 });
 
-test("the glossary stays saveable while a session writes next to it", async ({ page, api }) => {
-  // Critical path 9 for the campaign's list entries: `glossary` is NOT
-  // guarded by `campaigns.version`, which EVERY write bumps. Otherwise a quick
-  // note during a running session would answer the DM's open glossary edit
-  // with a stale revision — un-saveable exactly while the campaign is in
-  // use. Each entry carries its own token.
+
+test("the glossary offers no text editor — it is a list", async ({ page, api }) => {
+  // The glossary is a LIST, kept row by row on its own page, and there is no
+  // parser that reads text back into rows (ADR #23). So its reading view offers
+  // no edit action at all: an editor here could only ever produce a save the
+  // one write path refuses (400 `body_not_editable`, asserted on the endpoint
+  // itself in the test above).
   await page.goto("/campaigns/beispiel/entries/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
+  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 
-  await openMarkdownEditor(page);
-  const textarea = page.getByRole("textbox", { name: TEXTAREA });
-  await expect(textarea).toBeVisible();
-
-  // Something unrelated happens in the campaign while the editor stands open.
-  await api.send("POST", "campaigns/beispiel/session/start");
-  await api.send("POST", "campaigns/beispiel/log", { text: "Die Gruppe betritt den Turm" });
-
-  const added = "- tide flat → Gezeitenwatt";
-  await textarea.fill(`${await textarea.inputValue()}${added}\n`);
-  const save = page.getByRole("button", { name: "Speichern" });
-  await expect(save).toBeEnabled();
-  await save.click();
-
-  // No conflict, and the new term is stored and rendered.
-  await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
-  await expect(textarea).toHaveCount(0);
+  // The list endpoint is the way in — guarded by the same row version — and it
+  // leaves the entry a list.
+  await api.send("PUT", "campaigns/beispiel/glossary", {
+    rev: (await api.file("glossary")).rev,
+    entries: [{ term: "tide flat", explanation: "Gezeitenwatt" }],
+  });
+  const glossary = await api.get<{ entries: Array<{ term: string }> }>(
+    "campaigns/beispiel/glossary",
+  );
+  expect(glossary.entries.map((e) => e.term)).toEqual(["tide flat"]);
+  // And the reading view renders that list — still without an edit action.
+  await page.reload();
   await expect(page.getByRole("article")).toContainText("Gezeitenwatt");
-  await expect.poll(() => api.body("glossary")).toContain(added);
-  // The structured endpoint agrees — the body was decomposed into rows.
-  const glossary = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
-  expect(glossary.entries.map((e) => e.term)).toContain("tide flat");
-
-  // A REAL second writer still conflicts — the token did not become toothless.
-  await openMarkdownEditor(page);
-  await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
-  await api.writeBody("glossary", "\n- harbour master → Hafenmeisterin\n");
-  await page.getByRole("textbox", { name: TEXTAREA }).fill("\n- ganz was anderes → nope\n");
-  await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByText(STALE_MESSAGE)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 });

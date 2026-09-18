@@ -869,3 +869,58 @@ kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
   löst sie vorher auf. Was ankommt, ist eine gewöhnliche Adresse — die
   Antwort ist 404, nicht die 400 der Adressprüfung, die für absolute Pfade,
   Backslashes und versteckte Segmente weiter gilt.
+
+## 23. Ein Schreibweg je Eintrag
+
+**Kontext:** Ein Eintrag wurde über zwei Endpoints geschrieben: `PATCH
+/properties` für die Felder und `PUT /entries/<adresse>` für den Text, jeder
+mit eigenem Aufruf und eigener 409. Beide treffen dieselbe Zeile, also
+denselben Wächter `rev` — wer nacheinander speichert, macht seine erste
+Antwort selbst ungültig. Die App umging das mit einer Regel, die den Text als
+„textneutral" behandelte und den nächsten `rev` erriet, statt ihn zu kennen.
+Dazu war die Adresse `glossary` der letzte Weg, auf dem Text zurück in
+Spalten geparst wurde.
+
+**Entscheidung:** Ein Eintrag hat genau einen Schreibweg:
+
+    PATCH /api/campaigns/:campaign/entries/<adresse>
+    { rev, properties?, body?, force? }
+
+- Mindestens eines von `properties` und `body` muss dabei sein, sonst 400
+  `nothing_to_write`. Beides zusammen ist **ein** Schreibvorgang in einer
+  Transaktion, gegen **einen** `rev`: eine Zeilen-Änderung, ein Schritt von
+  `rev`, ein Versions-Zähler, ein Index-Lauf. Wie viel eine Anfrage trägt,
+  ist an `rev` nicht ablesbar.
+- Ein veralteter `rev` ist 409 `rev_conflict` und trägt neben dem aktuellen
+  `rev` den **aktuellen Eintrag** — der Konfliktdialog zeigt, was im Weg
+  steht, ohne nachzuladen. Dieselbe 409-Form gilt für jeden Schreibzugriff
+  mit Wächter.
+- `force: true` schreibt auf die Zeile, wie sie jetzt ist, und schreibt nur
+  die mitgeschickten Felder: ein fremd geänderter Status übersteht also ein
+  erzwungenes Text-Speichern.
+- Glossar, Kampagnenwissen und Ideen sind **Listen**. Sie werden auf ihren
+  Seiten über ihre eigenen Endpoints gepflegt und nehmen keinen `body` an
+  (400 `body_not_editable`). Es gibt keinen Parser mehr, der Text in Zeilen
+  zurückliest.
+- Die App hält den `rev` der laufenden Bearbeitung und schickt ihn mit,
+  statt ihn einzufrieren und zu raten. Die „textneutral"-Regel entfällt.
+
+**Folgen:**
+
+- `PATCH /properties` und `PUT /entries/<adresse>` sind gelöscht — keine
+  Umleitung, kein Alias. Die Endpoint-Namen in älteren Entscheidungen (#4,
+  #13, #19, #22) sind damit überholt; die Regeln dahinter — Wächter statt
+  stilles Überschreiben, Referenzen sind Fremdschlüssel — gelten weiter.
+- In der Schreibschicht gibt es eine Funktion statt drei
+  (`server/src/store/write.ts` `patchEntry`); der Generator-Apply benutzt
+  genau sie, also gelten dort dieselben Prüfungen.
+- `campaigns.glossary_intro` wird nicht mehr geschrieben. Die Spalte bleibt
+  und wird weiter angezeigt, damit ein älterer Bestand seinen Vorspann
+  behält.
+- Jeder Anlege-Endpoint antwortet wie eine Änderung mit dem Eintrag; `POST
+  /api/campaigns` bleibt die Ausnahme und antwortet mit der
+  Kampagnen-Übersicht, weil es keine Kampagne betritt, sondern eine anlegt.
+- Die 400 `body_not_editable` für einen `body` auf Glossar, Ideen oder
+  Session ist eine Zwischenlösung, solange diese Listen noch eine
+  Eintrags-Adresse haben; die Adresse fällt in einer eigenen Entscheidung,
+  damit fällt der Code.

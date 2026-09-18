@@ -38,12 +38,36 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 - **Eine Adresse ist kein Fixture-Name**; das letzte Segment einer Szene ist
   ihre `id`.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
-  Eintrags `properties`. Ein veraltetes `rev` antwortet mit 409.
+  Eintrags `properties`. Ein veraltetes `rev` antwortet mit 409
+  `rev_conflict` und trägt den aktuellen Eintrag mit.
+- **Ein Eintrag hat EINEN Schreibweg** (ADR #23):
+  `PATCH /api/campaigns/:campaign/entries/<adresse>` mit
+  `{ rev, properties?, body?, force? }`. Eigenschaften und Text zusammen sind
+  **ein** Schreibvorgang gegen **einen** `rev` — ein Schritt der
+  Zeilenversion, egal wie viel die Anfrage trug. `PATCH /properties` und
+  `PUT /entries/<adresse>` gibt es nicht mehr.
 - **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
-  Pfad 9 schreibt über die API (`api.writeBody`), während der Editor offen
-  steht, danach speichert die UI — und muss den Konflikt zeigen und neu laden
-  statt still zu überschreiben. Genauso in `status-control`,
+  Pfad 9 schreibt über die API (`api.writeBody`, `api.patchProperties` oder
+  `api.patchEntry` für beides in einer Anfrage), während der Editor offen
+  steht, danach speichert die UI — und muss die Konfliktzeile mit ihren zwei
+  Aktionen zeigen statt still zu überschreiben. Genauso in `status-control`,
   `properties-form` und `block-composer`.
+- **Weil Eigenschaften und Text eine Zeile teilen, ist ein reiner
+  Eigenschaften-Write auch für einen offenen Texteditor ein Konflikt.** Es
+  gibt keine „textneutrale" Änderung, die eine Oberfläche still übernimmt.
+- **Die Konfliktzeile ist geteilt** (`EditConflict`) und das **einzige**
+  `role="alert"` der App — Specs greifen sie darum über die Rolle, nicht über
+  ihren Text: die Meldung des Status-Reglers beginnt mit denselben Worten.
+  Ihre zwei Aktionen sind „Neu laden" (Entwurf verwerfen, gespeicherten Stand
+  übernehmen) und „Trotzdem speichern" (`force`, schreibt nur die
+  mitgeschickten Felder). Der Übernehmen-Schritt des Generators kann nicht
+  erzwingen und zeigt darum nur „Neu laden".
+  Achtung: „Trotzdem speichern" enthält „Speichern" — wer den Speicher-Knopf
+  einer Oberfläche meint, schreibt `{ name: "Speichern", exact: true }`.
+- **Nach „Neu laden" startet der Entwurf des Text-Editors wieder auf der
+  Standard-Oberfläche** (Block-Composer). Ein Spec, der danach die Textarea
+  liest, schaltet erneut auf „Markdown" um, ohne den Bearbeiten-Modus zu
+  verlassen.
 
 ## Gruppe = Ort
 
@@ -120,9 +144,11 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
 
 - `api` — getippte Aufrufe gegen den Server dieses Tests: `api.file(rel)` (der Eintrag:
   `properties`, `body`, `rev`), `api.body`, `api.properties`,
-  `api.exists`, `api.get`/`api.send` und die beiden Schreibwege
-  `api.writeBody` / `api.patchProperties`, die sich frisch ein Token holen
-  und damit den „zweiten Schreiber" spielen.
+  `api.exists`, `api.get`/`api.send` und der Schreibweg `api.patchEntry(rel,
+  { rev?, properties?, body?, force? })`. Ohne `rev` holt er sich frisch ein
+  Token und spielt damit den „zweiten Schreiber"; `api.writeBody` und
+  `api.patchProperties` sind die zwei bequemen Fälle davon und geben das neue
+  Token zurück.
 - `db` — liest `grimoire.db` dieses Tests über den Treiber des Servers
   (`server/src/db/driver.ts`, keine zweite SQLite-Abhängigkeit). Nur für
   Behauptungen, die die API nicht machen kann — etwa Zeilenzahlen
@@ -297,11 +323,15 @@ Zeilenzahlen, gleicher Inhalt. Er braucht eigene Boots und benutzt darum
 `startGrimoireServer`/`seedCampaigns` direkt statt der `server`-Fixture.
 
 Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
-Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
+Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster; der Regler hat
+keine Konflikt-Aktionen und meldet nur den veralteten Stand),
 `properties-form.e2e.ts` den „Eigenschaften"-Dialog (alle Felder einer
 Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
-deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
-einfriert). Der
+deterministische 409: der Dialog schreibt gegen die Version, mit der seine
+Bearbeitung begann, und beantwortet den Konflikt mit seinen zwei Aktionen —
+„Neu laden" zeigt die aktuellen Werte, „Trotzdem speichern" schreibt nur die
+Felder des Dialogs, eine gleichzeitige Textänderung übersteht es also und wird
+über die API zurückgelesen). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 `properties-form.e2e.ts` prüft dort auch den UMZUG: `location`
@@ -320,7 +350,19 @@ aus, Eintrag unverändert), der 409 mit offenem Blockformular und die Bedienung
 bei 390px. `entry-edit.e2e.ts` deckt
 den „Markdown"-Fallback ab: die Textarea, ihre „Vorschau" (die es nur dort
 gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
-fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
+fehlgeschlagener Refetch). Dazu die beiden Konflikt-Antworten in je einem
+Test — derselbe Aufbau, ein fremder Status-Write neben dem offenen Editor:
+„Neu laden" verwirft den Entwurf und zeigt gespeicherten Text samt geändertem
+Status — auf derselben Oberfläche, die Antwort auf einen Konflikt schiebt
+niemanden von der Textarea in den Composer —, „Trotzdem speichern" schreibt
+den Text und lässt den fremden Status stehen. Ein Test belegt Eigenschaften und Text in EINER Anfrage direkt am
+Schreibweg — ein Schritt der Zeilenversion, und keines der beiden Felder
+dabei ist 400 `nothing_to_write` —, weil keine Oberfläche der App heute beides
+in einem Speichern schickt. Die Listen-Adressen (Session, Eingang, Glossar)
+lehnen einen `body` mit 400 `body_not_editable` ab; das Glossar ist eine
+Liste, seine Leseansicht bietet darum gar keine Bearbeitung an — der Spec
+hält beides fest: keine Aktion in der Ansicht, und die Pflege läuft über den
+Listen-Endpoint. Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
 zusätzlich den Umzug ab: eine Szene, deren `location` sich geändert hat,

@@ -18,12 +18,12 @@
 //
 // Degrade rule (README): an unknown stored value is shown VERBATIM. An ABSENT
 // one is not the same case: every path that creates a chapter writes
-// `planned`, so nothing only survives on an older chapter — and „no status" on
-// a chapter means „not started", which is what `planned` says.
+// `planned`, so nothing only survives on an older chapter — and no status on a
+// chapter means "not started", which is what `planned` says.
 
 import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/types";
 
-import { fetchEntry, patchProperties, setChapterActive } from "@/api";
+import { fetchEntry, patchEntry, setChapterActive } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
 import { chapterMetaPath } from "@/lib/chapter-meta";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
@@ -32,10 +32,10 @@ import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 export const CHAPTER_STATUS_DEFAULT: ChapterStatus = "planned";
 
 /**
- * Catalog key + dot/text colors per status. `active` borrows the scene's
- * „Bereit" green on purpose: in both cases it is the value that says „this is
- * the one the evening runs on". `done` is the quiet end of the scale, like
- * „Gespielt".
+ * Catalog key + dot/text colors per status. `active` borrows the green of a
+ * scene's ready status on purpose: in both cases it is the value that says
+ * "this is the one the evening runs on". `done` is the quiet end of the scale,
+ * like a scene that has been played.
  */
 const CHAPTER_STATUS_META: Record<ChapterStatus, { key: MessageKey; dot: string; text: string }> = {
   planned: {
@@ -118,7 +118,7 @@ export async function writeChapterStatus(
   if (rev === undefined) throw new Error("no version to write against");
   const path = chapterMetaPath(chapter);
   return writeWithRev(
-    () => patchProperties(campaign, { path, rev, patch: { status } }),
+    () => patchEntry(campaign, path, { rev, properties: { status } }),
     () => fetchEntry(campaign, path),
   );
 }
@@ -131,7 +131,7 @@ export async function writeChapterStatus(
  * `current` is what the row SHOWS: a chapter that already holds the flag is
  * never set active again. The endpoint would happily re-assert it, and that is
  * the damage — the swap moves a SECOND chapter, so `active` on the chapter
- * whose control still reads „Aktiv" (the previously active one, until the
+ * whose control still shows the active state (the previously active one, until the
  * invalidation lands) pulls the flag back off the chapter the DM just picked.
  * The domain rule, next to the control's own no-op filter
  * (`statusSelectionWrites`): this one holds for every caller of the write.

@@ -87,6 +87,23 @@ describe("the location value that is no id", () => {
   });
 });
 
+describe("the two refusals of the entry write", () => {
+  test("a request with neither field says so in one short sentence", () => {
+    // No parameters: there is no field to name, which is the message.
+    expect(serverErrorBodyMessage(body("nothing_to_write"), de)).toBe("Nichts zu speichern.");
+    expect(serverErrorBodyMessage(body("nothing_to_write"), en)).toBe("Nothing to save.");
+  });
+
+  test("text sent to a list entry says why, not just that it failed", () => {
+    const german = serverErrorBodyMessage(body("body_not_editable", { path: "glossary" }), de);
+    expect(german).toContain("keinen bearbeitbaren Text");
+    expect(german).toContain("Liste");
+    const english = serverErrorBodyMessage(body("body_not_editable", { path: "glossary" }), en);
+    expect(english).toContain("no editable text");
+    expect(english).toContain("list");
+  });
+});
+
 describe("the degrade rule", () => {
   test("every code the server may send has a sentence in both languages", () => {
     for (const code of ERROR_CODES) {
