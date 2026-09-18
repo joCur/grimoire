@@ -20,7 +20,6 @@ import {
   hasPropertiesChanges,
   referenceLabel,
   referenceOptions,
-  selectOptions,
   type FieldOption,
   type FormValues,
   type PropertiesField,
@@ -339,9 +338,10 @@ describe("propertiesPatch", () => {
     expect(propertiesPatch(npcFields, initial, current)).toEqual({ quickstats: null });
   });
 
-  test("an unknown status value survives an edit of another field (degrade)", () => {
-    const odd = { ...SCENE_PROPERTIES, status: "onhold" };
-    const { initial, current } = edited(sceneFields, odd, {
+  test("a field nobody touched is not in the patch at all", () => {
+    // The status is part of the form and stands unchanged, so the write must
+    // not carry it — a no-op that would still bump the rev.
+    const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       title: { kind: "text", text: "Anderer Titel" },
     });
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({ title: "Anderer Titel" });
@@ -687,38 +687,4 @@ describe("reference and select options", () => {
     expect(referenceLabel(options, "kapitaen-torv")).toBe(undefined);
   });
 
-  test("a select offers the value the entry carries, known or not", () => {
-    const known = [
-      { value: "draft", label: "Entwurf" },
-      { value: "ready", label: "Bereit" },
-    ];
-    expect(selectOptions(known, "ready")).toBe(known);
-    expect(selectOptions(known, "")).toBe(known);
-    expect(selectOptions(known, "onhold")).toEqual([...known, { value: "onhold", label: "onhold" }]);
-  });
-
-  test("the entry's unknown value stays selectable after the DM clicked away", () => {
-    const known = [
-      { value: "draft", label: "Entwurf" },
-      { value: "ready", label: "Bereit" },
-    ];
-    // Open on `onhold`, switch to a known value: the odd one must still be in
-    // the list, or the DM could never put it back.
-    expect(selectOptions(known, "draft", "onhold")).toEqual([
-      ...known,
-      { value: "onhold", label: "onhold" },
-    ]);
-    // Cleared to „nicht gesetzt“ — same thing, the entry's value is still there.
-    expect(selectOptions(known, "", "onhold")).toEqual([
-      ...known,
-      { value: "onhold", label: "onhold" },
-    ]);
-    // Both odd (cannot happen through the select, but no duplicate options).
-    expect(selectOptions(known, "onhold", "onhold")).toEqual([
-      ...known,
-      { value: "onhold", label: "onhold" },
-    ]);
-    // A known initial adds nothing.
-    expect(selectOptions(known, "draft", "ready")).toBe(known);
-  });
 });

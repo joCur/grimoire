@@ -20,6 +20,7 @@
 // mobile start surface instead of the overview, so this control is not on the
 // phone at all.
 
+import type { ChapterStatus } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -37,8 +38,8 @@ export function ChapterStatusControl({
 }: {
   campaign: string;
   chapter: string;
-  /** The status as the tree carries it — unknown values pass through. */
-  status: string | undefined;
+  /** The status as the tree carries it; absent reads as `planned`. */
+  status: ChapterStatus | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const path = chapterMetaPath(chapter);
@@ -81,13 +82,13 @@ export function ChapterStatusMenu({
   onOpenChange,
   onSelect,
 }: {
-  status: string;
-  pendingStatus?: string | undefined;
+  status: ChapterStatus;
+  pendingStatus?: ChapterStatus | undefined;
   message?: string | undefined;
   disabled?: boolean;
   open?: boolean | undefined;
   onOpenChange?: (open: boolean) => void;
-  onSelect: (status: string) => void;
+  onSelect: (status: ChapterStatus) => void;
 }) {
   const t = useT();
   return (

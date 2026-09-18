@@ -43,13 +43,6 @@ describe("SceneStatusMenu", () => {
     expect(html).toMatch(/aria-checked="true"[^>]*>.*?<span class="flex-1">Gespielt</);
   });
 
-  test("an unknown value shows verbatim and checks nothing", () => {
-    const html = render({ status: "verschollen" });
-    expect(html).toContain("verschollen");
-    expect(itemLabels(html)).toEqual(["Entwurf", "Bereit", "Gespielt", "Verworfen"]);
-    expect(html).not.toContain('aria-checked="true"');
-  });
-
   test("the trigger names the current status for screen readers", () => {
     expect(render({ status: "ready" })).toContain('aria-label="Status ändern, aktuell Bereit"');
   });

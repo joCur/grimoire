@@ -87,9 +87,9 @@ Der Text ist freier Notizraum für Kampagnenweites.
 
 `active` markiert das **eine** Kapitel, das die Session-Ansicht öffnet: der
 Server setzt es in einem Vorgang und stellt das bisher aktive Kapitel zurück
-auf `planned`. Die API schreibt nur diese drei Werte (400 sonst); ein bereits
-gespeicherter anderer Wert wird weiterhin unverändert angezeigt — das Format
-degradiert wie überall.
+auf `planned`. Die API schreibt nur diese drei Werte (400 sonst), und die
+Spalte selbst lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint
+(DECISIONS #25), kein degradierendes Freitextfeld.
 
 Im Text liegen das Kapitelziel (Abschnitt `## Ziel des Kapitels`) und die
 Handlungsstränge (`## Offene Fäden`, Checkliste), die die Nachbereitung

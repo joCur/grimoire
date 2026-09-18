@@ -41,13 +41,12 @@ function render(
   field: PropertiesField,
   value: FieldValue,
   pending = "",
-  extra: { initialValue?: FieldValue; issue?: string } = {},
+  extra: { issue?: string } = {},
 ): string {
   return renderToStaticMarkup(
     <PropertiesFieldControl
       field={field}
       value={value}
-      initialValue={extra.initialValue}
       tree={tree}
       pending={pending}
       issue={extra.issue}
@@ -142,25 +141,14 @@ describe("chips and selects", () => {
     expect(count(html, 'aria-label="social entfernen"')).toBe(2);
   });
 
-  test("a status the entry carries but nobody knows is an option of its own", () => {
-    const html = render(sceneField("status"), { kind: "text", text: "onhold" });
-    expect(html).toContain('value="onhold"');
-    expect(html).toContain("Bereit"); // the known options are still offered
-    // Clearing must be reachable: the empty option deletes the key on save.
-    expect(html).toContain("— nicht gesetzt —");
-  });
-
-  test("that unknown status stays in the list after the DM picked a known one", () => {
-    // The extra option comes from what the ENTRY held, not from the current
-    // selection — otherwise the odd value is gone the moment it is left.
-    const html = render(
-      sceneField("status"),
-      { kind: "text", text: "draft" },
-      "",
-      { initialValue: { kind: "text", text: "onhold" } },
-    );
-    expect(html).toContain('value="onhold"');
+  test("the status select offers the closed list and nothing else", () => {
+    // The column is a CHECK constraint (ADR #25), so the four values are the
+    // whole list — plus the empty option, which deletes the key on save.
+    const html = render(sceneField("status"), { kind: "text", text: "draft" });
     expect(html).toContain('value="draft" selected');
+    expect(html).toContain("Bereit");
+    expect(html).toContain("— nicht gesetzt —");
+    expect(count(html, "<option")).toBe(5);
   });
 });
 

@@ -5,9 +5,10 @@
 // the scene header (type overline, chip row) must never sit above an NPC or
 // a location. Everything here is pure so it can be unit-tested without a DOM.
 
-import type { EntityKind } from "@grimoire/shared/types";
+import type { EntityKind, NpcStatus } from "@grimoire/shared/types";
 
 import type { MessageKey, Translate } from "@/i18n";
+import { propString } from "@/lib/properties";
 
 /**
  * Which header the reading view renders for a kind:
@@ -44,24 +45,31 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
 export { isEntityId } from "@grimoire/shared/slug";
 
 /**
- * Labels for the known npc `status` values (shared NPC_STATUSES), from the
+ * Labels for the npc `status` values (shared NPC_STATUSES), from the
  * catalog — the translator is PASSED IN, so this module holds no copy of its
  * own (i18n/index.ts, the lib-layer rule).
  *
- * The format degrades: an unknown value is shown verbatim instead of being
- * swallowed or corrected — the entry stays the truth.
+ * `unknown` is one of the four stored values — the NPC nobody has placed yet —
+ * and not a fallback: `npcs.status` is a CHECK constraint of its column and
+ * the preflight refuses a database that holds anything else (ADR #25).
  */
-const NPC_STATUS_KEYS: Record<string, MessageKey> = {
+const NPC_STATUS_KEYS: Record<NpcStatus, MessageKey> = {
   alive: "status.npc.alive",
   dead: "status.npc.dead",
   missing: "status.npc.missing",
   unknown: "status.npc.unknown",
 };
 
-export function npcStatusLabel(status: string, t: Translate): string {
-  const trimmed = status.trim();
-  const key = NPC_STATUS_KEYS[trimmed.toLowerCase()];
-  return key === undefined ? trimmed : t(key);
+export function npcStatusLabel(status: NpcStatus, t: Translate): string {
+  return t(NPC_STATUS_KEYS[status]);
+}
+
+/**
+ * The status of an npc entry, read out of its untyped `properties` bag —
+ * undefined when the entry carries none, which is what leaves the pill off.
+ */
+export function npcStatusOf(properties: Record<string, unknown>): NpcStatus | undefined {
+  return propString(properties.status) as NpcStatus | undefined;
 }
 
 /**

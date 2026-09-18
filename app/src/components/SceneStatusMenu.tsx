@@ -34,8 +34,8 @@ export function SceneStatusControl({
 }: {
   campaign: string;
   path: string;
-  /** The status as it stands in the log/tree — unknown values pass through. */
-  status: string;
+  /** The status as it stands in the log/tree. */
+  status: SceneStatus;
   /** From the loaded EntryResponse; undefined means "fetch it when opening". */
   rev?: number | undefined;
   variant: SceneStatusVariant;
@@ -87,7 +87,7 @@ export function SceneStatusMenu({
   onOpenChange,
   onSelect,
 }: {
-  status: string;
+  status: SceneStatus;
   variant: SceneStatusVariant;
   pendingStatus?: SceneStatus | undefined;
   message?: string | undefined;
@@ -109,7 +109,7 @@ export function SceneStatusMenu({
       disabled={disabled}
       open={open}
       onOpenChange={onOpenChange}
-      onSelect={(value) => onSelect(value as SceneStatus)}
+      onSelect={onSelect}
     />
   );
 }

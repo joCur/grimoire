@@ -84,9 +84,9 @@ import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
 import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
-import { npcStatusLabel } from "@/lib/entity";
+import { npcStatusLabel, npcStatusOf } from "@/lib/entity";
 import { propQuickstats, propString, propStringArray } from "@/lib/properties";
-import { sceneStatusMeta } from "@/lib/scene-status";
+import { sceneStatusMeta, sceneStatusOf } from "@/lib/scene-status";
 import {
   applySummary,
   chapterIdError,
@@ -1643,10 +1643,10 @@ function SceneCard({
 }) {
   const t = useT();
   const title = propString(properties.title) ?? path;
-  const status = propString(properties.status) ?? "draft";
-  // Show the status LABEL, never the raw property value; unknown
-  // values still degrade to their verbatim text inside the helper.
-  const statusLabel = sceneStatusMeta(status, t).label;
+  // Show the status LABEL, never the property value: a generated scene draft
+  // carries `status: draft` (the reply validation insists on it) and the
+  // dialog's select offers nothing but the four.
+  const statusLabel = sceneStatusMeta(sceneStatusOf(properties), t).label;
   const isContingency = propString(properties.type) === "contingency";
   const location = locationName(tree, propString(properties.location));
   const tags = propStringArray(properties.tags);
@@ -1833,7 +1833,7 @@ function NpcDraftCard({
 }) {
   const t = useT();
   const name = propString(properties.name) ?? path;
-  const status = propString(properties.status);
+  const status = npcStatusOf(properties);
   const role = propString(properties.role);
   const voice = propString(properties.voice);
   const appearance = propString(properties.appearance);

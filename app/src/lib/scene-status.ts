@@ -7,14 +7,15 @@
 // (CLAUDE.md/i18n/index.ts: the lib layer takes `Translate` as a parameter).
 // The colors stay here: they are design tokens, not copy.
 //
-// Degrade rule (README): an unknown status value is shown VERBATIM — the entry
-// stays the truth. The menu only ever offers the known quartet, and picking
-// one replaces whatever stood there.
+// `scenes.status` is a CHECK constraint of its column and the preflight
+// refuses a database that holds anything else (ADR #25), so the value is one
+// of the four everywhere below — there is no foreign value to render.
 
 import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
 
 import { fetchEntry, patchEntry, type PatchEntryRequest } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
+import { propString } from "@/lib/properties";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** Catalog key + dot/text colors per design/README.md. */
@@ -28,23 +29,26 @@ const SCENE_STATUS_META: Record<
   dropped: { key: "status.scene.dropped", dot: "bg-faint", text: "text-muted-foreground" },
 };
 
-function knownStatus(status: string): SceneStatus | undefined {
-  return (SCENE_STATUSES as readonly string[]).includes(status)
-    ? (status as SceneStatus)
-    : undefined;
+/** Default of a scene without a stored status — what every creation path writes. */
+export const SCENE_STATUS_DEFAULT: SceneStatus = "draft";
+
+/**
+ * The status of a scene entry, read out of its untyped `properties` bag. This
+ * is the one place a status crosses into the app as a bare value, so the
+ * narrowing sits here: the column admits nothing but the four (ADR #25), and
+ * an entry without a status reads as the default.
+ */
+export function sceneStatusOf(properties: Record<string, unknown>): SceneStatus {
+  return (propString(properties.status) as SceneStatus | undefined) ?? SCENE_STATUS_DEFAULT;
 }
 
-/** Label + colors for a status value; unknown values keep their raw label. */
+/** Label + colors for a status value. */
 export function sceneStatusMeta(
-  status: string,
+  status: SceneStatus,
   t: Translate,
 ): { label: string; dot: string; text: string } {
-  const known = knownStatus(status);
-  if (known !== undefined) {
-    const { key, dot, text } = SCENE_STATUS_META[known];
-    return { label: t(key), dot, text };
-  }
-  return { label: status, dot: "bg-muted-foreground", text: "text-dim" };
+  const { key, dot, text } = SCENE_STATUS_META[status];
+  return { label: t(key), dot, text };
 }
 
 /**
@@ -62,13 +66,13 @@ export function sceneStatusOptions(
 
 /**
  * Statuses that take a scene out of the evening's plan: `played` and
- * `dropped`. The live nav groups these away; everything else — including an
- * unknown value, which degrades to plain text — counts as still planned.
+ * `dropped`. The live nav groups these away; the other two count as still
+ * planned.
  */
-const DONE_STATUSES: ReadonlySet<string> = new Set<SceneStatus>(["played", "dropped"]);
+const DONE_STATUSES: ReadonlySet<SceneStatus> = new Set<SceneStatus>(["played", "dropped"]);
 
 /** True when the scene's status says it is behind us (played or dropped). */
-export function isSceneDone(status: string): boolean {
+export function isSceneDone(status: SceneStatus): boolean {
   return DONE_STATUSES.has(status);
 }
 

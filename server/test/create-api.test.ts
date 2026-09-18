@@ -482,8 +482,8 @@ describe("the chapter status enum via the entry PATCH", () => {
   test("the column itself refuses an unknown value — not just the API", async () => {
     // Since ADR #25 there is no way to put one there at all: a CHECK holds
     // the column to the trio, so even a write that bypasses the store is
-    // refused. The reader still degrades for a database that pre-dates the
-    // constraint — which is why nothing here can plant one to show it.
+    // refused. That is what lets the app treat the status as an enum — there
+    // is no database left that could hand it a fourth value.
     const { getDb } = await import("../src/store/handle");
     const db = await getDb();
     const { sql } = await import("drizzle-orm");

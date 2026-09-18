@@ -10,7 +10,7 @@
 import type { EntryResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
-import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
+import { entityHeaderKind, npcStatusLabel, npcStatusOf } from "@/lib/entity";
 import { propQuickstats, propString } from "@/lib/properties";
 import { useT } from "@/i18n";
 import { sessionDateLabel } from "@/lib/session";
@@ -106,7 +106,7 @@ function NpcHeader({
   const t = useT();
   const properties = entry.properties;
   const role = propString(properties.role);
-  const status = propString(properties.status);
+  const status = npcStatusOf(properties);
   const voice = propString(properties.voice);
   const appearance = propString(properties.appearance);
   const statblock = propString(properties.statblock);

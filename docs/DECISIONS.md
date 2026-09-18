@@ -995,10 +995,9 @@ Inhalt einer Spalte auch in die Spalte. Das ist dieselbe Bewegung wie ADR #19:
 Referenzen sind seit dort Fremdschlüssel und keine Absprache mehr.
 
 Der Widerspruch zum „Format degradiert" aus README.md ist keiner. Degradieren
-ist eine Regel für den **Leser**: ein unbekannter Callout, eine unbekannte
-Überschrift, ein alter Status in einem bestehenden Bestand werden angezeigt und
-werfen nie. Geschlossen ist der **Schreibweg** — die Spalte kann keinen neuen
-fremden Wert mehr aufnehmen.
+ist eine Regel für den **Leser**: ein unbekannter Callout und eine unbekannte
+Überschrift werden angezeigt und werfen nie. Geschlossen ist der
+**Schreibweg** — die Spalte kann keinen fremden Wert aufnehmen.
 
 **Folgen:**
 

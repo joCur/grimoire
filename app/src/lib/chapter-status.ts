@@ -16,10 +16,11 @@
 // module choosing the right door — but choosing it is still what keeps the
 // app's cache honest about both chapters.
 //
-// Degrade rule (README): an unknown stored value is shown VERBATIM. An ABSENT
-// one is not the same case: every path that creates a chapter writes
-// `planned`, so nothing only survives on an older chapter — and no status on a
-// chapter means "not started", which is what `planned` says.
+// `chapters.status` is a CHECK constraint of its column and the preflight
+// refuses a database that holds anything else (ADR #25), so the stored value
+// is one of the three. An ABSENT one is the only other case: every path that
+// creates a chapter writes `planned`, and no status on a chapter means "not
+// started", which is what `planned` says.
 
 import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/types";
 
@@ -47,33 +48,23 @@ const CHAPTER_STATUS_META: Record<ChapterStatus, { key: MessageKey; dot: string;
   done: { key: "properties.chapter.status.done", dot: "bg-faint", text: "text-muted-foreground" },
 };
 
-/** The stored value normalized for display: absent/blank reads as `planned`. */
-export function chapterStatusValue(status: string | undefined): string {
-  return status === undefined || status.trim() === "" ? CHAPTER_STATUS_DEFAULT : status;
-}
-
-function knownStatus(status: string): ChapterStatus | undefined {
-  return (CHAPTER_STATUSES as readonly string[]).includes(status)
-    ? (status as ChapterStatus)
-    : undefined;
+/** The stored value normalized for display: an absent one reads as `planned`. */
+export function chapterStatusValue(status: ChapterStatus | undefined): ChapterStatus {
+  return status ?? CHAPTER_STATUS_DEFAULT;
 }
 
 /** True for one of the three values the API accepts. */
 export function isChapterStatus(status: string): status is ChapterStatus {
-  return knownStatus(status) !== undefined;
+  return (CHAPTER_STATUSES as readonly string[]).includes(status);
 }
 
-/** Label + colors for a status value; an unknown value keeps its raw label. */
+/** Label + colors for a status value. */
 export function chapterStatusMeta(
-  status: string,
+  status: ChapterStatus,
   t: Translate,
 ): { label: string; dot: string; text: string } {
-  const known = knownStatus(status);
-  if (known !== undefined) {
-    const { key, dot, text } = CHAPTER_STATUS_META[known];
-    return { label: t(key), dot, text };
-  }
-  return { label: status, dot: "bg-muted-foreground", text: "text-dim" };
+  const { key, dot, text } = CHAPTER_STATUS_META[status];
+  return { label: t(key), dot, text };
 }
 
 /**
@@ -92,7 +83,7 @@ export function chapterStatusOptions(
  * chapter rather than to patch this one — the one branch the overview's
  * control and the properties dialog both have to take.
  */
-export function chapterStatusNeedsSwap(status: string): boolean {
+export function chapterStatusNeedsSwap(status: ChapterStatus): boolean {
   return status === "active";
 }
 
@@ -108,7 +99,7 @@ export function chapterStatusNeedsSwap(status: string): boolean {
 export async function writeChapterStatus(
   campaign: string,
   chapter: string,
-  status: string,
+  status: ChapterStatus,
   rev: number | undefined,
 ): Promise<RevWriteResult> {
   if (chapterStatusNeedsSwap(status)) {
@@ -137,9 +128,9 @@ export async function writeChapterStatus(
  * (`statusSelectionWrites`): this one holds for every caller of the write.
  */
 export function chapterStatusWritable(
-  status: string,
+  status: ChapterStatus,
   rev: number | undefined,
-  current?: string | undefined,
+  current?: ChapterStatus | undefined,
 ): boolean {
   if (chapterStatusNeedsSwap(status)) return current !== "active";
   return rev !== undefined;

@@ -20,14 +20,18 @@ import {
   type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
+  type ChapterStatus,
   type EntryResponse,
   type GlossaryResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
   type LocationSummary,
+  type NpcStatus,
   type NpcSummary,
   type SceneGroup,
+  type SceneStatus,
   type SceneSummary,
+  type SceneType,
   type SessionSummary,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
@@ -182,8 +186,11 @@ function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
     path: sceneAddress(row),
     id: row.id,
     title: row.title === "" ? row.id : row.title,
-    type: row.type === "" ? "planned" : row.type,
-    status: row.status === "" ? "draft" : row.status,
+    // Both columns are CHECK constraints over the shared lists (ADR #25), so
+    // the stored text is one of their values — the narrowing the row type
+    // cannot express.
+    type: row.type as SceneType,
+    status: row.status as SceneStatus,
     npcs: npcRefs,
     tags,
   };
@@ -252,7 +259,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       // uses it to open the chapter entry.
       path: chapterPath(chapter.id),
     };
-    if (chapter.status !== null) node.status = chapter.status;
+    if (chapter.status !== null) node.status = chapter.status as ChapterStatus;
     return node;
   });
 
@@ -264,7 +271,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
         path: npcPath(row.id),
         id: row.id,
         name: row.name === "" ? row.id : row.name,
-        status: row.status === "" ? "unknown" : row.status,
+        status: row.status as NpcStatus,
       };
       if (row.role !== null) summary.role = row.role;
       if (row.chapterId !== null) summary.chapter = row.chapterId;

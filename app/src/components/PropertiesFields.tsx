@@ -27,7 +27,6 @@ import {
   locationRef,
   referenceLabel,
   referenceOptions,
-  selectOptions,
   type FieldOption,
   type FieldValue,
   type PropertiesField,
@@ -89,7 +88,6 @@ function FieldRow({
 export function PropertiesFieldControl({
   field,
   value,
-  initialValue,
   tree,
   pending,
   issue,
@@ -98,12 +96,6 @@ export function PropertiesFieldControl({
 }: {
   field: PropertiesField;
   value: FieldValue;
-  /**
-   * What the field held when the dialog OPENED. A select derives its extra
-   * option from this and not from `value`, so a hand-written unknown value
-   * (`status: onhold`) stays selectable even after the DM clicked away from it.
-   */
-  initialValue?: FieldValue;
   /** Reference options come from the campaign tree; undefined = none yet. */
   tree: CampaignTree | undefined;
   pending: string;
@@ -143,7 +135,6 @@ export function PropertiesFieldControl({
   const setText = (text: string) => onChange({ kind: "text", text });
 
   if (field.control === "select") {
-    const initialText = initialValue?.kind === "text" ? initialValue.text : value.text;
     return (
       <FieldRow field={field} labelFor={id} issue={issue}>
         <div className="relative">
@@ -155,7 +146,8 @@ export function PropertiesFieldControl({
           >
             {/* Clearing is a real choice: it deletes the key. */}
             <option value="">{t("properties.field.unset")}</option>
-            {selectOptions(field.options ?? [], value.text, initialText).map((option) => (
+            {/* The closed list itself — the column admits nothing else (ADR #25). */}
+            {(field.options ?? []).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

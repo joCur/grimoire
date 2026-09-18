@@ -266,6 +266,17 @@ const RULES: readonly Rule[] = [
     meaning: "an entry has properties, a body and an address — it is not a file",
   },
   {
+    // The status degrade the app used to carry: `status` is a CHECK constraint
+    // of its column and the preflight refuses a database holding anything else
+    // (ADR #25), so a foreign value cannot reach a renderer at all. A fallback
+    // for one would be dead code that reads like a rule, and it would come
+    // back with these words — they are the ones the removed branches used.
+    id: "status-degrade-fallback",
+    pattern: /unknown status value|raw label/i,
+    meaning: "status is an enum — a value from outside the list has no fallback to render",
+    only: ["app/src"],
+  },
+  {
     id: "chokidar",
     pattern: /chokidar/,
     meaning: "there is no external editor to watch; `campaigns.version` is bumped by the writer",

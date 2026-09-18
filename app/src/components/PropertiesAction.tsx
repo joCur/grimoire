@@ -242,7 +242,6 @@ function PropertiesDialog({
                   key={field.key}
                   field={field}
                   value={value}
-                  initialValue={initial[field.key]}
                   tree={tree}
                   pending={pending[field.key] ?? ""}
                   issue={issues[field.key]}

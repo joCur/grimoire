@@ -76,10 +76,8 @@ describe("EntityArticle — npc", () => {
     expect(html).not.toContain("Eventualszene");
   });
 
-  test("an unknown status value is shown verbatim (degrade)", () => {
-    expect(render(entry("npc", { id: "x", name: "X", status: "verschollen" }))).toContain(
-      "verschollen",
-    );
+  test("the status pill carries the catalog label of the stored value", () => {
+    expect(render(entry("npc", { id: "x", name: "X", status: "missing" }))).toContain("Vermisst");
   });
 
   test("a bare npc entry degrades to name + body", () => {

@@ -18,12 +18,13 @@
 //      in an entry the DM also reads in an editor. Same choice the campaign
 //      metadata dialog made for a blank description.
 //
-// The format DEGRADES (README): an unknown `status`/`type` value is offered as
-// its own option instead of being corrected away, a reference field takes a
-// free-text id that has no entry yet, and a wrong-typed value is shown as text
-// rather than throwing.
+// The format DEGRADES (README): a reference field takes a free-text id that
+// has no entry yet, and a wrong-typed value is shown as text rather than
+// throwing. The closed fields are the exception — `status` and `type` are
+// CHECK constraints of their columns (ADR #25), so a select over them needs no
+// room for a value from outside the list.
 
-import { type CampaignTree, type EntityKind } from "@grimoire/shared/types";
+import { NPC_STATUSES, type CampaignTree, type EntityKind } from "@grimoire/shared/types";
 import {
   PROPERTY_FIELDS,
   isPropertiesKind,
@@ -194,7 +195,9 @@ function optionsOf(
   // depend on which of the two doors the write came through.
   if (kind === "chapter" && def.key === "status") return chapterStatusOptions(t);
   if (kind === "npc" && def.key === "status") {
-    return (def.values ?? []).map((value) => ({ value, label: npcStatusLabel(value, t) }));
+    // The shared list itself, not `def.values`: it is the typed single source
+    // the CHECK constraint is built from, and the labels need that type.
+    return NPC_STATUSES.map((value) => ({ value, label: npcStatusLabel(value, t) }));
   }
   if (kind === "scene" && def.key === "type") {
     return (def.values ?? []).map((value) => {
@@ -678,30 +681,4 @@ export function referenceLabel(
   return hit === undefined || hit.label === value ? undefined : hit.label;
 }
 
-/**
- * The options a select shows: the known set, plus any unknown value the field
- * holds — the one the ENTRY came with (`initial`) first. The format degrades —
- * a hand-written `status: onhold` must be visible and survive an unrelated
- * save, not be silently corrected to the first known option.
- *
- * Seeding from `initial` and not only from `current` is what makes it
- * RECOVERABLE: a DM who clicks through the list once must be able to put the
- * entry's own value back, which a select cannot offer once it has dropped it.
- */
-export function selectOptions(
-  options: readonly FieldOption[],
-  current: string,
-  /** The value the dialog opened with; defaults to `current` (no history). */
-  initial: string = current,
-): readonly FieldOption[] {
-  const extras: FieldOption[] = [];
-  for (const raw of [initial, current]) {
-    const value = raw.trim();
-    if (value === "") continue;
-    if (options.some((option) => option.value === value)) continue;
-    if (extras.some((option) => option.value === value)) continue;
-    extras.push({ value, label: value });
-  }
-  return extras.length === 0 ? options : [...options, ...extras];
-}
 

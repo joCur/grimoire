@@ -49,6 +49,7 @@ import { entityHeaderKind } from "@/lib/entity";
 import { encodeAddress } from "@/lib/address";
 import { canEditEntryBody } from "@/lib/entry-body";
 import { propString, propStringArray } from "@/lib/properties";
+import { sceneStatusOf } from "@/lib/scene-status";
 import { pageContextCrumbs } from "@/lib/page-context";
 
 export function SceneRoute() {
@@ -216,7 +217,7 @@ export function SceneRoute() {
                 <SceneStatusControl
                   campaign={campaign}
                   path={data.path}
-                  status={propString(data.properties.status) ?? "draft"}
+                  status={sceneStatusOf(data.properties)}
                   rev={data.rev}
                   variant="pill"
                 />

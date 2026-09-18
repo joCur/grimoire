@@ -3,7 +3,7 @@
 // NOTHING then, so the UI must re-read the entry and let the next attempt
 // carry the fresh rev.
 
-import type { EntryResponse } from "@grimoire/shared/types";
+import { SCENE_STATUSES, type EntryResponse, type SceneStatus } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
@@ -160,11 +160,13 @@ describe("status labels", () => {
     ]);
   });
 
-  test("an unknown value stays visible verbatim (degrade, never corrected)", () => {
-    expect(sceneStatusMeta("verschollen", t).label).toBe("verschollen");
-    // …in every language: the entry is the truth, not the catalog.
-    expect(sceneStatusMeta("verschollen", tEn).label).toBe("verschollen");
-    expect(sceneStatusOptions(t).map((o) => o.value)).not.toContain("verschollen");
+  test("a value from outside the four is not a status at all", () => {
+    // The column is a CHECK constraint and the preflight refuses a database
+    // that holds anything else (ADR #25), so there is no value left for the
+    // renderer to fall back for — the type is what says so.
+    // @ts-expect-error not one of draft | ready | played | dropped
+    const foreign: SceneStatus = "verschollen";
+    expect(SCENE_STATUSES as readonly string[]).not.toContain(foreign);
   });
 });
 
@@ -180,8 +182,4 @@ describe("isSceneDone", () => {
     expect(isSceneDone("ready")).toBe(false);
   });
 
-  test("an unknown status degrades to planned — it never hides a scene", () => {
-    expect(isSceneDone("verschollen")).toBe(false);
-    expect(isSceneDone("")).toBe(false);
-  });
 });

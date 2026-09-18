@@ -203,8 +203,8 @@ export interface SceneSummary {
   path: string;
   id: string;
   title: string;
-  type: OrString<SceneType>;
-  status: OrString<SceneStatus>;
+  type: SceneType;
+  status: SceneStatus;
   /** Free-text firing condition — only meaningful for `type: contingency`. */
   trigger?: string;
   location?: string;
@@ -235,7 +235,7 @@ export interface ChapterNode {
   id: string;
   /** The chapter's title; falls back to its id. */
   title: string;
-  status?: OrString<ChapterStatus>;
+  status?: ChapterStatus;
   /** Address of the chapter — its id. */
   path?: string;
   groups: SceneGroup[];
@@ -246,7 +246,7 @@ export interface NpcSummary {
   id: string;
   name: string;
   role?: string;
-  status: OrString<NpcStatus>;
+  status: NpcStatus;
   chapter?: string;
 }
 
