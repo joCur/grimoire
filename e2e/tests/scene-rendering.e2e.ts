@@ -187,7 +187,7 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
     });
 
   // An id nothing holds: refused, and no entry appears for it.
-  const before = await api.file(scene);
+  const before = await api.entry(scene);
   const unknown = await patchLocation("nordbucht", before.rev);
   expect(unknown.status).toBe(400);
   expect(await unknown.json()).toMatchObject({
@@ -209,7 +209,7 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   // With the Ort created, the patch lands and the scene MOVES with it.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(scene, { location: "nordbucht" });
-  const moved = await api.file(scene);
+  const moved = await api.entry(scene);
   expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
   await page.goto(`/campaigns/beispiel/entries/${moved.path}`);
   await expect(page.getByRole("article")).toContainText("Nordbucht");

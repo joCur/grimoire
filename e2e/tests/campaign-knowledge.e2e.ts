@@ -409,7 +409,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   await page.getByRole("button", { name: /^Übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  const scene = await api.file(`01-salzhafen/${SCENE_ID}`);
+  const scene = await api.entry(`01-salzhafen/${SCENE_ID}`);
   expect(`${JSON.stringify(scene.properties)}\n${scene.body}`).toContain(OLD_NAME);
 });
 
@@ -561,7 +561,7 @@ test("deleting in the ALPHABETICAL glossary hands the focus to the row that take
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("button", { name: doomed })).toHaveCount(0);
   // The row that moved into the gap holds the keyboard — not a row two
-  // positions away, and not the document.
+  // positions away, and not the page body.
   await expect(page.getByRole("button", { name: successor })).toBeFocused();
 });
 

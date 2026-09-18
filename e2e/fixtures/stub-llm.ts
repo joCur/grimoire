@@ -271,7 +271,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       kind: "outline",
       truncated,
       delayMs,
-      // The „invalid" trigger belongs to the SCENE document, so the outline
+      // The „invalid" trigger belongs to the SCENE entry, so the outline
       // it gets is a well-formed one with a single part.
       reply: invalid
         ? invalidRunOutline(source)
@@ -288,7 +288,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       const nonce = partFailNonce(source);
       // The first ROUND fails whole — initial call and correction turn — so
       // the part really ends up `failed`; from the second round on (that is:
-      // after „Erneut versuchen“) the same prompt gets a good document.
+      // after „Erneut versuchen“) the same prompt gets a good draft.
       let fails = false;
       if (nonce !== "" && assigned === FAILING_SCENE_ID) {
         const key = `${nonce}:${assigned}`;

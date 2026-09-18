@@ -62,7 +62,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // Straight into the (empty) chapter overview of the new campaign.
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
-  const campaignDoc = await api.file("campaign");
+  const campaignDoc = await api.entry("campaign");
   expect(campaignDoc.properties.name).toBe(CAMPAIGN_NAME);
 
   // The empty chapter overview names the NEXT STEP instead of the generator, which needs
@@ -86,7 +86,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const chapter = page.getByRole("button", { name: /01 Salzhafen/ });
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText("keine Szenen");
-  const chapterDoc = await api.file("01-salzhafen");
+  const chapterDoc = await api.entry("01-salzhafen");
   expect(chapterDoc.body).toContain("## Ziel des Kapitels");
   await expect(
     page.getByText("Ziel: Herausfinden, warum das Leuchtfeuer erloschen ist."),
@@ -119,7 +119,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(page.getByRole("article")).toContainText(
     "Der Turm steht schwarz gegen den Abendhimmel.",
   );
-  const sceneDoc = await api.file("01-salzhafen/ankunft-am-leuchtturm");
+  const sceneDoc = await api.entry("01-salzhafen/ankunft-am-leuchtturm");
   expect(sceneDoc.body).toContain("[!readaloud]");
   expect(sceneDoc.properties.status).toBe("draft");
 
@@ -176,7 +176,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
-  expect((await api.file("npcs/hafenmeisterin-jorna")).properties.name).toBe(
+  expect((await api.entry("npcs/hafenmeisterin-jorna")).properties.name).toBe(
     "Hafenmeisterin Jorna",
   );
 
@@ -195,7 +195,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.getByRole("button", { name: /„hafenmeisterin-jorna-2“ verwenden/ }).click();
   await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna-2$/);
   // The NAME is the one that was typed; only the id came from the proposal.
-  expect((await api.file("npcs/hafenmeisterin-jorna-2")).properties.name).toBe(
+  expect((await api.entry("npcs/hafenmeisterin-jorna-2")).properties.name).toBe(
     "Hafenmeisterin Jorna",
   );
 
@@ -207,7 +207,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await locationName.fill("Hafenviertel");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page).toHaveURL(/\/locations\/hafenviertel$/);
-  expect((await api.file("locations/hafenviertel")).properties.name).toBe("Hafenviertel");
+  expect((await api.entry("locations/hafenviertel")).properties.name).toBe("Hafenviertel");
 });
 
 test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, server }) => {
@@ -250,14 +250,14 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(page).toHaveURL(new RegExp(`/campaigns/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);
   await expect(switcher).toHaveAccessibleName(`Kampagne: ${SECOND_NAME}`);
-  expect((await second.file("campaign")).properties.name).toBe(SECOND_NAME);
+  expect((await second.entry("campaign")).properties.name).toBe(SECOND_NAME);
 
   // Both campaigns are in the menu now, and the first one is untouched.
   await switcher.click();
   await expect(page.getByRole("menu")).toContainText(CAMPAIGN_NAME);
   await expect(page.getByRole("menu")).toContainText(SECOND_NAME);
   await expect(page.getByRole("menu")).toContainText("Nebel, Torf und ein Verschwundener.");
-  expect((await first.file("campaign")).properties.name).toBe(CAMPAIGN_NAME);
+  expect((await first.entry("campaign")).properties.name).toBe(CAMPAIGN_NAME);
 
   // …and switching back works, which is what the menu was there for already.
   await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(CAMPAIGN_NAME) }).click();
@@ -289,5 +289,5 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   await page.getByLabel("Name").fill("Alte Fischerin");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page).toHaveURL(/\/npcs\/alte-fischerin$/);
-  expect((await api.file("npcs/alte-fischerin")).properties.name).toBe("Alte Fischerin");
+  expect((await api.entry("npcs/alte-fischerin")).properties.name).toBe("Alte Fischerin");
 });

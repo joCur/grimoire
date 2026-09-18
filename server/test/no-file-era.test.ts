@@ -52,7 +52,8 @@ interface Rule {
 
 /**
  * A place a rule does not apply. `path` exempts a file or directory prefix,
- * `phrase` exempts a line containing that text; `rule` narrows the exception to
+ * `phrase` exempts a line containing that text — matched case-insensitively,
+ * so an emphasised `THIS FILE` counts as well; `rule` narrows the exception to
  * one rule, and without it the path is not scanned at all.
  */
 interface Exception {
@@ -91,21 +92,40 @@ const EXCEPTIONS: readonly Exception[] = [
     reason: "the same URL segment, as a route pattern",
   },
   {
-    path: "app/src",
+    phrase: "document order",
     rule: "entry-is-not-a-document",
-    reason: "the app's `document` is the DOM object, and a markdown text has a document order",
+    reason: "the order the blocks of a body stand in, which is what the renderer walks",
   },
   {
-    path: "e2e",
+    phrase: "document level",
     rule: "entry-is-not-a-document",
-    reason: "the same two meanings — the browser's document and a text's block order",
+    reason: "the same structure seen from the top: a block that sits in no section",
   },
   {
-    path: "app/src",
-    rule: "entry-is-not-a-file",
-    reason: "the app engineer owns these lines; this step's report names them",
+    phrase: "document-start",
+    rule: "entry-is-not-a-document",
+    reason: "the browser timing an init script runs at, spelled the way the browser does",
   },
-  { path: "e2e", rule: "entry-is-not-a-file", reason: "as above — not this step's files" },
+  {
+    path: "app/src/lib/blocks.test.ts",
+    rule: "file-word-for-an-entry",
+    reason: "the roundtrip case reads the fixture JSON from disk and names it by file",
+  },
+  {
+    phrase: "this file",
+    rule: "file-word-for-an-entry",
+    reason: "the module the comment stands in, not an entry",
+  },
+  {
+    phrase: "spec file",
+    rule: "file-word-for-an-entry",
+    reason: "a `*.e2e.ts` of the suite — a file the test runner picks up",
+  },
+  {
+    phrase: "fixture file",
+    rule: "file-word-for-an-entry",
+    reason: "`fixtures/beispiel/<stem>.json` on disk, the input the seed run reads",
+  },
 ];
 
 /**
@@ -202,9 +222,14 @@ const RULES: readonly Rule[] = [
     meaning: "`fm` was the frontmatter; the half is called `properties`",
   },
   {
-    // Singular only: "the format documents" is the verb, not the noun.
+    // Singular only: "the format documents" is the verb, not the noun. The
+    // word also has two meanings that are NOT an entry, and the pattern tells
+    // them apart instead of exempting whole trees: the DOM object, written
+    // `document.` or `documentElement` or quoted as code, and the block order
+    // of a body, which the exceptions above name as the phrases "document
+    // order", "document level" and the browser's "document-start".
     id: "entry-is-not-a-document",
-    pattern: /\b[Dd]ocument\b/,
+    pattern: /(?<![.`])\b[Dd]ocument\b(?![.`]|Element)/,
     meaning: "an entry has properties and a text — it is not a document",
     commentsOnly: true,
   },
@@ -215,6 +240,19 @@ const RULES: readonly Rule[] = [
     id: "entry-is-not-a-file",
     pattern: /[Dd]okument|[Dd]atei/,
     meaning: "an entry is an Eintrag with Eigenschaften and Text — never a Datei",
+  },
+  {
+    // The English word, over the two trees that have retired it: the app and
+    // the e2e suite read and write ENTRIES through the API and touch no entry
+    // on disk, so "file" there is either a real file of the repo — a module, a
+    // spec, a fixture, each an exception above — or an entry called by the
+    // wrong name. `server/src` and `shared/src` are out of scope: they open
+    // the database file, serve assets and read the fixtures, and still name
+    // entries files in their own comments.
+    id: "file-word-for-an-entry",
+    pattern: /\bfiles?\b/i,
+    meaning: "an entry has properties, a body and an address — it is not a file",
+    only: ["app/src", "e2e"],
   },
   {
     id: "chokidar",
@@ -324,7 +362,8 @@ function hits(rule: Rule): string[] {
     }
     if (rule.commentsOnly === true && !isComment(line.text)) return false;
     if (!rule.pattern.test(line.text)) return false;
-    return !phrases.some((phrase) => line.text.includes(phrase));
+    const lowered = line.text.toLowerCase();
+    return !phrases.some((phrase) => lowered.includes(phrase.toLowerCase()));
   }).map((line) => `${line.file}:${line.number} ${line.text.trim()}`);
 }
 

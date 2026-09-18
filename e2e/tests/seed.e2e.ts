@@ -82,20 +82,20 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // What says the entry was SEEDED rather than conjured: it carries the name
   // and the chapter its fixture spells, which a synthesized stub would not
   // have.
-  const bucht = await api.file("locations/bucht");
+  const bucht = await api.entry("locations/bucht");
   expect(bucht.properties.name).toBe("Die Nordbucht");
   expect(bucht.properties.chapter).toBe("01-salzhafen");
   expect(tree.sessions.map((s) => s.path)).toEqual(["sessions/2026-01-15"]);
 
   // --- a scene body, callouts and If-sections included ----------------------
-  const scene = await api.file(SCENE);
+  const scene = await api.entry(SCENE);
   expect(scene.properties.id).toBe("lighthouse-arrival");
   expect(scene.properties.status).toBe("ready");
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
 
   // --- an npc: typed properties (voice, quickstats) and its prose ----------
-  const npc = await api.file("npcs/jorna");
+  const npc = await api.entry("npcs/jorna");
   expect(npc.properties.name).toBe("Hafenmeisterin Jorna");
   expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
@@ -103,11 +103,11 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
 
   // --- the session ----------------------------------------------------------
-  const session = await api.file("sessions/2026-01-15");
+  const session = await api.entry("sessions/2026-01-15");
   expect(session.body).toContain("Spuren gefunden");
 
   // --- the inbox ------------------------------------------------------------
-  const inbox = await api.file("inbox");
+  const inbox = await api.entry("inbox");
   expect(inbox.body).toContain("Der Dorfschmied repariert");
 
   // --- the glossary: its own TABLE ------------------------------------------

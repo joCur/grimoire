@@ -4,10 +4,10 @@
 //
 // ONLY SheetContent is its own thing: the panel geometry. Root, Title and
 // Description are the dialog's (./dialog) under sheet names — they were
-// byte-identical copies before, which is one styling decision in two files.
+// byte-identical copies before, which is one styling decision in two modules.
 //
 // Like ./dialog there is NO enter/leave animation: the quality floor asks for
-// prefers-reduced-motion safety, and in the live mode (issue #40 — the NPC and
+// prefers-reduced-motion safety, and in the live mode (the NPC and
 // location drawer) a panel that is simply THERE is the calmer answer while the
 // DM is mid-sentence. The panel scrolls internally, so a long NPC entry never
 // pushes the live layout around.

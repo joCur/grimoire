@@ -156,7 +156,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   await expect(page.getByText(SCENE_PATH)).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.
-  const scene = await api.file(SCENE_PATH);
+  const scene = await api.entry(SCENE_PATH);
   expect(scene.properties.status).toBe("draft");
   expect(scene.properties.title).toBe(SCENE_TITLE);
   expect(scene.body).toContain("> [!loot]");
@@ -165,7 +165,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (ADR #17).
-  expect((await api.file(DRAFT_PATH)).path).toBe(SCENE_PATH);
+  expect((await api.entry(DRAFT_PATH)).path).toBe(SCENE_PATH);
 
   // Back in the chapter overview the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
@@ -300,7 +300,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   // Quoted quickstats stay STRINGS — a relative value is not read as a number.
   expect(npc.quickstats).toMatchObject({ insight: "+1" });
 
-  // "NPC ansehen" opens the file that now exists.
+  // "NPC ansehen" opens the entry that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
@@ -423,7 +423,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect(await api.exists(SCENE_PATH)).toBe(true);
   // Both edits really are what was written — the accept takes the edited half
   // where there is one and the model's half everywhere else.
-  const written = await api.file(SCENE_PATH);
+  const written = await api.entry(SCENE_PATH);
   expect(written.body).toContain("Die Flut zieht sich im Regen");
   expect(written.properties.title).toBe(EDITED_TITLE);
   // …and the untouched fields of the edited half are still the run's.
@@ -460,7 +460,7 @@ test("a properties-only edit keeps the body the run produced", async ({ page, ap
   expect(edit.properties).toMatchObject({ title: EDITED_TITLE });
 
   await acceptWholeRun(page);
-  const scene = await api.file(SCENE_PATH);
+  const scene = await api.entry(SCENE_PATH);
   expect(scene.properties.title).toBe(EDITED_TITLE);
   // Byte for byte the body of the run: nothing round-tripped it.
   expect(scene.body).toBe(bodyOfRun);
@@ -481,7 +481,7 @@ test("a body-only edit keeps the properties the run produced", async ({ page, ap
   expect(edit.body).toContain(OWN_LINE);
 
   await acceptWholeRun(page);
-  const scene = await api.file(SCENE_PATH);
+  const scene = await api.entry(SCENE_PATH);
   expect(scene.body).toContain(OWN_LINE);
   // Every property is the run's, title included — the edit named the body.
   expect(scene.properties).toEqual(propertiesOfRun);
@@ -627,10 +627,10 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 
   // The point: the chapter exists, with the title the RUN was started with —
   // not the id, and not nothing.
-  expect((await api.file(CHAPTER_ID)).properties.title).toBe(CHAPTER_TITLE);
+  expect((await api.entry(CHAPTER_ID)).properties.title).toBe(CHAPTER_TITLE);
   // …and the scene really hangs in it.
   expect(
-    (await api.file(`${CHAPTER_ID}/${LOCATION_STUB_ID}/${SCENE_ID}`)).properties.chapter,
+    (await api.entry(`${CHAPTER_ID}/${LOCATION_STUB_ID}/${SCENE_ID}`)).properties.chapter,
   ).toBe(CHAPTER_ID);
 
   // The overview lists the chapter with that title, and the scene inside it.

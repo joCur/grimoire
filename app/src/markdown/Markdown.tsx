@@ -125,8 +125,8 @@ function TableScroll({ children, ...rest }: ComponentProps<"table">) {
 
 /**
  * The summary row of an `## If:` branch: chevron, the brass „Falls:" prefix
- * from the catalog (issue #69 — the branch label is copy, the `## If:` in the
- * FILE is not) and the italic condition.
+ * from the catalog (the branch label is copy, the `## If:` in the ENTRY'S TEXT
+ * is not) and the italic condition.
  */
 function IfSummary({ children, ...rest }: ComponentProps<"summary">) {
   const t = useT();

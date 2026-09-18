@@ -14,7 +14,7 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: /.*\.e2e\.ts$/,
   globalSetup: "./support/global-setup.ts",
-  // Every test is independent (own server, own files), so full parallelism is
+  // Every test is independent (own server, own database), so full parallelism is
   // safe; the port ranges in support/test.ts are per worker.
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,

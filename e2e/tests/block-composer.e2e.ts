@@ -52,7 +52,7 @@ const SCENE_BLOCKS = [
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.file(rel);
+  const { properties, body } = await api.entry(rel);
   return { properties, body };
 }
 
@@ -356,7 +356,7 @@ test("a child of the first If-section edits without touching the two headings", 
   );
   await page.getByRole("button", { name: "Bearbeiten" }).click();
 
-  // Two levels: the document's blocks, and each section's children indented
+  // Two levels: the body's blocks, and each section's children indented
   // below it — counting from 1 again, because a move stays inside its list.
   expect(await blockNames(page)).toEqual([
     "Überschrift 1",

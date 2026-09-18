@@ -198,7 +198,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
       jobId: after.id,
     });
     expect(written.written).toContain(SCENE_PATH);
-    const stored = await api.file(SCENE_PATH);
+    const stored = await api.entry(SCENE_PATH);
     // Both halves as the DM left them before the restart.
     expect(stored.properties.title).toBe(EDITED_TITLE);
     expect(stored.body).toContain(edited.trim());

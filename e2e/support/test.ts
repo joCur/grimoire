@@ -15,7 +15,7 @@
 // really means storage, through `db`.
 //
 // The FIXTURES are therefore only an INPUT, read exactly once per test — by
-// that seed run. `fixtures/beispiel/*.json` holds one entry per file in the
+// that seed run. `fixtures/beispiel/*.json` holds one entry per fixture file in the
 // shape the API speaks, and a test that needs content the example campaign
 // does not have overrides the fixtures in its own copy of that directory:
 //
@@ -83,7 +83,7 @@ export interface ServerHandle {
   url: string;
   /** GRIMOIRE_DATA of this server (holds grimoire.db and its companions). */
   dataDir: string;
-  /** The database file this server booted on. */
+  /** The `grimoire.db` this server booted on. */
   dbFile: string;
   /** The fixtures directory `grimoire seed` read (an INPUT, never written). */
   fixturesDir: string;
@@ -140,7 +140,7 @@ export interface Seed {
 }
 
 /** One entry as GET /api/campaigns/:campaign/entries/<address> answers it. */
-export interface ApiFile {
+export interface ApiEntry {
   path: string;
   kind: string;
   properties: Record<string, unknown>;
@@ -163,7 +163,7 @@ export interface Api {
   /** POST/PATCH/PUT with a JSON body, parsed as JSON; throws on non-2xx. */
   send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
   /** GET the entry at an address; throws when it is unknown. */
-  file(rel: string): Promise<ApiFile>;
+  entry(rel: string): Promise<ApiEntry>;
   /** The markdown text of an entry. */
   body(rel: string): Promise<string>;
   /** The properties of an entry. */
@@ -197,7 +197,7 @@ export interface Api {
       body?: string;
       force?: boolean;
     },
-  ): Promise<ApiFile>;
+  ): Promise<ApiEntry>;
   /**
    * Replace the body with a FRESH guard token: a second writer, not a race.
    * Returns the new token. This is how a spec provokes the app's 409 — an entry
@@ -357,14 +357,14 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       });
       return json<T>(response, `${method} ${apiPath}`);
     },
-    file(rel) {
-      return api.get<ApiFile>(entriesPath(campaign, rel));
+    entry(rel) {
+      return api.get<ApiEntry>(entriesPath(campaign, rel));
     },
     async body(rel) {
-      return (await api.file(rel)).body;
+      return (await api.entry(rel)).body;
     },
     async properties(rel) {
-      return (await api.file(rel)).properties;
+      return (await api.entry(rel)).properties;
     },
     async exists(rel) {
       const response = await fetchApi(entriesPath(campaign, rel));
@@ -378,12 +378,12 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       );
       if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`GET /session: HTTP ${response.status}`);
-      return ((await response.json()) as ApiFile).path;
+      return ((await response.json()) as ApiEntry).path;
     },
     async patchEntry(rel, change) {
-      const rev = change.rev ?? (await api.file(rel)).rev;
+      const rev = change.rev ?? (await api.entry(rel)).rev;
       const { properties, body, force } = change;
-      return api.send<ApiFile>("PATCH", entriesPath(campaign, rel), {
+      return api.send<ApiEntry>("PATCH", entriesPath(campaign, rel), {
         rev,
         ...(properties === undefined ? {} : { properties }),
         ...(body === undefined ? {} : { body }),
@@ -417,7 +417,7 @@ export function dbFor(client: SqliteClient): Db {
 
 export const test = base.extend<Fixtures>({
   // What the seed run should see instead of the pristine fixtures. Set per
-  // file or per describe block with test.use({ seed: … }).
+  // spec file or per describe block with test.use({ seed: … }).
   seed: [{}, { option: true }],
 
   // The fixtures directory `grimoire seed` reads. Without overrides this is
@@ -435,7 +435,7 @@ export const test = base.extend<Fixtures>({
     await mkdir(dir, { recursive: true });
     await cp(pristineDir(), dir, { recursive: true });
     const campaignDir = path.join(dir, CAMPAIGN);
-    // One entry per file, `<stem>.json` — so a stem the pristine copy already
+    // One entry per fixture file, `<stem>.json` — so a stem the pristine copy already
     // has is overwritten, and any other stem adds an entry.
     for (const stem of without) {
       await rm(path.join(campaignDir, `${stem}.json`), { force: true });

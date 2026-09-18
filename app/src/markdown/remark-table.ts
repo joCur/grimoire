@@ -10,8 +10,8 @@
 // only narrows strikethrough, it does not disable it. Two of the four would
 // change texts we already have:
 //
-//   * TASK LISTS would eat the inbox syntax. `- [x] erledigt` is a LINE IN A
-//     FILE that the app checks off through the API (README, Inbox); rendered
+//   * TASK LISTS would eat the inbox syntax. `- [x] erledigt` is a LINE IN AN
+//     ENTRY'S TEXT that the app checks off through the API (README, Inbox); rendered
 //     as a checkbox it becomes a control that writes nothing, and the DM's own
 //     `- [ ]` notes in a scene would silently turn into UI.
 //   * AUTOLINK LITERALS and FOOTNOTES invent meaning in prose nobody wrote for

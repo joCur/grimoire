@@ -93,7 +93,7 @@ Gruppenfeld. Für die Suite heißt das drei Dinge:
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
   `true` — wer prüfen will, WO eine Szene liegt, fragt
-  `(await api.file(rel)).path`.
+  `(await api.entry(rel)).path`.
 - **Der Generator vergibt keine Pfade.** Der Prüfschritt adressiert eine
   Szene als `<kapitel>/<id>` (`DRAFT_PATH` in den Specs), geschrieben wird
   sie unter `<kapitel>/<location>/<id>` (`SCENE_PATH`). Die Fixture-Antwort
@@ -150,7 +150,7 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
 
 **Die zwei Zusicherungs-Helfer:**
 
-- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.file(rel)` (der Eintrag:
+- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.entry(rel)` (der Eintrag:
   `properties`, `body`, `rev`), `api.body`, `api.properties`,
   `api.exists`, `api.get`/`api.send` und der Schreibweg `api.patchEntry(rel,
   { rev?, properties?, body?, force? })`. Ohne `rev` holt er sich frisch ein

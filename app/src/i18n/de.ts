@@ -781,7 +781,7 @@ export const de = {
   "markdown.callout.outcome": "Ergebnis",
   "markdown.callout.loot": "Beute",
   "markdown.callout.note": "Notiz",
-  // The branch label of a `## If:` section — the heading in the FILE stays
+  // The branch label of a `## If:` section — the heading in the TEXT stays
   // `## If:` in every language, only this prefix is copy.
   "markdown.ifSection.prefix": "Falls:",
   "markdown.readaloud.copy": "Kopieren",

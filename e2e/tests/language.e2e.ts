@@ -239,7 +239,7 @@ test.describe("no language flash", () => {
   }) => {
     await api.send("PUT", "settings", { locale: "de" });
 
-    // Every text node that reaches the document, from the very first one.
+    // Every text node that reaches the DOM, from the very first one.
     await page.addInitScript(() => {
       const seen: string[] = [];
       (window as unknown as { __painted: string[] }).__painted = seen;
@@ -263,9 +263,9 @@ test.describe("no language flash", () => {
           if (record.type === "characterData") collect(record.target);
           for (const added of record.addedNodes) collect(added);
         }
-        // `document`, not `document.documentElement`: this runs at document
-        // START, where the latter may not exist yet — and the document node
-        // sees its own children appear.
+        // `document`, not `document.documentElement`: this runs at
+        // document-start, where the latter may not exist yet — and the
+        // `document` node sees its own children appear.
       }).observe(document, {
         childList: true,
         subtree: true,

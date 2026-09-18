@@ -37,7 +37,7 @@ const CONFLICT_LINE = "Inzwischen geändert";
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.file(rel);
+  const { properties, body } = await api.entry(rel);
   return { properties, body };
 }
 
@@ -177,7 +177,7 @@ test("scene properties: chips, reference and status land in the entry — nothin
     page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
   ).toHaveCount(0);
   // The old address still names the scene and reports the new one.
-  expect((await api.file(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
+  expect((await api.entry(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
   // `[[…]]` references resolve over ids, so the session log is untouched.
   expect(await api.body("sessions/2026-01-15")).toContain("lighthouse-arrival");
 
@@ -188,7 +188,7 @@ test("scene properties: chips, reference and status land in the entry — nothin
   expect(after.properties.location).toBe("nordbucht");
   // …and the location it names is untouched: a scene references its group, it
   // never writes it.
-  expect((await api.file("locations/nordbucht")).properties.name).toBe("Nordbucht");
+  expect((await api.entry("locations/nordbucht")).properties.name).toBe("Nordbucht");
   expect(after.properties.status).toBe("draft");
   // … the untouched ones with their values …
   expect(after.properties.id).toBe("lighthouse-arrival");
@@ -661,7 +661,7 @@ test("a status outside the closed list is refused and writes nothing", async ({ 
   // which is what protects the column against the generator and a direct
   // write as well.
   const before = await split(api, SCENE);
-  const current = await api.file(SCENE);
+  const current = await api.entry(SCENE);
   const response = await api.fetch(
     `campaigns/beispiel/entries/${SCENE.split("/").map(encodeURIComponent).join("/")}`,
     {
@@ -681,7 +681,7 @@ test("a status outside the closed list is refused and writes nothing", async ({ 
   });
   // A refusal writes nothing — neither half moved, and the guard token stands.
   expect(await split(api, SCENE)).toEqual(before);
-  expect((await api.file(SCENE)).rev).toBe(current.rev);
+  expect((await api.entry(SCENE)).rev).toBe(current.rev);
 });
 
 // Critical path 8: the same form at phone size. The dialog is the only place

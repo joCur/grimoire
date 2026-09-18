@@ -11,7 +11,7 @@ const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
-test("the status control writes the status into the file", async ({ page, api }) => {
+test("the status control writes the status into the entry", async ({ page, api }) => {
   await page.goto(SCENE_URL);
   expect((await api.properties(SCENE)).status).toBe("ready");
 
@@ -29,7 +29,7 @@ test("the status control writes the status into the file", async ({ page, api })
   await expect(trigger).toHaveText(/Gespielt/);
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
 
-  // …and back to "Bereit" — the file follows every pick.
+  // …and back to "Bereit" — the entry follows every pick.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Bereit" }).click();
   await expect(trigger).toHaveText(/Bereit/);
@@ -71,11 +71,11 @@ test("a second writer: the status pick reports the conflict inline", async ({
   expect(conflicted, "the 409 conflict message never appeared").toBe(true);
 
   // Nothing was written: the other writer's content stands, unchanged.
-  const stored = await api.file(SCENE);
+  const stored = await api.entry(SCENE);
   expect(stored.properties.status).toBe("ready");
   expect(stored.body).toContain("Von einem zweiten Schreiber geändert");
 
-  // The control re-read the file, so the SAME pick works now.
+  // The control re-read the entry, so the SAME pick works now.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
   await expect(trigger).toHaveText(/Gespielt/);

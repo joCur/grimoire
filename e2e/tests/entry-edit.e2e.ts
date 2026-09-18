@@ -45,7 +45,7 @@ const TEXTAREA = "Markdown-Text von";
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.file(rel);
+  const { properties, body } = await api.entry(rel);
   return { properties, body };
 }
 
@@ -320,7 +320,7 @@ test("a properties-only second write conflicts too — reloading adopts it", asy
   page,
   api,
 }) => {
-  const opened = await api.file(SCENE);
+  const opened = await api.entry(SCENE);
   const before = { properties: opened.properties, body: opened.body };
   const mine = "Während des Statuswechsels geschrieben.";
 
@@ -406,7 +406,7 @@ test("a forced save writes only the text — the other writer's status survives"
 // on the write path itself. One PATCH, one transaction, ONE step of the
 // version — how much a request carried is not readable from `rev`.
 test("properties and body in ONE write are one version step", async ({ api }) => {
-  const opened = await api.file(SCENE);
+  const opened = await api.entry(SCENE);
   const before = { properties: opened.properties, body: opened.body };
   const rev = opened.rev;
   const body = `${before.body}\nIn einem Zug mit den Eigenschaften geschrieben.\n`;
@@ -438,7 +438,7 @@ test("properties and body in ONE write are one version step", async ({ api }) =>
   });
   expect(empty.status).toBe(400);
   expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
-  expect((await api.file(SCENE)).rev).toBe(written.rev);
+  expect((await api.entry(SCENE)).rev).toBe(written.rev);
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
@@ -597,7 +597,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // They grow by rows through their own endpoints (ADR #23).
   for (const rel of ["sessions/2026-01-15", "inbox", "glossary"]) {
     const before = await split(api, rel);
-    const current = await api.file(rel);
+    const current = await api.entry(rel);
     const res = await api.fetch(
       `campaigns/beispiel/entries/${rel.split("/").map(encodeURIComponent).join("/")}`,
       {
@@ -665,7 +665,7 @@ test("the glossary offers no text editor — it is a list", async ({ page, api }
   // The list endpoint is the way in — guarded by the same row version — and it
   // leaves the entry a list.
   await api.send("PUT", "campaigns/beispiel/glossary", {
-    rev: (await api.file("glossary")).rev,
+    rev: (await api.entry("glossary")).rev,
     entries: [{ term: "tide flat", explanation: "Gezeitenwatt" }],
   });
   const glossary = await api.get<{ entries: Array<{ term: string }> }>(

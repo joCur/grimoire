@@ -243,7 +243,7 @@ export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
 /**
  * Where the focus goes when a row is deleted.
  *
- * Deleting the row the focus sits in drops the focus to the document, which on
+ * Deleting the row the focus sits in drops the focus to `document.body`, which on
  * a list you clear from the bottom means reaching for the mouse after every
  * single click. The delete button of the NEIGHBOUR is the honest target.
  *

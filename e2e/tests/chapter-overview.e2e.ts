@@ -639,7 +639,7 @@ test("editing the campaign metadata updates header, switcher and the entry", asy
   ).toBeVisible();
 
   // Stored: the properties changed, the text did not.
-  const campaign = await api.file("campaign");
+  const campaign = await api.entry("campaign");
   expect(campaign.properties.name).toBe("Salzhafen, zweite Fassung");
   expect(campaign.properties.description).toBe("Jetzt mit mehr Schmuggel und weniger Möwen.");
   expect(campaign.body).toContain("Kampagnenweite Notizen:");
@@ -660,7 +660,7 @@ test.describe("a campaign without a name", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "beispiel",
     );
-    const nameless = await api.file("campaign");
+    const nameless = await api.entry("campaign");
     expect(nameless.properties).toEqual({ id: "beispiel", name: "beispiel" });
     expect(nameless.body).toBe("");
 
@@ -814,7 +814,7 @@ test("a chapter's title and goal are editable from the chapter overview", async 
 
   // The overview's goal line reads that section.
   await expect(page.getByText("Ziel: Den Leuchtturm wieder anzünden.")).toBeVisible();
-  const stored = await api.file("01-salzhafen");
+  const stored = await api.entry("01-salzhafen");
   expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
   expect(stored.body).toContain("Den Leuchtturm wieder anzünden.");
 });
@@ -840,7 +840,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   // there.
   await expect(dialog.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
   await expect(body).toHaveValue("## Ziel des Kapitels\n\nAus dem Dialog.");
-  expect((await api.file("01-salzhafen")).body).toContain("Von der API.");
+  expect((await api.entry("01-salzhafen")).body).toContain("Von der API.");
 
   // Forcing writes the same field on top of the row as it stands. The save
   // label is addressed exactly: the conflict line's force action contains it.
@@ -900,8 +900,8 @@ test("the chapter status control shows the German labels and swaps the active ch
 
   // The flag moved in BOTH directions, in one call.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
-  await expect.poll(async () => (await api.file("01-salzhafen")).properties.status).toBe("planned");
-  expect((await api.file(secondPath)).properties.status).toBe("active");
+  await expect.poll(async () => (await api.entry("01-salzhafen")).properties.status).toBe("planned");
+  expect((await api.entry(secondPath)).properties.status).toBe("active");
 
   // Exactly ONE call, and it named the chapter the DM picked — no second one
   // from the row that lost the flag.
@@ -920,8 +920,8 @@ test("the chapter status control shows the German labels and swaps the active ch
     .locator('xpath=//h2/ancestor::div[1]//button[starts-with(@aria-label,"Status ändern")]')
     .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
   expect(rows).toEqual(["Status ändern, aktuell Geplant", "Status ändern, aktuell Aktiv"]);
-  expect((await api.file("01-salzhafen")).properties.status).toBe("planned");
-  expect((await api.file(secondPath)).properties.status).toBe("active");
+  expect((await api.entry("01-salzhafen")).properties.status).toBe("planned");
+  expect((await api.entry(secondPath)).properties.status).toBe("active");
 });
 
 // The control is a RADIO group, so the checked option is the state — selecting
@@ -954,7 +954,7 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
 
   expect(writes).toEqual([]);
   await expect(activeMenu).toBeVisible();
-  expect((await api.file("01-salzhafen")).properties.status).toBe("active");
+  expect((await api.entry("01-salzhafen")).properties.status).toBe("active");
 });
 
 // The completed value is the other branch: a rev-guarded properties patch on the
@@ -974,9 +974,9 @@ test("picking Abgeschlossen patches that chapter and leaves the active one alone
   await expect(
     page.getByRole("button", { name: "Status ändern, aktuell Abgeschlossen" }),
   ).toBeVisible();
-  await expect.poll(async () => (await api.file(created.path)).properties.status).toBe("done");
+  await expect.poll(async () => (await api.entry(created.path)).properties.status).toBe("done");
   // The evening's chapter is untouched.
-  expect((await api.file("01-salzhafen")).properties.status).toBe("active");
+  expect((await api.entry("01-salzhafen")).properties.status).toBe("active");
 });
 
 // The dialog is a FORM over the same value, and a form sends its DIFF: a
@@ -1005,7 +1005,7 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
     id: "02",
   });
   await api.send("POST", "campaigns/beispiel/chapters/02/active");
-  expect((await api.file("01-salzhafen")).properties.status).toBe("planned");
+  expect((await api.entry("01-salzhafen")).properties.status).toBe("planned");
 
   await properties.click();
   const dialog = page.getByRole("dialog");
@@ -1025,10 +1025,10 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
 
   // The title is written, the status is not even mentioned — and the chapter
   // the other writer activated keeps the flag.
-  const stored = await api.file("01-salzhafen");
+  const stored = await api.entry("01-salzhafen");
   expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
   expect(stored.properties.status).toBe("planned");
-  expect((await api.file(created.path)).properties.status).toBe("active");
+  expect((await api.entry(created.path)).properties.status).toBe("active");
   // Both attempts sent the title and nothing else — the status field never
   // appears on the wire, so no stale active value can ride along.
   expect(patches).toHaveLength(2);
@@ -1062,7 +1062,7 @@ test("the properties dialog offers the enum and its Aktiv swaps too", async ({ p
 
   // The swap happened server-side: exactly one active chapter, and it is this
   // one.
-  await expect.poll(async () => (await api.file(created.path)).properties.status).toBe("active");
-  await expect.poll(async () => (await api.file("01-salzhafen")).properties.status).toBe("planned");
+  await expect.poll(async () => (await api.entry(created.path)).properties.status).toBe("active");
+  await expect.poll(async () => (await api.entry("01-salzhafen")).properties.status).toBe("planned");
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
 });

@@ -7,7 +7,7 @@
 //   2. Once the setting is there, the STORED language wins over the browser's.
 //
 // `<html lang>` is an effect and therefore not observable here — it has its own
-// assertion in e2e/tests/language.e2e.ts, against a real document.
+// assertion in e2e/tests/language.e2e.ts, against a real DOM.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, test } from "bun:test";

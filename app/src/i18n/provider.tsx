@@ -77,7 +77,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // reached has bigger problems to report than its language.
   const locale: Locale = settings.data?.locale ?? browserLocale();
 
-  // `<html lang>`: the document's language, kept in sync with the UI's. Only
+  // `<html lang>`: the page's language, kept in sync with the UI's. Only
   // once the setting is known — during the gate below there is no answer yet,
   // and `index.html` already carries the default.
   useEffect(() => {
