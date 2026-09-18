@@ -155,6 +155,40 @@ export function replaceSceneRefs(
   });
 }
 
+// --- reading a chapter or a scene entry ---------------------------------------
+
+/**
+ * The chapter entry an address names; 404 when the campaign has no chapter
+ * with that id.
+ */
+export function readChapterEntry(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+): EntryResponse {
+  const row = chapterRowOf(tx, campaign, id);
+  if (row === undefined) throw new ApiError(404, "entry not found");
+  return renderChapter(row);
+}
+
+/**
+ * The scene entry an address names; 404 when the campaign has no scene with
+ * that id.
+ *
+ * A scene is resolved by its ID alone. The chapter and group segments of the
+ * address are not matched: the group is `location`, and it moves whenever the
+ * DM corrects it, so an old link is a STALE ADDRESS for a scene that still
+ * exists, not a wrong one. The answer carries the CURRENT address in `path`
+ * (renderScene builds it from the row) and the app replaces the URL with it.
+ * See ADR #17.
+ */
+export function readSceneEntry(tx: GrimoireDb, campaign: string, id: string): EntryResponse {
+  const row = sceneRowOf(tx, campaign, id);
+  if (row === undefined) throw new ApiError(404, "entry not found");
+  const summary = sceneSummaryRow(tx, row);
+  return renderScene(row, summary.npcs, summary.tags);
+}
+
 // --- GET /api/campaigns/:campaign/tree ----------------------------------------
 
 /** Lexicographic (code-unit) compare — locale-independent, stable. */

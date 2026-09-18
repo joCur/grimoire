@@ -57,6 +57,18 @@ function isEmptyJsonObject(packed: string): boolean {
   return trimmed === "" || trimmed === "{}";
 }
 
+// --- reading an npc entry -----------------------------------------------------
+
+/**
+ * The npc entry an address names; 404 when the campaign has no npc with that
+ * id.
+ */
+export function readNpcEntry(tx: GrimoireDb, campaign: string, id: string): EntryResponse {
+  const row = npcRowOf(tx, campaign, id);
+  if (row === undefined) throw new ApiError(404, "entry not found");
+  return renderNpc(row);
+}
+
 // --- creating an npc ----------------------------------------------------------
 
 /**

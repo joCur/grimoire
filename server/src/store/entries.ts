@@ -25,15 +25,17 @@ import {
   campaignRow,
   indexCampaign,
   mutate,
+  readCampaignEntry,
   requireCampaign,
   requireCampaignRow,
 } from "./campaigns";
 import {
   CHAPTER_ACTIVE,
   clearOtherActiveChapters,
+  readChapterEntry,
+  readSceneEntry,
   replaceSceneRefs,
   sceneLocation,
-  sceneSummaryRow,
 } from "./chapters";
 import {
   assertChapterRef,
@@ -51,7 +53,8 @@ import {
   sceneRowAt,
 } from "./entity-rows";
 import { getDb } from "./handle";
-import { NPC_DEFAULT_STATUS } from "./npcs";
+import { NPC_DEFAULT_STATUS, readNpcEntry } from "./npcs";
+import { readLocationEntry } from "./locations";
 import { locatorFromPath, type Locator } from "./paths";
 import {
   applyPatch,
@@ -89,9 +92,9 @@ import {
 // --- reading one entry --------------------------------------------------------
 
 /**
- * Render the row a campaign-relative path addresses. 404 when there is no
- * such row — including for a scene whose path names the wrong chapter or
- * group, which is what a stale link is.
+ * Render the entry a campaign-relative path addresses, by handing the id to
+ * the domain module that owns the kind. Each of them answers the same 404
+ * when the campaign has no row with that id.
  *
  * Only the five ENTRY kinds reach here. A session, the inbox and the glossary
  * have no address (ADR #26), so `locatorFromPath` already answered 404 for
@@ -105,50 +108,15 @@ export function readByLocator(
   const campaign = campaignRowValue.id;
   switch (locator.kind) {
     case "campaign":
-      return renderCampaign(campaignRowValue);
-    case "chapter": {
-      const row = db
-        .select()
-        .from(chapters)
-        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, locator.id)))
-        .all()[0] as ChapterRow | undefined;
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      return renderChapter(row);
-    }
-    case "scene": {
-      const row = db
-        .select()
-        .from(scenes)
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, locator.id)))
-        .all()[0] as SceneRow | undefined;
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      // A scene is resolved by its ID alone. The chapter and group segments
-      // are not matched: the group is `location` and moves whenever the DM
-      // corrects it, so an old link is a STALE ADDRESS for a scene that still
-      // exists, not a wrong one. The answer carries the CURRENT address in
-      // `path` (renderScene builds it from the row) and
-      // the app replaces the URL with it. See ADR #17.
-      const summary = sceneSummaryRow(db, row);
-      return renderScene(row, summary.npcs, summary.tags);
-    }
-    case "npc": {
-      const row = db
-        .select()
-        .from(npcs)
-        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, locator.id)))
-        .all()[0] as NpcRow | undefined;
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      return renderNpc(row);
-    }
-    case "location": {
-      const row = db
-        .select()
-        .from(locations)
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, locator.id)))
-        .all()[0] as LocationRow | undefined;
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      return renderLocation(row);
-    }
+      return readCampaignEntry(campaignRowValue);
+    case "chapter":
+      return readChapterEntry(db, campaign, locator.id);
+    case "scene":
+      return readSceneEntry(db, campaign, locator.id);
+    case "npc":
+      return readNpcEntry(db, campaign, locator.id);
+    case "location":
+      return readLocationEntry(db, campaign, locator.id);
   }
 }
 

@@ -6,7 +6,7 @@
 // write of this store is one transaction that bumps exactly that counter.
 
 import { asc, eq, sql } from "drizzle-orm";
-import { freeSlug, type CampaignSummary } from "@grimoire/shared";
+import { freeSlug, type CampaignSummary, type EntryResponse } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeCampaignId } from "../addressing";
 import type { GrimoireDb } from "../db/client";
@@ -15,7 +15,7 @@ import { indexEntity } from "./fts";
 import { getDb } from "./handle";
 import { CAMPAIGN_PATH } from "./paths";
 import { expandBodyRefs } from "./refs";
-import { campaignDisplayName, type CampaignRow } from "./render";
+import { campaignDisplayName, renderCampaign, type CampaignRow } from "./render";
 import { compareSessionsNewestFirst, resolveNewId, slugTaken } from "./shared";
 
 // --- campaign lookup ---------------------------------------------------------
@@ -53,6 +53,17 @@ export function requireCampaignRow(tx: GrimoireDb, campaign: string): CampaignRo
   const row = campaignRow(tx, campaign);
   if (row === undefined) throw new ApiError(404, "campaign not found");
   return row;
+}
+
+// --- reading the campaign entry ------------------------------------------------
+
+/**
+ * The campaign entry. Its row is already in hand wherever an address is
+ * resolved — the campaign is what an address is relative to — so this only
+ * renders it.
+ */
+export function readCampaignEntry(row: CampaignRow): EntryResponse {
+  return renderCampaign(row);
 }
 
 // --- transaction plumbing ----------------------------------------------------

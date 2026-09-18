@@ -9,6 +9,7 @@
 import { and, eq } from "drizzle-orm";
 import { freeSlug, type EntryResponse } from "@grimoire/shared";
 import { ApiError } from "../api-error";
+import type { GrimoireDb } from "../db/client";
 import { locations } from "../db/schema";
 import { mutate } from "./campaigns";
 import { indexLocation, locationRowOf } from "./entity-rows";
@@ -25,6 +26,22 @@ export function isEmptyLocationRow(row: LocationRow): boolean {
     row.roll20Page === null &&
     row.body.trim() === ""
   );
+}
+
+// --- reading a location entry -------------------------------------------------
+
+/**
+ * The location entry an address names; 404 when the campaign has no location
+ * with that id.
+ */
+export function readLocationEntry(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+): EntryResponse {
+  const row = locationRowOf(tx, campaign, id);
+  if (row === undefined) throw new ApiError(404, "entry not found");
+  return renderLocation(row);
 }
 
 // --- creating a location ------------------------------------------------------
