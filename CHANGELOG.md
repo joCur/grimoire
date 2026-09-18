@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.7.0](https://github.com/joCur/grimoire/compare/v0.6.0...v0.7.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* POST /api/campaigns/:campaign/review/inbox-done takes `{ text }` — the idea as the row holds it — instead of `{ line }`.
+* Ein Bestand mit minutengenauen Session-Zeiten wird beim ersten Start dieser Version einmalig umgeschrieben. Ein Downgrade auf eine ältere Version liest die ergänzten Werte weiter, aber die Zeile steht danach nicht mehr wie vorher da.
+* ein Entwurf reist als `{ path, properties, body }` (Stub: `{ kind, id, name, properties, body }`) — das Feld `markdown` gibt es nicht mehr, auf `POST …/generate/apply`, `POST …/generate/job/:id/accept` und in `GET …/generate/job`. `draftEdits` bzw. das `edits` einer Review- PATCH trägt je Adresse `{ properties?, body? }` statt eines Textes, und `ParsedFile` entfällt zugunsten von `EntryResponse`.
+* PATCH /api/campaigns/:campaign/properties and PUT /api/campaigns/:campaign/entries/* are removed — no redirect, no alias. Clients use PATCH /api/campaigns/:campaign/entries/<address>.
+* every API and app URL of a campaign changed; old URLs 404.
+* POST /api/:campaign/rename und GET /api/:campaign/usage sind entfallen.
+* `grimoire seed` takes a directory of JSON entries instead of a markdown campaign tree. Migrating an old markdown tree is no longer possible with this tool.
+* `EntryResponse.raw` ist aus GET/PUT/PATCH-Antworten entfernt. Einziger Client ist die App im Repo, die es nicht las.
+
+### Features
+
+* chapters are created with their run, editable, and carry a status enum ([#115](https://github.com/joCur/grimoire/issues/115)) ([#137](https://github.com/joCur/grimoire/issues/137)) ([6ea0030](https://github.com/joCur/grimoire/commit/6ea00309d922aadb74a4164bff0746845708397f))
+* **db:** every reference is a foreign key; a mention never creates an entry ([#136](https://github.com/joCur/grimoire/issues/136)) ([#139](https://github.com/joCur/grimoire/issues/139)) ([867795e](https://github.com/joCur/grimoire/commit/867795ea9da03e3466e49026ff4c1b9db104fbc5))
+* ein Schreibweg je Eintrag — PATCH mit properties/body/force, kein Client-Freeze ([#144](https://github.com/joCur/grimoire/issues/144)) ([#151](https://github.com/joCur/grimoire/issues/151)) ([547f840](https://github.com/joCur/grimoire/commit/547f840ec7adce8bc368fe097e849bfad6b8d666))
+* ein URL-Schema — alles Kampagnenabhängige unter /campaigns/:id, Adresse im Pfad ([#143](https://github.com/joCur/grimoire/issues/143)) ([#149](https://github.com/joCur/grimoire/issues/149)) ([4190bfe](https://github.com/joCur/grimoire/commit/4190bfe44757624543e47f2f77f304f25ab2c14f))
+* Endstand ohne Datei-Ära — CHECK-Constraints, Kampagnen-Text, Endstand-Check ([#146](https://github.com/joCur/grimoire/issues/146)) ([#153](https://github.com/joCur/grimoire/issues/153)) ([0257913](https://github.com/joCur/grimoire/commit/02579134b65bc694f2db7f6734da3a49fef4193b))
+* Generator ohne Markdown-Schleife — Entwurf bleibt properties + body bis in den Store ([#145](https://github.com/joCur/grimoire/issues/145)) ([#152](https://github.com/joCur/grimoire/issues/152)) ([5037a73](https://github.com/joCur/grimoire/commit/5037a734ea055a6e3c7be6c0a10e5f2ae4aca951))
+* **generator:** schema-forced JSON object replies, typographic quotes ([#107](https://github.com/joCur/grimoire/issues/107)) ([#116](https://github.com/joCur/grimoire/issues/116)) ([3fa5dbe](https://github.com/joCur/grimoire/commit/3fa5dbe701f1e140af36c668ce9197498b643fff))
+* ids sind unveränderlich — Umbenennen entfällt ([#134](https://github.com/joCur/grimoire/issues/134)) ([#148](https://github.com/joCur/grimoire/issues/148)) ([cb1a010](https://github.com/joCur/grimoire/commit/cb1a010b2dc0a3f99bdb480b1c927e5aaab9cf06))
+* Importer und Seeder entfernen — Fixtures als JSON-Einträge über die Store-Schicht ([#142](https://github.com/joCur/grimoire/issues/142)) ([#147](https://github.com/joCur/grimoire/issues/147)) ([d5ded52](https://github.com/joCur/grimoire/commit/d5ded52fd878068abfd9ffa977e8c91cadf8ce99))
+* Listen sind keine Einträge — Session, Ideen und Glossar mit eigenen Endpoints, ohne Markdown-Zeile ([#146](https://github.com/joCur/grimoire/issues/146)) ([#154](https://github.com/joCur/grimoire/issues/154)) ([ac58a13](https://github.com/joCur/grimoire/commit/ac58a130c042b9a6b907bb96dd9b4196dae20559))
+* **server:** cache the constant prompt half on the OpenRouter path ([#110](https://github.com/joCur/grimoire/issues/110)) ([#113](https://github.com/joCur/grimoire/issues/113)) ([e8a42b0](https://github.com/joCur/grimoire/commit/e8a42b0b7489903cacf9aa6132767b12b3455f83))
+
+
+### Bug Fixes
+
+* **deploy:** keep /data a bind mount instead of an anonymous volume ([#119](https://github.com/joCur/grimoire/issues/119)) ([#121](https://github.com/joCur/grimoire/issues/121)) ([a24b773](https://github.com/joCur/grimoire/commit/a24b773652c7fbbf86c8145daea29b1e029d8f44))
+
+
+### Code Refactoring
+
+* raw aus dem API-Vertrag — ein Eintrag ist properties + body ([#118](https://github.com/joCur/grimoire/issues/118)) ([#128](https://github.com/joCur/grimoire/issues/128)) ([4e3e730](https://github.com/joCur/grimoire/commit/4e3e73016e819d206b3c53ab54ea7401cad39375))
+
 ## [0.6.0](https://github.com/joCur/grimoire/compare/v0.5.0...v0.6.0) (2026-09-15)
 
 
