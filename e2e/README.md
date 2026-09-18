@@ -467,7 +467,10 @@ Kapitel → Szene → Text → Session) und baut seinen `api`-Helfer mit
 `apiFor(server.url, id)`, weil die Kampagnen-id erst zur Laufzeit existiert.
 Dazu die beiden Listen-Einstiege („NPC/Ort anlegen") mit der
 Slug-Kollision — 409 mit Vorschlag, nichts geschrieben, der Vorschlag als ein
-Klick — und dieselben Listen bei 390px, womit der Spec auch auf Pfad 8 liegt.
+Klick —, die selbst gesetzte Kennung am Stift der Vorschauzeile (ADR #21: der
+Anlege-Dialog ist der einzige Ort dafür — ungültige Kennung blockiert
+„Anlegen", leeres Feld leitet wieder aus dem Namen ab) und dieselben Listen
+bei 390px, womit der Spec auch auf Pfad 8 liegt.
 
 Beide lesen nach jedem Speichern den Eintrag über die API zurück, und der
 Composer parst und serialisiert den Textkörper: „kein Byte Diff außer dem bearbeiteten Block" ist

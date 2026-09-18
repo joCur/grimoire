@@ -216,7 +216,9 @@ Die Pfade:
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
     Szene befüllen → Session starten → Szene in der Session-Ansicht
-    nutzbar; dazu NPC/Ort anlegen aus ihren Listen und die
+    nutzbar; dazu NPC/Ort anlegen aus ihren Listen, die selbst gesetzte
+    Kennung im Anlege-Dialog (Stift, ungültige Kennung blockiert „Anlegen",
+    leeres Feld leitet wieder aus dem Namen ab) und die
     Slug-Kollision (409 mit Vorschlag, schreibt nichts)
 
 Regel für neue Features: Jedes ready-Ticket benennt die berührten

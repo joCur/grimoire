@@ -107,10 +107,10 @@ describe("interpolation", () => {
   });
 
   test("formatParts keeps a non-string value as its own part", () => {
-    const marker = { mono: "jorna" };
-    const parts = formatParts("de", "coldstart.id", { id: marker });
+    const marker = { mono: "salzhafen" };
+    const parts = formatParts("de", "campaign.switcher.current", { name: marker });
     expect(parts).toContain(marker);
-    expect(parts.filter((part) => typeof part === "string").join("")).toBe("Kennung: ");
+    expect(parts.filter((part) => typeof part === "string").join("")).toBe("Kampagne: ");
   });
 
   test("degrades to the raw pattern instead of throwing", () => {
