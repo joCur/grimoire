@@ -13,10 +13,10 @@
 // `e2e/`. The tests are read along with the code: a helper called `getFile`
 // teaches the next case to write a second one. A hit fails with the file, the
 // line number and the line, so the fix is obvious from the failure alone.
-// Exceptions live in ONE array below, each with its reason; `pendingRules`
-// below that is the opposite list — names a follow-up removes, asserted to
-// still BE there, so that step flips them from pending to forbidden
-// deliberately instead of by accident.
+// Exceptions live in ONE array below, each with its reason. Every rule is
+// forbidden over every scanned root unless it names `only`, and an `only`
+// stands for a rule that is about one layer — never for a corner of the tree
+// that has not caught up.
 //
 // It walks the tree synchronously and skips `node_modules` and build output, so
 // it costs a few milliseconds and runs in the normal suite.
@@ -86,6 +86,23 @@ const EXCEPTIONS: readonly Exception[] = [
   {
     path: "server/test/no-file-era.test.ts",
     reason: "this test names every forbidden name in order to forbid it",
+  },
+  {
+    path: "server/src/db/list-rows-preflight.ts",
+    rule: "raw-list-column",
+    reason:
+      "this gate exists to RECOGNIZE the dropped column and refuse the boot on it — it has to name it",
+  },
+  {
+    path: "server/test/list-rows-preflight.test.ts",
+    rule: "raw-list-column",
+    reason: "it plants the pre-0018 shape the gate above is checked against",
+  },
+  {
+    path: "server/test/reference-preflight.test.ts",
+    rule: "raw-list-column",
+    reason:
+      "the reference gate's spec builds its own SQL schema, and that copy still carries the column the real schema dropped",
   },
   {
     phrase: "fixtures/",
@@ -331,35 +348,32 @@ const RULES: readonly Rule[] = [
     id: "list-entry-address",
     pattern: /entries\/(?:glossary|inbox|sessions)/,
     meaning: "a list has no entry address — it answers its own endpoint (ADR #26)",
-    // SCOPED, on purpose, until the app's half of this lands: the app tree
-    // still reads these addresses, and flipping the rule for `app/src` in the
-    // same step would fail a suite the app engineer has not reached yet. The
-    // integration step widens the scope to the whole tree.
-    only: ["server/src", "shared/src", "fixtures", "generator"],
   },
   {
     // The 400 that refused a `body` for one of those three addresses. With
-    // the address gone there is nothing to refuse a body FOR, so the code is
-    // unreachable — it stays in the append-only code list with a note, and
-    // no write path may name it again.
+    // the address gone there is nothing to refuse a body FOR, so the code has
+    // no sender. It STAYS in the append-only code list and in the message
+    // catalog (which is a Record over that whole list) — what is forbidden is
+    // SENDING it, so the pattern looks for the shape a refusal has: the code
+    // as the `code` field of an error body.
     id: "body-not-editable",
-    pattern: /body_not_editable/,
+    pattern: /code:\s*"body_not_editable"|ApiError\([^\n]*body_not_editable/,
     meaning: "no address carries a list any more, so no write can be refused one",
-    // SCOPED, on purpose, until the app's half of this lands: the app tree
-    // still reads these addresses, and flipping the rule for `app/src` in the
-    // same step would fail a suite the app engineer has not reached yet. The
-    // integration step widens the scope to the whole tree.
-    only: ["server/src", "fixtures", "generator"],
   },
   {
     // `raw` held the markdown line beside a log or inbox row — two truths
     // about one note, and the line was the one the reader used. Migration
-    // 0018 dropped the column; a reference to it in the storage layer would
-    // be the parse coming back.
+    // 0018 dropped the column; a reference to it anywhere — the store, a seed
+    // fixture's shape, an E2E helper — would be the parse coming back.
+    //
+    // `raw` is also an ordinary name for an unparsed model reply or an
+    // unvalidated request value, and those are fine. So the pattern looks for
+    // a `raw` that belongs to one of the two LIST tables: named beside the
+    // table, or as a key of a log/inbox row shape.
     id: "raw-list-column",
-    pattern: /\braw\s*:|\.raw\b|`raw`|"raw"/,
+    pattern:
+      /(?:log_entries|inbox_entries|logEntries|inboxEntries)[^\n]*\braw\b|\braw\b[^\n]*(?:log_entries|inbox_entries|logEntries|inboxEntries)|(?:\blog\b|\binbox\b|\bentries\b)[^\n]*\{[^\n]*\braw\s*[:?]/,
     meaning: "a log or inbox row is columns only — there is no line beside them",
-    only: ["server/src/db/schema.ts", "server/src/store"],
   },
   {
     id: "chokidar",
@@ -376,17 +390,14 @@ const RULES: readonly Rule[] = [
       /(?:path\.(?:join|resolve)|readdirSync|readFileSync|writeFileSync|existsSync|mkdirSync|GRIMOIRE_DATA|dataDir)[^\n]*campaigns/,
     meaning: "`campaigns/` is not a data directory — the database is the only storage (ADR #13)",
   },
-];
-
-/**
- * Names a FOLLOW-UP removes, asserted to still be there. Each is a stopgap
- * that outlives this step, and flipping one into `RULES` is then a conscious
- * line in that step's diff rather than a rule that quietly started passing.
- */
-const pendingRules: ReadonlyArray<{ pattern: RegExp; goes: string }> = [
   {
+    // The app's own parser: it read a session's log back out of the rendered
+    // text, so a note had to satisfy a grammar to keep its time and its
+    // scene. The session endpoints answer rows (ADR #26), so there is nothing
+    // left to parse and nothing left to lose in the round trip.
+    id: "log-line-parser",
     pattern: /\bparseLogEntries\b/,
-    goes: "the app still parses a session's log out of its text; the rows are the truth",
+    meaning: "a session's log arrives as rows — nothing reads it back out of a text",
   },
 ];
 
@@ -474,15 +485,6 @@ describe("no rest of the file era", () => {
   for (const rule of RULES) {
     test(`${rule.id}: ${rule.meaning}`, () => {
       expect(hits(rule)).toEqual([]);
-    });
-  }
-});
-
-describe("the stopgaps a follow-up removes are still there", () => {
-  for (const pending of pendingRules) {
-    test(`still present until ${pending.goes}`, () => {
-      const found = LINES.filter((line) => pending.pattern.test(line.text));
-      expect(found.length).toBeGreaterThan(0);
     });
   }
 });
