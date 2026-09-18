@@ -60,9 +60,8 @@ import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /**
  * The quiet header trigger, in the same vocabulary as the edit action next to
- * it. Renders nothing for the kinds that have no form:
- * the campaign entry (its own metadata dialog), sessions and the inbox
- * (app-managed, append-only), glossary and unknown.
+ * it. Renders nothing for the one entry kind that has no form: the campaign,
+ * whose metadata has its own dialog.
  */
 export function PropertiesAction({
   campaign,

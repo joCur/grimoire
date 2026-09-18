@@ -99,11 +99,6 @@ export function useLastStartedSession(campaign: string, enabled = true) {
   });
 }
 
-/** True when the session query failed because no session was started today. */
-export function noSessionYet(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404;
-}
-
 /**
  * The `code` of a `POST /session/start` 409 (server: store/write.ts). Exactly
  * ONE code exists: `"session_running"` — an OLDER session is still open. An
@@ -118,10 +113,14 @@ export function sessionStartConflict(error: unknown): SessionStartConflict | und
   return error.details.code === "session_running" ? "session_running" : undefined;
 }
 
-/** The session id a start 409 points at, when the server sent one. */
+/**
+ * The session id a start 409 points at, when the server sent one. The session
+ * endpoints name a session by `id` — a list row has no address (ADR #26), so
+ * there is no second name to look under.
+ */
 export function conflictSessionId(error: unknown): string | undefined {
   if (!(error instanceof ApiError)) return undefined;
-  const id = error.details.sessionId ?? error.details.id;
+  const id = error.details.id;
   return typeof id === "string" ? id : undefined;
 }
 

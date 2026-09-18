@@ -16,8 +16,8 @@ import type {
   KnowledgeEntry,
   KnowledgeResponse,
   SearchResponse,
-  SessionListEntry,
   SessionResponse,
+  SessionSummary,
 } from "@grimoire/shared/types";
 
 import { encodeAddress } from "@/lib/address";
@@ -284,8 +284,8 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 }
 
 /**
- * The ACTIVE session, or null when none is running — the server's
- * 404 is the normal "no session" answer, never an error state in the UI.
+ * The ACTIVE session, or null when none is running — "no session" is a 200
+ * whose body is `null` (ADR #26), never an error state in the UI.
  *
  * The app must NOT derive the session from its own date: a session that
  * runs past midnight lives in yesterday's session, and a browser in another
@@ -313,9 +313,10 @@ async function currentSession(
 ): Promise<SessionResponse | null> {
   const path = `/campaigns/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
   const response = await fetch(`/api${path}`);
-  if (response.status === 404) return null;
   if (!response.ok) throw await failure(`GET /api${path}`, response);
-  return (await response.json()) as SessionResponse;
+  // "Nothing runs" is a null body, so an absent session is a value here, not
+  // a status to branch on.
+  return ((await response.json()) as SessionResponse | null) ?? null;
 }
 
 /** ONE session by its id — the reading page of a past evening. */
@@ -326,8 +327,8 @@ export function fetchSession(campaign: string, id: string): Promise<SessionRespo
 }
 
 /** The campaign's sessions, newest first — id and the two timestamps only. */
-export function fetchSessions(campaign: string): Promise<SessionListEntry[]> {
-  return getJson<SessionListEntry[]>(`/campaigns/${encodeURIComponent(campaign)}/sessions`);
+export function fetchSessions(campaign: string): Promise<SessionSummary[]> {
+  return getJson<SessionSummary[]>(`/campaigns/${encodeURIComponent(campaign)}/sessions`);
 }
 
 /**

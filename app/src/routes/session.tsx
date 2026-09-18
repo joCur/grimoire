@@ -13,6 +13,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
+import type { SessionPauseInterval } from "@grimoire/shared/types";
+
 import { fetchTree } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { PageContext } from "@/components/PageContext";
@@ -59,7 +61,12 @@ export function SessionRoute() {
   // where a running clock belongs.
   const runtime =
     data.endedMs === undefined ? undefined : sessionElapsedMs(data, data.endedMs);
-  const closedPauses = data.pauses.filter((pause) => pause.toMs !== undefined);
+  // A pause is shown once it is over AND the server could read both of its
+  // wall clocks — only then is there a duration to print.
+  const closedPauses = data.pauses.filter(
+    (pause): pause is SessionPauseInterval & { fromMs: number; toMs: number } =>
+      pause.fromMs !== undefined && pause.toMs !== undefined,
+  );
 
   return (
     <>
@@ -151,7 +158,7 @@ export function SessionRoute() {
                   {t("session.page.pauseRow", {
                     from: sessionTimeLabel(pause.from) ?? pause.from,
                     to: sessionTimeLabel(pause.to) ?? (pause.to ?? ""),
-                    duration: formatDuration((pause.toMs ?? pause.fromMs) - pause.fromMs),
+                    duration: formatDuration(pause.toMs - pause.fromMs),
                   })}
                 </li>
               ))}

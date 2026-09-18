@@ -81,20 +81,19 @@ describe("the call sites", () => {
     );
   });
 
-  test("no Eigenschaften where there is no typed properties (session, inbox, campaign)", () => {
-    for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
-      const entry: EntryResponse = {
-        path: "x",
-        kind,
-        properties: {},
-        body: "",
-        rev: 1,
-      };
-      expect(
-        renderToStaticMarkup(
-          <PropertiesAction campaign="beispiel" entry={entry} tree={undefined} />,
-        ),
-      ).toBe("");
-    }
+  test("no properties action on the campaign — it has no typed fields", () => {
+    // The campaign is the only entry kind without a properties form; its
+    // metadata has its own dialog. Sessions, ideas and the glossary are lists
+    // and never reach this view at all (ADR #26).
+    const entry: EntryResponse = {
+      path: "campaign",
+      kind: "campaign",
+      properties: {},
+      body: "",
+      rev: 1,
+    };
+    expect(
+      renderToStaticMarkup(<PropertiesAction campaign="beispiel" entry={entry} tree={undefined} />),
+    ).toBe("");
   });
 });

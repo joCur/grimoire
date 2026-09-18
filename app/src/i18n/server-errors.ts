@@ -126,8 +126,10 @@ function paramsFor(
     case "chapter_unknown":
     case "log_scene_unknown":
     case "played_scene_unknown": {
-      // The five reference refusals share one shape: the value that names
-      // nothing. Without it there is no sentence worth showing.
+      // The reference refusals share one shape: the value that names nothing.
+      // Without it there is no sentence worth showing. `played_scene_unknown`
+      // has no sender left — played scenes have no write path of their own —
+      // but the code list is append-only, so its sentence stays reachable.
       const value = text(body.value);
       return value === undefined ? undefined : { value };
     }
@@ -160,10 +162,10 @@ function paramsFor(
       return { max: max ?? t("server.llm_truncated.defaultCap") };
     }
     // The codes whose sentence names a RULE rather than a value, so there is
-    // no parameter to check for. The two refusals of the entry write belong
-    // here: one says the request carried no field to write, the other that
-    // this kind of entry is maintained as a list. The address the second one
-    // carries is addressing — the DM is already looking at that entry.
+    // no parameter to check for. `nothing_to_write` says the request carried
+    // no field to write. `body_not_editable` has no sender left — no address
+    // names a list any more, so there is no text to refuse — and stands here
+    // only because the code list is append-only.
     case "chapter_required":
     case "session_running":
     case "session_not_empty":

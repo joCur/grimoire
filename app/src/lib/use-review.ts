@@ -13,7 +13,7 @@
 // `useT()` (same as lib/use-rev-write.ts); the lib layer stays free of copy of
 // its own.
 
-import type { InboxEntry, SessionLogRow } from "@grimoire/shared/types";
+import type { InboxEntry, SessionLogEntry } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -103,7 +103,7 @@ export function pcGroups(entries: readonly ReviewEntry[]) {
 
 /** A log row the review shows — with the tag that put it there. */
 interface HarvestedLogRow {
-  row: SessionLogRow;
+  row: SessionLogEntry;
   tag: string;
   /** A `#pc` row — its own section, no adoption. */
   pc: boolean;

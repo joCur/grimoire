@@ -12,7 +12,7 @@
 // midnight is YESTERDAY's session, and a browser in another timezone than
 // the server would get both the session and the runtime wrong.
 
-import type { SessionResponse } from "@grimoire/shared/types";
+import type { SessionPauseInterval, SessionResponse } from "@grimoire/shared/types";
 
 import { formatDate, type Translate } from "@/i18n/format";
 
@@ -48,18 +48,27 @@ export function parseLocalDateTime(value: unknown): number | undefined {
  * The bit of a session the timer helpers need — so the topbar chip, the live
  * view and the reading page share one set of rules, and a session SUMMARY
  * (which carries no pauses) works with them too.
+ *
+ * Every epoch reading is optional, exactly as the session endpoints answer
+ * them: the server puts one beside a timestamp only when it could read that
+ * timestamp. A session without a readable start has no runtime, and that is
+ * the honest answer rather than a clock counting from 1970.
  */
 export interface SessionTimes {
-  startedMs: number;
+  startedMs?: number;
   endedMs?: number;
-  pauses?: readonly { fromMs: number; toMs?: number }[];
+  pauses?: readonly SessionPauseInterval[];
 }
 
-/** Total paused time in milliseconds: the sum of the CLOSED intervals. */
+/**
+ * Total paused time in milliseconds: the sum of the CLOSED intervals whose
+ * wall clock the server could read. An interval without an epoch reading
+ * contributes nothing rather than an invented number.
+ */
 export function sessionPausedMs(session: SessionTimes | undefined): number {
   let sum = 0;
   for (const pause of session?.pauses ?? []) {
-    if (pause.toMs === undefined) continue;
+    if (pause.toMs === undefined || pause.fromMs === undefined) continue;
     sum += Math.max(0, pause.toMs - pause.fromMs);
   }
   return sum;
@@ -102,18 +111,20 @@ export function sessionIsEnded(session: Pick<SessionResponse, "ended">): boolean
  * point is then the moment the pause began, so a re-render a minute later
  * shows the same number. `ended` and an open pause together take the earlier
  * of the two, so the value can never grow past the end. Undefined when there
- * is no session.
+ * is no session, and when its start carries no epoch reading — there is
+ * nothing to count from.
  */
 export function sessionElapsedMs(
   session: SessionTimes | undefined,
   nowMs: number,
 ): number | undefined {
-  if (session === undefined) return undefined;
-  const stops = [session.endedMs, sessionPausedSinceMs(session)].filter(
+  const startedMs = session?.startedMs;
+  if (startedMs === undefined) return undefined;
+  const stops = [session?.endedMs, sessionPausedSinceMs(session)].filter(
     (v): v is number => v !== undefined,
   );
   const reference = stops.length === 0 ? nowMs : Math.min(...stops);
-  return Math.max(0, reference - session.startedMs - sessionPausedMs(session));
+  return Math.max(0, reference - startedMs - sessionPausedMs(session));
 }
 
 /**

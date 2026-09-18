@@ -15,7 +15,7 @@
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
-import type { SceneSummary, SessionLogRow } from "@grimoire/shared/types";
+import type { SceneSummary, SessionLogEntry } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
@@ -400,7 +400,7 @@ function LogPanel({
   activeSceneId,
 }: {
   campaign: string;
-  log: readonly SessionLogRow[];
+  log: readonly SessionLogEntry[];
   activeSceneId: string | undefined;
 }) {
   const t = useT();

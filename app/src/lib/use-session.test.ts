@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import { conflictSessionId, noSessionYet, sessionStartConflict } from "./use-session";
+import { conflictSessionId, sessionStartConflict } from "./use-session";
 
 const conflict = (details: Record<string, unknown>) =>
   new ApiError(409, "conflict", { error: "…", ...details });
@@ -30,19 +30,11 @@ describe("sessionStartConflict", () => {
 
 describe("conflictSessionId", () => {
   test("returns the session the conflict points at, or undefined", () => {
-    expect(conflictSessionId(conflict({ sessionId: "s-42" }))).toBe("s-42");
-    // `id` is read as well — the same answer under the plainer name.
     expect(conflictSessionId(conflict({ id: "s-7" }))).toBe("s-7");
-    expect(conflictSessionId(conflict({ sessionId: 42 }))).toBeUndefined();
+    // Only `id` names a session; a stray `sessionId` is not a second name.
+    expect(conflictSessionId(conflict({ sessionId: "s-42" }))).toBeUndefined();
+    expect(conflictSessionId(conflict({ id: 42 }))).toBeUndefined();
     expect(conflictSessionId(conflict({}))).toBeUndefined();
     expect(conflictSessionId(new Error("nope"))).toBeUndefined();
-  });
-});
-
-describe("noSessionYet", () => {
-  test("only a 404 means 'there is none'", () => {
-    expect(noSessionYet(new ApiError(404, "no active session"))).toBe(true);
-    expect(noSessionYet(new ApiError(500, "boom"))).toBe(false);
-    expect(noSessionYet(new Error("offline"))).toBe(false);
   });
 });
