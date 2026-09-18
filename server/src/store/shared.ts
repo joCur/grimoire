@@ -288,11 +288,20 @@ export function slugReserved(kind: ErrorKind, id: string, suggestion: string): A
  * (`name` or `title`), so the app's 400 sentence can point at it in the UI
  * language.
  *
- * An EXPLICIT id exists for exactly one flow: the `slug_taken` 409 hands the
- * app a free `suggestion`, and "diesen Vorschlag nehmen" has to be one click
- * rather than "now think of a different name". It is taken verbatim — no
- * derivation, no fallback — and has to be a slug, because it lands in the
- * format's one permanent field.
+ * An EXPLICIT id serves two callers, and it means the same thing to both: the
+ * DM decided this id, so nothing derives one for them.
+ *
+ *   - the `slug_taken` / `slug_reserved` 409 hands the app a free
+ *     `suggestion`, and taking that proposal is one click rather than "now
+ *     think of a different name".
+ *   - the create dialog's id field, where the DM sets the id instead of
+ *     accepting the one the name yields. This is the only moment an id is
+ *     chosen (ADR #21 — no endpoint ever changes one).
+ *
+ * Either way it is taken verbatim — no derivation, no fallback — and has to be
+ * a slug, because it lands in the format's one permanent field. A typed id
+ * that is already taken comes back as the same 409 as any other collision, so
+ * the two callers close a loop rather than needing separate handling here.
  */
 export function resolveNewId(
   explicit: string | undefined,

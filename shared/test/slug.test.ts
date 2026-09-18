@@ -33,7 +33,7 @@ describe("toSlug", () => {
   });
 
   test("yields nothing when nothing maps into a-z0-9", () => {
-    // The caller has to say so — an id is never invented (store/write.ts).
+    // The caller has to say so — an id is never invented (store/shared.ts).
     expect(toSlug("!!!")).toBe("");
     expect(toSlug("   ")).toBe("");
     expect(toSlug("東京")).toBe("");

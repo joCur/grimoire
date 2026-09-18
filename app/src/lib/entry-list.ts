@@ -98,7 +98,7 @@ export function glossaryRows(
 /**
  * The campaign knowledge as the page shows it: STORED order, filtered.
  *
- * The order is the order of the prompt (server/src/store/read.ts), so it is
+ * The order is the order of the prompt (server/src/store/knowledge.ts), so it is
  * the DM's to arrange — hence up/down here and not on the glossary.
  */
 export function knowledgeRows(
@@ -215,7 +215,7 @@ export function isIncompleteNamingEntry(entry: KnowledgeEntry): boolean {
  * view's context-sent-along line counts.
  *
  * Not simply `entries.length`: a half-typed naming convention is stored but
- * skipped by the prompt (server/src/store/read.ts knowledgeText), and a count
+ * skipped by the prompt (server/src/store/knowledge.ts knowledgeText), and a count
  * that promises a rule the model never saw is the one number in that line
  * nobody could act on. The rule is mirrored here rather than asked for over
  * the wire — it is two conditions, and an endpoint for a number the client

@@ -100,7 +100,7 @@ export function useLastStartedSession(campaign: string, enabled = true) {
 }
 
 /**
- * The `code` of a `POST /session/start` 409 (server: store/write.ts). Exactly
+ * The `code` of a `POST /session/start` 409 (server: store/sessions.ts). Exactly
  * ONE code exists: `"session_running"` — an OLDER session is still open. An
  * already ended session of today is no conflict; the start simply creates the
  * next session of the day. Undefined for anything else, so the caller can fall
