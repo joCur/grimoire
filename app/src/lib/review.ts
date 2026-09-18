@@ -62,9 +62,7 @@ export function stripHashtags(text: string): string {
   const stripped = text
     .replace(/\s*#[\p{L}\p{N}][\p{L}\p{N}_-]*/gu, "")
     .replace(/\s{2,}/g, " ")
-    .trim()
-    // A leading em dash is log-line formatting (scene-less notes), not content.
-    .replace(/^[—–-]\s+/, "");
+    .trim();
   return stripped === "" ? text.trim() : stripped;
 }
 

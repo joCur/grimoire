@@ -69,12 +69,6 @@ describe("stripHashtags", () => {
   test("a row of nothing but hashtags keeps its text", () => {
     expect(stripHashtags("#thread")).toBe("#thread");
   });
-
-  test("drops a leading em dash — that is log formatting, not content", () => {
-    expect(stripHashtags("— Cliffhanger: Lichter in der Bucht #thread")).toBe(
-      "Cliffhanger: Lichter in der Bucht",
-    );
-  });
 });
 
 describe("player-character notes", () => {
