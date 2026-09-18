@@ -62,10 +62,10 @@ import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
 import { requireCampaign } from "./store/campaigns";
+import { buildTree, chapterExists } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
-import { buildTree } from "./store/read";
-import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
+import { applyDrafts, draftTargetExists } from "./store/write";
 import {
   addressHead,
   addressIdentity,

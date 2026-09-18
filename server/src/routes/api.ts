@@ -46,9 +46,16 @@ import { getBuildId } from "../config";
 import { ApiError } from "../api-error";
 import { campaignVersion, createCampaign, listCampaigns, requireCampaign } from "../store/campaigns";
 import { appendInboxEntry, markInboxLineDone, readInbox } from "../store/inbox";
+import {
+  appendThreadToChapter,
+  buildTree,
+  createChapter,
+  createScene,
+  setActiveChapter,
+} from "../store/chapters";
 import { readGlossary, writeGlossary } from "../store/glossary";
 import { readKnowledge, writeKnowledge } from "../store/knowledge";
-import { buildTree, readEntry } from "../store/read";
+import { readEntry } from "../store/read";
 import {
   appendLogEntry,
   continueSession,
@@ -67,13 +74,7 @@ import { searchCampaign } from "../store/search";
 import { readSettings, writeSettings } from "../store/settings";
 import { createLocation } from "../store/locations";
 import { createNpc, createNpcStub } from "../store/npcs";
-import {
-  appendThreadToChapter,
-  createChapter,
-  setActiveChapter,
-  createScene,
-  patchEntry,
-} from "../store/write";
+import { patchEntry } from "../store/write";
 import { acceptJobParts } from "../generate-accept";
 import {
   applyGenerated,
