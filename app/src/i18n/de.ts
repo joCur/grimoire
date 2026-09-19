@@ -316,6 +316,8 @@ export const de = {
     'Die gespielte Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
+  "server.scene_order_mismatch":
+    "Die Reihenfolge passt nicht mehr zu den Szenen des Kapitels — bitte neu laden.",
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
   "server.session_not_empty": "Diese Session hat Inhalt — beenden statt verwerfen.",
   "server.rev_conflict": "Inzwischen geändert — neu laden vor dem Speichern.",

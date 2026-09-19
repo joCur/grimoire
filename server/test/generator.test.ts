@@ -2349,10 +2349,10 @@ describe("a scene draft whose chapter has no entry", () => {
 
     // …and the scene really hangs in it.
     const tree = (await (await app.request("/api/campaigns/beispiel/tree")).json()) as {
-      chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
+      chapters: Array<{ id: string; scenes: Array<{ id: string }> }>;
     };
     const node = tree.chapters.find((c) => c.id === "03-drachenbrut");
-    expect(node?.groups.flatMap((g) => g.scenes).map((s) => s.id)).toContain("brut-im-dunkeln");
+    expect(node?.scenes.map((s) => s.id)).toContain("brut-im-dunkeln");
   });
 
   test("a chapter id that is no slug answers 400 and names the chapter", async () => {

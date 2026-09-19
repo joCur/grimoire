@@ -166,6 +166,20 @@ export const chapters = sqliteTable(
     /** Display order. */
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
+    /**
+     * Guard token of the chapter's SCENE ORDER — the `pos` values of the
+     * scenes below it, which `PUT /chapters/:chapter/scene-order` writes as a
+     * whole.
+     *
+     * Its own counter, for the reason the three list guards on `campaigns`
+     * have theirs: the order is a list that lives on its own, and `rev` —
+     * which every unrelated write of the chapter bumps — would make an open
+     * chapter-text edit unsaveable the moment somebody rearranges the scenes.
+     * The other direction holds too, which is the one that bites: reordering
+     * must not 409 an editor it has nothing to do with. So the order counts
+     * only its own writes, and `rev` counts only the entry's.
+     */
+    sceneOrderRev: integer("scene_order_rev").notNull().default(1),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -195,9 +209,10 @@ export const scenes = sqliteTable(
      * The scene's location — a foreign key to an existing location entry, or
      * null when the scene sits at chapter level. Never free text.
      *
-     * It is also the scene's GROUP: the address `<chapter>/<location>/<id>`
-     * and the tree's `SceneGroup`s are derived from this column, which is why
-     * there is no independent `group_slug` column (migration 0009, ADR #17).
+     * It is part of the scene's ADDRESS — `<chapter>/<location>/<id>` is
+     * derived from this column, which is why there is no independent
+     * `group_slug` column (migration 0009, ADR #17). It does not order
+     * anything: `pos` below does that.
      */
     location: text("location"),
     /** `draft | ready | played | dropped` (shared `SCENE_STATUSES`), CHECKed. */
@@ -211,6 +226,21 @@ export const scenes = sqliteTable(
     handouts: text("handouts").notNull().default("[]"),
     /** The markdown body — ONE field, editable as markdown. */
     body: text("body").notNull().default(""),
+    /**
+     * Display order WITHIN THE CHAPTER, counted from 0 — the chapter lists
+     * its scenes by it, with the id as the tie-break.
+     *
+     * It is SET, never derived: creating a scene appends it to its chapter,
+     * moving one to another chapter appends it there, and
+     * `PUT /chapters/:chapter/scene-order` hands out the whole chapter's
+     * positions from the order the DM dragged them into. Nothing reads an
+     * ordering out of the title, the address or the location any more.
+     *
+     * It is not a property either (store/properties.ts `SCENE_KEYS`): the
+     * position of a scene among its siblings is a statement about the
+     * chapter, so it is written where the chapter is guarded, not in the
+     * scene's own properties dialog.
+     */
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
   },

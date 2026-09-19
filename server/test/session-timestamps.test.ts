@@ -196,6 +196,9 @@ describe("a session timestamp outside the one shape is a 400", () => {
  *
  * `count` is how far back the migration under test sits from the end, so a
  * case names that distance instead of assuming its migration is the newest.
+ * Every migration after the one under test is replayed along with it, so a
+ * case also has to undo what those later ones added — a database recorded
+ * before a migration was recorded before its successors too.
  */
 function forgetMigrations(client: SqliteClient, count: number): void {
   client.exec(
@@ -235,10 +238,11 @@ describe("a database recorded before the seconds were written", () => {
       );
       // And the other half of that state: the installation predates the
       // migration, so its bookkeeping row goes as well and the next open runs
-      // it for the first time.
-      // 0017 is the second-to-last migration, so the one behind it is
-      // replayed as well — which it is built to survive.
-      forgetMigrations(seeded.client, 2);
+      // it for the first time. Everything recorded AFTER it is replayed with
+      // it, so the schema those later migrations added has to go back too —
+      // an installation from before 0017 had none of it.
+      seeded.client.exec("alter table chapters drop column scene_order_rev");
+      forgetMigrations(seeded.client, 3);
       seeded.close();
 
       // The real boot path, on that database.

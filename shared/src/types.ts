@@ -179,27 +179,20 @@ export interface SceneSummary {
   status: SceneStatus;
   /** Free-text firing condition — only meaningful for `type: contingency`. */
   trigger?: string;
+  /** The location id the scene names; absent when it sits at chapter level. */
   location?: string;
-  npcs: string[];
-  tags: string[];
-}
-
-export interface SceneGroup {
-  /**
-   * The `location` the scenes of this group name — the group IS that
-   * location. "" for the scenes that name none.
-   */
-  slug: string;
   /**
    * The location entry's display NAME, degraded to the id when nobody has
-   * named it yet (an entry created and left empty). "" for the `slug: ""`
-   * group, which is not a location and is labelled by the app.
+   * named it yet (an entry created and left empty). Absent exactly when
+   * `location` is.
    *
-   * Resolved HERE because the groups are ordered by it: the heading the DM
-   * reads is the name, so an ordering by slug would sort by the id instead.
+   * Resolved by the SERVER because only the server has the location rows at
+   * hand while it builds the tree: a scene's meta line shows the name of its
+   * location, not the slug behind it.
    */
-  name: string;
-  scenes: SceneSummary[];
+  locationName?: string;
+  npcs: string[];
+  tags: string[];
 }
 
 export interface ChapterNode {
@@ -210,7 +203,21 @@ export interface ChapterNode {
   status?: ChapterStatus;
   /** Address of the chapter — its id. */
   path?: string;
-  groups: SceneGroup[];
+  /**
+   * Guard token of the scene ORDER below — what
+   * `PUT /chapters/:chapter/scene-order` sends back and 409s on. Its own
+   * counter, NOT the chapter entry's `rev`: reordering and editing the
+   * chapter's text are separate writes and must not invalidate each other.
+   * Optional in the type so an older payload still parses.
+   */
+  sceneOrderRev?: number;
+  /**
+   * The chapter's scenes in the order the DM arranged them — `pos` ascending
+   * with the id as the tie-break. A FLAT list: the scenes of a chapter are
+   * ordered, not grouped, and the location a scene names is a property it
+   * shows (`locationName`) rather than a heading it hangs under.
+   */
+  scenes: SceneSummary[];
 }
 
 export interface NpcSummary {
@@ -342,6 +349,22 @@ export interface CampaignTree {
   npcs: NpcSummary[];
   locations: LocationSummary[];
   sessions: SessionSummary[];
+}
+
+/**
+ * PUT /api/campaigns/:campaign/chapters/:chapter/scene-order — the chapter's
+ * scenes in their new order, and the chapter's fresh guard token.
+ *
+ * `rev` is `chapters.scene_order_rev` — the ORDER's own guard token, which
+ * the tree hands out as `ChapterNode.sceneOrderRev`. Not the chapter entry's
+ * `rev` and not a scene's: reordering changes neither entry, so it must not
+ * invalidate an editor open on one. `scenes` is the complete list of the
+ * chapter's scene ids — a request naming anything else is refused whole
+ * (`scene_order_mismatch`).
+ */
+export interface SceneOrderResponse {
+  scenes: string[];
+  rev: number;
 }
 
 /**

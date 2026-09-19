@@ -283,6 +283,8 @@ export const en: Messages = {
     'Played scene “{value}” does not exist — create it first.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
+  "server.scene_order_mismatch":
+    "The order no longer matches the chapter's scenes — please reload.",
   "server.session_running": "An older session is still running — end it first.",
   "server.session_not_empty": "This session has content — end it instead of discarding it.",
   "server.rev_conflict": "Changed in the meantime — reload before saving.",

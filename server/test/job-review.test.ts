@@ -493,10 +493,10 @@ test("the accepted scenes hang in that chapter and are visible in the tree", asy
 
   const res = await app.request("/api/campaigns/beispiel/tree");
   const tree = (await res.json()) as {
-    chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
+    chapters: Array<{ id: string; scenes: Array<{ id: string }> }>;
   };
   const chapter = tree.chapters.find((c) => c.id === NEW_CHAPTER);
-  expect((chapter?.groups.flatMap((g) => g.scenes) ?? []).length).toBeGreaterThan(0);
+  expect((chapter?.scenes ?? []).length).toBeGreaterThan(0);
 });
 
 test("a run started without a title falls back to the chapter id", async () => {

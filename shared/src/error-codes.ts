@@ -69,6 +69,15 @@ export const ERROR_CODES = [
   "played_scene_unknown",
   /** 400, glossary write: one term appears twice. `{ term }` */
   "glossary_duplicate_term",
+  /**
+   * 400, scene-order write: the list is not exactly the chapter's scenes —
+   * one is missing, one belongs to another chapter, or one appears twice.
+   * The order is written as a WHOLE, so a list that does not describe the
+   * whole chapter writes nothing at all. `{ missing, unknown, duplicate }`,
+   * each an id list in the order the request had them, so the app can name
+   * what is wrong without asking again.
+   */
+  "scene_order_mismatch",
   /** 409, session start: an older session is still running. `{ id }` */
   "session_running",
   /** 409, session discard: the session already carries content. `{ id }` */

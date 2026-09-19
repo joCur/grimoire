@@ -156,9 +156,13 @@ describe("a database recorded while the rows still carried their line", () => {
       `);
       // And the other half of that state: the installation predates the
       // migration, so its bookkeeping row goes and the next open runs it.
+      // Everything recorded after it replays along with it, so the schema
+      // those later migrations added goes back as well — this database
+      // predates them too.
+      seeded.client.exec("alter table chapters drop column scene_order_rev");
       seeded.client.exec(
-        "delete from __drizzle_migrations where rowid =" +
-          " (select max(rowid) from __drizzle_migrations)",
+        "delete from __drizzle_migrations where rowid in" +
+          " (select rowid from __drizzle_migrations order by rowid desc limit 2)",
       );
       seeded.close();
 
