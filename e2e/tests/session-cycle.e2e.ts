@@ -378,6 +378,149 @@ test("session start, quick note, pause, end — log and session row follow", asy
   ).toHaveCount(0);
 });
 
+// The `## If:` branches of the scene column start CLOSED here and nowhere
+// else. Checked on the reference scene CLAUDE.md names for the renderer, and
+// against the reading view of the very same scene (critical path 2), which
+// keeps opening every branch.
+test("live scene column: If-sections start closed, open one at a time, reset on a switch", async ({
+  page,
+}) => {
+  await page.goto("/campaigns/beispiel");
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+
+  const nav = page.getByRole("navigation", { name: "Szenen der Session" });
+  const captured = nav.getByRole("button", { name: /Von den Schmugglern erwischt/ });
+  const article = page.getByRole("article");
+  await captured.click();
+  await expect(article.getByRole("heading", { level: 1 })).toHaveText(
+    "Von den Schmugglern erwischt",
+  );
+
+  // Both branches are there as rows — and both are folded away.
+  const branches = page.getByRole("main").locator("details[data-if-section]");
+  await expect(branches).toHaveCount(2);
+  const first = branches.first();
+  const firstBody = first.getByText("Fenn lässt sie in die alte Räucherkammer sperren", {
+    exact: false,
+  });
+  await expect(first.locator("summary")).toContainText("Falls:");
+  await expect(first.locator("summary")).toContainText("sie geben zu, für Jorna zu arbeiten");
+  await expect(first).not.toHaveAttribute("open", "");
+  await expect(firstBody).toBeHidden();
+  await expect(branches.nth(1)).not.toHaveAttribute("open", "");
+
+  // A click opens exactly the one case — the other branch stays closed.
+  await first.locator("summary").click();
+  await expect(firstBody).toBeVisible();
+  await expect(branches.nth(1)).not.toHaveAttribute("open", "");
+
+  // And it STAYS open under a re-render of the column: the quick note round
+  // trip refreshes the session the whole live view hangs on.
+  const note = page.getByLabel("Schnellnotiz");
+  await note.fill("Sie geben es zu — Räucherkammer");
+  await note.press("Enter");
+  await expect(page.getByText("Sie geben es zu — Räucherkammer")).toBeVisible();
+  await expect(firstBody).toBeVisible();
+
+  // Nothing is remembered: away to the other scene and back, and the branch
+  // is closed again (no localStorage, no server state — quality floor).
+  await nav.getByRole("button", { name: /Ankunft am Leuchtturm/ }).click();
+  await expect(article.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await captured.click();
+  await expect(article.getByRole("heading", { level: 1 })).toHaveText(
+    "Von den Schmugglern erwischt",
+  );
+  await expect(branches.first()).not.toHaveAttribute("open", "");
+  await expect(
+    branches.first().getByText("Fenn lässt sie in die alte Räucherkammer sperren", {
+      exact: false,
+    }),
+  ).toBeHidden();
+
+  // Critical path 2, same scene: the reading view is untouched by all this.
+  await page.goto("/campaigns/beispiel/entries/01-salzhafen/bucht/smuggler-captured");
+  const reading = page.locator("details[data-if-section]");
+  await expect(reading).toHaveCount(2);
+  await expect(reading.first()).toHaveAttribute("open", "");
+  await expect(reading.nth(1)).toHaveAttribute("open", "");
+});
+
+// The hard half of "nothing is remembered": two scenes built the SAME way.
+// React reconciles the live column by position, so without a remount per
+// scene it hands the next scene the very `<details>` nodes of the last one —
+// and with them the branch the DM had open. Two scenes of identical shape are
+// the only arrangement that can show that; the reference scenes differ enough
+// for the nodes to be thrown away anyway.
+test.describe("two scenes of the same shape", () => {
+  const branchScene = (id: string, title: string, first: string, second: string) => ({
+    kind: "scene" as const,
+    properties: {
+      id,
+      title,
+      type: "planned",
+      chapter: "01-salzhafen",
+      location: "bucht",
+      npcs: [],
+      tags: ["social"],
+      status: "ready",
+    },
+    body:
+      "\n## Aufhänger\n\nDie Gruppe steht vor der Tür.\n\n" +
+      `## If: ${first}\n\nDann redet der Wirt.\n\n` +
+      `## If: ${second}\n\nDann schweigt er.\n`,
+  });
+
+  test.use({
+    seed: {
+      entries: {
+        "scene-twin-a": branchScene("twin-a", "Zwilling A", "sie zahlen", "sie drohen"),
+        "scene-twin-b": branchScene("twin-b", "Zwilling B", "sie feilschen", "sie gehen"),
+      },
+    },
+  });
+
+  test("the branch opened in one scene is closed in the other, and closed on the way back", async ({
+    page,
+  }) => {
+    await page.goto("/campaigns/beispiel");
+    await page.getByRole("button", { name: "Session starten" }).click();
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+
+    const nav = page.getByRole("navigation", { name: "Szenen der Session" });
+    const article = page.getByRole("article");
+    const branches = page.getByRole("main").locator("details[data-if-section]");
+    const openBranch = async (title: string) => {
+      await nav.getByRole("button", { name: new RegExp(title) }).click();
+      await expect(article.getByRole("heading", { level: 1 })).toHaveText(title);
+    };
+
+    // Both scenes are LOADED once first. A scene the column has never shown
+    // arrives through a loading line, and that alone throws the old nodes
+    // away — the switch that has to be proven is the one between two cached
+    // scenes, where the column re-renders without ever emptying.
+    await openBranch("Zwilling B");
+    await openBranch("Zwilling A");
+
+    await expect(branches).toHaveCount(2);
+    await expect(branches.first()).not.toHaveAttribute("open", "");
+    await branches.first().locator("summary").click();
+    await expect(branches.first().getByText("Dann redet der Wirt.")).toBeVisible();
+
+    // The other scene, same shape: its own branches, both closed.
+    await openBranch("Zwilling B");
+    await expect(branches.first().locator("summary")).toContainText("sie feilschen");
+    await expect(branches.first()).not.toHaveAttribute("open", "");
+    await expect(branches.nth(1)).not.toHaveAttribute("open", "");
+    await expect(branches.first().getByText("Dann redet der Wirt.")).toBeHidden();
+
+    // And back: what was open before the switch is closed again.
+    await openBranch("Zwilling A");
+    await expect(branches.first().locator("summary")).toContainText("sie zahlen");
+    await expect(branches.first()).not.toHaveAttribute("open", "");
+  });
+});
+
 test("a #pc quick note becomes a reminder in the aside and is ticked off there", async ({
   page,
   api,
