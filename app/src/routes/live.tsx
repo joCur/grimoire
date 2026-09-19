@@ -210,7 +210,12 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             // — the selected scene and the half-typed
             // Schnellnotiz survive it.
             <EntityRefDrawerTarget onOpen={setDrawerPath}>
-              <LiveScene campaign={campaign} path={selected.path} />
+              {/* Keyed by the scene: a switch REMOUNTS the column instead of
+                  reconciling the new text into the old nodes. Without it the
+                  `## If:` branches the DM opened in one scene would stay open
+                  in the next one — the branches start collapsed per scene and
+                  nothing is remembered across a switch. */}
+              <LiveScene key={selected.path} campaign={campaign} path={selected.path} />
             </EntityRefDrawerTarget>
           )}
         </div>

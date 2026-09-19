@@ -4,10 +4,16 @@
 // below map those elements to their React rendering per the design
 // reference: a borderless summary row — chevron, brass „Falls:" prefix,
 // italic condition — over 18px-indented content, no box.
+//
+// The INITIAL state of those branches belongs to the VIEW, not to the format:
+// `ifSections` says whether a text opens with its branches unfolded
+// (everywhere the DM reads or edits) or collapsed (the scene column of the
+// live view, where only the case that happens at the table is opened). The
+// plugin is untouched by that choice — it always marks a branch open.
 
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 
 import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
 
@@ -38,7 +44,7 @@ const components: Components = {
     }
     return <section {...rest}>{children}</section>;
   },
-  // `[[slug]]` (issue #68): the plugin marked it, the tree resolves it.
+  // `[[slug]]`: the plugin marked it, the tree resolves it.
   span(props) {
     const { node: _node, children, ...rest } = props;
     const attrs = rest as Record<string, unknown>;
@@ -51,18 +57,7 @@ const components: Components = {
     }
     return <EntityRef slug={slug} fallback={children} />;
   },
-  details(props) {
-    const { node: _node, children, ...rest } = props;
-    const attrs = rest as Record<string, unknown>;
-    // Only if-sections get the branch styling; anything else stays native.
-    if (attrs["data-if-section"] === undefined) return <details {...rest}>{children}</details>;
-    return (
-      <details {...rest} className="group mt-2.5 [&>:not(summary)]:ml-[18px]">
-        {children}
-      </details>
-    );
-  },
-  // A table (issue #96) never widens the page: it scrolls inside its own box.
+  // A table never widens the page: it scrolls inside its own box.
   table(props) {
     const { node: _node, children, ...rest } = props;
     return <TableScroll {...rest}>{children}</TableScroll>;
@@ -72,6 +67,48 @@ const components: Components = {
     const { node: _node, children, ...rest } = props;
     return <IfSummary {...rest}>{children}</IfSummary>;
   },
+};
+
+/** How a view opens the `## If:` branches of a text: unfolded, or folded away. */
+export type IfSections = "open" | "collapsed";
+
+/**
+ * The `<details>` override for ONE initial state.
+ *
+ * The plugin marks every branch open, so the collapsed variant simply OMITS
+ * the attribute — it never passes `open={false}`. The element stays
+ * uncontrolled that way, and a re-render of the column (a quick note, the
+ * session poll) cannot fold a branch the DM just opened at the table.
+ */
+function ifDetails(ifSections: IfSections): Components["details"] {
+  return function IfDetails({
+    node: _node,
+    children,
+    ...rest
+  }: ComponentProps<"details"> & ExtraProps) {
+    const attrs = rest as Record<string, unknown>;
+    // Only if-sections get the branch styling; anything else stays native.
+    if (attrs["data-if-section"] === undefined) return <details {...rest}>{children}</details>;
+    const { open: _open, ...folded } = rest;
+    return (
+      <details
+        {...(ifSections === "collapsed" ? folded : rest)}
+        className="group mt-2.5 [&>:not(summary)]:ml-[18px]"
+      >
+        {children}
+      </details>
+    );
+  };
+}
+
+/**
+ * The two component sets, built ONCE at module scope. Building them per
+ * render would hand React a new component identity every time, and a
+ * remounted `<details>` loses the branch the DM has open.
+ */
+const COMPONENTS: Record<IfSections, Components> = {
+  open: { ...components, details: ifDetails("open") },
+  collapsed: { ...components, details: ifDetails("collapsed") },
 };
 
 /**
@@ -147,9 +184,9 @@ function IfSummary({ children, ...rest }: ComponentProps<"summary">) {
 }
 
 /**
- * A callout, with the read-aloud CLIPBOARD text resolved (issue #68): the
- * plugin splits the raw mdast into `data-copy-parts`, so a `[[slug]]` in a
- * read-aloud would otherwise land in the Roll20 chat as brackets. What the DM
+ * A callout, with the read-aloud CLIPBOARD text resolved: the plugin splits
+ * the raw mdast into `data-copy-parts`, so a `[[slug]]` in a read-aloud
+ * would otherwise land in the Roll20 chat as brackets. What the DM
  * copies has to be what the DM reads — which is also why the PIECES come from
  * the plugin: a reference the page shows literally (inside code) is a text
  * piece there and is never resolved here.
@@ -187,16 +224,23 @@ function parseCopyParts(value: string): EntityRefPiece[] {
 
 const remarkPlugins = [remarkTable, remarkGrimoire];
 
-export function Markdown({ children }: { children: string }) {
+export function Markdown({
+  children,
+  ifSections = "open",
+}: {
+  children: string;
+  /** Default: every branch unfolded — the collapsed start is the live view's. */
+  ifSections?: IfSections;
+}) {
   return (
     <div className="md-body">
       {/* skipHtml: raw HTML in a body is DROPPED, not printed. Without it
           react-markdown shows the raw source as text — the generator's
           `<!-- wird von der App … -->` hints ended up visible under
-          `## Notizen` (review of issue #26). Nothing in the format needs
-          HTML: callouts and `## If:` sections become elements through the
-          remark plugin's hName, never through raw HTML. */}
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={components} skipHtml>
+          `## Notizen`. Nothing in the format needs HTML: callouts and
+          `## If:` sections become elements through the remark plugin's
+          hName, never through raw HTML. */}
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={COMPONENTS[ifSections]} skipHtml>
         {children}
       </ReactMarkdown>
     </div>

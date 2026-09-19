@@ -11,10 +11,12 @@
 //    next depth<=2 heading (or end of text) is wrapped in a custom node
 //    that renders as `<details data-if-section open>` with the condition as
 //    its `<summary>` label. Branches are OPEN by default (design reference) —
-//    the DM collapses what does not apply.
+//    the DM collapses what does not apply. The INITIAL state is the view's
+//    call, though: a view that wants them folded drops the attribute on its
+//    side (Markdown.tsx), the format keeps saying open.
 //
-// 3. `[[slug]]` entity references (issue #68): every text node is split and
-//    the reference becomes a `<span data-entity-ref="slug">` carrying the
+// 3. `[[slug]]` entity references: every text node is split and the
+//    reference becomes a `<span data-entity-ref="slug">` carrying the
 //    literal `[[slug]]` as its text. RESOLUTION IS NOT THIS PLUGIN'S JOB —
 //    the name lives in the campaign tree, which only React has (EntityRef in
 //    Markdown.tsx). The literal text inside the span is therefore also the
@@ -91,7 +93,7 @@ function copyParts(node: Blockquote): EntityRefPiece[] {
     }
     if (item.type === "tableRow") {
       // A row is one LINE in the Roll20 chat: cells separated, not glued into
-      // `W6Fund1Fass`. Issue #96.
+      // `W6Fund1Fass`.
       const cells = Array.isArray(item.children) ? item.children : [];
       cells.forEach((cell, index) => {
         if (index > 0) pushText(" | ");
@@ -210,7 +212,7 @@ function transformIfSections(tree: Root): void {
 }
 
 /**
- * Split every text node on `[[slug]]` references (issue #68).
+ * Split every text node on `[[slug]]` references.
  *
  * Walked by hand instead of with `visit`, for two reasons that both matter:
  *
