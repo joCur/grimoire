@@ -46,8 +46,9 @@ antwortet mit der aktuellen und die App ersetzt die URL.
 
 Gegliedert wird die Kapitelübersicht davon nicht. Sie ist eine durchgehende
 Liste in der **Reihenfolge, die der DM setzt** (ADR #27); der Ort steht mit
-seinem Namen in der Metazeile der einzelnen Szene, Eventualszenen stehen als
-eigener Block am Ende. Diese Reihenfolge ist **keine Eigenschaft** — sie ist
+seinem Namen in der Metazeile der einzelnen Szene — hat eine Szene keinen,
+fehlt dort schlicht der Ortsteil —, Eventualszenen stehen als eigener Block
+am Ende. Diese Reihenfolge ist **keine Eigenschaft** — sie ist
 eine Aussage des Kapitels über seine Szenen, nicht einer Szene über sich
 selbst, und steht deshalb in keiner Feldtabelle dieses Dokuments. Gepflegt
 wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
@@ -341,13 +342,17 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu
   überschreiben.
-- Die **Szenenreihenfolge** eines Kapitels hat ihren eigenen Schreibweg:
-  `PUT /api/campaigns/<kampagne>/chapters/<kapitel>/scene-order` mit
+- Die **Szenenreihenfolge** eines Kapitels hat ihren eigenen Schreibweg und
+  ihren eigenen Wächter: `PUT
+  /api/campaigns/<kampagne>/chapters/<kapitel>/scene-order` mit
   `{ scenes, rev }`, wobei `scenes` die vollständige Liste der Szenen-ids
-  dieses Kapitels ist (sonst 400) und `rev` der des **Kapitels** (sonst 409).
-  Der Vorgang lässt die Szenen selbst unberührt — ihr `rev` bleibt stehen,
-  damit ein offener Szenen-Editor durch ein Umsortieren nicht in einen
-  Konflikt läuft (ADR #27).
+  dieses Kapitels ist (sonst 400). Das `rev` ist `scene_order_rev`, das der
+  Kapitel-Knoten mitliefert — nicht der `rev` einer Szene und nicht der des
+  Kapitel-Eintrags; passt es nicht, ist das 409. Geschrieben wird nur die
+  Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
+  offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
+  Konflikt läuft (ADR #27). Dieselbe Bauart haben die Wächter der übrigen
+  Listen (`glossaryRev`, `inboxRev`, `knowledgeRev`).
 - Log und Ideen sind append-only (ADR #4); die eine Ausnahme ist das Abhaken
   erledigter Ideen.
 

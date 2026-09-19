@@ -1164,9 +1164,11 @@ Block am Ende.
   eine fehlt, eine doppelt sich, eine gehört woanders hin —, ist das **400**
   und es wird nichts geschrieben. Eine Teilliste anzunehmen hieße, den Rest
   irgendwohin zu sortieren, und das entscheidet niemand nebenbei.
-- **Der Wächter ist der `rev` des Kapitels;** ein alter Stand ist
-  **409 `rev_conflict`**. Der Write bumpt `chapters.rev` und
-  `campaigns.version`, **nicht** `scenes.rev`.
+- **Der Wächter ist `chapters.scene_order_rev`** — ein eigener Zähler, der
+  nur die Writes dieser einen Liste zählt und den `ChapterNode` mitliefert;
+  das `rev` im Rumpf ist seiner. Ein alter Stand ist **409 `rev_conflict`**.
+  Der Write bumpt `scene_order_rev` und `campaigns.version` — **weder**
+  `scenes.rev` **noch** `chapters.rev`.
 - **Neue Szenen landen am Ende** ihres Kapitels. Wechselt eine Szene das
   Kapitel, landet sie am Ende des Zielkapitels: dort ist sie neu, und wo sie
   in der Dramaturgie des anderen Kapitels stand, sagt über das Ziel nichts.
@@ -1194,20 +1196,33 @@ Szene, keine Gliederungsebene über ihr — zwei Szenen am selben Ort können in
 der Dramaturgie weit auseinanderliegen, und die Gruppierung hat sie trotzdem
 nebeneinandergestellt.
 
-**Warum die Ordnung dem Kapitel gehört:** Eine Reihenfolge ist eine Aussage
-über eine **Menge**, nicht über ein einzelnes Element. „Diese Szene ist die
-dritte" heißt nichts ohne die anderen, und ein Umsortieren ändert immer
-mehrere Positionen auf einmal. Deshalb ist der Schreibweg einer für das ganze
-Kapitel, und deshalb bewacht ihn der `rev` des **Kapitels**: der Stand, den der
-DM gesehen hat, als er die Liste in diese Reihenfolge brachte, ist die
-Kapitelliste.
+**Warum die Ordnung dem Kapitel gehört und trotzdem einen eigenen Wächter
+bekommt:** Eine Reihenfolge ist eine Aussage über eine **Menge**, nicht über
+ein einzelnes Element. „Diese Szene ist die dritte" heißt nichts ohne die
+anderen, und ein Umsortieren ändert immer mehrere Positionen auf einmal.
+Deshalb ist der Schreibweg einer für das ganze Kapitel. Sie gehört dem
+Kapitel — aber sie **ist** nicht der Kapitel-Eintrag: dessen `rev` bewacht
+Eigenschaften und Text, die sich einen Wächter teilen (ADR #23), und die
+Reihenfolge ist keins von beidem. Sie ist eine eigene Liste mit eigener
+Lebensdauer, also bekommt sie `chapters.scene_order_rev`.
 
-Dass der Write `scenes.rev` **nicht** anfasst, ist die andere Hälfte derselben
-Überlegung. Der Szenen-`rev` bewacht Eigenschaften und Text einer Szene
-(ADR #23); an denen ändert ein Umsortieren nichts. Würde er mitbumpen, triebe
-jedes Hoch/Runter einen offenen Szenen-Editor in eine 409 — ein Konflikt über
-etwas, das sich gar nicht widerspricht. Ein Wächter soll echte
-Überschreibungen abfangen und sonst schweigen.
+Das ist kein neues Muster, sondern das vierte seiner Art: `glossaryRev`,
+`inboxRev` und `knowledgeRev` stehen neben `campaigns.version` aus exakt
+demselben Grund. Eine Liste hat keine Zeile, die einen `rev` tragen könnte,
+und ein Zähler, den jeder unbeteiligte Write hochdreht, macht eine offene
+Bearbeitung unspeicherbar — am härtesten während einer laufenden Session, wo
+ständig geschrieben wird. Ein Wächter zählt deshalb nur die Writes, gegen die
+er schützt.
+
+Am Kapitel stehen damit **drei Schreibwege mit drei Wächtern**, und keiner
+stört den anderen: der Szenen-Eintrag mit `scenes.rev` (Eigenschaften und
+Text einer Szene), der Kapitel-Eintrag mit `chapters.rev` (Titel, Status,
+Kapiteltext) und die Reihenfolge mit `chapters.scene_order_rev`. Ein
+Hoch/Runter treibt weder einen offenen Szenen-Editor noch einen offenen
+Kapiteltext in eine 409 — beides wären Konflikte über etwas, das sich gar
+nicht widerspricht. Umgekehrt merkt der, der gerade umsortiert, es sofort,
+wenn jemand anders die Reihenfolge verändert hat. Genau das soll ein Wächter:
+echte Überschreibungen abfangen und sonst schweigen.
 
 **Warum `pos` keine Eigenschaft ist:** Schema-Regel 1 sagt „Contract-Felder
 sind Spalten, und es gibt nichts daneben" — sie sagt nicht, dass jede Spalte
@@ -1272,6 +1287,15 @@ Preis dieser Änderung und ist vermeidbar.
   Ort, an dem über Dramaturgie entschieden wird — hätte die schlechtere. Die
   Session-Ansicht moderiert, was die Vorbereitung gelegt hat; sie ist nicht
   die Stelle, an der die Ordnung entsteht.
+- **Den `rev` des Kapitel-Eintrags als Wächter nehmen.** Naheliegend, weil
+  die Reihenfolge dem Kapitel gehört — und derselbe Fehler, den `scenes.rev`
+  eine Zeile höher vermeidet, nur eine Ebene versetzt. Der Kapiteltext ist
+  bearbeitbar; ein Umsortieren würde einen offenen Kapitel-Editor in eine 409
+  treiben, und ein Kapitel-Write (Titel, Status, Text) würde umgekehrt ein
+  vorbereitetes Umsortieren ungültig machen. Beide Male ein Konflikt, der
+  keiner ist. Ein Wächter, der auf fremde Writes anspringt, erzieht dazu, die
+  Konfliktzeile wegzuklicken — und dann fängt er die echte Überschreibung
+  auch nicht mehr.
 - **Drag & Drop statt Hoch/Runter.** Später möglich, jetzt nicht: es braucht
   eine Bibliothek, eine Tastatur-Bedienung, die ohnehin auf Hoch/Runter
   hinausläuft, und eine Greiffläche, die mit der „ruhigen Liste" aus

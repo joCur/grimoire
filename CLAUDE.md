@@ -172,8 +172,8 @@ Die Pfade:
 1. Auto-Einstieg `/` → Kapitel lädt die Kampagne: eine durchgehende
    Szenenliste in der Reihenfolge des DM (keine Ortsgruppen, der Ort steht
    in der Metazeile), umsortiert über Hoch/Runter — der Schreibweg trägt den
-   `rev` des **Kapitels**, ein alter Stand ist 409, und die Szenen selbst
-   bleiben unberührt
+   eigenen Wächter der Reihenfolge (`scene_order_rev`), ein alter Stand ist
+   409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei
 2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
    NPC-Karten der Referenzszenen
 3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Eintrags-Arten und die
