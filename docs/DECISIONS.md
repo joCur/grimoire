@@ -676,6 +676,19 @@ konserviert, die diese Entscheidung beseitigt. Sie fällt weg; `store/paths.ts`
   `location` in den Eigenschaften, und der Seed schreibt es unverändert —
   eine Gruppe wird nirgends mehr aus einer Adresse abgeleitet.
 
+### Nachtrag 2026-09-19: die Anzeige-Hälfte ist abgelöst (ADR #27)
+
+Die **Adressableitung** dieses Eintrags gilt unverändert: `location` ist
+Orts-id oder leer, die Adresse lautet `<kapitel>/<ort>/<id>`, und
+`sceneAddress(row)` bleibt die eine Stelle, die sie kennt.
+
+Abgelöst ist die **Gruppierung der Anzeige**: Die Kapitelübersicht gruppiert
+Szenen nicht mehr nach Ort, sondern zeigt eine durchgehende Liste in der
+Reihenfolge, die der DM setzt (ADR #27). Es gibt keine Gruppe mehr, die aus
+`location` abzuleiten wäre — der Ort steht in der Metazeile der Szene. Auf der
+Leitung heißt das `ChapterNode.scenes` statt `ChapterNode.groups`;
+`SceneGroup` entfällt.
+
 ## 18. Das Kapitel entsteht aus dem Lauf, sein Status ist ein Enum
 
 **Entscheidung (a): Das Kapitel eines „Neues Kapitel"-Laufs entsteht aus dem
@@ -1129,3 +1142,146 @@ einer Session (`## Threads`) bleibt, wo er ist. Die Suche indexiert weiterhin
 nur Glossar-Begriffe und die fünf Eintrags-Arten — Log-Zeilen und Ideen
 durchsuchbar zu machen wäre ein eigenes Feature und ist hier nicht
 entschieden.
+
+## 27. Die Reihenfolge der Szenen im Kapitel ist gesetzt, nicht abgeleitet
+
+**Entscheidung:** Ein Kapitel hat eine **Szenenreihenfolge**, und die setzt der
+DM. `scenes.pos` ist diese Reihenfolge — fortlaufend **innerhalb des
+Kapitels** —, gepflegt über Hoch/Runter an der Zeile. Die Kapitelübersicht
+zeigt genau sie: eine durchgehende Liste statt der bisherigen Ortsgruppen. Der
+Ort verschwindet dabei nicht, er wandert an die Szene — in die Metazeile ihrer
+Zeile, mit dem Namen des Orts-Eintrags. Eventualszenen bleiben ein eigener
+Block am Ende.
+
+- **Lesen:** `ChapterNode.groups: SceneGroup[]` wird zu
+  `ChapterNode.scenes: SceneSummary[]`, sortiert nach `pos`; `SceneGroup`
+  entfällt. `SceneSummary` trägt neben der Orts-id den aufgelösten
+  **Ortsnamen** — dieselbe Auflösung, die bisher die Gruppenüberschrift
+  gebraucht hat, nur eine Ebene tiefer.
+- **Schreiben:** `PUT /api/campaigns/:campaign/chapters/:chapter/scene-order`
+  mit `{ scenes: string[], rev }`. `scenes` ist die vollständige neue
+  Reihenfolge; ist sie nicht exakt die Menge der Szenen-ids dieses Kapitels —
+  eine fehlt, eine doppelt sich, eine gehört woanders hin —, ist das **400**
+  und es wird nichts geschrieben. Eine Teilliste anzunehmen hieße, den Rest
+  irgendwohin zu sortieren, und das entscheidet niemand nebenbei.
+- **Der Wächter ist der `rev` des Kapitels;** ein alter Stand ist
+  **409 `rev_conflict`**. Der Write bumpt `chapters.rev` und
+  `campaigns.version`, **nicht** `scenes.rev`.
+- **Neue Szenen landen am Ende** ihres Kapitels. Wechselt eine Szene das
+  Kapitel, landet sie am Ende des Zielkapitels: dort ist sie neu, und wo sie
+  in der Dramaturgie des anderen Kapitels stand, sagt über das Ziel nichts.
+- **Die Session-Ansicht liest dieselbe Reihenfolge.** Sie öffnet die erste
+  Szene, deren Status weder `played` noch `dropped` ist, sonst die erste;
+  unter der offenen Szene steht der Schritt „Nächste Szene: <Titel>".
+
+**Warum keine abgeleitete Ordnung:** Bisher fiel die Reihenfolge an, statt
+gesetzt zu werden — Szenen innerhalb ihrer Ortsgruppe alphabetisch nach
+Adresse, faktisch nach Szenen-id, die Gruppen alphabetisch nach Ortsname.
+Beide Schlüssel sind für diese Aufgabe die falschen. Die id entsteht aus dem
+getippten Namen und steht danach fest (ADR #21); der Name wiederum ist
+Dramaturgie — „Ankunft am Leuchtturm", „Der Keller" —, und wer dramaturgisch
+benennt, sortiert nicht. Der DM könnte die Ordnung also nur über den Namen
+beeinflussen, und genau das wirkt nicht: ein neuer Titel ändert die id nicht,
+und die id ist es, die die Sortierung liest. Übrig bliebe, ids zu Nummern zu
+machen (`01-ankunft`) — eine Reihenfolge, die beim ersten Umstellen falsch
+wird und die der Referenz-Schlüssel des ganzen Modells danach mit sich
+herumträgt.
+
+Eine Ordnung, die der DM nicht setzen kann, ist am Tisch keine Ordnung. Die
+Kapitelübersicht ist das Werkzeug der Vorbereitung, und Vorbereitung heißt: in
+welcher Reihenfolge erzähle ich das. Der Ort ist dafür eine Eigenschaft der
+Szene, keine Gliederungsebene über ihr — zwei Szenen am selben Ort können in
+der Dramaturgie weit auseinanderliegen, und die Gruppierung hat sie trotzdem
+nebeneinandergestellt.
+
+**Warum die Ordnung dem Kapitel gehört:** Eine Reihenfolge ist eine Aussage
+über eine **Menge**, nicht über ein einzelnes Element. „Diese Szene ist die
+dritte" heißt nichts ohne die anderen, und ein Umsortieren ändert immer
+mehrere Positionen auf einmal. Deshalb ist der Schreibweg einer für das ganze
+Kapitel, und deshalb bewacht ihn der `rev` des **Kapitels**: der Stand, den der
+DM gesehen hat, als er die Liste in diese Reihenfolge brachte, ist die
+Kapitelliste.
+
+Dass der Write `scenes.rev` **nicht** anfasst, ist die andere Hälfte derselben
+Überlegung. Der Szenen-`rev` bewacht Eigenschaften und Text einer Szene
+(ADR #23); an denen ändert ein Umsortieren nichts. Würde er mitbumpen, triebe
+jedes Hoch/Runter einen offenen Szenen-Editor in eine 409 — ein Konflikt über
+etwas, das sich gar nicht widerspricht. Ein Wächter soll echte
+Überschreibungen abfangen und sonst schweigen.
+
+**Warum `pos` keine Eigenschaft ist:** Schema-Regel 1 sagt „Contract-Felder
+sind Spalten, und es gibt nichts daneben" — sie sagt nicht, dass jede Spalte
+ein Contract-Feld ist. `pos` steht deshalb **nicht** in `SCENE_KEYS`
+(`server/src/store/properties.ts`), nicht in den Fixtures und nicht im
+Eigenschaften-Dialog. Eigenschaften sind, was ein Eintrag über sich selbst
+aussagt: Titel, Typ, Ort, Status, NPCs. Wo er in einer Liste steht, sagt die
+Liste über ihn aus, nicht er über sich. Eine Positionszahl im
+Eigenschaften-Dialog wäre obendrein unbedienbar: der DM müsste ausrechnen,
+welche Zahl die Szene an die gewünschte Stelle bringt, und die Nachbarn zögen
+nicht mit.
+
+Im Schema ist das kein Sonderfall, sondern Regel 2: Reihenfolge ist
+festgehaltene Information und wohnt in einer `pos`-Spalte. `scene_npcs.pos`
+hält die Reihenfolge der NPCs einer Szene, `chapters.pos` die der Kapitel —
+beide sind keine Eigenschaften, beide werden nicht im Dialog gepflegt, und
+`scenes.pos` reiht sich genau dort ein. Neu ist nur, dass sie bedienbar wird:
+die Spalte gab es schon, sie wurde beim Anlegen kampagnenweit hochgezählt und
+danach von niemandem gelesen.
+
+**Verhältnis zu ADR #17:** Jener Eintrag hat zwei Hälften, und nur eine
+wird abgelöst.
+
+- **Gültig bleibt die Adressableitung.** Die Adresse einer Szene ist weiter
+  `<kapitel>/<ort>/<id>`, ohne Ort `<kapitel>/<id>`, abgeleitet aus der Spalte
+  `location`; `location` bleibt Orts-id oder leer, Freitext bleibt 400
+  (`location_not_an_id`), eine id ohne Eintrag 400 (`location_unknown`). Es
+  gibt weiterhin keine zweite Spalte neben `location`, und `sceneAddress(row)`
+  bleibt die eine Stelle, die die Ableitung kennt.
+- **Überholt ist die Anzeige-Hälfte:** „die Kapitelgruppierung wird aus
+  `location` abgeleitet". Es gibt keine Kapitelgruppierung mehr, also bleibt
+  nichts abzuleiten. Der Satz „die Gruppe einer Szene IST ihr `location`" gilt
+  nur noch für die Adresse.
+
+Der Kern von ADR #17 — zwei unabhängige Werte für dieselbe Sache driften, also
+schafft man einen ab — wird dadurch nicht schwächer, sondern bestätigt: die
+Reihenfolge bekommt genau eine Quelle, statt neben `pos` noch aus Namen und
+Adressen abgeleitet zu werden.
+
+**Migration:** `pos` wird einmalig in der **heutigen Anzeigereihenfolge**
+vergeben — Ortsgruppen nach Ortsname, innerhalb einer Gruppe nach Adresse, die
+Szenen ohne Ort an der Stelle, an der sie heute erscheinen. Nach dem Update
+sieht der DM dieselbe Liste wie davor, nur ohne die Überschriften; ab dann
+bewegt sie nur noch er. „Nach dem Update springt alles" wäre der teuerste
+Preis dieser Änderung und ist vermeidbar.
+
+**Verworfene Alternativen:**
+
+- **Ortsgruppen behalten und nur innerhalb der Gruppe sortieren.** Rettet
+  genau die Gliederung, die das Problem ist: Der DM kann die Szene, die er als
+  nächste erzählen will, nicht nach oben bringen, wenn ihr Ort eine Gruppe
+  weiter unten hat. Zwei Ordnungsachsen, von denen er nur eine bedient, sind
+  eine halbe Bedienung.
+- **Die Gruppenreihenfolge aus der kleinsten `pos` der Gruppe ableiten.**
+  Macht die Liste bedienbar und die Gruppen unerklärlich: eine Szene nach oben
+  zu schieben verschiebt plötzlich ihre ganze Gruppe mit, und eine Szene
+  zwischen zwei Szenen eines anderen Orts abzulegen ist unmöglich — die Gruppe
+  zieht sie zurück. Eine Bedienung, deren Ergebnis man vorher nicht absehen
+  kann, ist keine.
+- **Die Reihenfolge nur in der Session-Ansicht führen.** Dann gäbe es zwei
+  Szenenlisten mit zwei Reihenfolgen, und ausgerechnet die Vorbereitung — der
+  Ort, an dem über Dramaturgie entschieden wird — hätte die schlechtere. Die
+  Session-Ansicht moderiert, was die Vorbereitung gelegt hat; sie ist nicht
+  die Stelle, an der die Ordnung entsteht.
+- **Drag & Drop statt Hoch/Runter.** Später möglich, jetzt nicht: es braucht
+  eine Bibliothek, eine Tastatur-Bedienung, die ohnehin auf Hoch/Runter
+  hinausläuft, und eine Greiffläche, die mit der „ruhigen Liste" aus
+  docs/UI-BRIEF.md ringt. Hoch/Runter ist mit Tastatur und Zeigegerät dieselbe
+  Bedienung, ist auf dem Handy nicht kaputt und schreibt dieselbe Liste an
+  denselben Endpoint. Kommt Drag & Drop später dazu, ändert es die Geste und
+  nicht den Contract.
+
+**Bewusst nicht Teil der Entscheidung:** Eine Reihenfolge über Kapitelgrenzen
+hinweg — die Kapitel haben ihre eigene (`chapters.pos`). Sortieren nach
+Status, Tag oder Ort als Ansicht: die Kapitelübersicht filtert, sie sortiert
+nicht um. Und der Eventualszenen-Block bekommt keine zweite Ordnung — er ist
+derselbe `pos`-Lauf, nur getrennt gezeigt.

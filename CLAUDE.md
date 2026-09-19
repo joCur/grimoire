@@ -169,15 +169,22 @@ Playwright gegen den echten Stack (realer Server auf einer eigenen, aus
 das LLM ist ein lokaler Stub-HTTP-Server — der Provider-Pfad läuft real).
 Die Pfade:
 
-1. Auto-Einstieg `/` → Kapitel lädt die Kampagne
-2. Szene lesen: Callouts, If-Sections, NPC-Karten der Referenzszenen
+1. Auto-Einstieg `/` → Kapitel lädt die Kampagne: eine durchgehende
+   Szenenliste in der Reihenfolge des DM (keine Ortsgruppen, der Ort steht
+   in der Metazeile), umsortiert über Hoch/Runter — der Schreibweg trägt den
+   `rev` des **Kapitels**, ein alter Stand ist 409, und die Szenen selbst
+   bleiben unberührt
+2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
+   NPC-Karten der Referenzszenen
 3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Eintrags-Arten und die
    Glossar-Begriffe. Ein Glossar-Treffer nennt seine Zeile mit `kind` + `id`
    ohne Adresse und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
    nicht indexiert
-4. Session-Zyklus: starten → Schnellnotiz → Log-**Zeile** (mit `sceneId`) +
-   `scenesPlayed` → Pause (ein Intervall, keine Log-Zeile) → beenden →
-   Nachbereitung. Dazu die Leseseite einer vergangenen Session
+4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
+   weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →
+   Log-**Zeile** (mit `sceneId`) + `scenesPlayed` → „Nächste Szene" führt
+   zur folgenden der Reihenfolge → Pause (ein Intervall, keine Log-Zeile) →
+   beenden → Nachbereitung. Dazu die Leseseite einer vergangenen Session
    (`/campaigns/:id/sessions/<session-id>`)
 5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken.
    Review und Ideen benennen ihre Zeilen per `id`
@@ -218,13 +225,14 @@ Die Pfade:
    unter `Eigenschaften` im Dialog „Kampagne bearbeiten". Der Kopf der
    Kapitelübersicht bleibt unberührt: dort führt das eine `Bearbeiten` in
    denselben Dialog.
-10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
+10. Kaltstart: leere Instanz ohne Seed — seit ADR #13 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
     Szene befüllen → Session starten → Szene in der Session-Ansicht
-    nutzbar; dazu NPC/Ort anlegen aus ihren Listen, die selbst gesetzte
-    Kennung im Anlege-Dialog (Stift, ungültige Kennung blockiert „Anlegen",
-    leeres Feld leitet wieder aus dem Namen ab) und die
-    Slug-Kollision (409 mit Vorschlag, schreibt nichts)
+    nutzbar; jede neue Szene hängt sich ans Ende ihres Kapitels, ein
+    Kapitelwechsel ans Ende des Zielkapitels; dazu NPC/Ort anlegen aus ihren
+    Listen, die selbst gesetzte Kennung im Anlege-Dialog (Stift, ungültige
+    Kennung blockiert „Anlegen", leeres Feld leitet wieder aus dem Namen ab)
+    und die Slug-Kollision (409 mit Vorschlag, schreibt nichts)
 
 Regel für neue Features: Jedes ready-Ticket benennt die berührten
 kritischen Pfade; wer einen berührt oder schafft, erweitert die

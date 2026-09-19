@@ -44,9 +44,14 @@ Monochrom, in Textfarbe, 16–20px. Keine bunten Icon-Illustrationen.
 ## Die Ansichten
 
 ### 1. Kapitel (Prep-Modus, Desktop; Route `/campaigns/:id`)
-Job: Überblick und Ordnung. Kapitel > Ort > Szenen als ruhige Liste
+Job: Überblick und Ordnung. Kapitel > Szenen als ruhige Liste
 (keine Karten-Grids), Status als dezente Marker, Eventualszenen visuell
-als eigene Gruppe („Eventualszenen"). Filter über Tags/Status,
+als eigene Gruppe („Eventualszenen"). Die Liste steht in der Reihenfolge,
+die der DM gelegt hat — der Ort ist keine Ebene mehr über den Szenen,
+sondern ein Wort in der Metazeile der Zeile, neben Typ und Tags.
+Umgelegt wird die Reihenfolge genau hier, mit Hoch/Runter an der Zeile:
+leise wie alles andere, spürbar an der Zeile, die gerade dran ist, und
+nicht als Dauerbeschriftung neben jeder Szene. Filter über Tags/Status,
 globale Suche prominent (Cmd/Ctrl-K). Von hier: Szene öffnen,
 Session starten, Generator aufrufen.
 
@@ -60,8 +65,13 @@ und leicht abgedunkelt — Geheimnisse sehen geheim aus.
 
 ### 3. Session-Ansicht (Session-Modus, Desktop; Route `live`)
 Job: moderieren ohne suchen. Drei ruhige Zonen: links Szenenliste des
-Kapitels (geplant oben, Eventualszenen darunter), Mitte aktuelle Szene,
-rechts NPCs + Schnellnotiz-Feld (immer fokussierbar, Enter sendet).
+Kapitels in der Reihenfolge aus der Vorbereitung (geplant oben,
+Eventualszenen darunter; umgelegt wird sie in der Kapitelübersicht, nicht
+hier), Mitte aktuelle Szene, rechts NPCs + Schnellnotiz-Feld (immer
+fokussierbar, Enter sendet). Der rote Faden des Abends ist ein einziger
+Schritt unter der offenen Szene: „Nächste Szene: <Titel>" — er sagt, wohin
+der DM als nächstes greift, ohne dass er die Liste absuchen muss. Beim
+Betreten steht die erste Szene an, die noch nicht gespielt ist.
 Kopfzeile: Sessionzeit (berechnet aus `started`), Pause-Eintrag,
 Session beenden. Die Schnellnotiz ist nach dem Read-Aloud das
 zweitwichtigste Element — nichts darf sie verdecken.
@@ -84,7 +94,7 @@ Keine Ausrufezeichen, kein Fantasy-Sprech in Funktionstexten
 (kein „Beschwöre eine neue Szene"). Leere Zustände laden zum Handeln ein
 („Noch keine Szenen in diesem Kapitel — erste Szene anlegen").
 
-### Begriffe in der UI (Issue #88)
+### Begriffe in der UI
 
 Jede Ansicht und jede Aktion heißt nach ihrer Funktion — keine internen
 Namen, keine Metaphern, keine Anglizismen, wo ein deutsches Wort trägt.
