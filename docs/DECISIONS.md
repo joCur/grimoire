@@ -1154,10 +1154,12 @@ Zeile, mit dem Namen des Orts-Eintrags. Eventualszenen bleiben ein eigener
 Block am Ende.
 
 - **Lesen:** `ChapterNode.groups: SceneGroup[]` wird zu
-  `ChapterNode.scenes: SceneSummary[]`, sortiert nach `pos`; `SceneGroup`
-  entfällt. `SceneSummary` trägt neben der Orts-id den aufgelösten
-  **Ortsnamen** — dieselbe Auflösung, die bisher die Gruppenüberschrift
-  gebraucht hat, nur eine Ebene tiefer.
+  `ChapterNode.scenes: SceneSummary[]`, sortiert nach `pos`. `SceneGroup`
+  entfällt **ersatzlos** — die Durchsicht fand genau einen Leser, die
+  Gruppenüberschrift der Kapitelübersicht, und die gibt es nicht mehr.
+  `SceneSummary` trägt neben der Orts-id den aufgelösten **Ortsnamen**:
+  dieselbe Auflösung, die bisher die Überschrift gebraucht hat, nur eine
+  Ebene tiefer.
 - **Schreiben:** `PUT /api/campaigns/:campaign/chapters/:chapter/scene-order`
   mit `{ scenes: string[], rev }`. `scenes` ist die vollständige neue
   Reihenfolge; ist sie nicht exakt die Menge der Szenen-ids dieses Kapitels —
@@ -1262,12 +1264,26 @@ schafft man einen ab — wird dadurch nicht schwächer, sondern bestätigt: die
 Reihenfolge bekommt genau eine Quelle, statt neben `pos` noch aus Namen und
 Adressen abgeleitet zu werden.
 
-**Migration:** `pos` wird einmalig in der **heutigen Anzeigereihenfolge**
-vergeben — Ortsgruppen nach Ortsname, innerhalb einer Gruppe nach Adresse, die
-Szenen ohne Ort an der Stelle, an der sie heute erscheinen. Nach dem Update
-sieht der DM dieselbe Liste wie davor, nur ohne die Überschriften; ab dann
-bewegt sie nur noch er. „Nach dem Update springt alles" wäre der teuerste
-Preis dieser Änderung und ist vermeidbar.
+**Migration `0019`** (`0019_scene_pos_per_chapter.sql`): die neue Spalte
+`chapters.scene_order_rev` und ein `UPDATE` mit Fensterfunktion, das jedem
+Kapitel seine Positionen frisch ab 0 vergibt. Es reproduziert die **heutige
+Anzeigereihenfolge** Regel für Regel: zuerst die Szenen mit Ort, sortiert nach
+dem **Anzeigenamen** des Orts (sein `name`, ersatzweise seine id — der Name
+war es, der in der Überschrift stand), innerhalb einer Ortsgruppe nach der
+Adresse, die sich dort nur noch in der Szenen-id unterscheidet; die Szenen
+ohne Ort stehen am Ende, wo der Abschnitt „Ohne Ort" sie hatte. Nach dem
+Update sieht der DM dieselbe Liste wie davor, nur ohne die Überschriften; ab
+dann bewegt sie nur noch er. „Nach dem Update springt alles" wäre der
+teuerste Preis dieser Änderung und ist vermeidbar.
+
+Die alten, kampagnenweit vergebenen Werte werden dabei **verworfen** statt
+umgerechnet: sie ließen beliebige Lücken zwischen den Kapiteln, und „ans Ende
+anhängen" soll gegen die Geschwister im eigenen Kapitel zählen, nicht gegen
+Zahlen, die ein anderes Kapitel vergeben hat. Ein Datenschritt **vor** dem
+Migrator — wie ihn ADR #17 für `group_slug` brauchte, weil aus Freitext eine
+id werden musste (`db/group-migration.ts`) — ist hier nicht nötig: jeder Teil
+der Regel ist eine Spalte oder ein Join, nichts wird transliteriert. Das
+Skript ist idempotent, und eine frische Datenbank fasst es nicht an.
 
 **Verworfene Alternativen:**
 
