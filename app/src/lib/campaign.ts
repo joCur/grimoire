@@ -34,10 +34,8 @@ export function sceneTitle(
 ): string | undefined {
   if (sceneId === undefined) return undefined;
   for (const chapter of tree?.chapters ?? []) {
-    for (const group of chapter.groups) {
-      const scene = group.scenes.find((s) => s.id === sceneId);
-      if (scene !== undefined) return scene.title;
-    }
+    const scene = chapter.scenes.find((s) => s.id === sceneId);
+    if (scene !== undefined) return scene.title;
   }
   return sceneId;
 }
@@ -53,10 +51,8 @@ export function scenePath(
 ): string | undefined {
   if (sceneId === undefined) return undefined;
   for (const chapter of tree?.chapters ?? []) {
-    for (const group of chapter.groups) {
-      const scene = group.scenes.find((s) => s.id === sceneId);
-      if (scene !== undefined) return scene.path;
-    }
+    const scene = chapter.scenes.find((s) => s.id === sceneId);
+    if (scene !== undefined) return scene.path;
   }
   return undefined;
 }

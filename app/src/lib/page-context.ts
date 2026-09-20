@@ -34,11 +34,11 @@ export interface ContextCrumb {
  * schema does not describe) — the nav's section marking is context enough
  * there.
  *
- * Scene: `<chapter title> › <group>`, the chapter linking to the chapter
- * overview. The group part is the scene's middle segment resolved like a
- * chapter overview group header (the location's name when `locations/<slug>`
- * exists, otherwise the slug as written — never prettified), and is absent for
- * a scene addressed directly under its chapter.
+ * Scene: `<chapter title> › <location>`, the chapter linking to the chapter
+ * overview. The location part is the scene's middle segment resolved to a
+ * display name (the location's name when `locations/<slug>` exists, otherwise
+ * the slug as written — never prettified), and is absent for a scene
+ * addressed directly under its chapter.
  * Chapter entry: just the chapter, unlinked — it IS the chapter.
  * NPC / location: their list.
  *
@@ -69,9 +69,9 @@ export function pageContextCrumbs(
       // chapter would need an anchor in the chapter overview plus reduced-motion handling —
       // its own slice; the accordion already opens the active chapter.
       const crumbs: ContextCrumb[] = [{ label: title, to: `/campaigns/${campaign}` }];
-      // `<chapter>/<group>/<scene>` — three segments means a group.
-      const group = segments.length === 3 ? (segments[1] ?? "") : "";
-      if (group !== "") crumbs.push({ label: locationName(tree, group) ?? group });
+      // `<chapter>/<location>/<scene>` — three segments means a location.
+      const location = segments.length === 3 ? (segments[1] ?? "") : "";
+      if (location !== "") crumbs.push({ label: locationName(tree, location) ?? location });
       return crumbs;
     }
     default:

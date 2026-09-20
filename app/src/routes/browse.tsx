@@ -67,7 +67,7 @@ export function BrowseRoute() {
 /** Scenes flat per chapter — the chapter title as a quiet group overline. */
 function SceneList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
   const t = useT();
-  const chapters = tree.chapters.filter((ch) => ch.groups.some((g) => g.scenes.length > 0));
+  const chapters = tree.chapters.filter((ch) => ch.scenes.length > 0);
   if (chapters.length === 0) {
     return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.scenes")}</p>;
   }
@@ -78,18 +78,16 @@ function SceneList({ campaign, tree }: { campaign: string; tree: CampaignTree })
           <p className="mb-1 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
             {chapter.title}
           </p>
-          {chapter.groups
-            .flatMap((g) => g.scenes)
-            .map((scene) => (
-              <Row
-                key={scene.path}
-                campaign={campaign}
-                path={scene.path}
-                icon={scene.type === "contingency" ? GitFork : Bookmark}
-                title={scene.title}
-                meta={locationName(tree, scene.location)}
-              />
-            ))}
+          {chapter.scenes.map((scene) => (
+            <Row
+              key={scene.path}
+              campaign={campaign}
+              path={scene.path}
+              icon={scene.type === "contingency" ? GitFork : Bookmark}
+              title={scene.title}
+              meta={locationName(tree, scene.location)}
+            />
+          ))}
         </section>
       ))}
     </>

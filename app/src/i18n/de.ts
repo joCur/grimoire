@@ -382,8 +382,6 @@ export const de = {
   // has one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
   "chapterOverview.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
-  // The chapter's leftovers section: the scenes that name no location.
-  "chapterOverview.group.noLocation": "Ohne Ort",
   "chapterOverview.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "chapterOverview.chapter.goal": "Ziel: {goal}",
   "chapterOverview.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
@@ -403,6 +401,17 @@ export const de = {
   // separator stays markup in the JSX.
   "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
   "chapterOverview.scene.trigger": "Wenn: {trigger}",
+  // Up/down on a scene row (ADR #27). The title is IN the name: a list of
+  // „Nach oben" says nothing about which row it moves — neither to a screen
+  // reader nor in a test.
+  "chapterOverview.scene.moveUp.aria": "„{title}“ nach oben",
+  "chapterOverview.scene.moveDown.aria": "„{title}“ nach unten",
+  // The order has no „Trotzdem speichern": an order arranged against a list
+  // somebody else has already changed would write positions for scenes the DM
+  // never saw there. So it reports and reloads, like the status control.
+  "chapterOverview.order.conflict":
+    "Reihenfolge inzwischen geändert — der aktuelle Stand ist geladen.",
+  "chapterOverview.order.failed": "Reihenfolge nicht gespeichert — Server prüfen.",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   // The three list titles are already above under `browse.title.*`.
@@ -440,6 +449,9 @@ export const de = {
   // trigger where the count is PART of the sentence.
   "live.nav.played": "Gespielt",
   "live.nav.playedGroup": "Gespielt {count}",
+
+  // The one step of the evening, under the open scene.
+  "live.next": "Nächste Szene: {title}",
 
   "live.scene.none":
     "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",

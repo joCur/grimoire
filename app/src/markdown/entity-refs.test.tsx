@@ -19,29 +19,25 @@ const TREE: CampaignTree = {
     {
       id: "01-salzhafen",
       title: "Kapitel 1",
-      groups: [
-        { slug: "hafen", name: "hafen",
-          scenes: [
-            {
-              path: "01-salzhafen/hafen/lighthouse-arrival",
-              id: "lighthouse-arrival",
-              title: "Ankunft am Leuchtturm",
-              type: "planned",
-              status: "ready",
-              npcs: [],
-              tags: [],
-            },
-            // Same slug as the npc below — the collision case.
-            {
-              path: "01-salzhafen/hafen/jorna",
-              id: "jorna",
-              title: "Szene namens jorna",
-              type: "planned",
-              status: "draft",
-              npcs: [],
-              tags: [],
-            },
-          ],
+      scenes: [
+        {
+          path: "01-salzhafen/hafen/lighthouse-arrival",
+          id: "lighthouse-arrival",
+          title: "Ankunft am Leuchtturm",
+          type: "planned",
+          status: "ready",
+          npcs: [],
+          tags: [],
+        },
+        // Same slug as the npc below — the collision case.
+        {
+          path: "01-salzhafen/hafen/jorna",
+          id: "jorna",
+          title: "Szene namens jorna",
+          type: "planned",
+          status: "draft",
+          npcs: [],
+          tags: [],
         },
       ],
     },

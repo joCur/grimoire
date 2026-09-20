@@ -654,7 +654,7 @@ describe("reference and select options", () => {
   const tree: CampaignTree = {
     campaign: "beispiel",
     chapters: [
-      { id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm", groups: [] },
+      { id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm", scenes: [] },
     ],
     npcs: [
       { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },

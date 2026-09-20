@@ -81,10 +81,8 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
 export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
   const paths = new Set<string>();
   for (const chapter of tree?.chapters ?? []) {
-    for (const group of chapter.groups) {
-      for (const scene of group.scenes) {
-        if (scene.type === "contingency") paths.add(scene.path);
-      }
+    for (const scene of chapter.scenes) {
+      if (scene.type === "contingency") paths.add(scene.path);
     }
   }
   return paths;
