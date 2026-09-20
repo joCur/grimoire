@@ -78,10 +78,12 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   liest, schaltet erneut auf „Markdown" um, ohne den Bearbeiten-Modus zu
   verlassen.
 
-## Gruppe = Ort
+## Ort = Adresse, Reihenfolge = eigene Liste
 
-Die **Gruppe** einer Szene ist ihr `location`, es gibt kein eigenes
-Gruppenfeld. Für die Suite heißt das drei Dinge:
+Der `location` einer Szene ist ihre **Adresse**, keine Gliederung über ihr:
+die Kapitelübersicht ist eine durchgehende Liste in der Reihenfolge, die der
+DM setzt (ADR #27), und der Ort steht mit seinem Namen in der Metazeile der
+Zeile. Für die Suite heißt das vier Dinge:
 
 - **Die Adressen der Beispielszenen folgen ihrem Ort.** Die beiden Szenen
   nennen verschiedene Orte, also lauten die Adressen
@@ -100,6 +102,16 @@ Gruppenfeld. Für die Suite heißt das drei Dinge:
   sie unter `<kapitel>/<location>/<id>` (`SCENE_PATH`). Die Fixture-Antwort
   setzt `location: bucht` und schlägt diesen Ort im selben Lauf vor — genau
   das prüft Pfad 6.
+- **Die Reihenfolge ist gesetzt, nicht abgeleitet.** Der Seed-Lauf lädt die
+  Einträge einer Kampagne in Dateinamen-Reihenfolge und hängt jede Szene ans
+  Ende ihres Kapitels; ein Spec, dessen Zusicherung von der Reihenfolge
+  abhängt, sagt die gemeinte deshalb selbst an —
+  `PUT …/chapters/<kapitel>/scene-order` mit `{ scenes, rev }`, wobei `rev`
+  der `sceneOrderRev` des `ChapterNode` ist. Dieser Wächter zählt nur die
+  Writes dieser Liste: ein Umsortieren bewegt weder `scenes.rev` noch
+  `chapters.rev` und ist deshalb für keinen offenen Editor ein Konflikt.
+  Adressiert werden die Zeilen über ihre Hoch/Runter-Schalter, die den Titel
+  im zugänglichen Namen tragen (`„<Titel>“ nach oben`).
 
 ## Lokal ausführen
 
@@ -286,7 +298,7 @@ mehrere Schreibwege auf ihm liegen:
 
 | Pfad (CLAUDE.md)   | Spec                                                           |
 | ------------------ | -------------------------------------------------------------- |
-| 1 Auto-Einstieg    | `tests/chapter-overview.e2e.ts` (Gruppen = Ortsnamen, „Ohne Ort")          |
+| 1 Auto-Einstieg    | `tests/chapter-overview.e2e.ts` (eine Liste, Ort in der Metazeile, Reihenfolge samt 409) |
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
@@ -480,7 +492,8 @@ Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.
 
 Ein Spec deckt auch spätere Scheiben auf seinem Pfad ab, nicht nur die Scheibe,
-die ihn angelegt hat: `tests/chapter-overview.e2e.ts` prüft zusätzlich Gruppenkopf-Namen,
+die ihn angelegt hat: `tests/chapter-overview.e2e.ts` prüft zusätzlich den Ortsnamen in der
+Metazeile, die Szenen-Reihenfolge mitsamt Konflikt,
 die Topbar-Navigation und den Kampagnen-Metadaten-Dialog,
 `tests/review.e2e.ts` den Szenentitel im Quellchip, und
 `tests/search.e2e.ts` die Frische-Zusicherung des Cutovers: was die
