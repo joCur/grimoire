@@ -154,17 +154,15 @@ export async function acceptJobParts(
     return candidates.filter((candidate) => parts.get(candidate)?.open === true);
   };
 
-  let selected: string[];
+  /**
+   * WHICH parts this call writes. Only membership — the order comes from
+   * `parts` below.
+   */
+  const chosen = new Set<string>();
   if (body.paths === undefined) {
-    selected = [...parts].filter(([, part]) => part.bulk).map(([rel]) => rel);
-    for (const rel of [...selected]) {
-      for (const referenced of referencedPartsOf(rel)) {
-        if (!selected.includes(referenced)) selected.push(referenced);
-      }
-    }
+    for (const [rel, part] of parts) if (part.bulk) chosen.add(rel);
   } else {
     if (!Array.isArray(body.paths)) throw new ApiError(400, "paths must be an array of strings");
-    selected = [];
     for (const rel of body.paths) {
       if (typeof rel !== "string") throw new ApiError(400, "paths must be an array of strings");
       const part = parts.get(rel);
@@ -172,14 +170,27 @@ export async function acceptJobParts(
       // is not an error but has nothing left to do (a double click, a second
       // tab) and is simply skipped.
       if (part === undefined) throw new ApiError(400, `unknown draft path: ${rel}`);
-      if (part.open) selected.push(rel);
-    }
-    for (const rel of [...selected]) {
-      for (const referenced of referencedPartsOf(rel)) {
-        if (!selected.includes(referenced)) selected.push(referenced);
-      }
+      if (part.open) chosen.add(rel);
     }
   }
+  for (const rel of [...chosen]) {
+    for (const referenced of referencedPartsOf(rel)) chosen.add(referenced);
+  }
+  /**
+   * The selection in the order of `parts`, which is the run's OUTLINE order —
+   * the dramaturgical sequence the outline step decided. A scene draft is
+   * written to the end of its chapter (`insertDraft`), so the write order IS
+   * the order the scenes end up in (ADR #27); taking it from the caller would
+   * make the chapter depend on the order the review happened to name its
+   * paths in.
+   *
+   * The carried-along referenced entries sit at their own outline place here
+   * rather than appended at the end: they are parts of this run like any
+   * other, and `applyDrafts` sorts every entry ahead of the scenes anyway
+   * (`inReferenceOrder`), so appending them would buy no reference safety and
+   * only let one scene's references shift another scene's position.
+   */
+  const selected = [...parts.keys()].filter((rel) => chosen.has(rel));
   // A selection whose parts are ALL written already is a double click or a
   // second tab, not an error: the caller asked for a state that is the
   // state, so it gets the honest empty answer.
