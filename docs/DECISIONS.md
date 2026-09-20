@@ -1164,8 +1164,24 @@ Block am Ende.
   mit `{ scenes: string[], rev }`. `scenes` ist die vollständige neue
   Reihenfolge; ist sie nicht exakt die Menge der Szenen-ids dieses Kapitels —
   eine fehlt, eine doppelt sich, eine gehört woanders hin —, ist das **400**
-  und es wird nichts geschrieben. Eine Teilliste anzunehmen hieße, den Rest
-  irgendwohin zu sortieren, und das entscheidet niemand nebenbei.
+  und es wird nichts geschrieben. Eine Teilliste **ohne Positionen**
+  anzunehmen hieße, den Rest irgendwohin zu sortieren, und das entscheidet
+  niemand nebenbei; dieser Endpoint bedient das Hoch/Runter an der Zeile, dem
+  die vollständige Liste ohnehin vorliegt — sie zu schicken kostet nichts.
+
+  Eine Teilliste **mit ausdrücklichen Positionen** ist etwas anderes und
+  bleibt ausdrücklich offen: `pos` ist ein Sortierschlüssel und verträgt
+  Lücken, nichts hier setzt dichte Werte voraus. Sie ist der naheliegende
+  Weg, damit die Reihenfolge eines Generator-Laufs auch über mehrere
+  Teil-Übernahmen hält — die Gliederung nummeriert, der Entwurf bringt seine
+  Nummer mit, später Übernommenes fällt an seinen Platz, ohne
+  Einsortier-Logik. Zwei Fragen tragen diese Entscheidung: Die Nummern
+  brauchen einen **stabilen Bezugspunkt** — ein Kapitel hat meist schon
+  Szenen, und ein je Übernahme neu berechnetes „ans Ende" wandert mit, der
+  Bezugspunkt müsste also am Lauf hängen —, und zwei gleiche Positionen
+  brauchen eine **Kollisionsregel**. Sobald der DM von Hand umsortiert,
+  schreibt dieser Endpoint die Positionen dicht neu: die Handsortierung
+  gewinnt, und das ist gewollt.
 - **Der Wächter ist `chapters.scene_order_rev`** — ein eigener Zähler, der
   nur die Writes dieser einen Liste zählt und den `ChapterNode` mitliefert;
   das `rev` im Rumpf ist seiner. Ein alter Stand ist **409 `rev_conflict`**.
