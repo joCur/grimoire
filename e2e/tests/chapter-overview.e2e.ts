@@ -2,18 +2,23 @@
 //
 // "/" has no page of its own: it redirects into the campaign the
 // server reports, and the chapter overview is the first thing the DM sees — campaign
-// header, the active chapter with its goal line, the location group and the
-// contingency block.
+// header, the active chapter with its goal line, its scenes as ONE list in
+// the order the DM arranged (ADR #27) and the contingency block at the end.
 //
-// The campaign chrome lives on this path as well: the group header resolves its slug
-// against the locations, the topbar carries the NPCs/Orte navigation (the
-// chapter overview's own footer line is gone), and the campaign's name/description are
-// editable from the header.
+// The order is the DM's, so it is also editable here: up/down per row, one
+// write for the whole chapter, with a guard of its own. That guard is why a
+// reorder never collides with an open editor — the two write different things
+// (ADR #27), and both halves of that promise are checked below.
+//
+// The campaign chrome lives on this path as well: a scene row resolves its
+// location to the location's NAME, the topbar carries the NPCs/Orte navigation
+// (the chapter overview's own footer line is gone), and the campaign's
+// name/description are editable from the header.
 
 import type { Page } from "@playwright/test";
 
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
-import { expect, test, todaySessionId, type SeedEntry } from "../support/test";
+import { expect, test, todaySessionId, type Api, type SeedEntry } from "../support/test";
 
 /**
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
@@ -69,9 +74,9 @@ async function widenGlyphs(page: Page, spacing: string) {
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /**
- * A scene that names NO location — it belongs under the chapter overview's
- * neutral no-location section. The example campaign has none, so the
- * test that needs one seeds it.
+ * A scene that names NO location — its row simply has no location part
+ * (ADR #27). The example campaign has none, so the test that needs one
+ * seeds it.
  */
 const SCENE_WITHOUT_LOCATION: SeedEntry = {
   kind: "scene",
@@ -133,7 +138,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   });
   await expect(chapter).toBeVisible();
   // The chapter is a HEADING inside that trigger, so the outline does not
-  // jump from the chapter overview's h1 straight to the group h3s.
+  // jump from the chapter overview's h1 straight to the contingency block.
   await expect(
     chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
@@ -149,13 +154,14 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
     ),
   ).toBeVisible();
 
-  // Planned scene in its location group, with the status control's label.
-  // The group IS the scene's `location`, so the header is the location's
-  // NAME; a bare slug like `hafen` is no grouping and appears nowhere.
+  // The planned scene is a ROW of the chapter's one list — no location
+  // heading over it any more (ADR #27). The location stands in the row's meta
+  // line, and it stands there with the NAME of its entry: the bare slug
+  // `leuchtturm` is no location for the reader and appears nowhere.
   await expect(
     page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
-  ).toBeVisible();
-  await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
+  ).toHaveCount(0);
+  await expect(page.getByText("leuchtturm", { exact: true })).toHaveCount(0);
   const planned = page.getByRole("link", { name: /Ankunft am Leuchtturm/ });
   await expect(planned).toBeVisible();
   await expect(planned).toContainText(
@@ -165,8 +171,8 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
     page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
   ).toBeVisible();
 
-  // Contingencies live in their own group — a section of the chapter, so the
-  // same heading level as a location group.
+  // Contingencies stay a block of their own at the end — the one heading the
+  // list still has, because it names a section of the chapter.
   await expect(page.getByRole("heading", { level: 3, name: "Eventualszenen" })).toBeVisible();
   const contingency = page.getByRole("link", {
     name: /Von den Schmugglern erwischt/,
@@ -188,19 +194,23 @@ test.describe("a scene without a location", () => {
     seed: { entries: { "scene-ohne-ort": SCENE_WITHOUT_LOCATION } },
   });
 
-  test('scenes that name no location get the neutral „Ohne Ort" section', async ({ page }) => {
+  test("a scene that names no location keeps its row, without a location part", async ({
+    page,
+  }) => {
     await page.goto("/campaigns/beispiel");
-    // A section, not a location with a blank name — and it comes LAST, after
-    // every real location of the chapter. (The contingency-scenes section
-    // belongs to the chapter too and follows the location groups.)
-    const headings = page.getByRole("heading", { level: 3 });
-    await expect(headings).toHaveText([
-      "Der Leuchtturm von Salzhafen",
-      "Ohne Ort",
-      "Eventualszenen",
-    ]);
+    // No section for it and none for the scenes that DO name a location: the
+    // contingency block is the only heading the list has left.
+    await expect(page.getByRole("heading", { level: 3 })).toHaveText(["Eventualszenen"]);
+    await expect(page.getByText("Ohne Ort")).toHaveCount(0);
     const scene = page.getByRole("link", { name: /Irgendwo unterwegs/ });
     await expect(scene).toBeVisible();
+    // The meta line is the tags alone — no placeholder, no dangling separator,
+    // while the scene one row above still names its location.
+    await expect(scene).toContainText("#travel");
+    await expect(scene).not.toContainText("·");
+    await expect(page.getByRole("link", { name: /Ankunft am Leuchtturm/ })).toContainText(
+      "Leuchtturm von Salzhafen · #social #travel",
+    );
     // …and the scene sits at chapter level, address included.
     await expect(scene).toHaveAttribute("href", "/campaigns/beispiel/entries/01-salzhafen/ohne-ort-szene");
   });
@@ -1065,4 +1075,227 @@ test("the properties dialog offers the enum and its Aktiv swaps too", async ({ p
   await expect.poll(async () => (await api.entry(created.path)).properties.status).toBe("active");
   await expect.poll(async () => (await api.entry("01-salzhafen")).properties.status).toBe("planned");
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
+});
+
+// --- the scene order: one list, up/down, one guard of its own (ADR #27) -----
+
+/** The chapter of the example campaign — the one that holds an order. */
+const CHAPTER = "01-salzhafen";
+/** The write path of that order: the whole list, against its own guard. */
+const ORDER_PATH = `campaigns/beispiel/chapters/${CHAPTER}/scene-order`;
+/** The conflict line of the order — it reports and reloads, it does not force. */
+const ORDER_CONFLICT = "Reihenfolge inzwischen geändert — der aktuelle Stand ist geladen.";
+
+/** The tree's answer about one chapter's order — the parts this spec reads. */
+interface OrderTree {
+  chapters: {
+    id: string;
+    /** The order's OWN guard token; the entry's `rev` is a different one. */
+    sceneOrderRev: number;
+    scenes: { id: string; title: string }[];
+  }[];
+}
+
+/** Scene id -> the title its row and its move controls carry. */
+const TITLES: Record<string, string> = {
+  "lighthouse-arrival": "Ankunft am Leuchtturm",
+  keller: "Der Keller unter dem Turm",
+  steg: "Nachts am Steg",
+  "smuggler-captured": "Von den Schmugglern erwischt",
+};
+
+/** One planned scene for the order fixtures, with a location so the row has a meta line. */
+function plannedScene(id: string, location: string): SeedEntry {
+  return {
+    kind: "scene",
+    properties: {
+      id,
+      title: TITLES[id],
+      type: "planned",
+      chapter: CHAPTER,
+      location,
+      npcs: [],
+      handouts: [],
+      tags: [],
+      status: "draft",
+    },
+    body: `\n## Flow\n\n${TITLES[id]}.\n`,
+  };
+}
+
+/**
+ * Three planned scenes in the chapter — the example campaign brings one, and
+ * an order needs something to arrange.
+ *
+ * The STEMS set the seeded order: the seed run loads a campaign's entries in
+ * file-name order and appends every scene to the end of its chapter, so these
+ * two stand behind `scene-lighthouse-arrival` and the contingency behind them.
+ */
+const ORDER_SEED = {
+  entries: {
+    "scene-order-2-keller": plannedScene("keller", "leuchtturm"),
+    "scene-order-3-steg": plannedScene("steg", "bucht"),
+  },
+};
+
+/** The seeded order, by id — where every test of this block starts. */
+const SEEDED_ORDER = ["lighthouse-arrival", "keller", "steg", "smuggler-captured"];
+
+/** The chapter node of the tree: its scenes in order and the order's guard. */
+async function orderNode(api: Api): Promise<OrderTree["chapters"][number]> {
+  const tree = await api.get<OrderTree>("campaigns/beispiel/tree");
+  const chapter = tree.chapters.find((c) => c.id === CHAPTER);
+  if (chapter === undefined) throw new Error(`the tree has no chapter ${CHAPTER}`);
+  return chapter;
+}
+
+/** The STORED order, by scene id — what a reload would read back. */
+async function storedOrder(api: Api): Promise<string[]> {
+  return (await orderNode(api)).scenes.map((scene) => scene.id);
+}
+
+/**
+ * The rows on screen in DOM order, by the title they show.
+ *
+ * Read off the move controls: they carry the row's title in their accessible
+ * name, and a row has no other handle that says where it stands.
+ */
+async function shownOrder(page: Page): Promise<string[]> {
+  const labels = await page
+    .getByRole("button", { name: /nach unten$/ })
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
+  return labels.map((label) => label.replace(/^„|“ nach unten$/g, ""));
+}
+
+/** The titles of an order given by id — what `shownOrder` has to answer. */
+function titlesOf(order: readonly string[]): string[] {
+  return order.map((id) => TITLES[id] ?? id);
+}
+
+test.describe("the scene order of a chapter", () => {
+  test.use({ seed: ORDER_SEED });
+
+  const up = (page: Page, id: string) =>
+    page.getByRole("button", { name: `„${TITLES[id]}“ nach oben` });
+  const down = (page: Page, id: string) =>
+    page.getByRole("button", { name: `„${TITLES[id]}“ nach unten` });
+
+  test("the scenes are ONE list, and a step down survives a reload", async ({ page, api }) => {
+    await page.goto("/campaigns/beispiel");
+    await expect.poll(() => shownOrder(page)).toEqual(titlesOf(SEEDED_ORDER));
+
+    // The ends of a BLOCK are the ends of the move: the first row cannot go
+    // up, the last of the plan cannot go down, and the lone contingency has
+    // nowhere to go at all — its block is one row long.
+    await expect(up(page, "lighthouse-arrival")).toBeDisabled();
+    await expect(down(page, "lighthouse-arrival")).toBeEnabled();
+    await expect(up(page, "steg")).toBeEnabled();
+    await expect(down(page, "steg")).toBeDisabled();
+    await expect(up(page, "smuggler-captured")).toBeDisabled();
+    await expect(down(page, "smuggler-captured")).toBeDisabled();
+
+    // One step down swaps the first two rows — visibly …
+    const moved = ["keller", "lighthouse-arrival", "steg", "smuggler-captured"];
+    await down(page, "lighthouse-arrival").click();
+    await expect.poll(() => shownOrder(page)).toEqual(titlesOf(moved));
+    // … and in the database, which is what the reload reads back.
+    await expect.poll(() => storedOrder(api)).toEqual(moved);
+    await page.reload();
+    await expect.poll(() => shownOrder(page)).toEqual(titlesOf(moved));
+    // The moved row took its ends with it: now IT is the one that cannot go up.
+    await expect(up(page, "keller")).toBeDisabled();
+    await expect(up(page, "lighthouse-arrival")).toBeEnabled();
+  });
+
+  test("a second writer rearranges: the press reports it and the current order stands", async ({
+    page,
+    api,
+  }) => {
+    await page.goto("/campaigns/beispiel");
+    await expect.poll(() => shownOrder(page)).toEqual(titlesOf(SEEDED_ORDER));
+
+    const message = page.getByText(ORDER_CONFLICT);
+    // The page refreshes its token on the version poll (~5s), so the conflict
+    // window is short: write, then press immediately, up to three times — the
+    // same shape as the status control's conflict (critical path 7).
+    let conflicted = false;
+    let written: string[] = [];
+    for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
+      const node = await orderNode(api);
+      const front = attempt % 2 === 1 ? "steg" : "keller";
+      written = [front, ...node.scenes.map((scene) => scene.id).filter((id) => id !== front)];
+      await api.send("PUT", ORDER_PATH, { scenes: written, rev: node.sceneOrderRev });
+      await down(page, "lighthouse-arrival").click();
+      conflicted = await message
+        .waitFor({ state: "visible", timeout: 4000 })
+        .then(() => true)
+        .catch(() => false);
+    }
+    expect(conflicted, "the order conflict message never appeared").toBe(true);
+
+    // Nothing was overwritten: the order the other writer set is the stored
+    // one, and the page shows exactly that — the message announces a reload
+    // and there IS one.
+    expect(await storedOrder(api)).toEqual(written);
+    await expect.poll(() => shownOrder(page)).toEqual(titlesOf(written));
+
+    // With the fresh token the very same press lands.
+    const first = written[0] ?? "";
+    const after = [written[1], first, ...written.slice(2)];
+    await down(page, first).click();
+    await expect.poll(() => storedOrder(api)).toEqual(after);
+    await expect(message).toHaveCount(0);
+  });
+
+  test("a reorder is no conflict for an open editor — three writers, three guards", async ({
+    page,
+    api,
+  }) => {
+    const scene = "01-salzhafen/leuchtturm/lighthouse-arrival";
+    const sceneBefore = await api.entry(scene);
+    const chapterBefore = await api.entry(CHAPTER);
+    const addition = "Eine Zeile, die das Umsortieren überlebt.";
+
+    // The scene's text editor stands open on the version it started from.
+    await page.goto(`/campaigns/beispiel/entries/${scene}`);
+    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    await page.getByRole("button", { name: "Markdown", exact: true }).click();
+    const textarea = page.getByRole("textbox", { name: /^Markdown-Text von/ });
+    await expect(textarea).toHaveValue(sceneBefore.body);
+    await textarea.fill(`${sceneBefore.body}\n${addition}\n`);
+
+    // The order moves underneath — the one write the up/down buttons make.
+    const node = await orderNode(api);
+    const reordered = ["keller", "lighthouse-arrival", "steg", "smuggler-captured"];
+    await api.send("PUT", ORDER_PATH, { scenes: reordered, rev: node.sceneOrderRev });
+
+    // It bumped its OWN guard and nobody else's: neither the scene's row
+    // version nor the chapter's moved, so neither editor is stale (ADR #27).
+    expect((await orderNode(api)).sceneOrderRev).not.toBe(node.sceneOrderRev);
+    expect((await api.entry(scene)).rev).toBe(sceneBefore.rev);
+    expect((await api.entry(CHAPTER)).rev).toBe(chapterBefore.rev);
+
+    // So the save lands — no conflict line, the typed text is stored.
+    await page.getByRole("button", { name: "Speichern" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Inzwischen geändert" })).toHaveCount(0);
+    await expect.poll(() => api.body(scene)).toContain(addition);
+    expect(await storedOrder(api)).toEqual(reordered);
+
+    // The chapter's own text holds `chapters.rev`, which the order does not
+    // touch either — same promise, other half of the chapter.
+    await page.goto("/campaigns/beispiel");
+    await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
+    const dialog = page.getByRole("dialog");
+    const chapterText = dialog.getByRole("textbox", { name: "Text" });
+    await expect(chapterText).toHaveValue(/Ziel des Kapitels/);
+    await chapterText.fill("## Ziel des Kapitels\n\nDen Leuchtturm wieder anzünden.");
+    const second = await orderNode(api);
+    const again = ["steg", "keller", "lighthouse-arrival", "smuggler-captured"];
+    await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });
+    await dialog.getByRole("button", { name: "Speichern" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => api.body(CHAPTER)).toContain("Den Leuchtturm wieder anzünden.");
+    // …and the chapter write left the order where the other writer put it.
+    expect(await storedOrder(api)).toEqual(again);
+  });
 });
