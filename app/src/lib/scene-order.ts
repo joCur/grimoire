@@ -71,15 +71,22 @@ export function moveSceneOrder(
 }
 
 /**
- * The scene the session view opens with: the FIRST scene of the order whose
- * status is neither `played` nor `dropped`. With everything behind us it is
- * the first scene, so the view opens on something instead of on nothing;
- * `undefined` only for a chapter without scenes.
+ * The scene the session view opens with: the first PLANNED scene of the order
+ * whose status is neither `played` nor `dropped`.
+ *
+ * A contingency is never the entry — it fires when its trigger does, so the
+ * evening cannot start on one, however early it sits in the order. `pos` runs
+ * over both blocks, so the plan is what the search runs over.
+ *
+ * With the whole plan behind us it is the first planned scene, so the view
+ * opens on something instead of on nothing; `undefined` for a chapter that
+ * holds no planned scene at all.
  */
 export function initialSessionScene(
   scenes: readonly SceneSummary[],
 ): SceneSummary | undefined {
-  return scenes.find((scene) => !isSceneDone(scene.status)) ?? scenes[0];
+  const planned = plannedScenes(scenes);
+  return planned.find((scene) => !isSceneDone(scene.status)) ?? planned[0];
 }
 
 /**

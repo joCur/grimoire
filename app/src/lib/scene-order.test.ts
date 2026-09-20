@@ -83,13 +83,30 @@ describe("initialSessionScene", () => {
     expect(initialSessionScene(scenes)?.id).toBe("b");
   });
 
-  test("with everything played the view opens on the first scene, not on nothing", () => {
-    const scenes = [scene("a", "planned", "played"), scene("b", "planned", "dropped")];
+  test("a contingency is never the entry, however early it sits", () => {
+    // The evening never starts on a detour: the step past the played scene is
+    // the next PLANNED one, not the contingency in between.
+    const scenes = [
+      scene("a", "planned", "played"),
+      scene("notfall", "contingency"),
+      scene("b"),
+      scene("c"),
+    ];
+    expect(initialSessionScene(scenes)?.id).toBe("b");
+  });
+
+  test("with the plan played the view opens on its first scene, not on nothing", () => {
+    const scenes = [
+      scene("a", "planned", "played"),
+      scene("notfall", "contingency"),
+      scene("b", "planned", "dropped"),
+    ];
     expect(initialSessionScene(scenes)?.id).toBe("a");
   });
 
-  test("a chapter without scenes has none", () => {
+  test("a chapter without a planned scene has none", () => {
     expect(initialSessionScene([])).toBeUndefined();
+    expect(initialSessionScene([scene("notfall", "contingency")])).toBeUndefined();
   });
 });
 
@@ -108,6 +125,15 @@ describe("nextSessionScene", () => {
     const scenes = [
       scene("a", "planned", "played"),
       scene("notfall", "contingency"),
+      scene("b"),
+    ];
+    expect(nextSessionScene(scenes, "notfall")?.id).toBe("b");
+  });
+
+  test("from a contingency ahead of the plan the step is the plan's first open scene", () => {
+    const scenes = [
+      scene("notfall", "contingency"),
+      scene("a", "planned", "played"),
       scene("b"),
     ];
     expect(nextSessionScene(scenes, "notfall")?.id).toBe("b");

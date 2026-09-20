@@ -114,9 +114,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
   // Selected scene = client state (the scene's ID); the default is the first
-  // scene of the order that is not behind us, and with everything played the
-  // first one — `initialSessionScene`. A chapter without scenes leaves it
-  // undefined and the center column says so.
+  // PLANNED scene of the order that is not behind us, and with the plan played
+  // its first scene — `initialSessionScene`. A chapter without a planned scene
+  // leaves it undefined and the center column says so.
   //
   // The ID and not the address: a scene's address carries its
   // `location`, so a location change moves the address out from under the
