@@ -169,13 +169,16 @@ test("scene properties: chips, reference and status land in the entry — nothin
     /\/campaigns\/beispiel\/entries\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
 
-  // The chapter overview re-sorts: a section for the new location, none for
-  // the old one.
+  // The chapter overview does NOT re-sort: the location is a word of the row
+  // now, not a group over it (ADR #27). So the row keeps its place in the
+  // order and names the new location — with the NAME of the location entry,
+  // never its id.
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 3, name: "Nordbucht" })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
-  ).toHaveCount(0);
+  const row = page.getByRole("link", { name: /Ankunft am Leuchtturm/ });
+  await expect(row).toContainText("Nordbucht");
+  await expect(row).not.toContainText("Leuchtturm von Salzhafen");
+  await expect(page.getByText("nordbucht", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 3, name: "Nordbucht" })).toHaveCount(0);
   // The old address still names the scene and reports the new one.
   expect((await api.entry(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
   // References resolve over ids, so the session's log rows are untouched — a
@@ -251,9 +254,11 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
   );
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("location", "der-alte-hafen");
 
-  // …and the chapter overview heads the group with the location's name.
+  // …and the chapter overview's row names it, with the location's name.
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 3, name: "Der alte Hafen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Ankunft am Leuchtturm/ })).toContainText(
+    "Der alte Hafen",
+  );
 });
 
 test("a rejected save shows the SERVER sentence, not the generic one", async ({ page }) => {
