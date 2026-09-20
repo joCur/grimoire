@@ -20,7 +20,22 @@
 // one has to work on a phone, and the TOPBAR SWITCHER, where the SECOND
 // campaign is created — it is the UI's only entry point for one.
 
+import type { Page } from "@playwright/test";
+
 import { apiFor, expect, test } from "../support/test";
+
+/**
+ * The chapter overview's scene rows in DOM order, by the title they show.
+ *
+ * Read off the move controls: they carry the row's title in their accessible
+ * name, and a row has no other handle that says where in the order it stands.
+ */
+async function shownSceneOrder(page: Page): Promise<string[]> {
+  const labels = await page
+    .getByRole("button", { name: /nach unten$/ })
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
+  return labels.map((label) => label.replace(/^„|“ nach unten$/g, ""));
+}
 
 // An EMPTY instance for every test in this file — the honest starting point.
 test.use({ seed: { skip: true } });
@@ -124,6 +139,29 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   expect(sceneDoc.body).toContain("[!readaloud]");
   expect(sceneDoc.properties.status).toBe("draft");
 
+  // --- a second scene goes to the END of the chapter ------------------------
+  // The order is the DM's, and a new scene is appended to it (ADR #27). This
+  // title sorts BEFORE the first one alphabetically, which is exactly what
+  // must not decide anything: it lands behind it, where it was created.
+  await page.goto(`/campaigns/${CAMPAIGN_ID}`);
+  await page.getByRole("button", { name: "Szene anlegen" }).click();
+  await page.getByLabel("Titel").fill("Abendessen bei Jorna");
+  await page.getByRole("button", { name: "Anlegen" }).click();
+  await expect(page).toHaveURL(/\/01-salzhafen\/abendessen-bei-jorna$/);
+
+  await page.goto(`/campaigns/${CAMPAIGN_ID}`);
+  await expect
+    .poll(() => shownSceneOrder(page))
+    .toEqual(["Ankunft am Leuchtturm", "Abendessen bei Jorna"]);
+  // …and that is the stored order, not a sorting of the display.
+  const tree = await api.get<{ chapters: { id: string; scenes: { id: string }[] }[] }>(
+    `campaigns/${CAMPAIGN_ID}/tree`,
+  );
+  expect(tree.chapters[0]?.scenes.map((scene) => scene.id)).toEqual([
+    "ankunft-am-leuchtturm",
+    "abendessen-bei-jorna",
+  ]);
+
   // --- start the session, use the scene live --------------------------------
   expect(await api.sessionId()).toBeUndefined();
   await page.getByRole("button", { name: "Session starten" }).click();
@@ -135,6 +173,15 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const nav = page.getByRole("navigation", { name: "Szenen der Session" });
   await expect(nav).toContainText("01 Salzhafen");
   await expect(nav.getByRole("button", { name: /Ankunft am Leuchtturm/ })).toBeVisible();
+  // The session view reads the same order — the first scene is the open one.
+  await expect(nav.getByRole("button")).toHaveText([
+    /^Ankunft am Leuchtturm/,
+    /^Abendessen bei Jorna/,
+  ]);
+  await expect(nav.getByRole("button", { name: /Ankunft am Leuchtturm/ })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   // `.last()`: the live view's own center column is nested inside the app
   // shell's <main>, and the responsive mobile note is in the DOM either way.
   await expect(page.getByRole("main").last()).toContainText(
