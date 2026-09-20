@@ -1,6 +1,6 @@
 // Render tests for the markdown pipeline (react-dom/server — no DOM
-// needed): callout anatomy, read-aloud without label row, open-by-default
-// if-sections, and the degrade paths.
+// needed): callout anatomy, read-aloud without label row, both initial
+// states of the if-sections, and the degrade paths.
 //
 // At the end of this file: GFM TABLES and the four GFM extensions that stay
 // off. Rendered HTML rather than mdast, because the question is
@@ -21,6 +21,18 @@ import { Markdown } from "./Markdown";
 
 function render(markdown: string): string {
   return renderToStaticMarkup(<Markdown>{markdown}</Markdown>);
+}
+
+/** The live scene column: the same pipeline with its branches folded. */
+function renderCollapsed(markdown: string): string {
+  return renderToStaticMarkup(<Markdown ifSections="collapsed">{markdown}</Markdown>);
+}
+
+/** An opened branch in the rendered markup — and how many of them there are. */
+const OPEN_DETAILS = /<details[^>]*\sopen/;
+
+function openBranches(html: string): number {
+  return [...html.matchAll(/<details[^>]*\sopen/g)].length;
 }
 
 /** The reference fixtures CLAUDE.md names for renderer changes, body only. */
@@ -65,6 +77,33 @@ describe("Markdown pipeline rendering", () => {
     expect(html).toContain("Falls:");
     expect(html).toContain("sie lügen");
     expect(html).toContain("Inhalt.");
+  });
+
+  test("the live column starts every if-section collapsed", () => {
+    const html = renderCollapsed("## If: sie lügen\n\nInhalt.\n\n## If: sie schweigen\n\nAnderes.");
+    // Two branches, neither of them unfolded. That the attribute is OMITTED
+    // rather than passed as `open={false}` is what keeps the element
+    // uncontrolled (Markdown.tsx) — the behaviour following from it, an open
+    // branch surviving a re-render of the column, is an E2E assertion.
+    expect([...html.matchAll(/data-if-section="/g)]).toHaveLength(2);
+    expect(html).not.toMatch(OPEN_DETAILS);
+    expect(html).not.toContain("open=");
+    // The Falls row is there, and so is the content — just not unfolded.
+    expect(html).toContain("Falls:");
+    expect(html).toContain("sie lügen");
+    expect(html).toContain("Inhalt.");
+    expect(html).toContain("Anderes.");
+  });
+
+  test("the initial state is the view's, not the text's", () => {
+    // The SAME reference scene, rendered twice: the live column folds its two
+    // branches, every other surface opens them. Nothing in the body differs.
+    const body = fixtureBody("scene-smuggler-captured.json");
+    expect(openBranches(render(body))).toBe(2);
+    expect(renderCollapsed(body)).not.toMatch(OPEN_DETAILS);
+    // Everything else the scene carries is untouched by the choice.
+    expect([...renderCollapsed(body).matchAll(/data-callout="/g)]).toHaveLength(3);
+    expect(renderCollapsed(body)).toContain("Falls:");
   });
 
   test("unknown callout kind degrades to a plain blockquote", () => {

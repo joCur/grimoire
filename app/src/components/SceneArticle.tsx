@@ -4,6 +4,11 @@
 // design prototype: 26px title, location inside the overline, italic trigger
 // line and a plain hairline instead of the chip row.
 //
+// The live column also starts the text's `## If:` branches COLLAPSED: at the
+// table the DM opens the one case that happens, and a scene whose branches
+// are all unfolded scrolls the next information out of reach. Reading and
+// editing keep them open.
+//
 // `statusControl` is the status control of the reading view; it rides at the
 // right end of the overline row. `actions` — the edit, properties and augment
 // triggers — sits quietly to its left. The component stays free of queries —
@@ -141,7 +146,7 @@ export function SceneArticle({
           </div>
         )
       )}
-      {body ?? <Markdown>{entry.body}</Markdown>}
+      {body ?? <Markdown ifSections={live ? "collapsed" : "open"}>{entry.body}</Markdown>}
     </article>
   );
 }
