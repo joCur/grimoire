@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0](https://github.com/joCur/grimoire/compare/v0.7.0...v0.8.0) (2026-09-20)
+
+
+### Features
+
+* **app:** If-Abschnitte starten in der Live-Ansicht zugeklappt ([#166](https://github.com/joCur/grimoire/issues/166)) ([#167](https://github.com/joCur/grimoire/issues/167)) ([0d88f69](https://github.com/joCur/grimoire/commit/0d88f69008da93b03a092b355e1d0439f7a91604))
+* **app:** Kennung im Anlege-Dialog per Stift selbst setzen ([#123](https://github.com/joCur/grimoire/issues/123)) ([#155](https://github.com/joCur/grimoire/issues/155)) ([2efe51b](https://github.com/joCur/grimoire/commit/2efe51bfdc81d976d9f780492488b28450726c67))
+* Szenen-Reihenfolge im Kapitel — roter Faden statt Alphabet ([#164](https://github.com/joCur/grimoire/issues/164)) ([#169](https://github.com/joCur/grimoire/issues/169)) ([25741e5](https://github.com/joCur/grimoire/commit/25741e5cd5a4e08eae1b119b362f794f564b23a9))
+
 ## [0.7.0](https://github.com/joCur/grimoire/compare/v0.6.0...v0.7.0) (2026-09-18)
 
 
