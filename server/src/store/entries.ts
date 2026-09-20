@@ -32,6 +32,7 @@ import {
 import {
   CHAPTER_ACTIVE,
   clearOtherActiveChapters,
+  nextScenePos,
   readChapterEntry,
   readSceneEntry,
   replaceSceneRefs,
@@ -326,6 +327,14 @@ function patchLocator(
       const nextLocation = sceneLocation(props.location);
       assertLocationRef(tx, campaign, nextLocation);
       assertNpcRefs(tx, campaign, npcRefs);
+      // A scene that CHANGES chapter lands at the end of the new one: its
+      // old position counted among other siblings and means nothing here,
+      // and the target chapter's order is the DM's — a scene arriving in the
+      // middle of it would move without anybody saying where. Staying in the
+      // chapter leaves `pos` untouched, so an ordinary save does not
+      // reshuffle anything.
+      const nextPosValue =
+        declared === row.chapterId ? row.pos : nextScenePos(tx, campaign, declared);
       const next: SceneRow = {
         ...row,
         title: asStr(props.title, row.id),
@@ -336,6 +345,7 @@ function patchLocator(
         status: asStr(props.status, "draft"),
         handouts: packJson(asStrArray(props.handouts)),
         body: body ?? row.body,
+        pos: nextPosValue,
         rev: row.rev + 1,
       };
       tx.update(scenes)
@@ -348,6 +358,7 @@ function patchLocator(
           status: next.status,
           handouts: next.handouts,
           body: next.body,
+          pos: next.pos,
           rev: next.rev,
         })
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))

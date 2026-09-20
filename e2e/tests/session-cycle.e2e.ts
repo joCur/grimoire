@@ -15,6 +15,11 @@
 // played one, stays openable there, and never becomes the default
 // selection.
 //
+// The nav reads the ORDER THE DM ARRANGED in the chapter overview (ADR #27);
+// this view moderates that order, it makes none of its own. So a spec that
+// depends on the order states the one it means through the documented
+// endpoint instead of leaning on whichever order the seed run produced.
+//
 // Every claim is checked twice: once in the UI and once in the stored session
 // (the server is the truth, the app keeps no state of its own).
 //
@@ -33,9 +38,33 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "../support/test";
+import { expect, test, type Api, type SeedEntry } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
+
+/** The chapter of the example campaign — the one that holds a scene order. */
+const CHAPTER = "01-salzhafen";
+
+/**
+ * Arrange the chapter's scenes through the documented endpoint: the whole
+ * list against the order's own guard token (ADR #27).
+ *
+ * The order is the DM's, so a spec that reads it says which one it means.
+ */
+async function setSceneOrder(api: Api, order: string[]): Promise<void> {
+  const tree = await api.get<{ chapters: { id: string; sceneOrderRev: number }[] }>(
+    "campaigns/beispiel/tree",
+  );
+  const chapter = tree.chapters.find((c) => c.id === CHAPTER);
+  if (chapter === undefined) throw new Error(`the tree has no chapter ${CHAPTER}`);
+  await api.send("PUT", `campaigns/beispiel/chapters/${CHAPTER}/scene-order`, {
+    scenes: order,
+    rev: chapter.sceneOrderRev,
+  });
+}
+
+/** The live nav of a running session — its rows are the chapter's scenes. */
+const liveNav = (page: Page) => page.getByRole("navigation", { name: "Szenen der Session" });
 
 /** The session chip in menu mode (on /live) — the ONE session control. */
 const sessionMenuChip = (page: Page) =>
@@ -635,9 +664,9 @@ test("an unreachable session lookup dims the chip instead of offering a start", 
 test.describe("played/dropped scenes in the live nav", () => {
   const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
   // The seeded scene names a location that EXISTS — a reference creates
-  // nothing (ADR #19) — and that location's name sorts after the one the
-  // arrival scene sits in, so the arrival scene stays the first row of the
-  // nav. That is what the default selection needs to fall through to.
+  // nothing (ADR #19). Where it STANDS is not the location's business any
+  // more: the test arranges the order itself, the arrival scene first, so the
+  // default selection has something to fall through to.
   const SEEDED = "01-salzhafen/bucht/harbor-office-talk";
 
   test.use({
@@ -667,19 +696,23 @@ test.describe("played/dropped scenes in the live nav", () => {
     page,
     api,
   }) => {
+    // The chapter's order, as the DM would have arranged it in the overview.
+    await setSceneOrder(api, [
+      "lighthouse-arrival",
+      "harbor-office-talk",
+      "smuggler-captured",
+    ]);
     await page.goto("/campaigns/beispiel");
     await page.getByRole("button", { name: "Session starten" }).click();
     await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
-    const nav = page.getByRole("navigation", { name: "Szenen der Session" });
+    const nav = liveNav(page);
     const arrivalRow = nav.getByRole("button", { name: /Ankunft am Leuchtturm/ });
     const seededRow = nav.getByRole("button", { name: /Gespräch im Hafenkontor/ });
     const heading = page.getByRole("article").getByRole("heading", { level: 1 });
 
-    // Before: both are planned, the FIRST row is the default selection, the
-    // arrival scene: the nav walks the chapter's groups, and they are ordered
-    // by the NAME their heading shows, which puts the arrival scene's group
-    // first.
+    // Before: both are planned, and the default selection is the first row of
+    // the order — the arrival scene, where the DM put it.
     await expect(arrivalRow).toBeVisible();
     await expect(seededRow).toBeVisible();
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
@@ -748,8 +781,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     await page.reload();
     await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");
-    // The fallback is the FIRST done scene, i.e. the chapter's scene order
-    // again (groups by name).
+    // The fallback is the FIRST done scene — the chapter's scene order again.
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
     await expect(page.getByLabel("Schnellnotiz")).toBeVisible();
   });
@@ -799,4 +831,147 @@ test("the session page shows a past evening's rows; the old address is gone", as
   const address = ["sessions", "2026-01-15"].join("/");
   const res = await api.fetch(`campaigns/beispiel/entries/${address}`);
   expect(res.status).toBe(404);
+});
+
+// The ORDER the DM arranged is what the session view moderates (ADR #27):
+// which scene it opens on, which rows the nav shows in which sequence, and
+// where the one step of the evening leads.
+//
+// A CONTINGENCY is never any of that. It fires when its trigger fires, so it
+// stands in its own block and is skipped by both the entry point and the
+// step — even when the order puts it ahead of the first planned scene that is
+// still to come. That is the case this block is built around.
+test.describe("the session view follows the chapter's order", () => {
+  const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
+
+  /** One planned scene of this block's chapter, in the seed's shape. */
+  const planned = (id: string, title: string, location: string): SeedEntry => ({
+    kind: "scene",
+    properties: {
+      id,
+      title,
+      type: "planned",
+      chapter: CHAPTER,
+      location,
+      npcs: [],
+      handouts: [],
+      tags: [],
+      status: "draft",
+    },
+    body: `\n## Flow\n\n${title}.\n`,
+  });
+
+  const DINNER = "Abendessen bei Jorna";
+  const CELLAR = "Der Keller unter dem Turm";
+  const CONTINGENCY = "Von den Schmugglern erwischt";
+
+  test.use({
+    seed: {
+      entries: {
+        "scene-order-dinner": planned("abendessen", DINNER, "bucht"),
+        "scene-order-cellar": planned("keller", CELLAR, "leuchtturm"),
+      },
+    },
+  });
+
+  /** Start the evening from the overview — the session the view needs. */
+  async function startSession(page: Page): Promise<void> {
+    await page.goto("/campaigns/beispiel");
+    await page.getByRole("button", { name: "Session starten" }).click();
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  }
+
+  test("it opens the first planned scene still to come, never a contingency", async ({
+    page,
+    api,
+  }) => {
+    // The order deliberately puts the contingency BEFORE the first planned
+    // scene that is still to come: `Ankunft` is behind us, the contingency
+    // only fires on its trigger, so the evening starts at `Abendessen`.
+    await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
+    await api.patchProperties(ARRIVAL, { status: "played" });
+
+    await startSession(page);
+    const nav = liveNav(page);
+    const heading = page.getByRole("article").getByRole("heading", { level: 1 });
+
+    // The nav is the DM's order: the plan first, in sequence, then the
+    // contingency block, then the collapsed group of what is behind us.
+    await expect(nav.getByRole("button")).toHaveText([
+      new RegExp(`^${DINNER}`),
+      new RegExp(`^${CELLAR}`),
+      new RegExp(`^${CONTINGENCY}`),
+      /^Gespielt/,
+    ]);
+    await expect(heading).toHaveText(DINNER);
+    await expect(nav.getByRole("button", { name: new RegExp(DINNER) })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    await expect(nav.getByRole("button", { name: new RegExp(CONTINGENCY) })).not.toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+
+    // The step names where the DM reaches next — the next PLANNED scene that
+    // is still to come.
+    const step = page.getByRole("button", { name: `Nächste Szene: ${CELLAR}` });
+    await expect(step).toBeVisible();
+    await step.click();
+    await expect(heading).toHaveText(CELLAR);
+    await expect(nav.getByRole("button", { name: new RegExp(CELLAR) })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    // Nothing planned is left behind it, so there is no step at all — a dead
+    // control would say less than a missing one.
+    await expect(page.getByRole("button", { name: /^Nächste Szene: / })).toHaveCount(0);
+
+    // From a CONTINGENCY the step picks up the plan again, at its first scene
+    // still to come: the detour does not move the thread of the evening.
+    await nav.getByRole("button", { name: new RegExp(CONTINGENCY) }).click();
+    await expect(heading).toHaveText(CONTINGENCY);
+    await expect(page.getByRole("button", { name: `Nächste Szene: ${DINNER}` })).toBeVisible();
+  });
+
+  test("a rearranged order moves the entry point with it", async ({ page, api }) => {
+    await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
+    await api.patchProperties(ARRIVAL, { status: "played" });
+    await startSession(page);
+
+    const nav = liveNav(page);
+    const heading = page.getByRole("article").getByRole("heading", { level: 1 });
+    await expect(heading).toHaveText(DINNER);
+
+    // The DM rearranges in the overview — the same one write the up/down
+    // controls make. The session view reads that order, it keeps none.
+    await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "keller", "abendessen"]);
+    await page.reload();
+    await expect(nav.getByRole("button")).toHaveText([
+      new RegExp(`^${CELLAR}`),
+      new RegExp(`^${DINNER}`),
+      new RegExp(`^${CONTINGENCY}`),
+      /^Gespielt/,
+    ]);
+    await expect(heading).toHaveText(CELLAR);
+    await expect(page.getByRole("button", { name: `Nächste Szene: ${DINNER}` })).toBeVisible();
+  });
+
+  test("with the whole plan behind us it opens the first PLANNED scene and offers no step", async ({
+    page,
+    api,
+  }) => {
+    await setSceneOrder(api, ["smuggler-captured", "lighthouse-arrival", "abendessen", "keller"]);
+    for (const scene of [ARRIVAL, "01-salzhafen/bucht/abendessen", "01-salzhafen/leuchtturm/keller"]) {
+      await api.patchProperties(scene, { status: "played" });
+    }
+
+    await startSession(page);
+    const heading = page.getByRole("article").getByRole("heading", { level: 1 });
+    // The contingency stands FIRST in the order and is still `ready` — and it
+    // is still not the entry point. The fallback is the first planned scene.
+    await expect(liveNav(page)).toContainText("Keine geplanten Szenen in diesem Kapitel.");
+    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(page.getByRole("button", { name: /^Nächste Szene: / })).toHaveCount(0);
+  });
 });

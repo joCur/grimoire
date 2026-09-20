@@ -138,28 +138,30 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(chapter!.path).toBe("01-salzhafen");
   });
 
-  test("scenes grouped by their LOCATION", async () => {
+  test("a chapter lists its scenes as ONE ordered list", async () => {
     const t = await tree();
     const chapter = t.chapters.find((c) => c.id === "01-salzhafen")!;
-    // The `hafen/` directory of the import format is not a group: the group
-    // is what the scene's `location` names, so the two example scenes sit
-    // apart even though they shared a directory.
-    //
-    // Ordered by the NAME the heading shows, not by the
-    // id behind it.
-    expect(chapter.groups.map((g) => g.slug)).toEqual(["leuchtturm", "bucht"]);
-    expect(chapter.groups.map((g) => g.name)).toEqual([
-      "Der Leuchtturm von Salzhafen",
-      "Die Nordbucht",
+    // A flat list in `pos` order, not buckets per location: the migration
+    // gave the fixture scenes the positions they were displayed at, which
+    // ordered them by the location's display NAME ("Der Leuchtturm von
+    // Salzhafen" before "Die Nordbucht").
+    expect(chapter.scenes.map((s) => s.id)).toEqual([
+      "lighthouse-arrival",
+      "smuggler-captured",
     ]);
-    const leuchtturm = chapter.groups.find((g) => g.slug === "leuchtturm")!;
-    expect(leuchtturm.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
-    expect(leuchtturm.scenes[0]!.status).toBe("ready");
+    const arrival = chapter.scenes[0]!;
+    expect(arrival.status).toBe("ready");
+    // The location travels as the ID (address, links) AND as the resolved
+    // display name the meta line shows.
+    expect(arrival.location).toBe("leuchtturm");
+    expect(arrival.locationName).toBe("Der Leuchtturm von Salzhafen");
     // The path segment is the scene ID now (store/paths.ts) — the old stem
     // ("ankunft-leuchtturm") does not exist anywhere any more.
-    expect(leuchtturm.scenes[0]!.path).toBe("01-salzhafen/leuchtturm/lighthouse-arrival");
-    const bucht = chapter.groups.find((g) => g.slug === "bucht")!;
-    expect(bucht.scenes[0]!.type).toBe("contingency");
+    expect(arrival.path).toBe("01-salzhafen/leuchtturm/lighthouse-arrival");
+    expect(chapter.scenes[1]!.type).toBe("contingency");
+    // The order carries its own guard token, separate from the chapter
+    // entry's `rev`.
+    expect(chapter.sceneOrderRev).toBe(1);
   });
 
   test("npcs sorted by name, locations and sessions present", async () => {
@@ -193,7 +195,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
     const paths = t.chapters.flatMap((c) => [
       ...(c.path === undefined ? [] : [c.path]),
-      ...c.groups.flatMap((g) => g.scenes.map((s) => s.path)),
+      ...c.scenes.map((s) => s.path),
     ]);
     for (const rootEntry of ["campaign", "inbox", "glossary"]) expect(paths).not.toContain(rootEntry);
   });

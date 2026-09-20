@@ -10,7 +10,7 @@ const en = translator("en");
 
 const tree: CampaignTree = {
   campaign: "beispiel",
-  chapters: [{ id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm von Salzhafen", groups: [] }],
+  chapters: [{ id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm von Salzhafen", scenes: [] }],
   npcs: [],
   locations: [
     { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
@@ -19,7 +19,7 @@ const tree: CampaignTree = {
 };
 
 describe("pageContextCrumbs", () => {
-  test("a grouped scene reads chapter title then group, chapter links to the chapter overview", () => {
+  test("a scene with a location reads chapter title then location, chapter links to the chapter overview", () => {
     expect(
       pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm", tree, de),
     ).toEqual([
@@ -29,7 +29,7 @@ describe("pageContextCrumbs", () => {
     ]);
   });
 
-  test("a group WITH a location entry shows the location's name", () => {
+  test("a middle segment WITH a location entry shows the location's name", () => {
     expect(
       pageContextCrumbs("beispiel", "01-salzhafen/leuchtturm/aufstieg", tree, de),
     ).toEqual([
@@ -38,7 +38,7 @@ describe("pageContextCrumbs", () => {
     ]);
   });
 
-  test("a scene directly in the chapter directory has no group crumb", () => {
+  test("a scene addressed directly under its chapter has no location crumb", () => {
     expect(pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de)).toEqual([
       { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
     ]);

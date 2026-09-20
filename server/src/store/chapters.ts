@@ -18,7 +18,7 @@ import {
   type LocationSummary,
   type NpcStatus,
   type NpcSummary,
-  type SceneGroup,
+  type SceneOrderResponse,
   type SceneStatus,
   type SceneSummary,
   type SceneType,
@@ -28,7 +28,15 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { chapters, locations, npcs, sceneNpcs, sceneTags, scenes } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { chapterIdExists, chapterRowOf, indexChapter, indexScene, sceneRowOf } from "./entity-rows";
+import {
+  chapterIdExists,
+  chapterRowOf,
+  indexChapter,
+  indexScene,
+  refNpcs,
+  refTags,
+  sceneRowOf,
+} from "./entity-rows";
 import { getDb } from "./handle";
 import { chapterPath, locationPath, npcPath, sceneAddress, RESERVED_SEGMENTS } from "./paths";
 import {
@@ -43,6 +51,7 @@ import { sessionSummaries } from "./session-rows";
 import {
   asOptStr,
   assertSafeChapterId,
+  guardRev,
   nextPos,
   resolveNewId,
   slugReserved,
@@ -93,16 +102,15 @@ export function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep:
   }
 }
 
-// --- a scene's location, which is also its group ------------------------------
+// --- a scene's location -------------------------------------------------------
 
 /**
  * A scene's `location`, validated: an entity id, or null.
  *
- * `location` is a REFERENCE — it is the scene's group and its address — so a
- * value that cannot be an id cannot be a group either. Free text is a 400
- * that carries the slug it would have been, so the app can say which id to
- * use; whether that id HAS an entry is the next question
- * (`assertLocationRef`).
+ * `location` is a REFERENCE — it is part of the scene's address (ADR #17) —
+ * so free text is a 400 that carries the slug it would have been, and the
+ * app can say which id to use; whether that id HAS an entry is the next
+ * question (`assertLocationRef`).
  */
 export function sceneLocation(value: unknown): string | null {
   const raw = asOptStr(value);
@@ -155,6 +163,124 @@ export function replaceSceneRefs(
   });
 }
 
+// --- the order of the scenes in a chapter ------------------------------------
+
+/**
+ * The `pos` a scene appended to `chapter` gets: one past the last scene of
+ * THAT chapter.
+ *
+ * Per chapter, not per campaign: a chapter lists its own scenes and nothing
+ * else, so a campaign-wide counter would hand out positions that grow with
+ * the campaign while saying nothing about where the scene sits among its
+ * siblings. Every path that brings a scene into a chapter uses this one —
+ * creating it, accepting a generated draft, and moving one here from another
+ * chapter.
+ */
+export function nextScenePos(tx: GrimoireDb, campaign: string, chapter: string): number {
+  return nextPos(
+    tx
+      .select({ pos: scenes.pos })
+      .from(scenes)
+      .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter)))
+      .all(),
+  );
+}
+
+/**
+ * The 400 of a scene-order write whose list is not exactly the chapter's
+ * scenes. It names all three ways it can be wrong at once, so the DM sees
+ * the whole mismatch rather than the first id of it.
+ */
+function sceneOrderMismatch(
+  missing: string[],
+  unknown: string[],
+  duplicate: string[],
+): ApiError {
+  const parts: string[] = [];
+  if (missing.length > 0) parts.push(`missing: ${missing.join(", ")}`);
+  if (unknown.length > 0) parts.push(`not in this chapter: ${unknown.join(", ")}`);
+  if (duplicate.length > 0) parts.push(`listed twice: ${duplicate.join(", ")}`);
+  return new ApiError(
+    400,
+    `the order must name exactly the scenes of this chapter (${parts.join("; ")})`,
+    { code: "scene_order_mismatch", missing, unknown, duplicate },
+  );
+}
+
+/**
+ * PUT /api/campaigns/:campaign/chapters/:chapter/scene-order
+ * `{ scenes, rev }` -> the stored order plus the chapter's fresh `rev`.
+ *
+ * The whole order in one request, like the glossary's list write: dragging a
+ * scene changes the positions of its neighbours too, so the array IS the
+ * order and there is no per-scene "move" to race against.
+ *
+ * THE GUARD IS `chapters.scene_order_rev`, a counter of its own, and the
+ * write bumps only that one. Neither `chapters.rev` nor `scenes.rev` moves:
+ * those guard ENTRIES — a chapter's properties and text, a scene's
+ * properties and text (ADR #23) — and reordering touches none of them.
+ * Bumping either would turn an editor that is open on something else into a
+ * conflict the moment somebody rearranges the chapter around it, which is a
+ * write that editor is not competing with. The order is its own list with
+ * its own lifetime, so it counts its own writes, exactly like the three list
+ * guards on `campaigns`.
+ *
+ * The list has to be EXACTLY the chapter's scenes — a missing, a foreign or
+ * a repeated id is 400 `scene_order_mismatch` and nothing is written. A
+ * partial order would have to invent positions for the scenes it does not
+ * mention, and inventing is the thing this endpoint exists to stop.
+ */
+export async function writeSceneOrder(
+  campaign: string,
+  chapter: string,
+  order: string[],
+  rev: number,
+): Promise<SceneOrderResponse> {
+  assertSafeChapterId(chapter);
+  return mutate(campaign, (tx) => {
+    const chapterRow = chapterRowOf(tx, campaign, chapter);
+    if (chapterRow === undefined) throw new ApiError(404, "chapter not found");
+    guardRev(chapterRow.sceneOrderRev, rev, "scene order changed");
+
+    const present = new Set(
+      tx
+        .select({ id: scenes.id })
+        .from(scenes)
+        .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter)))
+        .all()
+        .map((r) => r.id),
+    );
+    const seen = new Set<string>();
+    const unknown: string[] = [];
+    const duplicate: string[] = [];
+    for (const id of order) {
+      if (seen.has(id)) {
+        if (!duplicate.includes(id)) duplicate.push(id);
+        continue;
+      }
+      seen.add(id);
+      if (!present.has(id)) unknown.push(id);
+    }
+    const missing = [...present].filter((id) => !seen.has(id)).sort(cmp);
+    if (missing.length > 0 || unknown.length > 0 || duplicate.length > 0) {
+      throw sceneOrderMismatch(missing, unknown, duplicate);
+    }
+
+    order.forEach((id, pos) => {
+      tx.update(scenes)
+        .set({ pos })
+        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
+        .run();
+    });
+    const nextRev = chapterRow.sceneOrderRev + 1;
+    tx.update(chapters)
+      .set({ sceneOrderRev: nextRev })
+      .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, chapter)))
+      .run();
+    return { scenes: [...order], rev: nextRev };
+  });
+}
+
 // --- reading a chapter or a scene entry ---------------------------------------
 
 /**
@@ -175,18 +301,17 @@ export function readChapterEntry(
  * The scene entry an address names; 404 when the campaign has no scene with
  * that id.
  *
- * A scene is resolved by its ID alone. The chapter and group segments of the
- * address are not matched: the group is `location`, and it moves whenever the
- * DM corrects it, so an old link is a STALE ADDRESS for a scene that still
- * exists, not a wrong one. The answer carries the CURRENT address in `path`
+ * A scene is resolved by its ID alone. The chapter and location segments of
+ * the address are not matched: `location` moves whenever the DM corrects it,
+ * so an old link is a STALE ADDRESS for a scene that still exists, not a
+ * wrong one. The answer carries the CURRENT address in `path`
  * (renderScene builds it from the row) and the app replaces the URL with it.
  * See ADR #17.
  */
 export function readSceneEntry(tx: GrimoireDb, campaign: string, id: string): EntryResponse {
   const row = sceneRowOf(tx, campaign, id);
   if (row === undefined) throw new ApiError(404, "entry not found");
-  const summary = sceneSummaryRow(tx, row);
-  return renderScene(row, summary.npcs, summary.tags);
+  return renderScene(row, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
 }
 
 // --- GET /api/campaigns/:campaign/tree ----------------------------------------
@@ -196,21 +321,17 @@ function cmp(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-export function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
-  const npcRefs = db
-    .select({ npcId: sceneNpcs.npcId })
-    .from(sceneNpcs)
-    .where(and(eq(sceneNpcs.campaignId, row.campaignId), eq(sceneNpcs.sceneId, row.id)))
-    .orderBy(asc(sceneNpcs.pos))
-    .all()
-    .map((r) => r.npcId);
-  const tags = db
-    .select({ tag: sceneTags.tag })
-    .from(sceneTags)
-    .where(and(eq(sceneTags.campaignId, row.campaignId), eq(sceneTags.sceneId, row.id)))
-    .orderBy(asc(sceneTags.pos))
-    .all()
-    .map((r) => r.tag);
+/**
+ * One scene as the tree lists it. `locationNames` resolves the scene's
+ * location to the NAME the DM reads — the caller holds that map because it
+ * builds a whole campaign's worth of summaries from one query of the
+ * location rows.
+ */
+export function sceneSummaryRow(
+  db: GrimoireDb,
+  row: SceneRow,
+  locationNames: ReadonlyMap<string, string>,
+): SceneSummary {
   const summary: SceneSummary = {
     path: sceneAddress(row),
     id: row.id,
@@ -220,11 +341,16 @@ export function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
     // cannot express.
     type: row.type as SceneType,
     status: row.status as SceneStatus,
-    npcs: npcRefs,
-    tags,
+    npcs: refNpcs(db, row.campaignId, row.id),
+    tags: refTags(db, row.campaignId, row.id),
   };
   if (row.trigger !== null) summary.trigger = row.trigger;
-  if (row.location !== null) summary.location = row.location;
+  if (row.location !== null) {
+    summary.location = row.location;
+    // A referenced entry always exists (schema.ts rule 3), and an unnamed
+    // one degrades to its id — still the word the DM typed.
+    summary.locationName = locationNames.get(row.location) ?? row.location;
+  }
   return summary;
 }
 
@@ -246,8 +372,8 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .orderBy(asc(scenes.pos), asc(scenes.id))
     .all() as SceneRow[];
 
-  // Location id -> display name, for the scene GROUPS below: the heading is
-  // the name, so the groups have to be ordered by it.
+  // Location id -> display name: a scene's summary names its location the
+  // way the DM reads it, and one query answers that for the whole campaign.
   const locationRows = db
     .select()
     .from(locations)
@@ -258,35 +384,20 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   );
 
   const chapterNodes: ChapterNode[] = chapterRows.map((chapter) => {
+    // `sceneRows` is already in `pos`, `id` order and a filter keeps it, so
+    // the chapter's scenes come out in the order the DM arranged them.
     const own = sceneRows.filter((s) => (s.chapterId ?? "") === chapter.id);
-    // The group IS the scene's location — "" means the scene
-    // names none and renders under the app's neutral "Ohne Ort" section.
-    const bySlug = new Map<string, SceneSummary[]>();
-    for (const scene of own) {
-      const group = scene.location ?? "";
-      const list = bySlug.get(group) ?? [];
-      list.push(sceneSummaryRow(db, scene));
-      bySlug.set(group, list);
-    }
-    const groups: SceneGroup[] = [...bySlug.entries()]
-      .map(([slug, list]) => ({
-        slug,
-        // A referenced entry always exists (schema.ts rule 3), and an
-        // unnamed one degrades to its id — still the word the DM typed.
-        name: slug === "" ? "" : (locationNames.get(slug) ?? slug),
-        scenes: list.sort((a, b) => cmp(a.path, b.path)),
-      }))
-      // By the NAME the heading shows, not by the id behind it. "" — the
-      // scenes that name no location — goes LAST: it is the leftovers section
-      // the app labels „Ohne Ort“, not the first location.
-      .sort((a, b) => (a.slug === "" ? 1 : b.slug === "" ? -1 : cmp(a.name, b.name)));
     const node: ChapterNode = {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,
-      groups,
+      scenes: own.map((scene) => sceneSummaryRow(db, scene, locationNames)),
       // A chapter row always exists, so its address is always there; the app
       // uses it to open the chapter entry.
       path: chapterPath(chapter.id),
+      // The order's guard token rides along so the overview can reorder
+      // straight from the tree it already has, without reading the chapter
+      // entry first for a token that is not even on it.
+      sceneOrderRev: chapter.sceneOrderRev,
     };
     if (chapter.status !== null) node.status = chapter.status as ChapterStatus;
     return node;
@@ -446,10 +557,11 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  * hang in — the same rule `assertChapterRef` enforces for a properties patch,
  * and the same code (ADR #19, a mention creates nothing).
  *
- * A scene created here has no `location`, so it sits at chapter level and
- * the app lists it in its no-location group. Setting one later is an
- * ordinary entry PATCH — and that patch is also what moves the scene into
- * the location's group, address included.
+ * A scene created here has no `location`, so it sits at chapter level.
+ * Setting one later is an ordinary entry PATCH — and that patch is also what
+ * changes the scene's address. It is appended to the END of its chapter
+ * (`nextScenePos`): a new scene has no place of its own yet, and the DM
+ * moves it where it belongs.
  */
 export async function createScene(
   campaign: string,
@@ -486,9 +598,7 @@ export async function createScene(
         id,
         chapterId: chapter,
         title: title.trim(),
-        pos: nextPos(
-          tx.select({ pos: scenes.pos }).from(scenes).where(eq(scenes.campaignId, campaign)).all(),
-        ),
+        pos: nextScenePos(tx, campaign, chapter),
       })
       .run();
     const row = sceneRowOf(tx, campaign, id);

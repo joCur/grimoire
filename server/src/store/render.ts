@@ -69,6 +69,8 @@ export interface ChapterRow {
   body: string;
   pos: number;
   rev: number;
+  /** Guard token of the chapter's scene ORDER, separate from `rev`. */
+  sceneOrderRev: number;
 }
 
 export interface SceneRow {

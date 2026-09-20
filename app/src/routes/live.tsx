@@ -2,7 +2,14 @@
 // prototype: left the planned scenes and contingencies of the ACTIVE
 // chapter, center the selected scene through the same article pipeline as
 // the reading view, right the location and NPC cards plus the log panel and
-// the Schnellnotiz. The session on the server is the truth: every write
+// the Schnellnotiz.
+//
+// The scenes stand in the order the DM arranged in the chapter overview
+// (ADR #27) — this view moderates that order and never reorders it. Which
+// scene it opens on, and where the "next scene" step under the open one
+// leads, are both read out of that order (lib/scene-order.ts).
+//
+// The session on the server is the truth: every write
 // returns the fresh session, the "played" checkmark comes from its played
 // scenes (server-maintained — never faked client-side). WHICH session is running is
 // the server's answer too (GET /campaigns/:campaign/session) — a session
@@ -17,7 +24,7 @@
 
 import type { SceneSummary, SessionLogEntry } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
+import { ArrowRight, Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
@@ -31,6 +38,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
+import { initialSessionScene, nextSessionScene } from "@/lib/scene-order";
 import { isSceneDone } from "@/lib/scene-status";
 import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
 import { cn } from "@/lib/utils";
@@ -58,13 +66,11 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  // "Active scene" = the live view's default selection: first planned scene
-  // of the active chapter (fallbacks as in LiveDesktop).
+  // "Active scene" = the session view's default selection, read from the same
+  // function so the phone points at the scene the desktop would open.
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
-  const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
-  const openScenes = scenes.filter((s) => s.type !== "contingency" && !isSceneDone(s.status));
-  const scene = openScenes[0] ?? scenes.find((s) => s.type !== "contingency") ?? scenes[0];
+  const scene = initialSessionScene(chapter?.scenes ?? []);
 
   return (
     <>
@@ -96,7 +102,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // The live nav shows the ACTIVE chapter; without one, the first.
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
-  const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
+  // The chapter's scenes in the order the DM arranged in the overview — this
+  // view moderates that order, it does not make one of its own (ADR #27).
+  const scenes = chapter?.scenes ?? [];
   // The scene STATUS splits the plan: `played`/`dropped` scenes
   // drop out of "Geplant" into the collapsed "Gespielt" group below. The
   // session checkmark is a different thing and stays on top of both.
@@ -105,18 +113,19 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const done = nonContingency.filter((s) => isSceneDone(s.status));
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
-  // Selected scene = client state (the scene's ID); default: FIRST PLANNED
-  // scene, never a played one. With everything played the fallbacks keep
-  // the view usable instead of blanking it: a done scene, else any scene, else
-  // the empty note in the center column.
+  // Selected scene = client state (the scene's ID); the default is the first
+  // PLANNED scene of the order that is not behind us, and with the plan played
+  // its first scene — `initialSessionScene`. A chapter without a planned scene
+  // leaves it undefined and the center column says so.
   //
   // The ID and not the address: a scene's address carries its
   // `location`, so a location change moves the address out from under the
   // selection — the tree refetches, no scene matches the stored path any
-  // more, and the live view jumps to the first planned scene mid-session.
+  // more, and the live view jumps back to the start of the chapter mid-session.
   const [selectedId, setSelectedId] = useState<string>();
-  const selected =
-    scenes.find((s) => s.id === selectedId) ?? planned[0] ?? done[0] ?? scenes[0];
+  const selected = scenes.find((s) => s.id === selectedId) ?? initialSessionScene(scenes);
+  // The thread of the evening: where the DM reaches after this scene.
+  const next = nextSessionScene(scenes, selected?.id);
 
   // Which entry the drawer shows — undefined = closed. Sitting HERE
   // (not inside the aside) is what keeps scene selection and note draft
@@ -209,14 +218,19 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             // here: the click opens the DRAWER instead of navigating away
             // — the selected scene and the half-typed
             // Schnellnotiz survive it.
-            <EntityRefDrawerTarget onOpen={setDrawerPath}>
-              {/* Keyed by the scene: a switch REMOUNTS the column instead of
-                  reconciling the new text into the old nodes. Without it the
-                  `## If:` branches the DM opened in one scene would stay open
-                  in the next one — the branches start collapsed per scene and
-                  nothing is remembered across a switch. */}
-              <LiveScene key={selected.path} campaign={campaign} path={selected.path} />
-            </EntityRefDrawerTarget>
+            <>
+              <EntityRefDrawerTarget onOpen={setDrawerPath}>
+                {/* Keyed by the scene: a switch REMOUNTS the column instead of
+                    reconciling the new text into the old nodes. Without it the
+                    `## If:` branches the DM opened in one scene would stay open
+                    in the next one — the branches start collapsed per scene and
+                    nothing is remembered across a switch. */}
+                <LiveScene key={selected.path} campaign={campaign} path={selected.path} />
+              </EntityRefDrawerTarget>
+              {next !== undefined && (
+                <NextSceneStep title={next.title} onPick={() => setSelectedId(next.id)} />
+              )}
+            </>
           )}
         </div>
       </main>
@@ -395,6 +409,37 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
     return <p className="text-muted-foreground">{t("live.scene.unloadable")}</p>;
   }
   return <SceneArticle entry={data} tree={tree.data} variant="live" />;
+}
+
+/**
+ * The one step of the evening, under the open scene: it names where the DM
+ * reaches next so the left list does not have to be searched mid-sentence
+ * (UI-BRIEF §3).
+ *
+ * It lives at the END of the CENTER column, which is the whole placement
+ * decision: the Schnellnotiz is the second most important element of this view
+ * and sits in the aside, so a step here can neither cover it nor push itself
+ * between a scene and the field the DM types into. Quiet, one line, the title
+ * in the label — a step nobody can read at a glance is not a step.
+ */
+function NextSceneStep({ title, onPick }: { title: string; onPick: () => void }) {
+  const t = useT();
+  return (
+    <div className="mt-8 border-t border-border pt-4">
+      <button
+        type="button"
+        onClick={onPick}
+        className="group flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13.5px] text-body-secondary transition-colors hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-reduce:transition-none"
+      >
+        <span className="min-w-0 flex-1 truncate">{t("live.next", { title })}</span>
+        <ArrowRight
+          aria-hidden
+          size={15}
+          className="flex-none text-muted-foreground group-hover:text-primary"
+        />
+      </button>
+    </div>
+  );
 }
 
 /** Log panel (newest first) pinned above the Schnellnotiz — recessed panel,

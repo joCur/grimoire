@@ -73,9 +73,7 @@ export function entityRefIndex(
       for (const location of tree.locations) put("location", location.id, location.name, location.path);
     } else {
       for (const chapter of tree.chapters) {
-        for (const group of chapter.groups) {
-          for (const scene of group.scenes) put("scene", scene.id, scene.title, scene.path);
-        }
+        for (const scene of chapter.scenes) put("scene", scene.id, scene.title, scene.path);
       }
     }
   }

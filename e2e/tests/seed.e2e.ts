@@ -35,7 +35,7 @@ import {
 /** What GET /api/:campaign/tree answers — only the parts this spec reads. */
 interface TreeResponse {
   campaign: string;
-  chapters: { id: string; title: string; groups: { slug: string; scenes: { path: string; id: string; title: string }[] }[] }[];
+  chapters: { id: string; title: string; scenes: { path: string; id: string; title: string }[] }[];
   npcs: { path: string; id: string }[];
   locations: { path: string }[];
   /** A session SUMMARY — id and timestamps, no address (ADR #26). */
@@ -64,9 +64,9 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const tree = await api.get<TreeResponse>("campaigns/beispiel/tree");
   expect(tree.campaign).toBe("beispiel");
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
-  const scenes = tree.chapters.flatMap((c) => c.groups.flatMap((g) => g.scenes));
+  const scenes = tree.chapters.flatMap((c) => c.scenes);
   // A scene's address is its chapter, its location and its id — the two
-  // scenes name different Orte, so they land under DIFFERENT groups.
+  // scenes name different Orte, so the location shows up in both addresses.
   expect(scenes.map((s) => s.path).sort()).toEqual([
     "01-salzhafen/bucht/smuggler-captured",
     "01-salzhafen/leuchtturm/lighthouse-arrival",

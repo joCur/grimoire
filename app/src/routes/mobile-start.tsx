@@ -32,10 +32,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
   });
   // Display name from campaign, id as the fallback.
   const { label: campaignName } = useCampaignMeta(campaign);
-  const sceneCount = tree?.chapters.reduce(
-    (n, ch) => n + ch.groups.reduce((m, g) => m + g.scenes.length, 0),
-    0,
-  );
+  const sceneCount = tree?.chapters.reduce((n, ch) => n + ch.scenes.length, 0);
   // The row's count, or nothing while the tree is still loading. The plural
   // form comes from the catalog (ICU), not from concatenation here.
   const countLabel = (count: number | undefined, key: MessageKey) =>

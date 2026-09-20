@@ -228,7 +228,7 @@ describe("a reference that names an entry is stored", () => {
     expect(patched.properties.npcs).toEqual(["jorna", "holm"]);
   });
 
-  test("changing location MOVES the scene — group and address", async () => {
+  test("changing location MOVES the scene — address and meta line", async () => {
     expect((await post("/locations", { name: "Alte Räucherkammer" })).status).toBe(201);
     expect((await getEntry(SCENE_B)).properties.location).toBe("bucht");
 
@@ -240,9 +240,13 @@ describe("a reference that names an entry is stored", () => {
       "01-salzhafen/alte-raeucherkammer/smuggler-captured",
     );
     const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
-    expect(chapter?.groups.map((g) => g.slug).sort()).toEqual([
-      "alte-raeucherkammer",
-      "leuchtturm",
+    const scene = chapter?.scenes.find((s) => s.id === "smuggler-captured");
+    expect(scene?.location).toBe("alte-raeucherkammer");
+    expect(scene?.locationName).toBe("Alte Räucherkammer");
+    // Only the location changed, so the scene keeps its place in the chapter.
+    expect(chapter?.scenes.map((s) => s.id)).toEqual([
+      "lighthouse-arrival",
+      "smuggler-captured",
     ]);
   });
 
@@ -250,7 +254,9 @@ describe("a reference that names an entry is stored", () => {
     const cleared = await patchFm(SCENE_B, { location: null });
     expect(cleared.path).toBe("01-salzhafen/smuggler-captured");
     const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
-    expect(chapter?.groups.map((g) => g.slug)).toEqual(["leuchtturm", ""]);
+    const scene = chapter?.scenes.find((s) => s.id === "smuggler-captured");
+    expect(scene?.location).toBeUndefined();
+    expect(scene?.locationName).toBeUndefined();
   });
 
   test("an unrelated patch re-sends the stored references and is fine", async () => {

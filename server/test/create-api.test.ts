@@ -239,11 +239,9 @@ describe("the per-campaign creates", () => {
 
     // …and the chapter overview sees it (the tree is what every list reads).
     const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
-      chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ path: string }> }> }>;
+      chapters: Array<{ id: string; scenes: Array<{ path: string }> }>;
     };
-    expect(tree.chapters[0]?.groups[0]?.scenes[0]?.path).toBe(
-      "01-salzhafen/ankunft-am-leuchtturm",
-    );
+    expect(tree.chapters[0]?.scenes[0]?.path).toBe("01-salzhafen/ankunft-am-leuchtturm");
   });
 
   test("a scene under an unknown chapter is a 400 — chapters are never created by naming", async () => {

@@ -40,10 +40,19 @@ Referenz-Schlüssel in Adressen, Links und `[[id]]`-Referenzen und ändert sich
 danach nie mehr (ADR #21). Der Eigenschaften-Dialog zeigt sie, bietet aber
 keine Änderung.
 
-Die Adresse einer Szene enthält ihren **Ort**. Die Kapitelübersicht gruppiert
-Szenen nach Ort; Szenen ohne Ort stehen unter „Ohne Ort". Ändert der DM den
-Ort einer Szene, ändert sich ihre Adresse — die alte bleibt auflösbar, der
-Server antwortet mit der aktuellen und die App ersetzt die URL.
+Die Adresse einer Szene enthält ihren **Ort**. Ändert der DM den Ort einer
+Szene, ändert sich ihre Adresse — die alte bleibt auflösbar, der Server
+antwortet mit der aktuellen und die App ersetzt die URL.
+
+Gegliedert wird die Kapitelübersicht davon nicht. Sie ist eine durchgehende
+Liste in der **Reihenfolge, die der DM setzt** (ADR #27); der Ort steht mit
+seinem Namen in der Metazeile der einzelnen Szene — hat eine Szene keinen,
+fehlt dort schlicht der Ortsteil —, Eventualszenen stehen als eigener Block
+am Ende. Diese Reihenfolge ist **keine Eigenschaft** — sie ist
+eine Aussage des Kapitels über seine Szenen, nicht einer Szene über sich
+selbst, und steht deshalb in keiner Feldtabelle dieses Dokuments. Gepflegt
+wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
+Ende ihres Kapitels.
 
 **Sessions, Ideen und Glossar haben keine Adresse** — sie sind Tabellen, die
 als Listen gepflegt werden, und antworten auf ihren eigenen Endpoints
@@ -114,7 +123,7 @@ befüllt.
 | `type` | `planned` oder `contingency` (Eventualszene) |
 | `trigger` | nur bei `contingency`: wann feuert sie? Freitext |
 | `chapter` | Kapitel-id; muss existieren |
-| `location` | Orts-id; bestimmt Gruppe und Adresse der Szene |
+| `location` | Orts-id; bestimmt die Adresse der Szene |
 | `npcs` | Liste von NPC-ids |
 | `handouts` | Namen der Roll20-Handouts, nur Verweis |
 | `tags` | frei; empfohlen: `combat`, `social`, `stealth`, `travel` |
@@ -197,9 +206,9 @@ Hinweis, den Eintrag zuerst anzulegen — es entsteht nichts nebenbei.
 Einträge entstehen über „Neu anlegen" und über das Übernehmen eines
 Generator-Vorschlags, sonst nirgends.
 
-`location:` verlangt eine id in Slug-Form (400 sonst) — sie ist zugleich die
-Gruppe der Szene. Jede Szene gehört zu einem Kapitel; `chapter:` lässt sich
-nicht leeren.
+`location:` verlangt eine id in Slug-Form (400 sonst) — sie ist zugleich das
+mittlere Segment der Szenen-Adresse. Jede Szene gehört zu einem Kapitel;
+`chapter:` lässt sich nicht leeren.
 
 Eine Nennung im **Text** ist keine Referenz in diesem Sinn: `[[id]]` und was
 unter `## Beziehungen` steht bleiben sichtbarer Text. Ein `[[id]]`, zu dem
@@ -333,6 +342,17 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu
   überschreiben.
+- Die **Szenenreihenfolge** eines Kapitels hat ihren eigenen Schreibweg und
+  ihren eigenen Wächter: `PUT
+  /api/campaigns/<kampagne>/chapters/<kapitel>/scene-order` mit
+  `{ scenes, rev }`, wobei `scenes` die vollständige Liste der Szenen-ids
+  dieses Kapitels ist (sonst 400). Das `rev` ist `scene_order_rev`, das der
+  Kapitel-Knoten mitliefert — nicht der `rev` einer Szene und nicht der des
+  Kapitel-Eintrags; passt es nicht, ist das 409. Geschrieben wird nur die
+  Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
+  offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
+  Konflikt läuft (ADR #27). Dieselbe Bauart haben die Wächter der übrigen
+  Listen (`glossaryRev`, `inboxRev`, `knowledgeRev`).
 - Log und Ideen sind append-only (ADR #4); die eine Ausnahme ist das Abhaken
   erledigter Ideen.
 

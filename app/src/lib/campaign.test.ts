@@ -97,13 +97,13 @@ const scene = (id: string, title: string): SceneSummary => ({
 const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [
-    { id: "01-salzhafen", title: "Kapitel 1", groups: [] },
+    { id: "01-salzhafen", title: "Kapitel 1", scenes: [] },
     {
       id: "02-bucht",
       title: "Kapitel 2",
-      groups: [
-        { slug: "", name: "", scenes: [scene("lighthouse-arrival", "Ankunft am Leuchtturm")] },
-        { slug: "hafen", name: "hafen", scenes: [scene("smuggler-captured", "Von den Schmugglern erwischt")] },
+      scenes: [
+        scene("lighthouse-arrival", "Ankunft am Leuchtturm"),
+        scene("smuggler-captured", "Von den Schmugglern erwischt"),
       ],
     },
   ],
@@ -115,11 +115,11 @@ const tree: CampaignTree = {
 };
 
 describe("locationName", () => {
-  test("resolves a known id to its name — this is what a chapter overview group header shows", () => {
+  test("resolves a known id to its name — what a scene's meta line shows", () => {
     expect(locationName(tree, "leuchtturm")).toBe("Der Leuchtturm von Salzhafen");
   });
 
-  test("an unknown slug passes through unchanged (group dirs need no location)", () => {
+  test("an unknown slug passes through unchanged — a scene needs no location", () => {
     expect(locationName(tree, "hafen")).toBe("hafen");
     expect(locationName(undefined, "hafen")).toBe("hafen");
     expect(locationName(tree, undefined)).toBeUndefined();
@@ -127,7 +127,7 @@ describe("locationName", () => {
 });
 
 describe("sceneTitle", () => {
-  test("finds the title across chapters and groups", () => {
+  test("finds the title across the chapters", () => {
     expect(sceneTitle(tree, "lighthouse-arrival")).toBe("Ankunft am Leuchtturm");
     expect(sceneTitle(tree, "smuggler-captured")).toBe("Von den Schmugglern erwischt");
   });

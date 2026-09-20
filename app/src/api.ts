@@ -15,6 +15,7 @@ import type {
   InstanceSettings,
   KnowledgeEntry,
   KnowledgeResponse,
+  SceneOrderResponse,
   SearchResponse,
   SessionResponse,
   SessionSummary,
@@ -182,6 +183,28 @@ export function putKnowledge(
     entries,
     rev,
   });
+}
+
+/**
+ * Write the scene ORDER of one chapter — the whole list, because a move
+ * changes where the neighbours sit too (ADR #27).
+ *
+ * `scenes` must name exactly the chapter's scenes; anything else is
+ * 400 `scene_order_mismatch` and writes nothing. `rev` is the order's own
+ * guard token, `ChapterNode.sceneOrderRev` — not the chapter entry's and not
+ * a scene's, so an open editor neither causes nor suffers a conflict here. A
+ * stale token is 409 and writes nothing either.
+ */
+export function putSceneOrder(
+  campaign: string,
+  chapter: string,
+  scenes: readonly string[],
+  rev: number,
+): Promise<SceneOrderResponse> {
+  return putJson<SceneOrderResponse>(
+    `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/scene-order`,
+    { scenes, rev },
+  );
 }
 
 // --- the one write path of an entry ----------------------------------------

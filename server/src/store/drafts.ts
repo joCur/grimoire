@@ -12,7 +12,7 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { chapters, generateJobs, locations, npcs, packJson, scenes } from "../db/schema";
 import { campaignRow, mutate } from "./campaigns";
-import { ensureChapterRow, replaceSceneRefs, sceneLocation } from "./chapters";
+import { ensureChapterRow, nextScenePos, replaceSceneRefs, sceneLocation } from "./chapters";
 import {
   assertChapterRef,
   assertLocationRef,
@@ -74,14 +74,9 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       assertChapterRef(tx, campaign, locator.chapterId);
       assertLocationRef(tx, campaign, draftLocation);
       assertNpcRefs(tx, campaign, npcRefs);
-      const pos =
-        (tx
-          .select({ pos: scenes.pos })
-          .from(scenes)
-          .where(eq(scenes.campaignId, campaign))
-          .orderBy(desc(scenes.pos))
-          .limit(1)
-          .all()[0]?.pos ?? -1) + 1;
+      // The end of ITS chapter, like every other way a scene is created: a
+      // draft the DM accepts is new material, and new material goes last.
+      const pos = nextScenePos(tx, campaign, locator.chapterId);
       tx.insert(scenes)
         .values({
           campaignId: campaign,

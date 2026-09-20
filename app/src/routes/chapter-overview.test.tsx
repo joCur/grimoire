@@ -1,17 +1,18 @@
-// The chapter overview's grouping heading.
+// Render test for one row of the chapter overview (ADR #27): the location is
+// a word in the meta line now, not a heading above the row, and every row
+// carries the two controls that set the order.
 //
-// A scene's group IS its `location`, so the heading is the LOCATION'S NAME —
-// and the group `""` is not a location with an empty name but the scenes
-// that name none. They get a neutral no-location section from the catalog,
-// never a blank line where a heading belongs.
+// A scene without a location must show no placeholder and no dangling
+// separator — "Ohne Ort" was a heading of the old grouping and is gone with
+// it.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
-import type { CampaignTree, SceneGroup, SceneSummary } from "@grimoire/shared";
+import type { SceneSummary } from "@grimoire/shared";
 
-import { PlannedGroup } from "./chapter-overview";
+import { SceneRow } from "./chapter-overview";
 
 function scene(id: string, over: Partial<SceneSummary> = {}): SceneSummary {
   return {
@@ -26,59 +27,74 @@ function scene(id: string, over: Partial<SceneSummary> = {}): SceneSummary {
   };
 }
 
-const tree = {
-  campaign: "beispiel",
-  chapters: [],
-  npcs: [],
-  locations: [
-    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
-    { path: "locations/bucht", id: "bucht", name: "bucht" },
-  ],
-  sessions: [],
-} as unknown as CampaignTree;
-
-function render(group: SceneGroup): string {
+function render(
+  value: SceneSummary,
+  over: { first?: boolean; last?: boolean; busy?: boolean } = {},
+): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <PlannedGroup campaign="beispiel" group={group} tree={tree} />
+        <SceneRow
+          campaign="beispiel"
+          scene={value}
+          first={over.first ?? false}
+          last={over.last ?? false}
+          busy={over.busy ?? false}
+          onMove={() => {}}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe("PlannedGroup — the heading is the location", () => {
-  test("a named location heads its group with its NAME, not its slug", () => {
-    const html = render({
-      slug: "leuchtturm",
-      name: "Der Leuchtturm von Salzhafen",
-      scenes: [scene("ankunft")],
-    });
-    expect(html).toContain("Der Leuchtturm von Salzhafen");
-    expect(html).not.toContain(">leuchtturm<");
+describe("the meta line carries the location", () => {
+  test("the resolved NAME, not the id behind it", () => {
+    const html = render(
+      scene("ankunft", {
+        location: "leuchtturm",
+        locationName: "Der Leuchtturm von Salzhafen",
+        tags: ["social"],
+      }),
+    );
+    expect(html).toContain("Der Leuchtturm von Salzhafen · #social");
   });
 
   test("a location nobody has named yet shows its id", () => {
-    // The entry exists and has no name of its own.
-    // The heading must be the word the DM typed, never a blank line: the
-    // tree degrades an empty name to the id and so does this view, so the
-    // fixture carries the EMPTY name the database actually holds.
-    const html = render({ slug: "bucht", name: "", scenes: [scene("erwischt")] });
-    expect(html).toContain(">bucht<");
+    // The tree degrades an empty name to the id server-side; a row must never
+    // print a blank where the location goes.
+    const html = render(scene("erwischt", { location: "bucht", locationName: "bucht" }));
+    expect(html).toContain("bucht");
   });
 
-  test("the scenes without a location get the neutral section", () => {
-    const html = render({ slug: "", name: "", scenes: [scene("heimatlos")] });
-    expect(html).toContain("Ohne Ort");
+  test("no location means no location part — the tags stand alone", () => {
+    const html = render(scene("heimatlos", { tags: ["combat"] }));
+    expect(html).toContain("#combat");
+    expect(html).not.toContain("·");
+    expect(html).not.toContain("Ohne Ort");
+  });
+});
+
+describe("the row sets the order", () => {
+  test("both controls name their scene", () => {
+    const html = render(scene("ankunft", { title: "Ankunft am Leuchtturm" }));
+    expect(html).toContain('aria-label="„Ankunft am Leuchtturm“ nach oben"');
+    expect(html).toContain('aria-label="„Ankunft am Leuchtturm“ nach unten"');
   });
 
-  test("a group with nothing but contingencies renders nothing at all", () => {
-    const html = render({
-      slug: "",
-      name: "",
-      scenes: [scene("notfall", { type: "contingency" })],
-    });
-    expect(html).toBe("");
+  test("the first row of a block cannot move up, the last cannot move down", () => {
+    const first = render(scene("a"), { first: true });
+    expect(first).toContain('nach oben" disabled=""');
+    expect(first).not.toContain('nach unten" disabled=""');
+
+    const last = render(scene("a"), { last: true });
+    expect(last).toContain('nach unten" disabled=""');
+    expect(last).not.toContain('nach oben" disabled=""');
+  });
+
+  test("while a move is on the wire the rows hold still", () => {
+    const html = render(scene("a"), { busy: true });
+    expect(html).toContain('nach oben" disabled=""');
+    expect(html).toContain('nach unten" disabled=""');
   });
 });

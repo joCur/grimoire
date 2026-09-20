@@ -283,6 +283,8 @@ export const en: Messages = {
     'Played scene “{value}” does not exist — create it first.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
+  "server.scene_order_mismatch":
+    "The order no longer matches the chapter's scenes — please reload.",
   "server.session_running": "An older session is still running — end it first.",
   "server.session_not_empty": "This session has content — end it instead of discarding it.",
   "server.rev_conflict": "Changed in the meantime — reload before saving.",
@@ -345,8 +347,6 @@ export const en: Messages = {
   "chapterOverview.empty":
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
   "chapterOverview.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
-  // The chapter's leftovers section: the scenes that name no location.
-  "chapterOverview.group.noLocation": "No location",
   "chapterOverview.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "chapterOverview.chapter.goal": "Goal: {goal}",
   "chapterOverview.chapter.empty": "No scenes in this chapter yet.",
@@ -361,6 +361,10 @@ export const en: Messages = {
     "## Ziel des Kapitels\n\nWhat the party is meant to achieve here",
   "chapterOverview.contingencies.hint": "only when the trigger fires",
   "chapterOverview.scene.trigger": "When: {trigger}",
+  "chapterOverview.scene.moveUp.aria": "Move \u201c{title}\u201d up",
+  "chapterOverview.scene.moveDown.aria": "Move \u201c{title}\u201d down",
+  "chapterOverview.order.conflict": "Order changed in the meantime — the current one is loaded.",
+  "chapterOverview.order.failed": "Order not saved — check the server.",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   "browse.fallbackTitle": "Look up",
@@ -398,6 +402,8 @@ export const en: Messages = {
   // trigger where the count is PART of the sentence.
   "live.nav.played": "Played",
   "live.nav.playedGroup": "Played {count}",
+
+  "live.next": "Next scene: {title}",
 
   "live.scene.none":
     "No scene in the active chapter — create scenes on the chapters page.",
