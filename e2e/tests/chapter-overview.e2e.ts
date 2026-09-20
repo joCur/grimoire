@@ -1127,9 +1127,10 @@ function plannedScene(id: string, location: string): SeedEntry {
  * Three planned scenes in the chapter — the example campaign brings one, and
  * an order needs something to arrange.
  *
- * The STEMS set the seeded order: the seed run loads a campaign's entries in
- * file-name order and appends every scene to the end of its chapter, so these
- * two stand behind `scene-lighthouse-arrival` and the contingency behind them.
+ * The STEMS set the seeded order: the seed run appends every scene to the end
+ * of its chapter, in the order it reads the fixture sources — alphabetically
+ * by stem. So these two stand behind `scene-lighthouse-arrival`, and the
+ * contingency behind them.
  */
 const ORDER_SEED = {
   entries: {

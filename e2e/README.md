@@ -102,10 +102,11 @@ Zeile. Für die Suite heißt das vier Dinge:
   sie unter `<kapitel>/<location>/<id>` (`SCENE_PATH`). Die Fixture-Antwort
   setzt `location: bucht` und schlägt diesen Ort im selben Lauf vor — genau
   das prüft Pfad 6.
-- **Die Reihenfolge ist gesetzt, nicht abgeleitet.** Der Seed-Lauf lädt die
-  Einträge einer Kampagne in Dateinamen-Reihenfolge und hängt jede Szene ans
-  Ende ihres Kapitels; ein Spec, dessen Zusicherung von der Reihenfolge
-  abhängt, sagt die gemeinte deshalb selbst an —
+- **Die Reihenfolge ist gesetzt, nicht abgeleitet.** Der Seed-Lauf hängt jede
+  Szene ans Ende ihres Kapitels, in der Reihenfolge, in der er die
+  Fixture-Quellen liest — alphabetisch nach ihrem Namen ohne `.json`; ein
+  Spec, dessen Zusicherung von der Reihenfolge abhängt, sagt die gemeinte
+  deshalb selbst an —
   `PUT …/chapters/<kapitel>/scene-order` mit `{ scenes, rev }`, wobei `rev`
   der `sceneOrderRev` des `ChapterNode` ist. Dieser Wächter zählt nur die
   Writes dieser Liste: ein Umsortieren bewegt weder `scenes.rev` noch
