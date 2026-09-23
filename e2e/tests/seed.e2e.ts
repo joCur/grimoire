@@ -96,12 +96,13 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
 
-  // --- an npc: typed properties (voice, quickstats) and its prose ----------
+  // --- an npc: typed properties (voice, quickstats, motivation) and its prose
   const npc = await api.entry("npcs/jorna");
   expect(npc.properties.name).toBe("Hafenmeisterin Jorna");
   expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
-  expect(npc.body).toContain("Das Leuchtfeuer muss wieder brennen");
+  expect(npc.properties.motivation).toContain("Das Leuchtfeuer muss wieder brennen");
+  expect(npc.body).not.toContain("## Will");
   expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
 
   // --- the session: its own TABLE, read through its own endpoint ------------

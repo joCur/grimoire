@@ -1503,3 +1503,52 @@ jede Migration nach der Baseline vier Regeln:
   vorher lief; ohne sie wären sie Code, der auf einer Datenbank mitten im
   Umbau scheitern kann. Eine neue Instanz braucht nur den Endstand, und den
   legt die Baseline in einem Schritt an.
+
+## 29. Was als Daten gebraucht wird, ist eine Eigenschaft oder eine Listenzeile
+
+**Kontext:** Mehrere Stellen behandelten den Text eines Eintrags wie Daten:
+Sie suchten eine `##`-Überschrift und lasen oder schrieben darunter — NPC-Karte
+und Vorschau `## Will`, Ort-Karte und Vorschau `## Atmosphäre`, die
+Nachbereitung `## Offene Fäden`, der NPC-Stub `## Notizen`, die
+Generator-Prüfung `## Weiß` und `## Beziehungen`. Leser und Schreiber
+erkannten die Überschriften nach verschiedenen Regeln (Groß/Klein, CRLF), und
+was der DM anders schrieb, fiel still heraus oder entstand doppelt. ADR #19
+sagt, dass die Speicherung nichts aus Text ableitet; die Anzeige tat es
+trotzdem.
+
+**Entscheidung:** Was eine Ansicht, ein Schreibweg oder eine Prüfung als Daten
+braucht, ist eine **Eigenschaft** des Eintrags oder eine **Zeile einer Liste**
+(ADR #26) — nie ein Abschnitt, der über den Text seiner Überschrift gefunden
+wird. Überschriften im Text gliedern ihn für den DM; eine Bedeutung für den
+Code hat allein `## If:`, ein Element des Renderers (README).
+
+**Erste Anwendung — Motivation und Atmosphäre:**
+
+- `npcs.motivation` und `locations.atmosphere` sind Spalten und damit
+  Eigenschaften (`motivation`, `atmosphere`). NPC-Karte, Ort-Karte,
+  Hover-Vorschau und Leseansicht lesen sie; ein `## Will` oder
+  `## Atmosphäre` im Text hat darauf keinen Einfluss. Ein `[[id]]` im Wert
+  erscheint bei der Anzeige als aktueller Name — Anzeige, keine Referenz im
+  Sinn von ADR #19 —, und die Suche indexiert beide Felder mit aufgelösten
+  Namen.
+- Bearbeitet werden sie auf der Fläche des Eintrags neben dem Text, nicht im
+  Eigenschaften-Dialog (`surface: "text"` in `shared/src/property-fields.ts`).
+  Sie teilen den einen Wächter `rev` (ADR #23): ein Speichern ist ein PATCH
+  mit dem, was sich geändert hat, und „Trotzdem speichern" schreibt genau
+  das — eine fremd geänderte Eigenschaft bleibt.
+- Der Generator liefert beide Felder über das Antwort-Schema, nullable wie
+  `voice` und `appearance`; NPC- und Ort-Prompt beschreiben sie als
+  Eigenschaft statt als Abschnitt.
+- Migration `0002_motivation_atmosphere.sql` legt die Spalten an und
+  **überträgt nichts** (ADR #28, Regel 2): die Felder starten leer, ein
+  bestehender Abschnitt bleibt als freier Text stehen. Einen Wert aus einem
+  Markdown-Abschnitt zu schneiden, wäre genau der Leser, den diese
+  Entscheidung abschafft.
+
+**Folgen:** Weitere Scheiben derselben Arbeit wenden den Grundsatz an: die
+offenen Fäden eines Kapitels werden eine eigene Liste am Kapitel statt
+`## Offene Fäden`, und Generator-Prüfungen und NPC-Stub verzweigen über keine
+Überschrift mehr (`## Weiß`, `## Beziehungen`, `## Notizen`). Bis dahin gelten
+diese Stellen unverändert. Das Kapitelziel bleibt Freitext des Kapitels; dass
+die Kapitelübersicht es noch unter `## Ziel des Kapitels` sucht, löst eine
+eigene Änderung ab.

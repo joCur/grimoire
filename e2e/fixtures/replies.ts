@@ -266,20 +266,35 @@ er will reden, nicht kämpfen.
   };
 }
 
+/** The motivation of the npc stub a scene run proposes — a property, not a section. */
+export const NPC_STUB_MOTIVATION =
+  "Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen — und zwar von [[fenn]] persönlich.";
+
 /** The npc stub a scene run's entry call answers with. */
 const npcStub: EntryReply = {
-  properties: { id: NPC_STUB_ID, name: NPC_STUB_NAME, status: "alive" },
-  body: `## Will
+  properties: {
+    id: NPC_STUB_ID,
+    name: NPC_STUB_NAME,
+    status: "alive",
+    motivation: NPC_STUB_MOTIVATION,
+  },
+  body: `## Weiß
 
-Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen — und
-zwar von [[fenn]] persönlich.
+> [!secret] Weiß, an welchem Poller [[fenn]] sein Boot festmacht.
 `,
   warnings: [],
 };
 
+/** The atmosphere of the location stub a scene run proposes. */
+export const LOCATION_STUB_ATMOSPHERE = "Salz in der Luft, Möwen über dem Schlick, kein Mensch zu sehen.";
+
 /** The location stub a scene run's entry call answers with. */
 const locationStub: EntryReply = {
-  properties: { id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME },
+  properties: {
+    id: LOCATION_STUB_ID,
+    name: LOCATION_STUB_NAME,
+    atmosphere: LOCATION_STUB_ATMOSPHERE,
+  },
   body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 `,
   warnings: [],
@@ -292,6 +307,8 @@ export const NPC_DEFAULT_ID = "brakk";
 export const NPC_DEFAULT_NAME = "Brakk Sturmhand";
 export const NPC_ROLE = "Fischer, kennt jede Sandbank der Nordbucht";
 export const NPC_VOICE = "langsam, sucht Worte, lacht über eigene Witze";
+export const NPC_MOTIVATION =
+  "Dass die Boote wieder sicher rausfahren können — er hat seit drei Nächten keinen Fang verkauft und traut [[fenn]] nicht.";
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
 export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): EntryReply {
@@ -311,13 +328,9 @@ export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): EntryRepl
       ],
       voice: NPC_VOICE,
       appearance: "geflickter Ölmantel, Hände voller Angelschnüre",
+      motivation: NPC_MOTIVATION,
     },
-    body: `## Will
-
-Dass die Boote wieder sicher rausfahren können — er hat seit drei
-Nächten keinen Fang verkauft und traut [[fenn]] nicht.
-
-## Weiß
+    body: `## Weiß
 
 > [!secret] Hat gesehen, wie zwei Fremde nachts Kisten von der Mole
 > trugen, und schweigt aus Angst.
@@ -345,10 +358,11 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
       name: NPC_DEFAULT_NAME,
       chapter: "01-salzhafen",
       quickstats: [{ key: "insight", value: 1 }],
+      motivation: "Irgendwas.",
     },
-    body: `## Will
+    body: `## Weiß
 
-Irgendwas.
+> [!secret] Irgendwas.
 `,
     warnings: [],
   };
@@ -377,8 +391,8 @@ export const AUGMENT_THREAD_TEXT =
  * Deliberately a MIX, because the default rule of the accept step is what the
  * spec is about:
  *
- *   role, voice   the entry has nothing there  -> `new`,     preselected
- *   name, status  the entry HAS a value        -> `changed`, kept
+ *   role, voice, motivation   the entry has nothing there  -> `new`,     preselected
+ *   name, status              the entry HAS a value        -> `changed`, kept
  *
  * so an accept with the defaults fills the holes and leaves the two fields
  * the DM (or the reference) already authored exactly as they were.
@@ -387,7 +401,7 @@ export const AUGMENT_NPC_ROLE = "Spitzel der Schmuggler in der Hafenwache";
 export const AUGMENT_NPC_VOICE = "leise, weicht Blicken aus";
 export const AUGMENT_NPC_NAME = "Kell Stichbein";
 export const AUGMENT_NPC_STATUS = "alive";
-export const AUGMENT_NPC_WILL =
+export const AUGMENT_NPC_MOTIVATION =
   "Nicht auffliegen — und trotzdem bezahlt werden. Beides geht nicht mehr lange gut.";
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
@@ -407,8 +421,8 @@ export interface ExistingEntry {
  * Which addition depends on what the entry IS — that is the whole point of
  * the two E2E cases:
  *
- *   an EMPTY npc (created, never filled in)  ->  properties and the two body
- *       sections are filled,
+ *   an EMPTY npc (created, never filled in)  ->  properties (the motivation
+ *       among them) and the body's `## Weiß` are filled,
  *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
@@ -426,12 +440,9 @@ export function augmentReply(path: string, entry: ExistingEntry, knowledge = "")
         role: AUGMENT_NPC_ROLE,
         status: AUGMENT_NPC_STATUS,
         voice: AUGMENT_NPC_VOICE,
+        motivation: AUGMENT_NPC_MOTIVATION,
       },
-      body: `## Will
-
-${AUGMENT_NPC_WILL}
-
-## Weiß
+      body: `## Weiß
 
 > [!secret] ${AUGMENT_NPC_SECRET}
 `,

@@ -38,7 +38,10 @@ const WIDE_TABLE_SCENE_PATH = "01-salzhafen/leuchtturm/wide-table";
 const ARRIVAL = "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival";
 const CAPTURED = "/campaigns/beispiel/entries/01-salzhafen/bucht/smuggler-captured";
 
-test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
+test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({
+  page,
+  api,
+}) => {
   await page.goto(ARRIVAL);
 
   // The context line above the title: chapter › group, replacing
@@ -84,7 +87,9 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(note).toContainText("Notiz");
   await expect(note).toContainText("Kontingenz");
 
-  // NPC card of the scene: name, mono id, voice, "Will", quickstats chips.
+  // NPC card of the scene: name, mono id, voice, "Will" (the npc's
+  // `motivation` property — the body carries no such section), quickstats
+  // chips.
   const aside = page.getByRole("complementary").filter({ hasText: "NPCs dieser Szene" });
   await expect(aside).toContainText("Hafenmeisterin Jorna");
   await expect(aside).toContainText("jorna");
@@ -92,6 +97,8 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText("knapp, wetterrau, duzt jeden");
   await expect(aside).toContainText("Will");
   await expect(aside).toContainText("Das Leuchtfeuer muss wieder brennen");
+  // …and it can only have come from the property: the text does not say it.
+  expect((await api.entry("npcs/jorna")).body).not.toContain("Das Leuchtfeuer");
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 

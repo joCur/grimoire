@@ -97,6 +97,22 @@ describe("propertiesFieldsFor", () => {
     expect(keys("chapter")).toEqual(["title", "status"]);
   });
 
+  // The prose properties the cards show are edited beside the text, on the
+  // entry's own edit surface — the dialog leaves them out.
+  test("the text surface carries motivation and atmosphere, and the dialog does not", () => {
+    const onText = (kind: EntityKind) =>
+      (propertiesFieldsFor(kind, t, "text") ?? []).map((field) => field.key);
+    expect(onText("npc")).toEqual(["motivation"]);
+    expect(onText("location")).toEqual(["atmosphere"]);
+    expect(onText("scene")).toEqual([]);
+    expect(onText("chapter")).toEqual([]);
+    expect(keys("npc")).not.toContain("motivation");
+    expect(keys("location")).not.toContain("atmosphere");
+    const [motivation] = propertiesFieldsFor("npc", t, "text") ?? [];
+    expect(motivation?.label).toBe("Will");
+    expect(motivation?.control).toBe("textarea");
+  });
+
   // The chapter status is not free text: the API enforces the trio (400
   // otherwise), so a text field could only produce a rejected save — and the
   // dialog has to offer the same list the overview's control does.

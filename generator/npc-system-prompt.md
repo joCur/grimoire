@@ -39,7 +39,8 @@ zur Mapping-Form der gespeicherten Eigenschaften zusammen.
     "statblock": "Roll20: <Sheet-Name>",
     "quickstats": [{ "key": "insight", "value": "+2" }],
     "voice": "<wie klingt er/sie>",
-    "appearance": "<1-2 Merkmale>"
+    "appearance": "<1-2 Merkmale>",
+    "motivation": "<was die Figur will, 1-3 Sätze>"
   },
   "body": "<der Text der Figur, ein String mit echten Zeilenumbrüchen>",
   "warnings": ["<kurzer deutscher Hinweis für den DM>"]
@@ -49,23 +50,25 @@ zur Mapping-Form der gespeicherten Eigenschaften zusammen.
 Jedes Feld, das der Quelltext nicht hergibt, trägt `null` — `chapter` bleibt
 `null`, weil der DM es später setzt.
 
+`motivation` ist die Motivation in 1-3 Sätzen: was die Figur in dieser
+Kampagne erreichen will, und woran sie zerbricht. Sie steht als Eigenschaft
+in `properties`; die NPC-Karte zeigt sie am Tisch.
+
 Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
 
-1. `## Will` — Motivation in 1-3 Sätzen: was die Figur in dieser Kampagne
-   erreichen will, und woran sie zerbricht.
-2. `## Weiß` — Wissen, das allein dem DM gehört, als `[!secret]`-Callouts.
+1. `## Weiß` — Wissen, das allein dem DM gehört, als `[!secret]`-Callouts.
    In diesem Abschnitt steht **ausschließlich** dieser Callout-Typ.
-3. `## Beziehungen` — Liste `- [[<npc-id>]]: <Freitext>`. Die id steht in
+2. `## Beziehungen` — Liste `- [[<npc-id>]]: <Freitext>`. Die id steht in
    doppelten eckigen Klammern, damit die App den Gegenpart verlinkt und den
    aktuellen Namen einsetzt. Es gelten allein die ids aus der mitgelieferten
    Kontextliste. Steht im Quelltext eine Figur ohne id: Zeile **weglassen**
    und eine `warning` schreiben. Gibt der Quelltext Beziehungen her, steht
    der Abschnitt; sonst entfällt er.
-4. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel). Die App
+3. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel). Die App
    füllt ihn im Review-Schritt.
 ## Regeln
 
-0. **Referenzen im Fließtext**: Nennt der Text in `## Will` oder `## Weiß`
+0. **Referenzen im Fließtext**: Nennen `motivation` oder der Text in `## Weiß`
    eine Figur oder einen Ort mit id aus der Kontextliste, schreibe `[[id]]`
    statt des Namens (`[[jorna]] zahlt gut`) — die App setzt beim Anzeigen den
    aktuellen Namen ein. In den Klammern steht allein die id, Endungen stehen
@@ -74,7 +77,8 @@ Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn` statt
    `der-schmuggler-aus-der-nordbucht`). Die ASCII-Beschränkung gilt
    AUSSCHLIESSLICH für die `id` — `name`, `role`, `voice`,
-   `appearance` und der Fließtext bleiben deutsch geschrieben (siehe Regel 11).
+   `appearance`, `motivation` und der Fließtext bleiben deutsch geschrieben
+   (siehe Regel 11).
    Die Adresse bildet der Server als `npcs/<id>`.
    Die id ist **neu** gegenüber jeder id aus der Kontextliste, damit
    bestehende Einträge stehen bleiben. Ist im Kontext eine
@@ -148,8 +152,8 @@ locations: bucht (Die Schmugglerbucht)
 ### Erwartete Ausgabe
 
 `npcs/fenn` mit `status: alive`, `role` als Einzeiler,
-`statblock: "Roll20: Fenn"`, quickstats als Strings, `## Will` (Auftrag ohne
-Tote — der wunde Punkt), `## Weiß` mit einem `[!secret]` (Name des
+`statblock: "Roll20: Fenn"`, quickstats als Strings, `motivation` (Auftrag
+ohne Tote — der wunde Punkt), `## Weiß` mit einem `[!secret]` (Name des
 Auftraggebers, Bedingung fürs Reden), `## Beziehungen` mit genau
 `- [[jorna]]: …` (id existiert im Kontext) und leerem `## Notizen`.
 Der Referenz-Eintrag liegt dem Prompt als `npc-example-output.json` bei.

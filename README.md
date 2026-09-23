@@ -3,8 +3,8 @@
 Grimoire speichert eine Kampagne in einer SQLite-Datenbank
 (`GRIMOIRE_DATA/grimoire.db`). Ein **Eintrag** ist eine Kampagne, ein
 Kapitel, eine Szene, ein NPC oder ein Ort. Jeder Eintrag besteht aus
-**Eigenschaften** — den Feldern, die die App im Eigenschaften-Dialog zeigt
-(Titel, Status, Ort, …) — und einem **Text** in Markdown.
+**Eigenschaften** — seinen strukturierten Feldern (Titel, Status, Ort, …) —
+und einem **Text** in Markdown.
 
 Dazu kommen vier **Listen**, die keine Einträge sind und keinen Text haben
 (ADR #26): die **Sessions**, die **Ideen**, das **Glossar** und das
@@ -83,10 +83,15 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder. Sie
 heißen auf der Leitung `properties`; die App zeigt sie im
-Eigenschaften-Dialog, und `PATCH /api/campaigns/<kampagne>/entries/<adresse>`
-ändert genau die Felder, die der DM angefasst hat. Felder, die ein Eintrag
+Eigenschaften-Dialog — die Prosa-Felder `motivation` (NPC) und `atmosphere`
+(Ort) stattdessen auf der Bearbeiten-Fläche des Eintrags, neben seinem Text —,
+und `PATCH /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die
+Felder, die der DM angefasst hat. Felder, die ein Eintrag
 mitbringt und die seine Art nicht kennt, bleiben erhalten und lassen sich
 ändern oder löschen; neue legt die API nicht an (400).
+
+Was eine Ansicht als Daten braucht, ist eine Eigenschaft oder eine Zeile einer
+Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
 
 ### Kampagne
 
@@ -144,11 +149,15 @@ befüllt.
 | `quickstats` | Kurzwerte, frei — nur was am Tisch sozial gebraucht wird (`{ wis: +2, insight: +2 }`) |
 | `voice` | wie klingt er/sie |
 | `appearance` | ein bis zwei Merkmale |
+| `motivation` | was die Figur will, ein bis drei Sätze — zeigen NPC-Karte und Vorschau (Beschriftung „Will“) |
 
-Text-Abschnitte: `## Will` (Motivation), `## Weiß` (`[!secret]`-Callouts),
-`## Beziehungen` (freier Text; einen Gegenpart verlinkt `[[id]]` wie überall
-im Text), `## Notizen` (befüllt die Nachbereitung mit „NPC-Stub anlegen" —
-nicht von Hand pflegen).
+`motivation` wird auf der Bearbeiten-Fläche des Eintrags gepflegt, nicht im
+Eigenschaften-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige als
+aktueller Name, wie im Text — eine Anzeige, keine Referenz.
+
+Text-Abschnitte: `## Weiß` (`[!secret]`-Callouts), `## Beziehungen` (freier
+Text; einen Gegenpart verlinkt `[[id]]` wie überall im Text), `## Notizen`
+(befüllt die Nachbereitung mit „NPC-Stub anlegen" — nicht von Hand pflegen).
 
 Kleinst-NPCs bekommen keinen Eintrag, bis sie wiederkehren. Bis dahin: Zeile
 im Szenentext oder `#npc`-Notiz im Log.
@@ -161,9 +170,14 @@ im Szenentext oder `#npc`-Notiz im Log.
 | `name` | Anzeigename |
 | `chapter` | Kapitel-id |
 | `roll20-page` | Verweis auf die Roll20-Seite, keine Karten-Kopie |
+| `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau |
+
+`atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche des Eintrags
+gepflegt, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere` zeigt
+die Ort-Karte die Roll20-Seite.
 
 Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
-`[!readaloud]`), `## Atmosphäre`, `## Wer ist hier`.
+`[!readaloud]`), `## Wer ist hier`.
 
 ### Session
 

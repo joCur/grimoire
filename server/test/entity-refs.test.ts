@@ -175,6 +175,22 @@ describe("referrersOf", () => {
     expect((await search("Hafenmeisterin")).some((r) => r.kind === "location")).toBe(true);
   });
 
+  test("a reference in a motivation or an atmosphere is a referrer too", async () => {
+    // The cards show these properties with the reference as a NAME, and the
+    // index spells it out — so a rename has to find them.
+    await patch("npcs/fenn", { motivation: "Weg von [[jorna]], bevor sie fragt." });
+    await patch("locations/bucht", { atmosphere: "Hier schaut [[jorna]] nie vorbei." });
+    const db = await getDb();
+    expect(referrersOf(db, "beispiel", "jorna")).toEqual([
+      FENN_REFERS_TO_JORNA,
+      { kind: "location", id: "bucht" },
+    ]);
+
+    await patch("npcs/jorna", { name: "Jorna Salzhand" });
+    const hits = await search("Salzhand");
+    expect(hits.some((r) => r.kind === "location" && r.id === "bucht")).toBe(true);
+  });
+
   test("the campaign body is a full reference site", async () => {
     await writeBody("campaign", "Notiz: [[jorna]] ist bestechlich.\n");
     const db = await getDb();

@@ -100,6 +100,7 @@ export interface NpcRow {
   quickstats: string;
   voice: string | null;
   appearance: string | null;
+  motivation: string | null;
   body: string;
   rev: number;
 }
@@ -110,6 +111,7 @@ export interface LocationRow {
   name: string;
   chapterId: string | null;
   roll20Page: string | null;
+  atmosphere: string | null;
   body: string;
   rev: number;
 }
@@ -265,6 +267,7 @@ export function npcProperties(row: NpcRow): Record<string, unknown> {
     ["quickstats", Object.keys(quickstats).length === 0 ? undefined : quickstats],
     ["voice", row.voice],
     ["appearance", row.appearance],
+    ["motivation", row.motivation],
   ]);
 }
 
@@ -282,6 +285,7 @@ export function locationProperties(row: LocationRow): Record<string, unknown> {
     ["name", row.name === "" ? row.id : row.name],
     ["chapter", row.chapterId],
     ["roll20-page", row.roll20Page],
+    ["atmosphere", row.atmosphere],
   ]);
 }
 

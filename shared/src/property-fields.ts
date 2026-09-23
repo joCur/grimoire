@@ -15,6 +15,8 @@
 //
 // The order is the order the dialog shows (and the order the rendered
 // properties block is written in): a contract of its own, not an accident.
+// A field edited beside the text (`surface: "text"`) stands at the end of its
+// kind's list and is left out of the dialog.
 
 import { CHAPTER_STATUSES, NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
 
@@ -50,6 +52,19 @@ export type FieldControl =
 /** Which tree list a reference field offers in the dialog (free text stays). */
 export type ReferenceSource = "npcs" | "locations" | "chapters";
 
+/**
+ * Where the app edits a field:
+ *
+ *   dialog   the „Eigenschaften" dialog — the default,
+ *   text     the entry's own edit surface, beside its text. A prose property
+ *            the cards show (an npc's `motivation`, a location's
+ *            `atmosphere`) is written where the prose is written, and the
+ *            dialog leaves it out. It is still a property: the same column,
+ *            the same patch, the same guard `rev` as the text (ADR #23), and
+ *            a generator reply carries it like any other field.
+ */
+export type FieldSurface = "dialog" | "text";
+
 /** One field of one kind — the shape, never the copy. */
 export interface PropertyFieldDef {
   /** The properties key, verbatim (`roll20-page` included). */
@@ -61,6 +76,8 @@ export interface PropertyFieldDef {
   source?: ReferenceSource;
   /** A field the entity cannot lose (`title`/`name`) — never blank. */
   required?: boolean;
+  /** Where the app edits it; absent means the dialog (see `FieldSurface`). */
+  surface?: FieldSurface;
 }
 
 /**
@@ -90,11 +107,13 @@ export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]
     { key: "quickstats", control: "pairs" },
     { key: "voice", control: "textarea" },
     { key: "appearance", control: "textarea" },
+    { key: "motivation", control: "textarea", surface: "text" },
   ],
   location: [
     { key: "name", control: "text", required: true },
     { key: "chapter", control: "reference", source: "chapters" },
     { key: "roll20-page", control: "text" },
+    { key: "atmosphere", control: "textarea", surface: "text" },
   ],
   chapter: [
     { key: "title", control: "text", required: true },
@@ -106,6 +125,11 @@ export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]
     { key: "status", control: "select", values: CHAPTER_STATUSES },
   ],
 };
+
+/** Where the app edits a field — the dialog unless the definition says otherwise. */
+export function fieldSurface(def: PropertyFieldDef): FieldSurface {
+  return def.surface ?? "dialog";
+}
 
 /** The field list of a kind, or undefined for a kind that has no form. */
 export function propertyFieldsFor(kind: string): readonly PropertyFieldDef[] | undefined {

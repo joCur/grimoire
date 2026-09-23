@@ -86,6 +86,8 @@ export interface NpcProperties {
   quickstats?: Record<string, string | number>;
   voice?: string;
   appearance?: string;
+  /** What the npc wants — shown on the npc card and in the reference preview. */
+  motivation?: string;
   [key: string]: unknown;
 }
 
@@ -95,12 +97,14 @@ export interface LocationProperties {
   chapter?: string;
   /** Reference to the Roll20 page — never a map copy. */
   "roll20-page"?: string;
+  /** What the place feels like — shown on the location card and in the reference preview. */
+  atmosphere?: string;
   [key: string]: unknown;
 }
 
 /**
- * Properties of a campaign's `campaign` (README, "Entität: Kampagne
- * (optional)"). The entry is optional — without it the UI shows the campaign's
+ * Properties of a campaign's `campaign` (README, the campaign section). The
+ * entry is optional — without it the UI shows the campaign's
  * id. `id` is that id, `name` the display name; further keys
  * (e.g. `system`) are preserved verbatim.
  */

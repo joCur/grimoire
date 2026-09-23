@@ -1,4 +1,4 @@
-// NSC: creating an npc entry, and what "empty" means for one.
+// Npcs: creating an npc entry, and what "empty" means for one.
 //
 // Two doors bring an npc row into existence — the create dialog and the
 // review's "#npc line becomes an npc" — and both fill an entry the DM created
@@ -47,6 +47,7 @@ export function isEmptyNpcRow(row: NpcRow): boolean {
     row.statblock === null &&
     row.voice === null &&
     row.appearance === null &&
+    row.motivation === null &&
     row.body.trim() === "" &&
     isEmptyJsonObject(row.quickstats)
   );

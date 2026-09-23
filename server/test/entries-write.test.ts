@@ -508,3 +508,77 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
     expect(await getEntry(SCENE)).toEqual(forced);
   });
 });
+
+describe("the prose properties an npc and a location keep beside their text", () => {
+  // `motivation` and `atmosphere` are properties like any other field of
+  // their kind — one row, one guard (ADR #23) — and the entry's edit surface
+  // writes them together with the text.
+  const NPC = "npcs/jorna";
+  const LOCATION = "locations/leuchtturm";
+
+  test("the seeded entries carry them as properties, not as body sections", async () => {
+    const jorna = await getEntry(NPC);
+    expect(jorna.properties.motivation).toBe(
+      "Das Leuchtfeuer muss wieder brennen, bevor die Herbstkonvois kommen — ihr Amt hängt daran.",
+    );
+    expect(jorna.body).not.toContain("## Will");
+    const tower = await getEntry(LOCATION);
+    expect(tower.properties.atmosphere).toBe(
+      "Verlassen in Eile, nicht im Kampf: nichts ist umgeworfen, aber alles stehen gelassen.",
+    );
+    expect(tower.body).not.toContain("## Atmosphäre");
+  });
+
+  test("set with text in one write, and `null` deletes the key", async () => {
+    const before = await getEntry(NPC);
+    const written = await patchOk(NPC, {
+      rev: before.rev,
+      properties: { motivation: "Ruhe am Kai — und dass [[fenn]] verschwindet." },
+      body: "\n## Weiß\n\nNichts Neues.\n",
+    });
+    expect(written.properties.motivation).toBe("Ruhe am Kai — und dass [[fenn]] verschwindet.");
+    expect(written.body).toBe("\n## Weiß\n\nNichts Neues.\n");
+    expect(written.rev).toBe(before.rev + 1);
+
+    const cleared = await patchOk(NPC, { rev: written.rev, properties: { motivation: null } });
+    expect(Object.hasOwn(cleared.properties, "motivation")).toBe(false);
+    expect(cleared.body).toBe(written.body);
+
+    const place = await getEntry(LOCATION);
+    const noAtmosphere = await patchOk(LOCATION, { rev: place.rev, properties: { atmosphere: null } });
+    expect(Object.hasOwn(noAtmosphere.properties, "atmosphere")).toBe(false);
+  });
+
+  test("each field belongs to its kind — `atmosphere` on an npc is a 400", async () => {
+    const before = await getEntry(NPC);
+    const res = await patchEntry(NPC, { rev: before.rev, properties: { atmosphere: "Nebel" } });
+    expect(res.status).toBe(400);
+    expect(await getEntry(NPC)).toEqual(before);
+  });
+
+  test("a concurrent write is a 409, and force keeps the foreign status", async () => {
+    const read = await getEntry(NPC);
+    // Somebody else changes the status while the edit surface is open.
+    const other = await patchEntry(NPC, { rev: read.rev, properties: { status: "missing" } });
+    expect(other.status).toBe(200);
+
+    const refused = await patchEntry(NPC, {
+      rev: read.rev,
+      properties: { motivation: "Neue Motivation." },
+      body: "\n## Weiß\n\nNeuer Text.\n",
+    });
+    expect(refused.status).toBe(409);
+
+    // „Trotzdem speichern": what the surface shows — text and motivation —
+    // and nothing else.
+    const forced = await patchOk(NPC, {
+      rev: read.rev,
+      properties: { motivation: "Neue Motivation." },
+      body: "\n## Weiß\n\nNeuer Text.\n",
+      force: true,
+    });
+    expect(forced.properties.motivation).toBe("Neue Motivation.");
+    expect(forced.body).toBe("\n## Weiß\n\nNeuer Text.\n");
+    expect(forced.properties.status).toBe("missing");
+  });
+});

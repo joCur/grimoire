@@ -56,6 +56,8 @@ const CHECKED_PROPERTIES = [
   "role",
   "voice",
   "appearance",
+  "motivation",
+  "atmosphere",
   "trigger",
   "statblock",
 ] as const;

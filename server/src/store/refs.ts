@@ -165,11 +165,24 @@ export function expandIndexedRefs(tx: GrimoireDb, campaign: string): number {
   return changed;
 }
 
+/**
+ * The table of each body kind and the PROSE a reference can stand in: the
+ * body, and for an npc and a location also the prose property the card shows
+ * (`motivation`, `atmosphere`). A `[[slug]]` there reads as a name on the card
+ * and is expanded in the index (./entity-rows.ts `indexedProse`), so a
+ * renamed target has to find these rows too.
+ */
 const REF_TABLES = {
-  scene: scenes,
-  npc: npcs,
-  location: locations,
-  chapter: chapters,
+  scene: { table: scenes, prose: sql<string>`${scenes.body}` },
+  npc: {
+    table: npcs,
+    prose: sql<string>`coalesce(${npcs.motivation}, '') || char(10) || char(10) || ${npcs.body}`,
+  },
+  location: {
+    table: locations,
+    prose: sql<string>`coalesce(${locations.atmosphere}, '') || char(10) || char(10) || ${locations.body}`,
+  },
+  chapter: { table: chapters, prose: sql<string>`${chapters.body}` },
 } as const;
 
 /** One referring entry with the body the check works on. */
@@ -200,11 +213,11 @@ function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerR
       if (row !== undefined) rows.push({ kind, id: row.id, body: row.body });
       continue;
     }
-    const table = REF_TABLES[kind];
+    const { table, prose } = REF_TABLES[kind];
     for (const row of tx
-      .select({ id: table.id, body: table.body })
+      .select({ id: table.id, body: prose })
       .from(table)
-      .where(and(eq(table.campaignId, campaign), like(table.body, needle)))
+      .where(and(eq(table.campaignId, campaign), like(prose, needle)))
       .orderBy(table.id)
       .all()) {
       rows.push({ kind, id: row.id, body: row.body });
@@ -213,7 +226,7 @@ function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerR
   return rows.filter((row) => bodyReferencesEntity(row.body, slug));
 }
 
-/** Ids of the entities whose body PROSE contains `[[slug]]`, per kind. */
+/** Ids of the entities whose PROSE (see `REF_TABLES`) contains `[[slug]]`, per kind. */
 export function referrersOf(
   tx: GrimoireDb,
   campaign: string,

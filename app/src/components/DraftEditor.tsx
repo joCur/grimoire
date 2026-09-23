@@ -11,7 +11,10 @@
 //               id stays read-only there and here (ADR #21).
 //   body        the mode toggle of the block composer over the same two
 //               surfaces the entry editor offers: the block cards, or the raw
-//               textarea with its preview.
+//               textarea with its preview — and above them, as there, the
+//               prose properties edited beside the text (`motivation`,
+//               `atmosphere`). Those are still properties: they are reported
+//               with the properties half.
 //
 // The two halves are reported SEPARATELY, because that is how they are stored:
 // each is a whole replacement of what the run produced, and an untouched half
@@ -89,7 +92,11 @@ export function DraftEditor({
   onFlush: () => void;
 }) {
   const t = useT();
-  const fields = propertiesFieldsFor(kind, t) ?? [];
+  // The dialog's fields, then the ones the entry editor puts beside the text:
+  // ONE form state over both, because both are the properties half.
+  const dialogFields = propertiesFieldsFor(kind, t) ?? [];
+  const textFields = propertiesFieldsFor(kind, t, "text") ?? [];
+  const fields = [...dialogFields, ...textFields];
   // Seeded once (see the note above): the object the diff is folded back into,
   // the values it is measured against, and the chip text that is not part of
   // a list yet.
@@ -112,9 +119,35 @@ export function DraftEditor({
     onPropertiesChange(applyPropertiesPatch(base, propertiesPatch(fields, initial, next)));
   };
 
+  /** One field of the form, wherever it stands. */
+  const control = (field: (typeof fields)[number]) => {
+    const value = values[field.key];
+    if (value === undefined) return null;
+    return (
+      <PropertiesFieldControl
+        key={field.key}
+        field={field}
+        value={value}
+        tree={tree}
+        pending={pending[field.key] ?? ""}
+        issue={issues[field.key]}
+        onChange={(next) => {
+          const nextValues = { ...values, [field.key]: next };
+          setValues(nextValues);
+          emit(nextValues, pending);
+        }}
+        onPendingChange={(text) => {
+          const nextPending = { ...pending, [field.key]: text };
+          setPending(nextPending);
+          emit(values, nextPending);
+        }}
+      />
+    );
+  };
+
   return (
     <div className="mt-3 flex flex-col gap-4">
-      {fields.length > 0 && (
+      {dialogFields.length > 0 && (
         <section aria-label={t("generate.review.propertiesHeading")}>
           <div className={OVERLINE}>{t("generate.review.propertiesHeading")}</div>
           {/* The two values the form does not own — shown, not editable,
@@ -122,32 +155,7 @@ export function DraftEditor({
           <p className="mt-1.5 text-[12px] text-body-secondary">
             {t("properties.id")} <span className="font-mono text-[12px] text-soft">{path}</span>
           </p>
-          <div className="mt-2.5 flex flex-col gap-3.5">
-            {fields.map((field) => {
-              const value = values[field.key];
-              if (value === undefined) return null;
-              return (
-                <PropertiesFieldControl
-                  key={field.key}
-                  field={field}
-                  value={value}
-                  tree={tree}
-                  pending={pending[field.key] ?? ""}
-                  issue={issues[field.key]}
-                  onChange={(next) => {
-                    const nextValues = { ...values, [field.key]: next };
-                    setValues(nextValues);
-                    emit(nextValues, pending);
-                  }}
-                  onPendingChange={(text) => {
-                    const nextPending = { ...pending, [field.key]: text };
-                    setPending(nextPending);
-                    emit(values, nextPending);
-                  }}
-                />
-              );
-            })}
-          </div>
+          <div className="mt-2.5 flex flex-col gap-3.5">{dialogFields.map(control)}</div>
         </section>
       )}
 
@@ -168,6 +176,9 @@ export function DraftEditor({
             )}
           </span>
         </div>
+        {textFields.length > 0 && (
+          <div className="mt-2.5 flex flex-col gap-3.5">{textFields.map(control)}</div>
+        )}
         {draft.mode === "blocks" ? (
           <BlockComposer
             blocks={draft.blocks}

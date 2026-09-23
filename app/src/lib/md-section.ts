@@ -1,5 +1,5 @@
 // Tiny line-based extractor for "first paragraph under a `## <heading>`"
-// lookups (chapter goal, NPC "Will"). Deliberately not a full markdown
+// lookups (the chapter goal). Deliberately not a full markdown
 // parse — these are display hints and DEGRADE: no heading / no paragraph
 // simply yields undefined, never an error.
 

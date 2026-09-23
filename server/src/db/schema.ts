@@ -347,6 +347,12 @@ export const npcs = sqliteTable(
     quickstats: text("quickstats").notNull().default("{}"),
     voice: text("voice"),
     appearance: text("appearance"),
+    /**
+     * What the npc wants — the line the npc card and the reference preview
+     * show. A property, not a body section found by its heading: what a view
+     * reads as data is a column (ADR #29).
+     */
+    motivation: text("motivation"),
     body: text("body").notNull().default(""),
     rev: revColumn(),
   },
@@ -392,6 +398,12 @@ export const locations = sqliteTable(
     chapterId: text("chapter_id"),
     /** Reference to the Roll20 page — never a map copy (DECISIONS #2). */
     roll20Page: text("roll20_page"),
+    /**
+     * What the place feels like — the line the location card and the
+     * reference preview show. A property for the same reason as
+     * `npcs.motivation` (ADR #29).
+     */
+    atmosphere: text("atmosphere"),
     body: text("body").notNull().default(""),
     rev: revColumn(),
   },

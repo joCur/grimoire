@@ -147,12 +147,9 @@ function npcDraft(
         quickstats: over.quickstats ?? { insight: "+3", deception: "+5" },
         voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
         appearance: "geflickter Ölmantel, rußige Finger",
+        motivation: "Die Route durch die Nordbucht für sich allein — ohne [[fenn]].",
       },
       body: [
-        "## Will",
-        "",
-        "Die Route durch die Nordbucht für sich allein — ohne Fenn.",
-        "",
         "## Weiß",
         "",
         over.knowledge ?? "> [!secret] Kennt ein zweites Versteck unter dem Kai.",
@@ -273,6 +270,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
       quickstats: { insight: "+3", deception: "+5" },
       voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
       appearance: "geflickter Ölmantel, rußige Finger",
+      motivation: "Die Route durch die Nordbucht für sich allein — ohne [[fenn]].",
     });
     expect(result.npc.body).toBe(npcDraft().body);
     expect(result.npc.properties.id).toBe("grella");
@@ -819,6 +817,10 @@ describe("apply an npc draft", () => {
     expect(written.properties.status).toBe("alive");
     expect(written.properties.quickstats).toEqual({ insight: "+3", deception: "+5" });
     expect(written.properties.statblock).toBe("Roll20: Grella");
+    // The motivation is a property of the reply, and the accept writes it.
+    expect(written.properties.motivation).toBe(
+      "Die Route durch die Nordbucht für sich allein — ohne [[fenn]].",
+    );
     expect(written.body).toContain("> [!secret] Kennt ein zweites Versteck unter dem Kai.");
     expect(written.body).toContain("- [[jorna]]: schuldet ihr einen Gefallen");
   });

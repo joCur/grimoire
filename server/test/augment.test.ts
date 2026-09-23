@@ -876,7 +876,8 @@ describe("an entry whose stored shape differs from the reply shape", () => {
     const written = await read(NPC);
     expect(written.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
     expect(written.body).toContain("## If: Jorna wird misstrauisch");
-    expect(written.body).toContain("## Will");
+    expect(written.body).toContain("## Weiß");
+    expect(written.properties.motivation).toBe(stored.properties.motivation);
   });
 });
 

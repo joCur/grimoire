@@ -218,11 +218,17 @@ export const de = {
   "properties.npc.voice.hint": "Wie klingt er/sie?",
   "properties.npc.appearance.label": "Erscheinung",
   "properties.npc.appearance.hint": "Ein bis zwei Merkmale.",
+  "properties.npc.motivation.label": "Will",
+  "properties.npc.motivation.hint":
+    "Was die Figur will — die NPC-Karte und die Vorschau zeigen es. [[id]] erscheint dort als Name.",
 
   "properties.location.name.label": "Name",
   "properties.location.chapter.label": "Kapitel",
   "properties.location.roll20.label": "Roll20-Seite",
   "properties.location.roll20.hint": "Verweis auf die Page, keine Karten-Kopie.",
+  "properties.location.atmosphere.label": "Atmosphäre",
+  "properties.location.atmosphere.hint":
+    "Wie der Ort wirkt — die Ort-Karte und die Vorschau zeigen es. [[id]] erscheint dort als Name.",
 
   "properties.chapter.title.label": "Titel",
   "properties.chapter.status.label": "Status",
@@ -590,6 +596,8 @@ export const de = {
   // --- body editor (components/EntryBodyEditor.tsx) -------------------------
   "bodyEditor.markdown.aria": "Markdown-Text von {path}",
   "bodyEditor.hint": "Nur der Textkörper — die Eigenschaften bleiben unverändert.",
+  "bodyEditor.hint.withFields":
+    "Textkörper und {fields} — die übrigen Eigenschaften bleiben unverändert.",
   "bodyEditor.blocked": "Ein Block muss noch geklärt werden — siehe Hinweis am Block.",
   "bodyEditor.discard.title": "Änderungen verwerfen?",
   "bodyEditor.discard.description":

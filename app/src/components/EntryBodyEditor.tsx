@@ -1,5 +1,5 @@
 // Edit mode of the reading view: the edit action in the header of a
-// scene/NPC/Ort/Kapitel swaps the rendered text of the entry for the editor.
+// scene/npc/location/chapter swaps the rendered text of the entry for the editor.
 //
 // That editor has TWO surfaces over ONE draft:
 //
@@ -16,9 +16,13 @@
 // ever sees `draftBody(draft)`.
 //
 // What the DM sees stays the same page: the header (title, chips, status
-// regler) keeps standing, only the body below it becomes editable. The
-// properties is not part of this by design — the status regler and the
-// properties dialog own the structured fields.
+// control) keeps standing, only the body below it becomes editable. Beside
+// the text the surface carries the kind's PROSE PROPERTIES — an npc's
+// `motivation`, a location's `atmosphere` (@grimoire/shared `FieldSurface`):
+// prose the cards show, written where prose is written. They share the
+// entry's one guard (ADR #23), so a save is ONE patch of whatever changed, and
+// a forced save resends exactly that. Every other property stays with the
+// status control and the properties dialog.
 //
 // Losing work is the one real risk here, so:
 //   * a conflict (409) keeps the draft and puts the shared conflict line under
@@ -38,6 +42,7 @@ import { useMemo, useState } from "react";
 import { BlockComposer, ComposerModeToggle } from "@/components/BlockComposer";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
+import { PropertiesFieldControl } from "@/components/PropertiesFields";
 import {
   EditorShell,
   MarkdownEditorSurface,
@@ -61,7 +66,14 @@ import {
   withDraftMode,
   withDraftText,
 } from "@/lib/composer";
-import { hasBodyChanges } from "@/lib/entry-body";
+import { bodyEditorWrite } from "@/lib/entry-body";
+import { hasEntryWrite } from "@/lib/entry-edit";
+import {
+  propertiesFieldsFor,
+  propertiesFormValues,
+  propertiesPatch,
+  type FormValues,
+} from "@/lib/properties-form";
 import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /**
@@ -100,7 +112,7 @@ export function EntryBodyEditor({
   onClose: () => void;
 }) {
   const t = useT();
-  // The block composer is the default surface (PO decision on #43): the DM
+  // The block composer is the default surface (a PO decision): the DM
   // maintains prose in forms, the textarea is the fallback.
   const [draft, setDraft] = useState(() => composerDraft(entry.body));
   // The text the draft was seeded from — what "is there anything to save?" is
@@ -108,6 +120,14 @@ export function EntryBodyEditor({
   // it moves only when that version does, i.e. when the DM adopts the stored
   // entry after a conflict.
   const [baseline, setBaseline] = useState(entry.body);
+  // The prose properties edited beside the text — none for a scene, a chapter
+  // or the campaign. Their baseline moves with the text's, for the same
+  // reason: it belongs to the version the session writes against.
+  const fields = useMemo(() => propertiesFieldsFor(entry.kind, t, "text") ?? [], [entry.kind, t]);
+  const [fieldBaseline, setFieldBaseline] = useState<FormValues>(() =>
+    propertiesFormValues(fields, entry.properties),
+  );
+  const [fieldValues, setFieldValues] = useState<FormValues>(fieldBaseline);
   // Textarea (true) or rendered preview (false) — the markdown surface's own
   // toggle, unchanged. The block surface has no preview of its own: every card
   // already shows its content.
@@ -122,6 +142,9 @@ export function EntryBodyEditor({
       // they were writing in.
       setDraft((current) => composerDraftIn(stored.body, current.mode));
       setBaseline(stored.body);
+      const storedFields = propertiesFormValues(fields, stored.properties);
+      setFieldBaseline(storedFields);
+      setFieldValues(storedFields);
     },
     // The text feeds the tree's counts/titles and the search index, so neither
     // the campaign's lists nor the command palette may keep the old text.
@@ -132,9 +155,11 @@ export function EntryBodyEditor({
   });
   const { isSaving, message } = edit;
 
-  // The one payload of this editor, whichever surface produced it.
+  // The one payload of this editor, whichever surface produced it: the text,
+  // plus the prose properties that moved — each half only when it changed.
   const body = useMemo(() => draftBody(draft), [draft]);
-  const dirty = hasBodyChanges(baseline, body);
+  const write = bodyEditorWrite(baseline, body, propertiesPatch(fields, fieldBaseline, fieldValues));
+  const dirty = hasEntryWrite(write);
   // What the block list would break if it were written now, per block — the
   // same seam the properties dialog uses (PropertiesAction): the card
   // says it, the button waits. The raw surface has no such state: its text IS
@@ -182,7 +207,7 @@ export function EntryBodyEditor({
                 list is the payload just as much as the textarea is. */}
             <Button
               type="button"
-              onClick={() => edit.save({ body })}
+              onClick={() => edit.save(write)}
               disabled={!dirty || blocked || isSaving}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
@@ -191,6 +216,25 @@ export function EntryBodyEditor({
           </>
         }
       >
+        {fields.length > 0 && (
+          <div className="mt-3.5 flex flex-col gap-3.5 border-b border-border pb-4">
+            {fields.map((field) => {
+              const value = fieldValues[field.key];
+              if (value === undefined) return null;
+              return (
+                <PropertiesFieldControl
+                  key={field.key}
+                  field={field}
+                  value={value}
+                  tree={undefined}
+                  pending=""
+                  onChange={(next) => setFieldValues({ ...fieldValues, [field.key]: next })}
+                  onPendingChange={() => undefined}
+                />
+              );
+            })}
+          </div>
+        )}
         {draft.mode === "blocks" ? (
           <BlockComposer
             blocks={draft.blocks}
@@ -210,7 +254,13 @@ export function EntryBodyEditor({
         )}
       </EditorShell>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[12px] text-faint">{t("bodyEditor.hint")}</p>
+        <p className="text-[12px] text-faint">
+          {fields.length === 0
+            ? t("bodyEditor.hint")
+            : t("bodyEditor.hint.withFields", {
+                fields: fields.map((field) => field.label).join(", "),
+              })}
+        </p>
         {/* A write error wins the line; without one it says why the save
             button is dead, because a disabled button next to a card-level hint
             is otherwise a dead end. */}

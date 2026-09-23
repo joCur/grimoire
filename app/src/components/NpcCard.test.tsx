@@ -50,12 +50,17 @@ describe("aside cards — a reference inside the excerpt", () => {
     ["bucht", { kind: "location", slug: "bucht", name: "Die Nordbucht", path: "locations/bucht" }],
   ]);
 
-  function renderCached(path: string, body: string, card: ReactNode): string {
+  function renderCached(
+    path: string,
+    properties: Record<string, unknown>,
+    body: string,
+    card: ReactNode,
+  ): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["entry", "beispiel", path], {
       path,
       kind: path.startsWith("npcs/") ? "npc" : "location",
-      properties: {},
+      properties,
       body,
       rev: 1,
     });
@@ -70,11 +75,16 @@ describe("aside cards — a reference inside the excerpt", () => {
     );
   }
 
-  const WILL = "## Will\n\nWill [[fenn]] aus [[bucht]] vertreiben, bevor [[niemand]] fragt.\n";
+  const MOTIVATION = "Will [[fenn]] aus [[bucht]] vertreiben, bevor [[niemand]] fragt.";
 
   test("NPC card, both densities: the name, not the brackets", () => {
     for (const compact of [false, true]) {
-      const html = renderCached("npcs/grella", WILL, <NpcCard campaign="beispiel" id="grella" compact={compact} />);
+      const html = renderCached(
+        "npcs/grella",
+        { motivation: MOTIVATION },
+        "",
+        <NpcCard campaign="beispiel" id="grella" compact={compact} />,
+      );
       expect(html).toContain("Will Fenn aus Die Nordbucht vertreiben");
       expect(html).not.toContain("[[fenn]]");
       // Unresolved stays as written, exactly as the text shows it.
@@ -82,13 +92,37 @@ describe("aside cards — a reference inside the excerpt", () => {
     }
   });
 
-  test("location card: the mood line reads with names", () => {
+  test("NPC card: a `## Will` section in the body shows nowhere on the card", () => {
+    for (const compact of [false, true]) {
+      const html = renderCached(
+        "npcs/grella",
+        {},
+        "## Will\n\nNur im Text, nie auf der Karte.\n",
+        <NpcCard campaign="beispiel" id="grella" compact={compact} />,
+      );
+      expect(html).not.toContain("Nur im Text");
+    }
+  });
+
+  test("location card: the atmosphere reads with names", () => {
     const html = renderCached(
       "locations/kai",
-      "## Atmosphäre\n\nHier riecht es nach [[fenn]]s Tabak.\n",
+      { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." },
+      "",
       <LocationCard campaign="beispiel" id="kai" />,
     );
     expect(html).toContain("Hier riecht es nach Fenns Tabak.");
     expect(html).not.toContain("[[fenn]]");
+  });
+
+  test("location card: a `## Atmosphäre` section is not read — the Roll20 page stands in", () => {
+    const html = renderCached(
+      "locations/kai",
+      { "roll20-page": "Kai" },
+      "## Atmosphäre\n\nNur im Text, nie auf der Karte.\n",
+      <LocationCard campaign="beispiel" id="kai" />,
+    );
+    expect(html).not.toContain("Nur im Text");
+    expect(html).toContain("Roll20-Seite: Kai");
   });
 });
