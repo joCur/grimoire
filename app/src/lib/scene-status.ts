@@ -7,9 +7,9 @@
 // (CLAUDE.md/i18n/index.ts: the lib layer takes `Translate` as a parameter).
 // The colors stay here: they are design tokens, not copy.
 //
-// `scenes.status` is a CHECK constraint of its column and the preflight
-// refuses a database that holds anything else (ADR #25), so the value is one
-// of the four everywhere below — there is no foreign value to render.
+// `scenes.status` is a CHECK constraint of its column, so the database cannot
+// hold anything else (ADR #25) and the value is one of the four everywhere
+// below — there is no foreign value to render.
 
 import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
 

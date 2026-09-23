@@ -5,141 +5,15 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1788621848784,
-      "tag": "0000_init",
+      "when": 1789757329900,
+      "tag": "0000_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "6",
-      "when": 1788621857760,
-      "tag": "0001_search_fts",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1788623923803,
-      "tag": "0002_played_pos_report_run",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1788639452705,
-      "tag": "0003_doc_revs_chapter_declared",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1788645978142,
-      "tag": "0004_generate_jobs_campaign_unique",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1788651234226,
-      "tag": "0005_sessions_created_at",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1789325427066,
-      "tag": "0006_campaign_knowledge",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1789385230150,
-      "tag": "0007_augment_job",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1789416124628,
-      "tag": "0008_job_review_state",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1789419799977,
-      "tag": "0009_group_from_location",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1789459044189,
-      "tag": "0010_pipeline_parts",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1789510860953,
-      "tag": "0011_drop_chapter_declared",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "6",
-      "when": 1789512099181,
-      "tag": "0012_drop_import_bookkeeping",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "6",
-      "when": 1789591155962,
-      "tag": "0013_job_new_chapter_title",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "6",
-      "when": 1789597018658,
-      "tag": "0014_reference_constraints",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "6",
-      "when": 1789664299056,
-      "tag": "0015_drop_extra",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "6",
-      "when": 1789734753450,
-      "tag": "0016_status_checks",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "6",
-      "when": 1789755952455,
-      "tag": "0017_session_timestamps_seconds",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "6",
-      "when": 1789757329900,
-      "tag": "0018_list_rows_without_markdown",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "6",
       "when": 1789760000000,
-      "tag": "0019_scene_pos_per_chapter",
+      "tag": "0001_scene_pos_per_chapter",
       "breakpoints": true
     }
   ]

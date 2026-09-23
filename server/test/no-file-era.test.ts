@@ -76,27 +76,12 @@ interface Exception {
 
 const EXCEPTIONS: readonly Exception[] = [
   {
-    path: "server/src/db/migrations",
-    reason: "a released migration never changes again — the file era is its history, not its code",
-  },
-  {
     path: "server/src/static-files.ts",
     reason: "the static-file server genuinely serves FILES — the built app's assets",
   },
   {
     path: "server/test/no-file-era.test.ts",
     reason: "this test names every forbidden name in order to forbid it",
-  },
-  {
-    path: "server/src/db/list-rows-preflight.ts",
-    rule: "raw-list-column",
-    reason:
-      "this gate exists to RECOGNIZE the dropped column and refuse the boot on it — it has to name it",
-  },
-  {
-    path: "server/test/list-rows-preflight.test.ts",
-    rule: "raw-list-column",
-    reason: "it plants the pre-0018 shape the gate above is checked against",
   },
   {
     phrase: "fixtures/",
@@ -187,11 +172,6 @@ const EXCEPTIONS: readonly Exception[] = [
     phrase: "raw `sql`",
     rule: "raw-list-column",
     reason: "the same escape hatch, named in prose: a hand-written SQL template",
-  },
-  {
-    phrase: "raw client",
-    rule: "raw-list-column",
-    reason: "the SQLite client under the drizzle handle, which the pre-flights run on",
   },
   {
     phrase: "raw-text patcher",
@@ -324,8 +304,8 @@ const RULES: readonly Rule[] = [
   },
   {
     // The status degrade the app used to carry: `status` is a CHECK constraint
-    // of its column and the preflight refuses a database holding anything else
-    // (ADR #25), so a foreign value cannot reach a renderer at all. A fallback
+    // of its column, so the database cannot hold anything else (ADR #25) and
+    // a foreign value cannot reach a renderer at all. A fallback
     // for one would be dead code that reads like a rule, and it would come
     // back with these words — they are the ones the removed branches used.
     id: "status-degrade-fallback",
@@ -356,9 +336,9 @@ const RULES: readonly Rule[] = [
   },
   {
     // `raw` held the markdown line beside a log or inbox row — two truths
-    // about one note, and the line was the one the reader used. Migration
-    // 0018 dropped the column; a reference to it anywhere — the store, a seed
-    // fixture's shape, an E2E helper — would be the parse coming back.
+    // about one note, and the line was the one the reader used. The column
+    // is gone; a reference to it anywhere — the store, a seed fixture's
+    // shape, an E2E helper — would be the parse coming back.
     //
     // `raw` is also an ordinary name for an unparsed model reply or an
     // unvalidated request value, and those are fine. So the pattern looks for

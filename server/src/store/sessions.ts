@@ -376,15 +376,13 @@ export async function markLogLineSeen(
  * The same closedness a closed field has (store/shared.ts), one layer down.
  * `started`, `ended` and the two ends of a pause are written from the
  * server's own clock everywhere else; a PATCH of a session is the only door
- * through which a
- * value from outside reaches those columns, and without this guard it was a
- * door PAST the boot pre-flight (db/timestamp-preflight.ts): a stored `19:30`
- * leaves that session without a place in the campaign's chronology, and the
- * next start refuses the database over a value the app itself wrote.
+ * through which a value from outside reaches those columns. Without this
+ * guard a stored `19:30` would leave that session without a place in the
+ * campaign's chronology.
  *
  * An EMPTY value is left through. `null` clears the column, and a blank
- * string is "not set" to the reader and to the pre-flight alike — refusing it
- * would make clearing a field depend on how the caller spells "nothing".
+ * string is "not set" to the reader — refusing it would make clearing a
+ * field depend on how the caller spells "nothing".
  */
 function assertTimestamp(value: string | null, field: string): void {
   if (value === null || value.trim() === "") return;

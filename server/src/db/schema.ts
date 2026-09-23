@@ -211,7 +211,7 @@ export const scenes = sqliteTable(
      *
      * It is part of the scene's ADDRESS — `<chapter>/<location>/<id>` is
      * derived from this column, which is why there is no independent
-     * `group_slug` column (migration 0009, ADR #17). It does not order
+     * group column (ADR #17). It does not order
      * anything: `pos` below does that.
      */
     location: text("location"),
@@ -448,9 +448,9 @@ export const sessions = sqliteTable(
     ended: text("ended"),
     /**
      * INSERTION ORDER of the row in epoch MILLISECONDS — the tie-break behind
-     * `started`, which is only second-precise. "Start, beenden, wieder
-     * starten" inside one second gives two rows the same `started`, and "die
-     * zuletzt gestartete" has to be the second of them deterministically. The
+     * `started`, which is only second-precise. Start, end and start again
+     * inside one second gives two rows the same `started`, and "the most
+     * recently started" has to be the second of them deterministically. The
      * opaque id cannot answer that (it has no time in it), so the row records
      * when it was written.
      *
@@ -830,8 +830,9 @@ export const meta = sqliteTable("meta", {
 // --- full-text search -------------------------------------------------------
 //
 // `search_fts` is an FTS5 virtual table and therefore NOT a drizzle table: it
-// is created by the hand-written custom migration
-// (0001_search_fts.sql) and maintained explicitly from the store layer.
+// is created by the hand-written statement at the end of the baseline
+// migration (0000_baseline.sql) and maintained explicitly from the store
+// layer.
 // Drizzle would have to model contentless-external-content tables and shadow
 // tables it has no concept of, and a generated diff would try to drop it on
 // every subsequent `drizzle-kit generate`.

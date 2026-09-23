@@ -1,1 +1,0 @@
-ALTER TABLE `generate_jobs` ADD `new_chapter_title` text;

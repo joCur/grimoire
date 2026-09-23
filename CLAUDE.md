@@ -101,8 +101,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   nicht nur in den geänderten Zeilen. Dafür gibt es keinen eigenen
   Aufräum-PR.
 - Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
-  sie ermöglichen (Vorabprüfung, Constraint-Fehler am Schreibpfad), nicht ihr
-  SQL.
+  sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
+- Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
+  kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
+  Übergangscode nur per eigenem ADR und befristet (ADR #28).
 - Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
   `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
   zusammengebaut zu werden.
@@ -201,8 +203,7 @@ Die Pfade:
    Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
    Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
    Server-Neustart (fertiger Job übersteht ihn und bleibt übernehmbar,
-   laufender wird als `failed` gemeldet, und ein Job im alten Entwurfsformat
-   wird beim Start als `failed` abgelehnt statt konvertiert)
+   laufender wird als `failed` gemeldet)
 7. Eigenschaften-Dialog/Status-Regler inkl. 409-Konflikt: der Dialog zeigt
    die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
    Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine

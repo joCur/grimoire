@@ -6,15 +6,13 @@
 // the answer, and that the session stays as it was. Everything else writes
 // those columns from the server's own clock, so this PATCH is the one place a
 // foreign value could enter — and the last case is the reason the guard
-// exists at all: whatever the API accepts, the next start accepts too.
+// exists at all: whatever the API writes, the reader reads.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { EntryResponse, SessionResponse } from "@grimoire/shared";
-import { openDb } from "../src/db/client";
-import type { SqliteClient } from "../src/db/driver";
 import { readFixtureSources, seedCampaign } from "../src/db/seed";
 import { closeStore, initStore } from "../src/store/handle";
 import { app } from "../src/server";
@@ -47,6 +45,17 @@ interface Refusal {
   error: string;
   field: string;
   value: string;
+}
+
+/** Every timestamp of an ended session carries its epoch reading. */
+function expectReadable(entry: SessionResponse): void {
+  expect(entry.startedMs).toEqual(expect.any(Number));
+  expect(entry.endedMs).toEqual(expect.any(Number));
+  expect(entry.pauses.length).toBeGreaterThan(0);
+  for (const pause of entry.pauses) {
+    expect(pause.fromMs).toEqual(expect.any(Number));
+    expect(pause.toMs).toEqual(expect.any(Number));
+  }
 }
 
 /** PATCH a foreign timestamp and read the refusal — nothing may be written. */
@@ -188,116 +197,19 @@ describe("a session timestamp outside the one shape is a 400", () => {
   });
 });
 
-/**
- * Drop the migrator's record of the last `count` migrations, so the next open
- * applies them again. It is how a case gets a database in the state an
- * installation was in before one of them existed — the data is planted, and
- * this removes the "already done" the migrator would otherwise read.
- *
- * `count` is how far back the migration under test sits from the end, so a
- * case names that distance instead of assuming its migration is the newest.
- * Every migration after the one under test is replayed along with it, so a
- * case also has to undo what those later ones added — a database recorded
- * before a migration was recorded before its successors too.
- */
-function forgetMigrations(client: SqliteClient, count: number): void {
-  client.exec(
-    "delete from __drizzle_migrations where rowid in" +
-      ` (select rowid from __drizzle_migrations order by rowid desc limit ${count})`,
-  );
-}
-
-describe("a database recorded before the seconds were written", () => {
-  afterEach(() => {
-    closeStore();
-  });
-
-  test("it starts, and its session reads back with the seconds completed", async () => {
-    // The shape a session held before the seconds were written is
-    // `yyyy-MM-ddTHH:mm`, and the boot check reads none of it. Completing it
-    // is lossless — `:00` is the only second that minute's precision allows —
-    // so migration 0017 does it and the start goes through.
-    const dir = mkdtempSync(path.join(tmpdir(), "grimoire-minute-session-"));
-    const dbPath = path.join(dir, "grimoire.db");
-    try {
-      const seeded = await openDb(dbPath);
-      const sources = await readFixtureSources(path.join(FIXTURES, "beispiel"));
-      seedCampaign(
-        seeded.db,
-        sources.map((source) => source.entry),
-      );
-      // The state an older installation is in: minute-precise values on the
-      // session and on a pause, one of them with a space where the `T` is.
-      seeded.client.exec(
-        "update sessions set started = '2026-01-15T19:30'," +
-          " ended = '2026-01-15 22:45:00' where id = '2026-01-15'",
-      );
-      seeded.client.exec(
-        "update session_pauses set from_ts = '2026-01-15T20:30'," +
-          " to_ts = '2026-01-15 20:50' where session_id = '2026-01-15'",
-      );
-      // And the other half of that state: the installation predates the
-      // migration, so its bookkeeping row goes as well and the next open runs
-      // it for the first time. Everything recorded AFTER it is replayed with
-      // it, so the schema those later migrations added has to go back too —
-      // an installation from before 0017 had none of it.
-      seeded.client.exec("alter table chapters drop column scene_order_rev");
-      forgetMigrations(seeded.client, 3);
-      seeded.close();
-
-      // The real boot path, on that database.
-      await initStore({ dbFile: dbPath });
-      const entry = await read();
-      expect(entry.started).toBe("2026-01-15T19:30:00");
-      expect(entry.ended).toBe("2026-01-15T22:45:00");
-      expect(intervals(entry)).toEqual([
-        { from: "2026-01-15T20:30:00", to: "2026-01-15T20:50:00" },
-      ]);
-      // Canonical means READABLE: the moment is there for the client's
-      // arithmetic, which is what a value outside the shape loses.
-      expect(entry.startedMs).toBe(new Date(2026, 0, 15, 19, 30, 0).getTime());
-    } finally {
-      closeStore();
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("a shape nothing can complete still refuses the start", async () => {
-    // The migration completes only what the value itself already says. A
-    // time without a day is not a shape anybody can finish, so it stays and
-    // the check reports it.
-    const dir = mkdtempSync(path.join(tmpdir(), "grimoire-unreadable-session-"));
-    const dbPath = path.join(dir, "grimoire.db");
-    try {
-      closeStore();
-      const seeded = await openDb(dbPath);
-      const sources = await readFixtureSources(path.join(FIXTURES, "beispiel"));
-      seedCampaign(
-        seeded.db,
-        sources.map((source) => source.entry),
-      );
-      seeded.client.exec("update sessions set started = '19:30' where id = '2026-01-15'");
-      seeded.close();
-
-      await expect(openDb(dbPath)).rejects.toThrow(/19:30/);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("the boot check is out of the API's reach", () => {
+describe("every stored timestamp is one the reader reads", () => {
   afterEach(() => {
     closeStore();
     setSystemTime();
   });
 
-  test("every write path for a session timestamp, and then a start", async () => {
-    // The gate in db/timestamp-preflight.ts refuses a database holding a
-    // value the reader cannot read. This case walks the paths that write
-    // those four columns — the clock-driven endpoints and the PATCH, with
-    // both a refused and an accepted value — and then BOOTS the same
-    // database: a shape the API let through would show up as a failed start.
+  test("every write path for a session timestamp", async () => {
+    // A value outside the one shape has no epoch reading (store/time.ts), so
+    // the session loses its place in the chronology. This case walks the
+    // paths that write those four columns — the clock-driven endpoints and
+    // the PATCH, with both a refused and an accepted value — and reads every
+    // stored value back: a shape the API let through would come back without
+    // its reading.
     const dir = mkdtempSync(path.join(tmpdir(), "grimoire-session-timestamps-"));
     const dbPath = path.join(dir, "grimoire.db");
     try {
@@ -333,6 +245,7 @@ describe("the boot check is out of the API's reach", () => {
       const currentRes = await app.request(sessionUrl);
       expect(currentRes.status).toBe(200);
       const current = (await currentRes.json()) as SessionResponse;
+      expectReadable(current);
       const refused = await app.request(sessionUrl, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -354,11 +267,9 @@ describe("the boot check is out of the API's reach", () => {
         }),
       });
       expect(accepted.status).toBe(200);
-      closeStore();
-
-      const booted = await openDb(dbPath);
-      booted.close();
+      expectReadable((await accepted.json()) as SessionResponse);
     } finally {
+      closeStore();
       rmSync(dir, { recursive: true, force: true });
     }
   });

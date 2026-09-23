@@ -49,8 +49,8 @@ export { isEntityId } from "@grimoire/shared/slug";
  * own (i18n/index.ts, the lib-layer rule).
  *
  * `unknown` is one of the four stored values — the NPC nobody has placed yet —
- * and not a fallback: `npcs.status` is a CHECK constraint of its column and
- * the preflight refuses a database that holds anything else (ADR #25).
+ * and not a fallback: `npcs.status` is a CHECK constraint of its column, so
+ * the database cannot hold anything else (ADR #25).
  */
 const NPC_STATUS_KEYS: Record<NpcStatus, MessageKey> = {
   alive: "status.npc.alive",

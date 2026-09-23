@@ -16,9 +16,9 @@
 // module choosing the right door — but choosing it is still what keeps the
 // app's cache honest about both chapters.
 //
-// `chapters.status` is a CHECK constraint of its column and the preflight
-// refuses a database that holds anything else (ADR #25), so the stored value
-// is one of the three. An ABSENT one is the only other case: every path that
+// `chapters.status` is a CHECK constraint of its column, so the database
+// cannot hold anything else (ADR #25) and the stored value is one of the
+// three. An ABSENT one is the only other case: every path that
 // creates a chapter writes `planned`, and no status on a chapter means "not
 // started", which is what `planned` says.
 

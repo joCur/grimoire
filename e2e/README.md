@@ -342,15 +342,7 @@ Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
 da (Ergebnis, Review-Edits in der Form je Hälfte) und wird mit beiden
 bearbeiteten Hälften übernommen; ein **laufender** steht als `failed` mit
 „Server wurde während des Laufs neu gestartet — Job neu starten" statt als
-endloser Spinner. Ein dritter Fall dort ist das **alte Entwurfsformat**: eine
-Job-Zeile, deren Entwürfe als `markdown` und deren `draftEdits` als Strings
-liegen, ist nach dem Boot `failed` mit `job_draft_format` und die Oberfläche
-sagt es in einem Satz — nichts wird konvertiert (ADR #24). Diese Zeile wird
-gepflanzt, weil kein Code im Repo diese Form noch schreibt: der Lauf des
-ersten Boots ist echt, zwischen den Boots wird sein Payload zurückdatiert.
-Das ist die **einzige** Stelle der Suite, die direkt in eine Datenbank
-schreibt — es läuft in dem Moment niemand darauf, und es gibt keine API für
-eine veraltete Zeile.
+endloser Spinner.
 
 `tests/generator-pipeline.e2e.ts` ist die **Pipeline-Hälfte** von Pfad 6
 die Pipeline: ein Lauf mit drei Szenen, von denen eine fehlschlägt — die anderen

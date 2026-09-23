@@ -12,8 +12,7 @@
 
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
-import type { GroupMigrationOutcome } from "../db/group-migration";
-import { failInterruptedJobs, failLegacyDraftJobs } from "../db/job-boot";
+import { failInterruptedJobs } from "../db/job-boot";
 
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
@@ -26,18 +25,6 @@ export interface StoreInfo {
    * runs the previous process took down with it.
    */
   interruptedJobs: number;
-  /**
-   * How many generator jobs this boot found with drafts in the pre-ADR-#24
-   * shape and had to fail — nothing is converted, the run is repeated.
-   */
-  legacyDraftJobs: number;
-  /**
-   * What the one-time `group_slug` -> `location` step changed
-   * (db/group-migration.ts): the scenes whose address moved, the location
-   * entries it had to create, and the scenes whose `location` yields no id
-   * and were left untouched. Empty on every boot after the first.
-   */
-  groupMigration: GroupMigrationOutcome;
 }
 
 let opened: OpenDb | null = null;
@@ -50,7 +37,7 @@ let opening: Promise<GrimoireDb> | null = null;
  *
  * `dbFile` defaults to `GRIMOIRE_DATA/grimoire.db`. Nothing is imported here —
  * an empty database stays empty; tests pass `:memory:` and
- * seed themselves through the importer when they need content.
+ * seed themselves from the fixtures when they need content.
  */
 export async function initStore(options: { dbFile?: string } = {}): Promise<GrimoireDb> {
   if (opened !== null) return opened.db;
@@ -58,23 +45,14 @@ export async function initStore(options: { dbFile?: string } = {}): Promise<Grim
   const dbFile = options.dbFile ?? getDbFile();
   opening = (async () => {
     const handle = await openDb(dbFile);
-    // A generator job cannot outlive the process that ran it: the
-    // provider call is gone, so a `running` row left behind by a restart or a
-    // crash is failed here — with a German sentence the app shows — instead of
-    // being polled forever. Finished jobs are untouched and stay applyable.
+    // A generator job cannot outlive the process that ran it: the provider
+    // call is gone, so a `running` row left behind by a restart or a crash is
+    // failed here — with an error code the app has a sentence for — instead
+    // of being polled forever. Finished jobs are untouched and stay
+    // applyable.
     const interruptedJobs = failInterruptedJobs(handle.db);
-    // A job whose drafts are one markdown text per draft cannot be reviewed
-    // or accepted any more (ADR #24), so it is failed here with a message
-    // that says so instead of breaking the review it lands in.
-    const legacyDraftJobs = failLegacyDraftJobs(handle.db);
     opened = handle;
-    info = {
-      dbFile,
-      backend: handle.client.backend,
-      interruptedJobs,
-      legacyDraftJobs,
-      groupMigration: handle.groupMigration,
-    };
+    info = { dbFile, backend: handle.client.backend, interruptedJobs };
     return handle.db;
   })();
   try {

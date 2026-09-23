@@ -108,9 +108,11 @@ export const ERROR_CODES = [
   /** 503, generator: the server was restarted while the job was running. */
   "job_restarted",
   /**
-   * 409, generator: the job's drafts predate the current draft format (ADR
-   * #24) and cannot be reviewed or accepted — the run has to be started
-   * again.
+   * NO LONGER SENT. It was the 409 for a job whose drafts predated the
+   * current draft format (ADR #24); every supported database already holds
+   * its drafts in that format (ADR #28), so no boot fails a job with it any
+   * more. The string stays because codes are APPEND-ONLY — and a job an
+   * older version failed with it still carries it in its error body.
    */
   "job_draft_format",
   /** 422, generator: the model's reply hit the token ceiling. `{ maxTokens }` */
