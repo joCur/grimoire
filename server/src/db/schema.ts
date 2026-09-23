@@ -228,10 +228,13 @@ export const scenes = sqliteTable(
     body: text("body").notNull().default(""),
     /**
      * Display order WITHIN THE CHAPTER, counted from 0 — the chapter lists
-     * its scenes by it, with the id as the tie-break.
+     * its scenes by it, with the id as the tie-break. A sort key, not an
+     * index: gaps are fine.
      *
      * It is SET, never derived: creating a scene appends it to its chapter,
-     * moving one to another chapter appends it there, and
+     * moving one to another chapter appends it there, an accepted scene of a
+     * generator run takes the run's start plus its outline number
+     * (store/chapters.ts `sceneRunPos`), and
      * `PUT /chapters/:chapter/scene-order` hands out the whole chapter's
      * positions from the order the DM dragged them into. Nothing reads an
      * ordering out of the title, the address or the location any more.

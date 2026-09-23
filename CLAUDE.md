@@ -203,7 +203,10 @@ Die Pfade:
    Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
    Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
    Server-Neustart (fertiger Job übersteht ihn und bleibt übernehmbar,
-   laufender wird als `failed` gemeldet)
+   laufender wird als `failed` gemeldet). Die Szenen eines Laufs stehen im
+   Kapitel in Gliederungsreihenfolge, auch wenn sie einzeln und in
+   umgekehrter Reihenfolge übernommen werden — Startwert bei der ersten
+   Übernahme plus Nummer in der Gliederung (ADR #27)
 7. Eigenschaften-Dialog/Status-Regler inkl. 409-Konflikt: der Dialog zeigt
    die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
    Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine

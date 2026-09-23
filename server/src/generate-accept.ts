@@ -8,7 +8,13 @@
 
 import type { DraftEdit } from "@grimoire/shared";
 import { ApiError } from "./api-error";
-import { getJob, markWrittenInTx, openPartPaths } from "./generate-jobs";
+import {
+  draftSceneId,
+  getJob,
+  markWrittenInTx,
+  openPartPaths,
+  outlineSceneNumbers,
+} from "./generate-jobs";
 import {
   applyNpcTarget,
   applySceneTarget,
@@ -20,7 +26,8 @@ import {
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
 import { requireCampaign } from "./store/campaigns";
-import { applyDrafts } from "./store/drafts";
+import { sceneRunPos, takeSceneRunStart, type SceneRunStart } from "./store/chapters";
+import { applyDrafts, type ScenePlacement } from "./store/drafts";
 
 /**
  * Accept PART of a finished run — „Diesen übernehmen" per scene
@@ -53,6 +60,12 @@ import { applyDrafts } from "./store/drafts";
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
+ *   placement   a scene of a pipelined run goes to the run's start plus its
+ *               outline number (ADR #27), so the run keeps its outline order
+ *               in the chapter however many calls accept it and in whatever
+ *               order. The start is the chapter's end at the FIRST scene
+ *               accept, taken in that transaction and stored on the job in
+ *               the same commit.
  *   job         the written parts are recorded ON the job in that same
  *               commit, and the row is deleted the moment nothing is left
  *               open. „Verwerfen" (DELETE …/job) therefore removes only the
@@ -178,11 +191,12 @@ export async function acceptJobParts(
   }
   /**
    * The selection in the order of `parts`, which is the run's OUTLINE order —
-   * the dramaturgical sequence the outline step decided. A scene draft is
-   * written to the end of its chapter (`insertDraft`), so the write order IS
-   * the order the scenes end up in (ADR #27); taking it from the caller would
-   * make the chapter depend on the order the review happened to name its
-   * paths in.
+   * the dramaturgical sequence the outline step decided. A scene draft of a
+   * pipelined run is placed by its outline number (`placeScene` below); a
+   * scene without one goes to the end of its chapter (`insertDraft`), and
+   * then the write order IS the order the scenes end up in (ADR #27). Either
+   * way the chapter does not depend on the order the review happened to name
+   * its paths in.
    *
    * The carried-along referenced entries sit at their own outline place here
    * rather than appended at the end: they are parts of this run like any
@@ -227,9 +241,40 @@ export async function acceptJobParts(
     const draft = drafts.find((d) => d.rel === rel);
     if (draft !== undefined) written[rel] = draft.address;
   }
+  /**
+   * The run's start, stored or — at the first scene accept — taken inside
+   * the write transaction. Reading the stored one off the pre-read job is
+   * safe: only an accept sets it, every accept bumps the review rev, and
+   * `markWrittenInTx` refuses a stale rev in this very transaction.
+   */
+  let sceneStart: SceneRunStart | undefined = job.pipeline?.sceneStart;
+  let tookStart = false;
+  const numbers = outlineSceneNumbers(job.pipeline?.parts ?? []);
+  const placeScene: ScenePlacement = (tx, rel, chapter) => {
+    const number = scenePaths.has(rel) ? numbers.get(draftSceneId(rel)) : undefined;
+    // A scene outside the outline or outside the run's chapter has no place
+    // of its own and goes to the end, like every other new scene.
+    if (number === undefined || chapter !== job.chapter) return undefined;
+    if (sceneStart === undefined) {
+      sceneStart = takeSceneRunStart(tx, campaign, chapter);
+      tookStart = true;
+    }
+    return sceneRunPos(tx, campaign, chapter, sceneStart, number);
+  };
+
   let jobDeleted = false;
-  await applyDrafts(campaign, drafts, undefined, (tx) => {
-    jobDeleted = markWrittenInTx(tx, campaign, jobId, rev, written);
+  await applyDrafts(campaign, drafts, {
+    placeScene,
+    onWritten: (tx) => {
+      jobDeleted = markWrittenInTx(
+        tx,
+        campaign,
+        jobId,
+        rev,
+        written,
+        tookStart ? sceneStart : undefined,
+      );
+    },
   });
   return { written, jobDeleted };
 }

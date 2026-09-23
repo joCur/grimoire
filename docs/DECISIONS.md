@@ -1206,19 +1206,42 @@ Block am Ende.
   niemand nebenbei; dieser Endpoint bedient das Hoch/Runter an der Zeile, dem
   die vollständige Liste ohnehin vorliegt — sie zu schicken kostet nichts.
 
-  Eine Teilliste **mit ausdrücklichen Positionen** ist etwas anderes und
-  bleibt ausdrücklich offen: `pos` ist ein Sortierschlüssel und verträgt
-  Lücken, nichts hier setzt dichte Werte voraus. Sie ist der naheliegende
-  Weg, damit die Reihenfolge eines Generator-Laufs auch über mehrere
-  Teil-Übernahmen hält — die Gliederung nummeriert, der Entwurf bringt seine
-  Nummer mit, später Übernommenes fällt an seinen Platz, ohne
-  Einsortier-Logik. Zwei Fragen tragen diese Entscheidung: Die Nummern
-  brauchen einen **stabilen Bezugspunkt** — ein Kapitel hat meist schon
-  Szenen, und ein je Übernahme neu berechnetes „ans Ende" wandert mit, der
-  Bezugspunkt müsste also am Lauf hängen —, und zwei gleiche Positionen
-  brauchen eine **Kollisionsregel**. Sobald der DM von Hand umsortiert,
-  schreibt dieser Endpoint die Positionen dicht neu: die Handsortierung
-  gewinnt, und das ist gewollt.
+  Eine Teilliste **mit ausdrücklichen Positionen** ist etwas anderes, und
+  sie gibt es genau einmal: für die Szenen eines Generator-Laufs, damit
+  dessen Reihenfolge auch über mehrere Teil-Übernahmen hält. `pos` ist ein
+  Sortierschlüssel und verträgt Lücken, nichts hier setzt dichte Werte
+  voraus. Die Regel: **Position = Startwert des Laufs + Nummer der Szene in
+  der Gliederung.**
+
+  - **Die Nummer** ist der Index der Szene unter den Szenen-Teilen der
+    Gliederung, in Gliederungsreihenfolge. Der Entwurf trägt kein eigenes
+    Feld dafür — die Gliederung liegt am Job. Eine verworfene oder
+    fehlgeschlagene Szene behält ihre Nummer und hinterlässt eine Lücke, ein
+    Retry ändert die Nummer nicht.
+  - **Der Startwert** ist der stabile Bezugspunkt, den die Nummern
+    brauchen: das Kapitelende bei der **ersten Szenen-Übernahme** des Laufs.
+    Er wird im selben Commit am Job gespeichert (im serverinternen
+    Pipeline-Stand, neben der Gliederung, übersteht also einen Neustart) und
+    für diesen Lauf nie neu berechnet — ein je Übernahme neu berechnetes
+    „ans Ende" wanderte mit, und eine später übernommene frühere Szene
+    landete wieder hinten. Nicht der Laufstart: eine Szene, die der DM
+    zwischen Start und erster Übernahme von Hand anlegt, steht so vor dem
+    Lauf. Ein neues Kapitel beginnt damit bei 0, ohne Sonderfall.
+  - **Die Handsortierung gewinnt.** Mit dem Startwert speichert der Job den
+    `scene_order_rev` des Kapitels. Hat der sich seitdem bewegt — der DM hat
+    über diesen Endpoint umsortiert, der die Positionen dicht neu schreibt —,
+    hängt jede weitere Übernahme dieses Laufs ans Kapitelende wie jede andere
+    neue Szene. Einen neuen Startwert gibt es nicht: er sortierte nur wieder
+    um die Ordnung des DM herum.
+  - **Ein Gleichstand** entsteht nur, wenn der DM mitten in der Prüfung eine
+    Szene von Hand anlegt. Er braucht keine eigene Regel: die Kapitelliste
+    sortiert nach `pos, id`, das Ergebnis ist eindeutig.
+
+  Wer alles in einem Aufruf übernimmt, bekommt dieselbe Reihenfolge wie
+  zuvor, und keine Übernahme bewegt `scene_order_rev`, `chapters.rev` oder
+  das `rev` einer bestehenden Szene. Ein neuer Lauf ersetzt den alten Job
+  (ein Job je Kampagne) und bekommt seinen eigenen Startwert; ein
+  Einsortieren über Läufe hinweg gibt es nicht.
 - **Der Wächter ist `chapters.scene_order_rev`** — ein eigener Zähler, der
   nur die Writes dieser einen Liste zählt und den `ChapterNode` mitliefert;
   das `rev` im Rumpf ist seiner. Ein alter Stand ist **409 `rev_conflict`**.
@@ -1227,6 +1250,9 @@ Block am Ende.
 - **Neue Szenen landen am Ende** ihres Kapitels. Wechselt eine Szene das
   Kapitel, landet sie am Ende des Zielkapitels: dort ist sie neu, und wo sie
   in der Dramaturgie des anderen Kapitels stand, sagt über das Ziel nichts.
+  Die eine Ausnahme sind die übernommenen Entwürfe eines Generator-Laufs:
+  sie stehen am Startwert des Laufs plus ihrer Nummer in der Gliederung
+  (oben), solange der DM das Kapitel nicht von Hand umsortiert hat.
 - **Die Session-Ansicht liest dieselbe Reihenfolge.** Sie öffnet die erste
   Szene, deren Status weder `played` noch `dropped` ist, sonst die erste;
   unter der offenen Szene steht der Schritt „Nächste Szene: <Titel>".

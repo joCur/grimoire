@@ -12,7 +12,9 @@
 //   4. a restart mid-run keeps the finished parts and fails the one that was
 //      in flight (the other half of generator-restart.e2e.ts, one level
 //      deeper),
-//   5. „Verwerfen" during a run stops the open parts.
+//   5. „Verwerfen" during a run stops the open parts,
+//   6. the scenes of a run accepted one by one in REVERSE stand in the
+//      chapter overview in outline order, behind the chapter's own scenes.
 //
 // Nothing is mocked but the model: the browser drives the real app, the real
 // server calls the real stub endpoint over the real provider, and the stub
@@ -21,6 +23,7 @@
 
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import type { Page } from "@playwright/test";
 
 import { FAILING_SCENE_ID, THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
@@ -118,7 +121,74 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 
-test("a finished part is acceptable while the run is still running (AK2)", async ({
+/**
+ * The rows of the chapter overview in DOM order, by the title they show —
+ * read off the move controls, which carry the row's title in their name.
+ */
+async function shownOrder(page: Page): Promise<string[]> {
+  const labels = await page
+    .getByRole("button", { name: /nach unten$/ })
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
+  return labels.map((label) => label.replace(/^„|“ nach unten$/g, ""));
+}
+
+test("scenes accepted one by one in reverse stand in outline order", async ({ page, api }) => {
+  type Tree = { chapters: Array<{ id: string; scenes: Array<{ id: string; title: string }> }> };
+  const chapterScenes = async () =>
+    (await api.get<Tree>("campaigns/beispiel/tree")).chapters.find((c) => c.id === CHAPTER)!
+      .scenes;
+  const before = await chapterScenes();
+
+  await page.goto("/campaigns/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill([SOURCE, TRIGGER.threeScenes].join("\n\n"));
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  for (const scene of THREE_SCENES) {
+    await expect(page.getByRole("heading", { level: 2, name: scene.title })).toBeVisible();
+  }
+
+  // Last first: every accept is its own call, and each one would have
+  // appended its scene behind the one before. The last accept empties the
+  // run, so it answers with the written summary instead of a link.
+  const reversed = [...THREE_SCENES].reverse();
+  for (const [index, scene] of reversed.entries()) {
+    await page
+      .locator("div")
+      .filter({ hasText: draftPath(scene.id) })
+      .last()
+      .getByRole("button", { name: "Diesen übernehmen" })
+      .click();
+    if (index < reversed.length - 1) {
+      await expect(page.getByRole("link", { name: draftPath(scene.id) })).toBeVisible();
+    } else {
+      await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+    }
+  }
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+
+  // Stored: the chapter's own scenes, then the run in outline order.
+  const runIds = THREE_SCENES.map((scene) => scene.id);
+  expect((await chapterScenes()).map((scene) => scene.id)).toEqual([
+    ...before.map((scene) => scene.id),
+    ...runIds,
+  ]);
+
+  // Shown: the planned rows of the overview put the run behind the planned
+  // scene the chapter already had, in outline order (the contingency keeps
+  // its own block at the end).
+  await page.goto("/campaigns/beispiel");
+  const runTitles: string[] = THREE_SCENES.map((scene) => scene.title);
+  await expect
+    .poll(async () => (await shownOrder(page)).filter((title) => runTitles.includes(title)))
+    .toEqual(runTitles);
+  const shown = await shownOrder(page);
+  const firstOwn = before[0]!.title;
+  expect(shown.indexOf(firstOwn)).toBeLessThan(shown.indexOf(runTitles[0]!));
+});
+
+test("a finished part is acceptable while the run is still running", async ({
   page,
   api,
 }) => {
