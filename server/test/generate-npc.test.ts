@@ -129,7 +129,6 @@ function npcDraft(
     quickstats?: Record<string, unknown>;
     knowledge?: string;
     relations?: string[];
-    notes?: string;
   } = {},
   drop: readonly string[] = [],
 ): ScriptedEntry {
@@ -157,10 +156,6 @@ function npcDraft(
         "## Beziehungen",
         "",
         ...(over.relations ?? ["- [[jorna]]: schuldet ihr einen Gefallen"]),
-        "",
-        "## Notizen",
-        "",
-        over.notes ?? "<!-- wird von der App im Review-Schritt befüllt -->",
         "",
       ].join("\n"),
     },
@@ -346,8 +341,8 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
 
   // --- the validation rules (each one a correction turn) ------------------------
 
-  test("a relationship to an unknown npc triggers a correction turn, then succeeds", async () => {
-    const bad = npcReply({ content: npcDraft({ relations: ["- niemand: alter Feind"] }) });
+  test("an unknown [[id]] triggers a correction turn, then succeeds", async () => {
+    const bad = npcReply({ content: npcDraft({ relations: ["- [[niemand]]: alter Feind"] }) });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
@@ -356,38 +351,62 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(fake.calls[1]!.corrections).toHaveLength(1);
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     const correction = fake.calls[1]!.corrections[0]!.correction;
-    expect(correction).toContain('npc "niemand" existiert nicht');
-    expect(correction).toContain("weglassen statt erfinden");
+    expect(correction).toContain("[[niemand]] nennt keinen Eintrag");
     // ONE error, not a cascade
     expect(correction.match(/^- /gm)).toHaveLength(1);
     expect(await exists("npcs/grella")).toBe(false);
   });
 
-  test("a relationship line that is not `- [[<npc-id>]]: text` is an error", async () => {
-    const errors = await firstValidationError([
-      npcReply({ content: npcDraft({ relations: ["- Jorna, die Hafenmeisterin"] }) }),
-    ]);
-    expect(errors).toContain("ist keine \"- [[<npc-id>]]: <Text>\"-Zeile");
+  test("the reference rule reads no heading — it finds [[id]] anywhere in the body", async () => {
+    // A lowercase heading, CRLF line ends, a paragraph under no heading at
+    // all: the rule is about the reference, so none of that hides one.
+    const bodies = [
+      "## weiß\r\n\r\n> [!secret] [[niemand]] zahlt.\r\n",
+      "Vor jeder Überschrift steht [[niemand]].\n\n## Weiß\n\n> [!secret] Nichts.\n",
+      "## Auftreten\n\n- [[niemand]]s Boot liegt am Kai.\n",
+    ];
+    for (const body of bodies) {
+      expect(
+        await firstValidationError([npcReply({ content: { ...npcDraft(), body } })]),
+      ).toContain("[[niemand]] nennt keinen Eintrag");
+    }
   });
 
-  test("a relationship line without the brackets passes in one turn", async () => {
-    // `- [[jorna]]: …` is what the prompt and its few-shot ask for (and what
-    // the default fixture above sends), but the check is after the id, not
-    // after the brackets: a line that names an existing npc bare is the same
-    // statement in the same place and must not come back as a correction.
-    const fake = useFake([
-      npcReply({ content: npcDraft({ relations: ["- jorna: alte Bekannte"] }) }),
-    ]);
+  test("[[id]] of any campaign kind, the npc itself and a slug in code pass in one turn", async () => {
+    // A reference resolves to an npc, a location or a scene of the campaign;
+    // the npc this run proposes is an entry of the run. Inside a code span the
+    // brackets are literal text, as on the rendered page.
+    const body = [
+      "## Weiß",
+      "",
+      "> [!secret] Trifft [[jorna]] am [[leuchtturm]]; gehört zu [[smuggler-captured]].",
+      "",
+      "## Beziehungen",
+      "",
+      "- [[fenn]]: alter Rivale",
+      "",
+      "[[grella]] schreibt sich im Log als `[[niemand]]`.",
+      "",
+    ].join("\n");
+    const fake = useFake([npcReply({ content: { ...npcDraft(), body } })]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("prose inside ## Beziehungen degrades instead of erroring", async () => {
-    const fake = useFake([
-      npcReply({ content: npcDraft({ relations: ["Keine belegten Beziehungen."] }) }),
-    ]);
-    expect((await generateNpc(npcBody)).status).toBe(200);
-    expect(fake.calls).toHaveLength(1);
+  test("a relationship line in any form is prose — it passes in one turn", async () => {
+    // `- [[jorna]]: …` is what the prompt and its few-shot recommend (and what
+    // the default fixture above sends), but the section is free text: a line
+    // without the brackets or without an id is the model's prose, not an
+    // error.
+    for (const relations of [
+      ["- jorna: alte Bekannte"],
+      ["- Jorna, die Hafenmeisterin"],
+      ["Keine belegten Beziehungen."],
+    ]) {
+      const fake = useFake([npcReply({ content: npcDraft({ relations }) })]);
+      expect((await generateNpc(npcBody)).status).toBe(200);
+      expect(fake.calls).toHaveLength(1);
+    }
   });
 
   test("an invalid status triggers a correction turn, then succeeds", async () => {
@@ -414,20 +433,9 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(result.npc.properties.status).toBe("unknown");
   });
 
-  test("only [!secret] inside ## Weiß — other known callouts elsewhere are fine", async () => {
-    const errors = await firstValidationError([
-      npcReply({ content: npcDraft({ knowledge: "> [!note] Nur ein DM-Hinweis." }) }),
-    ]);
-    expect(errors).toContain("## Weiß: nur [!secret] erlaubt");
-
-    // the same callout OUTSIDE the section passes in one call
+  test("any known callout passes under ## Weiß — no rule reads a heading", async () => {
     const fake = useFake([
-      npcReply({
-        content: {
-          ...npcDraft(),
-          body: `${npcDraft().body}\n## Auftreten\n\n> [!note] Grella taucht erst nach der Bucht auf.\n`,
-        },
-      }),
+      npcReply({ content: npcDraft({ knowledge: "> [!note] Nur ein DM-Hinweis." }) }),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(1);
@@ -455,16 +463,21 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     );
   });
 
-  test("an invented chapter and a filled ## Notizen are errors", async () => {
+  test("an invented chapter is an error; a ## Notizen section is free text", async () => {
     expect(
       await firstValidationError([npcReply({ content: npcDraft({ chapter: true }) })]),
     ).toContain('kein "chapter"');
 
-    expect(
-      await firstValidationError([
-        npcReply({ content: npcDraft({ notes: "Sie könnte die Schwester von Fenn sein." }) }),
-      ]),
-    ).toContain("## Notizen bleibt leer");
+    const fake = useFake([
+      npcReply({
+        content: {
+          ...npcDraft(),
+          body: `${npcDraft().body}\n## Notizen\n\nSie könnte die Schwester von [[fenn]] sein.\n`,
+        },
+      }),
+    ]);
+    expect((await generateNpc(npcBody)).status).toBe(200);
+    expect(fake.calls).toHaveLength(1);
   });
 
   test("an id that is no kebab slug is an error", async () => {
@@ -808,8 +821,8 @@ describe("apply an npc draft", () => {
     expect(await fetchJob()).toBeNull();
 
     // …and it is a real npc for the rest of the API: every reviewed field
-    // came through, the quoted quickstats included, and `## Beziehungen`
-    // (which became relation ROWS) is rendered back into the body
+    // came through, the quoted quickstats included, and the body is stored
+    // as the reply carried it
     const written = await read("npcs/apply-happy");
     expect(written.kind).toBe("npc");
     expect(written.properties.id).toBe("apply-happy");

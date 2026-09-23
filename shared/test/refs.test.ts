@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  bodyEntityRefSlugs,
   bodyReferencesEntity,
   entityRefSlugs,
   entityRefSource,
@@ -101,6 +102,16 @@ describe("code regions are not prose", () => {
     expect(bodyReferencesEntity("```\n[[jorna]]\n```\n", "jorna")).toBe(false);
     expect(bodyReferencesEntity("Am Kai wartet [[jorna]]s Boot.", "jorna")).toBe(true);
     expect(bodyReferencesEntity("Nur Prosa.", "jorna")).toBe(false);
+  });
+
+  test("the slugs of a body are its prose references, once each", () => {
+    expect(bodyEntityRefSlugs(FENCED)).toEqual(["jorna"]);
+    expect(bodyEntityRefSlugs("nur `[[fenn]]` und\n```\n[[bucht]]\n```\n")).toEqual([]);
+    expect(bodyEntityRefSlugs("[[fenn]] trifft [[jorna]], dann [[fenn]]s Boot.")).toEqual([
+      "fenn",
+      "jorna",
+    ]);
+    expect(bodyEntityRefSlugs("Nur Prosa, [[Jorna]] ist Text.")).toEqual([]);
   });
 });
 

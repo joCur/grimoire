@@ -30,6 +30,9 @@
 //     (a `vorgegebene id: <id>` line pins the id of the entry)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
+//   - TRIGGER.unknownRef in the source text -> an npc or augment run's first
+//     reply names an entry nobody has; the correction turn (the call that
+//     carries an assistant turn) gets the good reply
 //   - TRIGGER.truncated in the source text -> finish_reason "length"
 //   - TRIGGER.slow in the source text      -> the reply is HELD (SLOW_REPLY_MS)
 //     so a spec can observe a job while it is really running
@@ -91,6 +94,8 @@ import {
   outlineReply,
   partFailNonce,
   scenePartReply,
+  unknownRefAugmentReply,
+  unknownRefNpcReply,
   type ExistingEntry,
 } from "./replies";
 
@@ -243,6 +248,10 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // Only the PARTS are late; the outline answers at once, so the run reaches
   // `running` with its parts still pending.
   const latePart = source.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0;
+  // A correction turn replays the previous reply as an assistant turn, so the
+  // first call of a run is the one without it.
+  const unknownRef =
+    source.includes(TRIGGER.unknownRef) && !messages.some((m) => m.role === "assistant");
 
   // An augment run is the one prompt that carries an EXISTING entry. It is
   // checked FIRST — a scene augment also carries a `chapter:` line, and that
@@ -260,7 +269,9 @@ export function decide(messages: ChatMessage[]): StubDecision {
       pauseMs: latePart,
       reply: invalid
         ? invalidAugmentReply(existing.path)
-        : augmentReply(existing.path, existing.entry, knowledge),
+        : unknownRef
+          ? unknownRefAugmentReply(existing.path, existing.entry)
+          : augmentReply(existing.path, existing.entry, knowledge),
     };
   }
 
@@ -328,7 +339,11 @@ export function decide(messages: ChatMessage[]): StubDecision {
     kind: "npc",
     truncated,
     delayMs,
-    reply: invalid ? invalidNpcReply(pinned) : npcReply(pinned, knowledge),
+    reply: invalid
+      ? invalidNpcReply(pinned)
+      : unknownRef
+        ? unknownRefNpcReply(pinned)
+        : npcReply(pinned, knowledge),
   };
 }
 

@@ -204,16 +204,35 @@ describe("POST /api/campaigns/:campaign/review/npc-stub", () => {
     // the entry must not claim "alive".
     expect(entry.properties.status).toBe("unknown");
     expect(entry.properties).toEqual({ id: "old-metta", name: "Old Metta", status: "unknown" });
-    expect(entry.body).toBe("\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n");
+    // The text IS the note — no heading, nothing around it.
+    expect(entry.body).toBe("Fischerin am Steg, kennt die Gezeiten #npc");
     // A fresh row starts at rev 1 — the token the app sends with its first edit.
     expect(entry.rev).toBe(1);
     expect(await getEntry("npcs/old-metta")).toEqual(entry);
   });
 
-  test("name defaults to the id; without a note the section stays empty", async () => {
+  test("name defaults to the id; without a note the text is empty", async () => {
     const entry = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "kai" });
     expect(entry.properties).toEqual({ id: "kai", name: "kai", status: "unknown" });
-    expect(entry.body).toBe("\n## Notizen\n");
+    expect(entry.body).toBe("");
+  });
+
+  test("a stub without name and note is still EMPTY — a later create fills it, no 409", async () => {
+    // Nothing but the id: the entry holds nothing, so creating it from the
+    // list (or applying a generator draft for it) fills it like any other
+    // empty entry instead of colliding with it.
+    const stub = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "wirt" });
+    expect(stub.body).toBe("");
+    const created = await app.request("/api/campaigns/beispiel/npcs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Der Wirt", id: "wirt" }),
+    });
+    expect(created.status).toBe(201);
+    const filled = (await created.json()) as EntryResponse;
+    expect(filled.path).toBe("npcs/wirt");
+    expect(filled.properties.name).toBe("Der Wirt");
+    expect(filled.rev).toBe(stub.rev + 1);
   });
 
   test("an existing entry is ANSWERED, not overwritten and not refused", async () => {
@@ -251,7 +270,7 @@ describe("POST /api/campaigns/:campaign/review/npc-stub", () => {
       note: "war am Steg #npc",
     });
     expect(filled.properties.name).toBe("Holm");
-    expect(filled.body).toContain("- war am Steg #npc");
+    expect(filled.body).toBe("war am Steg #npc");
     expect(filled.rev).toBe(empty.rev + 1);
   });
 

@@ -557,7 +557,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
-  await textarea.fill(before.body.replace("## Notizen", `${added}\n\n## Notizen`));
+  await textarea.fill(`${before.body}${added}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(textarea).toHaveCount(0);

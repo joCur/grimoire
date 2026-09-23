@@ -302,8 +302,8 @@ test("creating an NPC entry from a #npc log row", async ({ page, api }) => {
   // The log row said nothing about the NPC's state, so the entry claims
   // nothing either.
   expect(stub.properties.status).toBe("unknown");
-  expect(stub.body).toContain("## Notizen");
-  expect(stub.body).toContain(NPC_TEXT);
+  // The text IS the log line (its hashtags stripped) — no heading around it.
+  expect(stub.body).toBe(NPC_TEXT);
 
   // The new NPC is in the tree right away (list page, search index).
   await page.goto("/campaigns/beispiel/list/npcs");

@@ -120,9 +120,8 @@ describe("Markdown pipeline rendering", () => {
   });
 });
 
-// Raw HTML is dropped instead of printed (skipHtml): the
-// generator leaves `<!-- … -->` hints in the bodies, and they were showing up
-// as visible text under `## Notizen`.
+// Raw HTML is dropped instead of printed (skipHtml): a `<!-- … -->` hint in a
+// body would otherwise show up as visible text.
 describe("HTML in the body", () => {
   test("an HTML comment is invisible", () => {
     const html = render("## Notizen\n\n<!-- wird von der App im Review-Schritt befüllt -->\n");
@@ -136,13 +135,6 @@ describe("HTML in the body", () => {
     expect(html).not.toContain("Notiz");
     expect(html).toContain("Ein Satz");
     expect(html).toContain("mit Kommentar.");
-  });
-
-  test("the npc fixture that carries the comment renders without it", () => {
-    const html = render(fixtureBody("npc-fenn.json"));
-    expect(html).not.toContain("<!--");
-    expect(html).not.toContain("wird von der App");
-    expect(html).toContain("<h2>Notizen</h2>");
   });
 
   test("the reference fixtures render exactly as before — comments are the only loss", () => {

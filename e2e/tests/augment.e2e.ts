@@ -13,7 +13,9 @@
 //      is augmented and keeps its stats as the mapping they are,
 //   c) rejecting the proposal writes nothing and takes the job with it,
 //   d) an entry that moves while the review is open answers 409 and nothing
-//      is written (ADR #4) — the review recovers on the re-read.
+//      is written (ADR #4) — the review recovers on the re-read,
+//   e) a proposal that names an entry nobody has (`[[…]]`) costs one
+//      correction turn, and the DM reviews the corrected one.
 //
 // Two of them carry the default rule with them, because it is the rule the
 // whole feature turns on: by default only empty and new units are accepted,
@@ -42,6 +44,7 @@ import {
   AUGMENT_THREAD_CONDITION,
   AUGMENT_THREAD_TEXT,
   TRIGGER,
+  UNKNOWN_REF_ID,
 } from "../fixtures/replies";
 import { expect, test, type Api } from "../support/test";
 
@@ -242,6 +245,34 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
   expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
   expect(after.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
   expect(after.properties.name).toBe(before.properties.name);
+});
+
+test("an unknown [[id]] in the proposal costs one correction turn", async ({ page, api }) => {
+  // The stub's first reply adds a sentence naming `[[der-fremde]]`; the
+  // correction turn answers the good proposal. What the review shows — and
+  // what the accept writes — is the corrected one.
+  await page.goto(`/campaigns/beispiel/entries/${FILLED_NPC}`);
+  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page
+    .getByLabel("Quelltext", { exact: false })
+    .fill(`${INSTRUCTION}\n\n${TRIGGER.unknownRef}`);
+  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+
+  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+    timeout: 30_000,
+  });
+  const job = (await (await api.fetch("campaigns/beispiel/generate/job")).json()) as {
+    augmentResult: { proposedBody: string; usage?: { attempts: number } };
+  };
+  expect(job.augmentResult.usage?.attempts).toBe(2);
+  expect(job.augmentResult.proposedBody).not.toContain(UNKNOWN_REF_ID);
+  await expect(page.getByRole("dialog")).not.toContainText(UNKNOWN_REF_ID);
+
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  const after = await api.body(FILLED_NPC);
+  expect(after).toContain(AUGMENT_THREAD_TEXT);
+  expect(after).not.toContain(UNKNOWN_REF_ID);
 });
 
 test("block decisions survive a reload — the review state is on the job", async ({

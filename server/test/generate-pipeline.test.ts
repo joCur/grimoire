@@ -52,6 +52,7 @@ const CTX = {
   namingRules: [],
   npcIds: new Set(["fenn"]),
   locationIds: new Set(["hafen"]),
+  sceneIds: new Set<string>(),
 } satisfies SceneContext;
 
 function outlineReply(over: Record<string, unknown> = {}): string {

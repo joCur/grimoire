@@ -17,7 +17,7 @@
 //      proposed body whole,
 //   3. accepting writes into the existing row with a `rev` guard, in ONE
 //      transaction (store/entries.ts `patchEntry`) — it never
-//      create the entry, it only fills it.
+//      creates the entry, it only fills it.
 //
 // WHY THE PROPOSAL CARRIES WHOLE BODIES and not a block list: the block model
 // is the Block-Composer's (app/src/lib/blocks.ts), and the review's decision
@@ -39,9 +39,11 @@ import {
   type EntryResponse,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
+import { bodyEntityRefSlugs } from "@grimoire/shared/refs";
 import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
+  campaignRefIds,
   collectContext,
   loadAsset,
   npcStatusErrors,
@@ -49,6 +51,7 @@ import {
   quickstatsErrors,
   runPipeline,
   unknownCallouts,
+  unknownRefErrors,
   withNamingHints,
   type CampaignContext,
 } from "./generator";
@@ -152,12 +155,12 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  *   * `npcs`/`location` pointing at something unknown is not checked HERE:
  *     the write path refuses it with the same sentence the properties dialog
  *     next to the button gets, so checking it twice would only make the
- *     review say it in worse words,
- *   * `## Beziehungen` is prose and nothing checks it at all.
+ *     review say it in worse words.
  *
  * What IS checked is what would make the entry unreadable or would break the
- * data contract: an unchanged id, only known callouts, a legal status per
- * kind, quoted quickstats.
+ * data contract: an unchanged id, only known callouts, `[[id]]` references
+ * that resolve (validateAugmentReply), a legal status per kind, quoted
+ * quickstats.
  */
 function kindErrors(
   kind: AugmentKind,
@@ -206,10 +209,18 @@ function kindErrors(
 /**
  * Mechanical validation of one raw augment reply against the entry it is
  * about. Returns the PROPOSAL, or the error list for the correction turn.
+ *
+ * `refIds` are the ids a `[[id]]` of the proposed body may name
+ * (`campaignRefIds`): an augment run proposes no entry of its own, so that is
+ * the campaign. A reference the STORED body already carries is not the
+ * model's — the DM wrote it, and the augmentation rule tells the model to keep
+ * it — so only a reference the proposal ADDS is checked, the same line the
+ * quickstats rule draws below.
  */
 export function validateAugmentReply(
   raw: string,
   target: { kind: AugmentKind; stored: EntryResponse },
+  refIds: ReadonlySet<string>,
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
@@ -252,6 +263,8 @@ export function validateAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
+  const known = new Set([...refIds, ...bodyEntityRefSlugs(stored.body)]);
+  for (const msg of unknownRefErrors(reply.body, known)) errors.push(`${label}: ${msg}`);
   kindErrors(kind, props, stored.properties, label, errors, reply.ignored ?? []);
   if (errors.length > 0) return { ok: false, errors };
 
@@ -385,7 +398,7 @@ export async function runAugment(
       jsonSchema: entryReplySchema(target.kind, "augment"),
     },
     provider: getProvider(),
-    validate: (raw) => validateAugmentReply(raw, target),
+    validate: (raw) => validateAugmentReply(raw, target, campaignRefIds(ctx)),
     correctionTail: AUGMENT_CORRECTION_TAIL,
   });
   // The naming check runs on the PROPOSAL, as hints — never

@@ -20,6 +20,7 @@ import {
   LOCATION_STUB_ATMOSPHERE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
+  NPC_DEFAULT_ID,
   NPC_DEFAULT_NAME,
   NPC_MOTIVATION,
   NPC_ROLE,
@@ -29,6 +30,7 @@ import {
   SCENE_ID,
   SCENE_TITLE,
   TRIGGER,
+  UNKNOWN_REF_ID,
 } from "../fixtures/replies";
 import { expect, test, type Api } from "../support/test";
 
@@ -112,7 +114,9 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   });
   await expect(page.getByText("1 Szene · 2 vorgeschlagene Einträge · noch nichts geschrieben")).toBeVisible();
   // What the run cost: it is summed over every CALL of the
-  // pipeline — the outline plus the one scene plus the two entries.
+  // pipeline — the outline plus the one scene plus the two entries. Not one
+  // correction among them: the scene and the location name `[[grella]]`,
+  // an npc only this run proposes, and a reference to a proposal is valid.
   await expect(page.getByText(/~[\d.]+ Tokens · 4 Aufrufe/)).toBeVisible();
   // The model's warning is shown, not swallowed.
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
@@ -170,6 +174,8 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).atmosphere).toBe(
     LOCATION_STUB_ATMOSPHERE,
   );
+  // The co-proposed npc's reference arrived as written, and now resolves.
+  expect(await api.body(`locations/${LOCATION_STUB_ID}`)).toContain(`[[${NPC_STUB_ID}]]`);
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (ADR #17).
@@ -333,6 +339,36 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await page.getByRole("button", { name: "NPC ansehen" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
+});
+
+test("npc run: an unknown [[id]] costs one correction turn, the corrected draft is accepted", async ({
+  page,
+  api,
+}) => {
+  // The stub's first reply names `[[der-fremde]]`, an entry nobody has; the
+  // server sends it back as a correction turn and the second reply is the
+  // good one. The DM only ever sees the corrected draft.
+  await page.goto("/campaigns/beispiel/generate");
+  await page.getByRole("button", { name: "NPC", exact: true }).click();
+  await page.getByLabel("Quelltext", { exact: true }).fill(`${NPC_SOURCE}\n\n${TRIGGER.unknownRef}`);
+  await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vorschlag prüfen", {
+    timeout: 30_000,
+  });
+  // Two calls: the reply with the dangling reference and its correction.
+  await expect(page.getByText(/~[\d.]+ Tokens · 2 Versuche/)).toBeVisible();
+  const card = page.locator("div").filter({ hasText: `npcs/${NPC_DEFAULT_ID}` }).last();
+  await expect(card).not.toContainText(UNKNOWN_REF_ID);
+  // The relation to an entry the campaign has stayed, as a link.
+  await expect(card).toContainText("kennt ihn vom Kai");
+  await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
+  await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
+  const body = await api.body(`npcs/${NPC_DEFAULT_ID}`);
+  expect(body).toContain("- [[fenn]]: kennt ihn vom Kai");
+  expect(body).not.toContain(UNKNOWN_REF_ID);
 });
 
 test("failure path: an invalid model reply shows the 422 block with the raw reply", async ({

@@ -202,7 +202,7 @@ export function compareSessionsNewestFirst(
 // --- creating content --------------------------------------------------------
 //
 // Five endpoints bring a row into existence on purpose — campaign, chapter,
-// scene, npc and ort, each in its own domain module. The 409s and the id
+// scene, npc and location, each in its own domain module. The 409s and the id
 // derivation they share are here, and so are the rules behind them.
 //
 // THE THREE RULES they all share, and they are the whole design:
@@ -220,11 +220,11 @@ export function compareSessionsNewestFirst(
 //      app can link to what is there) and `suggestion`. The SENTENCE the DM
 //      reads is the app's — what is here is its English fallback.
 //   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
-//      default, so `## Notizen`-style scaffolding nobody asked for cannot
-//      appear. The only exception is a chapter's optional goal, which goes
+//      default, so scaffolding nobody asked for (a heading, an empty section)
+//      cannot appear. The only exception is a chapter's optional goal, which goes
 //      into the section the chapter overview reads it from (`## Ziel des Kapitels`).
 //
-// EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds
+// EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and location, the two kinds
 // that have an empty state at all. An entry that holds nothing but its id is
 // one the DM created and did not fill in, and the npc-create action for
 // exactly that id is what fills it. That is the same rule `createNpcStub` and the

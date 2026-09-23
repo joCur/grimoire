@@ -48,13 +48,17 @@ die Ort-Karte zeigt sie am Tisch.
 Die Abschnitte im String `body` sind frei; empfohlen und in dieser Reihenfolge:
 
 1. `## Beim ersten Betreten` — der erste Eindruck, als `[!readaloud]`.
-2. `## Wer ist hier` — Liste der Figuren/Gruppen am Ort. NPCs mit id aus der
-   Kontextliste als `[[id]]`.
-3. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel).
+2. `## Wer ist hier` — Liste der Figuren/Gruppen am Ort, NPCs mit id als
+   `[[id]]`.
+
+Jede `[[id]]` im Text nennt einen Eintrag, den es gibt: eine id aus der
+Kontextliste, aus der Gliederung dieses Durchlaufs oder die id dieses
+Eintrags selbst. Eine Figur oder ein Ort ohne id steht mit dem Namen als
+normaler Text da, und die Lücke gehört in eine `warning`.
 ## Regeln
 
 0. **Referenzen im Fließtext**: Nennen der Text oder `atmosphere` eine Figur,
-   einen Ort oder eine Szene mit id aus der Kontextliste, schreibe `[[id]]`
+   einen Ort oder eine Szene mit id, schreibe `[[id]]`
    statt des Namens (`[[jorna]] hält die Schlüssel`). In den Klammern steht
    allein die id, Endungen stehen außerhalb (`[[jorna]]s Boot`).
 1. **id**: kebab-case, kurz, stabil gedacht (`leuchtturm` statt
@@ -126,6 +130,6 @@ locations: bucht (Die Schmugglerbucht)
 
 `locations/leuchtturm` mit `name`, `chapter: 01-salzhafen`,
 `roll20-page: "Leuchtturm"`, `atmosphere` (in Eile verlassen, `[[jorna]]` als
-Referenz), `## Beim ersten Betreten` als `[!readaloud]`, `## Wer ist hier`
-(niemand) und leerem `## Notizen`. Das Referenz-Beispiel
-liegt dem Prompt als `location-example-output.json` bei.
+Referenz), `## Beim ersten Betreten` als `[!readaloud]` und `## Wer ist hier`
+(niemand). Das Referenz-Beispiel liegt dem Prompt als
+`location-example-output.json` bei.

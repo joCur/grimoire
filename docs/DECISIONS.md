@@ -1586,3 +1586,41 @@ Checkliste unter `## Offene Fäden` mehr, sondern eine eigene Liste (ADR #26):
 - Migration `0003_open_threads.sql` legt Tabelle und Zähler an und
   **überträgt nichts** (ADR #28, Regel 2): die Liste startet leer, ein
   vorhandener Abschnitt `## Offene Fäden` bleibt freier Text des Kapitels.
+
+### Nachtrag 2026-09-23: Generator-Prüfungen und NPC-Stub ohne Überschriften
+
+Dritte Anwendung des Grundsatzes. Keine Prüfung des Generators und kein
+Schreibweg des NPC-Stubs verzweigt mehr über eine Überschrift:
+
+- **Entfallen** sind die Prüfungen, die einen Abschnitt über seine
+  Überschrift fanden: nur `[!secret]` unter `## Weiß`, die Zeilenform unter
+  `## Beziehungen`, ein leeres `## Notizen`. `## Weiß` und `## Beziehungen`
+  bleiben Empfehlung der NPC-Prompts, freier Text; `## Notizen` fällt aus
+  NPC- und Ort-Prompt, den Few-Shots und den Fixtures von Fenn und Jorna.
+- **An ihre Stelle** tritt die eine Regel, die von der Beziehungs-Prüfung
+  etwas wert war, ohne Überschrift: jedes `[[id]]` in einem erzeugten Text
+  nennt einen NPC, Ort oder eine Szene der Kampagne oder einen Vorschlag
+  desselben Laufs (die Gliederung eines Szenen-Laufs, im NPC-Lauf der NPC
+  selbst) — sonst geht die Antwort als Korrektur-Turn zurück. Sie gilt für
+  Szenen, NPCs und Orte im neuen Lauf und im Ergänzen-Lauf; dort nur für
+  Verweise, die der Vorschlag neu bringt, denn ein Verweis im bestehenden
+  Text gehört dem DM, und die Ergänzungsregel verlangt, ihn stehen zu lassen.
+  Gelesen wird mit der Grammatik von Anzeige und Suche
+  (`@grimoire/shared/refs`): nur eine kebab-case-id in doppelten Klammern,
+  nichts in Code. Geprüft wird der Text; `motivation` und `atmosphere`
+  zeigen ein `[[id]]` ohne Eintrag weiter als Text.
+- Das ist eine Regel für die **Antwort des Modells**, keine Referenz im Sinn
+  von ADR #19: „Übernehmen" und der Schreibweg prüfen sie nicht, und ein
+  `[[id]]` ohne Eintrag, das der DM schreibt, bleibt sichtbarer Text.
+- **NPC-Stub:** Der Text eines neuen Stubs ist genau die Notiz, ohne
+  Überschrift; ohne Notiz bleibt er leer. Ein Stub ohne Name und Notiz gilt
+  damit weiter als leer (`isEmptyNpcRow`), und ein späteres Anlegen oder
+  Übernehmen derselben id füllt ihn, statt mit 409 zu kollidieren. Ein NPC
+  mit Inhalt kommt unverändert zurück; die Notiz wird dann nicht angehängt.
+- **Keine Überführung** (ADR #28, Regel 2): ein bestehender Abschnitt
+  `## Notizen` bleibt freier Text.
+
+Danach sucht im Code von `app/`, `server/` und `shared/` allein `## If:` eine
+Überschrift per Text — und die Kapitelübersicht das Kapitelziel unter
+`## Ziel des Kapitels`, das die eigene Änderung ablöst, die unter „Folgen"
+genannt ist.

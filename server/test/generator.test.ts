@@ -538,6 +538,82 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     expect(scene[1]!.corrections[0]!.correction).toContain("[!danger]");
   });
 
+  // --- `[[id]]` references in the bodies of a run ---------------------------
+
+  test("an unknown [[id]] in a scene body triggers a correction turn, then succeeds", async () => {
+    const withRef = (slug: string): ScriptedEntry => {
+      const draft = sceneDraft();
+      return { ...draft, body: `${draft.body}\n[[${slug}]] wartet am Ende der Mole.\n` };
+    };
+    const fake = useFake([reply({ scenes: [{ content: withRef("nobody") }] }), reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    const correction = scene[1]!.corrections[0]!.correction;
+    expect(correction).toContain('scene "treffen-am-kai": [[nobody]] nennt keinen Eintrag');
+    expect(correction.match(/^- /gm)).toHaveLength(1);
+  });
+
+  test("[[id]] of the campaign and of the run's own proposals pass in one call", async () => {
+    // `grella` and the location exist only as proposals of this run, the
+    // other scene only in its outline; `fenn`, `bucht` and `smuggler-captured`
+    // are the campaign's. None of them costs a correction turn — neither in
+    // the scene nor in the proposed entries.
+    const draft = sceneDraft();
+    const scene: ScriptedEntry = {
+      ...draft,
+      body:
+        `${draft.body}\n[[grella]] führt [[fenn]] zur [[${LOCATION_STUB_ID}]], weiter nach ` +
+        "[[bucht]] — sonst folgt [[smuggler-captured]] oder [[zweite-szene]].\n",
+    };
+    const location: ScriptedEntry = {
+      ...locationStub(),
+      body: "## Wer ist hier\n\n- [[grella]], wenn die Ladung kommt\n",
+    };
+    const npc: ScriptedEntry = {
+      ...NPC_STUB,
+      body: `${NPC_STUB.body}\n## Beziehungen\n\n- [[fenn]]: Rivale\n- Versteck in der [[${LOCATION_STUB_ID}]]\n`,
+    };
+    const fake = useFake([
+      reply({
+        scenes: [{ content: scene }, { content: sceneWithId("zweite-szene") }],
+        entries: [
+          { kind: "npc", content: npc },
+          { kind: "location", content: location },
+        ],
+      }),
+    ]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    for (const call of fake.calls) expect(call.corrections).toEqual([]);
+  });
+
+  test("an unknown [[id]] in a proposed entry is that entry's correction turn", async () => {
+    const bad: ScriptedEntry = {
+      ...locationStub(),
+      body: "## Wer ist hier\n\n- [[der-wirt]] hinter dem Tresen\n",
+    };
+    const fake = useFake([
+      reply({ entries: [{ kind: "npc", content: NPC_STUB }, { kind: "location", content: bad }] }),
+      reply({
+        entries: [
+          { kind: "npc", content: NPC_STUB },
+          { kind: "location", content: locationStub() },
+        ],
+      }),
+    ]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    const entry = fake.callsFor(LOCATION_STUB_ID);
+    expect(entry).toHaveLength(2);
+    expect(entry[1]!.corrections[0]!.correction).toContain(
+      `location "${LOCATION_STUB_ID}": [[der-wirt]] nennt keinen Eintrag`,
+    );
+    // The scene part was not affected by its sibling's reference.
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+  });
+
   // --- the id is the model's ONE addressing decision ------------------------
   //
   // The shared parser degrades a missing `id` to the address's last segment,

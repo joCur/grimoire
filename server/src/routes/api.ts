@@ -871,8 +871,9 @@ api.post("/campaigns/:campaign/review/seen", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/review/npc-stub { id, name?, note? } -> EntryResponse
-// Creates the npc entry (status: unknown) — or, when the id already has one,
-// answers with THAT entry: the caller's goal is "this id has an
+// Creates the npc entry (status: unknown) whose text is the note, no heading
+// around it; without a note the text is empty — or, when the id already has
+// one, answers with THAT entry: the caller's goal is "this id has an
 // entry", so the call is idempotent. An entry that holds content is never
 // overwritten; an EMPTY one — created and never filled in — is filled in.
 api.post("/campaigns/:campaign/review/npc-stub", async (c) => {
@@ -886,7 +887,7 @@ api.post("/campaigns/:campaign/review/npc-stub", async (c) => {
   let note: string | undefined;
   if (body.note !== undefined && body.note !== null) {
     if (typeof body.note !== "string") throw new ApiError(400, "note must be a string");
-    note = normalizeLineText(body.note); // empty after trim -> no note line
+    note = normalizeLineText(body.note); // empty after trim -> an empty text
   }
   return c.json(await createNpcStub(c.req.param("campaign"), body.id, name, note));
 });

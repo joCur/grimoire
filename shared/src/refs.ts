@@ -257,6 +257,23 @@ export function expandBodyEntityRefs(
   return mapProse(text, (prose) => expandEntityRefs(prose, nameOf));
 }
 
+/**
+ * Every slug the PROSE of a raw body references, first-seen order, without
+ * duplicates — `entityRefSlugs` with code regions left out, because a
+ * reference inside them is literal text on the page.
+ */
+export function bodyEntityRefSlugs(text: string): string[] {
+  if (!text.includes("[[")) return [];
+  const slugs: string[] = [];
+  for (const segment of splitCodeSegments(text)) {
+    if (segment.code) continue;
+    for (const slug of entityRefSlugs(segment.value)) {
+      if (!slugs.includes(slug)) slugs.push(slug);
+    }
+  }
+  return slugs;
+}
+
 /** Does the PROSE of a raw body reference this slug? (Code does not count.) */
 export function bodyReferencesEntity(text: string, slug: string): boolean {
   if (!text.includes(entityRefSource(slug))) return false;
