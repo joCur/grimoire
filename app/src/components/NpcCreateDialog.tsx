@@ -57,8 +57,6 @@ export function NpcCreateDialog({
     >
       <DialogContent aria-describedby={undefined}>
         <DialogTitle>{t("create.npc.title")}</DialogTitle>
-        {/* `status: unknown` is a FORMAT token on the wire (README), so it
-            stands verbatim inside the translated sentence. */}
         <DialogDescription>{t("npcCreate.description")}</DialogDescription>
 
         <form

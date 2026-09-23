@@ -564,10 +564,8 @@ export const de = {
   "review.finish": "Fertig — zurück zu den Kapiteln",
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
-  // `status: unknown` is a FORMAT token on the wire (README), so it stands
-  // verbatim in both languages.
   "npcCreate.description":
-    "Legt den NPC-Eintrag mit status: unknown an; der Text der Zeile wird sein Text. Gibt es die Kennung schon, wird auf den bestehenden Eintrag verwiesen.",
+    "Legt einen neuen NPC mit dem Status „Unbekannt“ an; die Notiz wird sein Text. Gibt es die Kennung schon, wird auf diesen NPC verwiesen.",
   "npcCreate.idLabel": "Kennung (steht in der Adresse)",
   "npcCreate.idPlaceholder": "id-des-npcs",
   "npcCreate.idInvalid": "Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
