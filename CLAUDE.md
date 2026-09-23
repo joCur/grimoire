@@ -102,6 +102,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Aufräum-PR.
 - Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
   sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
+- Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
+  kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
+  Übergangscode nur per eigenem ADR und befristet (ADR #28).
 - Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
   `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
   zusammengebaut zu werden.

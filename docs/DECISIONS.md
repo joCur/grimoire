@@ -1446,6 +1446,27 @@ Zeitstempel — und ihre Fehlerpfade auf dem Schreibweg. Sie sind das
 Verhalten, nicht der Übergang. Ebenso `failInterruptedJobs`: ein Neustart
 kann jederzeit einen laufenden Job treffen, das ist kein Übergangscode.
 
+**Künftige Migrationen:** Damit kein neuer Übergangscode entsteht, gelten für
+jede Migration nach der Baseline vier Regeln:
+
+1. **Datenänderungen stehen in der Migration selbst.** Umzüge,
+   Umformatierungen und Aufteilungen sind SQL der Migration und laufen in
+   derselben Transaktion wie die Schemaänderung. Es gibt keinen Datenschritt
+   vor oder nach dem Migrator, keine Vorabprüfung und keinen Boot-Durchgang.
+2. **Nicht eindeutig Übertragbares entscheidet die Migration fest und
+   verlustfrei** — etwa `NULL` setzen, den Wert sichtbar in den Text
+   übernehmen oder ihn als eigenen Abschnitt anhängen. Die Entscheidung steht
+   im ADR der Änderung. Das ersetzt die Start-Verweigerung, ohne etwas hinter
+   dem Rücken des DM zu reparieren: die Migration entscheidet nachvollziehbar
+   und dokumentiert, statt still zu raten.
+3. **Kein Code, der nur für eine Migration existiert.** Braucht eine Änderung
+   ausnahmsweise TypeScript (etwa weil SQLite kein Markdown parsen kann), ist
+   das ein eigener ADR mit Begründung, und ein Folge-Release nimmt den Code
+   wieder heraus.
+4. **Ungültige Daten entstehen gar nicht erst.** Das leisten CHECK-Constraints,
+   Fremdschlüssel und die 400 am Schreibpfad. Deshalb braucht es auch künftig
+   keine Vorabprüfung.
+
 **Verworfene Alternativen:**
 
 - **Ein Versions-Riegel**, der eine Datenbank von vor v0.7 erkennt und mit
