@@ -12,15 +12,13 @@ describe("chapterMetaPath", () => {
 
 describe("chapterBodyToWrite", () => {
   test("keeps the text and ends it with exactly one newline", () => {
-    expect(chapterBodyToWrite("## Ziel des Kapitels\n\nAnkommen.")).toBe(
-      "## Ziel des Kapitels\n\nAnkommen.\n",
-    );
+    expect(chapterBodyToWrite("Ankommen.\n\nUnd bleiben.")).toBe("Ankommen.\n\nUnd bleiben.\n");
     expect(chapterBodyToWrite("## Ziel\n\nAnkommen.\n\n\n")).toBe("## Ziel\n\nAnkommen.\n");
   });
 
   test("blank text is the empty string, not whitespace", () => {
-    // "" is what the overview's goal line and the reading view read as „no
-    // text"; three newlines would render as an empty section instead.
+    // "" is what the overview and the reading view read as „no text"; three
+    // newlines would render as an empty block instead.
     expect(chapterBodyToWrite("")).toBe("");
     expect(chapterBodyToWrite("\n\n  \n")).toBe("");
   });

@@ -508,16 +508,29 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 }
 
 /**
- * POST /api/campaigns/:campaign/chapters { title, goal? } -> the chapter entry.
+ * The text a new chapter starts with: the description it was given, verbatim,
+ * trimmed and ending in one newline — no heading around it, because nothing
+ * reads a chapter's text by its headings (ADR #29). Blank or absent is the
+ * empty text.
  *
- * `goal` is optional and lands under `## Ziel des Kapitels` — the heading the
- * chapter overview reads its goal line from (routes/chapter-overview.tsx). Without it the body stays
- * empty rather than carrying an empty section.
+ * Both ways a chapter comes into being with a description use it: the create
+ * dialog and a „Neues Kapitel" generator run (generator.ts `newChapterTarget`).
+ */
+export function newChapterBody(description?: string): string {
+  const trimmed = description?.trim() ?? "";
+  return trimmed === "" ? "" : `${trimmed}\n`;
+}
+
+/**
+ * POST /api/campaigns/:campaign/chapters { title, description? } -> the chapter entry.
+ *
+ * `description` is optional and becomes the chapter's text as it was typed
+ * (`newChapterBody`); the chapter overview shows that text under the title.
  */
 export async function createChapter(
   campaign: string,
   title: string,
-  goal?: string,
+  description?: string,
   explicitId?: string,
 ): Promise<EntryResponse> {
   const id = resolveNewId(explicitId, title, "chapter", "title");
@@ -534,8 +547,7 @@ export async function createChapter(
     if (chapterRowOf(tx, campaign, id) !== undefined) {
       throw slugTaken("chapter", id, freeSlug(id, unavailable), chapterPath(id));
     }
-    const trimmedGoal = goal?.trim() ?? "";
-    const body = trimmedGoal === "" ? "" : `## Ziel des Kapitels\n\n${trimmedGoal}\n`;
+    const body = newChapterBody(description);
     tx.insert(chapters)
       .values({
         campaignId: campaign,

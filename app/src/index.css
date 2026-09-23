@@ -363,6 +363,28 @@
     margin: 16px 0;
   }
 
+  /* A text shown on a few lines under a title (components/ClampedText): the
+     chapter overview's chapter and campaign texts. One step quieter than a
+     reading body — the size and tone of the design reference's line under a
+     chapter title. `flow-root` keeps the margins of the first and last block
+     inside the measured height; they are zeroed so a text that fits exactly
+     is not taken for one that overflows. */
+  .md-compact { font-size: 14px; }
+  .md-compact .md-body {
+    display: flow-root;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .md-compact .md-body > :first-child { margin-top: 0; }
+  .md-compact .md-body > :last-child { margin-bottom: 0; }
+  /* Clamped: cut at the box height and faded over the last line, the cue that
+     the text goes on. */
+  .md-compact[data-clamped] {
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em - 0.25rem), transparent);
+  }
+
   /* Plain blockquote = degrade path for unknown callout kinds. */
   .md-body blockquote {
     border-inline-start: 2px solid var(--color-border);

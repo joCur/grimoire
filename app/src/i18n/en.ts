@@ -95,11 +95,12 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The goal is optional and appears in the chapter as the “Ziel des Kapitels” section.",
+    "The description is optional. It becomes the chapter's text and appears under its title in the chapter overview.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
-  "create.chapter.goalLabel": "Goal of the chapter (optional)",
-  "create.chapter.goalPlaceholder": "What the party is meant to achieve here",
+  "create.chapter.descriptionLabel": "Description (optional)",
+  "create.chapter.descriptionPlaceholder":
+    "What this chapter is about and what the party is meant to achieve",
 
   "create.scene.title": "Create scene",
   "create.scene.description":
@@ -353,17 +354,16 @@ export const en: Messages = {
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
   "chapterOverview.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
   "chapterOverview.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
-  "chapterOverview.chapter.goal": "Goal: {goal}",
   "chapterOverview.chapter.empty": "No scenes in this chapter yet.",
   // --- chapter actions in the chapter overview -----------------------------
   "chapterOverview.chapter.properties": "Chapter properties",
   "chapterOverview.chapter.edit": "Edit chapter",
   "chapterBody.title": "Edit chapter: {title}",
   "chapterBody.description":
-    "The chapter's text as markdown \u2014 the heading \u201c## Ziel des Kapitels\u201d is the line the overview shows as its goal.",
+    "The chapter's text as markdown. The chapter overview shows it under its title.",
   "chapterBody.field.body": "Text",
   "chapterBody.field.body.placeholder":
-    "## Ziel des Kapitels\n\nWhat the party is meant to achieve here",
+    "What this chapter is about and what the party is meant to achieve",
   "chapterOverview.contingencies.hint": "only when the trigger fires",
   "chapterOverview.scene.trigger": "When: {trigger}",
   "chapterOverview.scene.moveUp.aria": "Move \u201c{title}\u201d up",
@@ -522,6 +522,8 @@ export const en: Messages = {
 
   // --- shared verbs: ADD to the existing common block --------------------
   "common.edit": "Edit",
+  "common.showMore": "Show more",
+  "common.showLess": "Show less",
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Search scenes, NPCs, locations …",
@@ -701,6 +703,7 @@ export const en: Messages = {
   "generate.review.propertiesHeading": "Properties",
   "generate.review.bodyHeading": "Text",
   "generate.review.bodyLabel": "Text of {path}",
+  "generate.review.chapterDescription": "Chapter description",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
   "generate.usage.group": ",",
   // --- generator: the pipeline ---------------------------------------------

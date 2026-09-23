@@ -15,7 +15,8 @@ Dieser Aufruf antwortet mit der **Gliederung** als JSON-Objekt; die Szenen,
 NPCs und Orte selbst entstehen danach als eigene Einträge. Das Schema
 erzwingt der Server über die API (Tool-Aufruf bzw. `response_format`), also
 halte dich genau daran; `location` und `sourceExcerpt` gibst du als `null`
-an, wenn der Quelltext sie offen lässt.
+an, wenn der Quelltext sie offen lässt, `chapterDescription` bei einem
+bestehenden Kapitel.
 
 Gib genau dieses JSON-Objekt zurück:
 
@@ -38,6 +39,7 @@ Gib genau dieses JSON-Objekt zurück:
     { "kind": "npc", "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" },
     { "kind": "location", "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" }
   ],
+  "chapterDescription": "<bei „neues Kapitel: ja“: worum es im Kapitel geht und was die Gruppe erreichen soll; sonst null>",
   "warnings": ["<alles, was der DM prüfen sollte>"]
 }
 ```
@@ -45,7 +47,8 @@ Gib genau dieses JSON-Objekt zurück:
 Das JSON-Objekt ist die ganze Antwort.
 
 **Adressen und Inhalte kommen später.** Dieser Aufruf liefert allein die
-Gliederung: ids, Titel, Typ, Ort, Zitatgrenzen und Querverweise. Szenentexte,
+Gliederung: ids, Titel, Typ, Ort, Zitatgrenzen, Querverweise und — für ein
+neues Kapitel — dessen Beschreibung. Szenentexte,
 Callouts und Eigenschaften schreiben die folgenden Aufrufe, und die Adresse
 bildet der Server aus dem Kapitel im Kontext und der `id`.
 
@@ -79,12 +82,19 @@ bildet der Server aus dem Kapitel im Kontext und der `id`.
    nennt und die im Kontext erst noch eine id brauchen — mit `kind`, `id`, `name`
    und einem Satz, der sagt, was sie im Abenteuer sind. Was im Kontext schon
    steht, bleibt dort.
-8. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
+8. **chapterDescription**: Nennt der Kontext die Zeile `neues Kapitel: ja`,
+   legt dieser Durchlauf das Kapitel aus der Zeile `chapter:` neu an, und
+   `chapterDescription` wird sein Text. Schreib dafür eine kurze Beschreibung
+   auf Deutsch aus dem Quelltext — ein bis drei Sätze, worum es in diesem
+   Kapitel geht und was die Gruppe erreichen soll —, als schlichten
+   Fließtext, der direkt mit dem ersten Satz beginnt. Für ein bestehendes
+   Kapitel steht hier `null`: sein Text gehört dem DM.
+9. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
    auch für Titel und Einzeiler.
-9. **Quelltreu bleiben**: Jede Szene stammt aus dem Quelltext. Lücken
+10. **Quelltreu bleiben**: Jede Szene stammt aus dem Quelltext. Lücken
    gehören in `warnings`.
-10. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
+11. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
    Rechtschreibung — ä, ö, ü und ß stehen als genau diese Zeichen. Das gilt
    für Fließtext, Read-Alouds, alle Callouts, `## If:`-Bedingungen,
    Überschriften, `warnings` und für jeden Eigenschafts-Wert, der Text ist
@@ -98,6 +108,6 @@ bildet der Server aus dem Kapitel im Kontext und der `id`.
 ## Beispiel (Few-Shot)
 
 Der Prompt trägt eine Beispiel-Gliederung als Referenz bei
-(`outline-example-output.json`): drei Szenen aus einem Hafen-Kapitel, eine
-davon `contingency` mit `refs` auf die Szene, aus der sie ausgelöst wird,
-und zwei neue Einträge.
+(`outline-example-output.json`): drei Szenen aus einem neuen Hafen-Kapitel,
+eine davon `contingency` mit `refs` auf die Szene, aus der sie ausgelöst wird,
+zwei neue Einträge und die Beschreibung des Kapitels.

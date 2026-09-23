@@ -20,6 +20,7 @@ import {
   ClaudeProvider,
   DEFAULT_MAX_TOKENS,
   KNOWLEDGE_HEADING,
+  NEW_CHAPTER_LINE,
   OUTLINE_HEADING,
   OpenAICompatProvider,
   buildPrompt,
@@ -153,7 +154,7 @@ const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> =
 
 // --- prompt assembly ------------------------------------------------------------
 //
-// The ORDER of the prompt's sections is the contract the ticket writes down:
+// The ORDER of the prompt's sections is a contract:
 // the campaign knowledge stands above the glossary and is introduced by a
 // heading that says it wins against the source material. A unit test rather
 // than only an E2E assertion, because this is the one place that order is
@@ -177,7 +178,7 @@ describe("buildPrompt", () => {
     expect(prompt.startsWith(`${KNOWLEDGE_HEADING}\n\n${KNOWLEDGE}\n\n## Glossar`)).toBe(true);
   });
 
-  test("the heading is the wording the ticket demands", () => {
+  test("the heading is the binding wording", () => {
     expect(KNOWLEDGE_HEADING).toBe(
       "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet",
     );
@@ -193,6 +194,18 @@ describe("buildPrompt", () => {
     expect(prompt.indexOf("## Glossar")).toBeLessThan(prompt.indexOf("## Kontext"));
     expect(prompt).toContain("vorgegebene id: brakk");
     expect(prompt).not.toContain("chapter:");
+  });
+
+  test("a new-chapter outline call says so in the context, every other call does not", () => {
+    const outline = buildPrompt({
+      ...REQ,
+      context: { chapter: "02-bucht", newChapter: true, npcs: [], locations: [] },
+    });
+    expect(outline).toContain(`chapter: 02-bucht\n${NEW_CHAPTER_LINE}\n`);
+    expect(NEW_CHAPTER_LINE).toBe("neues Kapitel: ja");
+    // The outline prompt and its schema name that exact line.
+    expect(JSON.stringify(outlineJsonSchema())).toContain(NEW_CHAPTER_LINE);
+    expect(buildPrompt(REQ)).not.toContain(NEW_CHAPTER_LINE);
   });
 
   test("the sections after it are unchanged and in their old order", () => {

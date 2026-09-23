@@ -221,8 +221,8 @@ export function compareSessionsNewestFirst(
 //      reads is the app's — what is here is its English fallback.
 //   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
 //      default, so scaffolding nobody asked for (a heading, an empty section)
-//      cannot appear. The only exception is a chapter's optional goal, which goes
-//      into the section the chapter overview reads it from (`## Ziel des Kapitels`).
+//      cannot appear. A chapter's optional description is typed, too: it
+//      becomes the chapter's text as it stands, without a heading around it.
 //
 // EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and location, the two kinds
 // that have an empty state at all. An entry that holds nothing but its id is

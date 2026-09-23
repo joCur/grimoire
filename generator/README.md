@@ -110,7 +110,8 @@ kein stilles Ersetzen.
 
 **Die Gliederung** hat ihr eigenes Schema (`shared/schema/outline.schema.json`) und
 das einzige, das keinen Eintrag beschreibt: ein kleines, flaches Objekt aus
-Szenenliste und neuen Einträgen. Die **semantischen** Prüfungen bleiben auch
+Szenenliste, neuen Einträgen und, für ein neues Kapitel, dessen Beschreibung.
+Die **semantischen** Prüfungen bleiben auch
 dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
 Durchlauf nur einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER
 Gliederung“ oder „das Kapitel kommt aus dem Kontext“.
@@ -137,6 +138,17 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    teurer, aber nie falsch. Validierung und Korrektur-Turns gelten für diesen
    Schritt allein.
 
+   **Neues Kapitel:** Legt der Lauf sein Kapitel neu an („Neues Kapitel“),
+   trägt der Kontext des Gliederungs-Aufrufs die Zeile `neues Kapitel: ja`,
+   und die Gliederung beschreibt das Kapitel unter `chapterDescription` —
+   ein bis drei Sätze aus dem Quelltext, worum es geht und was die Gruppe
+   erreichen soll. „Entwürfe prüfen“ zeigt sie als „Beschreibung des
+   Kapitels“, und das Übernehmen legt das Kapitel mit ihr als Text an. Für ein
+   bestehendes Kapitel ist das Feld `null`, und was dort trotzdem steht,
+   verwirft die Validierung: den Text eines bestehenden Kapitels erreicht
+   kein Lauf. Eine fehlende Beschreibung kostet keinen Korrektur-Turn — das
+   Kapitel beginnt dann mit leerem Text.
+
    **Obergrenze:** höchstens 12 Szenen und 12 neue Einträge je Lauf
    (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_ENTRIES`). Jeder Teil ist ein
    Provider-Aufruf, also entscheidet die Gliederung, was ein Lauf kostet;
@@ -145,7 +157,8 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 
    Die Gliederung ist ein **rein systeminterner** Schritt zur Fehlerreduktion.
    Sie wird dem Nutzer nie angezeigt und nie zum Bearbeiten angeboten (PO,
-   15.09.) — interessant ist nur das Ergebnis je Szene/NPC/Ort. Der Server
+   15.09.) — interessant ist nur das Ergebnis je Szene/NPC/Ort und die
+   Beschreibung eines neuen Kapitels. Der Server
    speichert sie auf der Job-Zeile, weil „Erneut versuchen“ und ein Neustart
    sie brauchen.
 

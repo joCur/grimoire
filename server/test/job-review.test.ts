@@ -452,8 +452,11 @@ const NEW_CHAPTER_REPLY = JSON.stringify({
 });
 
 /** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
-async function runNewChapterJob(title?: string): Promise<GenerateJob> {
-  setProviderForTests(new PipelineFake([NEW_CHAPTER_REPLY]));
+async function runNewChapterJob(
+  title?: string,
+  provider: PipelineFake = new PipelineFake([NEW_CHAPTER_REPLY]),
+): Promise<GenerateJob> {
+  setProviderForTests(provider);
   const res = await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: NEW_CHAPTER,
     sourceText: "Eggs in the dark.",
@@ -545,4 +548,82 @@ test("accepting only the suggested entry already creates the run's chapter", asy
   expect(rest).not.toBeNull();
   expect((await accept(rest, {})).status).toBe(200);
   expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
+});
+
+// --- the chapter description of a new-chapter run ------------------------------
+//
+// The outline of a „Neues Kapitel" run describes the chapter it creates, and
+// that description is the chapter's text once the run is accepted. A run into
+// an existing chapter never touches that chapter's text, whatever its outline
+// says.
+
+const DESCRIPTION = "Unter dem Leuchtturm brütet etwas. Die Gruppe soll das Gelege finden.";
+
+/** The new-chapter batch with a description — padded, as a model may send it. */
+function describedReply(description: string): string {
+  return JSON.stringify({ ...JSON.parse(NEW_CHAPTER_REPLY), chapterDescription: `  ${description}\n` });
+}
+
+async function chapterBody(chapter: string): Promise<string> {
+  const res = await app.request(entriesUrl("beispiel", chapter));
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { body: string }).body;
+}
+
+test("a new-chapter run's description becomes the text of the chapter it creates", async () => {
+  const fake = new PipelineFake([describedReply(DESCRIPTION)]);
+  const job = await runNewChapterJob("Die Drachenbrut", fake);
+  // Only the outline call hears that the chapter is new — it is the call
+  // that describes it.
+  expect(fake.callsFor("outline")[0]?.req.context.newChapter).toBe(true);
+  expect(fake.callsFor("treffen-am-kai")[0]?.req.context.newChapter).toBeUndefined();
+  // The review reads the description off the job, trimmed.
+  expect(job.pipeline?.chapterDescription).toBe(DESCRIPTION);
+
+  expect((await accept(job, {})).status).toBe(200);
+  // Verbatim, one closing newline, and no heading around it.
+  expect(await chapterBody(NEW_CHAPTER)).toBe(`${DESCRIPTION}\n`);
+});
+
+test("the body override names the chapter; the description still comes from the job", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut", new PipelineFake([describedReply(DESCRIPTION)]));
+  expect(
+    (await accept(job, { chapter: NEW_CHAPTER, chapterTitle: "Anders benannt" })).status,
+  ).toBe(200);
+  expect(await chapterBody(NEW_CHAPTER)).toBe(`${DESCRIPTION}\n`);
+});
+
+test("a new-chapter run without a description creates the chapter with an empty text", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect(job.pipeline?.chapterDescription).toBeUndefined();
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterBody(NEW_CHAPTER)).toBe("");
+});
+
+test("a run into an existing chapter drops the description and leaves the chapter's text", async () => {
+  const before = await chapterBody("01-salzhafen");
+  const fake = new PipelineFake([
+    JSON.stringify({ ...JSON.parse(REPLY), chapterDescription: "Ein ganz anderes Kapitel." }),
+  ]);
+  setProviderForTests(fake);
+  const job = await runJob();
+  expect(fake.callsFor("outline")[0]?.req.context.newChapter).toBeUndefined();
+  expect(job.pipeline?.chapterDescription).toBeUndefined();
+
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterBody("01-salzhafen")).toBe(before);
+});
+
+test("a chapter that exists by the time of the accept keeps its own text", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut", new PipelineFake([describedReply(DESCRIPTION)]));
+  // The DM created the chapter by hand while the run waited in the review.
+  const created = await send("POST", "/api/campaigns/beispiel/chapters", {
+    title: "Die Drachenbrut",
+    id: NEW_CHAPTER,
+    description: "Von Hand geschrieben.",
+  });
+  expect(created.status).toBe(201);
+
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterBody(NEW_CHAPTER)).toBe("Von Hand geschrieben.\n");
 });

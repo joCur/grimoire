@@ -586,14 +586,14 @@ export function setChapterActive(campaign: string, chapter: string): Promise<Ent
   );
 }
 
-/** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
+/** A new chapter; `description`, when given, becomes its text as typed. */
 export function createChapter(
   campaign: string,
-  input: { title: string; goal?: string; id?: string },
+  input: { title: string; description?: string; id?: string },
 ): Promise<EntryResponse> {
   return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/chapters`, {
     title: input.title,
-    ...(input.goal === undefined ? {} : { goal: input.goal }),
+    ...(input.description === undefined ? {} : { description: input.description }),
     ...(input.id === undefined ? {} : { id: input.id }),
   });
 }

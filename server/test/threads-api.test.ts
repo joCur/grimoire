@@ -100,7 +100,8 @@ describe("GET …/chapters/:chapter/threads", () => {
     expect(list.rev).toBe(1);
     expect(list.entries).toEqual([{ id: expect.any(String), text: SEEDED, done: false }]);
     expect(list.entries[0]!.id).not.toBe("");
-    // The fixture's text is the goal and nothing else: the thread moved out.
+    // The fixture's text is the chapter's description and nothing else: the
+    // thread moved out.
     expect((await chapterEntry()).body).not.toContain("Offene Fäden");
   });
 

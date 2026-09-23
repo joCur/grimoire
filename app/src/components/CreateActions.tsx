@@ -183,14 +183,14 @@ export function ChapterCreateAction({
           namePlaceholder={t("create.chapter.namePlaceholder")}
           addressPrefix=""
           extra={{
-            label: t("create.chapter.goalLabel"),
-            placeholder: t("create.chapter.goalPlaceholder"),
+            label: t("create.chapter.descriptionLabel"),
+            placeholder: t("create.chapter.descriptionPlaceholder"),
             multiline: true,
           }}
           create={async (values: CreateValues) => {
             await createChapter(campaign, {
               title: values.name,
-              ...(values.extra === undefined ? {} : { goal: values.extra }),
+              ...(values.extra === undefined ? {} : { description: values.extra }),
               ...(values.id === undefined ? {} : { id: values.id }),
             });
             await afterCreate();

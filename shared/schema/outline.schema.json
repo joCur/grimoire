@@ -6,6 +6,7 @@
   "required": [
     "scenes",
     "entries",
+    "chapterDescription",
     "warnings"
   ],
   "properties": {
@@ -108,6 +109,13 @@
           }
         }
       }
+    },
+    "chapterDescription": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Die Beschreibung des Kapitels, das dieser Durchlauf neu anlegt: ein bis drei Sätze auf Deutsch aus dem Quelltext — worum es im Kapitel geht und was die Gruppe erreichen soll. Nur wenn der Kontext „neues Kapitel: ja“ nennt; bei einem bestehenden Kapitel null."
     },
     "warnings": {
       "type": "array",

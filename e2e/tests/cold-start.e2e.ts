@@ -93,19 +93,23 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(chapterTitle).toHaveAttribute("placeholder", "Titel des Kapitels");
   await chapterTitle.fill("01 Salzhafen");
   await expect(page.getByText("01-salzhafen", { exact: true })).toBeVisible();
-  await page
-    .getByLabel("Ziel des Kapitels (optional)")
-    .fill("Herausfinden, warum das Leuchtfeuer erloschen ist.");
+  const description = page.getByLabel("Beschreibung (optional)");
+  await expect(description).toHaveAttribute(
+    "placeholder",
+    "Worum es in diesem Kapitel geht und was die Gruppe erreichen soll",
+  );
+  await description.fill("Herausfinden, warum das Leuchtfeuer erloschen ist.");
   await page.getByRole("button", { name: "Anlegen" }).click();
 
-  // The chapter overview lists it, with the goal line the dialog wrote.
+  // The chapter overview lists it, with the text the dialog wrote: the
+  // description as typed, no heading around it.
   const chapter = page.getByRole("button", { name: /01 Salzhafen/ });
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText("keine Szenen");
   const chapterDoc = await api.entry("01-salzhafen");
-  expect(chapterDoc.body).toContain("## Ziel des Kapitels");
+  expect(chapterDoc.body).toBe("Herausfinden, warum das Leuchtfeuer erloschen ist.\n");
   await expect(
-    page.getByText("Ziel: Herausfinden, warum das Leuchtfeuer erloschen ist."),
+    page.getByText("Herausfinden, warum das Leuchtfeuer erloschen ist.", { exact: true }),
   ).toBeVisible();
 
   // --- create the scene -----------------------------------------------------

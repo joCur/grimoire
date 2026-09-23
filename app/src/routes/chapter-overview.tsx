@@ -1,5 +1,6 @@
-// "/campaigns/:campaign" — the chapter overview per the design reference: campaign header,
-// chapter accordions with goal line and open threads, the chapter's planned
+// "/campaigns/:campaign" — the chapter overview per the design reference: campaign header
+// with the campaign's text, chapter accordions with the chapter's text and
+// open threads, the chapter's planned
 // scenes as ONE list in the order the DM arranged (ADR #27) and a separate
 // contingency group at the end.
 // Below md the SAME route shows the mobile start surface instead — a
@@ -16,13 +17,14 @@ import { Link, useParams } from "react-router";
 import { fetchEntry, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { ChapterActions } from "@/components/ChapterActions";
+import { ClampedText } from "@/components/ClampedText";
 import { ChapterThreads } from "@/components/ChapterThreads";
 import { ChapterStatusControl } from "@/components/ChapterStatusMenu";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useT } from "@/i18n";
-import { firstParagraphOfSection } from "@/lib/md-section";
+import { CAMPAIGN_META_PATH } from "@/lib/campaign-meta";
 import { CHAPTER_OVERVIEW_LOOKUP_TARGETS } from "@/lib/lookup";
 import { contingencyScenes, plannedScenes } from "@/lib/scene-order";
 import { useCampaignMeta } from "@/lib/use-campaign";
@@ -43,6 +45,15 @@ export function ChapterOverviewRoute() {
   // Display name + description from campaign; the header
   // degrades to the campaign id when the entry is missing.
   const meta = useCampaignMeta(campaign);
+  // The campaign's TEXT stands under the description. It is the campaign
+  // entry's body, which the campaign list does not carry — the same query the
+  // campaign's edit dialog and reading view read, so it is cached once.
+  const campaignEntry = useQuery({
+    queryKey: ["entry", campaign, CAMPAIGN_META_PATH],
+    queryFn: () => fetchEntry(campaign, CAMPAIGN_META_PATH),
+    enabled: campaign !== "",
+    retry: false,
+  });
   // Open the active chapter(s) by default; without one, the first.
   const anyActive = data?.chapters.some((ch) => ch.status === "active") ?? false;
 
@@ -97,6 +108,12 @@ export function ChapterOverviewRoute() {
                   {meta.description}
                 </p>
               )}
+              {/* The whole text, a few lines of it at first — nothing is
+                  picked out of it by a heading (ADR #29). A campaign without
+                  one shows nothing here. */}
+              <ClampedText className="mt-2.5 max-w-[62ch]">
+                {campaignEntry.data?.body ?? ""}
+              </ClampedText>
               <LookupLine campaign={campaign} />
             </div>
             {/* The empty chapter overview is the second half of the cold start: it used
@@ -147,17 +164,14 @@ function Chapter({
   const contingencies = contingencyScenes(scenes);
   const order = useSceneOrderWrite(campaign, chapter);
 
-  // The chapter goal lives in the chapter entry body — fetched lazily on
-  // first expand; missing entry/heading degrades to no goal line.
+  // The chapter's text is its entry's body — fetched lazily on first expand;
+  // a missing entry or an empty text simply shows no text.
   const chapterEntry = useQuery({
     queryKey: ["entry", campaign, chapter.path],
     queryFn: () => fetchEntry(campaign, chapter.path as string),
     enabled: open && chapter.path !== undefined,
     retry: false,
   });
-  const goal = chapterEntry.data
-    ? firstParagraphOfSection(chapterEntry.data.body, "Ziel des Kapitels")
-    : undefined;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-4">
@@ -203,13 +217,11 @@ function Chapter({
             entry={chapterEntry.data}
             tree={tree}
           />
-          {goal !== undefined && (
-            <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">
-              {t("chapterOverview.chapter.goal", { goal })}
-            </p>
-          )}
-          {/* The storylines the chapter carries, under its goal — their own
-              list, read lazily like the goal line. */}
+          {/* The whole text of the chapter, whatever it says and however it
+              is structured — a few lines of it until the DM opens it. */}
+          <ClampedText className="mb-3">{chapterEntry.data?.body ?? ""}</ClampedText>
+          {/* The storylines the chapter carries, under its text — their own
+              list, read lazily like the text. */}
           <ChapterThreads campaign={campaign} chapter={chapter.id} enabled={open} />
           {scenes.length === 0 && (
             <p className="pt-0.5 pb-3 text-[13.5px] text-muted-foreground">

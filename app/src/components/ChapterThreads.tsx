@@ -1,6 +1,6 @@
 // The open threads of one chapter, in the chapter overview.
 //
-// Where the design reference puts them: under the chapter's goal line, above
+// Where the design reference puts them: under the chapter's text, above
 // its scenes — the storylines the DM is carrying through the chapter, one
 // quiet line each. Here the list is also where it is kept: tick a thread off,
 // reword it, delete it, add one by hand. The review adds them too
@@ -46,7 +46,7 @@ export function ChapterThreads({
 }: {
   campaign: string;
   chapter: string;
-  /** The accordion is open — the list is read lazily, like the goal line. */
+  /** The accordion is open — the list is read lazily, like the chapter's text. */
   enabled: boolean;
 }) {
   const t = useT();

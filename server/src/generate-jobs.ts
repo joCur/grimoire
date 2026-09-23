@@ -117,7 +117,9 @@ interface Job {
 /**
  * What the `pipeline` column holds. The OUTLINE is stored but
  * never serialized: it is an internal step and is never shown to the DM.
- * A retry needs it, a restart needs it — the browser does not.
+ * A retry needs it, a restart needs it — the browser does not. The one field
+ * of it that reaches the client is a new chapter's description, because that
+ * becomes the chapter's text (`serializePipeline`).
  */
 export interface PipelineRecord {
   outline?: RunOutline;
@@ -150,11 +152,15 @@ export function emptyPipeline(): PipelineRecord {
 }
 
 /**
- * The client's half of the pipeline: the parts in outline order and the
- * totals. Deliberately NOT the outline — see PipelineRecord.
+ * The client's half of the pipeline: the parts in outline order, the totals
+ * and — for a new-chapter run — the chapter description the outline wrote,
+ * which the review shows with the chapter the accept will create. Deliberately
+ * NOT the outline itself — see PipelineRecord.
  */
 function serializePipeline(pipeline: PipelineRecord): GenerateJobPipeline {
+  const chapterDescription = pipeline.outline?.chapterDescription;
   return {
+    ...(chapterDescription === undefined ? {} : { chapterDescription }),
     parts: pipeline.parts.map((part) => ({
       key: part.key,
       kind: part.kind,

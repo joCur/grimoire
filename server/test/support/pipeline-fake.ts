@@ -6,7 +6,8 @@
 // it over the run's calls:
 //
 //   outline call   a SYNTHETIC outline derived from the scripted batch reply
-//                  (its scene ids/titles/types/locations and its entries).
+//                  (its scene ids/titles/types/locations, its entries and its
+//                  `chapterDescription`).
 //                  Deriving it means a test does not have to hand-write an
 //                  outline to say something about a scene — and a batch reply
 //                  whose ids are unusable still fails the run, now at the
@@ -61,6 +62,8 @@ interface BatchReply {
   scenes: Array<{ content: ScriptedEntry }>;
   entries: Array<{ kind?: string; content: ScriptedEntry }>;
   warnings: string[];
+  /** Served as the outline's `chapterDescription`; null when the script has none. */
+  chapterDescription: string | null;
 }
 
 function textOf(reply: ScriptedReply): string {
@@ -117,6 +120,7 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
     warnings: Array.isArray(obj.warnings)
       ? obj.warnings.filter((w): w is string => typeof w === "string")
       : [],
+    chapterDescription: typeof obj.chapterDescription === "string" ? obj.chapterDescription : null,
   };
 }
 
@@ -223,6 +227,9 @@ function outlineOf(batch: BatchReply, sourceText: string): string {
         name: property(entry.content, "name") ?? "",
         summary: "aus dem Quelltext erwähnt",
       })),
+      // Whatever the script says, for every run kind: dropping it for a run
+      // into an existing chapter is the server's job, not the fake's.
+      chapterDescription: batch.chapterDescription,
       warnings: batch.warnings,
     },
     null,

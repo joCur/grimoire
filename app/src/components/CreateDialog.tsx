@@ -5,7 +5,7 @@
 // will get, confirm. So they are one component; five copies of a form is how
 // wording, focus behaviour and the collision handling drift apart. The
 // differences that remain are text plus at most one extra field (a chapter's
-// optional goal), which is what the props carry.
+// optional description), which is what the props carry.
 //
 // Why the id is on screen while typing: it is the format's permanent reference
 // key (README — an id never changes). Deriving it silently would mean the DM
@@ -51,7 +51,7 @@ import {
 export interface CreateValues {
   /** The typed name/title — always sent. */
   name: string;
-  /** The optional second field's text (a chapter goal), when the dialog has one. */
+  /** The optional second field's text (a chapter description), when the dialog has one. */
   extra?: string;
   /**
    * Only set when the DM settled an id themselves — by typing it into the id
