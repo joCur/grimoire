@@ -189,97 +189,6 @@ describe("POST /api/campaigns/:campaign/review/seen", () => {
   });
 });
 
-// The `## Offene Fäden` markdown surgery is UNCHANGED by the cutover
-// (store/chapters.ts appendThreadItem) — it operates on the chapter row's body
-// instead of on stored bytes, and the three insertion cases below are the same
-// three it always had.
-describe("POST /api/campaigns/:campaign/review/thread", () => {
-  const CHAPTER = "01-salzhafen";
-
-  test("appends to an existing ## Offene Fäden section (append-only)", async () => {
-    const before = await getEntry(CHAPTER);
-    const entry = await postOk("/api/campaigns/beispiel/review/thread", {
-      chapter: "01-salzhafen",
-      text: "Lichter in der Bucht untersuchen",
-    });
-    // The section is the last one in the fixture -> pure append.
-    expect(entry.body).toBe(`${before.body}- [ ] Lichter in der Bucht untersuchen\n`);
-    expect(entry.kind).toBe("chapter");
-    expect(entry.properties).toEqual(before.properties);
-  });
-
-  test("inserts before the next heading when the section is not last", async () => {
-    // The body is set up through PUT /entry — the app's own way to get a
-    // chapter into this shape, instead of writing into the row behind the server.
-    await patchBody(CHAPTER, "\n## Offene Fäden\n\n- [ ] Alt\n\n## Notizen\n\nText bleibt.\n");
-    const entry = await postOk("/api/campaigns/beispiel/review/thread", {
-      chapter: "01-salzhafen",
-      text: "Neu",
-    });
-    expect(entry.body).toBe(
-      "\n## Offene Fäden\n\n- [ ] Alt\n- [ ] Neu\n\n## Notizen\n\nText bleibt.\n",
-    );
-  });
-
-  test("creates the section at the end when it is missing", async () => {
-    const body = "\n## Ziel des Kapitels\n\nText.\n";
-    await patchBody(CHAPTER, body);
-    const entry = await postOk("/api/campaigns/beispiel/review/thread", {
-      chapter: "01-salzhafen",
-      text: "Erster Faden",
-    });
-    expect(entry.body).toBe(`${body}\n## Offene Fäden\n\n- [ ] Erster Faden\n`);
-  });
-
-  test("multi-line text collapses to a single item line", async () => {
-    await postOk("/api/campaigns/beispiel/review/thread", {
-      chapter: "01-salzhafen",
-      text: "Faden eins",
-    });
-    const entry = await postOk("/api/campaigns/beispiel/review/thread", {
-      chapter: "01-salzhafen",
-      text: "  Zeile eins\n  Zeile zwei  ",
-    });
-    expect(entry.body.endsWith("- [ ] Faden eins\n- [ ] Zeile eins Zeile zwei\n")).toBe(true);
-  });
-
-  test("404 when the chapter does not exist or is not a chapter", async () => {
-    // Replaces "creates chapter entry with minimal properties when missing":
-    // the endpoint used to invent a chapter entry for any directory it found,
-    // and a chapter ROW is not something a review action may create out of a
-    // typo (the generator's new-chapter flow does that, deliberately). So an
-    // unknown chapter is now 404 in BOTH shapes the old test distinguished.
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "04-leer", text: "x" })).status,
-    ).toBe(404);
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "99-nix", text: "x" })).status,
-    ).toBe(404);
-    // `npcs` is a reserved name, never a chapter id.
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "npcs", text: "x" })).status,
-    ).toBe(404);
-  });
-
-  test("400 on unsafe chapter ids and empty text", async () => {
-    for (const chapter of ["../beispiel", "a/b", ".hidden", "", "a\\b"]) {
-      expect(
-        (await postJson("/api/campaigns/beispiel/review/thread", { chapter, text: "x" })).status,
-      ).toBe(400);
-    }
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "01-salzhafen", text: "  " }))
-        .status,
-    ).toBe(400);
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/thread", { chapter: "01-salzhafen" })).status,
-    ).toBe(400);
-    expect((await postJson("/api/campaigns/beispiel/review/thread", { chapter: 42, text: "x" })).status).toBe(
-      400,
-    );
-  });
-});
-
 describe("POST /api/campaigns/:campaign/review/npc-stub", () => {
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
@@ -429,7 +338,7 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
     expect(res.status).toBe(404);
   });
 
-  test("404 for an unknown campaign on all four endpoints", async () => {
+  test("404 for an unknown campaign on all three endpoints", async () => {
     expect(
       (
         await postJson("/api/campaigns/nope/review/seen", {
@@ -438,9 +347,6 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
         })
       ).status,
     ).toBe(404);
-    expect((await postJson("/api/campaigns/nope/review/thread", { chapter: "a", text: "x" })).status).toBe(
-      404,
-    );
     expect((await postJson("/api/campaigns/nope/review/npc-stub", { id: "a" })).status).toBe(404);
     expect((await postJson("/api/campaigns/nope/review/inbox-done", { id: "0" })).status).toBe(404);
   });

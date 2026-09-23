@@ -5,5 +5,10 @@
     "title": "Kapitel 1: Der Leuchtturm von Salzhafen",
     "status": "active"
   },
-  "body": "\n## Ziel des Kapitels\n\nHerausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.\n\n## Offene Fäden\n\n- [ ] Wer bezahlt die Schmuggler?\n"
+  "body": "\n## Ziel des Kapitels\n\nHerausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.\n",
+  "threads": [
+    {
+      "text": "Wer bezahlt die Schmuggler?"
+    }
+  ]
 }

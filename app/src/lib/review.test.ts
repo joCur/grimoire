@@ -1,6 +1,6 @@
 // Unit tests of the review helpers: the hashtag vocabulary of log and inbox
-// rows, the grouping of player-character notes and the chapter's thread
-// checklist. Rows arrive from the server and are marked done by their id, so
+// rows and the grouping of player-character notes. Rows — the chapter's open
+// threads included — arrive from the server and are named by their id, so
 // there is no list-out-of-text parsing left to test.
 
 import { describe, expect, test } from "bun:test";
@@ -15,7 +15,6 @@ import {
   isNpcSlug,
   isReviewTag,
   npcNameFromText,
-  parseChecklist,
   stripHashtags,
 } from "./review";
 
@@ -136,38 +135,6 @@ describe("player-character notes", () => {
 
   test("an empty list yields no groups", () => {
     expect(groupByPcTag([], () => undefined)).toEqual([]);
-  });
-});
-
-describe("parseChecklist", () => {
-  const body = `---
----
-
-## Ziel des Kapitels
-
-Text.
-
-## Offene Fäden
-
-- [ ] Wer bezahlt die Schmuggler?
-- [x] Leuchtfeuer geprüft
-- kein Kästchen
-
-## Notizen
-
-- [ ] gehört nicht dazu
-`;
-
-  test("reads the checkbox items of the section only", () => {
-    expect(parseChecklist(body, "Offene Fäden")).toEqual([
-      { text: "Wer bezahlt die Schmuggler?", done: false },
-      { text: "Leuchtfeuer geprüft", done: true },
-    ]);
-  });
-
-  test("missing section degrades to an empty list", () => {
-    expect(parseChecklist(body, "Gibt es nicht")).toEqual([]);
-    expect(parseChecklist("", "Offene Fäden")).toEqual([]);
   });
 });
 

@@ -1,9 +1,11 @@
-// Cosmetic memory of the review sitting (issue #10). The server stores only
-// WHETHER an entry was harvested (`reviewed` hash / `- [x]`), not WHICH
-// action it got — the specific done label ("Als Handlungsstrang übernommen" …) and the
-// "neu" chip on freshly adopted threads therefore live in the browser for
-// as long as the app is open. Nothing here is persisted (no localStorage —
-// the server is the truth); after a reload the neutral label is shown.
+// Cosmetic memory of the review sitting. The server stores only WHETHER a
+// row was harvested (a log row's `reviewed`, an idea's `done`), not WHICH
+// action it got — the specific done label ("Als Handlungsstrang übernommen" …)
+// and the "neu" chip on freshly adopted threads therefore live in the browser
+// for as long as the app is open. A thread is remembered by the id of the row
+// the adoption created, so the chip sits on exactly that row however the list
+// is worded or ordered. Nothing here is persisted (no localStorage — the
+// server is the truth); after a reload the neutral label is shown.
 //
 // It sits above the router (App's Layout) because the topbar's progress and
 // the review page must count the same cards.
@@ -15,13 +17,13 @@ export type ReviewActionKind = "thread" | "npc" | "dismiss";
 interface ReviewMemoryValue {
   /** `${campaign}|${entryKey}` → the action taken in this browser session. */
   acted: Readonly<Record<string, ReviewActionKind>>;
-  /** campaign → thread texts adopted in this browser session. */
+  /** campaign → ids of the thread rows adopted in this browser session. */
   adopted: Readonly<Record<string, string[]>>;
   remember: (
     campaign: string,
     entryKey: string,
     action: ReviewActionKind,
-    threadText?: string,
+    threadId?: string,
   ) => void;
 }
 
@@ -36,12 +38,12 @@ export function ReviewMemoryProvider({ children }: { children: React.ReactNode }
   const [adopted, setAdopted] = useState<Record<string, string[]>>({});
 
   const remember = useCallback(
-    (campaign: string, entryKey: string, action: ReviewActionKind, threadText?: string) => {
+    (campaign: string, entryKey: string, action: ReviewActionKind, threadId?: string) => {
       setActed((current) => ({ ...current, [`${campaign}|${entryKey}`]: action }));
-      if (threadText !== undefined) {
+      if (threadId !== undefined) {
         setAdopted((current) => ({
           ...current,
-          [campaign]: [...(current[campaign] ?? []), threadText],
+          [campaign]: [...(current[campaign] ?? []), threadId],
         }));
       }
     },

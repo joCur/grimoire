@@ -48,8 +48,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
   — `campaigns`, `chapters` (mit den Szenen), `npcs`, `locations`, `entries`
   (der eine Schreibweg, ADR #23), `sessions`, `inbox`, `glossary`,
-  `knowledge`, `drafts` — und jedes trägt die **Lese- UND Schreibzugriffe**
-  seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
+  `knowledge`, `threads` (die offenen Fäden), `drafts` — und jedes trägt die
+  **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
@@ -84,10 +84,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `<kapitel>/<szenen-id>`, `locations/<id>`, `campaign`); das Schema steht in
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
   Eintrags `properties`, sein Markdown `body`.
-- Sessions, Ideen und Glossar sind **Listen, keine Einträge** (ADR #26): sie
-  haben keine Adresse und antworten ihre eigene Form über ihre eigenen
-  Endpoints (`…/session`, `…/sessions`, `…/sessions/<id>`, `…/inbox`,
-  `…/glossary`) — Zeilen mit Spalten, kein `body`, kein `properties`-Map. Die
+- Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
+  **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
+  ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
+  `…/sessions/<id>`, `…/inbox`, `…/glossary`, `…/chapters/<kapitel>/threads`)
+  — Zeilen mit Spalten, kein `body`, kein `properties`-Map. Die
   Segmente `sessions`, `inbox` und `glossary` bleiben in `RESERVED_SEGMENTS`
   reserviert; als Eintrags-Adresse antworten sie 404.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
@@ -188,10 +189,14 @@ Die Pfade:
    zur folgenden der Reihenfolge → Pause (ein Intervall, keine Log-Zeile) →
    beenden → Nachbereitung. Dazu die Leseseite einer vergangenen Session
    (`/campaigns/:id/sessions/<session-id>`)
-5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken.
-   Review und Ideen benennen ihre Zeilen per `id`
-   (`review/seen { sessionId, logId }`, `review/inbox-done { id }`) — eine
-   unbekannte id ist 404, kein stilles 200
+5. Nachbereitung: Handlungsstrang übernehmen → Zeile der Fäden-Liste des
+   Kapitels (`POST …/chapters/<kapitel>/threads`, ohne `rev`; Kapiteltext und
+   Kapitel-`rev` bleiben unberührt); Ideen abhaken. Review, Ideen und Fäden
+   benennen ihre Zeilen per `id` (`review/seen { sessionId, logId }`,
+   `review/inbox-done { id }`, `PATCH`/`DELETE …/threads/<id>` mit dem
+   Listen-`rev` `threads_rev`) — eine unbekannte id ist 404, kein stilles 200,
+   ein alter Listen-Stand 409 mit der aktuellen Liste. Dazu die Fäden in der
+   Kapitelübersicht pflegen: anlegen, abhaken, umformulieren, löschen
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
    in den Kapiteln; plus 409-/Fehlerpfad. Ein Entwurf ist ein Paar aus
    Eigenschaften und Text (ADR #24): „Bearbeiten" öffnet beide Hälften —

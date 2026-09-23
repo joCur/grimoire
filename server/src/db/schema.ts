@@ -180,10 +180,71 @@ export const chapters = sqliteTable(
      * only its own writes, and `rev` counts only the entry's.
      */
     sceneOrderRev: integer("scene_order_rev").notNull().default(1),
+    /**
+     * Guard token of the chapter's THREAD LIST (`threads` below) — the
+     * fourth list counter of its kind, for the reason `scene_order_rev` has
+     * its own: the open threads are a list with a lifetime of their own, and
+     * `rev` guards the chapter ENTRY (properties and text, ADR #23). A thread
+     * adopted in the review must not 409 an open chapter-text editor, and a
+     * text save must not invalidate a tick in the overview. So the list
+     * counts only its own writes.
+     */
+    threadsRev: integer("threads_rev").notNull().default(1),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
     check("chapters_status_check", oneOf("status", CHAPTER_STATUSES, true)),
+  ],
+);
+
+// --- open threads -------------------------------------------------------------
+
+/**
+ * One OPEN THREAD — a storyline the DM keeps track of — as a row of a list
+ * (ADR #26, #29). The list replaces the `## Offene Fäden` checklist a
+ * chapter used to carry in its text: what the review writes and reads back
+ * is a row with columns, never a line found under a heading.
+ *
+ * COLUMNS ONLY, as in `inbox_entries`: the text, the flag and the position.
+ * `id` is an OPAQUE random string (store/threads.ts), unique per campaign —
+ * not per chapter and not the position — so a row keeps its identity through
+ * every edit, a later reorder and a list that gains another anchor.
+ *
+ * THE ANCHOR is the chapter, and today it is the only one: `chapter_id` is
+ * NOT NULL and a foreign key (rule 3). The list belongs to the chapter the
+ * way its tags belong to a scene, so a chapter's removal would take its
+ * threads with it (`ON DELETE CASCADE`) — there is no delete path for
+ * entries, the rule only says whose rows these are. Another anchor (a
+ * scene, the campaign) would be one more owner column of the same shape and
+ * a counter on that anchor's row; the rows, their ids and the response
+ * shape stay as they are.
+ *
+ * `pos` is the display order within the anchor — appended at the end, a
+ * sort key with gaps allowed. No `rev` on the row: like the inbox, the list
+ * is the guarded unit, and its token is `chapters.threads_rev`.
+ */
+export const threads = sqliteTable(
+  "threads",
+  {
+    campaignId: text("campaign_id").notNull(),
+    /** Opaque random id — the row's identity on the wire. */
+    id: text("id").notNull(),
+    /** The owning chapter — a foreign key (rule 3). */
+    chapterId: text("chapter_id").notNull(),
+    /** The thread as the DM wrote it, one line. */
+    text: text("text").notNull(),
+    done: integer("done").notNull().default(0),
+    pos: integer("pos").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.id] }),
+    foreignKey({
+      columns: [t.campaignId, t.chapterId],
+      foreignColumns: [chapters.campaignId, chapters.id],
+      name: "threads_chapter_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
   ],
 );
 
@@ -736,8 +797,8 @@ export const campaignKnowledge = sqliteTable(
 // --- generator jobs ---------------------------------------------------------
 
 /**
- * The generate job of a campaign (ADR #10 addendum). Still at most one
- * per campaign; persisting it is what slice 4 switches on. The
+ * The generate job of a campaign (ADR #10 addendum), at most one per
+ * campaign and persisted so it survives a restart. The
  * result/error/edit payloads stay JSON: they are the API's own shapes
  * (`GenerateResult`, `GenerateJobError`, `draftEdits`) and nothing queries
  * inside them.
@@ -906,6 +967,7 @@ export function unpackStringArray(value: string | null | undefined): string[] {
 export const schema = {
   campaigns,
   chapters,
+  threads,
   scenes,
   sceneNpcs,
   sceneTags,

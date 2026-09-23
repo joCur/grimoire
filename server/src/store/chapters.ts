@@ -3,8 +3,9 @@
 // A scene lives here rather than in a module of its own: its chapter and its
 // location are its ADDRESS (ADR #17), so creating one, moving one and listing
 // the tree are all statements about a chapter. This module builds that tree,
-// creates chapters and scenes, holds the one-active-chapter rule and appends
-// to a chapter's `## Offene Fäden`.
+// creates chapters and scenes, holds the one-active-chapter rule and writes
+// the order of a chapter's scenes. A chapter's open threads are a list of
+// their own (./threads.ts).
 
 import { and, asc, eq } from "drizzle-orm";
 import {
@@ -262,7 +263,7 @@ function sceneOrderMismatch(
 
 /**
  * PUT /api/campaigns/:campaign/chapters/:chapter/scene-order
- * `{ scenes, rev }` -> the stored order plus the chapter's fresh `rev`.
+ * `{ scenes, rev }` -> the stored order plus the order's fresh guard token.
  *
  * The whole order in one request, like the glossary's list write: dragging a
  * scene changes the positions of its neighbours too, so the array IS the
@@ -699,57 +700,4 @@ export function ensureChapterRow(
   const row = chapterRowOf(tx, campaign, id);
   if (row !== undefined) indexChapter(tx, campaign, row);
   return true;
-}
-
-// --- the review's open threads ------------------------------------------------
-
-/**
- * Append one item to the `## Offene Fäden` section of a chapter body — the
- * item goes to the end of the section, a missing section is created at the
- * end of the body, and only the seam's blank lines are adjusted.
- */
-export function appendThreadItem(body: string, item: string): string {
-  const heading = /^## Offene Fäden[ \t]*\r?$/m.exec(body);
-  if (heading === null) {
-    let base = body;
-    if (base.length > 0 && !base.endsWith("\n")) base += "\n";
-    if (base.length > 0 && !base.endsWith("\n\n")) base += "\n";
-    return `${base}## Offene Fäden\n\n${item}\n`;
-  }
-  const nlAfterHeading = body.indexOf("\n", heading.index);
-  const sectionStart = nlAfterHeading === -1 ? body.length : nlAfterHeading + 1;
-  const nextHeading = /^#{1,6}[ \t]/m.exec(body.slice(sectionStart));
-  const sectionEnd = nextHeading === null ? body.length : sectionStart + nextHeading.index;
-  const section = body.slice(sectionStart, sectionEnd).replace(/\s+$/, "");
-  const newSection = section === "" ? `\n${item}\n` : `${section}\n${item}\n`;
-  const rest = body.slice(sectionEnd);
-  return body.slice(0, sectionStart) + newSection + (rest === "" ? "" : `\n${rest}`);
-}
-
-/**
- * POST /api/campaigns/:campaign/review/thread — append `- [ ] text` under
- * `## Offene Fäden` of the chapter. 404 for an unknown chapter — the chapter
- * ROW has to exist.
- */
-export async function appendThreadToChapter(
-  campaign: string,
-  chapter: string,
-  text: string,
-): Promise<EntryResponse> {
-  assertSafeChapterId(chapter);
-  return mutate(campaign, (tx) => {
-    const row = chapterRowOf(tx, campaign, chapter);
-    if (row === undefined) throw new ApiError(404, "chapter not found");
-    const next: ChapterRow = {
-      ...row,
-      body: appendThreadItem(row.body, `- [ ] ${text}`),
-      rev: row.rev + 1,
-    };
-    tx.update(chapters)
-      .set({ body: next.body, rev: next.rev })
-      .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, chapter)))
-      .run();
-    indexChapter(tx, campaign, next);
-    return renderChapter(next);
-  });
 }

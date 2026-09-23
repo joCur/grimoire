@@ -54,6 +54,8 @@ export function useCampaignVersion(campaign: string): void {
     // "last-session" is the review's session (ended or not) — same reasoning,
     // and "session"/"sessions"/"inbox" are the reads of one evening, the list
     // of evenings and the ideas thrown in from the phone.
+    // "threads" are the open threads of each chapter, keyed per chapter
+    // below the campaign — the prefix reaches all of them.
     // "knowledge"/"glossary" are campaign reads like the rest:
     // the two content pages have to learn about a write from another tab.
     // NOTE what that means for an OPEN row there: the list under it changes.
@@ -69,6 +71,7 @@ export function useCampaignVersion(campaign: string): void {
       "session",
       "sessions",
       "inbox",
+      "threads",
       "knowledge",
       "glossary",
     ]) {

@@ -1,7 +1,7 @@
 // "/campaigns/:campaign" — the chapter overview per the design reference: campaign header,
-// chapter accordions with goal line, the chapter's planned scenes as ONE
-// list in the order the DM arranged (ADR #27) and a separate contingency
-// group at the end.
+// chapter accordions with goal line and open threads, the chapter's planned
+// scenes as ONE list in the order the DM arranged (ADR #27) and a separate
+// contingency group at the end.
 // Below md the SAME route shows the mobile start surface instead — a
 // responsive swap, no separate URL: the desktop chapter overview is
 // `hidden md:block`, the mobile start `md:hidden`. Both share the tree query
@@ -16,6 +16,7 @@ import { Link, useParams } from "react-router";
 import { fetchEntry, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { ChapterActions } from "@/components/ChapterActions";
+import { ChapterThreads } from "@/components/ChapterThreads";
 import { ChapterStatusControl } from "@/components/ChapterStatusMenu";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
@@ -60,10 +61,9 @@ export function ChapterOverviewRoute() {
                   the same line — the shape of the design reference's chapter overview
                   header (design/Grimoire.dc.html: a baseline row that does
                   not wrap).
-                  „Kapitel anlegen" was added next to „Bearbeiten"
-                  inside a `flex-wrap` row, and the pair promptly dropped onto
-                  a line of ITS OWN, right-aligned under the title, on any
-                  campaign with a normal-length name (PO finding).
+                  In a `flex-wrap` row, „Kapitel anlegen" next to
+                  „Bearbeiten" drops onto a line of ITS OWN, right-aligned
+                  under the title, on any campaign with a normal-length name.
                   So the actions are no longer a wrap candidate: the row holds
                   the title block and the actions and does not wrap between
                   them. What gives when 760px is not enough for all of it is
@@ -208,6 +208,9 @@ function Chapter({
               {t("chapterOverview.chapter.goal", { goal })}
             </p>
           )}
+          {/* The storylines the chapter carries, under its goal — their own
+              list, read lazily like the goal line. */}
+          <ChapterThreads campaign={campaign} chapter={chapter.id} enabled={open} />
           {scenes.length === 0 && (
             <p className="pt-0.5 pb-3 text-[13.5px] text-muted-foreground">
               {t("chapterOverview.chapter.empty")}

@@ -1,22 +1,26 @@
 // Critical path 5: the session review; the harvest metaphor lives on in spec
 // and identifier names only. See CLAUDE.md.
 //
-// Adopt a thread → chapter, tick off an inbox line, create an NPC stub,
-// and the progress counter.
+// Adopt a thread → a row of the chapter's thread list, tick off an inbox
+// line, create an NPC stub, and the progress counter. The thread list itself
+// — its rows, its guard and the chapter overview that keeps it — is
+// threads.e2e.ts.
 //
 // TODAY's session is the harvest's data, so it is SEEDED as a session of its
 // own (the same rows the live view would have written — path 4 covers the
 // writing itself).
 //
-// Sessions and ideas are LISTS (ADR #26): the review reads rows and names
-// them back by their id — `POST /review/seen { sessionId, logId }` and
-// `POST /review/inbox-done { id }` — so every assertion about what was
-// harvested reads a row's `reviewed`/`done` flag, not a rendered text.
+// Sessions, ideas and a chapter's open threads are LISTS (ADR #26): the
+// review reads rows and names them back by their id — `POST /review/seen
+// { sessionId, logId }` and `POST /review/inbox-done { id }` — and adopting a
+// thread appends a row to the chapter's list. So every assertion about what
+// was harvested reads a row, not a rendered text, and the chapter's own text
+// and `rev` stay exactly as they were.
 //
 // The source chip of a log row names the SCENE by its title (resolved via
 // the tree), not by the row's `sceneId`.
 
-import { expect, test, todaySessionId, type SeedEntry } from "../support/test";
+import { expect, test, todaySessionId, type ApiThreads, type SeedEntry } from "../support/test";
 
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
@@ -75,10 +79,12 @@ const PAST_MIDNIGHT = (() => {
   return { id: yesterday, entry };
 })();
 
-test("adopting a thread lands in the chapter, the inbox line gets ticked off", async ({
+test("adopting a thread lands in the chapter's list, the inbox line gets ticked off", async ({
   page,
   api,
 }) => {
+  const chapterBefore = await api.entry("01-salzhafen");
+  const threadsBefore = await api.threads("01-salzhafen");
   await page.goto("/campaigns/beispiel/review");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
 
@@ -88,8 +94,9 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   // Three tagged log rows + the tagged idea of the example campaign.
   await expect(progress).toHaveText("0 von 4 gesichtet");
   await expect(page.getByText("Noch keine offenen Handlungsstränge in diesem Kapitel.")).toHaveCount(0);
-  // The chapter already carries one open thread.
+  // The chapter already carries one open thread — a row of its list.
   await expect(page.getByText("Wer bezahlt die Schmuggler?")).toBeVisible();
+  expect(threadsBefore.entries.map((row) => row.text)).toEqual(["Wer bezahlt die Schmuggler?"]);
 
   // --- adopt the #thread log line -----------------------------------------
   const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
@@ -103,10 +110,44 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   // The thread list shows the new item with the "neu" chip.
   await expect(page.getByText("neu", { exact: true })).toBeVisible();
 
-  // Stored: the chapter gained the checklist item …
+  // Stored: the chapter's thread list gained a ROW at its end …
   await expect
-    .poll(() => api.body("01-salzhafen"))
-    .toContain(`- [ ] ${THREAD_TEXT}`);
+    .poll(async () =>
+      (await api.threads("01-salzhafen")).entries.map((row) => [row.text, row.done]),
+    )
+    .toEqual([
+      ["Wer bezahlt die Schmuggler?", false],
+      [THREAD_TEXT, false],
+    ]);
+  // … and the chapter ENTRY did not move: not its text, not its guard.
+  const chapterAfter = await api.entry("01-salzhafen");
+  expect(chapterAfter.body).toBe(chapterBefore.body);
+  expect(chapterAfter.rev).toBe(chapterBefore.rev);
+  // The list's own guard moved instead.
+  expect((await api.threads("01-salzhafen")).rev).toBe(threadsBefore.rev + 1);
+
+  // The adopted thread is a row with an id, and ticking it names that id.
+  const list = await api.threads("01-salzhafen");
+  const adopted = list.entries.at(-1)!;
+  const ticked = await api.send<ApiThreads>("PATCH", api.threadsPath("01-salzhafen", adopted.id), {
+    rev: list.rev,
+    done: true,
+  });
+  expect(ticked.entries.at(-1)).toEqual({ ...adopted, done: true });
+  expect((await api.entry("01-salzhafen")).rev).toBe(chapterBefore.rev);
+  const patchThread = (id: string, body: unknown) =>
+    api.fetch(api.threadsPath("01-salzhafen", id), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  // An id the list does not hold is 404 — never a quiet 200.
+  expect((await patchThread("no-such-thread", { rev: ticked.rev, done: true })).status).toBe(404);
+  // A stale token is 409, writes nothing and hands back the current list.
+  const stale = await patchThread(adopted.id, { rev: list.rev, done: false });
+  expect(stale.status).toBe(409);
+  expect(((await stale.json()) as { threads: ApiThreads }).threads).toEqual(ticked);
+  expect(await api.threads("01-salzhafen")).toEqual(ticked);
   // … and the source ROW carries the flag: the review named it by the `id`
   // the log handed out, so exactly that row is marked and no other.
   await expect
@@ -315,7 +356,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
       .toEqual([true]);
     expect(await api.sessionExists(todaySessionId())).toBe(false);
     await expect
-      .poll(() => api.body("01-salzhafen"))
-      .toContain(`- [ ] ${THREAD_TEXT}`);
+      .poll(async () => (await api.threads("01-salzhafen")).entries.map((row) => row.text))
+      .toContain(THREAD_TEXT);
   });
 });

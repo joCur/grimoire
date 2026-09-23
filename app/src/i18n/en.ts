@@ -370,6 +370,19 @@ export const en: Messages = {
   "chapterOverview.scene.moveDown.aria": "Move \u201c{title}\u201d down",
   "chapterOverview.order.conflict": "Order changed in the meantime — the current one is loaded.",
   "chapterOverview.order.failed": "Order not saved — check the server.",
+  "chapterOverview.threads.label": "Open storylines",
+  "chapterOverview.threads.done.aria": "\u201c{text}\u201d done",
+  "chapterOverview.threads.edit.aria": "Edit \u201c{text}\u201d",
+  "chapterOverview.threads.remove.aria": "Delete \u201c{text}\u201d",
+  "chapterOverview.threads.add": "Add storyline",
+  "chapterOverview.threads.addSubmit": "Add",
+  "chapterOverview.threads.input": "Open storyline",
+  "chapterOverview.threads.new": "new from the session review",
+  "chapterOverview.threads.failed": "Not saved — check the server.",
+  "chapterOverview.threads.confirmDelete.title": "Delete this storyline?",
+  "chapterOverview.threads.confirmDelete.body":
+    "\u201c{text}\u201d will be removed from the list. This cannot be undone.",
+  "chapterOverview.threads.confirmDelete.confirm": "Delete",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   "browse.fallbackTitle": "Look up",

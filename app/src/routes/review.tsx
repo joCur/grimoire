@@ -4,40 +4,40 @@
 // at the end. Reached after a session is ended and from the quiet chapter
 // overview affordance.
 //
-// The server is the truth: every action writes through the review endpoints,
-// and what comes back — the chapter or npc entry that was written, plus the
-// session or the inbox the row was ticked off in — is seeded into the caches.
-// The ONLY client state is cosmetic: which action a card got in this sitting
-// (the server stores done/not-done, not which action) and which threads were
-// adopted here (the "neu" chip).
+// The server is the truth: every action writes through its endpoint, and what
+// comes back — the chapter's thread list a thread was appended to, the npc
+// entry that was written, plus the session or the inbox the row was ticked
+// off in — is seeded into the caches. Adopting a thread appends a ROW to the
+// active chapter's thread list; the chapter's text and its `rev` stay as they
+// are (ADR #29). The ONLY client state is cosmetic: which action a card got in
+// this sitting (the server stores done/not-done, not which action) and which
+// thread rows were adopted here (the "neu" chip, by row id).
 // Mobile: the desk task stays usable — one column, stacked cards.
 
-import type { EntryResponse, InboxResponse, SessionResponse } from "@grimoire/shared/types";
+import type {
+  EntryResponse,
+  InboxResponse,
+  SessionResponse,
+  ThreadsResponse,
+} from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import {
-  adoptThread,
-  ensureNpc,
-  fetchEntry,
-  fetchTree,
-  markInboxLineDone,
-  markLogLineSeen,
-} from "@/api";
+import { appendThread, ensureNpc, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCreateDialog } from "@/components/NpcCreateDialog";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
 import { useT } from "@/i18n";
-import { parseChecklist } from "@/lib/review";
 import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
 import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
 import { seedSession } from "@/lib/use-session";
+import { threadsKey, useThreads } from "@/lib/use-threads";
 
 type ActionKind = ReviewActionKind;
 
@@ -47,16 +47,14 @@ interface ActVars {
   npc?: { id: string; name?: string };
 }
 
-/** What one card action wrote: the entries it created plus the ticked source. */
+/** What one card action wrote: what it created plus the ticked source. */
 interface ActResult {
   written: EntryResponse[];
+  /** The chapter's thread list after an adoption, and the row it appended. */
+  threads?: { chapter: string; list: ThreadsResponse; adoptedId?: string };
   session?: SessionResponse;
   inbox?: InboxResponse;
 }
-
-/** The H2 the chapter's checklist lives under — a FORMAT token of the
- *  markdown body (README), not copy, so it stays German in every language. */
-const THREADS_HEADING = "Offene Fäden";
 
 function doneLabel(
   action: ActionKind | undefined,
@@ -109,25 +107,22 @@ export function ReviewRoute() {
   });
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
-  const chapterPath = chapter?.path;
 
-  const chapterEntry = useQuery({
-    queryKey: ["entry", campaign, chapterPath],
-    queryFn: () => fetchEntry(campaign, chapterPath as string),
-    enabled: chapterPath !== undefined,
-    retry: false,
-  });
-  const threads = useMemo(
-    () => parseChecklist(chapterEntry.data?.body ?? "", THREADS_HEADING),
-    [chapterEntry.data?.body],
-  );
+  // The chapter's open threads: rows of its own list, read as rows.
+  const threadList = useThreads(campaign, chapter?.id);
+  const threads = threadList.data?.entries;
 
   const act = useMutation({
     mutationFn: async ({ entry, action, npc }: ActVars): Promise<ActResult> => {
       const written: EntryResponse[] = [];
+      let threads: ActResult["threads"];
       if (action === "thread") {
         if (chapter === undefined) throw new Error("no chapter to adopt into");
-        written.push(await adoptThread(campaign, chapter.id, entry.text));
+        const list = await appendThread(campaign, chapter.id, entry.text);
+        // An append lands at the END of the list, and the answer is read in
+        // the same transaction — so its last row is the one just written.
+        const adoptedId = list.entries.at(-1)?.id;
+        threads = { chapter: chapter.id, list, ...(adoptedId === undefined ? {} : { adoptedId }) };
       } else if (action === "npc") {
         if (npc === undefined) throw new Error("no npc id");
         written.push(await ensureNpc(campaign, npc.id, npc.name, entry.text));
@@ -137,9 +132,11 @@ export function ReviewRoute() {
         // The session comes from the server (the last started one — which may
         // be yesterday's). Without it there is nothing to mark.
         if (model.sessionId === "") throw new Error("no session to mark in");
-        return { written, session: await markLogLineSeen(campaign, model.sessionId, entry.id) };
+        const session = await markLogLineSeen(campaign, model.sessionId, entry.id);
+        return { written, session, ...(threads === undefined ? {} : { threads }) };
       }
-      return { written, inbox: await markInboxLineDone(campaign, entry.id) };
+      const inbox = await markInboxLineDone(campaign, entry.id);
+      return { written, inbox, ...(threads === undefined ? {} : { threads }) };
     },
     onSuccess: (result, vars) => {
       // Every endpoint returns what it wrote: seed, then invalidate on top.
@@ -154,16 +151,15 @@ export function ReviewRoute() {
       if (result.inbox !== undefined) {
         queryClient.setQueryData(inboxKey(campaign), result.inbox);
       }
-      // A new thread section or NPC entry can change the tree, too.
-      if (vars.action !== "dismiss") {
+      // The thread list answered whole — the overview reads the same key.
+      if (result.threads !== undefined) {
+        queryClient.setQueryData(threadsKey(campaign, result.threads.chapter), result.threads.list);
+      }
+      // A new NPC entry changes the tree.
+      if (vars.action === "npc") {
         void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
       }
-      remember(
-        campaign,
-        vars.entry.key,
-        vars.action,
-        vars.action === "thread" ? vars.entry.text : undefined,
-      );
+      remember(campaign, vars.entry.key, vars.action, result.threads?.adoptedId);
       if (vars.action === "npc") setNpcEntry(undefined);
     },
   });
@@ -297,13 +293,13 @@ export function ReviewRoute() {
               <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
                 {t("review.threads.title")}
               </h2>
-              {threads.length === 0 ? (
+              {threads === undefined ? null : threads.length === 0 ? (
                 <p className="text-[13.5px] text-muted-foreground">{t("review.threads.empty")}</p>
               ) : (
                 <ul className="flex flex-col gap-2">
-                  {threads.map((thread, index) => (
+                  {threads.map((thread) => (
                     <li
-                      key={`${index}-${thread.text}`}
+                      key={thread.id}
                       className={cn(
                         "flex items-center gap-2.5 text-[14px] text-body",
                         thread.done && "text-muted-foreground",
@@ -318,7 +314,7 @@ export function ReviewRoute() {
                         />
                       )}
                       <span>{thread.text}</span>
-                      {adoptedHere.includes(thread.text) && (
+                      {adoptedHere.includes(thread.id) && (
                         <span className="flex-none rounded-[4px] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-[7px] py-px text-[11px] text-primary-hover">
                           {t("review.threads.new")}
                         </span>

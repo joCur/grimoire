@@ -21,7 +21,7 @@
 // Codes are append-only: an old one keeps its meaning and its parameters.
 // Parameters that are pure ADDRESSING (`path`, `rev`, `conflicts`) are not
 // listed here — they are part of the individual endpoint contracts in
-// server/src/server.ts and are consumed as data, not as copy.
+// server/src/routes/api.ts and are consumed as data, not as copy.
 
 /**
  * Every code the server may send. The app has a catalog entry per code; a
@@ -87,13 +87,15 @@ export const ERROR_CODES = [
    * `{ rev }` always, plus the CURRENT state where there is one to hand back,
    * so the app can show what is in the way instead of fetching it again:
    * `{ entry }` for the write of an entry, `{ session }` for
-   * `PATCH /sessions/:id`. A LIST write (the glossary, the campaign
-   * knowledge) carries neither — the page reloads its own list.
+   * `PATCH /sessions/:id`, `{ threads }` for a write of a chapter's thread
+   * list. A whole-list write (the glossary, the campaign knowledge, the
+   * scene order) carries none of them — the page reloads its own list.
    */
   "rev_conflict",
   /**
-   * 400, entry write: neither `properties` nor `body` was sent — the request
-   * asks for no change at all. No parameters.
+   * 400, a patch that names nothing to change: an entry write without
+   * `properties` and `body`, a session patch without a timestamp, a thread
+   * patch without `text` and `done`. No parameters.
    */
   "nothing_to_write",
   /**
