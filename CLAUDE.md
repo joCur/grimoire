@@ -40,8 +40,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `shared/` — Entitäts-Typen (`@grimoire/shared`), von Server und App
   gemeinsam genutzt. Autorität über das Format sind
   `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
-  (Adressen), beschrieben in README.md — die drei synchron halten;
-  `shared/src/parse.ts` ist der Entwurfs-Parser des Generators.
+  (Adressen), beschrieben in README.md — die drei synchron halten. Eine
+  Eintragsart mit eigenem Typ hat ihr zod-Schema in `shared/src/<art>.ts`
+  (ADR #31).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
   Abhaken. `server/src/server.ts` setzt nur die App zusammen. Datenzugriff
