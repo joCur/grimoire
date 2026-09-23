@@ -70,6 +70,7 @@ import {
   type RunOutline,
 } from "./generate-pipeline";
 import type { LLMProvider } from "./llm-provider";
+import type { SceneRunStart } from "./store/chapters";
 import { getDb } from "./store/handle";
 import { addressSegments, RESERVED_SEGMENTS } from "./store/paths";
 
@@ -122,6 +123,15 @@ export interface PipelineRecord {
   outline?: RunOutline;
   parts: StoredPart[];
   totals: { inputTokens: number; outputTokens: number; calls: number };
+  /**
+   * Where the run's scenes are placed from in their chapter
+   * (store/chapters.ts `sceneRunPos`). Absent until the FIRST scene accept
+   * takes it, and never recomputed after that — the whole point is that a
+   * later accept of an earlier scene still finds its place. Server-internal
+   * like the outline, and on the row for the same reason: it has to outlast a
+   * restart between two accepts.
+   */
+  sceneStart?: SceneRunStart;
 }
 
 /**
@@ -454,6 +464,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
   if (parts.length === 0 && parsed.outline === undefined) return undefined;
   const totals = (parsed.totals ?? {}) as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const sceneStart = unpackSceneStart(parsed.sceneStart);
   return {
     ...(parsed.outline === undefined ? {} : { outline: parsed.outline as RunOutline }),
     parts,
@@ -462,7 +473,21 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
       outputTokens: num(totals.outputTokens),
       calls: num(totals.calls),
     },
+    ...(sceneStart === undefined ? {} : { sceneStart }),
   };
+}
+
+/**
+ * The stored start of a run's scenes, or undefined when there is none or it
+ * cannot be read. An unreadable one degrades to "not taken yet": the next
+ * accept takes a fresh one at the chapter's end, which is where a scene went
+ * before there was a start at all.
+ */
+function unpackSceneStart(value: unknown): SceneRunStart | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const { pos, sceneOrderRev } = value as Record<string, unknown>;
+  if (!Number.isInteger(pos) || !Number.isInteger(sceneOrderRev)) return undefined;
+  return { pos: pos as number, sceneOrderRev: sceneOrderRev as number };
 }
 
 function jobRow(db: GrimoireDb, campaign: string): JobRow | undefined {
@@ -706,8 +731,8 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
   if (outcome.stub !== undefined) {
     const stub = outcome.stub;
     const at = stubs.findIndex((s) => s.kind === stub.kind && s.id === stub.id);
-    // Deduped by id (Zuschnitt 3): a retried part replaces its own entry
-    // rather than proposing the same npc twice.
+    // Deduped by id: a retried part replaces its own entry rather than
+    // proposing the same npc twice.
     if (at === -1) stubs.push(stub);
     else stubs[at] = stub;
   }
@@ -723,12 +748,27 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
 }
 
 /**
+ * The outline NUMBER of each scene of a run, by scene id: its index among the
+ * scene parts, in outline order. A part that failed or was dropped keeps its
+ * number, and a retry does not change it — the parts list is the outline's
+ * and never reshuffled.
+ */
+export function outlineSceneNumbers(parts: readonly StoredPart[]): Map<string, number> {
+  return new Map(parts.filter((p) => p.kind === "scene").map((p, i) => [p.id, i]));
+}
+
+/** The scene id a scene draft path names — its last segment. */
+export function draftSceneId(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/**
  * Order the result the way the OUTLINE ordered the parts: the review shows
- * the parts in outline order (Zuschnitt 2), and parts finish out of order
- * because three of them run at once.
+ * the parts in outline order, and parts finish out of order because three of
+ * them run at once.
  */
 function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): GenerateResult {
-  const sceneRank = new Map(parts.filter((p) => p.kind === "scene").map((p, i) => [p.id, i]));
+  const sceneRank = outlineSceneNumbers(parts);
   const entryRank = new Map(
     parts.filter((p) => p.kind !== "scene").map((p, i) => [`${p.kind}:${p.id}`, i]),
   );
@@ -736,9 +776,7 @@ function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): Gene
   return {
     ...result,
     scenes: [...result.scenes].sort(
-      (a, b) =>
-        rank(sceneRank, a.path.slice(a.path.lastIndexOf("/") + 1)) -
-        rank(sceneRank, b.path.slice(b.path.lastIndexOf("/") + 1)),
+      (a, b) => rank(sceneRank, draftSceneId(a.path)) - rank(sceneRank, draftSceneId(b.path)),
     ),
     stubs: [...result.stubs].sort(
       (a, b) => rank(entryRank, `${a.kind}:${a.id}`) - rank(entryRank, `${b.kind}:${b.id}`),
@@ -1179,6 +1217,10 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
  * never disagree after a crash: either both landed or neither did (the same
  * rule the whole-run apply follows).
  *
+ * `sceneStart` is the start this accept TOOK — given only by the run's first
+ * scene accept, and stored on the pipeline in the same commit as the scenes
+ * it placed.
+ *
  * Returns true when the job row was deleted because nothing is left open.
  *
  * `rev` is the review rev the client read.
@@ -1195,6 +1237,7 @@ export function markWrittenInTx(
   jobId: string,
   rev: number,
   written: Record<string, string>,
+  sceneStart?: SceneRunStart,
 ): boolean {
   const row = jobRow(tx, campaign);
   if (row === undefined || row.id !== jobId) {
@@ -1224,7 +1267,20 @@ export function markWrittenInTx(
     return true;
   }
   tx.update(generateJobs)
-    .set({ review: JSON.stringify(job.review), rev: row.rev + 1 })
+    .set({
+      review: JSON.stringify(job.review),
+      rev: row.rev + 1,
+      // Merged onto the stored column rather than re-serialized from the
+      // parsed record, so nothing else the pipeline holds is rewritten here.
+      ...(sceneStart === undefined
+        ? {}
+        : {
+            pipeline: JSON.stringify({
+              ...unpackPayload<Record<string, unknown>>(row.pipeline),
+              sceneStart,
+            }),
+          }),
+    })
     .where(eq(generateJobs.id, row.id))
     .run();
   return false;

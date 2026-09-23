@@ -48,11 +48,24 @@ export interface EntityDraft {
 }
 
 /**
+ * Where a scene draft goes in its chapter: a `pos`, or undefined for the end
+ * of the chapter. Asked INSIDE the write transaction, once the scene's
+ * chapter exists and before the scene is inserted — a generator run's start
+ * is the chapter's end at that moment (store/chapters.ts `sceneRunPos`).
+ */
+export type ScenePlacement = (tx: GrimoireDb, rel: string, chapter: string) => number | undefined;
+
+/**
  * Insert one generated entity (scene, npc, location stub or a new chapter's
  * metadata) — the database half of `POST /generate/apply`. The caller has
  * already validated everything and checked for conflicts; this is the write.
  */
-export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft): void {
+export function insertDraft(
+  tx: GrimoireDb,
+  campaign: string,
+  draft: EntityDraft,
+  placeScene?: ScenePlacement,
+): void {
   const locator = locatorFromPath(draft.rel);
   const props = draft.properties;
   switch (locator.kind) {
@@ -76,7 +89,11 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       assertNpcRefs(tx, campaign, npcRefs);
       // The end of ITS chapter, like every other way a scene is created: a
       // draft the DM accepts is new material, and new material goes last.
-      const pos = nextScenePos(tx, campaign, locator.chapterId);
+      // The one exception is a scene of a pipelined run, which the caller
+      // places at its outline number from the run's start (ADR #27).
+      const pos =
+        placeScene?.(tx, draft.rel, locator.chapterId) ??
+        nextScenePos(tx, campaign, locator.chapterId);
       tx.insert(scenes)
         .values({
           campaignId: campaign,
@@ -206,16 +223,21 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
 export async function applyDrafts(
   campaign: string,
   drafts: EntityDraft[],
-  jobId?: string,
-  /**
-   * A PARTIAL accept does not discard the job — it records what
-   * it wrote on it and deletes the row only when nothing is left open. That
-   * bookkeeping belongs in THIS transaction for the same reason the discard
-   * does: after a crash the job and the entries it produced must not
-   * disagree. When it is given it replaces the `jobId` discard entirely.
-   */
-  onWritten?: (tx: GrimoireDb) => void,
+  options: {
+    jobId?: string;
+    /**
+     * A PARTIAL accept does not discard the job — it records what
+     * it wrote on it and deletes the row only when nothing is left open. That
+     * bookkeeping belongs in THIS transaction for the same reason the discard
+     * does: after a crash the job and the entries it produced must not
+     * disagree. When it is given it replaces the `jobId` discard entirely.
+     */
+    onWritten?: (tx: GrimoireDb) => void;
+    /** Where the scene drafts go; absent, every one goes to its chapter's end. */
+    placeScene?: ScenePlacement;
+  } = {},
 ): Promise<void> {
+  const { jobId, onWritten, placeScene } = options;
   try {
     await mutate(campaign, (tx) => {
       // TWO drafts for ONE address are a conflict too. An empty entry is no
@@ -235,7 +257,7 @@ export async function applyDrafts(
       if (conflicts.length > 0) {
         throw new ApiError(409, "target entries already exist", { conflicts });
       }
-      for (const draft of inReferenceOrder(drafts)) insertDraft(tx, campaign, draft);
+      for (const draft of inReferenceOrder(drafts)) insertDraft(tx, campaign, draft, placeScene);
       if (onWritten !== undefined) {
         onWritten(tx);
       } else if (jobId !== undefined) {

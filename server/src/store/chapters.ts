@@ -173,8 +173,8 @@ export function replaceSceneRefs(
  * else, so a campaign-wide counter would hand out positions that grow with
  * the campaign while saying nothing about where the scene sits among its
  * siblings. Every path that brings a scene into a chapter uses this one —
- * creating it, accepting a generated draft, and moving one here from another
- * chapter.
+ * creating it, moving one here from another chapter, and accepting a
+ * generated draft, which uses it through the run's start below.
  */
 export function nextScenePos(tx: GrimoireDb, campaign: string, chapter: string): number {
   return nextPos(
@@ -184,6 +184,59 @@ export function nextScenePos(tx: GrimoireDb, campaign: string, chapter: string):
       .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter)))
       .all(),
   );
+}
+
+/**
+ * Where the scenes of ONE generator run are placed from (ADR #27): the
+ * chapter's end at the run's first scene accept, and the chapter's order
+ * guard at that moment. It is taken once and stored on the run, so a scene
+ * accepted later still lands at its outline place instead of behind whatever
+ * the earlier accepts appended.
+ */
+export interface SceneRunStart {
+  pos: number;
+  sceneOrderRev: number;
+}
+
+/** Take a run's start now — before any scene of that run is in the chapter. */
+export function takeSceneRunStart(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+): SceneRunStart {
+  return {
+    pos: nextScenePos(tx, campaign, chapter),
+    sceneOrderRev: chapterRowOf(tx, campaign, chapter)?.sceneOrderRev ?? 0,
+  };
+}
+
+/**
+ * The `pos` of the run's scene with outline number `number`: the start plus
+ * that number, so accepting the scenes in any order and across any number of
+ * calls ends in outline order. A dropped or failed scene keeps its number and
+ * leaves a gap — `pos` is a sort key, not an index.
+ *
+ * Once the DM has reordered the chapter by hand (its `scene_order_rev` moved
+ * past the start's), the hand order wins: the order write has handed out
+ * dense positions the start knows nothing about, so every further scene of
+ * the run is appended at the end like any other new scene. There is no new
+ * start either — a second one would only re-sort around the DM's order.
+ *
+ * Two equal positions are possible only when the DM created a scene by hand
+ * during the review; the chapter lists by `pos, id`, so that tie needs no
+ * rule of its own.
+ */
+export function sceneRunPos(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  start: SceneRunStart,
+  number: number,
+): number {
+  const current = chapterRowOf(tx, campaign, chapter)?.sceneOrderRev;
+  return current === start.sceneOrderRev
+    ? start.pos + number
+    : nextScenePos(tx, campaign, chapter);
 }
 
 /**

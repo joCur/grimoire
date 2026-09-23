@@ -52,7 +52,9 @@ am Ende. Diese Reihenfolge ist **keine Eigenschaft** — sie ist
 eine Aussage des Kapitels über seine Szenen, nicht einer Szene über sich
 selbst, und steht deshalb in keiner Feldtabelle dieses Dokuments. Gepflegt
 wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
-Ende ihres Kapitels.
+Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
+Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
+übernommen werden (ADR #27).
 
 **Sessions, Ideen und Glossar haben keine Adresse** — sie sind Tabellen, die
 als Listen gepflegt werden, und antworten auf ihren eigenen Endpoints

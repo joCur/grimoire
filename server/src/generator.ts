@@ -1380,7 +1380,7 @@ export async function applyGenerated(
   // collides with an existing entity is caught even when the model chose a
   // different last segment for it; the conflict is REPORTED under the path
   // the client sent, which is the draft it has to fix.
-  await applyDrafts(campaign, drafts, jobId);
+  await applyDrafts(campaign, drafts, { jobId });
   return { written: drafts.map((draft) => draft.address) };
 }
 
