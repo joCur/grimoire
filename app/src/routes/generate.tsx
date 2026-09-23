@@ -985,6 +985,8 @@ export function GenerateRoute() {
               </p>
             )}
 
+            <ChapterDescription description={job?.pipeline?.chapterDescription} t={t} />
+
             {(result?.warnings ?? []).map((warning) => (
               <div
                 key={warning}
@@ -1382,6 +1384,32 @@ function stubReason(scenes: GenerateResult["scenes"], t: Translate): string {
  * Nothing renders when there is nothing to say: a box announcing zero hints
  * would be noise on every single run of every campaign without conventions.
  */
+/**
+ * The description of the chapter a „Neues Kapitel" run creates — the text
+ * that chapter starts with once the run is accepted. It comes from the
+ * outline, so it stands above the drafts, rendered like the chapter overview
+ * will show it. Read-only: the review edits drafts, and the chapter's text is
+ * the DM's to change afterwards in the chapter overview. A run into an
+ * existing chapter has none, and nothing is shown.
+ */
+function ChapterDescription({
+  description,
+  t,
+}: {
+  description: string | undefined;
+  t: Translate;
+}) {
+  if (description === undefined || description.trim() === "") return null;
+  return (
+    <section className="mb-[22px] rounded-md border border-border bg-card px-3.5 py-3">
+      <h2 className={cn(OVERLINE, "mb-2")}>{t("generate.review.chapterDescription")}</h2>
+      <div className="md-compact">
+        <Markdown>{description}</Markdown>
+      </div>
+    </section>
+  );
+}
+
 function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Translate }) {
   if (hints === undefined || hints.length === 0) return null;
   return (

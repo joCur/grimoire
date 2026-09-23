@@ -74,6 +74,12 @@ export const TRIGGER = {
    */
   threeScenes: "E2E_THREE_SCENES",
   /**
+   * The outline describes the chapter even though the run goes into an
+   * EXISTING one — a model that ignores the prompt's rule. The server has to
+   * drop it, so that chapter's text stays the DM's.
+   */
+  describeAnyway: "E2E_DESCRIBE_ANYWAY",
+  /**
    * The SECOND of those three scenes fails its first call and succeeds on
    * every call after it — which is what „Erneut versuchen“ has to fix. The
    * token is written as `E2E_PART_FAIL:<nonce>` and the nonce keys the stub's
@@ -549,10 +555,36 @@ function wholeSourceExcerpt(source: string): { first: string; last: string } {
   return { first: sentences[0] ?? source.trim(), last: sentences.at(-1) ?? source.trim() };
 }
 
+/**
+ * The context line of a new-chapter run's outline call —
+ * server/src/llm-provider.ts NEW_CHAPTER_LINE, duplicated on purpose like
+ * EXISTING_ENTRY_HEADING: the stub reads the prompt the way a model does.
+ */
+export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
+
+/**
+ * What a well-behaved model writes as the description of a new chapter —
+ * the text the chapter starts with once the run is accepted. Two paragraphs,
+ * so the overview has something to clamp.
+ */
+export const CHAPTER_DESCRIPTION =
+  "Nachts verschwinden Ladungen aus dem Hafen, und an der Nordbucht brennen " +
+  "Laternen, wo niemand sein sollte.\n\nDie Gruppe soll herausfinden, wer die " +
+  "Schmuggler deckt, und die Ladung sicherstellen, bevor sie ins Dorf gelangt.";
+
 /** The outline reply: one scene plus two entries, or three scenes and none. */
 export function outlineReply(input: {
   source: string;
   knowledge?: string;
+  /**
+   * The context says the run creates its chapter: the outline then carries the
+   * chapter's description — and only then, as the prompt asks. A model that
+   * describes an existing chapter anyway is the server's to ignore, and the
+   * specs check that with `describeAnyway`.
+   */
+  newChapter?: boolean;
+  /** TRIGGER.describeAnyway: a description for an EXISTING chapter as well. */
+  describeAnyway?: boolean;
   three?: boolean;
   /**
    * TRIGGER.oldName: the naming-check case. Its draft proposes no entries, so
@@ -575,6 +607,8 @@ export function outlineReply(input: {
     "Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel.",
     ...contextEchoWarnings(input.knowledge ?? ""),
   ];
+  const chapterDescription =
+    input.newChapter === true || input.describeAnyway === true ? CHAPTER_DESCRIPTION : null;
   if (input.three === true) {
     return {
       scenes: THREE_SCENES.map((scene) => ({
@@ -585,6 +619,7 @@ export function outlineReply(input: {
         refs: [],
       })),
       entries: [],
+      chapterDescription,
       warnings,
     };
   }
@@ -592,6 +627,7 @@ export function outlineReply(input: {
     return {
       scenes: [{ id: SCENE_ID, title: SCENE_TITLE, type: "planned", sourceExcerpt, refs: [] }],
       entries: [],
+      chapterDescription,
       warnings,
     };
   }
@@ -615,6 +651,7 @@ export function outlineReply(input: {
         summary: "Die flache Bucht nördlich des Hafens.",
       },
     ],
+    chapterDescription,
     warnings,
   };
 }
@@ -637,6 +674,7 @@ export function invalidRunOutline(source: string): unknown {
       },
     ],
     entries: [],
+    chapterDescription: null,
     warnings: [],
   };
 }

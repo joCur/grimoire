@@ -128,6 +128,14 @@ export interface RunOutline {
   scenes: OutlineScene[];
   entries: OutlineEntry[];
   warnings: string[];
+  /**
+   * What the chapter a new-chapter run creates is about, from the source
+   * material — it becomes that chapter's text when the run is accepted.
+   * Only a new-chapter run's outline carries it; for a run into an existing
+   * chapter whatever the reply says is dropped here, so the chapter's text
+   * cannot be reached from a run.
+   */
+  chapterDescription?: string;
 }
 
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
@@ -341,6 +349,11 @@ export function validateOutlineReply(
   const warnings = Array.isArray(obj.warnings)
     ? obj.warnings.filter((w): w is string => typeof w === "string")
     : [];
+  // A missing description is no correction turn: the chapter then starts
+  // with an empty text, which the DM fills like any other.
+  const chapterDescription = ctx.newChapter
+    ? stringField(obj, "chapterDescription")?.trim()
+    : undefined;
   return {
     ok: true,
     result: {
@@ -348,6 +361,7 @@ export function validateOutlineReply(
       entries,
       // The repair is recorded as a run warning, not swallowed.
       warnings: parsedReply.repaired ? [...warnings, REPAIRED_REPLY_WARNING] : warnings,
+      ...(chapterDescription === undefined ? {} : { chapterDescription }),
     },
   };
 }
@@ -775,7 +789,14 @@ export async function runOutlineStep(
       fewShotTarget: assets.fewShotTarget,
       knowledge: ctx.knowledge,
       glossary: ctx.glossary,
-      context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
+      // Only the outline hears that the chapter is new: it is the one call
+      // that describes the chapter.
+      context: {
+        chapter: ctx.chapter,
+        ...(ctx.newChapter ? { newChapter: true } : {}),
+        npcs: ctx.npcs,
+        locations: ctx.locations,
+      },
       sourceText,
       // The one call of a run that still answers JSON — so it is the one
       // call whose shape the API can GUARANTEE: Claude gets a

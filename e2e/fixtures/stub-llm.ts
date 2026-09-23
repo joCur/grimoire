@@ -81,6 +81,7 @@ import {
   EXISTING_ENTRY_HEADING,
   FAILING_SCENE_ID,
   LATE_REPLY_MS,
+  NEW_CHAPTER_LINE,
   SLOW_REPLY_MS,
   THREE_SCENES,
   TRIGGER,
@@ -286,7 +287,16 @@ export function decide(messages: ChatMessage[]): StubDecision {
       // it gets is a well-formed one with a single part.
       reply: invalid
         ? invalidRunOutline(source)
-        : outlineReply({ source, knowledge, three, oldName, asciiQuotes }),
+        : outlineReply({
+            source,
+            knowledge,
+            three,
+            oldName,
+            asciiQuotes,
+            // The context's own line, as a model reads it.
+            newChapter: new RegExp(`^${NEW_CHAPTER_LINE}$`, "m").test(prompt),
+            describeAnyway: source.includes(TRIGGER.describeAnyway),
+          }),
     };
   }
 

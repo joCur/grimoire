@@ -111,11 +111,12 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    'Das Ziel ist optional und erscheint im Kapitel als Abschnitt „Ziel des Kapitels“.',
+    "Die Beschreibung ist optional. Sie wird der Text des Kapitels und steht in der Kapitelübersicht unter dem Titel.",
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
-  "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
-  "create.chapter.goalPlaceholder": "Was die Gruppe hier erreichen soll",
+  "create.chapter.descriptionLabel": "Beschreibung (optional)",
+  "create.chapter.descriptionPlaceholder":
+    "Worum es in diesem Kapitel geht und was die Gruppe erreichen soll",
 
   "create.scene.title": "Szene anlegen",
   "create.scene.description":
@@ -389,7 +390,6 @@ export const de = {
   // can differ without a second call site.
   "chapterOverview.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
   "chapterOverview.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
-  "chapterOverview.chapter.goal": "Ziel: {goal}",
   "chapterOverview.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // --- chapter actions in the chapter overview -----------------------------
   // The chapter's status control (the active option sets `active` and takes it
@@ -399,10 +399,10 @@ export const de = {
   "chapterOverview.chapter.edit": "Kapitel bearbeiten",
   "chapterBody.title": "Kapitel bearbeiten: {title}",
   "chapterBody.description":
-    "Text des Kapitels als Markdown — die Überschrift „## Ziel des Kapitels“ ist die Zeile, die die Übersicht als Ziel zeigt.",
+    "Der Text des Kapitels als Markdown. Die Kapitelübersicht zeigt ihn unter dem Titel.",
   "chapterBody.field.body": "Text",
   "chapterBody.field.body.placeholder":
-    "## Ziel des Kapitels\n\nWas die Gruppe hier erreichen soll",
+    "Worum es in diesem Kapitel geht und was die Gruppe erreichen soll",
   // The quiet second half of the contingency-scenes heading row — the `· `
   // separator stays markup in the JSX.
   "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
@@ -573,6 +573,9 @@ export const de = {
 
   // --- shared verbs: ADD to the existing common block --------------------
   "common.edit": "Bearbeiten",
+  // The toggle under a text shown on a few lines (components/ClampedText).
+  "common.showMore": "Mehr anzeigen",
+  "common.showLess": "Weniger anzeigen",
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Szenen, NPCs, Orte suchen …",
@@ -780,6 +783,9 @@ export const de = {
   "generate.review.propertiesHeading": "Eigenschaften",
   "generate.review.bodyHeading": "Text",
   "generate.review.bodyLabel": "Text von {path}",
+  // A new-chapter run's outline describes the chapter; accepting makes it the
+  // chapter's text. Shown read-only above the drafts.
+  "generate.review.chapterDescription": "Beschreibung des Kapitels",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",

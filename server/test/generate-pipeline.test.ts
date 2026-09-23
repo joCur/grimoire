@@ -45,6 +45,7 @@ import {
 
 const CTX = {
   chapter: "01-salzhafen",
+  newChapter: false,
   npcs: [{ id: "fenn", name: "Fenn" }],
   locations: [{ id: "hafen", name: "Der Hafen" }],
   knowledge: "",
@@ -113,6 +114,35 @@ test("an almost-JSON outline is repaired instead of costing a correction turn", 
     "Der Quelltext nennt keinen DC.",
     REPAIRED_REPLY_WARNING,
   ]);
+});
+
+test("a new-chapter outline keeps its chapter description, trimmed", () => {
+  const outcome = validateOutlineReply(
+    outlineReply({ chapterDescription: "  Worum es geht.\n\nWas die Gruppe erreichen soll.  " }),
+    { ...CTX, newChapter: true },
+  );
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) return;
+  expect(outcome.result.chapterDescription).toBe("Worum es geht.\n\nWas die Gruppe erreichen soll.");
+});
+
+test("a missing description is no correction turn — the chapter starts empty", () => {
+  for (const chapterDescription of [null, "", "   "]) {
+    const outcome = validateOutlineReply(outlineReply({ chapterDescription }), {
+      ...CTX,
+      newChapter: true,
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.result.chapterDescription).toBeUndefined();
+  }
+});
+
+test("a run into an existing chapter drops whatever description the reply carries", () => {
+  const outcome = validateOutlineReply(outlineReply({ chapterDescription: "Ein anderes Kapitel." }), CTX);
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) return;
+  expect(outcome.result.chapterDescription).toBeUndefined();
 });
 
 test("a repaired outline is still VALIDATED — the repair loosens only parsing", () => {

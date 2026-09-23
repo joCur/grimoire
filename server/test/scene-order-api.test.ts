@@ -231,7 +231,7 @@ describe("the guard", () => {
     const patched = await app.request(`/api/campaigns/${CAMPAIGN}/entries/${CHAPTER}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: chapter.rev, body: "## Ziel des Kapitels\n\nEtwas Neues.\n" }),
+      body: JSON.stringify({ rev: chapter.rev, body: "Etwas Neues.\n" }),
     });
     expect(patched.status).toBe(200);
 

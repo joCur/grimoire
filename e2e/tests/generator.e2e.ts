@@ -17,6 +17,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
   ASCII_QUOTE_LINE,
+  CHAPTER_DESCRIPTION,
   LOCATION_STUB_ATMOSPHERE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
@@ -673,6 +674,14 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
+  // The outline of a new-chapter run describes the chapter, and the review
+  // shows it — read-only, rendered, above the drafts.
+  const description = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { level: 2, name: "Beschreibung des Kapitels" }) });
+  await expect(description).toContainText("Nachts verschwinden Ladungen aus dem Hafen");
+  await expect(description).toContainText("Die Gruppe soll herausfinden, wer die Schmuggler deckt");
+  await expect(description.getByRole("textbox")).toHaveCount(0);
 
   // …and away. The review state is a row, so it is still there when we come
   // back — but this browser has forgotten the title it typed.
@@ -691,8 +700,11 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
 
   // The point: the chapter exists, with the title the RUN was started with —
-  // not the id, and not nothing.
-  expect((await api.entry(CHAPTER_ID)).properties.title).toBe(CHAPTER_TITLE);
+  // not the id, and not nothing — and the outline's description as its text,
+  // verbatim and without a heading.
+  const chapter = await api.entry(CHAPTER_ID);
+  expect(chapter.properties.title).toBe(CHAPTER_TITLE);
+  expect(chapter.body).toBe(`${CHAPTER_DESCRIPTION}\n`);
   // …and the scene really hangs in it.
   expect(
     (await api.entry(`${CHAPTER_ID}/${LOCATION_STUB_ID}/${SCENE_ID}`)).properties.chapter,
@@ -705,4 +717,37 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   await page.getByRole("button", { name: new RegExp(CHAPTER_TITLE) }).click();
   await expect(page.getByRole("link", { name: new RegExp(SCENE_TITLE) })).toBeVisible();
   await expect(page.getByText("2 Kapitel · 3 Szenen")).toBeVisible();
+  // …and its text is what the overview shows under the chapter's title.
+  await expect(
+    page.getByText("Nachts verschwinden Ladungen aus dem Hafen", { exact: false }),
+  ).toBeVisible();
+});
+
+// A run into an EXISTING chapter never reaches that chapter's text: the
+// outline call is not told the chapter is new, and a description the model
+// sends anyway is dropped by the server — the review shows none, and the
+// accept leaves the text exactly as the DM wrote it.
+test("a run into an existing chapter leaves the chapter's text alone", async ({ page, api }) => {
+  const before = await api.entry("01-salzhafen");
+  await page.goto("/campaigns/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(`${SOURCE} ${TRIGGER.describeAnyway}`);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  await expect(page.getByRole("heading", { name: "Beschreibung des Kapitels" })).toHaveCount(0);
+  await expect(page.getByText("Nachts verschwinden Ladungen", { exact: false })).toHaveCount(0);
+
+  // Accept the whole run: both suggested entries, then everything open.
+  const acceptEntry = page.getByRole("button", { name: "Annehmen" });
+  await expect(acceptEntry).toHaveCount(2);
+  await acceptEntry.first().click();
+  await expect(acceptEntry).toHaveCount(1);
+  await acceptEntry.first().click();
+  await expect(acceptEntry).toHaveCount(0);
+  await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+
+  expect((await api.entry(SCENE_PATH)).properties.chapter).toBe("01-salzhafen");
+  expect((await api.entry("01-salzhafen")).body).toBe(before.body);
 });

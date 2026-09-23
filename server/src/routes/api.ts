@@ -775,15 +775,16 @@ api.post("/campaigns", async (c) => {
   return c.json(await createCampaign(name, description, optionalText(body.id, "id")), 201);
 });
 
-// POST /api/campaigns/:campaign/chapters { title, goal? } -> 201 EntryResponse
-// `goal` lands under `## Ziel des Kapitels` — the heading the chapter
-// overview reads its goal line from.
+// POST /api/campaigns/:campaign/chapters { title, description?, id? } -> 201 EntryResponse
+// `description` becomes the chapter's text as typed (trimmed, one closing
+// newline, no heading around it); the chapter overview shows that text under
+// the title. Without it the text stays empty.
 api.post("/campaigns/:campaign/chapters", async (c) => {
-  const body = await jsonBody(c, ["title", "goal", "id"]);
+  const body = await jsonBody(c, ["title", "description", "id"]);
   const title = requiredText(body.title, "title");
-  const goal = optionalText(body.goal, "goal");
+  const description = optionalText(body.description, "description");
   return c.json(
-    await createChapter(c.req.param("campaign"), title, goal, optionalText(body.id, "id")),
+    await createChapter(c.req.param("campaign"), title, description, optionalText(body.id, "id")),
     201,
   );
 });

@@ -3,7 +3,7 @@
 //
 // The review adopts a thread by appending a row (review.e2e.ts). Here the
 // same list is kept by hand, where the design reference puts it — under the
-// chapter's goal line: add a thread, tick it, reword it, delete it. Every one
+// chapter's text: add a thread, tick it, reword it, delete it. Every one
 // of those writes answers the whole list and moves only the list's own guard
 // (`chapters.threads_rev`); the chapter ENTRY — its text and its `rev` —
 // stays exactly as it was, so an open chapter editor never runs into a
@@ -35,7 +35,7 @@ test("the chapter overview keeps the list: add, tick, reword, delete — the cha
   const chapterBefore = await api.entry(CHAPTER);
   await page.goto("/campaigns/beispiel");
 
-  // The seeded thread is a row under the goal line, open.
+  // The seeded thread is a row under the chapter's text, open.
   const list = threadList(page);
   await expect(list.getByRole("listitem")).toHaveText([SEEDED]);
   await expect(page.getByRole("checkbox", { name: `„${SEEDED}“ erledigt` })).not.toBeChecked();
@@ -144,8 +144,8 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
   await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
   const dialog = page.getByRole("dialog");
   const chapterText = dialog.getByRole("textbox", { name: "Text" });
-  await expect(chapterText).toHaveValue(/Ziel des Kapitels/);
-  await chapterText.fill("## Ziel des Kapitels\n\nDen Leuchtturm wieder anzünden.");
+  await expect(chapterText).toHaveValue(/Leuchtfeuer/);
+  await chapterText.fill("Den Leuchtturm wieder anzünden.");
 
   // A thread is appended underneath — the write „Handlungsstrang übernehmen" makes.
   const chapterRev = (await api.entry(CHAPTER)).rev;

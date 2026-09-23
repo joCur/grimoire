@@ -689,6 +689,13 @@ export type GenerateJobPartStatus = (typeof GENERATE_JOB_PART_STATUSES)[number];
 export interface GenerateJobPipeline {
   parts: GenerateJobPart[];
   /**
+   * What the chapter a „Neues Kapitel" run creates is about — written by the
+   * outline from the source material, and the text that chapter starts with
+   * once the run is accepted. Absent for a run into an existing chapter and
+   * when the outline brought none.
+   */
+  chapterDescription?: string;
+  /**
    * Summed over every provider call of every part, the outline included —
    * the review header shows it as a token and call count. `calls` counts
    * provider calls (a correction turn is one more).

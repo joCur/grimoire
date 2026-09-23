@@ -2,7 +2,7 @@
 // before and after the POST. No react, no query imports.
 //
 // The dialogs themselves only ever ask a NAME (plus a chapter for a scene and
-// an optional goal for a chapter). The id the format needs is DERIVED from
+// an optional description for a chapter). The id the format needs is DERIVED from
 // that name with the one slug rule (`@grimoire/shared/slug`), and it is shown
 // while typing: an id is the permanent reference key, so the DM sees the one
 // they are about to create rather than discovering it later in an address.

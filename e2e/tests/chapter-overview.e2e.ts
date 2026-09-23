@@ -2,7 +2,8 @@
 //
 // "/" has no page of its own: it redirects into the campaign the
 // server reports, and the chapter overview is the first thing the DM sees — campaign
-// header, the active chapter with its goal line, its scenes as ONE list in
+// header with the campaign's text, the active chapter with its text, its
+// scenes as ONE list in
 // the order the DM arranged (ADR #27) and the contingency block at the end.
 //
 // The order is the DM's, so it is also editable here: up/down per row, one
@@ -15,7 +16,7 @@
 // (the chapter overview's own footer line is gone), and the campaign's
 // name/description are editable from the header.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { expect, test, todaySessionId, type Api, type SeedEntry } from "../support/test";
@@ -129,8 +130,11 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
       exact: false,
     }),
   ).toBeVisible();
+  // …and under the one-line description the campaign's TEXT, rendered. It is
+  // short, so it stands whole and there is nothing to open.
+  await expect(page.getByText("Kampagnenweite Notizen: Ton ist bodenständige", { exact: false })).toBeVisible();
 
-  // The chapter accordion: title, scene count, goal line — and the status
+  // The chapter accordion: title, scene count, its text — and the status
   // control BESIDE the trigger (a menu trigger cannot sit inside the
   // accordion button).
   const chapter = page.getByRole("button", {
@@ -147,12 +151,14 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toContainText(
     "Aktiv",
   );
-  // Open by default (status: active) — the goal comes from the chapter entry.
+  // Open by default (status: active) — the text is the chapter entry's, all of
+  // it and nothing prefixed, so no „Mehr anzeigen" either.
   await expect(
-    page.getByText(
-      "Ziel: Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.",
-    ),
+    page.getByText("Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.", {
+      exact: true,
+    }),
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toHaveCount(0);
 
   // The planned scene is a ROW of the chapter's one list — no location
   // heading over it any more (ADR #27). The location stands in the row's meta
@@ -779,15 +785,102 @@ test("the chapter overview header is ONE row: the actions right beside the title
   }
 });
 
+// Critical path 1: the chapter overview shows the WHOLE text of a chapter and
+// of the campaign — rendered like everywhere else, nothing picked out by a
+// heading — on a few lines at first. „Mehr anzeigen" exists only where the
+// text really is longer than that, and a link in the cut-off part that takes
+// the keyboard focus opens the text, so the focus never sits on something
+// hidden.
+
+/** A text that is longer than four lines at any width, ending in a reference. */
+const LONG_TEXT = [
+  "## Worum es geht",
+  "Seit drei Nächten brennt das Leuchtfeuer nicht mehr, und im Hafen erzählt jeder eine andere Geschichte darüber, wer es gelöscht hat.",
+  "> [!secret] Die Hafenmeisterin weiß mehr, als sie sagt.",
+  "Die Gruppe soll herausfinden, wer das Feuer gelöscht hat, bevor das nächste Schiff an den Klippen zerschellt.",
+  "Am Ende wartet [[jorna]] am Kai.",
+].join("\n\n");
+
+/** The clamped box a toggle opens — named by the toggle's aria-controls. */
+async function clampBox(page: Page, toggle: Locator) {
+  const id = await toggle.getAttribute("aria-controls");
+  expect(id).not.toBeNull();
+  return page.locator(`[id="${id}"]`);
+}
+
+test("a long chapter text is clamped, opens and closes; a link in the cut-off part opens it", async ({
+  page,
+  api,
+}) => {
+  await api.writeBody("01-salzhafen", `${LONG_TEXT}\n`);
+  await page.goto("/campaigns/beispiel");
+
+  // Rendered through the one renderer: the heading, the callout, the reference.
+  await expect(page.getByRole("heading", { level: 2, name: "Worum es geht" })).toBeVisible();
+  const toggle = page.getByRole("button", { name: "Mehr anzeigen" });
+  await expect(toggle).toHaveCount(1);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  const box = await clampBox(page, toggle);
+  await expect(box).toHaveAttribute("data-clamped", "");
+  await expect(box).toContainText("Die Hafenmeisterin weiß mehr");
+  const clampedHeight = (await box.boundingBox())!.height;
+  // Four lines of 14px at line height 1.6, plus the 4px focus-ring margin on
+  // both sides — and not a pixel of the rest.
+  expect(clampedHeight).toBeLessThanOrEqual(4 * 14 * 1.6 + 8 + 1);
+
+  await toggle.click();
+  const less = page.getByRole("button", { name: "Weniger anzeigen" });
+  await expect(less).toHaveAttribute("aria-expanded", "true");
+  await expect(box).not.toHaveAttribute("data-clamped", "");
+  expect((await box.boundingBox())!.height).toBeGreaterThan(clampedHeight);
+  // The reference at the very end is a live link to its entry.
+  await expect(box.getByRole("link", { name: /Jorna/ })).toBeVisible();
+
+  await less.click();
+  await expect(box).toHaveAttribute("data-clamped", "");
+  await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toBeFocused();
+
+  // The keyboard reaches the reference in the hidden part — and the text opens.
+  await box.getByRole("link", { name: /Jorna/ }).focus();
+  await expect(box).not.toHaveAttribute("data-clamped", "");
+  await expect(page.getByRole("button", { name: "Weniger anzeigen" })).toBeVisible();
+});
+
+test("the campaign's text stands under its description, clamped the same way", async ({
+  page,
+  api,
+}) => {
+  await api.writeBody("campaign", `${LONG_TEXT}\n`);
+  // The chapter's own text is short, so the one toggle is the header's.
+  await page.goto("/campaigns/beispiel");
+  await expect(page.getByText("Seit drei Nächten brennt das Leuchtfeuer", { exact: false })).toBeVisible();
+  const toggle = page.getByRole("button", { name: "Mehr anzeigen" });
+  await expect(toggle).toHaveCount(1);
+  const box = await clampBox(page, toggle);
+  await expect(box).toContainText("Seit drei Nächten brennt das Leuchtfeuer");
+  await expect(box).toHaveAttribute("data-clamped", "");
+  await toggle.click();
+  await expect(box).not.toHaveAttribute("data-clamped", "");
+
+  // An empty campaign text shows nothing extra — the description stays.
+  await api.writeBody("campaign", "");
+  await page.reload();
+  await expect(
+    page.getByText("Eine Küstenkampagne um einen erloschenen Leuchtturm", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByText("Seit drei Nächten brennt das Leuchtfeuer", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toHaveCount(0);
+});
+
 // Critical path 1: a chapter is editable where it is read.
 //
-// Creating a chapter is not the only moment its title and goal can be
-// said: a chapter created without a goal gets one here, and a chapter a
-// generator run created under its slug is renamed here — otherwise the
-// overview would list a heading nobody can correct. Both halves go through the
-// documented endpoints with their rev guard: the title is a PROPERTY (the
-// shared properties dialog), the goal is the TEXT.
-test("a chapter's title and goal are editable from the chapter overview", async ({
+// Creating a chapter is not the only moment its title and text can be
+// said: a chapter created without a description gets its text here, and a
+// chapter a generator run created under its slug is renamed here — otherwise
+// the overview would list a heading nobody can correct. Both halves go through
+// the documented endpoints with their rev guard: the title is a PROPERTY (the
+// shared properties dialog), the description is the TEXT.
+test("a chapter's title and text are editable from the chapter overview", async ({
   page,
   api,
 }) => {
@@ -812,18 +905,28 @@ test("a chapter's title and goal are editable from the chapter overview", async 
   // invalidated.
   await expect(page.getByRole("heading", { level: 2, name: "Kapitel 1: Salzhafen" })).toBeVisible();
 
-  // --- the goal, through the edit dialog ---
+  // --- the text, through the edit dialog ---
   await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
   dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kapitel bearbeiten: Kapitel 1: Salzhafen");
+  await expect(dialog).toContainText(
+    "Der Text des Kapitels als Markdown. Die Kapitelübersicht zeigt ihn unter dem Titel.",
+  );
   const body = dialog.getByRole("textbox", { name: "Text" });
-  await expect(body).toHaveValue(/Ziel des Kapitels/);
-  await body.fill("## Ziel des Kapitels\n\nDen Leuchtturm wieder anzünden.");
+  await expect(body).toHaveValue(/Leuchtfeuer/);
+  await body.fill("");
+  await expect(body).toHaveAttribute(
+    "placeholder",
+    "Worum es in diesem Kapitel geht und was die Gruppe erreichen soll",
+  );
+  // A heading is text like any other now: it is shown, and so is what follows.
+  await body.fill("## Worum es geht\n\nDen Leuchtturm wieder anzünden.");
   await dialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // The overview's goal line reads that section.
-  await expect(page.getByText("Ziel: Den Leuchtturm wieder anzünden.")).toBeVisible();
+  // The overview shows the whole text, rendered.
+  await expect(page.getByRole("heading", { level: 2, name: "Worum es geht" })).toBeVisible();
+  await expect(page.getByText("Den Leuchtturm wieder anzünden.", { exact: true })).toBeVisible();
   const stored = await api.entry("01-salzhafen");
   expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
   expect(stored.body).toContain("Den Leuchtturm wieder anzünden.");
@@ -837,26 +940,26 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
   const dialog = page.getByRole("dialog");
   const body = dialog.getByRole("textbox", { name: "Text" });
-  await expect(body).toHaveValue(/Ziel des Kapitels/);
+  await expect(body).toHaveValue(/Leuchtfeuer/);
 
   // A SECOND WRITER while the dialog stands (there is no "external edit" any
   // more — e2e/README.md): the API writes with a fresh token.
-  await api.writeBody("01-salzhafen", "## Ziel des Kapitels\n\nVon der API.\n");
+  await api.writeBody("01-salzhafen", "Von der API.\n");
 
-  await body.fill("## Ziel des Kapitels\n\nAus dem Dialog.");
+  await body.fill("Aus dem Dialog.");
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
   // Nothing was written, the dialog says so, and the typed text is still
   // there.
   await expect(dialog.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  await expect(body).toHaveValue("## Ziel des Kapitels\n\nAus dem Dialog.");
+  await expect(body).toHaveValue("Aus dem Dialog.");
   expect((await api.entry("01-salzhafen")).body).toContain("Von der API.");
 
   // Forcing writes the same field on top of the row as it stands. The save
   // label is addressed exactly: the conflict line's force action contains it.
   await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByText("Ziel: Aus dem Dialog.")).toBeVisible();
+  await expect(page.getByText("Aus dem Dialog.", { exact: true })).toBeVisible();
 });
 
 // The chapter status control (critical path 1). The overview decides which
@@ -1288,8 +1391,8 @@ test.describe("the scene order of a chapter", () => {
     await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
     const dialog = page.getByRole("dialog");
     const chapterText = dialog.getByRole("textbox", { name: "Text" });
-    await expect(chapterText).toHaveValue(/Ziel des Kapitels/);
-    await chapterText.fill("## Ziel des Kapitels\n\nDen Leuchtturm wieder anzünden.");
+    await expect(chapterText).toHaveValue(/Leuchtfeuer/);
+    await chapterText.fill("Den Leuchtturm wieder anzünden.");
     const second = await orderNode(api);
     const again = ["steg", "keller", "lighthouse-arrival", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });

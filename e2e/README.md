@@ -278,6 +278,10 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   `body` eines erzwungenen Objekts ist es Text, der Lauf muss also ohne eine
   einzige Korrekturrunde `done` erreichen (zwei Aufrufe: Gliederung + eine
   Szene).
+- `E2E_DESCRIBE_ANYWAY` → die Gliederung beschreibt das Kapitel auch dann,
+  wenn der Lauf in ein **bestehendes** geht — ein Modell, das die Regel des
+  Prompts übergeht. Sonst trägt die Gliederung eine Beschreibung nur, wenn der
+  Kontext die Zeile `neues Kapitel: ja` hat.
 - `E2E_HOLD_LAST` → nur die **letzte** Szene wird gehalten, die anderen
   antworten normal. Das ist die Lage, die ein Neustart mitten im Lauf braucht:
   fertige Teile zum Behalten und einen in Flug. (Der Name beginnt bewusst
@@ -515,16 +519,26 @@ Zwei Pfade tragen das Kapitel als eigenen Eintrag.
   der Prüfschritt ist persistent, also ist genau das der Normalfall. Titel
   und id des neuen Kapitels liegen am Job
   (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
-  Spec prüft sie am Kapitel-Eintrag UND in der Übersicht.
+  Spec prüft sie am Kapitel-Eintrag UND in der Übersicht. Die Gliederung
+  beschreibt das neue Kapitel (der Stub antwortet mit einer Beschreibung,
+  sobald der Kontext `neues Kapitel: ja` trägt): „Entwürfe prüfen“ zeigt sie
+  als „Beschreibung des Kapitels“, und der Kapitel-Eintrag hat sie danach als
+  Text. Ein Lauf in ein bestehendes Kapitel mit `E2E_DESCRIBE_ANYWAY` zeigt,
+  dass eine trotzdem gelieferte Beschreibung den Text dieses Kapitels nicht
+  erreicht.
   Zu beachten: ein Bulk-„Übernehmen" lässt **unentschiedene** vorgeschlagene
   Einträge offen (Regel des Prüfschritts), der Prüfschritt bleibt stehen und
   meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.
 - **Pfad 1** (`chapter-overview.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
   wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte
-  Eigenschaften-Dialog), „Kapitel bearbeiten" (Kapiteltext, aus dem die
-  Zielzeile kommt, inkl. 409 gegen einen zweiten Schreiber) und das
+  Eigenschaften-Dialog), „Kapitel bearbeiten" (der Kapiteltext, den die
+  Übersicht zeigt, inkl. 409 gegen einen zweiten Schreiber) und das
   **Status-Bedienelement** in der Kapitelzeile, dessen „Aktiv" die Fahne in
-  **einem** Serveraufruf umhängt.
+  **einem** Serveraufruf umhängt. Den Text von Kapitel und Kampagne zeigt die
+  Übersicht ganz und gerendert, auf vier Zeilen begrenzt: „Mehr anzeigen“
+  steht nur bei einem längeren Text da (der Spec schreibt dafür einen langen
+  Text über die API), öffnet und schließt ihn, und ein Verweis im
+  abgeschnittenen Teil öffnet ihn, sobald er den Tastatur-Fokus bekommt.
 
 Zwei Fallen für neue Specs auf diesen Pfaden:
 

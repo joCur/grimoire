@@ -131,19 +131,30 @@ describe("the per-campaign creates", () => {
     dropStore();
   });
 
-  test("a chapter takes its id from the title and its goal into the section", async () => {
+  test("a chapter takes its id from the title and its description as its text", async () => {
     const chapter = await created<EntryResponse>("/campaigns/nordwind/chapters", {
       title: "01 Salzhafen",
-      goal: "Die Gruppe kommt an",
+      description: "  Die Gruppe kommt an.\n\nUnd sieht sich um.\n\n",
     });
     expect(chapter.path).toBe("01-salzhafen");
     expect(chapter.properties.title).toBe("01 Salzhafen");
-    expect(chapter.body).toBe("## Ziel des Kapitels\n\nDie Gruppe kommt an\n");
+    // Verbatim, trimmed, one closing newline — no heading around it.
+    expect(chapter.body).toBe("Die Gruppe kommt an.\n\nUnd sieht sich um.\n");
   });
 
-  test("a chapter without a goal has an empty body, not an empty section", async () => {
+  test("a chapter without a description has an empty text", async () => {
     const chapter = await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "Prolog" });
     expect(chapter.body).toBe("");
+    const blank = await created<EntryResponse>("/campaigns/nordwind/chapters", {
+      title: "Epilog",
+      description: "  \n ",
+    });
+    expect(blank.body).toBe("");
+  });
+
+  test("`goal` is no field of the chapter create — the text is its `description`", async () => {
+    const res = await post("/campaigns/nordwind/chapters", { title: "Prolog", goal: "Ankommen" });
+    expect(res.status).toBe(400);
   });
 
   test("a second chapter with the same title is a 409 with a suggestion", async () => {

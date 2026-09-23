@@ -1624,3 +1624,35 @@ Danach sucht im Code von `app/`, `server/` und `shared/` allein `## If:` eine
 Überschrift per Text — und die Kapitelübersicht das Kapitelziel unter
 `## Ziel des Kapitels`, das die eigene Änderung ablöst, die unter „Folgen"
 genannt ist.
+
+### Nachtrag 2026-09-23: Kapitel und Kampagne zeigen ihren ganzen Text
+
+Vierte Anwendung des Grundsatzes, und die letzte Stelle, die eine Überschrift
+per Text suchte. Die Kapitelübersicht zeigte als „Ziel: …“ den ersten Absatz
+unter `## Ziel des Kapitels`; was der DM anders schrieb, fehlte.
+
+- **Anzeige:** Die Kapitelübersicht zeigt den **ganzen Text** des Kapitels,
+  der Kopf unter der Kurzbeschreibung den ganzen Text der Kampagne — beide
+  durch denselben Renderer wie jeder Text (Callouts, `## If:`, `[[id]]`),
+  auf wenige Zeilen begrenzt und aufklappbar. Ob der Text länger ist, wird
+  gemessen; „Mehr anzeigen“ steht nur dann da. Ausgewählt wird nichts, und
+  keine Überschrift hat für die Anzeige eine Bedeutung.
+- **Anlegen:** „Kapitel anlegen“ schreibt die Beschreibung aus dem Dialog als
+  Text, so wie sie getippt wurde — getrimmt, mit einem abschließenden
+  Zeilenumbruch, ohne Überschrift davor. Das Feld heißt auf der Leitung
+  `description` (`POST …/chapters { title, description?, id? }`).
+- **Lauf „Neues Kapitel“:** Die Gliederung trägt `chapterDescription`
+  (`shared/schema/outline.schema.json`, nullable). Nur der Gliederungs-Aufruf
+  eines Laufs, der sein Kapitel anlegt, erfährt das (Kontextzeile
+  `neues Kapitel: ja`) und beschreibt das Kapitel aus dem Quellmaterial.
+  „Entwürfe prüfen“ zeigt die Beschreibung lesend, und das Übernehmen legt das
+  Kapitel mit ihr als Text an (ADR #18: das Kapitel entsteht aus dem Lauf).
+  Für einen Lauf in ein bestehendes Kapitel verwirft die Validierung das Feld,
+  und der Text eines Kapitels, das beim Übernehmen schon existiert, bleibt
+  unberührt. Fehlt die Beschreibung, beginnt das Kapitel mit leerem Text; das
+  kostet keinen Korrektur-Turn.
+- `app/src/lib/md-section.ts` ist entfernt. Im Code von `app/`, `server/` und
+  `shared/` sucht damit allein `## If:` eine Überschrift per Text.
+- **Keine Überführung** (ADR #28, Regel 2): ein bestehendes Kapitel mit
+  `## Ziel des Kapitels` zeigt diese Überschrift schlicht als Teil seines
+  Textes. Es gibt keine Migration und keinen Datenschritt.

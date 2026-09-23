@@ -2,7 +2,7 @@
 //
 // A chapter is the one thing the overview lists and would otherwise not be
 // able to edit: the title would stay whatever the create action was given (a
-// slug, for a chapter a generator run created), and a goal left out at
+// slug, for a chapter a generator run created), and a description left out at
 // creation time could never be added. So a chapter gets the campaign header's
 // vocabulary, per chapter:
 //
@@ -12,8 +12,8 @@
 //                and its 409 keeps the typed values. Reusing it is the point:
 //                a second chapter form is how the wording and the conflict
 //                handling drift apart.
-//   EDIT         the chapter entry's TEXT, which is where the goal line the
-//                overview shows comes from. Its own dialog (not the reading
+//   EDIT         the chapter entry's TEXT, which the overview shows under
+//                the chapter's title. Its own dialog (not the reading
 //                view's inline editor — the overview is a list, it does not
 //                turn into an editing surface), same editing session.
 //
@@ -28,8 +28,8 @@
 // enforced in two places is a rule that will disagree with itself.
 //
 // The chapter ENTRY is what carries the rev, so both dialogs need it. It is
-// the query the overview already runs for the goal line, passed in rather than
-// fetched twice.
+// the query the overview already runs for the chapter's text, passed in rather
+// than fetched twice.
 
 import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
@@ -115,7 +115,7 @@ export function ChapterActions({
 }
 
 /**
- * The edit dialog — the chapter's markdown text, where the goal lives.
+ * The edit dialog — the chapter's markdown text, the one the overview shows.
  *
  * The version it writes against is the one the dialog opened with, held by the
  * editing session: the 5s version poll refetches this entry while the dialog
@@ -154,7 +154,9 @@ function ChapterBodyDialog({
       setBody(stored.body);
       setBaseline(stored.body);
     },
-    // The goal line lives in the overview's tree, and the text is indexed.
+    // The overview reads the text through the entry query the save already
+    // refreshes; the tree carries the chapter's title, and the text is
+    // indexed.
     invalidateOnSuccess: [
       ["tree", campaign],
       ["search", campaign],

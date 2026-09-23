@@ -50,6 +50,8 @@ export interface GenerateRequest {
   context: {
     /** Target chapter of a scene run; absent for an NPC run. */
     chapter?: string;
+    /** The run creates `chapter` — set on the outline call of such a run only. */
+    newChapter?: boolean;
     npcs: Array<{ id: string; name: string }>;
     locations: Array<{ id: string; name: string }>;
     /** Id the DM pinned for the generated entry (NPC run) — absent: free choice. */
@@ -238,9 +240,9 @@ export const KNOWLEDGE_HEADING =
   "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
 
 /**
- * Heading of the augment run's „this is what already stands there" block
- *. A constant for the same reason KNOWLEDGE_HEADING is one: the
- * prompt test asserts on it, and the E2E stub reads the prompt by it.
+ * Heading of the augment run's „this is what already stands there" block.
+ * A constant for the same reason KNOWLEDGE_HEADING is one: the prompt test
+ * asserts on it, and the E2E stub reads the prompt by it.
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
 
@@ -256,14 +258,23 @@ export const INSTRUCTION_HEADING = "## Anweisung des DM";
 export const OUTLINE_HEADING = "## Gliederung des Durchlaufs — verbindlich, ids unverändert übernehmen";
 
 /**
- * Heading of the line that says WHICH scene of the outline this call writes
- *. It stands in the VARIABLE half, above the excerpt: the
+ * Heading of the line that says WHICH scene of the outline this call writes.
+ * It stands in the VARIABLE half, above the excerpt: the
  * outline block above it is byte-identical for every part of a run, which is
  * what makes the cached prefix worth anything. A constant for the same reason
  * the others are — the prompt test asserts on it and the E2E stub reads the
  * prompt by it.
  */
 export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
+
+/**
+ * The context line of a new-chapter run's outline call: the chapter in the
+ * `chapter:` line does not exist yet, so the outline also describes it
+ * (`chapterDescription`, outline-system-prompt.md). A constant because the
+ * outline schema's description and the prompt name this exact line, and the
+ * E2E stub reads the prompt by it.
+ */
+export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
 
 /**
  * The existing entry of an augment run, as PROMPT TEXT: the `properties` and
@@ -328,6 +339,7 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     // and a pinned id only exists when the DM typed one.
     [
       ...(req.context.chapter === undefined ? [] : [`chapter: ${req.context.chapter}`]),
+      ...(req.context.newChapter === true ? [NEW_CHAPTER_LINE] : []),
       `npcs: ${npcList || "(keine)"}`,
       `locations: ${locList || "(keine)"}`,
       ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),

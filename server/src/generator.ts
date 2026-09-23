@@ -63,7 +63,7 @@ import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
 import { requireCampaign } from "./store/campaigns";
-import { buildTree, chapterExists } from "./store/chapters";
+import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
 import { applyDrafts, draftTargetExists } from "./store/drafts";
@@ -257,6 +257,11 @@ export interface CampaignContext {
 /** A scene run additionally targets one chapter. */
 export interface SceneContext extends CampaignContext {
   chapter: string;
+  /**
+   * The run creates its chapter (a „Neues Kapitel" run): the outline then
+   * also describes that chapter. False for a run into an existing chapter.
+   */
+  newChapter: boolean;
 }
 
 /** A chapter id is a single, non-hidden path segment. */
@@ -336,16 +341,17 @@ async function collectNpcContext(campaign: string, npcId?: string): Promise<Camp
 /**
  * Collect the prompt context of a scene run. Runs the same target checks
  * again (they are cheap and the pipeline must never depend on a caller having
- * done them); the chapter contributes only its id to the context, so nothing
- * else changes when the chapter (and its chapter entry) is still missing.
+ * done them); the chapter contributes only its id — and, for a new-chapter
+ * run, that fact — to the context, so nothing else changes when the chapter
+ * (and its chapter entry) is still missing.
  */
 export async function collectSceneContext(
   campaign: string,
   chapter: string,
-  allowMissingChapter = false,
+  newChapter = false,
 ): Promise<SceneContext> {
-  await assertGenerateTarget(campaign, chapter, allowMissingChapter);
-  return { ...(await collectContext(campaign)), chapter };
+  await assertGenerateTarget(campaign, chapter, newChapter);
+  return { ...(await collectContext(campaign)), chapter, newChapter };
 }
 
 /**
@@ -1168,15 +1174,6 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
 }
 
 /**
- * The new-chapter flow: `chapter` + `chapterTitle` mean "the
- * drafts go into a chapter that does not exist yet". Returns the
- * chapter entry to create in the same batch, or null when the
- * chapter is already there (idempotent — an existing chapter is not a
- * conflict). Minimal properties per the format
- * (id/title/status: planned — a generator-created chapter is upcoming,
- * never the active one); the body stays empty and degrades.
- */
-/**
  * The chapter target of a new-chapter run, decided from the JOB.
  *
  * The app must not decide it from its own state: the review state is
@@ -1194,24 +1191,49 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
  */
 export async function jobChapterTarget(
   campaign: string,
-  job: { newChapter: boolean; chapter?: string; newChapterTitle?: string },
+  job: {
+    newChapter: boolean;
+    chapter?: string;
+    newChapterTitle?: string;
+    pipeline?: { outline?: { chapterDescription?: string } };
+  },
   bodyChapter: unknown,
   bodyChapterTitle: unknown,
 ): Promise<ApplyTarget | null> {
+  // The description is the OUTLINE's (it read the source material) and only
+  // a new-chapter run's outline has one, so it comes from the job on either
+  // path: the override names the chapter, it does not describe it.
+  const description = job.newChapter ? job.pipeline?.outline?.chapterDescription : undefined;
   if (bodyChapter !== undefined || bodyChapterTitle !== undefined) {
-    return newChapterTarget(campaign, bodyChapter, bodyChapterTitle);
+    return newChapterTarget(campaign, bodyChapter, bodyChapterTitle, description);
   }
   if (!job.newChapter || job.chapter === undefined) return null;
   // No stored title (a run started before the column existed) falls back to
   // the id: a chapter called by its slug is at least readable in the
   // overview, an invisible one is not.
-  return newChapterTarget(campaign, job.chapter, job.newChapterTitle ?? job.chapter);
+  return newChapterTarget(
+    campaign,
+    job.chapter,
+    job.newChapterTitle ?? job.chapter,
+    description,
+  );
 }
 
+/**
+ * The new-chapter flow: `chapter` + `chapterTitle` mean "the
+ * drafts go into a chapter that does not exist yet". Returns the
+ * chapter entry to create in the same batch, or null when the
+ * chapter is already there (idempotent — an existing chapter is not a
+ * conflict, and its text is never touched). Minimal properties per the format
+ * (id/title/status: planned — a generator-created chapter is upcoming,
+ * never the active one); the text is the run's chapter description, or empty
+ * when there is none.
+ */
 export async function newChapterTarget(
   campaign: string,
   chapter: unknown,
   chapterTitle: unknown,
+  description?: string,
 ): Promise<ApplyTarget | null> {
   if (chapter === undefined && chapterTitle === undefined) return null;
   if (typeof chapter !== "string" || typeof chapterTitle !== "string") {
@@ -1223,7 +1245,11 @@ export async function newChapterTarget(
   const rel = chapterPath(chapter);
   // An existing chapter is not a conflict — idempotent, as before.
   if (await chapterExists(campaign, chapter)) return null;
-  return { rel, properties: { id: chapter, title, status: "planned" }, body: "" };
+  return {
+    rel,
+    properties: { id: chapter, title, status: "planned" },
+    body: newChapterBody(description),
+  };
 }
 
 /**

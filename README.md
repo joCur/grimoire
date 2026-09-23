@@ -105,7 +105,9 @@ Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
 | `name` | Anzeigename in der UI; fehlt er, ist der Anzeigename die id |
 | `description` | Kurzbeschreibung, eine Zeile |
 
-Der Text ist freier Notizraum für Kampagnenweites.
+Der Text ist freier Notizraum für Kampagnenweites. Der Kopf der
+Kapitelübersicht zeigt ihn unter der Kurzbeschreibung: ganz und gerendert, auf
+wenige Zeilen begrenzt und aufklappbar. Ohne Text steht dort nichts.
 
 ### Kapitel
 
@@ -121,7 +123,13 @@ auf `planned`. Die API schreibt nur diese drei Werte (400 sonst), und die
 Spalte selbst lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint
 (DECISIONS #25), kein degradierendes Freitextfeld.
 
-Im Text liegt das Kapitelziel (Abschnitt `## Ziel des Kapitels`).
+Der Text ist die Beschreibung des Kapitels — worum es geht und was die Gruppe
+erreichen soll. Die Kapitelübersicht zeigt ihn unter dem Titel, ganz und
+gerendert wie jeder Text, auf wenige Zeilen begrenzt und aufklappbar; ob und
+welche Überschriften er hat, ändert daran nichts (ADR #29). Die Beschreibung
+aus „Kapitel anlegen“ wird der Text so, wie sie getippt wurde, ohne Überschrift
+davor; ein Lauf „Neues Kapitel“ legt sein Kapitel mit der Beschreibung aus
+seiner Gliederung an (siehe Generator).
 
 Die **offenen Fäden** — die Handlungsstränge, die das Kapitel trägt — sind
 kein Text, sondern eine **Liste am Kapitel** (ADR #29). Eine Zeile ist
@@ -414,7 +422,10 @@ Szenen und ihre ids fest, danach wird jede Szene und jeder neue Eintrag
 einzeln geschrieben. Ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
 wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
-angezeigt.
+angezeigt. Legt der Lauf sein Kapitel neu an, beschreibt die Gliederung es aus
+dem Quellmaterial; „Entwürfe prüfen“ zeigt diese Beschreibung, und das
+Übernehmen legt das Kapitel mit ihr als Text an. Den Text eines bestehenden
+Kapitels ändert kein Lauf.
 
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
 über die Provider-API **erzwingt**. Ein Eintrags-Aufruf (Szene, NPC, Ort,
