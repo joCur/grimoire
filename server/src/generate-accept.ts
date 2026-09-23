@@ -12,7 +12,6 @@ import {
   draftSceneId,
   getJob,
   markWrittenInTx,
-  openPartPaths,
   outlineSceneNumbers,
 } from "./generate-jobs";
 import {
