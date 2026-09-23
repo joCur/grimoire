@@ -383,6 +383,7 @@ ein Spiegel erzeugt, wird nicht gebaut.
   generierte, **committete** SQL-Dateien und werden beim Boot in einer
   Transaktion angewandt. Downgrade wird nicht unterstützt; Rückweg ist
   Volume-Sicherung plus Image-Rollback auf einen älteren Versions-Tag (ADR #12).
+  Die Kette beginnt seit ADR #28 mit einer Baseline, dem Schema von v0.7.
 - **FTS5 statt Fuse.js** für die Suche, als handgeschriebene
   Custom-Migration (Tokenizer `unicode61 remove_diacritics 2`, Ranking
   `bm25(search_fts, 10, 6, 4, 1)`), explizit aus der Store-Schicht gepflegt.
@@ -689,6 +690,13 @@ Reihenfolge, die der DM setzt (ADR #27). Es gibt keine Gruppe mehr, die aus
 Leitung heißt das `ChapterNode.scenes` statt `ChapterNode.groups`;
 `SceneGroup` entfällt.
 
+### Nachtrag 2026-09-23: der Datenschritt ist entfallen (ADR #28)
+
+Der Datenschritt vor dem Migrator (`db/group-migration.ts`) und seine
+Boot-Meldung sind entfernt. Jede unterstützte Datenbank hat Migration 0009
+hinter sich, und die ist in der Baseline aufgegangen: `scenes.group_slug`
+gibt es in keinem Schema mehr, das der Server öffnet.
+
 ## 18. Das Kapitel entsteht aus dem Lauf, sein Status ist ein Enum
 
 **Entscheidung (a): Das Kapitel eines „Neues Kapitel"-Laufs entsteht aus dem
@@ -801,6 +809,13 @@ keinen; `ON DELETE NO ACTION` sagt nur, dass ein solcher Weg eine eigene
 Entscheidung braucht) und ein Umgang mit Referenzen zwischen Kampagnen (die
 Fremdschlüssel schließen sie aus, weil `campaign_id` Teil jeder Referenz
 ist).
+
+### Nachtrag 2026-09-23: die Vorabprüfung ist entfallen (ADR #28)
+
+`db/reference-preflight.ts` ist entfernt. Jede unterstützte Datenbank hat die
+Constraints aus Migration 0014 bereits, und die Baseline legt sie für eine
+neue Datenbank von Anfang an. Die Fremdschlüssel selbst und ihre 400 auf dem
+Schreibweg gelten unverändert.
 
 ## 20. Fixtures sind JSON-Einträge, es gibt keinen Import
 
@@ -984,6 +999,14 @@ Generator selbst.
   Schnittstelle, und er ist keiner in der Praxis: ein Entwurf lebt nur
   zwischen einem Lauf und seinem Übernehmen.
 
+### Nachtrag 2026-09-23: kein Boot-Durchgang mehr für die alte Form (ADR #28)
+
+`failLegacyDraftJobs` ist entfernt. Jede unterstützte Datenbank ist mit v0.7
+gestartet, und dieser Start hat jeden Job in der alten Form bereits auf
+`failed` gesetzt. Der Code `job_draft_format` wird nicht mehr gesendet; er
+bleibt in der append-only-Liste und im Katalog, weil ein so markierter Job
+ihn weiter im Fehlerbody trägt.
+
 ## 25. Status und Typ sind Constraints der Datenbank
 
 **Entscheidung:** Die vier geschlossenen Felder des Datenmodells —
@@ -1046,6 +1069,14 @@ ist eine Regel für den **Leser**: ein unbekannter Callout und eine unbekannte
   Sekunde, die diese Genauigkeit zulässt, und die Lesung ändert sich nicht.
   Deshalb läuft dieser Vorlauf — anders als die beiden über ihm — NACH dem
   Migrator; jede andere Form bleibt unangetastet und wird von ihm gemeldet.
+
+### Nachtrag 2026-09-23: die Vorläufe sind entfallen (ADR #28)
+
+`db/status-preflight.ts` und `db/timestamp-preflight.ts` sind entfernt. Jede
+unterstützte Datenbank hat die CHECK-Constraints aus Migration 0016 und die
+Sekunden aus 0017 hinter sich; beide Migrationen sind in der Baseline
+aufgegangen. Die Constraints, ihre 400 auf dem Schreibweg und die eine Form
+der Zeitstempel samt der 400 des Session-Patches gelten unverändert.
 
 ## 26. Listen sind keine Einträge
 
@@ -1142,6 +1173,12 @@ einer Session (`## Threads`) bleibt, wo er ist. Die Suche indexiert weiterhin
 nur Glossar-Begriffe und die fünf Eintrags-Arten — Log-Zeilen und Ideen
 durchsuchbar zu machen wäre ein eigenes Feature und ist hier nicht
 entschieden.
+
+### Nachtrag 2026-09-23: der Vorlauf ist entfallen (ADR #28)
+
+`db/list-rows-preflight.ts` ist entfernt. Jede unterstützte Datenbank hat
+Migration 0018 hinter sich, und die ist in der Baseline aufgegangen: die
+Spalte `raw` gibt es in keinem Schema mehr, das der Server öffnet.
 
 ## 27. Die Reihenfolge der Szenen im Kapitel ist gesetzt, nicht abgeleitet
 
@@ -1341,3 +1378,81 @@ hinweg — die Kapitel haben ihre eigene (`chapters.pos`). Sortieren nach
 Status, Tag oder Ort als Ansicht: die Kapitelübersicht filtert, sie sortiert
 nicht um. Und der Eventualszenen-Block bekommt keine zweite Ordnung — er ist
 derselbe `pos`-Lauf, nur getrennt gezeigt.
+
+### Nachtrag 2026-09-23: die Migration heißt jetzt `0001` (ADR #28)
+
+Die Migration steht seit der Baseline als
+`0001_scene_pos_per_chapter.sql` im Verzeichnis, Inhalt und `when` im Journal
+unverändert. Der Datenschritt aus ADR #17, auf den der Vergleich oben
+verweist, ist entfernt.
+
+## 28. v0.7 ist die Baseline
+
+**Entscheidung:** Grimoire v0.7 ist die erste unterstützte Version.
+Installationen vor v0.7 werden nicht unterstützt: der Server erkennt eine
+solche Datenbank nicht und behandelt sie nicht gesondert — es gibt keinen
+Versions-Riegel. Die Migrationen `0000`–`0018`, die jede v0.7-Datenbank
+durchlaufen hat, sind zu **einer** Baseline zusammengefasst
+(`server/src/db/migrations/0000_baseline.sql`). Die spätere Migration aus
+ADR #27 steht als `0001_scene_pos_per_chapter.sql` unverändert darauf.
+
+**Kontext:** Jede Datenbank, die einmal mit v0.7 gestartet ist, hat die
+Migrationen 0000–0018 und alle Vorabprüfungen davor bestanden, und eine
+Installation von vor v0.7 gibt es nicht mehr. Der Code, der ältere Stände
+über diese Schwelle brachte, hatte damit keinen Anwendungsfall mehr, aber
+weiter Pflegekosten: fünf Prüf- und Datenschritte rund um den Migrator, ein
+Boot-Durchgang für Generator-Jobs, ihre Tests und neunzehn Migrationen, die
+jede neue Instanz nacheinander durchlief, um am Ende dasselbe Schema zu haben.
+
+**Wie die Baseline greift:** Drizzles Migrator wendet eine Migration nur an,
+wenn ihr `when` im Journal größer ist als der `created_at` der zuletzt
+eingetragenen; Hashes vergleicht er nicht. Die Baseline trägt deshalb das
+`when` der bisherigen `0018` (`1789757329900`), `0001` das der bisherigen
+`0019` (`1789760000000`). Daraus folgt:
+
+| Datenbank | Baseline | `0001` |
+| --------- | -------- | ------ |
+| leer (frische Installation) | angewandt | angewandt |
+| v0.7 | übersprungen | angewandt |
+| v0.8 | übersprungen | übersprungen |
+
+Diese beiden `when`-Werte ändern sich nie. Neue Migrationen entstehen wie
+bisher über `drizzle-kit generate` und stehen auf `0001`.
+
+**Inhalt der Baseline:** genau das Schema einer über 0000–0018 migrierten
+Datenbank — Tabellen mit derselben Spaltenreihenfolge, Primär- und
+Fremdschlüssel, CHECK-Constraints, der eine Index und die FTS5-Tabelle. Es
+ist aus dem `sqlite_master` einer frisch migrierten Datenbank abgeleitet und
+im PR einmalig verglichen, nicht als bleibender Test (Migrationen werden
+nicht getestet, CLAUDE.md). Ohne Gegenstück bleibt nur SQLites interne
+Tabelle `sqlite_sequence`: eine längst gelöschte Tabelle mit
+`AUTOINCREMENT` hat sie hinterlassen, sie ist leer und lässt sich nicht per
+DDL anlegen. Das Snapshot in `meta/` ist das der bisherigen `0018`, sodass
+`drizzle-kit generate` gegen `schema.ts` weiter nur echte Änderungen findet.
+
+**Entfällt:**
+
+- der Datenschritt vor dem Migrator (`db/group-migration.ts`, ADR #17) und
+  die Vorabprüfungen (`db/reference-preflight.ts`, ADR #19;
+  `db/status-preflight.ts` und `db/timestamp-preflight.ts`, ADR #25;
+  `db/list-rows-preflight.ts`, ADR #26) samt Tests und Boot-Meldungen.
+  `openDb` öffnet die Datei, setzt die PRAGMAs und migriert, sonst nichts;
+- der Boot-Durchgang für Jobs in der alten Entwurfsform (ADR #24). Der Code
+  `job_draft_format` bleibt in der append-only-Liste, wird aber nicht mehr
+  gesendet.
+
+**Bleibt:** die Constraints selbst — Fremdschlüssel, CHECK, die eine Form der
+Zeitstempel — und ihre Fehlerpfade auf dem Schreibweg. Sie sind das
+Verhalten, nicht der Übergang. Ebenso `failInterruptedJobs`: ein Neustart
+kann jederzeit einen laufenden Job treffen, das ist kein Übergangscode.
+
+**Verworfene Alternativen:**
+
+- **Ein Versions-Riegel**, der eine Datenbank von vor v0.7 erkennt und mit
+  einem Hinweis abweist. Er wäre genau der Übergangscode, der hier entfällt,
+  für Installationen, die es nicht gibt.
+- **Nur die Prüfungen entfernen, die Migrationen stehen lassen.** Die alten
+  Migrationen 0009, 0014, 0016 und 0018 setzen voraus, dass ihre Prüfung
+  vorher lief; ohne sie wären sie Code, der auf einer Datenbank mitten im
+  Umbau scheitern kann. Eine neue Instanz braucht nur den Endstand, und den
+  legt die Baseline in einem Schritt an.

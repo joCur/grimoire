@@ -37,41 +37,6 @@ if (import.meta.main) {
   void store;
   const info = (await import("./store/handle")).storeInfo();
   console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
-  // The one-time step that turned the group directories of the
-  // pre-database storage into `location` references. It names EVERY scene
-  // whose address moved — an old link still resolves (the app follows the
-  // response's `path`), but a DM who wrote one down should see it.
-  const groupMigration = info?.groupMigration;
-  if (groupMigration !== undefined && groupMigration.moved.length > 0) {
-    console.log(
-      `${groupMigration.moved.length} scene(s) moved to the group their location names:`,
-    );
-    for (const move of groupMigration.moved) {
-      console.log(
-        `  · [${move.campaignId}] ${move.sceneId}: ` +
-          `${move.from === "" ? "(chapter level)" : move.from} -> ` +
-          `${move.to === "" ? "(chapter level)" : move.to}`,
-      );
-    }
-  }
-  // …and the scenes it did NOT touch: a `location` nothing can be derived
-  // from stays exactly as it was, and only the DM can decide what it should
-  // be. Loud on purpose — it is the one case the step cannot finish.
-  if (groupMigration !== undefined && groupMigration.unresolved.length > 0) {
-    console.log(
-      `${groupMigration.unresolved.length} scene(s) name a location that yields no id — ` +
-        `left unchanged, please set one:`,
-    );
-    for (const open of groupMigration.unresolved) {
-      console.log(`  · [${open.campaignId}] ${open.sceneId}: "${open.location}"`);
-    }
-  }
-  if (groupMigration !== undefined && groupMigration.createdLocations.length > 0) {
-    console.log(
-      `${groupMigration.createdLocations.length} location(s) referenced by a scene had no ` +
-        `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
-    );
-  }
   // Jobs are rows, so a restart keeps a finished generation — but a run that
   // was in flight died with the previous process and is reported as failed.
   // Say so, it explains the app's message.
@@ -79,14 +44,6 @@ if (import.meta.main) {
     console.log(
       `${info.interruptedJobs} generate job(s) were running at the last shutdown — ` +
         "marked as failed (restart the run).",
-    );
-  }
-  // Drafts are `{ properties, body }` (ADR #24); a job whose stored drafts
-  // are one markdown text each is failed rather than converted.
-  if (info !== undefined && info.legacyDraftJobs > 0) {
-    console.log(
-      `${info.legacyDraftJobs} generate job(s) carried drafts in the old format — ` +
-        "marked as failed (start the run again).",
     );
   }
 

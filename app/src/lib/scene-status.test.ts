@@ -161,9 +161,9 @@ describe("status labels", () => {
   });
 
   test("a value from outside the four is not a status at all", () => {
-    // The column is a CHECK constraint and the preflight refuses a database
-    // that holds anything else (ADR #25), so there is no value left for the
-    // renderer to fall back for — the type is what says so.
+    // The column is a CHECK constraint, so the database cannot hold anything
+    // else (ADR #25) and there is no value left for the renderer to fall back
+    // for — the type is what says so.
     // @ts-expect-error not one of draft | ready | played | dropped
     const foreign: SceneStatus = "verschollen";
     expect(SCENE_STATUSES as readonly string[]).not.toContain(foreign);

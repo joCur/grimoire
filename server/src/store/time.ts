@@ -12,10 +12,10 @@
 // needs a fixed one fakes the system clock.
 //
 // The shape is CLOSED, not guessed at: the app is the only writer (ADR #13),
-// it writes exactly this format, and the boot pre-flight
-// (db/timestamp-preflight.ts) refuses a start over a stored value in any other
-// shape. So the reader tolerates no variants — no second-less value, no space
-// instead of the `T`, no bare date.
+// it writes exactly this format, and the one write that carries a value from
+// outside — a session PATCH — refuses any other shape (store/sessions.ts). So
+// the reader tolerates no variants — no second-less value, no space instead
+// of the `T`, no bare date.
 
 import { format, isValid, parse } from "date-fns";
 
@@ -27,8 +27,7 @@ export const LOCAL_DATE_TIME_SECONDS = "yyyy-MM-dd'T'HH:mm:ss";
 
 /**
  * The same shape spelled for a HUMAN — the pattern above with the quoting
- * `date-fns` needs stripped out. It is what the boot pre-flight's report and
- * the write path's refusal name, so both say the shape the same way.
+ * `date-fns` needs stripped out. It is what the write path's refusal names.
  */
 export const LOCAL_DATE_TIME_SHAPE = LOCAL_DATE_TIME_SECONDS.replace(/'/g, "");
 
@@ -46,7 +45,7 @@ export const LOCAL_DATE_TIME_SHAPE = LOCAL_DATE_TIME_SECONDS.replace(/'/g, "");
  * direct database write left behind — yields undefined, and the caller reads
  * that as "says nothing about when". The exactness comes from formatting the
  * parsed moment back: `date-fns` `parse` alone accepts a one-digit hour and
- * trailing blanks, and the pre-flight and the reader must agree on ONE shape.
+ * trailing blanks, and the write guard and the reader must agree on ONE shape.
  */
 export function localDateTimeToMs(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;

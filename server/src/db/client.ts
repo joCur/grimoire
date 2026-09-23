@@ -21,11 +21,6 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
-import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
-import { assertMigrationReady } from "./reference-preflight";
-import { assertListRowsReady } from "./list-rows-preflight";
-import { assertStatusesReady } from "./status-preflight";
-import { assertTimestampsReady } from "./timestamp-preflight";
 import { schema } from "./schema";
 
 /** The drizzle handle the whole server uses. Synchronous, like the driver. */
@@ -36,12 +31,6 @@ export interface OpenDb {
   db: GrimoireDb;
   client: SqliteClient;
   close(): void;
-  /**
-   * What the pre-migration data step changed on THIS open —
-   * empty on every database that has already been through it. See
-   * ./group-migration.ts for why it cannot run after the migrator.
-   */
-  groupMigration: GroupMigrationOutcome;
 }
 
 /** Directory of the committed migration SQL. */
@@ -82,6 +71,11 @@ function buildDrizzle(client: SqliteClient): GrimoireDb {
  * runtime-specific wrappers around exactly these two calls; the dialect
  * wraps the whole run in a transaction and keeps its bookkeeping in
  * `__drizzle_migrations`.
+ *
+ * The first migration is the v0.7 baseline (ADR #28). A migration runs only
+ * when its journal `when` is newer than the last one the database recorded,
+ * so a database started with v0.7 or later skips the baseline and an empty
+ * one gets it.
  */
 export function migrateDb(db: GrimoireDb, migrationsFolder = MIGRATIONS_DIR): void {
   const migrations = readMigrationFiles({ migrationsFolder });
@@ -106,49 +100,15 @@ export async function openDb(filename: string): Promise<OpenDb> {
   }
   const client = await openSqlite(filename);
   applyPragmas(client);
-  // BEFORE the migrator, on purpose: migration 0009 drops
-  // `scenes.group_slug`, and this step is what carries the old grouping over
-  // into `location`. It is a no-op once the column is gone.
-  const groupMigration = migrateGroupsToLocations(client);
-  // The gate in front of the reference constraints: a database whose data
-  // cannot satisfy them — or whose relation notes the migration cannot place
-  // without appending a second section — is REFUSED here, with the offending
-  // values in the log, instead of failing halfway through the rebuild (or
-  // being repaired behind the DM's back). A no-op once the constraints are in
-  // place.
-  assertMigrationReady(client);
-  // The same gate in front of the CHECK constraints (ADR #25): a stored status
-  // or type outside its list is REFUSED here, naming campaign, address and
-  // value, instead of failing halfway through the rebuild. Also a no-op once
-  // the constraints are in place.
-  assertStatusesReady(client);
-  // And the gate in front of migration 0018, which drops the markdown line
-  // beside a log or inbox row: a row whose `text` the old parse left empty
-  // would turn into an empty note there, so it is REFUSED here with the line
-  // it was written as. A no-op once the column is gone.
-  assertListRowsReady(client);
   const db = buildDrizzle(client);
   migrateDb(db);
-  // And the gate in front of the session timestamps: a `started`, `ended` or
-  // pause value outside the one shape the reader reads (store/time.ts) is
-  // REFUSED here, naming campaign, session, column and value, instead of
-  // quietly losing a session's place in the chronology.
-  //
-  // It sits AFTER the migrator, unlike the two gates above. They guard a
-  // migration that would fail halfway through on data it cannot carry over,
-  // so they have to speak first. This one guards nothing — it reports what
-  // only the DM can correct — and migration 0017 completes the one shape it
-  // CAN complete without asking: the minute-precise values an older
-  // installation recorded. Running the check first would refuse those
-  // databases instead of letting the migration fix them.
-  assertTimestampsReady(client);
-  return { db, client, close: () => client.close(), groupMigration };
+  return { db, client, close: () => client.close() };
 }
 
 /**
- * True when the database holds no campaign data at all. This is the
- * defensive half of the migration's idempotency rule:
- * a NON-EMPTY database is never overwritten, marker or no marker.
+ * True when the database holds no campaign data at all. The seed command
+ * (../cli.ts) asks this before it loads fixtures: a NON-EMPTY database is
+ * never mixed with a second data set.
  *
  * "Empty" is deliberately narrow — only `campaigns`. The bookkeeping table
  * `meta` says nothing about whether a DM's content is in there.

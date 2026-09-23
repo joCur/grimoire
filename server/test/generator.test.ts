@@ -30,12 +30,7 @@ import { app } from "../src/server";
 import { eq } from "drizzle-orm";
 import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
 import { generateJobs } from "../src/db/schema";
-import {
-  DRAFT_FORMAT_FAILURE_MESSAGE,
-  failInterruptedJobs,
-  failLegacyDraftJobs,
-  RESTART_FAILURE_MESSAGE,
-} from "../src/db/job-boot";
+import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
 import { dropStore, seedStore } from "./support/store";
 import {
@@ -1835,7 +1830,7 @@ describe("generate jobs", () => {
     expect(await fetchJob()).toBeNull();
   });
 
-  test("a RUNNING job cannot survive — the boot fails it with a German message", async () => {
+  test("a RUNNING job cannot survive — the boot fails it with the restart message", async () => {
     const open = gate();
     useFake([jobReply("01-salzhafen/job-interrupted")], undefined, open.promise);
     expect((await postJson("/api/campaigns/beispiel/generate", generateBody)).status).toBe(202);
@@ -2021,53 +2016,6 @@ describe("generate jobs", () => {
     });
     expect(res.status).toBe(200);
     expect(await exists("01-salzhafen/leuchtturm/legacy-grouped")).toBe(true);
-  });
-
-  // --- a persisted row in the OLD draft shape ------------------------------
-
-  test("a persisted job whose drafts are one markdown text is failed at boot", async () => {
-    // The shape before ADR #24: a draft was ONE markdown text with a
-    // properties block, and a draft edit was that text. Such a row is not
-    // converted — parsing it back is exactly the round trip the format change
-    // removed — so the boot fails it, with a message that says why.
-    const legacyDraft = {
-      path: "01-salzhafen/legacy-format",
-      markdown: "---\nid: legacy-format\nstatus: draft\n---\n\n## Flow\n",
-      properties: { id: "legacy-format", status: "draft" },
-    };
-    const db = await getDb();
-    db.insert(generateJobs)
-      .values({
-        id: "legacy-format-row",
-        campaignId: "beispiel",
-        kind: "scene",
-        chapter: "01-salzhafen",
-        status: "done",
-        startedAt: new Date().toISOString(),
-        finishedAt: new Date().toISOString(),
-        result: JSON.stringify({ scenes: [legacyDraft], stubs: [], warnings: [] }),
-        draftEdits: JSON.stringify({ [legacyDraft.path]: legacyDraft.markdown }),
-      })
-      .run();
-
-    expect(failLegacyDraftJobs(db)).toBe(1);
-    const job = (await fetchJob())!;
-    expect(job.status).toBe("failed");
-    expect(job.error!.status).toBe(409);
-    expect(job.error!.body.code).toBe("job_draft_format");
-    expect(job.error!.body.error).toBe(DRAFT_FORMAT_FAILURE_MESSAGE);
-  });
-
-  test("a job whose drafts are the two halves survives the boot untouched", async () => {
-    useFake([jobReply("01-salzhafen/job-current-format")]);
-    await generate(generateBody);
-    const before = (await fetchJob())!;
-    expect(before.status).toBe("done");
-
-    expect(failLegacyDraftJobs(await getDb())).toBe(0);
-    const after = (await fetchJob())!;
-    expect(after.status).toBe("done");
-    expect(after.result!.scenes[0]!.body).toBe(before.result!.scenes[0]!.body);
   });
 
   // --- the invariant is a constraint ----------------------------------------

@@ -53,8 +53,7 @@ Der Container selbst hat keinen Zustand — der steht im `/data`-Volume.
 
 Das Produktivsystem muss nicht selbst bauen — Images liegen in der GitHub
 Container Registry. Der Release-Workflow ist der **einzige** Schreiber dieser
-Registry — ein main-Merge veröffentlicht nichts (Issues #47/#66,
-DECISIONS #12). Es gibt daher genau zwei Tag-Sorten:
+Registry — ein main-Merge veröffentlicht nichts (DECISIONS #12). Es gibt daher genau zwei Tag-Sorten:
 
 | Tag | Woher | Wofür |
 | --- | ----- | ----- |
@@ -162,7 +161,8 @@ $GRIMOIRE_DATA/
   Buchführung in `__drizzle_migrations`). Ein **Downgrade** wird nicht
   unterstützt: der Rückweg bei Problemen ist die eigene Volume-Sicherung plus
   Image-Rollback auf den alten Tag (DECISIONS #12). Eine Migration, die
-  Inhalt umschreibt, bekommt einen eigenen Abschnitt — derzeit 2c.
+  Inhalt umschreibt, bekommt einen eigenen Abschnitt.
+- Installationen vor v0.7 werden nicht unterstützt.
 - **WAL auf Bind-Mounts:** WAL braucht funktionierendes `mmap`/Locking im
   gemounteten Dateisystem. Lokale Bind-Mounts und Docker-Volumes sind
   unproblematisch; **Netzwerk-Dateisysteme (NFS, SMB/CIFS) sind es nicht** —
@@ -170,7 +170,7 @@ $GRIMOIRE_DATA/
 
 ### Sicherung — Sache des Stack-Owners
 
-Grimoire hat **bewusst kein eigenes Backup-System** (Planung #52, F3): kein
+Grimoire hat **bewusst kein eigenes Backup-System**: kein
 `grimoire backup`, keine Auto-Backups vor Migrations-Boots. Es gibt eine
 Datei in einem Volume, und die sichert der Betreiber mit seinen Bordmitteln.
 Zwei Wege, die konsistent sind:
@@ -236,7 +236,7 @@ repariert), und was übrig bleibt, repariert ein Modell mit Fehlerliste fast
 immer im ersten Turn — ein zweiter kostet nur. `0` schaltet Korrektur-Turns
 ganz ab (billigster, strengster Modus), `2` ist das Maximum.
 
-**Generierungen laufen im Hintergrund** (Issue #19): `POST
+**Generierungen laufen im Hintergrund** (DECISIONS #10): `POST
 /api/campaigns/:campaign/generate` startet einen Job und antwortet mit `202
 {"jobId":…}`; das Ergebnis holt die App über `GET
 /api/campaigns/:campaign/generate/job`. Ein Job pro Kampagne (zweiter Start → `409`
@@ -288,46 +288,6 @@ Zur Laufzeit übergeben:
 ```bash
 docker run --env-file /srv/grimoire/.env … grimoire
 ```
-
-## 2c. Das Update auf die Referenz-Constraints (Migration 0014)
-
-**Vor diesem Update eine Sicherung ziehen.** Es ist die erste Migration, die
-Kampagnen-**Inhalt** umschreibt: die Beziehungs-Notizen eines NPC lagen als
-Zeilen in einer Tabelle und ziehen in den Text des NPC um, bevor die Tabelle
-verschwindet. Das Verfahren steht in Abschnitt 2a — `VACUUM INTO` im Betrieb,
-oder Container stoppen und `grimoire.db` **mit** `-wal` und `-shm` kopieren.
-
-```bash
-sqlite3 /srv/grimoire/data/grimoire.db "VACUUM INTO '/backup/vor-0014.db'"
-```
-
-**Was beim Start im Log steht.** Vor der Migration läuft eine Vorabprüfung.
-Ist sie still, wird migriert. Findet sie etwas, startet der Server **nicht**,
-und im Log steht ein Block mit genau zwei möglichen Überschriften:
-
-- `Reference check failed — …` mit einer Zeile pro Tabelle und Spalte: welche
-  Werte keinen Eintrag nennen und wie viele Zeilen sie tragen (`(leer)` steht
-  für einen leeren Wert). Das sind Referenzen, die ins Nichts zeigen.
-- `Relation notes cannot be placed — …` mit einer Zeile pro NPC-id: dessen
-  Text schreibt die Überschrift `## Beziehungen` anders (zwei Leerzeichen,
-  ein Tabulator, ein längeres Wort). Genau diese eine Schreibweise kann die
-  Migration platzieren; jede andere bekäme einen **zweiten** Abschnitt.
-
-Beide Blöcke enden mit `Nothing has been migrated.` — das ist wörtlich zu
-nehmen: die Prüfung liest nur. Korrigiert wird in der **vorherigen** Version
-der App (sie läuft weiter, ihr Schema ist unverändert) oder direkt in der
-Datenbank; der nächste Start migriert dann.
-
-**Reparaturen macht Grimoire keine.** Fehlende Einträge anzulegen würde
-Inhalt erfinden, Referenzen zu löschen würde löschen, was jemand geschrieben
-hat, und eine Überschrift zu normalisieren wäre eine Änderung an Prosa — drei
-Entscheidungen, die nur der DM treffen kann.
-
-**Rollback ist gefahrlos, solange die Prüfung abbricht:** es wurde nichts
-migriert, also läuft das vorherige Image auf derselben Datei weiter
-(`GRIMOIRE_VERSION` zurücksetzen, Abschnitt 1a). Nach einer **erfolgreichen**
-Migration gilt wieder die Regel aus Abschnitt 2a: kein Downgrade, der Rückweg
-ist die Sicherung.
 
 ## 3. Erreichbarkeit: Tailscale zuerst
 
@@ -381,11 +341,6 @@ Verzeichnis kopieren) und die Wiederherstellung.
   derselben Transaktion hoch, die App pollt `GET /api/campaigns/:campaign/version`
   (DECISIONS #9). Es gibt keinen Datei-Watcher mehr — Edits im Dateibaum
   wirken NICHT, die Datenbank ist die Wahrheit (ADR #13).
-- Start bricht mit `Reference check failed — …` oder
-  `Relation notes cannot be placed — …` ab: die Vorabprüfung vor Migration
-  0014 hat Daten gefunden, die die Referenz-Constraints nicht tragen. Es ist
-  nichts migriert, das vorherige Image läuft weiter — Abschnitt 2c erklärt
-  den Block Zeile für Zeile.
 - Generator-Jobs überleben einen Neustart (ADR #10-Nachtrag): ein fertiger
   Job ist nach dem Boot noch da und übernehmbar. War ein Job im Lauf, steht im
   Log `N generate job(s) were running at the last shutdown — marked as

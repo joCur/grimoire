@@ -12,10 +12,6 @@
 //     generator proposal;
 //   * a mention in TEXT — a `## Beziehungen` line, `[[slug]]` in prose —
 //     is neither: it stays visible text, with no entry and no error.
-//
-// The gate that runs before the constraints exist — the check that names
-// unresolvable references and aborts the start — is
-// test/reference-preflight.test.ts.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignTree, EntryResponse, SessionResponse } from "@grimoire/shared";
@@ -164,7 +160,7 @@ describe("a reference that names nothing is refused", () => {
   });
 
   test("a scene's chapter cannot be removed at all — 400 chapter_required", async () => {
-    // Clearing the Kapitel field in the dialog is the way to get here, so the
+    // Clearing the chapter field in the dialog is the way to get here, so the
     // refusal carries a CODE: the app reads its own sentence off it and
     // disables „Speichern" instead of letting the save round-trip.
     const res = await patchRes(SCENE, { chapter: null });

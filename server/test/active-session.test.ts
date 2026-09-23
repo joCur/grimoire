@@ -665,9 +665,8 @@ describe("degraded sessions never hijack the active session", () => {
 
   // A `started` outside the one shape (store/time.ts) has no epoch reading at
   // all — the row stays readable and shows its string verbatim, it simply has
-  // no place in the chronology. The boot pre-flight
-  // (db/timestamp-preflight.ts) is what keeps such a value out of a real
-  // database; here it is planted past the seed on purpose.
+  // no place in the chronology. The session PATCH refuses such a value
+  // (store/sessions.ts); here it is planted past the seed on purpose.
   test("a second-less `started` is unreadable, not half-read", async () => {
     await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00:00" }));
     db.update(sessionsTable)
