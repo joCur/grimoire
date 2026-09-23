@@ -1,7 +1,9 @@
 // NPC card fed from npcs/<id> — voice, "Will" (first paragraph of the
 // `## Will` section) and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
-// badge and labeled rows) and the live aside ("compact", inline "Will:").
+// badge and labeled rows) and the live aside ("compact", inline "Will:" — the
+// same rows the hover preview of a reference shows, components/EntityCompact).
+// A `[[slug]]` inside "Will" reads as the current name, like in the text.
 // The whole card links to the NPC reading view — UNLESS the caller
 // passes `onOpen`: in the live mode the card must not navigate
 // away from the running session, it opens the detail drawer instead. Same
@@ -18,10 +20,12 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
+import { NpcCompact } from "@/components/EntityCompact";
 import { useI18n } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
-import { propQuickstats, propString } from "@/lib/properties";
-import { firstParagraphOfSection } from "@/lib/md-section";
+import { npcExcerpt } from "@/lib/entity-excerpt";
+import { propString } from "@/lib/properties";
+import { useEntityRefs } from "@/markdown/entity-refs";
 
 /** Campaign-relative path of an NPC entry — the reference key is the id. */
 function npcPath(id: string): string {
@@ -44,6 +48,7 @@ export function NpcCard({
   onOpen?: (path: string) => void;
 }) {
   const { t, tNode } = useI18n();
+  const { resolve } = useEntityRefs();
   const path = npcPath(id);
   // A NON-SLUG value is no id and therefore no entry: `npcs:` holds ids and
   // the server refuses anything else. Asking for `npcs/Alte Fischerin` would
@@ -80,38 +85,13 @@ export function NpcCard({
   const properties = data.properties;
   const name = propString(properties.name) ?? id;
   const npcId = propString(properties.id) ?? id;
-  const role = propString(properties.role);
-  const voice = propString(properties.voice);
-  const will = firstParagraphOfSection(data.body, "Will");
-  const quickstats = propQuickstats(properties.quickstats);
+  const excerpt = npcExcerpt(data, (slug) => resolve(slug)?.name);
+  const { role, voice, will, quickstats } = excerpt;
 
   if (compact) {
     return (
       <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-3.5">
-        <p className="mb-px font-serif text-[15px] font-semibold text-foreground">{name}</p>
-        {role !== undefined && (
-          <p className="mb-[9px] text-[12px] text-muted-foreground">{role}</p>
-        )}
-        {voice !== undefined && (
-          <p className="mb-2 text-[12.5px] leading-[1.5] text-body italic">{voice}</p>
-        )}
-        {will !== undefined && (
-          <p className="mb-2.5 text-[12.5px] leading-[1.5] text-body-secondary">
-            <span className="text-muted-foreground">{t("npcCard.will.inline")}</span> {will}
-          </p>
-        )}
-        {quickstats.length > 0 && (
-          <div className="flex flex-wrap gap-[5px]">
-            {quickstats.map(([key, value]) => (
-              <span
-                key={key}
-                className="rounded-[4px] border border-input bg-background px-1.5 py-[2px] font-mono text-[10.5px] text-soft"
-              >
-                {key} {value}
-              </span>
-            ))}
-          </div>
-        )}
+        <NpcCompact name={name} excerpt={excerpt} />
       </EntityCardShell>
     );
   }

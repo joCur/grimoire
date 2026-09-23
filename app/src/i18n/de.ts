@@ -402,11 +402,11 @@ export const de = {
   "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
   "chapterOverview.scene.trigger": "Wenn: {trigger}",
   // Up/down on a scene row (ADR #27). The title is IN the name: a list of
-  // „Nach oben" says nothing about which row it moves — neither to a screen
-  // reader nor in a test.
+  // bare "move up" buttons says nothing about which row it moves — neither to
+  // a screen reader nor in a test.
   "chapterOverview.scene.moveUp.aria": "„{title}“ nach oben",
   "chapterOverview.scene.moveDown.aria": "„{title}“ nach unten",
-  // The order has no „Trotzdem speichern": an order arranged against a list
+  // The order has no "save anyway" answer: an order arranged against a list
   // somebody else has already changed would write positions for scenes the DM
   // never saw there. So it reports and reloads, like the status control.
   "chapterOverview.order.conflict":
@@ -900,6 +900,13 @@ export const de = {
   "npcCard.voice": "Stimme",
   "locationCard.unloadable": "{id} — Ort nicht ladbar, Server prüfen.",
   "locationCard.roll20": "Roll20-Seite: {value}",
+
+  // --- hover preview of a `[[ref]]` (components/EntityPreview.tsx) ---------
+  // Everything else it says comes from the shared labels: `kind.*`,
+  // `status.*`, `sceneArticle.type.*`, `sceneArticle.trigger.label`,
+  // `npcCard.will.inline` and `locationCard.roll20`. Only the scene's
+  // location row has a label of its own.
+  "refPreview.scene.location": "Ort",
 
   // --- entity reading view (components/EntityArticle.tsx) -------------------
   "entity.npc.statblock": "Statblock: {value}",

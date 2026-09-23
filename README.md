@@ -293,6 +293,10 @@ Text (Szene, NPC, Ort, Kapitel, Kampagne) und in jedem Callout.
   stehen — kein Fehler, und sie wird lebendig, sobald der Eintrag existiert.
 - Klick: in der Leseansicht ein Link zum Eintrag, in der Session-Ansicht
   öffnet er die Detail-Schublade, ohne die Session zu verlassen.
+- Überfahren oder Tastatur-Fokus zeigt eine kurze **Vorschau** des Ziels
+  (Art, Status und die Zeilen der Kompakt-Karte); ein `[[id]]` in deren
+  Auszug steht dort — wie auf den NPC- und Ort-Karten — als Name. Auf
+  Touch-Geräten gibt es keine Vorschau.
 - Namen als normaler Text sind weiterhin erlaubt — sie bleiben aber stehen,
   wenn ein Eintrag seinen Titel ändert.
 

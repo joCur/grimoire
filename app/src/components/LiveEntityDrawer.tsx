@@ -21,6 +21,7 @@ import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/i18n";
 import { propString } from "@/lib/properties";
+import { PREVIEW_BOUNDARY_ATTR } from "@/markdown/ref-preview";
 
 export function LiveEntityDrawer({
   campaign,
@@ -41,6 +42,9 @@ export function LiveEntityDrawer({
           // The article carries the visible title; the accessible name of the
           // dialog comes from the hidden SheetTitle inside.
           className="gap-0"
+          // A reference's hover preview stays inside the drawer, not merely
+          // inside the text column of the article in it.
+          {...{ [PREVIEW_BOUNDARY_ATTR]: "" }}
         >
           <DrawerBody campaign={campaign} path={path} />
         </SheetContent>

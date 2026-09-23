@@ -77,11 +77,23 @@
      light derived from the warm text family */
   --overlay: light-dark(rgba(44, 38, 28, 0.4), rgba(15, 13, 10, 0.7));
 
+  /* floating popover shadow (hover preview): deep and neutral on the dark
+     page, lighter and warm-tinted on paper. A shadow is no color, so it
+     cannot ride on light-dark() — it follows the same scheme switch by hand */
+  --popover-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+
   --radius: 0.5rem;
 }
 
+@media (prefers-color-scheme: light) {
+  :root:not(.dark) { --popover-shadow: 0 12px 32px rgba(44, 38, 28, 0.18); }
+}
+
 .dark { color-scheme: dark; }
-.light { color-scheme: light; }
+.light {
+  color-scheme: light;
+  --popover-shadow: 0 12px 32px rgba(44, 38, 28, 0.18);
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -120,6 +132,7 @@
   --color-secret-border: var(--secret-border);
   --color-panel-deep: var(--panel-deep);
   --color-overlay: var(--overlay);
+  --shadow-popover: var(--popover-shadow);
 
   /* Serif carries the personality: page/scene titles, NPC names, the
      wordmark and the read-aloud text (self-hosted Literata).
@@ -175,6 +188,32 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/* Hover card motion (components/ui/hover-card.tsx): in, 120ms ease-out —
+   opacity plus 4px travel TOWARD the anchor, so a card below its reference
+   rises and one above it sinks; out, 80ms opacity only. Reduced motion drops
+   the animation entirely, which also lets the card unmount at once. */
+@keyframes hover-card-in-below {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@keyframes hover-card-in-above {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes hover-card-out {
+  to { opacity: 0; }
+}
+.hover-card[data-state="open"][data-side="bottom"] {
+  animation: hover-card-in-below 120ms ease-out;
+}
+.hover-card[data-state="open"][data-side="top"] {
+  animation: hover-card-in-above 120ms ease-out;
+}
+.hover-card[data-state="closed"] {
+  animation: hover-card-out 80ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hover-card[data-state] { animation: none; }
 }
 
 /* Rendered markdown body — pixel values from the design prototype. */
@@ -262,7 +301,7 @@
   }
   .md-body pre code { background: none; padding: 0; }
 
-  /* Tables (issue #96) — the one borrowed GFM construct. Dense enough that a
+  /* Tables — the one borrowed GFM construct. Dense enough that a
      W6 table reads as one object, and always inside its own scroll box: on a
      390px phone the TABLE scrolls, never the page. */
   .md-table-scroll {
@@ -292,7 +331,7 @@
   }
   .md-body th:last-child,
   .md-body td:last-child { padding-inline-end: 0; }
-  /* Issue #96: the first column is the roll/dice column by convention
+  /* The first column is the roll/dice column by convention
      (`W6` → `1–2`, `3–4`, …). Breaking it at the en dash turns one range
      into two lines, so headers and that column never wrap; the remaining
      cells wrap as usual. `min-width: min-content` on the table then pushes

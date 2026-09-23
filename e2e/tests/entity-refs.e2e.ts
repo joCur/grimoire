@@ -1,20 +1,26 @@
 // Entity references in body text — `[[slug]]`.
 //
-// Touches three critical paths (CLAUDE.md):
+// Touches four critical paths (CLAUDE.md):
 //
-//   2 "Szene lesen"      the reference renders as the CURRENT display name,
-//                        an unknown slug stays plain text
-//   3 "⌘K-Suche"         the scene is findable under that display name,
+//   2 (reading)          the reference renders as the CURRENT display name,
+//                        an unknown slug stays plain text; hover and keyboard
+//                        focus show a preview of the target per kind (NPC,
+//                        location, scene), Esc closes it, a dead NPC says so
+//   3 (⌘K search)        the scene is findable under that display name,
 //                        although its body only holds the slug
-//   6 (generator)        covered in generator.e2e.ts: the stub's draft ships
-//                        `[[…]]` and the review renders it
+//   4 (session)          a click opens the DRAWER, it does not navigate —
+//                        the whole point of resolving at render time is that
+//                        the DM never leaves the running session for a name;
+//                        the preview works in the scene column and the drawer
+//   6 (generator)        the review renders the stub draft's `[[…]]` and
+//                        previews a resolved one (generator.e2e.ts covers the
+//                        rest of the run)
 //
-// Plus the live behaviour: a click opens the DRAWER, it does not navigate —
-// the whole point of resolving at render time is that the DM never leaves the
-// running session for a name.
+// Plus the aside cards: a `[[slug]]` in the excerpt they show reads as the
+// name there too.
 //
-// The scene is SEEDED as an extra entry: it references an npc, a location
-// and a slug nothing owns.
+// The scene is SEEDED as an extra entry: it references two npcs, a location,
+// a scene and a slug nothing owns.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -144,4 +150,222 @@ test("a changed display name reaches the prose without touching the body", async
     `campaigns/beispiel/search?q=${encodeURIComponent("Salzhand")}`,
   );
   expect(found.results.map((r) => `${r.kind}:${r.id}`)).toContain("scene:entity-refs");
+});
+
+// --- the hover preview ---------------------------------------------------------
+
+test("reading view: hovering a reference previews its target, per kind", async ({ page }) => {
+  await page.goto(SCENE_URL);
+  const tooltip = page.getByRole("tooltip");
+
+  // NPC: head line with kind and status, then the rows of the compact card.
+  const jorna = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
+  await jorna.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("NPC");
+  await expect(tooltip).toContainText("Lebendig");
+  await expect(tooltip).toContainText(JORNA);
+  await expect(tooltip).toContainText("Auftraggeberin, Hafenmeisterin von Salzhafen");
+  await expect(tooltip).toContainText("knapp, wetterrau, duzt jeden");
+  await expect(tooltip).toContainText("Will: Das Leuchtfeuer muss wieder brennen");
+  await expect(tooltip).toContainText("passive-perception 12");
+  // Passive: nothing in it is a link or a control.
+  await expect(tooltip.getByRole("link")).toHaveCount(0);
+  await expect(tooltip.getByRole("button")).toHaveCount(0);
+  // The reference is described by the card while it is open.
+  const tooltipId = await tooltip.getAttribute("id");
+  expect(tooltipId).not.toBeNull();
+  await expect(jorna).toHaveAttribute("aria-describedby", tooltipId ?? "");
+
+  // Location: name and the first paragraph of `## Atmosphäre`, no status.
+  // Only ever ONE preview is open.
+  await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().hover();
+  await expect(tooltip).toHaveCount(1);
+  await expect(tooltip).toContainText("Ort");
+  await expect(tooltip).toContainText("Der Leuchtturm von Salzhafen");
+  await expect(tooltip).toContainText("Verlassen in Eile, nicht im Kampf");
+  await expect(tooltip).not.toContainText("Lebendig");
+  await expect(jorna).not.toHaveAttribute("aria-describedby", /.+/);
+
+  // Scene: its type is its kind; trigger and location as rows.
+  await page.getByRole("link", { name: "Szene: Von den Schmugglern erwischt" }).hover();
+  await expect(tooltip).toHaveCount(1);
+  await expect(tooltip).toContainText("Eventualszene");
+  await expect(tooltip).toContainText("Bereit");
+  await expect(tooltip).toContainText("Von den Schmugglern erwischt");
+  await expect(tooltip).toContainText(
+    /Auslöser\s*Charaktere werden beim Auskundschaften der Bucht entdeckt/,
+  );
+  await expect(tooltip).toContainText(/Ort\s*Die Nordbucht/);
+
+  // Leaving reference and card closes it.
+  await page.getByRole("heading", { level: 1, name: SCENE_TITLE }).hover();
+  await expect(tooltip).toHaveCount(0);
+
+  // An unresolved reference is no element to hover at all, and the resolved
+  // name in an `## If:` summary is text — neither previews anything.
+  await expect(page.getByRole("link", { name: /niemand/ })).toHaveCount(0);
+  await page.locator("details[data-if-section] summary").first().hover();
+  await page.waitForTimeout(500);
+  await expect(tooltip).toHaveCount(0);
+
+  // The click is what it always was: the reading view navigates.
+  await page.getByRole("link", { name: "NPC: Fenn" }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/fenn$/);
+  await expect(tooltip).toHaveCount(0);
+});
+
+test("keyboard focus previews, Esc closes, a dead npc is marked", async ({ page, api }) => {
+  await api.patchProperties("npcs/fenn", { status: "dead" });
+  await page.goto(SCENE_URL);
+  const tooltip = page.getByRole("tooltip");
+
+  // Tab onto the reference: the preview follows the keyboard focus.
+  await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().focus();
+  await page.keyboard.press("Tab");
+  const fenn = page.getByRole("link", { name: "NPC: Fenn" });
+  await expect(fenn).toBeFocused();
+  await expect(tooltip).toHaveCount(1);
+  await expect(tooltip).toContainText("Fenn");
+  await expect(tooltip).toContainText("Anführer der Schmuggler in der Nordbucht");
+
+  // The dead status in the destructive color, with the skull in front of it.
+  const dead = tooltip.getByText("Tot", { exact: true });
+  await expect(dead).toBeVisible();
+  await expect(dead).toHaveClass(/text-destructive/);
+  await expect(dead.locator("svg.lucide-skull")).toBeVisible();
+  await expect(tooltip).not.toContainText("Lebendig");
+
+  // Esc closes it and leaves the focus where it is. The card takes no focus.
+  await expect(tooltip).toHaveCSS("opacity", "1");
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toHaveCount(0);
+  await expect(fenn).toBeFocused();
+
+  // Blur closes at once: Tab on to the scene reference, whose card follows.
+  await fenn.focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Szene: Von den Schmugglern erwischt" })).toBeFocused();
+  await expect(tooltip).toHaveCount(1);
+  await expect(tooltip).toContainText("Eventualszene");
+});
+
+test("a reference inside an excerpt reads as the name — in the preview and on the cards", async ({
+  page,
+  api,
+}) => {
+  const body = await api.body("npcs/jorna");
+  await api.writeBody(
+    "npcs/jorna",
+    body.replace("Das Leuchtfeuer muss", "Das Leuchtfeuer auf [[leuchtturm]] muss"),
+  );
+  await page.goto(SCENE_URL);
+
+  // The scene aside's NPC card (callouts are asides too — hence the filter).
+  const aside = page.locator("aside").filter({ hasText: "NPCs dieser Szene" });
+  await expect(aside).toContainText("Das Leuchtfeuer auf Der Leuchtturm von Salzhafen muss");
+  await expect(aside).not.toContainText("[[leuchtturm]]");
+
+  // The preview: the same excerpt, and the name in it is TEXT — no link, and
+  // hovering it opens nothing further.
+  await page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first().hover();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText("Das Leuchtfeuer auf Der Leuchtturm von Salzhafen muss");
+  await expect(tooltip).not.toContainText("[[leuchtturm]]");
+  await expect(tooltip.getByRole("link")).toHaveCount(0);
+});
+
+test("session view: previews in the scene column and in the drawer; the click opens the drawer", async ({
+  page,
+}) => {
+  await page.goto("/campaigns/beispiel");
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await page.getByRole("button", { name: SCENE_TITLE }).click();
+  await expect(page.getByRole("heading", { level: 1, name: SCENE_TITLE })).toBeVisible();
+
+  const tooltip = page.getByRole("tooltip");
+  const column = page.locator("main .md-body");
+
+  // Scene column: the card stays inside the text column — never over the NPC
+  // aside, the log or the quick note.
+  await column.getByRole("button", { name: "Szene: Von den Schmugglern erwischt" }).hover();
+  await expect(tooltip).toContainText("Von den Schmugglern erwischt");
+  const card = await tooltip.boundingBox();
+  const text = await column.boundingBox();
+  const aside = await page.locator("aside").filter({ hasText: "Schnellnotiz" }).boundingBox();
+  expect(card).not.toBeNull();
+  expect(text).not.toBeNull();
+  expect(aside).not.toBeNull();
+  if (card !== null && text !== null && aside !== null) {
+    expect(card.x).toBeGreaterThanOrEqual(text.x);
+    expect(card.x + card.width).toBeLessThanOrEqual(text.x + text.width);
+    expect(card.x + card.width).toBeLessThan(aside.x);
+  }
+
+  // The click still opens the drawer (and closes the preview).
+  await column.getByRole("button", { name: `NPC: ${JORNA}`, exact: true }).first().click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+
+  // Inside the drawer: Jorna's `## Beziehungen` names Fenn.
+  const fenn = drawer.getByRole("button", { name: "NPC: Fenn" });
+  await fenn.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("Anführer der Schmuggler in der Nordbucht");
+
+  // Esc closes the preview first — the drawer stays open. Pressed once the
+  // card has settled, as a person would: not in the frame it appears in.
+  await expect(tooltip).toHaveCSS("opacity", "1");
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toHaveCount(0);
+  await expect(drawer).toBeVisible();
+
+  // And the click in the drawer switches the drawer, as before.
+  await fenn.click();
+  await expect(drawer.getByRole("heading", { level: 1, name: "Fenn" })).toBeVisible();
+});
+
+test("draft review: a resolved reference previews, an unresolved one stays text", async ({
+  page,
+}) => {
+  await page.goto("/campaigns/beispiel/generate");
+  await page
+    .getByLabel("Quelltext (EN)")
+    .fill("The party watches the quay at low tide while Fenn's crew shifts a cargo.");
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+
+  const fenn = page.getByRole("link", { name: "NPC: Fenn" }).first();
+  await fenn.hover();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText("Fenn");
+  await expect(tooltip).toContainText("Lebendig");
+  await expect(tooltip).toContainText("Anführer der Schmuggler in der Nordbucht");
+
+  // `[[grella]]` is only proposed in this run — no entry, no link, no preview.
+  await expect(page.getByRole("link", { name: /grella/i })).toHaveCount(0);
+});
+
+test.describe("touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("no preview on a touch device — a tap navigates", async ({ page }) => {
+    await page.goto(SCENE_URL);
+    // The device really presents itself as touch-first.
+    expect(await page.evaluate(() => matchMedia("(hover: none), (pointer: coarse)").matches)).toBe(
+      true,
+    );
+    const jorna = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
+    await jorna.focus();
+    await page.waitForTimeout(500);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+
+    await jorna.tap();
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  });
 });
