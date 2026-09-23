@@ -12,9 +12,11 @@
 //   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
 //   npcs/<id> · locations/<id>
 //
-// The wire vocabulary follows from that: an entry's fields are `properties`,
-// its markdown is `body`, and its optimistic-concurrency token is `rev` (the
-// row version).
+// The wire vocabulary follows from that: an entry carries its `kind`, its
+// markdown as `body` and its optimistic-concurrency token as `rev` (the row
+// version). Its fields — its properties — stand flat beside them for a kind
+// with its own zod schema (ADR #31: a location, `{ kind, id, path, name, …,
+// body, rev }`); the other kinds carry them under `properties`.
 //
 // LISTS ARE NOT ENTRIES (ADR #26). A session, the inbox, the glossary and a
 // chapter's open threads are tables, and they answer their OWN shapes on
@@ -130,8 +132,12 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
-/** Parse the JSON body; must be an object with no keys outside `allowed`. */
-async function jsonBody(c: Context, allowed: string[]): Promise<Record<string, unknown>> {
+/**
+ * Parse the JSON body; must be an object with no keys outside `allowed`.
+ * `null` leaves the keys to the caller — a body whose shape depends on the
+ * kind of entry it writes is checked where the kind is known.
+ */
+async function jsonBody(c: Context, allowed: string[] | null): Promise<Record<string, unknown>> {
   let body: unknown;
   try {
     body = await c.req.json();
@@ -139,6 +145,7 @@ async function jsonBody(c: Context, allowed: string[]): Promise<Record<string, u
     throw new ApiError(400, "request body must be valid JSON");
   }
   if (!isPlainObject(body)) throw new ApiError(400, "request body must be a JSON object");
+  if (allowed === null) return body;
   for (const key of Object.keys(body)) {
     if (!allowed.includes(key)) throw new ApiError(400, `unknown body key: ${key}`);
   }
@@ -241,9 +248,11 @@ api.get("/campaigns/:campaign", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), "campaign")),
 );
 
-// GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
-// (properties, body, rev). The address IS the path — the schema is in
-// store/paths.ts, and it describes the five ENTRY kinds only.
+// GET /api/campaigns/:campaign/entries/<address> -> the entry: `kind`, `id`,
+// `path`, its fields, `body` and `rev` for a location (`Location`), the fields
+// under `properties` for the other kinds (`EntryResponse`). The address IS the
+// path — the schema is in store/paths.ts, and it describes the five ENTRY
+// kinds only.
 api.get("/campaigns/:campaign/entries/*", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), entryAddress(c))),
 );
@@ -355,8 +364,10 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 
 // --- write endpoints --------------------------------------------------------------
 
-// PATCH /api/campaigns/:campaign/entries/<address> { rev, properties?, body?, force? }
-//   -> EntryResponse
+// PATCH /api/campaigns/:campaign/entries/<address>
+//   location:      { rev, force?, body?, name?, chapter?, "roll20-page"?, atmosphere? }
+//   other kinds:   { rev, properties?, body?, force? }
+//   -> the entry, in the shape GET answers
 // THE write of one entry (ADR #23): its fields, its text, or both in ONE
 // request against ONE `rev`. The address is the path behind `entries/`, the
 // same one GET reads.
@@ -364,22 +375,23 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // Fields and text together are ONE write: the row changes once, so `rev`
 // steps once no matter how much the request carried.
 //
-// `properties` is a flat object of keys to set; null deletes a key. `body` is
-// the markdown WITHOUT the properties block — exactly what GET hands out as
-// `body` — and replaces the stored text. Neither of the two present is a 400
-// { code: "nothing_to_write" }: a request that changes nothing is a bug in
-// the caller, not a save.
+// The fields travel the way the kind's entry carries them. A location's
+// stand flat beside `rev` (ADR #31) and are checked against its zod schema:
+// any subset of them, `null` clears an optional one, and a key that is not a
+// field of a location — or a value of the wrong shape — is a 400 that names
+// it. The other kinds carry theirs under `properties`, a flat object of keys
+// to set where null deletes a key. `body` is the markdown — exactly what GET
+// hands out as `body` — and replaces the stored text. A request with neither
+// fields nor text is a 400 { code: "nothing_to_write" }: a request that
+// changes nothing is a bug in the caller, not a save. The `id` may be echoed,
+// never changed (400).
 //
-// A reference in `properties` — `chapter`, `location`, an `npcs` entry — has
+// A reference among the fields — `chapter`, `location`, an `npcs` entry — has
 // to name an entry that exists: 400 with the code the app turns into its
 // create-this-first hint, never a new entry as a side effect. A scene's
 // `chapter` may be SET that way but never REMOVED (400): a scene belongs to
 // a chapter and must not fall out of the tree. A key the entry's kind has no
-// field for is a 400 as well; a key that is not part of the kind but sits on
-// the row may still be changed or deleted with null.
-//
-// `locationName` is the display name for the location a scene's `location`
-// CREATES — applied on insert only, never to a location that already exists.
+// field for is a 400 as well.
 //
 // A stale `rev` is 409 { code: "rev_conflict", rev, entry } and writes
 // nothing — `entry` is the entry as it stands now, so the conflict dialog
@@ -393,26 +405,9 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // through their own endpoints: PUT /glossary, POST /inbox, POST /log, the
 // session verbs, PATCH /sessions/:id and the review actions.
 api.patch("/campaigns/:campaign/entries/*", async (c) => {
-  const body = await jsonBody(c, ["rev", "properties", "body", "force"]);
-  const properties = body.properties;
-  const markdown = body.body;
-  if (properties !== undefined && !isPlainObject(properties)) {
-    throw new ApiError(400, "properties must be an object");
-  }
-  if (markdown !== undefined && typeof markdown !== "string") {
-    throw new ApiError(400, "body must be a string");
-  }
-  if (body.force !== undefined && typeof body.force !== "boolean") {
-    throw new ApiError(400, "force must be a boolean");
-  }
-  return c.json(
-    await patchEntry(c.req.param("campaign"), entryAddress(c), {
-      rev: requireRev(body.rev),
-      ...(properties === undefined ? {} : { properties }),
-      ...(markdown === undefined ? {} : { body: markdown }),
-      ...(body.force === undefined ? {} : { force: body.force }),
-    }),
-  );
+  // The shape of the body is the KIND's, so the store checks it (see above).
+  const body = await jsonBody(c, null);
+  return c.json(await patchEntry(c.req.param("campaign"), entryAddress(c), body));
 });
 
 // POST /api/campaigns/:campaign/session/start -> SessionResponse
@@ -826,7 +821,7 @@ api.post("/campaigns/:campaign/npcs", async (c) => {
   );
 });
 
-// POST /api/campaigns/:campaign/locations { name } -> 201 EntryResponse (same rules)
+// POST /api/campaigns/:campaign/locations { name, id? } -> 201 Location (same rules)
 api.post("/campaigns/:campaign/locations", async (c) => {
   const body = await jsonBody(c, ["name", "id"]);
   const name = requiredText(body.name, "name");
@@ -1075,20 +1070,22 @@ api.post("/campaigns/:campaign/generate/augment", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/augment/apply
-// { path, rev, properties?, body?, jobId? } -> the written EntryResponse.
+// { path, jobId?, ...the entry PATCH } -> the written entry.
 // Accepting the reviewed proposal: the DM's chosen fields
 // and the body they assembled from the accepted blocks, written in ONE
 // transaction against `rev` — 409 { code: "rev_conflict", rev } when the
-// entry moved underneath, and then NOTHING is written. FTS and `[[slug]]`
+// entry moved underneath, and then NOTHING is written. Beside `path` and
+// `jobId` the body is the entry PATCH of the target's kind (see PATCH
+// …/entries above): a location's chosen fields flat beside `rev` and `body`,
+// the other kinds' under `properties`; there is no `force`. FTS and `[[slug]]`
 // reference rows follow because this is the ordinary write path; `jobId`
 // discards the augment job in that same transaction.
 api.post("/campaigns/:campaign/generate/augment/apply", async (c) => {
-  const body = await jsonBody(c, ["path", "rev", "properties", "body", "jobId"]);
-  const jobId = body.jobId;
+  const { path, jobId, ...patch } = await jsonBody(c, null);
   if (jobId !== undefined && typeof jobId !== "string") {
     throw new ApiError(400, "jobId must be a string");
   }
-  return c.json(await applyAugment(c.req.param("campaign"), body, jobId));
+  return c.json(await applyAugment(c.req.param("campaign"), path, patch, jobId));
 });
 
 // PATCH /api/campaigns/:campaign/generate/job/:id/review { rev, edits?, entries?,
@@ -1216,9 +1213,11 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 // { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
 // Writes the reviewed drafts — synchronous on purpose: this is a short
 // write, and the DM waits for its result. Every draft is
-// `{ path, properties, body }` (a stub `{ kind, id, name, properties, body }`)
-// and is re-validated server-side (status draft, safe paths, the id matching
-// the address); 409 { conflicts } when any
+// `{ path, properties, body }` (an npc stub `{ kind, id, name, properties,
+// body }`, a location stub the location draft itself, `{ kind, id, name, …,
+// body }`, checked against the location's schema — ADR #31) and is
+// re-validated server-side (status draft, safe paths, the id matching the
+// address); 409 { conflicts } when any
 // target entry exists — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create the chapter entry
 // when it is missing, in the same all-or-nothing batch (the app's

@@ -9,14 +9,15 @@ bleiben wie unten angegeben.
 ## Ausgabeformat
 
 Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
-von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
+von der Schnittstelle erzwungen — es trägt drei Teile:
 
-* `properties` — die Eigenschaften des Eintrags, jede als eigener Schlüssel.
-  Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere trägt
-  `null`. Der Server speichert sie genau so.
+* die Eigenschaften des Eintrags, jede als eigener Schlüssel (`id`, `name`,
+  `chapter`, `roll20-page`, `atmosphere`). Ein Feld, das der Quelltext
+  hergibt, trägt seinen Wert; jedes andere trägt `null`.
+  Der Server speichert sie genau so.
 * `body` — der Text des Eintrags, als **ein** String mit echten
   Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Die
-  Eigenschaften bleiben in `properties`.
+  Eigenschaften stehen als eigene Schlüssel daneben.
 * `warnings` — kurze deutsche Hinweise für den DM, einer je Hinweis; bei
   klarer Quelle bleibt die Liste leer.
 
@@ -26,13 +27,11 @@ Das Referenz-Beispiel unten ist genau diese Form.
 
 ```json
 {
-  "properties": {
-    "id": "<kebab-case ASCII, kurz und stabil — nur die id; der Anzeigename steht in name>",
-    "name": "<Anzeigename>",
-    "chapter": "<Kapitel-id aus dem Kontext; nur wenn eindeutig, sonst null>",
-    "roll20-page": "<Page-Name als Verweis auf die Roll20-Seite; sonst null>",
-    "atmosphere": "<was der Ort über sich verrät, 1-3 Sätze>"
-  },
+  "id": "<kebab-case ASCII, kurz und stabil — nur die id; der Anzeigename steht in name>",
+  "name": "<Anzeigename>",
+  "chapter": "<Kapitel-id aus dem Kontext; nur wenn eindeutig, sonst null>",
+  "roll20-page": "<Page-Name als Verweis auf die Roll20-Seite; sonst null>",
+  "atmosphere": "<was der Ort über sich verrät, 1-3 Sätze>",
   "body": "<der Text des Ortes, ein String mit echten Zeilenumbrüchen>",
   "warnings": ["<kurzer deutscher Hinweis für den DM>"]
 }
@@ -42,8 +41,8 @@ Ein Ort trägt genau diese Felder; `status` gehört zu Szene und Figur und
 entfällt hier. Jedes Feld, das der Quelltext nicht hergibt, trägt `null`.
 
 `atmosphere` hält in 1-3 Sätzen, was der Ort über sich verrät: Zustand,
-Geräusche, Gerüche, was auffällt. Sie steht als Eigenschaft in `properties`;
-die Ort-Karte zeigt sie am Tisch.
+Geräusche, Gerüche, was auffällt. Sie steht als eigene Eigenschaft neben dem
+Text; die Ort-Karte zeigt sie am Tisch.
 
 Die Abschnitte im String `body` sind frei; empfohlen und in dieser Reihenfolge:
 
@@ -69,9 +68,9 @@ normaler Text da, und die Lücke gehört in eine `warning`.
 2. **`status`**: Das Feld gehört zu Szene und Figur; bei einem Ort entfällt
    es.
 3. **`chapter`**: eine id aus der Kontextliste, wenn der Ort eindeutig
-   dorthin gehört. Sonst entfällt der Key — der DM setzt ihn später.
+   dorthin gehört. Sonst trägt das Feld `null` — der DM setzt es später.
 4. **`roll20-page`**: setze es, wenn der Quelltext eine Page/Karte nennt;
-   sonst entfällt der Key, und die Lücke gehört in `warnings`.
+   sonst trägt das Feld `null`, und die Lücke gehört in `warnings`.
 5. **Quelltreu bleiben**: Räume, Bewohner, Geheimnisse und Schätze stammen
    aus dem Quelltext. Lücken gehören in `warnings`.
 6. **Callouts**: `[!readaloud]` für Vorlesetext, `[!secret]` für Wissen, das

@@ -14,6 +14,10 @@
 // else. The types stay widened all the same, because a READER still has to
 // render whatever an older database hands it.
 
+import type { Location, LocationDraft } from "./location";
+
+export type { Location, LocationDraft, LocationFields, LocationPatch } from "./location";
+
 /** A scene's lifecycle states. A CHECK constraint holds the column to them. */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
 export type SceneStatus = (typeof SCENE_STATUSES)[number];
@@ -88,17 +92,6 @@ export interface NpcProperties {
   appearance?: string;
   /** What the npc wants — shown on the npc card and in the reference preview. */
   motivation?: string;
-  [key: string]: unknown;
-}
-
-export interface LocationProperties {
-  id: string;
-  name: string;
-  chapter?: string;
-  /** Reference to the Roll20 page — never a map copy. */
-  "roll20-page"?: string;
-  /** What the place feels like — shown on the location card and in the reference preview. */
-  atmosphere?: string;
   [key: string]: unknown;
 }
 
@@ -404,19 +397,46 @@ export interface SceneOrderResponse {
 }
 
 /**
- * GET /api/campaigns/:campaign/entries/<address> — ONE entry: its address,
- * its kind, its properties, its markdown body and the guard token a PATCH
- * sends back.
+ * What every entry has, whatever its kind (ADR #31): its kind, its id, its
+ * address, its markdown text and the guard token a PATCH sends back. The
+ * fields of a kind stand beside these, flat — a location's `name` is
+ * `entry.name`.
+ */
+export interface EntryBase {
+  kind: EntryKind;
+  id: string;
+  /** The entry's address within the campaign (server/src/store/paths.ts). */
+  path: string;
+  /** The entry's markdown text. */
+  body: string;
+  /** Optimistic-concurrency token: PATCH sends it back, server 409s on mismatch. */
+  rev: number;
+}
+
+/**
+ * GET /api/campaigns/:campaign/entries/<address> — ONE entry, told apart by
+ * its `kind`. A location has its own type from its zod schema
+ * (./location.ts); the other kinds answer `EntryResponse`.
  *
  * Only the five ENTRY kinds are answered this way. A session, the inbox and
  * the glossary have no entry address at all (ADR #26) — they answer
  * `SessionResponse`, `InboxResponse` and `GlossaryResponse` on their own
  * endpoints, and the epoch readings a session needs travel there.
  */
+export type Entry = TypedEntry<Location> | EntryResponse;
+
+/** A kind with its own type — held to the base every entry has. */
+type TypedEntry<T extends EntryBase> = T;
+
+/**
+ * An entry of a kind whose fields travel under `properties`: its address,
+ * its kind, its properties, its markdown body and the guard token a PATCH
+ * sends back.
+ */
 export interface EntryResponse {
   /** The entry's address within the campaign (server/src/store/paths.ts). */
   path: string;
-  kind: EntryKind;
+  kind: Exclude<EntryKind, "location">;
   properties: Record<string, unknown>;
   /** The entry's markdown text. */
   body: string;
@@ -426,7 +446,9 @@ export interface EntryResponse {
 
 /**
  * The body of PATCH /api/campaigns/:campaign/entries/<address> — the ONE
- * write of an entry (ADR #23).
+ * write of an entry (ADR #23) — for a kind whose fields travel under
+ * `properties`. A location's patch carries its fields flat beside `rev`,
+ * `force` and `body` instead (`LocationPatch`, ./location.ts).
  *
  * `rev` is the guard token of the entry as it was read; a mismatch is a 409
  * that carries the current `rev` AND the current entry. At least one of
@@ -498,10 +520,15 @@ export interface GeneratedSceneDraft {
 /**
  * A stub for an npc/location the source text mentions but the campaign does
  * not know yet. The review UI accepts/rejects stubs individually; the target
- * path on apply is derived as `npcs/<id>` / `locations/<id>`.
+ * path on apply is derived as `npcs/<id>` / `locations/<id>`. A location stub
+ * is the location draft itself (`LocationDraft`: the entry without `path`
+ * and `rev`).
  */
-export interface GeneratedStub {
-  kind: "npc" | "location";
+export type GeneratedStub = GeneratedNpcStub | LocationDraft;
+
+/** An npc stub: its id and name, its properties and its text. */
+export interface GeneratedNpcStub {
+  kind: "npc";
   id: string;
   name: string;
   /** The stub's properties. */
@@ -738,7 +765,10 @@ export interface GenerateJobError {
  * changed: `properties` REPLACES the draft's whole properties object (the
  * fields card edits every field at once), `body` replaces its whole body.
  * The half that is absent keeps the model's own value, so a text edit cannot
- * silently reset a field and a field edit cannot reset the text.
+ * silently reset a field and a field edit cannot reset the text. For a
+ * location draft the properties half is its fields by name
+ * (`LocationFields`), exactly what its draft carries beside `kind`, `id` and
+ * `body`.
  */
 export interface DraftEdit {
   properties?: Record<string, unknown>;

@@ -6,7 +6,7 @@
 // third module keeps that import graph a tree — the same split db/job-boot.ts
 // exists for.
 
-import type { DraftEdit } from "@grimoire/shared";
+import type { DraftEdit, GeneratedStub } from "@grimoire/shared";
 import { ApiError } from "./api-error";
 import {
   draftSceneId,
@@ -19,9 +19,8 @@ import {
   applyNpcTarget,
   applySceneTarget,
   applyStubTarget,
-  draftAddress,
+  entityDraftOf,
   jobChapterTarget,
-  storedDraftProperties,
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
@@ -88,6 +87,18 @@ function edit(
   };
 }
 
+/**
+ * A stub with the DM's review edit applied, by the same rule. A location
+ * stub is its draft, so its fields half is everything beside `kind`, `id`
+ * and `body`: an edit's properties half replaces those fields whole, and the
+ * result is checked against the location's schema like any apply item.
+ */
+function editStub(stub: GeneratedStub, edited: DraftEdit | undefined): unknown {
+  if (stub.kind === "npc") return { ...stub, ...edit(stub, edited) };
+  const { kind, id, body, ...fields } = stub;
+  return { kind, id, ...(edited?.properties ?? fields), body: edited?.body ?? body };
+}
+
 export async function acceptJobParts(
   campaign: string,
   jobId: string,
@@ -132,7 +143,7 @@ export async function acceptJobParts(
     const open =
       review.written[rel] === undefined && decision !== "rejected" && !dropped.has(rel);
     parts.set(rel, {
-      target: applyStubTarget({ ...stub, ...edit(stub, job.draftEdits.get(rel)) }, index),
+      target: applyStubTarget(editStub(stub, job.draftEdits.get(rel)), index),
       open,
       bulk: open && decision === "accepted",
     });
@@ -156,7 +167,7 @@ export async function acceptJobParts(
   const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
   const referencedPartsOf = (rel: string): string[] => {
     const part = parts.get(rel);
-    if (part === undefined || !scenePaths.has(rel)) return [];
+    if (part === undefined || !scenePaths.has(rel) || !("properties" in part.target)) return [];
     const { properties } = part.target;
     const npcIds = Array.isArray(properties.npcs) ? properties.npcs : [];
     const location = properties.location;
@@ -226,15 +237,7 @@ export async function acceptJobParts(
   const chapterEntry = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
   if (chapterEntry !== null) targets.unshift(chapterEntry);
 
-  const drafts = targets.map((t) => {
-    const properties = storedDraftProperties(t.properties, t.rel);
-    return {
-      rel: t.rel,
-      address: draftAddress(t.rel, properties),
-      properties,
-      body: t.body,
-    };
-  });
+  const drafts = targets.map(entityDraftOf);
 
   const written: Record<string, string> = {};
   for (const rel of selected) {

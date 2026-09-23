@@ -25,7 +25,7 @@
 // The system time is faked per case (setSystemTime) for deterministic dates.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
-import type { EntryResponse } from "@grimoire/shared";
+import type { EntryResponse, Location } from "@grimoire/shared";
 import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { seedCampaign } from "../src/db/seed";
@@ -36,6 +36,13 @@ async function getEntry(rel: string, campaign = "beispiel"): Promise<EntryRespon
   const res = await app.request(entriesUrl(campaign, rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
+}
+
+/** A location reads as its own typed entry (ADR #31). */
+async function getLocation(rel: string): Promise<Location> {
+  const res = await app.request(entriesUrl("beispiel", rel));
+  expect(res.status).toBe(200);
+  return (await res.json()) as Location;
 }
 
 /**
@@ -522,8 +529,8 @@ describe("the prose properties an npc and a location keep beside their text", ()
       "Das Leuchtfeuer muss wieder brennen, bevor die Herbstkonvois kommen — ihr Amt hängt daran.",
     );
     expect(jorna.body).not.toContain("## Will");
-    const tower = await getEntry(LOCATION);
-    expect(tower.properties.atmosphere).toBe(
+    const tower = await getLocation(LOCATION);
+    expect(tower.atmosphere).toBe(
       "Verlassen in Eile, nicht im Kampf: nichts ist umgeworfen, aber alles stehen gelassen.",
     );
     expect(tower.body).not.toContain("## Atmosphäre");
@@ -544,9 +551,12 @@ describe("the prose properties an npc and a location keep beside their text", ()
     expect(Object.hasOwn(cleared.properties, "motivation")).toBe(false);
     expect(cleared.body).toBe(written.body);
 
-    const place = await getEntry(LOCATION);
-    const noAtmosphere = await patchOk(LOCATION, { rev: place.rev, properties: { atmosphere: null } });
-    expect(Object.hasOwn(noAtmosphere.properties, "atmosphere")).toBe(false);
+    const place = await getLocation(LOCATION);
+    const noAtmosphere = (await patchOk(LOCATION, {
+      rev: place.rev,
+      atmosphere: null,
+    })) as unknown as Location;
+    expect(Object.hasOwn(noAtmosphere, "atmosphere")).toBe(false);
   });
 
   test("each field belongs to its kind — `atmosphere` on an npc is a 400", async () => {
@@ -580,5 +590,99 @@ describe("the prose properties an npc and a location keep beside their text", ()
     expect(forced.properties.motivation).toBe("Neue Motivation.");
     expect(forced.body).toBe("\n## Weiß\n\nNeuer Text.\n");
     expect(forced.properties.status).toBe("missing");
+  });
+});
+
+describe("a location is its own typed entry — fields flat beside the text", () => {
+  // ADR #31: a location answers `{ kind, id, path, name, …, body, rev }` and
+  // its PATCH carries its fields beside `rev`, checked against its schema.
+  const LOCATION = "locations/leuchtturm";
+
+  async function patchLocation(body: Record<string, unknown>): Promise<Response> {
+    return patchEntry(LOCATION, body);
+  }
+
+  test("GET answers the fields flat, and no `properties` half", async () => {
+    const tower = await getLocation(LOCATION);
+    expect(tower).toMatchObject({
+      kind: "location",
+      id: "leuchtturm",
+      path: LOCATION,
+      name: "Der Leuchtturm von Salzhafen",
+      chapter: "01-salzhafen",
+      "roll20-page": "Leuchtturm",
+    });
+    expect(Object.hasOwn(tower, "properties")).toBe(false);
+  });
+
+  test("only the named fields change; `null` clears an optional one", async () => {
+    const before = await getLocation(LOCATION);
+    const res = await patchLocation({ rev: before.rev, name: "Der alte Leuchtturm", "roll20-page": null });
+    expect(res.status).toBe(200);
+    const after = (await res.json()) as Location;
+    expect(after.name).toBe("Der alte Leuchtturm");
+    expect(Object.hasOwn(after, "roll20-page")).toBe(false);
+    expect(after.chapter).toBe(before.chapter);
+    expect(after.atmosphere).toBe(before.atmosphere);
+    expect(after.body).toBe(before.body);
+    expect(after.rev).toBe(before.rev + 1);
+    expect(await getLocation(LOCATION)).toEqual(after);
+  });
+
+  test("400 for a field a location does not have — named, and nothing written", async () => {
+    const before = await getLocation(LOCATION);
+    for (const extra of [{ status: "alive" }, { properties: { name: "X" } }, { review_note: "x" }]) {
+      const res = await patchLocation({ rev: before.rev, ...extra });
+      expect(res.status).toBe(400);
+      const key = Object.keys(extra)[0]!;
+      expect(((await res.json()) as { error: string }).error).toContain(key);
+    }
+    expect((await getLocation(LOCATION)).rev).toBe(before.rev);
+  });
+
+  test("400 for a value of the wrong shape — nothing written", async () => {
+    const before = await getLocation(LOCATION);
+    for (const bad of [{ name: 7 }, { name: null }, { atmosphere: ["Nebel"] }, { body: 3 }]) {
+      const res = await patchLocation({ rev: before.rev, ...bad });
+      expect(res.status).toBe(400);
+    }
+    expect((await patchLocation({ name: "ohne rev" })).status).toBe(400);
+    expect((await getLocation(LOCATION)).rev).toBe(before.rev);
+  });
+
+  test("the id may be echoed, never changed; an empty patch writes nothing", async () => {
+    const before = await getLocation(LOCATION);
+    const changed = await patchLocation({ rev: before.rev, id: "turm" });
+    expect(changed.status).toBe(400);
+    const empty = await patchLocation({ rev: before.rev });
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
+    expect((await getLocation(LOCATION)).rev).toBe(before.rev);
+  });
+
+  test("a stale rev is 409 with the current location; force writes only what it carries", async () => {
+    const read = await getLocation(LOCATION);
+    const other = await patchLocation({ rev: read.rev, "roll20-page": "Turm (fremd)" });
+    expect(other.status).toBe(200);
+
+    const refused = await patchLocation({ rev: read.rev, atmosphere: "Neue Stimmung." });
+    expect(refused.status).toBe(409);
+    const conflict = (await refused.json()) as { code: string; entry: Location };
+    expect(conflict.code).toBe("rev_conflict");
+    expect(conflict.entry["roll20-page"]).toBe("Turm (fremd)");
+
+    const forced = await patchLocation({ rev: read.rev, atmosphere: "Neue Stimmung.", force: true });
+    expect(forced.status).toBe(200);
+    const written = (await forced.json()) as Location;
+    expect(written.atmosphere).toBe("Neue Stimmung.");
+    expect(written["roll20-page"]).toBe("Turm (fremd)");
+  });
+
+  test("the search index follows a rename", async () => {
+    const before = await getLocation(LOCATION);
+    expect((await patchLocation({ rev: before.rev, name: "Kap Leuchtfeuer" })).status).toBe(200);
+    const res = await app.request("/api/campaigns/beispiel/search?q=Leuchtfeuer");
+    const { results } = (await res.json()) as { results: Array<{ kind: string; id: string }> };
+    expect(results.some((hit) => hit.kind === "location" && hit.id === "leuchtturm")).toBe(true);
   });
 });

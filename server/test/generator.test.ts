@@ -25,7 +25,14 @@
 // below call it directly.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { EntryResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
+import type {
+  EntryResponse,
+  GenerateJob,
+  GenerateResult,
+  GenerateUsage,
+  GeneratedNpcStub,
+  Location,
+} from "@grimoire/shared";
 import { app } from "../src/server";
 import { eq } from "drizzle-orm";
 import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
@@ -234,6 +241,15 @@ function locationStub(over: { status?: string } = {}): ScriptedEntry {
     },
     body: ["## Wer ist hier", "", "- niemand", ""].join("\n"),
   };
+}
+
+/**
+ * The location stub as an APPLY item: the location draft itself, its fields
+ * flat beside `kind` and `body` (ADR #31).
+ */
+function locationItem(over: { status?: string } = {}): Record<string, unknown> {
+  const stub = locationStub(over);
+  return { kind: "location", ...stub.properties, body: stub.body };
 }
 
 interface ReplyOver {
@@ -696,7 +712,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     expect(fake.callsFor("grella")).toHaveLength(1);
     // …and the draft the review shows carries the default, not a gap.
     const result = (await res.json()) as GenerateResult;
-    expect(result.stubs[0]!.properties.status).toBe("unknown");
+    expect((result.stubs[0] as GeneratedNpcStub).properties.status).toBe("unknown");
   });
 
   test("location stub with ANY status triggers a correction turn", async () => {
@@ -713,10 +729,10 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       expect(entry).toHaveLength(2);
       const correction = entry[1]!.corrections[0]!.correction;
       expect(correction).toContain(`location "${LOCATION_STUB_ID}"`);
-      // The FIELD LIST catches it before the status rule
-      // does: a location has no `status` field at all, so the message names
-      // the fields it does have — which is more to go on, not less.
-      expect(correction).toContain("ist kein Feld dieser Entität");
+      // The location's reply SCHEMA catches it: a location has no `status`
+      // field at all, so the message names the key and the fields it does
+      // have — which is more to go on, not less.
+      expect(correction).toContain('Unbekannter Schlüssel: "status"');
       expect(correction).toContain("roll20-page");
     }
   });
@@ -1362,11 +1378,9 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
         { kind: "npc", id: "brix", ...npcStub({ ...brix, status: null }) },
         '"status" fehlt',
       ],
-      // a location stub must not carry a status key at all
-      [
-        { kind: "location", id: "raeucherkammer", ...locationStub({ status: "alive" }) },
-        "locations haben keinen status",
-      ],
+      // a location stub must not carry a status key at all — its schema has
+      // no such field
+      [locationItem({ status: "alive" }), 'Unrecognized key: "status"'],
     ];
     for (const [stub, expected] of cases) {
       const res = await postJson("/api/campaigns/beispiel/generate/apply", { stubs: [stub] });
@@ -1380,17 +1394,17 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     const ok = await postJson("/api/campaigns/beispiel/generate/apply", {
       stubs: [
         { kind: "npc", id: "brix", ...npcStub({ ...brix, status: "missing" }) },
-        { kind: "location", id: "raeucherkammer", ...locationStub() },
+        locationItem(),
       ],
     });
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({
       written: ["npcs/brix", "locations/raeucherkammer"],
     });
-    // The location's prose property came through the accept as a property.
-    expect((await read("locations/raeucherkammer")).properties.atmosphere).toBe(
-      "Im Quelltext nur erwähnt — Details fehlen.",
-    );
+    // The location's prose property came through the accept as a field of
+    // its own (ADR #31).
+    const written = (await read("locations/raeucherkammer")) as unknown as Location;
+    expect(written.atmosphere).toBe("Im Quelltext nur erwähnt — Details fehlen.");
   });
 
   test("400 on malformed bodies", async () => {

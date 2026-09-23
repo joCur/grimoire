@@ -3,7 +3,7 @@
 Dieser Aufruf schreibt GENAU EINE Szene — die, die die Gliederung dir zuweist.
 
 Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
-von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
+von der Schnittstelle erzwungen — es trägt drei Teile:
 
 * `properties` — die Eigenschaften des Eintrags, jede als eigener Schlüssel.
   Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere trägt

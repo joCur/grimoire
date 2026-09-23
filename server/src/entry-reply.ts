@@ -26,13 +26,19 @@
 // travels as a JSON string, which the TRANSPORT escapes: quotation marks,
 // newlines and backslashes survive because nobody hand-wrote them.
 //
+// A kind with its own zod schema (ADR #31, a location) replies FLAT — its
+// fields beside `body` and `warnings`, no `properties` half — and its reply is
+// read by that kind's reply schema (`parseLocationReply`): the schema the
+// provider enforced is the schema that parses.
+//
 // What this module does NOT do is judge content. It reads the object,
-// type-checks its `properties` against the kind's FIELD LIST
-// (@grimoire/shared/property-fields — the very list the properties dialog is
-// built from) and hands on the properties/body pair the store speaks.
-// Everything after that — a kebab `id`, a known scene type, references that
-// resolve, known callouts, the npc format rules — stays in the validators
-// (./generator.ts, ./generate-pipeline.ts, ./generator-augment.ts).
+// type-checks its fields — against the kind's reply schema, or against the
+// kind's FIELD LIST (@grimoire/shared/property-fields — the very list the
+// properties dialog is built from) for the kinds that still reply with
+// `properties` — and hands on the draft the store speaks. Everything after
+// that — a kebab `id`, a known scene type, references that resolve, known
+// callouts, the npc format rules — stays in the validators (./generator.ts,
+// ./generate-pipeline.ts, ./generator-augment.ts).
 //
 // The conversion goes BOTH ways here, and on purpose: `toReplyProperties`
 // writes stored properties in the reply's shape, which is what an augment
@@ -40,15 +46,21 @@
 // contract, so they are one module.
 
 import { jsonrepair } from "jsonrepair";
+import { z } from "zod";
 import {
   PAIR_KEY,
   PAIR_VALUE,
   isNotGiven,
+  locationReplySchemas,
   propertyFieldsFor,
   type GeneratedEntryKind,
   type EntryMode,
+  type LocationDraft,
   type PropertyFieldDef,
 } from "@grimoire/shared";
+
+/** The kinds whose reply carries its fields under `properties`. */
+export type PropertiesReplyKind = Exclude<GeneratedEntryKind, "location">;
 
 /** One entry reply, normalized: the object the server stores plus notes. */
 export interface EntryReply {
@@ -66,8 +78,8 @@ export interface EntryReply {
    * The property keys the reply carried that the kind does NOT have — empty
    * except in `augment` mode, which drops them instead of failing the run
    * (see `normalizeProperties`). A validator that has a rule about such a key
-   * — a location must never carry a `status` — reads it here; everything else
-   * ignores it, which is the point. Optional, so a reply built in a test or a
+   * reads it here; everything else ignores it, which is the point. Optional,
+   * so a reply built in a test or a
    * fixture does not have to carry an empty list.
    */
   ignored?: string[];
@@ -190,7 +202,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function parseEntryReply(
   raw: string,
-  kind: GeneratedEntryKind,
+  kind: PropertiesReplyKind,
   mode: EntryMode = "create",
 ): { ok: true; reply: EntryReply } | { ok: false; errors: string[] } {
   const parsed = parseJsonReply(raw);
@@ -250,7 +262,7 @@ function normalizeWarnings(value: unknown, errors: string[]): string[] {
  * also knows whether the id may be a NEW one.
  */
 function normalizeProperties(
-  kind: GeneratedEntryKind,
+  kind: PropertiesReplyKind,
   mode: EntryMode,
   raw: Record<string, unknown>,
   errors: string[],
@@ -290,7 +302,7 @@ function normalizeProperties(
     const before = errors.length;
     const read = fieldValue(field, raw[field.key], errors);
     const value = read ?? defaults[field.key];
-    // „Verpflichtend" is checked HERE, after the value was normalized: a
+    // "Required" is checked HERE, after the value was normalized: a
     // required field whose value is whitespace only (`name: "   "`) trims to
     // the empty string, and dropping that silently is how an npc ends up
     // named after its id. A field whose SHAPE was already complained about
@@ -316,7 +328,7 @@ function normalizeProperties(
  * these in, reject an absent scene `type` / npc `status` outright. The
  * default is the pre-cutover behaviour, restored where the key is composed.
  */
-const PROPERTY_DEFAULTS: Partial<Record<GeneratedEntryKind, Record<string, string>>> = {
+const PROPERTY_DEFAULTS: Partial<Record<PropertiesReplyKind, Record<string, string>>> = {
   // "planned" is the unmarked case; a contingency scene says so explicitly.
   scene: { type: "planned" },
   // "unknown" is what a status-less npc means — never "alive", which would be
@@ -414,7 +426,7 @@ function isPairValue(value: unknown): value is string | number {
  * extra ones included, is passed through untouched.
  */
 export function toReplyProperties(
-  kind: GeneratedEntryKind,
+  kind: PropertiesReplyKind,
   stored: Record<string, unknown>,
 ): Record<string, unknown> {
   const pairKeys = new Set(
@@ -433,4 +445,112 @@ export function toReplyProperties(
         : value;
   }
   return out;
+}
+
+// --- a location reply ---------------------------------------------------------
+
+/** One location reply, read: the draft the store writes plus the notes. */
+export interface LocationEntryReply {
+  /** The location as a draft — `kind`, `id`, its fields and the stored body. */
+  draft: LocationDraft;
+  /** One note per entry; empty when there was nothing to report. */
+  warnings: string[];
+  /**
+   * The keys an AUGMENT reply carried that a location does not have — echoes
+   * of the entry the model was shown, dropped instead of failing the run. A
+   * validator that has a rule about one (a location never has a `status`)
+   * reads it here. Always empty in a create run, where such a key is an error.
+   */
+  ignored: string[];
+}
+
+/**
+ * The error a location reply that is not the reply object gets back —
+ * German, like every correction turn, and naming the flat shape.
+ */
+export const NOT_A_LOCATION_ERROR =
+  "die Antwort ist kein Objekt des Schemas — sie braucht die Eigenschaften des Orts " +
+  "als eigene Schlüssel (`id`, `name`, `chapter`, `roll20-page`, `atmosphere`), " +
+  "daneben `body` (der Fließtext als ein String) und `warnings` (eine Liste von " +
+  "Hinweisen). Gib genau dieses Objekt zurück — als ganze Antwort, ohne Code-Zäune.";
+
+/** The issues of a reply parse in German — they travel into the correction turn. */
+const GERMAN_ISSUES = z.locales.de();
+
+/**
+ * Read one location reply with the location's reply schema — the very
+ * schema the provider enforced (@grimoire/shared/location) — into the draft
+ * the store writes, or into the error list for the correction turn.
+ *
+ * Three leniencies stand in front of the parse, the same the other kinds'
+ * reader grants: text is trimmed and a blank optional field is „not given",
+ * a nullable field the reply left out entirely counts as `null`, and
+ * `warnings: null` is no warnings. In an AUGMENT run a key the location does
+ * not have is dropped into `ignored` instead of failing the run (see
+ * `normalizeProperties` for why).
+ */
+export function parseLocationReply(
+  raw: string,
+  mode: EntryMode = "create",
+): { ok: true; reply: LocationEntryReply } | { ok: false; errors: string[] } {
+  const parsed = parseJsonReply(raw);
+  if (parsed === null || !isRecord(parsed.value)) {
+    return { ok: false, errors: [NOT_A_LOCATION_ERROR] };
+  }
+  const schema = locationReplySchemas[mode];
+  const shape: Record<string, z.ZodType> = schema.shape;
+  const ignored: string[] = [];
+  const input: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed.value)) {
+    if (!(key in shape) && mode === "augment") {
+      ignored.push(key);
+      continue;
+    }
+    input[key] = typeof value === "string" && key !== "body" ? value.trim() : value;
+  }
+  for (const [key, field] of Object.entries(shape)) {
+    const value = input[key];
+    const blank = value === undefined || value === "";
+    if (blank && field.safeParse(null).success) input[key] = null;
+  }
+  if (input.warnings === null) input.warnings = [];
+
+  const read = schema.safeParse(input, { error: GERMAN_ISSUES.localeError });
+  if (!read.success) {
+    const allowed = Object.keys(shape).join(", ");
+    return {
+      ok: false,
+      errors: read.error.issues.map((issue) => {
+        const where = issue.path.length === 0 ? "" : `"${issue.path.join(".")}": `;
+        const hint = issue.code === "unrecognized_keys" ? ` — erlaubt sind: ${allowed}` : "";
+        return `${where}${issue.message}${hint}`;
+      }),
+    };
+  }
+  const { id, name, body, warnings, ...optional } = read.data;
+  const errors: string[] = [];
+  if (id === "") errors.push('"id" fehlt — jeder Eintrag nennt seine kebab-case id');
+  if (name === "") errors.push('"name" fehlt — das Feld ist verpflichtend');
+  if (errors.length > 0) return { ok: false, errors };
+
+  const draft: LocationDraft = {
+    kind: "location",
+    id,
+    name,
+    ...(optional.chapter === null ? {} : { chapter: optional.chapter }),
+    ...(optional["roll20-page"] === null ? {} : { "roll20-page": optional["roll20-page"] }),
+    ...(optional.atmosphere === null ? {} : { atmosphere: optional.atmosphere }),
+    // The body is stored the way the store keeps it: no leading blank lines
+    // and exactly one trailing newline.
+    body: `${body.replace(/^\n+/, "").trimEnd()}\n`,
+  };
+  const notes = warnings.map((warning) => warning.trim()).filter((warning) => warning !== "");
+  return {
+    ok: true,
+    reply: {
+      draft,
+      warnings: parsed.repaired ? [...notes, REPAIRED_ENTRY_WARNING] : notes,
+      ignored,
+    },
+  };
 }

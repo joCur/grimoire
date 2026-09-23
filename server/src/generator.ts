@@ -6,8 +6,9 @@
 //   4. read the reply and validate it MECHANICALLY. EVERY call answers a
 //      JSON object whose shape the provider forces: the outline
 //      its own small object (shared/outline-schema), an entry call the
-//      object that mirrors the stored row — `properties` per kind, `body`,
-//      `warnings` (shared/entry-schema, read by ./entry-reply). Errors
+//      object that mirrors the stored row — the kind's fields (flat for a
+//      location, under `properties` for the others), `body`, `warnings`
+//      (shared/entry-schema, read by ./entry-reply). Errors
 //      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
 //      default 1, max 2), never to the user; exhausted retries
 //      -> 422.
@@ -19,7 +20,8 @@
 //      NOTHING; only POST /generate/apply stores anything, and it
 //      re-validates server-side instead of trusting the client.
 //
-// A DRAFT IS `{ properties, body }` from the reply to the store (ADR #24):
+// A DRAFT IS `{ properties, body }` from the reply to the store (ADR #24) —
+// for a location its typed draft, `{ kind, id, …fields, body }` (ADR #31):
 // nothing here renders an entry into one markdown text and nothing parses
 // one back.
 //
@@ -49,8 +51,10 @@ import {
   kindFromAddress,
   type GenerateNpcResult,
   type GenerateUsage,
+  type GeneratedNpcStub,
   type GeneratedSceneDraft,
   type GeneratedStub,
+  type LocationDraft,
   type NamingHint,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
@@ -58,7 +62,7 @@ import { bodyEntityRefSlugs, entityRefSource } from "@grimoire/shared/refs";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
-import { parseEntryReply, type EntryReply } from "./entry-reply";
+import { parseEntryReply, type EntryReply, type LocationEntryReply } from "./entry-reply";
 import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
@@ -66,7 +70,8 @@ import { requireCampaign } from "./store/campaigns";
 import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
-import { applyDrafts, draftTargetExists } from "./store/drafts";
+import { applyDrafts, draftTargetExists, type EntityDraft } from "./store/drafts";
+import { readLocationDraft } from "./store/locations";
 import {
   addressHead,
   addressIdentity,
@@ -489,30 +494,18 @@ function draftProperties(
 }
 
 /**
- * The `status` rules for stubs, as messages — empty list means
- * fine. `status: draft` belongs to SCENES only: per the data contract
- * (README) an npc knows alive/dead/missing/unknown and a location has no
- * status at all, so a `draft` leaking into a stub becomes an invalid
- * pass-through value in the UI. Any valid NpcStatus is accepted for an npc
- * stub; the prompt asks for `alive` unless the source text says otherwise,
- * which is why a MISSING npc status is an error too.
- *
- * Shared by the reply validation (-> correction turn) and the apply
- * re-validation (-> 400): the same rule, checked on both ways in.
- */
-function stubStatusErrors(kind: "npc" | "location", props: Record<string, unknown>): string[] {
-  if (kind === "location") {
-    return Object.hasOwn(props, "status")
-      ? ['"status" ist nicht erlaubt — locations haben keinen status']
-      : [];
-  }
-  return npcStatusErrors(props, "NPC-Stubs");
-}
-
-/**
  * The npc `status` rule, shared by the stub validation and the NPC generator:
  * present, and one of NPC_STATUSES. `subject` names who the rule
  * is about, so the correction turn reads naturally in both places.
+ *
+ * `status: draft` belongs to SCENES only: per the data contract (README) an
+ * npc knows alive/dead/missing/unknown, so a `draft` leaking into a stub
+ * becomes an invalid pass-through value in the UI. The prompt asks for
+ * `alive` unless the source text says otherwise, which is why a MISSING
+ * status is an error too. (A location has no status at all: its schema has no
+ * such field, so a reply or an apply item that names one is refused there.)
+ * Shared by the reply validation (-> correction turn) and the apply
+ * re-validation (-> 400): the same rule, checked on both ways in.
  */
 export function npcStatusErrors(props: Record<string, unknown>, subject: string): string[] {
   if (!Object.hasOwn(props, "status")) {
@@ -529,14 +522,19 @@ export function npcStatusErrors(props: Record<string, unknown>, subject: string)
 }
 
 /**
- * Validate one SUGGESTED ENTRY of a scene reply: `kind` says
- * what it is, the properties `id` is its key, and the server addresses it as
- * `npcs/<id>` / `locations/<id>`. Returns the GeneratedStub or pushes errors.
+ * Validate one suggested NPC of a scene run: the properties `id` is its key,
+ * and the server addresses it as `npcs/<id>`. Returns the stub or pushes
+ * errors. (A suggested location is read by its own reply schema,
+ * `validateLocationEntry`.)
  */
-export function validateEntry(entry: RawEntry, index: number, errors: string[]): GeneratedStub | null {
+export function validateEntry(
+  entry: RawEntry,
+  index: number,
+  errors: string[],
+): GeneratedNpcStub | null {
   const kind = entry.kind;
-  if (kind !== "npc" && kind !== "location") {
-    errors.push(`entries[${index}]: "kind" must be "npc" or "location"`);
+  if (kind !== "npc") {
+    errors.push(`entries[${index}]: "kind" must be "npc"`);
     return null;
   }
   const preview = `entries[${index}]`;
@@ -558,7 +556,7 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
-  for (const msg of stubStatusErrors(kind, props)) errors.push(`${label}: ${msg}`);
+  for (const msg of npcStatusErrors(props, "NPC-Stubs")) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
@@ -566,6 +564,34 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     properties,
     body: entry.reply.body,
   };
+}
+
+/**
+ * Validate one suggested LOCATION of a scene run, read by the location's
+ * reply schema (./entry-reply `parseLocationReply`): its `id` is the key and
+ * has to be a kebab slug, and the server addresses it as `locations/<id>`.
+ * Returns the location draft, which IS the stub, or pushes errors.
+ */
+export function validateLocationEntry(
+  reply: LocationEntryReply,
+  errors: string[],
+): LocationDraft | null {
+  const { draft } = reply;
+  if (!ENTITY_ID_PATTERN.test(draft.id)) {
+    errors.push(`location entry "${draft.id}": "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
+    return null;
+  }
+  return draft;
+}
+
+/**
+ * A stub as the naming check reads it — its address, its fields and its
+ * text, the same halves the review shows and the accept writes.
+ */
+export function checkedStub(stub: GeneratedStub): CheckedDraft {
+  if (stub.kind === "npc") return { path: stubPath(stub), properties: stub.properties, body: stub.body };
+  const { kind: _kind, body, ...fields } = stub;
+  return { path: stubPath(stub), properties: fields, body };
 }
 
 /**
@@ -1045,15 +1071,46 @@ export async function runGenerateNpc(
 // --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
 
 const SCENE_ITEM_KEYS = new Set(["path", "properties", "body"]);
-const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "properties", "body"]);
+const NPC_STUB_ITEM_KEYS = new Set(["kind", "id", "name", "properties", "body"]);
 /** Same three keys as a scene draft — the client may pass the draft verbatim. */
 const NPC_ITEM_KEYS = SCENE_ITEM_KEYS;
 
-/** One validated entry ready to be written. */
-export interface ApplyTarget {
+/**
+ * One validated entry ready to be written: a `properties`/`body` pair, or a
+ * location's typed draft (ADR #31).
+ */
+export type ApplyTarget = PropertiesTarget | LocationTarget;
+
+/** A target of a kind whose fields travel under `properties`. */
+export interface PropertiesTarget {
   rel: string;
   properties: Record<string, unknown>;
   body: string;
+}
+
+/** A location target — its draft, checked against the location's schema. */
+export interface LocationTarget {
+  rel: string;
+  location: LocationDraft;
+}
+
+/**
+ * The draft a target is written as, with the address it will have. The `id`
+ * of a `properties` target is checked and a scene's address derived here
+ * (`storedDraftProperties`, `draftAddress`); a location target's id was
+ * checked with its draft, and its address is its path.
+ */
+export function entityDraftOf(target: ApplyTarget): EntityDraft {
+  if ("location" in target) {
+    return { rel: target.rel, address: target.rel, location: target.location };
+  }
+  const properties = storedDraftProperties(target.properties, target.rel);
+  return {
+    rel: target.rel,
+    address: draftAddress(target.rel, properties),
+    properties,
+    body: target.body,
+  };
 }
 
 /**
@@ -1086,7 +1143,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /** Deep-validate one scene item of the apply body -> write target. */
-export function applySceneTarget(item: unknown, index: number): ApplyTarget {
+export function applySceneTarget(item: unknown, index: number): PropertiesTarget {
   const label = `scenes[${index}]`;
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, SCENE_ITEM_KEYS, label);
@@ -1128,7 +1185,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
  * here — from here on the DM is the author of the entry, and their own edit
  * must not be rejected for a prompt rule.
  */
-export function applyNpcTarget(item: unknown): ApplyTarget {
+export function applyNpcTarget(item: unknown): PropertiesTarget {
   const label = "npc";
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, NPC_ITEM_KEYS, label);
@@ -1148,27 +1205,36 @@ export function applyNpcTarget(item: unknown): ApplyTarget {
   return { rel, properties, body };
 }
 
-/** Deep-validate one stub item of the apply body -> write target. */
+/**
+ * Deep-validate one stub item of the apply body -> write target. An npc stub
+ * is `{ kind, id, name, properties, body }`; a location stub is the location
+ * draft itself, checked against the location's schema (ADR #31) — a key a
+ * location does not have (a `status`, a `properties` half) is a 400.
+ */
 export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   const label = `stubs[${index}]`;
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
-  assertKnownKeys(item, STUB_ITEM_KEYS, label);
   const kind = item.kind;
   const id = item.id;
-  // Narrowed to the literal union on purpose — the status re-validation
-  // below is kind-specific.
   if (kind !== "npc" && kind !== "location") {
     throw new ApiError(400, `${label}.kind must be "npc" or "location"`);
   }
   if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
     throw new ApiError(400, `${label}.id must be a kebab-case slug`);
   }
+  if (kind === "location") {
+    const location = readLocationDraft(item, label);
+    const rel = locationPath(location.id);
+    assertSafeAddress(rel); // defense in depth — the slug check above rules escapes out
+    return { rel, location };
+  }
+  assertKnownKeys(item, NPC_STUB_ITEM_KEYS, label);
   const { properties, body } = itemHalves(item, label);
-  const rel = kind === "npc" ? npcPath(id) : locationPath(id);
+  const rel = npcPath(id);
   assertSafeAddress(rel); // defense in depth — the slug check above rules escapes out
   // Re-validation, same as for scenes: a client payload must not sneak a
   // stub status past the reply validation.
-  const statusError = stubStatusErrors(kind, properties)[0];
+  const statusError = npcStatusErrors(properties, "NPC-Stubs")[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, properties, body };
 }
@@ -1199,7 +1265,7 @@ export async function jobChapterTarget(
   },
   bodyChapter: unknown,
   bodyChapterTitle: unknown,
-): Promise<ApplyTarget | null> {
+): Promise<PropertiesTarget | null> {
   // The description is the OUTLINE's (it read the source material) and only
   // a new-chapter run's outline has one, so it comes from the job on either
   // path: the override names the chapter, it does not describe it.
@@ -1234,7 +1300,7 @@ export async function newChapterTarget(
   chapter: unknown,
   chapterTitle: unknown,
   description?: string,
-): Promise<ApplyTarget | null> {
+): Promise<PropertiesTarget | null> {
   if (chapter === undefined && chapterTitle === undefined) return null;
   if (typeof chapter !== "string" || typeof chapterTitle !== "string") {
     throw new ApiError(400, "chapter and chapterTitle must be sent together as strings");
@@ -1303,22 +1369,13 @@ export async function applyGenerated(
   const chapterEntry = await newChapterTarget(campaign, chapter, chapterTitle);
   if (chapterEntry !== null) targets.unshift(chapterEntry);
 
-  const drafts = targets.map((t) => {
-    const properties = storedDraftProperties(t.properties, t.rel);
-    // The ADDRESS the entity will have (store/paths) — for a scene that is
-    // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because
-    // that is the key `insertDraft` writes under. The model's last segment is
-    // not part of the addressing, so it must not decide anything
-    // here either: checking the path-derived id while inserting the
-    // properties id would let a colliding draft past the 409 and into a
-    // primary-key violation.
-    return {
-      rel: t.rel,
-      address: draftAddress(t.rel, properties),
-      properties,
-      body: t.body,
-    };
-  });
+  // The ADDRESS each entity will have (store/paths) — for a scene that is
+  // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because that is
+  // the key `insertDraft` writes under. The model's last segment is not part
+  // of the addressing, so it must not decide anything here either: checking
+  // the path-derived id while inserting the properties id would let a
+  // colliding draft past the 409 and into a primary-key violation.
+  const drafts = targets.map(entityDraftOf);
 
   // By IDENTITY, not by address: a scene's address carries its `location`, so
   // two drafts with the same id under different locations

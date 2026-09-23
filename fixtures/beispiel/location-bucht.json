@@ -1,11 +1,9 @@
 {
   "kind": "location",
-  "properties": {
-    "id": "bucht",
-    "name": "Die Nordbucht",
-    "chapter": "01-salzhafen",
-    "roll20-page": "Nordbucht",
-    "atmosphere": "Arbeit, keine Romantik: Kisten unter Planen, ausgetretene Pfade, niemand redet laut."
-  },
+  "id": "bucht",
+  "name": "Die Nordbucht",
+  "chapter": "01-salzhafen",
+  "roll20-page": "Nordbucht",
+  "atmosphere": "Arbeit, keine Romantik: Kisten unter Planen, ausgetretene Pfade, niemand redet laut.",
   "body": "\n## Beim ersten Betreten\n\n> [!readaloud] Der Pfad endet an einem Kiesstrand, den die Flut halb\n> verschluckt hat. Zwischen zwei Felsnadeln liegt ein Boot ohne Namen,\n> und weiter hinten, wo der Fels zurückweicht, hängt Rauch in der Luft.\n\n## Wer ist hier\n\n- Fenn und vier Leute, die für ihn fahren\n"
 }

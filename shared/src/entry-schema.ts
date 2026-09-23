@@ -6,25 +6,28 @@
 // `response_format: json_schema` (server/src/llm-provider.ts). A shape the
 // API guarantees is a shape no correction turn has to buy.
 //
-// The shape MIRRORS THE STORED ENTRY:
+// The shape MIRRORS THE STORED ENTRY. A kind with its own zod schema
+// (ADR #31, a location) replies with its fields side by side with the text:
+//
+//     { "id": "alte-mole", "name": "Die alte Mole", "chapter": null, …,
+//       "body": "## Beim ersten Betreten\n…", "warnings": [] }
+//
+// and its reply schema is DERIVED from that one zod schema with
+// `z.toJSONSchema` (./entry-form `replyForm`, ./location.ts) — never written
+// down by hand. The other kinds reply with their fields under `properties`:
 //
 //     { "properties": { "id": "night-watch-quay", … }, "body": "## Ablauf\n…",
 //       "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."] }
 //
-// `properties` holds the kind's own property keys, `body` the whole rendered
-// text below them as one string, `warnings` what the DM reads in the review.
-// The server composes the properties block itself with the store's renderer
-// and never asks the model for it, so the body travels verbatim: a forced
-// object cannot miss a delimiter, fence itself, append a sign-off or break on
-// a quotation mark.
-//
-// The schemas live in ../schema, one per kind and run, readable
-// and reviewable on their own. This module only loads them and hands them to
-// the provider — nothing here assembles a schema. `shared/test/
+// and their schemas live in ../schema, one per kind and run; `shared/test/
 // entry-schema.test.ts` asserts that their keys and enums still match the
 // property field definitions the „Eigenschaften" dialog is built from
-// (./property-fields), so the fields a model may write and the fields the DM
-// can edit cannot drift apart.
+// (./property-fields).
+//
+// Either way `body` is the whole text as one string and `warnings` what the
+// DM reads in the review. The body travels verbatim: a forced object cannot
+// miss a delimiter, fence itself, append a sign-off or break on a quotation
+// mark.
 //
 // STRICT MODE rules those schemas, because the OpenAI-compatible path sends
 // `strict: true` and a schema it rejects is a permanent downgrade for the
@@ -36,16 +39,16 @@
 //   * `additionalProperties: false` everywhere,
 //   * every property in `required` — a genuinely optional field is NULLABLE
 //     instead, and the server reads `null` as „not given" (it drops the key
-//     before it composes the properties block),
+//     before the draft is stored),
 //   * a free key/value map (`quickstats`) cannot be expressed at all, so it
 //     travels as a LIST of `{ key, value }` pairs and the server folds it
 //     back into the mapping the format contract asks for.
 
 import type { JsonSchema } from "./outline-schema";
-import augmentedLocationEntry from "../schema/augmented-location.schema.json";
+import { replyJsonSchema } from "./entry-form";
+import { locationReplySchemas } from "./location";
 import augmentedNpcEntry from "../schema/augmented-npc.schema.json";
 import augmentedSceneEntry from "../schema/augmented-scene.schema.json";
-import locationEntry from "../schema/location.schema.json";
 import npcEntry from "../schema/npc.schema.json";
 import sceneEntry from "../schema/scene.schema.json";
 
@@ -75,17 +78,17 @@ export type EntryMode = "create" | "augment";
 export const PAIR_KEY = "key";
 export const PAIR_VALUE = "value";
 
-/** Every loaded entry schema, by kind and run. */
+/** Every entry schema, by kind and run — loaded or derived once, at start. */
 const ENTRY_SCHEMAS: Record<EntryMode, Record<GeneratedEntryKind, JsonSchema>> = {
   create: {
     scene: sceneEntry,
     npc: npcEntry,
-    location: locationEntry,
+    location: replyJsonSchema(locationReplySchemas.create),
   },
   augment: {
     scene: augmentedSceneEntry,
     npc: augmentedNpcEntry,
-    location: augmentedLocationEntry,
+    location: replyJsonSchema(locationReplySchemas.augment),
   },
 };
 

@@ -21,9 +21,9 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
 
 **Eintrags-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
 (NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem Objekt, das den
-gespeicherten Eintrag **spiegelt**: die Eigenschaften unter `properties`,
-den ganzen Text als **ein** String unter `body`, die Hinweise für den DM
-unter `warnings`.
+gespeicherten Eintrag **spiegelt**: die Eigenschaften (bei Szene und NPC
+unter `properties`, beim Ort flach, siehe unten), den ganzen Text als
+**ein** String unter `body`, die Hinweise für den DM unter `warnings`.
 
 ```json
 {
@@ -38,34 +38,55 @@ unter `warnings`.
 }
 ```
 
-`properties` ist **je Art** getypt, und zwar aus **derselben** Feldliste, aus
-der der Eigenschaften-Dialog gebaut wird (`shared/src/property-fields.ts`) —
-ein Modell kann also genau die Felder schreiben, die der DM auch bearbeiten
-kann, und keins mehr. Der **Entwurf bleibt dieses Paar** — `properties` und
-`body` — von der Antwort bis in die Zeile (ADR #24): nichts setzt daraus einen
-Markdown-Text zusammen und nichts liest einen zurück, also kann auf diesem Weg
-auch nichts an einem Wert verloren gehen.
+Ein **Ort** hat einen eigenen Typ aus seinem zod-Schema (ADR #31) und
+antwortet deshalb **flach**: seine Eigenschaften als eigene Schlüssel neben
+`body` und `warnings`, ohne `properties`-Hälfte.
 
-Die Schemata liegen als **lesbares JSON** in `shared/schema/`, eines je Art
-und Lauf: `scene.schema.json`, `npc.schema.json`, `location.schema.json`,
-dazu `augmented-scene.schema.json`, `augmented-npc.schema.json` und
-`augmented-location.schema.json` für den Ergänzen-Lauf sowie
-`outline.schema.json`. Der Code lädt sie nur und gibt sie an den Provider
-weiter; `shared/test/entry-schema.test.ts` prüft ihre Schlüssel und
-Wertelisten gegen die Feldliste und die Konstanten, die die Validierung
-liest, damit die beiden nicht auseinanderlaufen können. Der
-Unterschied zwischen den Läufen steht in den Schemata selbst: eine bestehende
-Szene behält den Status, den der DM ihr gegeben hat, während eine **neue**
-Szene nur `draft` sein kann.
+```json
+{
+  "id": "alte-mole",
+  "name": "Die alte Mole",
+  "chapter": null,
+  "roll20-page": "Mole",
+  "atmosphere": "Salz in der Luft, Möwen über dem Schlick.",
+  "body": "## Beim ersten Betreten\n\n> [!readaloud] …\n",
+  "warnings": []
+}
+```
+
+Die Eigenschaften sind **je Art** getypt — ein Modell kann genau die Felder
+schreiben, die der DM auch bearbeiten kann, und keins mehr. Der **Entwurf
+bleibt dieses Paar** aus Eigenschaften und `body` von der Antwort bis in die
+Zeile (ADR #24): nichts setzt daraus einen Markdown-Text zusammen und nichts
+liest einen zurück, also kann auf diesem Weg auch nichts an einem Wert
+verloren gehen. Ein Orts-Entwurf ist der Ort selbst ohne Adresse und Wächter
+(`LocationDraft`: `kind`, `id`, die Felder, `body`).
+
+Das Antwort-Schema des Orts hat **genau eine Quelle**: sein zod-Schema
+(`shared/src/location.ts`). Daraus wird die Generator-Form abgeleitet
+(`replyForm` in `shared/src/entry-form.ts`: `null`-fähig statt optional,
+nichts Zusätzliches erlaubt, alles in `required`, die Hinweise für das Modell
+als `description`) und mit `z.toJSONSchema` an den Provider gegeben — je Lauf
+unter eigenem Namen (`location`, `augmented_location`). Szene und NPC laden
+ihre Schemata noch als **lesbares JSON** aus `shared/schema/`, eines je Art
+und Lauf (`scene.schema.json`, `npc.schema.json`,
+`augmented-scene.schema.json`, `augmented-npc.schema.json`), dazu
+`outline.schema.json`; `shared/test/entry-schema.test.ts` prüft deren
+Schlüssel und Wertelisten gegen die Feldliste
+(`shared/src/property-fields.ts`) und für **jedes** Schema, abgeleitet oder
+geladen, die Regeln des strict mode. Der Unterschied zwischen den Läufen
+steht in den Schemata selbst: eine bestehende Szene behält den Status, den
+der DM ihr gegeben hat, während eine **neue** Szene nur `draft` sein kann.
 
 **Die Prompts zeigen genau dieses Objekt.** Der Abschnitt „## Eigenschaften
 und Text des Eintrags“ jedes Create-Prompts führt ein ```json-Beispiel des
-Antwort-Objekts: `properties` mit denselben Feldern in derselben Reihenfolge
-wie das Schema der Art (ein Feld ohne Quelle als `null`), `body` als **ein**
-String — dessen Aufbau, `## Flow`, `## If:`, die sechs Callouts und
-`[[id]]`-Verweise, steht als Beschreibung dieses Strings darunter — und
-`warnings` als Liste von Strings. Prompt, Schema und Few-Shot zeigen damit
-Feld für Feld dieselbe Form.
+Antwort-Objekts: die Eigenschaften mit denselben Feldern in derselben
+Reihenfolge wie das Schema der Art (ein Feld ohne Quelle als `null`) — unter
+`properties` oder, beim Ort, flach —, `body` als **ein** String — dessen
+Aufbau, `## Flow`, `## If:`, die sechs Callouts und `[[id]]`-Verweise, steht
+als Beschreibung dieses Strings darunter — und `warnings` als Liste von
+Strings. Prompt, Schema und Few-Shot zeigen damit Feld für Feld dieselbe
+Form.
 
 Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
 und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
@@ -209,9 +230,10 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
    „Antwortformate“ oben.
 4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
    Inhalt):
-   - `properties` nur bekannte Felder, kebab-`id`? `type`/`status` gültig?
+   - nur bekannte Eigenschaften, kebab-`id`? `type`/`status` gültig?
      `status == draft`?
-     Stubs: NPC-Status gültig (Normalfall `alive`), Orte ohne status-Key.
+     Stubs: NPC-Status gültig (Normalfall `alive`); ein Ort hat kein
+     `status`-Feld, sein Schema kennt keins.
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
    - jedes `[[id]]` im Text nennt einen NPC, Ort oder eine Szene der
      Kampagne oder einen Vorschlag desselben Laufs (Gliederung, im NPC-Lauf

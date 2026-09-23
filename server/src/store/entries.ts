@@ -2,25 +2,21 @@
 //
 // Five kinds have one — campaign, chapter, scene, npc, location — and they
 // share exactly one read (`readEntry`) and exactly one write (`patchEntry`,
-// ADR #23): fields, text, or both, in ONE transaction against ONE `rev`. The
-// property contract per kind is its own module (./properties.ts), because
-// the seed reads it too. Lists have no address and no case in either switch
-// (ADR #26).
+// ADR #23): fields, text, or both, in ONE transaction against ONE `rev`.
+//
+// A kind with its own zod schema (ADR #31) parses, renders and writes itself
+// in its domain module (a location: ./locations.ts), and this module only
+// hands the address and the request over. The other kinds are written here,
+// with the property contract per kind in its own module (./properties.ts),
+// because the seed reads it too. Lists have no address and no case in either
+// switch (ADR #26).
 
 import { and, eq } from "drizzle-orm";
-import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
+import type { Entry, EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import {
-  campaigns,
-  chapters,
-  generateJobs,
-  locations,
-  npcs,
-  packJson,
-  scenes,
-} from "../db/schema";
+import { campaigns, chapters, generateJobs, npcs, packJson, scenes } from "../db/schema";
 import {
   campaignRow,
   indexCampaign,
@@ -44,10 +40,8 @@ import {
   assertNpcRefs,
   chapterRowOf,
   indexChapter,
-  indexLocation,
   indexNpc,
   indexScene,
-  locationRowOf,
   npcRowOf,
   refNpcs,
   refTags,
@@ -55,13 +49,12 @@ import {
 } from "./entity-rows";
 import { getDb } from "./handle";
 import { NPC_DEFAULT_STATUS, readNpcEntry } from "./npcs";
-import { readLocationEntry } from "./locations";
+import { patchLocationIn, readLocationEntry, readLocationPatch } from "./locations";
 import { locatorFromPath, type Locator } from "./paths";
 import {
   applyPatch,
   CAMPAIGN_KEYS,
   CHAPTER_KEYS,
-  LOCATION_KEYS,
   NPC_KEYS,
   rejectIdPatch,
   rejectUnknownKeys,
@@ -70,12 +63,10 @@ import {
 import {
   renderCampaign,
   renderChapter,
-  renderLocation,
   renderNpc,
   renderScene,
   type CampaignRow,
   type ChapterRow,
-  type LocationRow,
   type NpcRow,
   type SceneRow,
 } from "./render";
@@ -87,8 +78,12 @@ import {
   assertChapterStatus,
   assertNpcStatus,
   assertSceneClosedFields,
+  normalizeBody,
   revConflict,
 } from "./shared";
+
+/** An address of a kind whose fields travel under `properties`. */
+type PropertiesLocator = Exclude<Locator, { kind: "location" }>;
 
 // --- reading one entry --------------------------------------------------------
 
@@ -105,7 +100,7 @@ export function readByLocator(
   db: GrimoireDb,
   campaignRowValue: CampaignRow,
   locator: Locator,
-): EntryResponse {
+): Entry {
   const campaign = campaignRowValue.id;
   switch (locator.kind) {
     case "campaign":
@@ -122,7 +117,7 @@ export function readByLocator(
 }
 
 /** GET /api/campaigns/:campaign/entries/<address> */
-export async function readEntry(campaign: string, rel: string): Promise<EntryResponse> {
+export async function readEntry(campaign: string, rel: string): Promise<Entry> {
   const row = await requireCampaign(campaign);
   assertSafeAddress(rel); // 400 unsafe id/address
   const db = await getDb();
@@ -171,15 +166,82 @@ function guardEntryRev(
  * `jobId` discards the generator job the write came from, in the SAME
  * transaction (drafts and job can never disagree after a crash). A stale id
  * matches nothing and is ignored.
+ *
+ * `raw` is the request body as it arrived. Its shape is the kind's: a
+ * location's fields stand flat beside `rev`, `force` and `body` and are
+ * checked against its schema (./locations.ts); the other kinds carry theirs
+ * under `properties` (`readPatchRequest`).
  */
 export async function patchEntry(
   campaign: string,
   rel: string,
+  raw: Record<string, unknown>,
+  jobId?: string,
+): Promise<Entry> {
+  assertSafeAddress(rel);
+  const locator = locatorFromPath(rel);
+  if (locator.kind === "location") {
+    const patch = readLocationPatch(raw);
+    return mutate(campaign, (tx) => {
+      const written = patchLocationIn(tx, campaign, locator.id, patch);
+      discardJob(tx, campaign, jobId);
+      return written;
+    });
+  }
+  return patchPropertiesEntry(campaign, locator, readPatchRequest(raw), jobId);
+}
+
+/** Keys of a request body for a kind whose fields travel under `properties`. */
+const PATCH_REQUEST_KEYS = new Set(["rev", "properties", "body", "force"]);
+
+/**
+ * The request body of a kind whose fields travel under `properties`, shape
+ * by shape: `rev` a number, `properties` an object, `body` a string, `force`
+ * a boolean, and nothing else.
+ */
+function readPatchRequest(raw: Record<string, unknown>): PatchEntryRequest {
+  for (const key of Object.keys(raw)) {
+    if (!PATCH_REQUEST_KEYS.has(key)) throw new ApiError(400, `unknown body key: ${key}`);
+  }
+  const { rev, properties, body, force } = raw;
+  if (typeof rev !== "number" || !Number.isFinite(rev)) {
+    throw new ApiError(400, "rev must be a number");
+  }
+  if (
+    properties !== undefined &&
+    (properties === null || typeof properties !== "object" || Array.isArray(properties))
+  ) {
+    throw new ApiError(400, "properties must be an object");
+  }
+  if (body !== undefined && typeof body !== "string") {
+    throw new ApiError(400, "body must be a string");
+  }
+  if (force !== undefined && typeof force !== "boolean") {
+    throw new ApiError(400, "force must be a boolean");
+  }
+  return {
+    rev,
+    ...(properties === undefined ? {} : { properties: properties as Record<string, unknown> }),
+    ...(body === undefined ? {} : { body }),
+    ...(force === undefined ? {} : { force }),
+  };
+}
+
+/** Delete the generator job a write came from, inside the write's transaction. */
+function discardJob(tx: GrimoireDb, campaign: string, jobId: string | undefined): void {
+  if (jobId === undefined) return;
+  tx.delete(generateJobs)
+    .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
+    .run();
+}
+
+/** The write of a kind whose fields travel under `properties`. */
+async function patchPropertiesEntry(
+  campaign: string,
+  locator: PropertiesLocator,
   request: PatchEntryRequest,
   jobId?: string,
 ): Promise<EntryResponse> {
-  assertSafeAddress(rel);
-  const locator = locatorFromPath(rel);
   const patch = request.properties;
   const markdown = request.body;
   // An EMPTY properties object counts as nothing either: it would pass the
@@ -202,24 +264,9 @@ export async function patchEntry(
     const written = hasProperties
       ? patchLocator(tx, campaign, locator, guard, patch as Record<string, unknown>, body)
       : writeBodyIn(tx, campaign, locator, guard, body as string);
-    if (jobId !== undefined) {
-      tx.delete(generateJobs)
-        .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
-        .run();
-    }
+    discardJob(tx, campaign, jobId);
     return written;
   });
-}
-
-/**
- * A non-empty body gets its closing newline. The text is handed to a
- * markdown editor and to the generator's prompt, and a body without its
- * final newline made the next appended section run into the last line.
- * EXISTING trailing newlines are left alone, so a read/write roundtrip
- * changes nothing; an empty body stays empty.
- */
-function normalizeBody(markdown: string): string {
-  return markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
 }
 
 /**
@@ -231,7 +278,7 @@ function normalizeBody(markdown: string): string {
 function patchLocator(
   tx: GrimoireDb,
   campaign: string,
-  locator: Locator,
+  locator: PropertiesLocator,
   rev: number,
   patch: Record<string, unknown>,
   body?: string,
@@ -414,38 +461,6 @@ function patchLocator(
       indexNpc(tx, campaign, next);
       return renderNpc(next);
     }
-    case "location": {
-      const row = locationRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
-      rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, LOCATION_KEYS);
-      const props = applyPatch(renderLocation(row).properties, patch);
-      const locationChapter = asOptStr(props.chapter);
-      assertChapterRef(tx, campaign, locationChapter);
-      const next: LocationRow = {
-        ...row,
-        name: asStr(props.name, row.id),
-        chapterId: locationChapter,
-        roll20Page: asOptStr(props["roll20-page"]),
-        atmosphere: asOptStr(props.atmosphere),
-        body: body ?? row.body,
-        rev: row.rev + 1,
-      };
-      tx.update(locations)
-        .set({
-          name: next.name,
-          chapterId: next.chapterId,
-          roll20Page: next.roll20Page,
-          atmosphere: next.atmosphere,
-          body: next.body,
-          rev: next.rev,
-        })
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
-        .run();
-      indexLocation(tx, campaign, next);
-      return renderLocation(next);
-    }
   }
 }
 
@@ -459,7 +474,7 @@ function patchLocator(
 function writeBodyIn(
   tx: GrimoireDb,
   campaign: string,
-  locator: Locator,
+  locator: PropertiesLocator,
   rev: number,
   body: string,
 ): EntryResponse {
@@ -514,19 +529,5 @@ function writeBodyIn(
       indexNpc(tx, campaign, next);
       return renderNpc(next);
     }
-    case "location": {
-      const row = locationRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
-      const next: LocationRow = { ...row, body, rev: row.rev + 1 };
-      tx.update(locations)
-        .set({ body: next.body, rev: next.rev })
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
-        .run();
-      indexLocation(tx, campaign, next);
-      return renderLocation(next);
-    }
-    default:
-      throw new ApiError(404, "entry not found");
   }
 }

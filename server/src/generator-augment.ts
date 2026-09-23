@@ -36,7 +36,9 @@ import {
   type AugmentKind,
   type AugmentPropertyProposal,
   type AugmentResult,
+  type Entry,
   type EntryResponse,
+  type Location,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { bodyEntityRefSlugs } from "@grimoire/shared/refs";
@@ -56,10 +58,28 @@ import {
   type CampaignContext,
 } from "./generator";
 import type { CheckedDraft } from "./naming-check";
-import { parseEntryReply } from "./entry-reply";
+import { parseEntryReply, parseLocationReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { addressHead } from "./store/paths";
 import { patchEntry, readEntry } from "./store/entries";
+
+/**
+ * The target of an augment run: its kind and the entry as the store holds it.
+ * A location is told apart by its own type (ADR #31); the other kinds carry
+ * their fields under `properties`.
+ */
+export type AugmentTarget =
+  | { kind: "location"; stored: Location }
+  | { kind: Exclude<AugmentKind, "location">; stored: EntryResponse };
+
+/**
+ * A location's fields by name, its id included — the one shape the
+ * per-field proposal compares, whatever the kind.
+ */
+function locationFieldValues(location: Location): Record<string, unknown> {
+  const { kind: _kind, path: _path, body: _body, rev: _rev, ...fields } = location;
+  return fields;
+}
 
 /** The correction turn's tail — what a corrected reply must still contain. */
 const AUGMENT_CORRECTION_TAIL = "den vollständigen ergänzten Eintrag enthalten";
@@ -84,11 +104,9 @@ const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
  * …/generate/augment runs it BEFORE it creates a background job — a request
  * error must not become a failed job the DM has to go and read.
  */
-export async function readAugmentTarget(
-  campaign: string,
-  rel: string,
-): Promise<{ kind: AugmentKind; stored: EntryResponse }> {
-  const stored = await readEntry(campaign, rel); // 400 unsafe, 404 unknown
+export async function readAugmentTarget(campaign: string, rel: string): Promise<AugmentTarget> {
+  const stored: Entry = await readEntry(campaign, rel); // 400 unsafe, 404 unknown
+  if (stored.kind === "location") return { kind: "location", stored };
   if (!isAugmentKind(stored.kind)) {
     throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc, location or scene only`);
   }
@@ -159,16 +177,16 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  *
  * What IS checked is what would make the entry unreadable or would break the
  * data contract: an unchanged id, only known callouts, `[[id]]` references
- * that resolve (validateAugmentReply), a legal status per kind, quoted
- * quickstats.
+ * that resolve (`entryErrors`), a legal status per kind, quoted quickstats.
+ * A location's own rule — it has no status — is checked with its reply
+ * (`validateLocationAugment`).
  */
 function kindErrors(
-  kind: AugmentKind,
+  kind: Exclude<AugmentKind, "location">,
   props: Record<string, unknown>,
   current: Record<string, unknown>,
   label: string,
   errors: string[],
-  ignored: readonly string[] = [],
 ): void {
   if (kind === "npc") {
     for (const msg of npcStatusErrors(props, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
@@ -179,16 +197,6 @@ function kindErrors(
     // authored and this run does not touch.
     if (!sameValue(current.quickstats, props.quickstats)) {
       for (const msg of quickstatsErrors(props)) errors.push(`${label}: ${msg}`);
-    }
-    return;
-  }
-  if (kind === "location") {
-    // A location has no `status` — the schema has no such field for it, so a
-    // reply that names one had it DROPPED (`reply.ignored`) rather than
-    // normalized. Still an error, and not a silent one: the key is the data
-    // contract being broken, not a DM's own extra key.
-    if (Object.hasOwn(props, "status") || ignored.includes("status")) {
-      errors.push(`${label}: "status" ist nicht erlaubt — locations haben keinen status`);
     }
     return;
   }
@@ -219,9 +227,10 @@ function kindErrors(
  */
 export function validateAugmentReply(
   raw: string,
-  target: { kind: AugmentKind; stored: EntryResponse },
+  target: AugmentTarget,
   refIds: ReadonlySet<string>,
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
+  if (target.kind === "location") return validateLocationAugment(raw, target.stored, refIds);
   // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
   // the warnings. The augmentation rule holds throughout: a reply carries the
@@ -251,21 +260,8 @@ export function validateAugmentReply(
   const props = reply.properties;
 
   const currentId = stored.properties.id;
-  if (currentId !== undefined && props.id !== currentId) {
-    errors.push(
-      `${label}: die id bleibt "${String(currentId)}" — sie ist der Referenzschlüssel ` +
-        "der Kampagne und wird beim Ergänzen nie geändert",
-    );
-  }
-  for (const callout of unknownCallouts(reply.body)) {
-    errors.push(
-      `${label}: unknown callout "[!${callout}]" — allowed: ` +
-        CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
-    );
-  }
-  const known = new Set([...refIds, ...bodyEntityRefSlugs(stored.body)]);
-  for (const msg of unknownRefErrors(reply.body, known)) errors.push(`${label}: ${msg}`);
-  kindErrors(kind, props, stored.properties, label, errors, reply.ignored ?? []);
+  entryErrors(label, currentId, props.id, stored.body, reply.body, refIds, errors);
+  kindErrors(kind, props, stored.properties, label, errors);
   if (errors.length > 0) return { ok: false, errors };
 
   return {
@@ -280,6 +276,77 @@ export function validateAugmentReply(
       warnings: reply.warnings,
     },
   };
+}
+
+/**
+ * The same validation for a LOCATION, whose reply is flat and read by the
+ * location's own reply schema (./entry-reply `parseLocationReply`). The
+ * proposal compares its fields by name, exactly as for the other kinds.
+ *
+ * A location has no `status` — its schema has no such field, so a reply that
+ * names one had it DROPPED (`ignored`) rather than read. Still an error, and
+ * not a silent one: the key is the data contract being broken, not a DM's own
+ * extra key.
+ */
+function validateLocationAugment(
+  raw: string,
+  stored: Location,
+  refIds: ReadonlySet<string>,
+): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
+  const label = `entry "${stored.path}"`;
+  const read = parseLocationReply(raw, "augment");
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
+  const { draft, warnings, ignored } = read.reply;
+  const errors: string[] = [];
+  entryErrors(label, stored.id, draft.id, stored.body, draft.body, refIds, errors);
+  if (ignored.includes("status")) {
+    errors.push(`${label}: "status" ist nicht erlaubt — locations haben keinen status`);
+  }
+  if (errors.length > 0) return { ok: false, errors };
+  const { kind: _kind, body, ...proposed } = draft;
+  return {
+    ok: true,
+    result: {
+      path: stored.path,
+      kind: "location",
+      rev: stored.rev,
+      properties: propertyProposals(locationFieldValues(stored), proposed),
+      currentBody: stored.body,
+      proposedBody: body,
+      warnings,
+    },
+  };
+}
+
+/**
+ * The rules every augment reply shares, whatever its kind: the id stays
+ * (ADR #21), only known callouts, and every `[[id]]` the proposal ADDS names
+ * an entry of the campaign — one the stored body already carries is the
+ * DM's, and the augmentation rule tells the model to keep it.
+ */
+function entryErrors(
+  label: string,
+  currentId: unknown,
+  proposedId: unknown,
+  storedBody: string,
+  proposedBody: string,
+  refIds: ReadonlySet<string>,
+  errors: string[],
+): void {
+  if (currentId !== undefined && proposedId !== currentId) {
+    errors.push(
+      `${label}: die id bleibt "${String(currentId)}" — sie ist der Referenzschlüssel ` +
+        "der Kampagne und wird beim Ergänzen nie geändert",
+    );
+  }
+  for (const callout of unknownCallouts(proposedBody)) {
+    errors.push(
+      `${label}: unknown callout "[!${callout}]" — allowed: ` +
+        CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
+    );
+  }
+  const known = new Set([...refIds, ...bodyEntityRefSlugs(storedBody)]);
+  for (const msg of unknownRefErrors(proposedBody, known)) errors.push(`${label}: ${msg}`);
 }
 
 // --- the properties proposal --------------------------------------------------
@@ -385,12 +452,15 @@ export async function runAugment(
         ...(target.kind === "scene" ? { chapter: chapterOf(target.stored) } : {}),
       },
       sourceText,
-      existingEntry: {
-        path: target.stored.path,
-        kind: target.kind,
-        properties: target.stored.properties,
-        body: target.stored.body,
-      },
+      existingEntry:
+        target.kind === "location"
+          ? { path: target.stored.path, kind: "location", location: target.stored }
+          : {
+              path: target.stored.path,
+              kind: target.kind,
+              properties: target.stored.properties,
+              body: target.stored.body,
+            },
       ...(instruction === "" ? {} : { instruction }),
       // Forced like every other reply — in "augment" mode, which
       // is the one difference: an existing scene's `status` is whatever the DM
@@ -408,7 +478,7 @@ export async function runAugment(
 }
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
-function chapterOf(stored: EntryResponse): string {
+function chapterOf(stored: Entry): string {
   return addressHead(stored.path);
 }
 
@@ -433,49 +503,39 @@ function proposedEntry(result: AugmentResult): CheckedDraft {
 /**
  * POST /api/campaigns/:campaign/generate/augment/apply — write the DM's decisions.
  *
- * The client sends the accepted properties fields and the body it assembled
- * out of the accepted blocks; the server does not re-derive either (the
- * decisions ARE the payload) but it does everything a normal write does,
- * because it IS one: rev guard (409 `rev_conflict`), FTS, `[[slug]]`
- * reference rows, the reference checks, and the job discarded in the SAME
- * transaction.
+ * The client sends the accepted fields and the body it assembled out of the
+ * accepted blocks, as the entry PATCH of the target's kind (`patch`: a
+ * location's fields flat, the other kinds' under `properties`); the server
+ * does not re-derive either (the decisions ARE the payload) but it does
+ * everything a normal write does, because it IS one: rev guard (409
+ * `rev_conflict`), FTS, `[[slug]]` reference rows, the reference checks, and
+ * the job discarded in the SAME transaction. There is no `force` here.
  */
 export async function applyAugment(
   campaign: string,
-  body: { path?: unknown; rev?: unknown; properties?: unknown; body?: unknown },
+  path: unknown,
+  patch: Record<string, unknown>,
   jobId?: string,
-): Promise<EntryResponse> {
-  const rel = body.path;
-  if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
-  const rev = body.rev;
-  if (typeof rev !== "number" || !Number.isFinite(rev)) {
-    throw new ApiError(400, "rev must be a number");
+): Promise<Entry> {
+  if (typeof path !== "string" || path === "") throw new ApiError(400, "path must be a string");
+  if (patch.force !== undefined) throw new ApiError(400, "unknown body key: force");
+  // The kind gate again — apply is a separate request and must never trust
+  // the client to have come through the dialog.
+  const target = await readAugmentTarget(campaign, path);
+  const { rev: _rev, body, ...rest } = patch;
+  let fields: Record<string, unknown> = rest;
+  if (target.kind !== "location") {
+    const properties = rest.properties;
+    fields =
+      properties !== null && typeof properties === "object" && !Array.isArray(properties)
+        ? (properties as Record<string, unknown>)
+        : {};
   }
-  const patch = body.properties;
-  if (
-    patch !== undefined &&
-    (patch === null || typeof patch !== "object" || Array.isArray(patch))
-  ) {
-    throw new ApiError(400, "properties must be an object");
-  }
-  const markdown = body.body;
-  if (markdown !== undefined && typeof markdown !== "string") {
-    throw new ApiError(400, "body must be a string");
-  }
-  const fields = { ...((patch as Record<string, unknown> | undefined) ?? {}) };
   for (const key of Object.keys(fields)) {
     if (FROZEN_KEYS.has(key)) throw new ApiError(400, `"${key}" cannot be augmented`);
   }
-  if (Object.keys(fields).length === 0 && markdown === undefined) {
+  if (Object.keys(fields).length === 0 && body === undefined) {
     throw new ApiError(400, "nothing to apply");
   }
-  // The kind gate again — apply is a separate request and must never trust
-  // the client to have come through the dialog.
-  await readAugmentTarget(campaign, rel);
-  return patchEntry(
-    campaign,
-    rel,
-    { rev, properties: fields, ...(markdown === undefined ? {} : { body: markdown }) },
-    jobId,
-  );
+  return patchEntry(campaign, path, patch, jobId);
 }

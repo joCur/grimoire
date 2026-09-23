@@ -12,20 +12,23 @@ Eigenschaften und der Text der jeweiligen Art stehen unten.
 ## Ausgabeformat
 
 Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
-von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
+von der Schnittstelle erzwungen — es trägt drei Teile:
 
-* `properties` — die Eigenschaften des Eintrags, jede als eigener Schlüssel.
-  Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere trägt
-  `null`. Der Server speichert sie genau so.
+* die Eigenschaften des Eintrags, jede als eigener Schlüssel — genau so
+  angeordnet, wie der Format-Teil der Art unten sie zeigt: gesammelt unter
+  `properties` (NPC, Szene) oder als eigene Schlüssel direkt neben `body`
+  (Ort). Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere
+  trägt `null`. Der Server speichert sie genau so.
 * `body` — der Text des Eintrags, als **ein** String mit echten
   Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Die
-  Eigenschaften bleiben in `properties`.
+  Eigenschaften stehen in ihren eigenen Schlüsseln.
 * `warnings` — kurze deutsche Hinweise für den DM, einer je Hinweis; bei
   klarer Quelle bleibt die Liste leer.
 
-Das Referenz-Beispiel unten ist genau diese Form.
+Das Referenz-Beispiel unten ist genau diese Form, und der bestehende Eintrag
+im Prompt steht ebenfalls in ihr.
 
-`properties` und `body` beschreiben immer den **ganzen** Eintrag, so wie er
+Eigenschaften und `body` beschreiben immer den **ganzen** Eintrag, so wie er
 danach aussehen soll. Jedes Feld und jeder Abschnitt, der bleiben soll, steht
 unverändert wieder darin.
 

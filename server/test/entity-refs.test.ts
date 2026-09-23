@@ -52,10 +52,14 @@ async function writeBody(rel: string, body: string): Promise<void> {
 
 async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
   const entry = await readEntry(rel);
+  // A location's fields travel flat beside `rev` (ADR #31).
+  const request = rel.startsWith("locations/")
+    ? { rev: entry.rev, ...p }
+    : { rev: entry.rev, properties: p };
   const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: entry.rev, properties: p }),
+    body: JSON.stringify(request),
   });
   expect(res.status).toBe(200);
 }

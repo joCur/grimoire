@@ -14,7 +14,7 @@
 //     is neither: it stays visible text, with no entry and no error.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, EntryResponse, SessionResponse } from "@grimoire/shared";
+import type { CampaignTree, EntryResponse, Location, SessionResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { applyDrafts } from "../src/store/drafts";
 import { dropStore, seedStore } from "./support/store";
@@ -44,10 +44,14 @@ async function patchFm(rel: string, patch: Record<string, unknown>): Promise<Ent
 /** The raw answer of a properties patch — for the cases that are refused. */
 async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Response> {
   const before = await getEntry(rel);
+  // A location's fields travel flat beside `rev` (ADR #31).
+  const request = rel.startsWith("locations/")
+    ? { rev: before.rev, ...patch }
+    : { rev: before.rev, properties: patch };
   return app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: before.rev, properties: patch }),
+    body: JSON.stringify(request),
   });
 }
 
@@ -151,7 +155,8 @@ describe("a reference that names nothing is refused", () => {
         code: "chapter_unknown",
         value: "99-nirgendwo",
       });
-      expect((await getEntry(rel)).properties.chapter).toBe(before.properties.chapter);
+      // Nothing was written.
+      expect((await getEntry(rel)).rev).toBe(before.rev);
     }
     // An existing chapter is stored as before.
     expect((await patchFm(NPC, { chapter: "01-salzhafen" })).properties.chapter).toBe(
@@ -313,14 +318,19 @@ describe("the generator's apply step", () => {
       {
         rel: "locations/alte-mole",
         address: "locations/alte-mole",
-        properties: { id: "alte-mole", name: "Alte Mole" },
-        body: "\n## Beim ersten Betreten\n\nMorsch.\n",
+        location: {
+          kind: "location",
+          id: "alte-mole",
+          name: "Alte Mole",
+          body: "\n## Beim ersten Betreten\n\nMorsch.\n",
+        },
       },
     ]);
     const npc = await getEntry("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
     expect(npc.properties.status).toBe("alive");
-    expect((await getEntry("locations/alte-mole")).properties.name).toBe("Alte Mole");
+    const location = (await getEntry("locations/alte-mole")) as unknown as Location;
+    expect(location.name).toBe("Alte Mole");
     const scene = await getEntry("01-salzhafen/alte-mole/neue-szene");
     expect(scene.properties.npcs).toEqual(["holm"]);
   });

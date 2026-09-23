@@ -85,14 +85,16 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 ## Eigenschaften
 
-Die Eigenschaften eines Eintrags sind seine strukturierten Felder. Sie
-heißen auf der Leitung `properties`; die App zeigt sie im
+Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
+außer dem Text (`body`). Jede Art hat ihren eigenen Typ aus genau einem
+zod-Schema (ADR #31). Beim **Ort** stehen die Felder auf der Leitung flach
+neben `kind`, `id`, `path`, `body` und `rev`; bei Kampagne, Kapitel, Szene und
+NPC reisen sie gesammelt unter `properties`. Die App zeigt sie im
 Eigenschaften-Dialog — die Prosa-Felder `motivation` (NPC) und `atmosphere`
 (Ort) stattdessen auf der Bearbeiten-Fläche des Eintrags, neben seinem Text —,
 und `PATCH /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die
-Felder, die der DM angefasst hat. Felder, die ein Eintrag
-mitbringt und die seine Art nicht kennt, bleiben erhalten und lassen sich
-ändern oder löschen; neue legt die API nicht an (400).
+Felder, die der DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld,
+das die Art nicht kennt, legt die API nicht an (400).
 
 Was eine Ansicht als Daten braucht, ist eine Eigenschaft oder eine Zeile einer
 Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
@@ -195,13 +197,36 @@ im Szenentext oder `#npc`-Notiz im Log.
 
 ### Ort
 
+Ein Ort ist ein eigener Typ (`Location`, `shared/src/location.ts`): seine
+Felder stehen flach neben den Schlüsseln, die jeder Eintrag hat.
+
+```json
+{
+  "kind": "location",
+  "id": "leuchtturm",
+  "path": "locations/leuchtturm",
+  "name": "Der Leuchtturm von Salzhafen",
+  "chapter": "01-salzhafen",
+  "roll20-page": "Leuchtturm",
+  "atmosphere": "Verlassen in Eile, nicht im Kampf.",
+  "body": "\n## Beim ersten Betreten\n\n…",
+  "rev": 3
+}
+```
+
 | Feld | Bedeutung |
 | ---- | --------- |
 | `id` | stabil, wird referenziert |
-| `name` | Anzeigename |
-| `chapter` | Kapitel-id |
-| `roll20-page` | Verweis auf die Roll20-Seite, keine Karten-Kopie |
-| `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau |
+| `name` | Anzeigename, Pflicht; ohne eigenen Namen zeigt der Ort seine id |
+| `chapter` | Kapitel-id, optional; muss existieren |
+| `roll20-page` | Verweis auf die Roll20-Seite, keine Karten-Kopie; optional |
+| `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau; optional |
+
+Ein optionales Feld ohne Wert fehlt in der Antwort. Geschrieben wird mit
+`PATCH …/entries/locations/<id>` und `{ rev, force?, body?, name?, chapter?,
+"roll20-page"?, atmosphere? }` — `null` löscht ein optionales Feld, ein Feld,
+das ein Ort nicht hat (etwa `status`), ist eine 400. Ein Entwurf — Fixture,
+Generator-Vorschlag — ist derselbe Ort ohne `path` und `rev`.
 
 `atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche des Eintrags
 gepflegt, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere` zeigt
@@ -430,13 +455,14 @@ Kapitels ändert kein Lauf.
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
 über die Provider-API **erzwingt**. Ein Eintrags-Aufruf (Szene, NPC, Ort,
 Ergänzung) liefert das Objekt, das den gespeicherten Eintrag spiegelt: die
-Eigenschaften unter `properties` — je Art getypt aus derselben Feldliste, aus
-der der Eigenschaften-Dialog gebaut wird —, den Text als einen String unter
-`body` und die Hinweise für den DM unter `warnings`. Dieses Paar aus
-Eigenschaften und Text ist der **Entwurf** — im Prüfschritt, in den
-Änderungen des DM und beim Übernehmen (ADR #24); ein Entwurf ist nie ein
-Markdown-Text mit Eigenschaften davor. Die Schemata liegen als lesbares JSON
-in `shared/schema/`; Details in `generator/README.md`.
+Eigenschaften je Art getypt — beim Ort flach als eigene Schlüssel, bei Szene
+und NPC unter `properties` —, den Text als einen String unter `body` und die
+Hinweise für den DM unter `warnings`. Dieses Paar aus Eigenschaften und Text
+ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim
+Übernehmen (ADR #24); ein Entwurf ist nie ein Markdown-Text mit
+Eigenschaften davor. Das Antwort-Schema des Orts wird aus seinem zod-Schema
+abgeleitet (`z.toJSONSchema`, ADR #31), die von Szene und NPC liegen als
+lesbares JSON in `shared/schema/`; Details in `generator/README.md`.
 
 Die mechanische Prüfung liest Eigenschaften und Text, aber keine
 Überschrift (ADR #29): die Abschnitte eines Entwurfs sind die Empfehlung der
@@ -450,8 +476,10 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
-strukturierten Felder unter `properties` und der Text als ein String unter
-`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert,
+strukturierten Felder und der Text als ein String unter `body`. Ein Ort steht
+als sein Entwurf da, `{ kind, id, name, …, body }` mit den Feldern flach (ADR
+#31); die übrigen Arten tragen ihre Felder unter `properties`. Ideen, Glossar
+und Sessions tragen ihre Listen ebenso strukturiert,
 als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
 `threads`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
 wie ein Faden `{ text, done? }`. Eine Markdown-Zeile steht in keiner davon.

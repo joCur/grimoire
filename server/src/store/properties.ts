@@ -4,6 +4,9 @@
 // them, so a patch naming one that is not on its kind's list is a 400 and a
 // seed naming one is refused. Applying a flat patch to a rendered properties
 // mapping is the other half, `null` deleting a key.
+//
+// A kind with its own zod schema (ADR #31) has no list here: its schema is
+// the contract (a location: @grimoire/shared/location).
 
 import { ApiError } from "../api-error";
 
@@ -37,7 +40,6 @@ export const NPC_KEYS = [
   "appearance",
   "motivation",
 ] as const;
-export const LOCATION_KEYS = ["id", "name", "chapter", "roll20-page", "atmosphere"] as const;
 export const CHAPTER_KEYS = ["id", "title", "status"] as const;
 export const CAMPAIGN_KEYS = ["id", "name", "description"] as const;
 /**
@@ -54,7 +56,6 @@ export const PROPERTY_CONTRACT = {
   chapter: CHAPTER_KEYS,
   scene: SCENE_KEYS,
   npc: NPC_KEYS,
-  location: LOCATION_KEYS,
   session: SESSION_KEYS,
 } as const satisfies Record<string, readonly string[]>;
 

@@ -1,11 +1,13 @@
 // The helpers of the store that have no domain of their own.
 //
-// Value coercions for hand-editable properties, the closed-field and
-// reference 400s, the `rev` guard's 409, the chronological order of two
-// sessions and the ids a create endpoint hands out. Every one of them is
-// needed by two or more domain modules and none of them touches the
-// database, so this module imports nothing from the store.
+// Value coercions for hand-editable properties, the 400 of a request a kind's
+// zod schema refuses, the closed-field and reference 400s, the `rev` guard's
+// 409, the stored form of a body, the chronological order of two sessions and
+// the ids a create endpoint hands out. Every one of them is needed by two or
+// more domain modules and none of them touches the database, so this module
+// imports nothing from the store.
 
+import type { z } from "zod";
 import {
   CHAPTER_STATUSES,
   ENTITY_SLUG,
@@ -13,7 +15,7 @@ import {
   SCENE_STATUSES,
   SCENE_TYPES,
   toSlug,
-  type EntryResponse,
+  type Entry,
   type ErrorCode,
   type ErrorField,
   type ErrorKind,
@@ -21,6 +23,35 @@ import {
 import { ApiError } from "../api-error";
 import { localDateTimeToMs } from "./time";
 import type { SessionRow } from "./render";
+
+// --- a request a kind's schema refuses ---------------------------------------
+
+/**
+ * Parse a request body with a kind's zod schema (ADR #31) — or answer 400.
+ * The message names every issue with its field (`name: Invalid input: …`, an
+ * unknown key by its name), in English like every technical fallback.
+ */
+export function parseRequest<T extends z.ZodType>(schema: T, raw: unknown, what: string): z.output<T> {
+  const parsed = schema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  const issues = parsed.error.issues.map((issue) =>
+    issue.path.length === 0 ? issue.message : `${issue.path.join(".")}: ${issue.message}`,
+  );
+  throw new ApiError(400, `invalid ${what} — ${issues.join("; ")}`);
+}
+
+// --- the stored form of a body -----------------------------------------------
+
+/**
+ * A non-empty body gets its closing newline. The text is handed to a
+ * markdown editor and to the generator's prompt, and a body without its
+ * final newline made the next appended section run into the last line.
+ * EXISTING trailing newlines are left alone, so a read/write roundtrip
+ * changes nothing; an empty body stays empty.
+ */
+export function normalizeBody(markdown: string): string {
+  return markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
+}
 
 // --- defensive coercions (properties is hand-edited) ------------------------
 
@@ -125,7 +156,7 @@ export function unknownRef(code: ErrorCode, kind: string, value: string): ApiErr
  * token to retry with, and `entry` is that entry as it stands now, so the
  * conflict dialog can show what is in the way without a second request.
  */
-export function revConflict(current: number, what: string, entry?: EntryResponse): ApiError {
+export function revConflict(current: number, what: string, entry?: Entry): ApiError {
   return new ApiError(409, `${what} — reload before saving`, {
     code: "rev_conflict",
     rev: current,

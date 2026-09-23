@@ -61,22 +61,23 @@ import { checkDraftsNaming } from "./naming-check";
 import {
   ASSET_FILES,
   campaignRefIds,
+  checkedStub,
   collectSceneContext,
   loadAsset,
   loadPromptAssets,
   obtainProvider,
   runPipeline,
   quickstatsErrors,
-  stubPath,
   unknownCallouts,
   unknownRefErrors,
   validateEntry,
+  validateLocationEntry,
   validateSceneEntry,
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
-import { parseEntryReply, parseJsonReply } from "./entry-reply";
+import { parseEntryReply, parseJsonReply, parseLocationReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
@@ -529,10 +530,11 @@ export function validateSingleSceneReply(input: {
 /**
  * One suggested ENTRY, validated as the entry of a scene run.
  *
- * Deliberately built on `validateEntry` — the very function that judged the
- * `entries` of the batch reply — plus the body rules every generated entry
- * shares (known callouts, `[[id]]` references that resolve) and, for an npc,
- * quoted quickstats. What it does NOT take from the npc RUN are the rules
+ * An npc is built on `validateEntry` — the very function that judged the
+ * `entries` of the batch reply — a location on its own reply schema
+ * (`validateLocationEntry`); both then get the body rules every generated
+ * entry shares (known callouts, `[[id]]` references that resolve) and, for an
+ * npc, quoted quickstats. What it does NOT take from the npc RUN are the rules
  * that are about that run rather than about the entry: an npc run forbids a
  * `chapter` key (it has no target chapter) while a scene run's entry
  * legitimately belongs to the run's chapter, and its pinned-id rule is
@@ -547,15 +549,42 @@ export function validateEntryReply(
   entry: OutlineEntry,
   allowed: AllowedRefs,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
+  const label = `${entry.kind} "${entry.id}"`;
+  if (entry.kind === "location") {
+    // A location replies flat and is read by its own reply schema.
+    const read = parseLocationReply(raw);
+    if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
+    const errors: string[] = [];
+    const stub = validateLocationEntry(read.reply, errors);
+    if (stub === null || errors.length > 0) return { ok: false, errors };
+    return entryPartChecks(stub, read.reply.warnings, entry, allowed);
+  }
   const read = parseEntryReply(raw, entry.kind);
   if (!read.ok) {
-    return { ok: false, errors: read.errors.map((e) => `${entry.kind} "${entry.id}": ${e}`) };
+    return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
   }
   const reply = read.reply;
   const errors: string[] = [];
   const stub = validateEntry({ kind: entry.kind, reply }, 0, errors);
   if (stub === null || errors.length > 0) return { ok: false, errors };
+  return entryPartChecks(stub, reply.warnings, entry, allowed, quickstatsErrors(reply.properties));
+}
+
+/**
+ * The checks every suggested entry of a scene run shares, whatever its
+ * kind: the id the outline gave it, only known callouts, and `[[id]]`
+ * references that resolve — plus the kind's own findings (`kindErrors`, an
+ * npc's quoted quickstats), reported after them.
+ */
+function entryPartChecks(
+  stub: GeneratedStub,
+  warnings: string[],
+  entry: OutlineEntry,
+  allowed: AllowedRefs,
+  kindErrors: string[] = [],
+): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
   const label = `${entry.kind} "${entry.id}"`;
+  const errors: string[] = [];
   if (stub.id !== entry.id) {
     return {
       ok: false,
@@ -565,15 +594,13 @@ export function validateEntryReply(
       ],
     };
   }
-  for (const callout of unknownCallouts(reply.body)) {
+  for (const callout of unknownCallouts(stub.body)) {
     errors.push(`${label}: unknown callout "[!${callout}]"`);
   }
-  for (const msg of unknownRefErrors(reply.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
-  if (entry.kind === "npc") {
-    for (const msg of quickstatsErrors(reply.properties)) errors.push(`${label}: ${msg}`);
-  }
+  for (const msg of unknownRefErrors(stub.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
+  for (const msg of kindErrors) errors.push(`${label}: ${msg}`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { stub, warnings: reply.warnings } };
+  return { ok: true, result: { stub, warnings } };
 }
 
 // --- the run ------------------------------------------------------------------
@@ -914,13 +941,7 @@ export async function runEntryPart(
       stub: result.stub,
       warnings: result.warnings,
       namingHints: checkDraftsNaming(
-        [
-          {
-            path: stubPath(result.stub),
-            properties: result.stub.properties,
-            body: result.stub.body,
-          },
-        ],
+        [checkedStub(result.stub)],
         plan.ctx.namingRules,
       ),
     },

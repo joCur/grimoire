@@ -1,16 +1,19 @@
 // Seeding a campaign from JSON entries.
 //
-// One entry per fixture file, in the shape the API speaks: `properties` and `body`,
-// exactly as `GET /entry` returns them. The seed is therefore not a second
-// data format — it is the API's own shape written down, which is what makes
-// it readable next to a response and reviewable in a diff.
+// One entry per fixture file, in the shape the API speaks — exactly as `GET
+// /entry` returns it, without the address and the guard: a location with its
+// fields flat beside `kind`, `id` and `body` (its draft, ADR #31), the other
+// kinds with `properties` and `body`. The seed is therefore not a second data
+// format — it is the API's own shape written down, which is what makes it
+// readable next to a response and reviewable in a diff.
 //
 // THREE RULES hold this together:
 //
 //   1. THE STORE LAYER DOES THE WRITING wherever it has a path for it:
-//      chapter, scene, npc and location go through `insertDraft`
-//      (store/drafts.ts), so references, tags, handouts and the search index
-//      are maintained by the same code a create endpoint runs. What has no
+//      chapter, scene and npc go through `insertDraft` (store/drafts.ts), a
+//      location through `insertLocationDraft` (store/locations.ts), so
+//      references, tags, handouts and the search index are maintained by the
+//      same code a create endpoint runs. What has no
 //      endpoint because it is historic data — the campaign row, sessions with
 //      their pauses and log lines, the inbox list, the glossary, a chapter's
 //      open threads — is written as rows here and indexed the way the store
@@ -42,13 +45,15 @@ import {
   sessionScenesPlayed,
   sessions,
 } from "./schema";
+import { isEntityId, type LocationDraft } from "@grimoire/shared";
 import { campaignRow, indexCampaign } from "../store/campaigns";
 import { indexGlossaryTerm } from "../store/glossary";
 import { insertThreadRows } from "../store/threads";
 import { PROPERTY_CONTRACT } from "../store/properties";
 import { insertDraft } from "../store/drafts";
+import { insertLocationDraft, readLocationDraft } from "../store/locations";
 import { logLineId } from "../store/body-parse";
-import { chapterPath, locationPath, npcPath, sceneAddress } from "../store/paths";
+import { chapterPath, npcPath, sceneAddress } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";
 
 /** An entry's properties as the API speaks them. */
@@ -91,20 +96,21 @@ export interface SeedGlossaryEntry {
 
 /**
  * One seeded entry. `kind` is what decides the shape — the same discriminator
- * the API uses for an entry.
+ * the API uses for an entry. A location is its draft: the entry without its
+ * address and its guard, checked against the location's schema.
  */
 export type SeedEntry =
   | { kind: "campaign"; properties: Properties; body?: string }
   | { kind: "chapter"; properties: Properties; body?: string; threads?: SeedThread[] }
   | { kind: "scene"; properties: Properties; body?: string }
   | { kind: "npc"; properties: Properties; body?: string }
-  | { kind: "location"; properties: Properties; body?: string }
+  | LocationDraft
   | { kind: "session"; properties: Properties; body?: string; log?: SeedLogLine[] }
   | { kind: "inbox"; entries: SeedInboxEntry[] }
   | { kind: "glossary"; intro?: string; entries: SeedGlossaryEntry[] };
 
 /** The kinds that carry `properties` and a `body`. */
-const ENTRY_KINDS = ["campaign", "chapter", "scene", "npc", "location", "session"] as const;
+const ENTRY_KINDS = ["campaign", "chapter", "scene", "npc", "session"] as const;
 
 /**
  * The order the kinds are written in — the foreign keys decide it, so this is
@@ -175,6 +181,12 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
       }),
     };
   }
+  if (kind === "location") {
+    // The body may be left out of a fixture, like every other kind's.
+    const draft = readLocationDraftOrFail(where, { body: "", ...value });
+    if (!isEntityId(draft.id)) fail(where, "`id` must be a kebab-case slug");
+    return draft;
+  }
   if (!(ENTRY_KINDS as readonly string[]).includes(kind)) fail(where, `unknown kind "${kind}"`);
   const properties = value.properties;
   if (!isRecord(properties)) fail(where, "`properties` must be a JSON object");
@@ -222,10 +234,19 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
     };
   }
   return {
-    kind: kind as "campaign" | "scene" | "npc" | "location",
+    kind: kind as "campaign" | "scene" | "npc",
     properties,
     body: typeof body === "string" ? body : "",
   };
+}
+
+/** A location fixture as its draft — or the seed error that names what is wrong. */
+function readLocationDraftOrFail(where: string, value: unknown): LocationDraft {
+  try {
+    return readLocationDraft(value, "location");
+  } catch (error) {
+    fail(where, error instanceof Error ? error.message : String(error));
+  }
 }
 
 function asThread(where: string, value: unknown): SeedThread {
@@ -293,8 +314,6 @@ function addressOf(entry: SeedEntry & { properties: Properties }): string {
       return chapterPath(id);
     case "npc":
       return npcPath(id);
-    case "location":
-      return locationPath(id);
     default:
       return sceneAddress({
         chapterId: asOptString(entry.properties.chapter),
@@ -348,10 +367,11 @@ function writeEntry(tx: GrimoireDb, campaignId: string, entry: SeedEntry): void 
   switch (entry.kind) {
     case "campaign":
       return writeCampaignRow(tx, campaignId, entry.properties, entry.body ?? "");
+    case "location":
+      return insertLocationDraft(tx, campaignId, entry);
     case "chapter":
     case "scene":
-    case "npc":
-    case "location": {
+    case "npc": {
       const address = addressOf(entry);
       insertDraft(tx, campaignId, {
         rel: address,

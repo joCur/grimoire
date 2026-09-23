@@ -1,16 +1,19 @@
 // Taking over the generator's drafts.
 //
-// A draft is a pair of `properties` and `body` with a target address, and
-// this is the write behind `POST /generate/apply`: one transaction for the
+// A draft is a pair of `properties` and `body` with a target address — or,
+// for a kind with its own zod schema (ADR #31), that kind's draft itself (a
+// location: `LocationDraft`) — and this is the write behind `POST
+// /generate/apply`: one transaction for the
 // whole batch, the documented `409 { conflicts }` decided INSIDE it, and the
 // job row discarded in the same commit. A partial accept records what it
 // wrote instead. Nothing here is a second write path for an entry — an entry
 // that already holds content is a conflict, not something to overwrite.
 
 import { and, desc, eq } from "drizzle-orm";
+import type { LocationDraft } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { chapters, generateJobs, locations, npcs, packJson, scenes } from "../db/schema";
+import { chapters, generateJobs, npcs, packJson, scenes } from "../db/schema";
 import { campaignRow, mutate } from "./campaigns";
 import { ensureChapterRow, nextScenePos, replaceSceneRefs, sceneLocation } from "./chapters";
 import {
@@ -19,7 +22,6 @@ import {
   assertNpcRefs,
   chapterRowOf,
   indexChapter,
-  indexLocation,
   indexNpc,
   indexScene,
   locationRowOf,
@@ -27,24 +29,36 @@ import {
   sceneRowOf,
 } from "./entity-rows";
 import { getDb } from "./handle";
-import { isEmptyLocationRow } from "./locations";
+import { insertLocationDraft, isEmptyLocationRow } from "./locations";
 import { isEmptyNpcRow, NPC_DEFAULT_STATUS } from "./npcs";
 import { addressIdentity, locatorFromPath, type Locator } from "./paths";
 import { asMap, asOptStr, asStr, asStrArray, assertNpcStatus, assertSceneClosedFields } from "./shared";
 
 // --- the generator's apply step ------------------------------------------------
 
-export interface EntityDraft {
+/** One draft ready to be written, with where it goes. */
+export type EntityDraft = PropertiesDraft | TypedLocationDraft;
+
+interface DraftTarget {
   /** Campaign-relative target path (the generator's own addressing). */
   rel: string;
   /**
    * The ADDRESS the row will actually have — `rel` with the id segment taken
-   * from the properties (generator.ts `draftAddress`). The conflict check
-   * asks about this, `rel` is only what a 409 reports back to the client.
+   * from the draft (generator.ts `draftAddress`). The conflict check asks
+   * about this, `rel` is only what a 409 reports back to the client.
    */
   address: string;
+}
+
+/** A draft of a kind whose fields travel under `properties`. */
+export interface PropertiesDraft extends DraftTarget {
   properties: Record<string, unknown>;
   body: string;
+}
+
+/** A location draft — the location's own typed draft (ADR #31). */
+export interface TypedLocationDraft extends DraftTarget {
+  location: LocationDraft;
 }
 
 /**
@@ -66,6 +80,10 @@ export function insertDraft(
   draft: EntityDraft,
   placeScene?: ScenePlacement,
 ): void {
+  if ("location" in draft) {
+    insertLocationDraft(tx, campaign, draft.location);
+    return;
+  }
   const locator = locatorFromPath(draft.rel);
   const props = draft.properties;
   switch (locator.kind) {
@@ -146,33 +164,6 @@ export function insertDraft(
       }
       const row = npcRowOf(tx, campaign, id);
       if (row !== undefined) indexNpc(tx, campaign, row);
-      return;
-    }
-    case "location": {
-      const id = asStr(props.id, locator.id);
-      const locationChapter = asOptStr(props.chapter);
-      assertChapterRef(tx, campaign, locationChapter);
-      const values = {
-        name: asStr(props.name, id),
-        chapterId: locationChapter,
-        roll20Page: asOptStr(props["roll20-page"]),
-        atmosphere: asOptStr(props.atmosphere),
-        body: draft.body,
-      };
-      // Fill an empty entry rather than collide with it — see the npc case.
-      const existing = locationRowOf(tx, campaign, id);
-      if (existing !== undefined) {
-        tx.update(locations)
-          .set({ ...values, rev: existing.rev + 1 })
-          .where(and(eq(locations.campaignId, campaign), eq(locations.id, id)))
-          .run();
-      } else {
-        tx.insert(locations)
-          .values({ campaignId: campaign, id, ...values })
-          .run();
-      }
-      const row = locationRowOf(tx, campaign, id);
-      if (row !== undefined) indexLocation(tx, campaign, row);
       return;
     }
     case "chapter": {
