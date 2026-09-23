@@ -15,7 +15,9 @@
 //   d) an entry that moves while the review is open answers 409 and nothing
 //      is written (ADR #4) — the review recovers on the re-read,
 //   e) a proposal that names an entry nobody has (`[[…]]`) costs one
-//      correction turn, and the DM reviews the corrected one.
+//      correction turn, and the DM reviews the corrected one,
+//   f) a LOCATION — its own typed entry, fields flat on the wire (ADR #31) —
+//      echoes its fields unchanged and gains the new section.
 //
 // Two of them carry the default rule with them, because it is the rule the
 // whole feature turns on: by default only empty and new units are accepted,
@@ -390,6 +392,34 @@ test("409: the entry moves while the review is open — nothing is written", asy
   // …and the other writer is NOT overwritten by a decision that was cut
   // against the body they replaced.
   expect(written).toContain("Jemand anderes hat die Szene umgeschrieben.");
+});
+
+test("a location: its flat fields come back unchanged, the new section lands", async ({
+  page,
+  api,
+}) => {
+  // A location is its own typed entry (ADR #31): the prompt shows it flat,
+  // the reply echoes it flat, and the accept writes through its flat PATCH.
+  const LOCATION = "locations/leuchtturm";
+  const before = await api.properties(LOCATION);
+
+  await page.goto(`/campaigns/beispiel/entries/${LOCATION}`);
+  await startAugment(page);
+  // Every field echoed as it stands — no field decision to make.
+  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+    timeout: 30_000,
+  });
+  const newBlock = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
+  await expect(newBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect.poll(() => api.body(LOCATION)).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
+  expect(await api.properties(LOCATION)).toEqual(before);
+  await expect(page.getByRole("article")).toContainText(AUGMENT_THREAD_CONDITION);
 });
 
 test("the entry point: npc, location and scene — and nothing else", async ({

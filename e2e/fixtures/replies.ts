@@ -5,7 +5,9 @@
 //
 //   an entry call   `{ properties, body, warnings }` — the properties of
 //                     the entry, its whole text as one string, and the
-//                     notes the review shows the DM
+//                     notes the review shows the DM; a LOCATION answers its
+//                     fields flat beside `body` and `warnings` instead
+//                     (ADR #31)
 //   the outline call  the run's scene and entry list
 //
 // The fixtures write those objects DIRECTLY. A reply that is a plain STRING
@@ -45,6 +47,22 @@ export interface EntryReply {
   properties: Record<string, unknown>;
   body: string;
   warnings: string[];
+}
+
+/**
+ * A LOCATION reply: its fields flat beside `body` and `warnings` — a
+ * location has its own typed entry (ADR #31), and its reply mirrors it.
+ */
+export type LocationReply = Record<string, unknown> & { body: string; warnings: string[] };
+
+/** An entry reply in the flat shape a location answers with. */
+function flatLocation(reply: EntryReply): LocationReply {
+  return { ...reply.properties, body: reply.body, warnings: reply.warnings };
+}
+
+/** Is this the address of a location — the kind that replies flat? */
+function isLocationPath(path: string): boolean {
+  return path.startsWith("locations/");
 }
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
@@ -309,13 +327,17 @@ const npcStub: EntryReply = {
 /** The atmosphere of the location stub a scene run proposes. */
 export const LOCATION_STUB_ATMOSPHERE = "Salz in der Luft, Möwen über dem Schlick, kein Mensch zu sehen.";
 
-/** The location stub a scene run's entry call answers with. */
-const locationStub: EntryReply = {
-  properties: {
-    id: LOCATION_STUB_ID,
-    name: LOCATION_STUB_NAME,
-    atmosphere: LOCATION_STUB_ATMOSPHERE,
-  },
+/**
+ * The location stub a scene run's entry call answers with — FLAT, its fields
+ * beside `body` and `warnings` (ADR #31). A field the source does not give is
+ * `null`, as the schema asks.
+ */
+const locationStub: LocationReply = {
+  id: LOCATION_STUB_ID,
+  name: LOCATION_STUB_NAME,
+  chapter: null,
+  "roll20-page": null,
+  atmosphere: LOCATION_STUB_ATMOSPHERE,
   // `[[grella]]` is the npc the SAME run proposes: a reference to it is
   // valid before either entry is written.
   body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
@@ -441,10 +463,12 @@ export const AUGMENT_NPC_MOTIVATION =
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
 /**
- * The existing entry as the PROMPT shows it: the `properties` and `body` pair
- * as JSON, which is the same shape the reply is forced into (ADR #24). The
- * augment run is the one case that has to read it — its reply echoes the
- * entry it was given, so nothing here reconstructs properties from text.
+ * The existing entry as the PROMPT shows it — its fields and its body, read
+ * out of the JSON the prompt carries in the very shape the reply is forced
+ * into (ADR #24): a `properties`/`body` pair, or a location's fields flat
+ * beside its body (stub-llm.ts reads both into this). The augment run is the
+ * one case that has to read it — its reply echoes the entry it was given, so
+ * nothing here reconstructs properties from text.
  */
 export interface ExistingEntry {
   properties: Record<string, unknown>;
@@ -461,7 +485,17 @@ export interface ExistingEntry {
  *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(path: string, entry: ExistingEntry, knowledge = ""): EntryReply {
+export function augmentReply(
+  path: string,
+  entry: ExistingEntry,
+  knowledge = "",
+): EntryReply | LocationReply {
+  const reply = augmentedEntry(path, entry, knowledge);
+  return isLocationPath(path) ? flatLocation(reply) : reply;
+}
+
+/** The augment reply's content, before it takes the shape of its kind. */
+function augmentedEntry(path: string, entry: ExistingEntry, knowledge: string): EntryReply {
   const { properties, body } = entry;
   const id = String(properties.id ?? path.slice(path.lastIndexOf("/") + 1));
   const isEmptyNpc =
@@ -496,7 +530,10 @@ export function augmentReply(path: string, entry: ExistingEntry, knowledge = "")
  * The first reply of a TRIGGER.unknownRef augment run: the good proposal plus
  * a sentence naming an entry that does not exist — a correction turn.
  */
-export function unknownRefAugmentReply(path: string, entry: ExistingEntry): EntryReply {
+export function unknownRefAugmentReply(
+  path: string,
+  entry: ExistingEntry,
+): EntryReply | LocationReply {
   const good = augmentReply(path, entry);
   return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
@@ -507,8 +544,9 @@ export function unknownRefAugmentReply(path: string, entry: ExistingEntry): Entr
  * a shape a reply can have — rewriting the reference key is, and it is the
  * rule the augment run cares about most.
  */
-export function invalidAugmentReply(_path: string): EntryReply {
-  return { properties: { id: "not-the-entry" }, body: "", warnings: [] };
+export function invalidAugmentReply(path: string): EntryReply | LocationReply {
+  const reply: EntryReply = { properties: { id: "not-the-entry" }, body: "", warnings: [] };
+  return isLocationPath(path) ? flatLocation(reply) : reply;
 }
 
 // --- the pipelined scene run -------------------------------------------------
@@ -732,6 +770,6 @@ function plainSceneDraft(chapter: string, id: string, title: string): EntryReply
 }
 
 /** One suggested entry — the entry itself. */
-export function entryPartReply(kind: "npc" | "location"): EntryReply {
+export function entryPartReply(kind: "npc" | "location"): EntryReply | LocationReply {
   return kind === "location" ? locationStub : npcStub;
 }

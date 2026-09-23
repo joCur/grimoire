@@ -51,7 +51,8 @@ const TEXTAREA = "Markdown-Text von";
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.entry(rel);
+  // The fields by name for every kind — a location's travel flat (ADR #31).
+  const [properties, body] = await Promise.all([api.properties(rel), api.body(rel)]);
   return { properties, body };
 }
 

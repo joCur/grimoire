@@ -96,8 +96,18 @@ export interface ServerHandle {
  */
 export type SeedEntry =
   | {
-      kind: "campaign" | "scene" | "npc" | "location";
+      kind: "campaign" | "scene" | "npc";
       properties: Record<string, unknown>;
+      body?: string;
+    }
+  | {
+      /** A location is its draft: its fields flat beside `kind`, `id` and `body` (ADR #31). */
+      kind: "location";
+      id: string;
+      name: string;
+      chapter?: string;
+      "roll20-page"?: string;
+      atmosphere?: string;
       body?: string;
     }
   | {
@@ -146,7 +156,13 @@ export interface Seed {
   skip?: boolean;
 }
 
-/** One entry as GET /api/campaigns/:campaign/entries/<address> answers it. */
+/**
+ * One entry as GET /api/campaigns/:campaign/entries/<address> answers it, for
+ * a kind whose fields travel under `properties`. A location answers its
+ * fields flat beside `kind`, `id`, `path`, `body` and `rev` (ADR #31) — read
+ * them through `api.properties`, which answers the fields by name for every
+ * kind.
+ */
 export interface ApiEntry {
   path: string;
   kind: string;
@@ -154,6 +170,11 @@ export interface ApiEntry {
   body: string;
   /** The row version (`rev`) — an opaque guard token. */
   rev: number;
+}
+
+/** Is this address a location's, whose fields travel flat (ADR #31)? */
+function isLocationAddress(rel: string): boolean {
+  return rel.startsWith("locations/");
 }
 
 /** One log row of a session — columns, never a markdown line (ADR #26). */
@@ -439,7 +460,12 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       return (await api.entry(rel)).body;
     },
     async properties(rel) {
-      return (await api.entry(rel)).properties;
+      const entry = await api.entry(rel);
+      if (!isLocationAddress(rel)) return entry.properties;
+      // A location's fields stand flat beside the entry's own keys.
+      const fields: Record<string, unknown> = { ...entry };
+      for (const key of ["kind", "path", "body", "rev"]) delete fields[key];
+      return fields;
     },
     async exists(rel) {
       const response = await fetchApi(entriesPath(campaign, rel));
@@ -481,9 +507,12 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     async patchEntry(rel, change) {
       const rev = change.rev ?? (await api.entry(rel)).rev;
       const { properties, body, force } = change;
+      // The request speaks the kind's shape: a location's fields flat.
+      const fields =
+        properties === undefined ? {} : isLocationAddress(rel) ? properties : { properties };
       return api.send<ApiEntry>("PATCH", entriesPath(campaign, rel), {
         rev,
-        ...(properties === undefined ? {} : { properties }),
+        ...fields,
         ...(body === undefined ? {} : { body }),
         ...(force === undefined ? {} : { force }),
       });

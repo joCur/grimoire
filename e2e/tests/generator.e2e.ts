@@ -139,6 +139,18 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // Nothing is stored before the accept — under neither address.
   expect(await api.exists(DRAFT_PATH)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
+  // The proposed location is its own typed draft on the job: its fields flat
+  // beside `kind`, `id` and `body`, no `properties` map (ADR #31).
+  const job = await api.get<{ result?: { stubs: Array<Record<string, unknown>> } }>(
+    "campaigns/beispiel/generate/job",
+  );
+  const locationDraft = job.result?.stubs.find((stub) => stub.kind === "location");
+  expect(locationDraft).toMatchObject({
+    id: LOCATION_STUB_ID,
+    name: LOCATION_STUB_NAME,
+    atmosphere: LOCATION_STUB_ATMOSPHERE,
+  });
+  expect(locationDraft).not.toHaveProperty("properties");
 
   // Suggested entries are decided one by one. An undecided row is the innermost div that
   // carries the target path AND its own "Ablehnen" button.
@@ -177,6 +189,10 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   );
   // The co-proposed npc's reference arrived as written, and now resolves.
   expect(await api.body(`locations/${LOCATION_STUB_ID}`)).toContain(`[[${NPC_STUB_ID}]]`);
+  // …and the written location answers as its own typed entry.
+  const writtenLocation: Record<string, unknown> = { ...(await api.entry(`locations/${LOCATION_STUB_ID}`)) };
+  expect(writtenLocation).toMatchObject({ kind: "location", id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME });
+  expect(writtenLocation).not.toHaveProperty("properties");
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (ADR #17).

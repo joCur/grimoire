@@ -259,7 +259,12 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await locationName.fill("Hafenviertel");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page).toHaveURL(/\/locations\/hafenviertel$/);
-  expect((await api.entry("locations/hafenviertel")).properties.name).toBe("Hafenviertel");
+  expect((await api.properties("locations/hafenviertel")).name).toBe("Hafenviertel");
+  // A location answers as its own typed entry — its fields flat beside `kind`,
+  // `id` and `body`, no `properties` map (ADR #31).
+  const location: Record<string, unknown> = { ...(await api.entry("locations/hafenviertel")) };
+  expect(location).toMatchObject({ kind: "location", id: "hafenviertel", name: "Hafenviertel" });
+  expect(location).not.toHaveProperty("properties");
 });
 
 test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, server }) => {

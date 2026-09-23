@@ -66,9 +66,9 @@
 //
 // REPLY SHAPE: every reply is an OBJECT and is serialized as
 // JSON into the message content — the outline its own, an entry call
-// `{ properties, body, warnings }` (replies.ts assembles both). A reply that
-// is a plain STRING is one a spec wrote to be unreadable, and it travels
-// verbatim.
+// `{ properties, body, warnings }`, a location its fields flat beside `body`
+// and `warnings` (ADR #31; replies.ts assembles them all). A reply that is a
+// plain STRING is one a spec wrote to be unreadable, and it travels verbatim.
 //
 // The stub is an OpenAI-compatible endpoint and simply IGNORES the
 // `response_format` the server sends, which is exactly what the tolerant
@@ -173,8 +173,9 @@ const partCalls = new Map<string, number>();
 /**
  * The augment run's target: the address out of the „Bestehender Eintrag"
  * heading, and the entry itself out of the fenced JSON block right below it —
- * the `{ properties, body }` pair, which is the very shape the reply is forced
- * into (ADR #24). Returns null when the prompt has no such section — which is
+ * the `{ properties, body }` pair, or a location's fields flat beside its
+ * body, which is the very shape the reply is forced into (ADR #24, #31).
+ * Returns null when the prompt has no such section — which is
  * every create run, and then nothing about the stub changes.
  */
 function existingEntry(prompt: string): { path: string; entry: ExistingEntry } | null {
@@ -194,11 +195,14 @@ function existingEntry(prompt: string): { path: string; entry: ExistingEntry } |
     return null;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const { properties, body } = parsed as Record<string, unknown>;
+  const path = address[1]!.trim();
+  const { properties, body, ...flat } = parsed as Record<string, unknown>;
   return {
-    path: address[1]!.trim(),
+    path,
     entry: {
-      properties: isRecord(properties) ? properties : {},
+      // A location is shown FLAT — its fields beside its body (ADR #31) —
+      // the other kinds as their `properties`/`body` pair.
+      properties: path.startsWith("locations/") ? flat : isRecord(properties) ? properties : {},
       body: typeof body === "string" ? body : "",
     },
   };

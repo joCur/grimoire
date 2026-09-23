@@ -35,9 +35,13 @@ const NPC = "npcs/jorna";
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
 const CONFLICT_LINE = "Inzwischen geändert";
 
-/** Read the entry: its properties and its text — the two halves every assertion looks at. */
+/**
+ * Read the entry: its properties and its text — the two halves every
+ * assertion looks at. The fields by name for every kind, a location's
+ * included (they travel flat, ADR #31).
+ */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.entry(rel);
+  const [properties, body] = await Promise.all([api.properties(rel), api.body(rel)]);
   return { properties, body };
 }
 
@@ -194,7 +198,7 @@ test("scene properties: chips, reference and status land in the entry — nothin
   expect(after.properties.location).toBe("nordbucht");
   // …and the location it names is untouched: a scene references its group, it
   // never writes it.
-  expect((await api.entry("locations/nordbucht")).properties.name).toBe("Nordbucht");
+  expect((await api.properties("locations/nordbucht")).name).toBe("Nordbucht");
   expect(after.properties.status).toBe("draft");
   // … the untouched ones with their values …
   expect(after.properties.id).toBe("lighthouse-arrival");
@@ -426,6 +430,49 @@ test("a forced save writes the dialog's fields only — a concurrent body surviv
   // The assertion this test exists for, read back through the API.
   expect(after.body).toBe(externalBody);
   await expect(page.getByRole("article")).toContainText("#erzwungen");
+});
+
+test("a location's dialog writes its own fields — a second writer is a conflict, force keeps its text", async ({
+  page,
+  api,
+}) => {
+  // A location is its own typed entry (ADR #31): the dialog's save travels
+  // as the location's flat PATCH, and the guard and force work as for every
+  // other kind.
+  const LOCATION = "locations/leuchtturm";
+  const before = await split(api, LOCATION);
+
+  await page.goto(`/campaigns/beispiel/entries/${LOCATION}`);
+  let dialog = await openProperties(page);
+  await expect(dialog).toContainText("Ort: Eigenschaften");
+  const page20 = dialog.getByLabel("Roll20-Seite");
+  await expect(page20).toHaveValue("Leuchtturm");
+  await page20.fill("Leuchtturm (oben)");
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect.poll(async () => (await api.properties(LOCATION))["roll20-page"]).toBe(
+    "Leuchtturm (oben)",
+  );
+  // Only the changed field moved.
+  const saved = await split(api, LOCATION);
+  expect(saved.properties).toEqual({ ...before.properties, "roll20-page": "Leuchtturm (oben)" });
+  expect(saved.body).toBe(before.body);
+
+  // A second writer changes the TEXT while the dialog stands: the save is
+  // refused, and forcing writes the dialog's field only.
+  const externalBody = "\n## Beim ersten Betreten\n\nVon einem zweiten Schreiber.\n";
+  dialog = await openProperties(page);
+  await dialog.getByLabel("Name").fill("Der alte Leuchtturm");
+  await api.writeBody(LOCATION, externalBody);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  const conflicted = conflict(dialog);
+  await expect(conflicted.line).toBeVisible();
+  await conflicted.force.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expect.poll(async () => (await api.properties(LOCATION)).name).toBe("Der alte Leuchtturm");
+  expect(await api.body(LOCATION)).toBe(externalBody);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der alte Leuchtturm");
 });
 
 test("clearing a field deletes the key instead of writing an empty value", async ({

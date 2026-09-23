@@ -83,9 +83,9 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // What says the entry was SEEDED rather than conjured: it carries the name
   // and the chapter its fixture spells, which a synthesized stub would not
   // have.
-  const bucht = await api.entry("locations/bucht");
-  expect(bucht.properties.name).toBe("Die Nordbucht");
-  expect(bucht.properties.chapter).toBe("01-salzhafen");
+  const bucht = await api.properties("locations/bucht");
+  expect(bucht.name).toBe("Die Nordbucht");
+  expect(bucht.chapter).toBe("01-salzhafen");
   // A session in the tree is a SUMMARY: its id and when it ran, no address.
   expect(tree.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
 
