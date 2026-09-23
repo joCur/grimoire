@@ -218,7 +218,8 @@ Modell über die Adressierung entscheidet. Die inhaltlichen Regeln bleiben
 (Szene: `status: draft`, nur bekannte Callouts, `location` ist eine id,
 Referenzen existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
 Ort-Eintrag *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
-`{ key, value }`-Liste mit String-Werten, `## Notizen` leer).
+`{ key, value }`-Liste mit String-Werten; in jedem Text nennt jedes `[[id]]`
+einen Eintrag der Kampagne oder einen Vorschlag desselben Laufs).
 
 Wenn sich eine Validierungsregel ändert, ist diese Datei die Stelle, die
 mitwandert. Die Specs behaupten die dort definierten Titel und ids.
@@ -256,6 +257,11 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 - `E2E_INVALID` im Quelltext → Antwort, die die Validierung reißt (auch im
   Korrektur-Turn, der Lauf endet also in einem 422)
 - `E2E_TRUNCATED` im Quelltext → `finish_reason: "length"`
+- `E2E_UNKNOWN_REF` im Quelltext → die **erste** Antwort eines NPC- oder
+  Ergänzen-Laufs nennt `[[der-fremde]]`, einen Eintrag, den es nicht gibt;
+  der Korrektur-Turn (der Aufruf mit der vorigen Antwort als
+  Assistant-Turn) bekommt die gute Antwort. Der Lauf kostet also genau eine
+  Korrekturrunde und endet ohne diesen Verweis.
 - `E2E_THREE_SCENES` im Quelltext → die Gliederung hat **drei** Szenen und
   keine Vorschläge — die Form, in der man Teile einzeln fertig werden,
   fehlschlagen und wiederholen sehen kann

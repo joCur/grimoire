@@ -60,22 +60,22 @@ import { ApiError } from "./api-error";
 import { checkDraftsNaming } from "./naming-check";
 import {
   ASSET_FILES,
-  buildCorrectionMessage,
+  campaignRefIds,
   collectSceneContext,
   loadAsset,
   loadPromptAssets,
   obtainProvider,
   runPipeline,
-  npcBodyErrors,
   quickstatsErrors,
   stubPath,
+  unknownCallouts,
+  unknownRefErrors,
   validateEntry,
   validateSceneEntry,
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
-import { unknownCallouts } from "./generator";
 import { parseEntryReply, parseJsonReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
@@ -516,17 +516,22 @@ export function validateSingleSceneReply(input: {
  * One suggested ENTRY, validated as the entry of a scene run.
  *
  * Deliberately built on `validateEntry` — the very function that judged the
- * `entries` of the batch reply — plus the npc FORMAT rules of the npc run
- * (`npcBodyErrors`, quickstats). What it does NOT take from the npc RUN are
- * the rules that are about that run rather than about the entry: an npc run
- * forbids a `chapter` key (it has no target chapter) while a scene run's
- * entry legitimately belongs to the run's chapter, and its pinned-id rule is
+ * `entries` of the batch reply — plus the body rules every generated entry
+ * shares (known callouts, `[[id]]` references that resolve) and, for an npc,
+ * quoted quickstats. What it does NOT take from the npc RUN are the rules
+ * that are about that run rather than about the entry: an npc run forbids a
+ * `chapter` key (it has no target chapter) while a scene run's entry
+ * legitimately belongs to the run's chapter, and its pinned-id rule is
  * replaced by the outline's id.
+ *
+ * A reference may name anything the run's outline decided — another proposed
+ * npc or location, a scene of the run — next to what the campaign has
+ * (`allowed.refIds`).
  */
 export function validateEntryReply(
   raw: string,
   entry: OutlineEntry,
-  ctx: SceneContext,
+  allowed: AllowedRefs,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
   const read = parseEntryReply(raw, entry.kind);
   if (!read.ok) {
@@ -549,9 +554,9 @@ export function validateEntryReply(
   for (const callout of unknownCallouts(reply.body)) {
     errors.push(`${label}: unknown callout "[!${callout}]"`);
   }
+  for (const msg of unknownRefErrors(reply.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
   if (entry.kind === "npc") {
     for (const msg of quickstatsErrors(reply.properties)) errors.push(`${label}: ${msg}`);
-    for (const msg of npcBodyErrors(reply.body, ctx)) errors.push(`${label}: ${msg}`);
   }
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, result: { stub, warnings: reply.warnings } };
@@ -718,10 +723,10 @@ export interface RunPlan {
 }
 
 /**
- * The plan of a run: the campaign context plus the outline, and the id sets a
- * scene may reference (the campaign's plus the outline's own entries:
- * every id comes from the outline, so the validation checks against outline +
- * context and nothing else).
+ * The plan of a run: the campaign context plus the outline, and the id sets
+ * its parts may reference (the campaign's plus the outline's own entries and
+ * scenes: every id of the run comes from the outline, so the validation
+ * checks against outline + context and nothing else).
  */
 export function planOf(input: {
   campaign: string;
@@ -746,6 +751,11 @@ export function planOf(input: {
       locationIds: new Set([
         ...ctx.locationIds,
         ...outline.entries.filter((e) => e.kind === "location").map((e) => e.id),
+      ]),
+      refIds: new Set([
+        ...campaignRefIds(ctx),
+        ...outline.entries.map((e) => e.id),
+        ...outline.scenes.map((scene) => scene.id),
       ]),
     },
   };
@@ -873,7 +883,7 @@ export async function runEntryPart(
       jsonSchema: entryReplySchema(entry.kind, "create"),
     },
     provider,
-    validate: (raw) => validateEntryReply(raw, entry, plan.ctx),
+    validate: (raw) => validateEntryReply(raw, entry, plan.allowed),
     correctionTail:
       entry.kind === "npc" ? "den vollständigen NPC-Eintrag enthalten" : "den vollständigen Ort-Eintrag enthalten",
     onCall: counter.onCall,

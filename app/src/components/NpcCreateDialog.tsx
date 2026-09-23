@@ -1,8 +1,8 @@
 // "NPC anlegen": the entry needs an id the DM
 // chooses — a log line is prose, and ids are the stable reference keys of the
 // format (README) — so the review proposes a kebab-case slug derived from the
-// text and lets it be edited. Optional display name; the entry text becomes
-// the `## Notizen` line.
+// text and lets it be edited. Optional display name; the line's text becomes
+// the entry's whole text, with no heading around it.
 //
 // The id that ALREADY has an entry is not an error: the call is
 // idempotent, so the review links to what is there instead of making the DM
@@ -57,8 +57,8 @@ export function NpcCreateDialog({
     >
       <DialogContent aria-describedby={undefined}>
         <DialogTitle>{t("create.npc.title")}</DialogTitle>
-        {/* `status: unknown` and `## Notizen` are FORMAT tokens on the wire
-            (README), so they stand verbatim inside the translated sentence. */}
+        {/* `status: unknown` is a FORMAT token on the wire (README), so it
+            stands verbatim inside the translated sentence. */}
         <DialogDescription>{t("npcCreate.description")}</DialogDescription>
 
         <form

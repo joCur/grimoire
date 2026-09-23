@@ -54,6 +54,7 @@ import {
   type NamingHint,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
+import { bodyEntityRefSlugs, entityRefSource } from "@grimoire/shared/refs";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
@@ -164,9 +165,9 @@ export interface PromptAssets {
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
-  // Locations have no generator run of their own — the augment run is the
-  // only caller, and the pair is written so a future location run can
-  // use it unchanged.
+  // Locations have no single-call run of their own: a scene run loads this
+  // pair for every location its outline proposes, and the augment run takes
+  // the format half of the prompt and the few-shot from here.
   location: {
     systemPrompt: "location-system-prompt.md",
     fewShotTarget: "location-example-output.json",
@@ -245,6 +246,12 @@ export interface CampaignContext {
   namingRules: NamingRule[];
   npcIds: Set<string>;
   locationIds: Set<string>;
+  /**
+   * The campaign's scene ids. A scene is the third kind a `[[id]]` can name
+   * (@grimoire/shared/refs), so the reference check needs them next to the
+   * npc and location ids.
+   */
+  sceneIds: Set<string>;
 }
 
 /** A scene run additionally targets one chapter. */
@@ -364,6 +371,7 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
     namingRules: await namingRules(campaign),
     npcIds: new Set(npcs.map((n) => n.id)),
     locationIds: new Set(locations.map((l) => l.id)),
+    sceneIds: new Set(tree.chapters.flatMap((chapter) => chapter.scenes.map((s) => s.id))),
   };
 }
 
@@ -404,6 +412,36 @@ export function unknownCallouts(body: string): string[] {
     if (!KNOWN_CALLOUTS.has(kind) && !unknown.includes(m[1]!)) unknown.push(m[1]!);
   }
   return unknown;
+}
+
+/**
+ * Every id a `[[id]]` in a generated body may name without the run proposing
+ * it: the campaign's npcs, locations and scenes — the three kinds a reference
+ * resolves to (@grimoire/shared/refs `ENTITY_REF_KINDS`).
+ */
+export function campaignRefIds(ctx: CampaignContext): Set<string> {
+  return new Set([...ctx.npcIds, ...ctx.locationIds, ...ctx.sceneIds]);
+}
+
+/**
+ * The reference rule of a generated body: every `[[id]]` names an entry the
+ * campaign has or one the same run proposes (`known`). A reference to nothing
+ * would reach the DM as bracketed text instead of a name, so it is a
+ * correction turn like every other mechanical error.
+ *
+ * It reads the body with the grammar the renderer and the search index use
+ * (@grimoire/shared/refs): only a kebab-case slug in double brackets is a
+ * reference, and one inside a code span or a fenced block is literal text and
+ * not checked. WHERE in the body a reference stands does not matter.
+ */
+export function unknownRefErrors(body: string, known: ReadonlySet<string>): string[] {
+  return bodyEntityRefSlugs(body)
+    .filter((slug) => !known.has(slug))
+    .map(
+      (slug) =>
+        `${entityRefSource(slug)} nennt keinen Eintrag — weder die Kampagne noch dieser ` +
+        "Durchlauf hat diese id; nenne eine id aus dem Kontext oder schreibe den Namen als Text",
+    );
 }
 
 /**
@@ -525,14 +563,18 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
 }
 
 /**
- * Which ids a scene may REFERENCE. Before the pipeline
- * the answer was "the campaign plus the stubs of the same reply"; with it
- * pipeline the reply is one scene and the other ids come from the OUTLINE, so
- * the allowed sets became a parameter instead of a local variable.
+ * Which ids an entry of a scene run may REFERENCE: the campaign's plus the
+ * ones the run's OUTLINE decided. The reply is one part of the run and the
+ * other ids come from the outline, so the sets are a parameter.
+ *
+ * `npcIds`/`locationIds` are what a scene's `npcs`/`location` properties may
+ * name; `refIds` is what a `[[id]]` in any body of the run may name — every
+ * npc, location and scene of the campaign and of the outline.
  */
 export interface AllowedRefs {
   npcIds: ReadonlySet<string>;
   locationIds: ReadonlySet<string>;
+  refIds: ReadonlySet<string>;
 }
 
 /**
@@ -632,6 +674,7 @@ export function validateSceneEntry(input: {
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
   }
+  for (const msg of unknownRefErrors(reply.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
 
   return {
     path: scenePath(chapter, "", propsId),
@@ -644,105 +687,6 @@ export function validateSceneEntry(input: {
 
 /** The only legal target of an NPC run — the id IS the address. */
 const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
-
-/** The sections of the NPC format that carry rules (README "Entität: NPC"). */
-const KNOWLEDGE_SECTION = "Weiß";
-const RELATIONS_SECTION = "Beziehungen";
-const NOTES_SECTION = "Notizen";
-
-/** `- [[<npc-id>]]: <text>` — the relationship line of the format contract. */
-const RELATION_ITEM = /^\s*[-*]\s+(.*)$/;
-/**
- * The brackets are OPTIONAL to the check: the prompt asks for them, because
- * that is what makes the counterpart a link carrying its current name, and a
- * line written without them is the same statement in the same place. What the
- * check is after is the id, whichever way the line spells it.
- */
-const RELATION_ENTRY = /^(?:\[\[)?([a-z0-9][a-z0-9-]*)(?:\]\])?\s*:\s*\S/;
-
-/** The title of a `##` heading line, or undefined for any other line. */
-function h2Title(line: string): string | undefined {
-  const match = /^##[ \t]+(.+?)[ \t]*$/.exec(line);
-  return match?.[1];
-}
-
-/**
- * Body of one `## <heading>` section (up to the next heading of any level), or
- * undefined when the section is not there. Sections are NOT required — the
- * format degrades — but the ones that exist have to follow their rules.
- */
-function sectionBody(body: string, heading: string): string | undefined {
-  const lines = body.split("\n");
-  const start = lines.findIndex((line) => h2Title(line) === heading);
-  if (start === -1) return undefined;
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((line) => /^#{1,6}[ \t]/.test(line));
-  return (end === -1 ? rest : rest.slice(0, end)).join("\n");
-}
-
-/**
- * `## Beziehungen` may only point at npcs that EXIST (the prompt's rule is
- * "weglassen statt erfinden"): every list line must be `- <npc-id>: <text>`
- * with an id from the campaign context. Prose lines inside the section are
- * left alone — that is the format degrading, not a mechanical error.
- */
-function relationErrors(body: string, ctx: CampaignContext): string[] {
-  const section = sectionBody(body, RELATIONS_SECTION);
-  if (section === undefined) return [];
-  const errors: string[] = [];
-  for (const line of section.split("\n")) {
-    const item = RELATION_ITEM.exec(line);
-    if (item === null) continue;
-    const text = item[1]!.trim();
-    const entry = RELATION_ENTRY.exec(text);
-    if (entry === null) {
-      errors.push(
-        `## ${RELATIONS_SECTION}: "${text}" ist keine "- [[<npc-id>]]: <Text>"-Zeile — ` +
-          "nur ids aus der Kontextliste",
-      );
-      continue;
-    }
-    const id = entry[1]!;
-    if (!ctx.npcIds.has(id)) {
-      errors.push(
-        `## ${RELATIONS_SECTION}: npc "${id}" existiert nicht in der Kampagne — ` +
-          "Beziehung weglassen statt erfinden",
-      );
-    }
-  }
-  return errors;
-}
-
-/**
- * Inside `## Weiß` only `[!secret]` belongs (that section is the aggregated
- * player-unknown knowledge). Other KNOWN callouts elsewhere in the body are
- * fine; unknown ones are reported once for the whole body by unknownCallouts.
- */
-function knowledgeCalloutErrors(body: string): string[] {
-  const section = sectionBody(body, KNOWLEDGE_SECTION);
-  if (section === undefined) return [];
-  const errors: string[] = [];
-  const seen = new Set<string>();
-  for (const m of section.matchAll(CALLOUT_MARKER)) {
-    const kind = m[1]!.toLowerCase();
-    if (!KNOWN_CALLOUTS.has(kind) || kind === "secret" || seen.has(kind)) continue;
-    seen.add(kind);
-    errors.push(
-      `## ${KNOWLEDGE_SECTION}: nur [!secret] erlaubt — [!${kind}] gehört in einen anderen Abschnitt`,
-    );
-  }
-  return errors;
-}
-
-/** `## Notizen` is app-managed (README) — it must arrive empty. */
-function notesErrors(body: string): string[] {
-  const section = sectionBody(body, NOTES_SECTION);
-  if (section === undefined) return [];
-  const text = section.replace(/<!--[\s\S]*?-->/g, "").trim();
-  return text === ""
-    ? []
-    : [`## ${NOTES_SECTION} bleibt leer — die App füllt den Abschnitt im Review-Schritt`];
-}
 
 /**
  * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
@@ -785,30 +729,18 @@ export function quickstatsErrors(props: Record<string, unknown>): string[] {
  * Same contract as every other validator: the mapped result, or the error
  * list for the correction turn.
  *
- * The reply is the schema-forced OBJECT (./entry-reply):
- * `properties` per kind, `body`, `warnings`. The rules below are the format
- * contract's and unchanged by that — they read the properties mapping and the
- * body, which is what they always did.
+ * The reply is the schema-forced OBJECT (./entry-reply): `properties` per
+ * kind, `body`, `warnings`. The rules: an `id` that is a kebab-case id — the
+ * ADDRESS is the server's (`npcs/<id>`), the model does not name one — a
+ * valid NpcStatus (`alive` unless the source says otherwise), no invented
+ * `chapter`, quoted quickstats, only known callouts, and every `[[id]]` of the
+ * body naming an entry of the campaign or the npc itself. An id that already
+ * exists is an error too — the DM can pin a different one via the request's
+ * `id`.
  *
- * The rules, all from the format contract (README "Entität: NPC"):
- * parseable properties whose `id` is a kebab-case id — the ADDRESS is the
- * server's (`npcs/<id>`), the model does not name one — a `name`, a valid NpcStatus (`alive` unless the source says
- * otherwise), no invented `chapter`, quoted quickstats, relationships only to
- * npcs that exist, only `[!secret]` inside `## Weiß`, only known callouts, and
- * an empty `## Notizen`. An id that already exists is an error too — the DM
- * can pin a different one via the request's `id`.
+ * No rule looks for a heading (ADR #29): the sections of an npc body are the
+ * prompt's recommendation, and the text under them is the model's prose.
  */
-/**
- * The NPC FORMAT rules that live in the body: `## Weiß` carries
- * only `[!secret]`, `## Beziehungen` only existing npc ids, `## Notizen`
- * stays empty. Exported because an npc is generated as a part
- * of a scene run and has to be judged by the same rules as an npc RUN — minus
- * the ones that are about the run (no chapter, the pinned id).
- */
-export function npcBodyErrors(body: string, ctx: CampaignContext): string[] {
-  return [...knowledgeCalloutErrors(body), ...relationErrors(body, ctx), ...notesErrors(body)];
-}
-
 export function validateNpcReply(
   raw: string,
   ctx: CampaignContext,
@@ -860,9 +792,9 @@ export function validateNpcReply(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
   }
-  for (const msg of npcBodyErrors(reply.body, ctx)) {
-    errors.push(`${label}: ${msg}`);
-  }
+  // The npc itself is the one entry this run proposes.
+  const known = campaignRefIds(ctx).add(id);
+  for (const msg of unknownRefErrors(reply.body, known)) errors.push(`${label}: ${msg}`);
 
   if (errors.length > 0) return { ok: false, errors };
   return {
@@ -1186,9 +1118,9 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
  * Re-validated on the way in, exactly like a scene draft and for the same
  * reason (apply is a separate request — never trust the client): the target
  * address, the id matching it and a valid NpcStatus. The rules that shape the
- * MODEL's reply (relationship targets, `[!secret]`-only inside `## Weiß`) are
- * deliberately not re-run here — from here on the DM is the author of the
- * entry, and their own edit must not be rejected for a prompt rule.
+ * MODEL's reply (callouts, `[[id]]` references) are deliberately not re-run
+ * here — from here on the DM is the author of the entry, and their own edit
+ * must not be rejected for a prompt rule.
  */
 export function applyNpcTarget(item: unknown): ApplyTarget {
   const label = "npc";

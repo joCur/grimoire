@@ -20,6 +20,8 @@ import {
   ASSET_FILES,
   MAX_CORRECTION_TURNS,
   buildCorrectionMessage,
+  campaignRefIds,
+  collectContext,
   loadAsset,
   setProviderForTests,
 } from "../src/generator";
@@ -51,6 +53,11 @@ const CAMPAIGN = "beispiel";
 const NPC = "npcs/jorna";
 const LOCATION = "locations/leuchtturm";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+
+/** The ids a `[[id]]` may name: the seeded campaign's npcs, locations and scenes. */
+async function refIds(): Promise<Set<string>> {
+  return campaignRefIds(await collectContext(CAMPAIGN));
+}
 
 async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(entriesUrl(CAMPAIGN, rel));
@@ -532,6 +539,7 @@ describe("proposal", () => {
     const outcome = validateAugmentReply(
       augmentReply(NPC, proposal(stored, { properties: { id: "jorna-die-hafenmeisterin" } })),
       { kind: "npc", stored },
+      await refIds(),
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("die id bleibt");
@@ -542,23 +550,69 @@ describe("proposal", () => {
     const bad = validateAugmentReply(
       augmentReply(NPC, proposal(stored, { body: `${stored.body}\n> [!spoiler] nope\n` })),
       { kind: "npc", stored },
+      await refIds(),
     );
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.errors.join(" ")).toContain("[!spoiler]");
     const good = validateAugmentReply(
       augmentReply(NPC, proposal(stored, { body: `${stored.body}\n> [!note] fine\n` })),
       { kind: "npc", stored },
+      await refIds(),
     );
     expect(good.ok).toBe(true);
+  });
+
+  test("an added [[id]] must name an entry — wherever it stands in the body", async () => {
+    const stored = await read(NPC);
+    const bad = validateAugmentReply(
+      augmentReply(NPC, proposal(stored, { body: `${stored.body}\nSie misstraut [[niemand]].\n` })),
+      { kind: "npc", stored },
+      await refIds(),
+    );
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.errors).toHaveLength(1);
+      expect(bad.errors[0]).toContain("[[niemand]] nennt keinen Eintrag");
+    }
+    // An npc, a location and a scene of the campaign all resolve; a slug in
+    // code is literal text and not a reference at all.
+    const good = validateAugmentReply(
+      augmentReply(
+        NPC,
+        proposal(stored, {
+          body:
+            `${stored.body}\n[[fenn]] am [[leuchtturm]], danach [[smuggler-captured]].\n` +
+            "Im Log steht `[[niemand]]`.\n",
+        }),
+      ),
+      { kind: "npc", stored },
+      await refIds(),
+    );
+    expect(good.ok).toBe(true);
+  });
+
+  test("a reference the stored body already carries is the DM's, not the run's", async () => {
+    // The augmentation rule tells the model to keep what stands there, so a
+    // dangling reference the DM wrote must not cost a correction turn the
+    // model can only pass by deleting it.
+    const current = await read(NPC);
+    const stored = { ...current, body: `${current.body}\nVielleicht [[der-fremde]].\n` };
+    const outcome = validateAugmentReply(
+      augmentReply(NPC, proposal(stored, { body: `${stored.body}\n> [!note] Neu.\n` })),
+      { kind: "npc", stored },
+      await refIds(),
+    );
+    expect(outcome.ok).toBe(true);
   });
 
   test("a scene keeps the status the DM gave it", async () => {
     const stored = await read(SCENE);
     expect(stored.properties.status).toBe("ready");
-    const outcome = validateAugmentReply(augmentReply(SCENE, proposal(stored)), {
-      kind: "scene",
-      stored,
-    });
+    const outcome = validateAugmentReply(
+      augmentReply(SCENE, proposal(stored)),
+      { kind: "scene", stored },
+      await refIds(),
+    );
     expect(outcome.ok).toBe(true);
     // `ready` is not `draft` and must not be reported as a change at all.
     if (outcome.ok) {
@@ -576,10 +630,11 @@ describe("proposal", () => {
     expect(stored.properties.status).toBe("alive");
     const withoutStatus = proposal(stored);
     delete withoutStatus.properties.status;
-    const outcome = validateAugmentReply(augmentReply(NPC, withoutStatus), {
-      kind: "npc",
-      stored,
-    });
+    const outcome = validateAugmentReply(
+      augmentReply(NPC, withoutStatus),
+      { kind: "npc", stored },
+      await refIds(),
+    );
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
       const status = outcome.result.properties.find((p) => p.key === "status");
@@ -602,6 +657,7 @@ describe("proposal", () => {
     const outcome = validateAugmentReply(
       augmentReply(NPC, proposal(stored, { properties: { "roll20-page": "Jorna" } })),
       { kind: "npc", stored },
+      await refIds(),
     );
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
@@ -614,6 +670,7 @@ describe("proposal", () => {
     const outcome = validateAugmentReply(
       augmentReply(LOCATION, proposal(stored, { properties: { status: "alive" } })),
       { kind: "location", stored },
+      await refIds(),
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("status");
@@ -626,10 +683,7 @@ describe("the job", () => {
   test("a run answers 202 and leaves an augment job with the proposal", async () => {
     const stored = await read(NPC);
     const content = proposal(stored, {
-      body: stored.body.replace(
-        "## Notizen",
-        "> [!secret] Der Spitzel sitzt in der Hafenwache.\n\n## Notizen",
-      ),
+      body: `${stored.body}\n> [!secret] Der Spitzel sitzt in der Hafenwache.\n`,
     });
     useFake([augmentReply(NPC, content, ["Neuer Handlungsstrang ergänzt"])]);
     const job = await runAugmentJob({ path: NPC, instruction: "Spitzel einführen" });
@@ -645,6 +699,27 @@ describe("the job", () => {
     expect(result.warnings).toEqual(["Neuer Handlungsstrang ergänzt"]);
     // Nothing is written by a run.
     expect((await read(NPC)).body).toBe(stored.body);
+  });
+
+  test("an unknown [[id]] in the proposal costs one correction turn", async () => {
+    const stored = await read(NPC);
+    const bad = augmentReply(
+      NPC,
+      proposal(stored, { body: `${stored.body}\nDer Spitzel ist [[der-spitzel]].\n` }),
+    );
+    const good = augmentReply(
+      NPC,
+      proposal(stored, { body: `${stored.body}\nDer Spitzel sitzt in der Hafenwache.\n` }),
+    );
+    const fake = useFake([bad, good]);
+    const job = await runAugmentJob({ path: NPC, instruction: "Spitzel einführen" });
+    expect(job.status).toBe("done");
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain("[[der-spitzel]]");
+    const result = job.augmentResult as AugmentResult;
+    expect(result.proposedBody).toContain("Der Spitzel sitzt in der Hafenwache.");
+    expect(result.proposedBody).not.toContain("[[der-spitzel]]");
   });
 
   test("a reply that is not the object comes back as a correction turn", async () => {
@@ -1020,10 +1095,7 @@ describe("naming check", () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const stored = await read(NPC);
     const content = proposal(stored, {
-      body: stored.body.replace(
-        "## Notizen",
-        "> [!secret] Sie kam aus Salt Harbour zurück.\n\n## Notizen",
-      ),
+      body: `${stored.body}\n> [!secret] Sie kam aus Salt Harbour zurück.\n`,
     });
     useFake([augmentReply(NPC, content)]);
     const job = await runAugmentJob({ path: NPC, instruction: "Hintergrund ergänzen" });
@@ -1065,7 +1137,7 @@ describe("naming check", () => {
       augmentReply(
         NPC,
         proposal(stored, {
-          body: stored.body.replace("## Notizen", "## Notizen\n\nSalzhafen."),
+          body: `${stored.body}\nSalzhafen.\n`,
         }),
       ),
     ]);

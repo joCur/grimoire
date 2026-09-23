@@ -178,9 +178,9 @@ die Liste nicht.
 Eigenschaften-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige als
 aktueller Name, wie im Text — eine Anzeige, keine Referenz.
 
-Text-Abschnitte: `## Weiß` (`[!secret]`-Callouts), `## Beziehungen` (freier
-Text; einen Gegenpart verlinkt `[[id]]` wie überall im Text), `## Notizen`
-(befüllt die Nachbereitung mit „NPC-Stub anlegen" — nicht von Hand pflegen).
+Text-Abschnitte frei; empfohlen: `## Weiß` (`[!secret]`-Callouts),
+`## Beziehungen` (je Gegenpart eine Zeile; einen Gegenpart verlinkt `[[id]]`
+wie überall im Text). Keine Überschrift hat für die App eine Bedeutung.
 
 Kleinst-NPCs bekommen keinen Eintrag, bis sie wiederkehren. Bis dahin: Zeile
 im Szenentext oder `#npc`-Notiz im Log.
@@ -200,7 +200,7 @@ gepflegt, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere` zeigt
 die Ort-Karte die Roll20-Seite.
 
 Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
-`[!readaloud]`), `## Wer ist hier`.
+`[!readaloud]`), `## Wer ist hier` (Figuren am Ort, mit id als `[[id]]`).
 
 ### Session
 
@@ -366,9 +366,12 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   aktiven Kapitels an (`POST …/chapters/<kapitel>/threads`); Text und `rev`
   des Kapitels bleiben unberührt. Gepflegt wird die Liste in der
   Kapitelübersicht: abhaken, umformulieren, löschen, von Hand ergänzen.
-- „NPC-Stub anlegen" erzeugt den NPC `npcs/<id>` mit `status: alive` (wer am
-  Tisch auftaucht, lebt) und dem Log-Text unter `## Notizen`. Existiert die
-  id, meldet die App den Konflikt statt zu überschreiben.
+- „NPC anlegen" erzeugt den NPC `npcs/<id>` mit `status: unknown` (die
+  Log-Zeile sagt nichts über seinen Zustand); sein Text ist genau der
+  Log-Text, ohne Überschrift. Ohne Text bleibt er leer, und ein NPC ohne Name
+  und Text gilt weiter als leer — ein späteres Anlegen derselben id füllt
+  ihn. Hat die id schon einen Eintrag mit Inhalt, verweist die App auf ihn
+  und ändert nichts; ein leerer Eintrag wird gefüllt.
 - „Idee abhaken" setzt `done` auf der genannten Zeile (`POST
   …/review/inbox-done { id }`) — die eine Ausnahme vom Append-only der Ideen,
   damit sie nicht in jeder künftigen Nachbereitung wieder auftauchen.
@@ -423,6 +426,14 @@ Eigenschaften und Text ist der **Entwurf** — im Prüfschritt, in den
 Änderungen des DM und beim Übernehmen (ADR #24); ein Entwurf ist nie ein
 Markdown-Text mit Eigenschaften davor. Die Schemata liegen als lesbares JSON
 in `shared/schema/`; Details in `generator/README.md`.
+
+Die mechanische Prüfung liest Eigenschaften und Text, aber keine
+Überschrift (ADR #29): die Abschnitte eines Entwurfs sind die Empfehlung der
+Prompts. Jedes `[[id]]` in einem erzeugten Text nennt einen Eintrag der
+Kampagne (NPC, Ort, Szene) oder einen Vorschlag desselben Laufs, sonst geht
+die Antwort als Korrektur-Turn zurück. Im Ergänzen-Lauf gilt das für die
+Verweise, die der Vorschlag neu bringt; was im bestehenden Text schon steht,
+bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 ## Fixtures
 

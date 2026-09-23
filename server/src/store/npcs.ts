@@ -114,8 +114,8 @@ export async function createNpc(
  * an explicit one: the DM clicks it on a log line. CREATE OR LINK — the
  * caller's goal is that this id has an entry afterwards, so it is idempotent.
  *
- *   * no row      -> create it with the given name and the log text under
- *                   `## Notizen`;
+ *   * no row      -> create it with the given name, the log text as its
+ *                   whole text;
  *   * EMPTY row   -> fill it (the DM created it earlier and typed nothing,
  *                   and the review is the first thing that knows a name and
  *                   a note);
@@ -123,6 +123,11 @@ export async function createNpc(
  *                   Nothing is overwritten and nothing is refused: a
  *                   `409 { path }` here would make the DM correct an id that
  *                   was right.
+ *
+ * The text is the note and nothing else — no heading around it (ADR #29).
+ * Without a note it stays empty, so a stub that got neither a name nor a note
+ * is still an EMPTY entry (`isEmptyNpcRow`): a later create or generator
+ * apply for that id fills it instead of colliding with it.
  *
  * `status` keeps the column default ("unknown"): inserting "alive" would
  * contradict both the route's own documentation and the dialog text, and
@@ -138,12 +143,14 @@ export async function createNpcStub(
     throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
   return mutate(campaign, (tx) => {
-    // `## Notizen` is the app-managed review section (README) — always there
-    // in a new entry, so later review notes have their place.
-    const body = note === undefined ? "\n## Notizen\n" : `\n## Notizen\n\n- ${note}\n`;
+    const body = note ?? "";
     const existing = npcRowOf(tx, campaign, id);
     if (existing !== undefined) {
       if (!isEmptyNpcRow(existing)) return renderNpc(existing);
+      // Empty, and nothing to fill it with: answering the row as it stands
+      // keeps its `rev`, so a repeated call does not invalidate an open
+      // editor for a write that changes nothing.
+      if ((name ?? "") === "" && body === "") return renderNpc(existing);
       tx.update(npcs)
         .set({ name: name ?? "", body, rev: existing.rev + 1 })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))

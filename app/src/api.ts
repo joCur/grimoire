@@ -521,8 +521,8 @@ export function markLogLineSeen(
 }
 
 /**
- * Create the npc entry for `id` (status: unknown, note under `## Notizen`) —
- * or answer with the entry the id already has. Idempotent: the
+ * Create the npc entry for `id` (status: unknown, the note as its whole text)
+ * — or answer with the entry the id already has. Idempotent: the
  * goal is "this id has an entry", so an existing one is LINKED, never
  * overwritten, and an empty one — created and never filled in — is filled in.
  */

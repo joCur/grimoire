@@ -26,9 +26,10 @@
 //                  otherwise), a location entry carries none
 //   npc run        one entry, kebab `id`, no `chapter`, quickstats values
 //                  as STRINGS ("+2" — a number would lose the plus on the
-//                  way into the store), `## Weiß` only [!secret],
-//                  `## Beziehungen` only npc ids that exist, `## Notizen`
-//                  empty
+//                  way into the store)
+//   every body     each `[[id]]` names an entry of the campaign or one the
+//                  same run proposes; the sections (`## Weiß`,
+//                  `## Beziehungen`, …) are free text and nothing checks them
 //
 // When a validation rule changes, THIS file is the place to follow along —
 // the specs assert on the titles and ids defined here.
@@ -105,6 +106,14 @@ export const TRIGGER = {
    * the run has to reach `done` with no correction at all.
    */
   asciiQuotes: "E2E_ASCII_QUOTES",
+  /**
+   * The FIRST reply of an npc or augment run names an entry nobody has
+   * (UNKNOWN_REF_ID); the correction turn — the call that carries the
+   * previous reply as an assistant turn — gets the good reply. So the run
+   * costs exactly one correction and ends with a draft that has no such
+   * reference.
+   */
+  unknownRef: "E2E_UNKNOWN_REF",
   // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
   // therefore reaches the state in which its only reviewable part is a failed
   // one.
@@ -121,6 +130,12 @@ export function partFailNonce(source: string): string {
  * the review to flag exactly this word.
  */
 export const OLD_NAME = "Saltmarsh";
+
+/**
+ * The id TRIGGER.unknownRef puts into a first reply as `[[…]]` — neither the
+ * example campaign nor any run of the suite has an entry by that id.
+ */
+export const UNKNOWN_REF_ID = "der-fremde";
 
 /** How long a TRIGGER.slow request is held before it would answer. */
 export const SLOW_REPLY_MS = 60_000;
@@ -295,7 +310,13 @@ const locationStub: EntryReply = {
     name: LOCATION_STUB_NAME,
     atmosphere: LOCATION_STUB_ATMOSPHERE,
   },
+  // `[[grella]]` is the npc the SAME run proposes: a reference to it is
+  // valid before either entry is written.
   body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
+
+## Wer ist hier
+
+- [[grella]], wenn eine Ladung kommt
 `,
   warnings: [],
 };
@@ -338,13 +359,21 @@ export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): EntryRepl
 ## Beziehungen
 
 - [[fenn]]: kennt ihn vom Kai, geht ihm seit dem Sommer aus dem Weg
-
-## Notizen
-
-<!-- wird von der App im Review-Schritt befüllt -->
 `,
     warnings: contextEchoWarnings(knowledge),
   };
+}
+
+/** The relation line TRIGGER.unknownRef adds to the first npc reply. */
+export const UNKNOWN_REF_LINE = `- [[${UNKNOWN_REF_ID}]]: schuldet ihm Geld`;
+
+/**
+ * The first reply of a TRIGGER.unknownRef npc run: the good reply plus one
+ * relation to an entry that does not exist — a correction turn.
+ */
+export function unknownRefNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
+  const good = npcReply(id);
+  return { ...good, body: `${good.body}${UNKNOWN_REF_LINE}\n` };
 }
 
 /**
@@ -455,6 +484,15 @@ export function augmentReply(path: string, entry: ExistingEntry, knowledge = "")
     body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
     warnings,
   };
+}
+
+/**
+ * The first reply of a TRIGGER.unknownRef augment run: the good proposal plus
+ * a sentence naming an entry that does not exist — a correction turn.
+ */
+export function unknownRefAugmentReply(path: string, entry: ExistingEntry): EntryReply {
+  const good = augmentReply(path, entry);
+  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 /**

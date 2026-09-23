@@ -512,10 +512,10 @@ export const en: Messages = {
   "review.finish": "Done — back to the chapters",
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
-  // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
-  // so they stand verbatim in both languages.
+  // `status: unknown` is a FORMAT token on the wire (README), so it stands
+  // verbatim in both languages.
   "npcCreate.description":
-    "Creates the NPC entry with status: unknown; the text lands under ## Notizen. If the ID already exists, the existing entry is linked instead.",
+    "Creates the NPC entry with status: unknown; the line's text becomes its text. If the ID already exists, the existing entry is linked instead.",
   "npcCreate.idLabel": "ID (appears in the address)",
   "npcCreate.idPlaceholder": "npc-id",
   "npcCreate.idInvalid": "An ID needs lowercase letters, digits and single hyphens.",

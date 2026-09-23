@@ -73,8 +73,7 @@ Prozess):
 
 * kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
   nicht sagen kann, steht in einer `description` und wird dort geprüft, wo es
-  immer geprüft wurde (kebab-`id`, bekannte Callouts, auflösbare Referenzen,
-  die NPC-Formatregeln),
+  immer geprüft wurde (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
 * **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
   stattdessen `null`-fähig, und der Server liest `null` als „nicht
   angegeben“ und lässt den Schlüssel weg,
@@ -122,7 +121,7 @@ Gliederung“ oder „das Kapitel kommt aus dem Kontext“.
 Aufruf gezwungen wird — derselbe Beispielinhalt wie vorher, nur in der Form,
 die das Modell auch liefern soll.
 
-## Ablauf eines Szenen-Laufs (Pipeline, Issue #102)
+## Ablauf eines Szenen-Laufs (Pipeline)
 
 Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 
@@ -164,7 +163,7 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 Was das dem DM bringt: ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar und übernehmbar, und ein defekter Teil lässt sich
 einzeln wiederholen (`POST …/generate/job/:id/parts/:key/retry`). Das
-Job-Modell dazu steht in `docs/DECISIONS.md` #10.
+Job-Modell dazu steht in `docs/DECISIONS.md` (ADR #10).
 
 **Prompt-Caching:** Der konstante Teil des Prompts — System-Prompt,
 Kampagnenwissen, Glossar, Kontextlisten, Few-Shot, Gliederung — steht bei
@@ -179,8 +178,8 @@ die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
 Die Anzeige „~N Tokens · M Aufrufe“ summiert über alle Teile, die Gliederung
 eingeschlossen.
 
-**Ein Aufruf bleiben** (PO-Entscheid): der Ergänzen-Lauf (#36) und die
-NPC-Generierung (#21) — je ein Eintrag, nichts zu zerlegen.
+**Ein Aufruf bleiben** (PO-Entscheid): der Ergänzen-Lauf und die
+NPC-Generierung — je ein Eintrag, nichts zu zerlegen.
 
 ## Ablauf pro Aufruf
 
@@ -201,7 +200,13 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
      `status == draft`?
      Stubs: NPC-Status gültig (Normalfall `alive`), Orte ohne status-Key.
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
+   - jedes `[[id]]` im Text nennt einen NPC, Ort oder eine Szene der
+     Kampagne oder einen Vorschlag desselben Laufs (Gliederung, im NPC-Lauf
+     der NPC selbst)? Im Ergänzen-Lauf zählen nur Verweise, die der
+     Vorschlag neu bringt; `[[id]]` in Code ist kein Verweis.
    - nur bekannte Callout-Typen?
+   Keine Prüfung sucht eine Überschrift (ADR #29): `## Weiß`,
+   `## Beziehungen` & Co. sind Empfehlungen der Prompts, freier Text.
    Fehler gehen als Korrektur-Turn zurück ans LLM (konfigurierbar
    über LLM_CORRECTION_TURNS, 0–2, Default 1),
    nicht an den Nutzer. Ausnahme: eine vom Modell abgeschnittene Antwort
@@ -232,10 +237,10 @@ unter einer bindenden Überschrift:
 soll Namen enthalten, keine Slugs). Ohne Einträge fehlt der Abschnitt ganz —
 der Prompt sieht dann genauso aus wie vorher.
 
-## Deutsche Orthografie (Issue #93)
+## Deutsche Orthografie
 
 Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
-`location-system-prompt.md`, `augment-system-prompt.md` und seit #102
+`location-system-prompt.md`, `augment-system-prompt.md` und
 `outline-system-prompt.md`) tragen **dieselbe**
 Regel „Deutsche Orthografie“: jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
@@ -264,7 +269,7 @@ nur „## Eigenschaften und Text des Eintrags“ einschneidet (`formatContract` 
 gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
 Prompt.
 
-## Tabellen (Issue #96)
+## Tabellen
 
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
 „Tabellen“** in allen System-Prompts, die Einträge schreiben — der
@@ -293,8 +298,8 @@ Trennzeile ist Text — Degradation statt Fehler.
 
 Gleiche Pipeline, eigener Endpoint (`POST /api/campaigns/:campaign/generate/npc`)
 und eigene Prompt-Assets (`npc-system-prompt.md` und `npc-example-output.json`
-als Few-Shot-Ziel). Zielformat: NPC-Entität aus README.md; Beziehungen nur auf
-existierende ids, Quickstats als gequotete Strings (das Plus überlebt),
+als Few-Shot-Ziel). Zielformat: NPC-Entität aus README.md; `[[id]]` nur auf
+existierende Einträge, Quickstats als gequotete Strings (das Plus überlebt),
 status alive als Normalfall. Ein Generator-Job pro Kampagne, egal ob
 Szenen oder NPC.
 

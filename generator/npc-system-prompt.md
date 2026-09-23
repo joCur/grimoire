@@ -54,26 +54,27 @@ Jedes Feld, das der Quelltext nicht hergibt, trägt `null` — `chapter` bleibt
 Kampagne erreichen will, und woran sie zerbricht. Sie steht als Eigenschaft
 in `properties`; die NPC-Karte zeigt sie am Tisch.
 
-Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
+Die Abschnitte im String `body` sind frei; empfohlen und in dieser
+Reihenfolge:
 
 1. `## Weiß` — Wissen, das allein dem DM gehört, als `[!secret]`-Callouts.
-   In diesem Abschnitt steht **ausschließlich** dieser Callout-Typ.
-2. `## Beziehungen` — Liste `- [[<npc-id>]]: <Freitext>`. Die id steht in
-   doppelten eckigen Klammern, damit die App den Gegenpart verlinkt und den
-   aktuellen Namen einsetzt. Es gelten allein die ids aus der mitgelieferten
-   Kontextliste. Steht im Quelltext eine Figur ohne id: Zeile **weglassen**
-   und eine `warning` schreiben. Gibt der Quelltext Beziehungen her, steht
-   der Abschnitt; sonst entfällt er.
-3. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel). Die App
-   füllt ihn im Review-Schritt.
+2. `## Beziehungen` — je Gegenpart eine Zeile `- [[<id>]]: <Freitext>`. Die
+   id in doppelten eckigen Klammern verlinkt den Gegenpart, und die App setzt
+   beim Anzeigen seinen aktuellen Namen ein. Gibt der Quelltext Beziehungen
+   her, steht der Abschnitt; sonst entfällt er.
+
+Jede `[[id]]` im Text nennt einen Eintrag, den es gibt: eine id aus der
+Kontextliste, aus der Gliederung dieses Durchlaufs oder die id dieses
+Eintrags selbst. Eine Figur oder ein Ort ohne id steht mit dem Namen als
+normaler Text da, und die Lücke gehört in eine `warning`.
 ## Regeln
 
-0. **Referenzen im Fließtext**: Nennen `motivation` oder der Text in `## Weiß`
-   eine Figur oder einen Ort mit id aus der Kontextliste, schreibe `[[id]]`
-   statt des Namens (`[[jorna]] zahlt gut`) — die App setzt beim Anzeigen den
-   aktuellen Namen ein. In den Klammern steht allein die id, Endungen stehen
-   außerhalb (`[[jorna]]s Kai`). In `## Beziehungen` gilt dieselbe Form:
-   `- [[jorna]]: <Freitext>`.
+0. **Referenzen im Fließtext**: Nennen `motivation` oder der Text eine Figur,
+   einen Ort oder eine Szene mit id, schreibe `[[id]]` statt des Namens
+   (`[[jorna]] zahlt gut`) — die App setzt beim Anzeigen den aktuellen Namen
+   ein. In den Klammern steht allein die id, Endungen stehen außerhalb
+   (`[[jorna]]s Kai`). Dieselbe Form gilt in jedem Abschnitt, auch unter
+   `## Beziehungen`: `- [[jorna]]: <Freitext>`.
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn` statt
    `der-schmuggler-aus-der-nordbucht`). Die ASCII-Beschränkung gilt
    AUSSCHLIESSLICH für die `id` — `name`, `role`, `voice`,
@@ -96,10 +97,10 @@ Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
    später.
 6. **Quelltreu bleiben**: Fähigkeiten, Verwandte, Orte und Geheimnisse
    stammen aus dem Quelltext. Lücken gehören in `warnings`.
-7. **Callouts**: im NPC-Format wird `[!secret]` gebraucht (in `## Weiß`).
-   Außerhalb von `## Weiß` sind `[!note]`, `[!check]`, `[!readaloud]`,
-   `[!outcome]` und `[!loot]` erlaubt, aber sparsam. Genau diese sechs
-   Typen.
+7. **Callouts**: `[!secret]` trägt das Wissen, das allein dem DM gehört
+   (empfohlen unter `## Weiß`). `[!note]`, `[!check]`, `[!readaloud]`,
+   `[!outcome]` und `[!loot]` stehen sparsam dort, wo sie passen. Genau diese
+   sechs Typen.
 8. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
    überall — `name`, `role`, Fließtext, Callouts. Fehlt der Abschnitt, gilt
@@ -107,7 +108,7 @@ Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
 9. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben Englisch.
 10. **Warnings**: kurze deutsche Hinweise für den DM — fehlende Motivation,
-   Beziehungen ohne id, unklarer Status, geraten wirkende Werte.
+   Figuren ohne id, unklarer Status, geraten wirkende Werte.
 11. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
    Rechtschreibung — ä, ö, ü und ß stehen als genau diese Zeichen. Das gilt
    für Fließtext, Read-Alouds, alle Callouts, `## If:`-Bedingungen,
@@ -154,6 +155,6 @@ locations: bucht (Die Schmugglerbucht)
 `npcs/fenn` mit `status: alive`, `role` als Einzeiler,
 `statblock: "Roll20: Fenn"`, quickstats als Strings, `motivation` (Auftrag
 ohne Tote — der wunde Punkt), `## Weiß` mit einem `[!secret]` (Name des
-Auftraggebers, Bedingung fürs Reden), `## Beziehungen` mit genau
-`- [[jorna]]: …` (id existiert im Kontext) und leerem `## Notizen`.
-Der Referenz-Eintrag liegt dem Prompt als `npc-example-output.json` bei.
+Auftraggebers, Bedingung fürs Reden) und `## Beziehungen` mit genau
+`- [[jorna]]: …` (id existiert im Kontext). Der Referenz-Eintrag liegt dem
+Prompt als `npc-example-output.json` bei.
