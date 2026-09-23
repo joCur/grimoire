@@ -78,6 +78,11 @@ Text getrennt, genau so, wie der Store sie hält (ADR #24).
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe ADR #7).
 
+> **Teilweise überholt (ADR #30, ADR #31):** Abhängigkeiten für allgemeine
+> Aufgaben sind erwünscht (ADR #30); eintragspflichtig bleiben Bun-only-APIs.
+> Das Antwort-Schema einer Eintragsart wird aus ihrem zod-Schema abgeleitet,
+> und die Felder stehen flach neben `body` und `warnings` (ADR #31).
+
 **Icons:** Lucide für UI-Chrome (konsistent mit shadcn);
 game-icons.net (CC BY) für thematische Marker (Entitäts- und
 Callout-Typen). Benötigte SVGs als eigene Komponenten einchecken.
@@ -819,6 +824,10 @@ Schreibweg gelten unverändert.
 
 ## 20. Fixtures sind JSON-Einträge, es gibt keinen Import
 
+> **Teilweise überholt (ADR #31):** Ein Fixture ist der Entwurf seiner Art —
+> die Felder flach neben `kind`, `id` und `body`, keine `properties`. Was
+> GILT: ein Fixture-Format, und es ist die Form der API; kein Importer.
+
 **Entscheidung:** Die Beispielkampagne liegt unter `fixtures/` als Einträge in
 der Form, die die API spricht — eine JSON-Datei je Eintrag mit `kind`, den
 Eigenschaften unter `properties` und dem Text unter `body`; Sessions, Ideen und
@@ -898,6 +907,11 @@ kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
 
 ## 23. Ein Schreibweg je Eintrag
 
+> **Teilweise überholt (ADR #31):** Der Rumpf trägt die Felder der Art flach,
+> `{ rev, force?, body?, …Felder }`, statt unter `properties`. Was GILT: ein
+> Schreibweg, eine Transaktion, ein `rev`, die 409 mit dem aktuellen Eintrag,
+> `force` und `nothing_to_write`.
+
 **Kontext:** Ein Eintrag wurde über zwei Endpoints geschrieben: `PATCH
 /properties` für die Felder und `PUT /entries/<adresse>` für den Text, jeder
 mit eigenem Aufruf und eigener 409. Beide treffen dieselbe Zeile, also
@@ -953,6 +967,12 @@ Spalten geparst wurde.
   wird nicht mehr gesendet.
 
 ## 24. Der Generator kennt kein Markdown-Zwischenformat
+
+> **Teilweise überholt (ADR #31):** Ein Entwurf ist der Typ seiner Art ohne
+> Adresse und Wächter, die Felder flach neben `body`; das Antwort-Schema wird
+> aus dem zod-Schema der Art abgeleitet. Was GILT: kein Markdown-Zwischenformat,
+> Eigenschaften und Text getrennt von der Antwort bis in die Zeile, Änderungen
+> je Hälfte.
 
 **Entscheidung:** Ein Entwurf des Generators ist von der Antwort des Modells
 bis in die Zeile ein Paar aus `properties` und `body`. Der Server setzt daraus
@@ -1656,3 +1676,102 @@ unter `## Ziel des Kapitels`; was der DM anders schrieb, fehlte.
 - **Keine Überführung** (ADR #28, Regel 2): ein bestehendes Kapitel mit
   `## Ziel des Kapitels` zeigt diese Überschrift schlicht als Teil seines
   Textes. Es gibt keine Migration und keinen Datenschritt.
+
+## 30. Abhängigkeiten statt Eigenbau
+
+**Entscheidung:** Für allgemeine Aufgaben wird ein etabliertes Paket
+eingebunden, nicht selbst gebaut — Validierung, Schemata, Datum und Zeit,
+Diffs, das Lesen gängiger Formate und was sonst nicht Grimoire-spezifisch ist.
+Selbst geschrieben wird, was nur Grimoire hat: das Datenmodell, die
+Schreibregeln, das Text-Vokabular, die Oberfläche.
+
+**Warum:** Was wir nicht selbst pflegen, müssen wir nicht bedenken und nicht
+testen. Ein Hand-Helfer für eine Standardaufgabe kostet jedes Mal dasselbe:
+Randfälle, die das Paket längst kennt, eigene Tests dafür und eine Stelle
+mehr, die beim nächsten Umbau mitgezogen werden will. Ein etabliertes Paket
+bringt das mit, ist dokumentiert und von vielen geprüft. Die Kosten einer
+Abhängigkeit — ein Eintrag im Lockfile, gelegentlich ein Update — sind
+kleiner als die eines eigenen Nachbaus.
+
+**Folgen:**
+
+- Eine neue Abhängigkeit braucht keinen Eintrag hier. Eintragspflichtig
+  bleiben allein **Bun-only-APIs** (Node-Portabilität, ADR #5 und #7);
+  `CLAUDE.md` hält beide Regeln unter „Arbeitsweise“ fest.
+- „Etabliert“ heißt: verbreitet, gepflegt, mit Typen. Versionen stehen im
+  Lockfile und werden bewusst angehoben; wo ein Paket exakt gepinnt werden
+  muss, steht der Grund an seiner Stelle (`jsonrepair`, ADR #5).
+- Der Satz „Weitere Abhängigkeiten braucht es nicht“ in ADR #5 ist damit keine
+  Regel mehr, sondern die Feststellung, dass der Generator damals keine
+  brauchte.
+- Anwendungen: `date-fns` für Datum und Zeit, `zod` für die Schemata der
+  Einträge (ADR #31).
+
+## 31. Typisierte Einträge je Art
+
+**Kontext:** Ein Eintrag war auf der Leitung und im Server ein Objekt für fünf
+Arten: `{ kind, path, properties, body, rev }`, mit `properties` als
+untypisierter Abbildung. Die zulässigen Schlüssel standen in einer eigenen
+Kontrakt-Liste, ihre Formen in einer eigenen Feld-Beschreibung, und die
+Antwort-Schemata des Generators lagen als JSON daneben und wurden per Test
+gegen beide synchron gehalten. Ein neues Feld kostete damit fünf Stellen, und
+der Store verzweigte an jeder Stelle über `kind`, weil ein Objekt fünf Arten
+vertrat. Die Datenbank ist dagegen längst typisiert: eine Tabelle je Art, mit
+eigenen Spalten.
+
+**Entscheidung:** Jede Art — Kampagne, Kapitel, Szene, NPC, Ort — hat ihren
+eigenen Typ.
+
+- **Eine Quelle je Art: ein zod-Schema.** Es beschreibt den Eintrag, wie
+  `GET …/entries/<adresse>` ihn beantwortet, und aus ihm kommt alles andere:
+  der TypeScript-Typ (`z.infer`), die Validierung eingehender Patches und
+  Seeds und das Antwort-Schema des Generators. Keine dieser Formen wird von
+  Hand nachgebaut; sie werden abgeleitet (`shared/src/entry-form.ts`).
+- **Leitung:** Jeder Eintrag trägt `kind`, `id`, `path`, `body` und `rev`
+  (`EntryBase`) und daneben **flach** die Felder seiner Art — der Name eines
+  Orts ist `entry.name`. Eine Abbildung `properties` gibt es nicht. `Entry`
+  ist die Vereinigung der Arten, unterschieden über `kind`.
+- **Schreiben:** `PATCH …/entries/<adresse>` nimmt `{ rev, force?, body?,
+  …Teilmenge der Felder }` und prüft sie gegen das Schema der Art. `null`
+  löscht ein optionales Feld; ein Feld, das die Art nicht hat, oder ein Wert
+  der falschen Form ist eine 400, die das Feld nennt. Die `id` darf
+  mitgeschickt, nie geändert werden (ADR #21). Wächter, Konflikt und `force`
+  gelten unverändert (ADR #23).
+- **Entwurf:** Ein Eintrag, der noch nicht gespeichert ist, ist derselbe Typ
+  ohne Adresse und Wächter — `Omit<Eintrag, "path" | "rev">`. So steht er in
+  den Fixtures, so schlägt ihn der Generator vor, und so schreibt ihn die
+  Übernahme.
+- **Generator:** Das Antwort-Schema einer Art ist ihr Entwurf in der strengen
+  Form der Provider, abgeleitet und mit `z.toJSONSchema` übergeben:
+  null-fähig statt optional, `additionalProperties: false`, jedes Feld in
+  `required`, kein `pattern`, kein `format`, keine Grenzen. Was das Schema
+  nicht sagen kann, steht in einer `description` und wird in der Validierung
+  geprüft. Ein Test prüft allein diese Regeln an den abgeleiteten Schemata.
+- **Server:** Das Domänenmodul einer Art rendert, liest, schreibt und
+  übernimmt sie selbst, getypt (`store/<art>.ts`); nichts setzt eine
+  Abbildung aus Spalten zusammen.
+- **App:** Lesecode greift typisiert zu. Eigenschaften-Dialog und
+  Prüfschritt werden aus der **Feld-Beschreibung je Art** gebaut; sie steht
+  neben dem zod-Schema der Art und ist gegen dessen Felder getypt, sodass ein
+  Feld ohne Beschreibung nicht übersetzt.
+- **„Eigenschaften“** bleibt der Sammelbegriff für alle Felder eines Eintrags
+  außer `body`.
+
+**Warum zod:** Validierung und Schemata sind eine allgemeine Aufgabe (ADR #30).
+zod liefert Typ, Prüfung und JSON-Schema aus einer Beschreibung, in der
+Sprache, in der der übrige Code geschrieben ist — die drei Formen können
+nicht auseinanderlaufen, weil es nur eine gibt.
+
+**Folgen:**
+
+- Ein neues Feld ist eine Zeile im Schema seiner Art und eine in ihrer
+  Feld-Beschreibung, dazu seine Spalte samt Migration. Typ, Prüfung und
+  Generator-Schema folgen.
+- Die Fixtures stehen in der Form des Entwurfs: `{ kind, id, …Felder, body }`.
+  Die Bodies bleiben Zeichen für Zeichen, wie sie sind.
+- Gespeicherte Generator-Jobs, deren Nutzlast Entwürfe in der früheren Form
+  trägt, werden nicht überführt: die Migration löscht sie per SQL (ADR #28,
+  Regel 2). Ein Lauf kostet ein paar Token, ein halb überführter Entwurf einen
+  falschen Eintrag in der Kampagne.
+- Datenbankschema, Sessions, Ideen, Glossar, Kampagnenwissen und offene Fäden
+  bleiben, wie sie sind; Listen sind keine Einträge (ADR #26).

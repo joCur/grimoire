@@ -30,7 +30,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 - `fixtures/` — die Beispielkampagne als JSON-Einträge
   (`fixtures/beispiel/*.json`), ein Eintrag je Datei in der Form der API
-  (`properties` + `body`; Sessions, Ideen und Glossar strukturiert). Sie ist
+  (ein Ort als sein Entwurf mit flachen Feldern, die übrigen Arten
+  `properties` + `body`; Sessions, Ideen und Glossar strukturiert). Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
@@ -82,8 +83,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Konflikt, nie stilles Überschreiben.
 - Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>`,
   `<kapitel>/<szenen-id>`, `locations/<id>`, `campaign`); das Schema steht in
-  `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
-  Eintrags `properties`, sein Markdown `body`.
+  `server/src/store/paths.ts`. Jede Art hat ihren eigenen Typ (ADR #31):
+  beim Ort stehen die Felder auf der Leitung flach neben `kind`, `id`,
+  `path`, `body` und `rev`, bei den übrigen Arten unter `properties`; das
+  Markdown heißt immer `body`.
 - Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
   **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
   ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
@@ -106,9 +109,15 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
   kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
   Übergangscode nur per eigenem ADR und befristet (ADR #28).
-- Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
-  `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
-  zusammengebaut zu werden.
+- Abhängigkeiten statt Eigenbau (ADR #30): Für allgemeine Aufgaben
+  (Validierung, Schemata, Datum und Zeit, …) wird ein etabliertes Paket
+  eingebunden, nicht selbst gebaut. Eintragspflichtig in docs/DECISIONS.md
+  bleiben allein Bun-only-APIs (Node-Portabilität).
+- Ein Schema hat genau eine Quelle; eine abgeleitete Form wird nie von Hand
+  nachgebaut. Das Schema einer Eintragsart ist ihr zod-Schema, und Typ,
+  Patch-, Seed- und Generator-Form werden daraus abgeleitet (ADR #31).
+  Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
+  das Objekt, ein Eintrag als sein JSON).
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
