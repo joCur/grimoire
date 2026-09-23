@@ -46,9 +46,9 @@ import { PageContext } from "@/components/PageContext";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
-import { entityHeaderKind } from "@/lib/entity";
+import { entityHeaderKind, entryId } from "@/lib/entity";
 import { encodeAddress } from "@/lib/address";
-import { propString, propStringArray } from "@/lib/properties";
+import { propStringArray } from "@/lib/properties";
 import { sceneStatusOf } from "@/lib/scene-status";
 import { pageContextCrumbs } from "@/lib/page-context";
 
@@ -85,7 +85,7 @@ export function SceneRoute() {
   // properties `id`, which the format declares immutable, with
   // the canonical address as the fallback for an entry whose properties
   // carries none.
-  const docId = data === undefined ? undefined : (propString(data.properties.id) ?? data.path);
+  const docId = data === undefined ? undefined : entryId(data);
   const editing = data !== undefined && editingId !== undefined && editingId === docId;
   // Edit mode ENDS at a navigation. Leaving the entry drops the draft, so
   // coming back must not re-open the editor
@@ -143,9 +143,11 @@ export function SceneRoute() {
     );
   }
 
-  const isScene = entityHeaderKind(data.kind) === "scene";
+  // The scene, when the entry is one — the article, the status control and
+  // the npc aside are about a scene only.
+  const scene = data.kind !== "location" && entityHeaderKind(data.kind) === "scene" ? data : undefined;
   // The aside belongs to scenes: only they reference npcs in properties.
-  const npcs = isScene ? propStringArray(data.properties.npcs) : [];
+  const npcs = scene === undefined ? [] : propStringArray(scene.properties.npcs);
   // The edit action — the body editor. While it runs the trigger is gone: the
   // editor's own toggle owns the mode from then on.
   const editAction = editing ? null : <EntryBodyEditAction onEdit={() => setEditingId(docId)} />;
@@ -196,22 +198,22 @@ export function SceneRoute() {
               chapter › group for a scene, the list for an
               npc/location, nothing for the rest. */}
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
-          {isScene ? (
+          {scene !== undefined ? (
             <SceneArticle
-              entry={data}
+              entry={scene}
               tree={tree.data}
               variant="scene"
               actions={articleActions}
               body={bodyEditor}
               // The status display IS the control here. The rev
-              // comes from the EntryResponse on screen, so the patch carries
+              // comes from the entry on screen, so the patch carries
               // exactly the version the DM was looking at.
               statusControl={
                 <SceneStatusControl
                   campaign={campaign}
-                  path={data.path}
-                  status={sceneStatusOf(data.properties)}
-                  rev={data.rev}
+                  path={scene.path}
+                  status={sceneStatusOf(scene.properties)}
+                  rev={scene.rev}
                   variant="pill"
                 />
               }

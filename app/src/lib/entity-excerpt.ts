@@ -13,15 +13,16 @@
 // a query or a DOM.
 
 import { expandBodyEntityRefs } from "@grimoire/shared/refs";
-import type { NpcStatus, SceneStatus } from "@grimoire/shared/types";
+import type { Location, NpcStatus, SceneStatus } from "@grimoire/shared/types";
 
 import { npcStatusOf } from "@/lib/entity";
 import { propQuickstats, propString } from "@/lib/properties";
 import { sceneStatusOf } from "@/lib/scene-status";
 
 /**
- * What an entry is, as far as its short form cares: its properties. The body
- * is not read — nothing a card shows is derived from the text.
+ * What an npc or a scene is, as far as its short form cares: its properties.
+ * The body is not read — nothing a card shows is derived from the text. A
+ * location is read off its own typed fields (`locationExcerpt`).
  */
 export interface ExcerptSource {
   properties: Record<string, unknown>;
@@ -71,10 +72,14 @@ export function npcExcerpt(entry: ExcerptSource, nameOf: NameOf): NpcExcerpt {
   };
 }
 
-export function locationExcerpt(entry: ExcerptSource, nameOf: NameOf): LocationExcerpt {
+/** A location's short form, read off its own fields (ADR #31). */
+export function locationExcerpt(
+  location: Pick<Location, "atmosphere" | "roll20-page">,
+  nameOf: NameOf,
+): LocationExcerpt {
   return {
-    mood: proseExcerpt(entry.properties.atmosphere, nameOf),
-    page: propString(entry.properties["roll20-page"]),
+    mood: proseExcerpt(location.atmosphere, nameOf),
+    page: propString(location["roll20-page"]),
   };
 }
 

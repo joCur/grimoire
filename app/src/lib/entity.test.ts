@@ -1,8 +1,67 @@
 import { describe, expect, test } from "bun:test";
-import { NPC_STATUSES, type NpcStatus } from "@grimoire/shared/types";
+import {
+  NPC_STATUSES,
+  type EntryResponse,
+  type Location,
+  type NpcStatus,
+} from "@grimoire/shared/types";
 
+import { entryPatchBody } from "@/api";
 import { translator } from "@/i18n/format";
-import { browseListTitle, entityHeaderKind, npcStatusLabel } from "./entity";
+import {
+  browseListTitle,
+  entityHeaderKind,
+  entryFieldValues,
+  entryId,
+  entryName,
+  npcStatusLabel,
+} from "./entity";
+
+// A location is its own typed entry (ADR #31); the other kinds carry their
+// fields under `properties`.
+const TOWER: Location = {
+  kind: "location",
+  id: "leuchtturm",
+  path: "locations/leuchtturm",
+  name: "Der Leuchtturm",
+  atmosphere: "Verlassen in Eile.",
+  body: "## Beim ersten Betreten\n",
+  rev: 3,
+};
+const CHAPTER: EntryResponse = {
+  kind: "chapter",
+  path: "01-salzhafen",
+  properties: { id: "01-salzhafen", title: "Salzhafen", status: "active" },
+  body: "",
+  rev: 1,
+};
+
+describe("reading any entry", () => {
+  test("id, display name and fields, whatever the kind", () => {
+    expect(entryId(TOWER)).toBe("leuchtturm");
+    expect(entryName(TOWER)).toBe("Der Leuchtturm");
+    // A location's fields by name — its id included, never kind/path/body/rev.
+    expect(entryFieldValues(TOWER)).toEqual({
+      id: "leuchtturm",
+      name: "Der Leuchtturm",
+      atmosphere: "Verlassen in Eile.",
+    });
+    expect(entryId(CHAPTER)).toBe("01-salzhafen");
+    expect(entryName(CHAPTER)).toBe("Salzhafen");
+    expect(entryFieldValues(CHAPTER)).toBe(CHAPTER.properties);
+  });
+
+  test("the write travels in the kind's own shape", () => {
+    const request = { rev: 3, properties: { name: "Turm", chapter: null }, body: "x" };
+    expect(entryPatchBody(TOWER.path, request)).toEqual({
+      rev: 3,
+      name: "Turm",
+      chapter: null,
+      body: "x",
+    });
+    expect(entryPatchBody(CHAPTER.path, request)).toEqual(request);
+  });
+});
 
 // The labels come from the catalog and the translator is passed in, so a test
 // says which language it asserts.

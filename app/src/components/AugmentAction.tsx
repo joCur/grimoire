@@ -30,7 +30,7 @@
 import type {
   AugmentPropertyProposal,
   AugmentResult,
-  EntryResponse,
+  Entry,
   GenerateJob,
 } from "@grimoire/shared/types";
 import { isAugmentKind } from "@grimoire/shared/types";
@@ -56,7 +56,7 @@ import {
   type DiffToken,
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
-import { propString } from "@/lib/properties";
+import { entryName } from "@/lib/entity";
 import { reviewOf, runJobArrived } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
@@ -70,8 +70,8 @@ const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-mute
  * a scene's `title`), never the wire address. An address like `npcs/fenn` is
  * how the entry is addressed, not how it is known at the table.
  */
-function entryName(entry: EntryResponse): string {
-  return propString(entry.properties.name) ?? propString(entry.properties.title) ?? entry.path;
+function displayName(entry: Entry): string {
+  return entryName(entry) ?? entry.path;
 }
 
 /**
@@ -95,7 +95,7 @@ function decidedSet(
 /** The two review surfaces — blocks (default) and the raw text diff. */
 type ReviewMode = "blocks" | "markdown";
 
-export function AugmentAction({ campaign, entry }: { campaign: string; entry: EntryResponse }) {
+export function AugmentAction({ campaign, entry }: { campaign: string; entry: Entry }) {
   const t = useT();
   // Open-BY-ENTRY, like the properties dialog: the reading route stays
   // mounted across a navigation, and a dialog holding entry A while `entry`
@@ -132,7 +132,7 @@ function AugmentDialog({
   onClose,
 }: {
   campaign: string;
-  entry: EntryResponse;
+  entry: Entry;
   onClose: () => void;
 }) {
   const t = useT();
@@ -230,7 +230,7 @@ function AugmentDialog({
   // running one — never a mutation's `isPending`.
   const running =
     proposal === undefined && (starting || (mine && current?.status === "running"));
-  const name = entryName(entry);
+  const name = displayName(entry);
 
   return (
     <Dialog
@@ -376,7 +376,7 @@ function AugmentReview({
   onDone,
 }: {
   campaign: string;
-  entry: EntryResponse;
+  entry: Entry;
   jobId: string | undefined;
   /** The job the proposal came from — it carries the DM's decisions. */
   job: GenerateJob | null | undefined;

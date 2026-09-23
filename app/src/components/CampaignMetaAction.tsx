@@ -116,7 +116,7 @@ function CampaignMetaDialog({
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
         <DialogTitle>{t("campaignMeta.title")}</DialogTitle>
         <DialogDescription>{t("campaignMeta.description")}</DialogDescription>
-        {entry.data === undefined ? (
+        {entry.data === undefined || entry.data.kind === "location" ? (
           <p aria-live="polite" className="mt-4 min-h-[17px] text-[12px] text-destructive">
             {entry.isError ? t("campaignMeta.unreachable") : ""}
           </p>

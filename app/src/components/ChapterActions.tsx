@@ -31,7 +31,7 @@
 // the query the overview already runs for the chapter's text, passed in rather
 // than fetched twice.
 
-import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
+import type { CampaignTree, Entry } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 
@@ -52,12 +52,13 @@ import {
   chapterBodyToWrite,
   chapterMetaPath,
 } from "@/lib/chapter-meta";
+import { entryName } from "@/lib/entity";
 import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /** The chapter's display name — its id when the title is missing or empty. */
-function chapterLabel(entry: EntryResponse, chapter: string): string {
-  const title = entry.properties.title;
-  return typeof title === "string" && title.trim() !== "" ? title : chapter;
+function chapterLabel(entry: Entry, chapter: string): string {
+  const title = entryName(entry);
+  return title !== undefined && title.trim() !== "" ? title : chapter;
 }
 
 export function ChapterActions({
@@ -73,7 +74,7 @@ export function ChapterActions({
    * running (or when the chapter has no entry to read): the two actions need
    * its rev, so they simply are not offered yet.
    */
-  entry: EntryResponse | undefined;
+  entry: Entry | undefined;
   /** For the properties dialog's reference fields. */
   tree: CampaignTree | undefined;
 }) {
@@ -137,7 +138,7 @@ function ChapterBodyDialog({
 }: {
   campaign: string;
   chapter: string;
-  entry: EntryResponse;
+  entry: Entry;
   onClose: () => void;
 }) {
   const t = useT();

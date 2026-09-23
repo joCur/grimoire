@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
+import type { LocationDraft } from "@grimoire/shared/types";
+
 import { locationExcerpt, npcExcerpt, sceneExcerpt, type ExcerptSource } from "./entity-excerpt";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
@@ -72,23 +74,27 @@ describe("npcExcerpt", () => {
 
 describe("locationExcerpt", () => {
   test("the `atmosphere` property and the Roll20 page", () => {
-    expect(locationExcerpt(fixture("location-bucht"), nameOf)).toEqual({
+    // A location fixture is the location draft itself, its fields flat.
+    const bucht = JSON.parse(
+      readFileSync(path.join(FIXTURES, "location-bucht.json"), "utf8"),
+    ) as LocationDraft;
+    expect(locationExcerpt(bucht, nameOf)).toEqual({
       mood: "Arbeit, keine Romantik: Kisten unter Planen, ausgetretene Pfade, niemand redet laut.",
       page: "Nordbucht",
     });
   });
 
   test("a reference in the atmosphere reads as the current name", () => {
-    const entry = { properties: { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." } };
-    expect(locationExcerpt(entry, nameOf).mood).toBe("Hier riecht es nach Fenns Tabak.");
+    const location = { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." };
+    expect(locationExcerpt(location, nameOf).mood).toBe("Hier riecht es nach Fenns Tabak.");
   });
 
   test("a `## Atmosphäre` section in the body is not read — only the property is", () => {
-    const entry = {
-      properties: { "roll20-page": "Bucht" },
+    const location = {
+      "roll20-page": "Bucht",
       body: "## Atmosphäre\n\nDas steht im Text und bleibt Text.\n",
     };
-    expect(locationExcerpt(entry, nameOf)).toEqual({ mood: undefined, page: "Bucht" });
+    expect(locationExcerpt(location, nameOf)).toEqual({ mood: undefined, page: "Bucht" });
   });
 });
 

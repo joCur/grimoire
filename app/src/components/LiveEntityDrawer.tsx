@@ -20,7 +20,7 @@ import { fetchEntry } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/i18n";
-import { propString } from "@/lib/properties";
+import { entryName } from "@/lib/entity";
 import { PREVIEW_BOUNDARY_ATTR } from "@/markdown/ref-preview";
 
 export function LiveEntityDrawer({
@@ -61,10 +61,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
     retry: false,
   });
 
-  const name =
-    data === undefined
-      ? path
-      : (propString(data.properties.name) ?? propString(data.properties.title) ?? path);
+  const name = data === undefined ? path : (entryName(data) ?? path);
 
   return (
     <>

@@ -6,6 +6,7 @@ import type {
   CampaignSummary,
   CampaignTree,
   DraftEdit,
+  Entry,
   EntryResponse,
   GenerateJob,
   GenerateJobStarted,
@@ -15,12 +16,15 @@ import type {
   InstanceSettings,
   KnowledgeEntry,
   KnowledgeResponse,
+  Location,
   SceneOrderResponse,
   SearchResponse,
   SessionResponse,
   SessionSummary,
   ThreadsResponse,
 } from "@grimoire/shared/types";
+
+import { kindFromAddress } from "@grimoire/shared/kind";
 
 import { encodeAddress } from "@/lib/address";
 
@@ -112,8 +116,8 @@ export function fetchTree(campaign: string): Promise<CampaignTree> {
   return getJson<CampaignTree>(`/campaigns/${encodeURIComponent(campaign)}/tree`);
 }
 
-export function fetchEntry(campaign: string, path: string): Promise<EntryResponse> {
-  return getJson<EntryResponse>(entriesUrl(campaign, path));
+export function fetchEntry(campaign: string, path: string): Promise<Entry> {
+  return getJson<Entry>(entriesUrl(campaign, path));
 }
 
 /** The request path of one entry: its address is the URL path. */
@@ -293,10 +297,10 @@ export function threadsConflict(error: unknown): ThreadsResponse | undefined {
  * written, so the same request serves a properties-only patch, a text-only
  * one and a dialog that edits both in one transaction.
  *
- * `properties` is flat — a value sets the key, `null` deletes it, an unknown
- * key is a 400. `body` is the markdown GET hands out — the entry's text, with
- * its properties beside it. Neither field present is a 400
- * `nothing_to_write`.
+ * `properties` holds the fields the write changes, by name — a
+ * value sets the field, `null` clears it, a field the kind does not have is
+ * a 400. `body` is the markdown GET hands out — the entry's text. Neither
+ * present is a 400 `nothing_to_write`.
  *
  * `rev` is the optimistic-concurrency token of the entry the editing session
  * started from. When the row moved since, the server writes NOTHING and
@@ -308,8 +312,8 @@ export function threadsConflict(error: unknown): ThreadsResponse | undefined {
  * name an entry that exists; the server answers 400 with the code the app
  * turns into its "create it first" sentence and writes nothing.
  *
- * Defined here rather than in @grimoire/shared until the shared package
- * carries the request type.
+ * This is the app's own shape of a write, the same for every kind; the
+ * request body the server takes is the KIND's (`entryPatchBody`).
  */
 export interface PatchEntryRequest {
   rev: number;
@@ -318,20 +322,31 @@ export interface PatchEntryRequest {
   force?: boolean;
 }
 
+/**
+ * The request body of a write to `path`, in the shape of the entry's kind: a
+ * location carries its fields flat beside `rev`, `force` and `body` (ADR #31),
+ * the other kinds under `properties`.
+ */
+export function entryPatchBody(path: string, request: PatchEntryRequest): Record<string, unknown> {
+  if (kindFromAddress(path) !== "location") return { ...request };
+  const { properties, ...rest } = request;
+  return { ...rest, ...properties };
+}
+
 /** The single write path of one entry. */
 export async function patchEntry(
   campaign: string,
   path: string,
   request: PatchEntryRequest,
-): Promise<EntryResponse> {
+): Promise<Entry> {
   const url = entriesUrl(campaign, path);
   const response = await fetch(`/api${url}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
+    body: JSON.stringify(entryPatchBody(path, request)),
   });
   if (!response.ok) throw await failure(`PATCH /api${url}`, response);
-  return (await response.json()) as EntryResponse;
+  return (await response.json()) as Entry;
 }
 
 /** The server's state at the moment it refused the write. */
@@ -344,7 +359,7 @@ export interface RevConflict {
    * server, or a write path that only reports the version) — the caller then
    * degrades to re-reading the entry itself.
    */
-  entry?: EntryResponse;
+  entry?: Entry;
 }
 
 /**
@@ -360,13 +375,13 @@ export function revConflict(error: unknown): RevConflict | undefined {
   const { rev, entry } = error.details;
   return {
     rev: typeof rev === "number" ? rev : Number.NaN,
-    ...(isEntryResponse(entry) ? { entry } : {}),
+    ...(isEntry(entry) ? { entry } : {}),
   };
 }
 
-function isEntryResponse(value: unknown): value is EntryResponse {
+function isEntry(value: unknown): value is Entry {
   if (value === null || typeof value !== "object") return false;
-  const candidate = value as Partial<EntryResponse>;
+  const candidate = value as Partial<Entry>;
   return (
     typeof candidate.path === "string" &&
     typeof candidate.body === "string" &&
@@ -550,7 +565,7 @@ export function markInboxLineDone(campaign: string, id: string): Promise<InboxRe
 //
 // Five POSTs with one shape: the DM types a NAME, the server derives the id
 // (the shared slug rule, `@grimoire/shared/slug`) and answers with the created
-// DOCUMENT — so the caller can navigate straight into it. `id` is optional and
+// ENTRY — so the caller can navigate straight into it. `id` is optional and
 // exists for exactly one flow: taking the `slug_taken` 409's `suggestion` in
 // one click. Errors arrive as ApiError; a 409 carries
 // `{ code: "slug_taken", id, suggestion, path }` in `details` (lib/create.ts
@@ -625,8 +640,8 @@ export function createNpc(
 export function createLocation(
   campaign: string,
   input: { name: string; id?: string },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/locations`, {
+): Promise<Location> {
+  return postJson<Location>(`/campaigns/${encodeURIComponent(campaign)}/locations`, {
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
   });
@@ -772,12 +787,16 @@ export function applyAugment(
     body?: string;
     jobId?: string;
   },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/generate/augment/apply`, {
-    path: input.path,
+): Promise<Entry> {
+  // Beside `path` and `jobId` the body is the entry's own PATCH shape.
+  const patch = entryPatchBody(input.path, {
     rev: input.rev,
     ...(input.properties === undefined ? {} : { properties: input.properties }),
     ...(input.body === undefined ? {} : { body: input.body }),
+  });
+  return postJson<Entry>(`/campaigns/${encodeURIComponent(campaign)}/generate/augment/apply`, {
+    path: input.path,
+    ...patch,
     ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
   });
 }

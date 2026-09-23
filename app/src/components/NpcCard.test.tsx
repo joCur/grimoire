@@ -57,13 +57,15 @@ describe("aside cards — a reference inside the excerpt", () => {
     card: ReactNode,
   ): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(["entry", "beispiel", path], {
-      path,
-      kind: path.startsWith("npcs/") ? "npc" : "location",
-      properties,
-      body,
-      rev: 1,
-    });
+    const id = path.slice(path.indexOf("/") + 1);
+    // An npc carries its fields under `properties`; a location is its own
+    // typed entry, its fields flat (ADR #31).
+    client.setQueryData(
+      ["entry", "beispiel", path],
+      path.startsWith("npcs/")
+        ? { path, kind: "npc", properties, body, rev: 1 }
+        : { kind: "location", id, path, name: id, ...properties, body, rev: 1 },
+    );
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>

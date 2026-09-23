@@ -73,9 +73,11 @@ export function LocationCard({
       </p>
     );
   }
-  if (data === undefined) return null;
+  // The address names a location, so the answer is one; anything else has
+  // nothing a location card could show.
+  if (data === undefined || data.kind !== "location") return null;
 
-  const name = propString(data.properties.name) ?? id;
+  const name = propString(data.name) ?? id;
   return (
     <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-3.5">
       <LocationCompact name={name} excerpt={locationExcerpt(data, (slug) => resolve(slug)?.name)} />

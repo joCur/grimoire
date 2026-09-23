@@ -35,7 +35,7 @@
 //     parse) blocks the save until the DM decides — composerIssues, the same
 //     seam the properties dialog uses for an unfinished quickstat row.
 
-import type { EntryResponse } from "@grimoire/shared/types";
+import type { Entry } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -67,6 +67,7 @@ import {
   withDraftText,
 } from "@/lib/composer";
 import { bodyEditorWrite } from "@/lib/entry-body";
+import { entryFieldValues } from "@/lib/entity";
 import { hasEntryWrite } from "@/lib/entry-edit";
 import {
   propertiesFieldsFor,
@@ -108,7 +109,7 @@ export function EntryBodyEditor({
    * its version is what the write is checked against. Mount this component per
    * path (`key`) so a navigation starts a new editing session.
    */
-  entry: EntryResponse;
+  entry: Entry;
   onClose: () => void;
 }) {
   const t = useT();
@@ -125,7 +126,7 @@ export function EntryBodyEditor({
   // reason: it belongs to the version the session writes against.
   const fields = useMemo(() => propertiesFieldsFor(entry.kind, t, "text") ?? [], [entry.kind, t]);
   const [fieldBaseline, setFieldBaseline] = useState<FormValues>(() =>
-    propertiesFormValues(fields, entry.properties),
+    propertiesFormValues(fields, entryFieldValues(entry)),
   );
   const [fieldValues, setFieldValues] = useState<FormValues>(fieldBaseline);
   // Textarea (true) or rendered preview (false) — the markdown surface's own
@@ -142,7 +143,7 @@ export function EntryBodyEditor({
       // they were writing in.
       setDraft((current) => composerDraftIn(stored.body, current.mode));
       setBaseline(stored.body);
-      const storedFields = propertiesFormValues(fields, stored.properties);
+      const storedFields = propertiesFormValues(fields, entryFieldValues(stored));
       setFieldBaseline(storedFields);
       setFieldValues(storedFields);
     },

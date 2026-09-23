@@ -81,7 +81,8 @@ export function NpcCard({
       </p>
     );
   }
-  if (data === undefined) return null;
+  // The address names an npc, whose fields travel under `properties`.
+  if (data === undefined || data.kind === "location") return null;
 
   const properties = data.properties;
   const name = propString(properties.name) ?? id;

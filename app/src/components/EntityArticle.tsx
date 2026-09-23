@@ -11,10 +11,10 @@
 // stand in the header, read exactly as the cards read them
 // (lib/entity-excerpt.ts): a `[[slug]]` inside reads as the current name.
 
-import type { EntryResponse } from "@grimoire/shared/types";
+import type { Entry, EntryResponse, Location } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
-import { entityHeaderKind, npcStatusLabel, npcStatusOf } from "@/lib/entity";
+import { entityHeaderKind, entryName, npcStatusLabel, npcStatusOf } from "@/lib/entity";
 import { locationExcerpt, npcExcerpt } from "@/lib/entity-excerpt";
 import { propQuickstats, propString } from "@/lib/properties";
 import { useT } from "@/i18n";
@@ -63,7 +63,7 @@ export function EntityArticle({
   actions,
   body,
 }: {
-  entry: EntryResponse;
+  entry: Entry;
   actions?: ReactNode;
   /**
    * Replaces the rendered body — edit mode puts its markdown
@@ -72,22 +72,19 @@ export function EntityArticle({
   body?: ReactNode;
 }) {
   const header = entityHeaderKind(entry.kind);
-  const properties = entry.properties;
   // npc/location entries carry `name`, chapter/campaign entries `title` — either
   // may be missing (degrade), then the address is the honest fallback.
-  const fallback = entry.path;
-  const name = propString(properties.name) ?? propString(properties.title) ?? fallback;
-  const title = propString(properties.title) ?? propString(properties.name) ?? fallback;
+  const name = entryName(entry) ?? entry.path;
 
   return (
     <article className="w-full min-w-0">
-      {header === "npc" ? (
+      {entry.kind === "location" ? (
+        <LocationHeader location={entry} name={name} actions={actions} />
+      ) : header === "npc" ? (
         <NpcHeader entry={entry} name={name} actions={actions} />
-      ) : header === "location" ? (
-        <LocationHeader entry={entry} name={name} actions={actions} />
       ) : (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <Title>{title}</Title>
+          <Title>{name}</Title>
           <ActionGroup>{actions}</ActionGroup>
         </div>
       )}
@@ -165,17 +162,17 @@ function NpcHeader({
 }
 
 function LocationHeader({
-  entry,
+  location,
   name,
   actions,
 }: {
-  entry: EntryResponse;
+  location: Location;
   name: string;
   actions?: ReactNode;
 }) {
   const t = useT();
   const { resolve } = useEntityRefs();
-  const { mood, page } = locationExcerpt(entry, (slug) => resolve(slug)?.name);
+  const { mood, page } = locationExcerpt(location, (slug) => resolve(slug)?.name);
   return (
     <header className="mb-7 border-b border-border pb-5">
       <div className="flex flex-wrap items-start justify-between gap-3">

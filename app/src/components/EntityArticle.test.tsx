@@ -2,21 +2,29 @@
 // the NPC/location/titled headers and the one rule behind them —
 // the scene type overline never appears above a non-scene.
 
-import type { EntryKind, EntryResponse } from "@grimoire/shared/types";
+import type { Entry, EntryResponse, Location } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { EntityArticle } from "./EntityArticle";
 
 function entry(
-  kind: EntryKind,
+  kind: EntryResponse["kind"],
   properties: Record<string, unknown>,
   body = "",
 ): EntryResponse {
   return { path: `npcs/x`, kind, properties, body, rev: 1 };
 }
 
-function render(e: EntryResponse): string {
+/** A location is its own typed entry, its fields flat (ADR #31). */
+function location(
+  fields: { id: string; name: string } & Partial<Location>,
+  body = "",
+): Location {
+  return { kind: "location", path: `locations/${fields.id}`, body, rev: 1, ...fields };
+}
+
+function render(e: Entry): string {
   return renderToStaticMarkup(<EntityArticle entry={e} />);
 }
 
@@ -104,8 +112,7 @@ describe("EntityArticle — npc", () => {
 describe("EntityArticle — location and titled entities", () => {
   test("location shows the roll20 page as a reference line", () => {
     const html = render(
-      entry(
-        "location",
+      location(
         { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen", "roll20-page": "Leuchtturm" },
         "## Atmosphäre\n\nVerlassen in Eile.\n",
       ),
@@ -118,7 +125,7 @@ describe("EntityArticle — location and titled entities", () => {
 
   test("the atmosphere property stands in the header", () => {
     const html = render(
-      entry("location", { id: "kai", name: "Der Kai", atmosphere: "Nebel, Möwen, nasses Holz." }),
+      location({ id: "kai", name: "Der Kai", atmosphere: "Nebel, Möwen, nasses Holz." }),
     );
     expect(html).toContain("Nebel, Möwen, nasses Holz.");
   });
@@ -146,9 +153,9 @@ describe("EntityArticle — location and titled entities", () => {
     );
     const grouped =
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
-    const variants = [
+    const variants: Entry[] = [
       jorna, // npc header
-      entry("location", { id: "leuchtturm", name: "Leuchtturm" }),
+      location({ id: "leuchtturm", name: "Leuchtturm" }),
       entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }),
     ];
     for (const e of variants) {

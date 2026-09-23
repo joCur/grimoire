@@ -405,7 +405,7 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
   });
 
   if (isPending) return <p className="text-muted-foreground">{t("live.scene.loading")}</p>;
-  if (isError || !data) {
+  if (isError || !data || data.kind === "location") {
     return <p className="text-muted-foreground">{t("live.scene.unloadable")}</p>;
   }
   return <SceneArticle entry={data} tree={tree.data} variant="live" />;

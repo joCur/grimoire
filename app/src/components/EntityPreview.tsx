@@ -93,19 +93,19 @@ export function EntityPreview({
 
   if (target.kind === "npc") {
     kind = t("kind.npc");
-    if (data !== undefined) {
+    if (data !== undefined && data.kind !== "location") {
       const excerpt = npcExcerpt(data, nameOf);
       if (excerpt.status !== undefined) status = npcStatusLine(excerpt.status, t);
       rows = <NpcCompact name={target.name} excerpt={excerpt} clamp />;
     }
   } else if (target.kind === "location") {
     kind = t("kind.location");
-    if (data !== undefined) {
+    if (data?.kind === "location") {
       rows = <LocationCompact name={target.name} excerpt={locationExcerpt(data, nameOf)} clamp />;
     }
   } else {
     const excerpt =
-      data === undefined
+      data === undefined || data.kind === "location"
         ? undefined
         : sceneExcerpt(
             data,

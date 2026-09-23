@@ -27,7 +27,7 @@
 // points at B would patch A's diff into B. So the open state IS the entry
 // (campaign + path), and the content is keyed by it.
 
-import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
+import type { CampaignTree, Entry } from "@grimoire/shared/types";
 import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -43,7 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n, useT } from "@/i18n";
-import { propString } from "@/lib/properties";
+import { entryFieldValues, entryId } from "@/lib/entity";
 import {
   canSubmitProperties,
   commitPendingText,
@@ -70,7 +70,7 @@ export function PropertiesAction({
   triggerLabel,
 }: {
   campaign: string;
-  entry: EntryResponse;
+  entry: Entry;
   /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
   /**
@@ -133,7 +133,7 @@ function PropertiesDialog({
   onClose,
 }: {
   campaign: string;
-  entry: EntryResponse;
+  entry: Entry;
   tree: CampaignTree | undefined;
   fields: readonly PropertiesField[];
   kindLabel: string;
@@ -145,7 +145,7 @@ function PropertiesDialog({
   // silently swallow the DM's change. It moves only when the DM adopts the
   // stored entry after a conflict, together with the session's version.
   const [initial, setInitial] = useState<FormValues>(() =>
-    propertiesFormValues(fields, entry.properties),
+    propertiesFormValues(fields, entryFieldValues(entry)),
   );
   const [values, setValues] = useState<FormValues>(initial);
   // Text still standing in a chip input, per field key. It lives here so a
@@ -159,7 +159,7 @@ function PropertiesDialog({
     onReload: (stored) => {
       // Continue from what is stored: the form is refilled from that entry, so
       // the next diff is measured against it and nothing is pending.
-      const refilled = propertiesFormValues(fields, stored.properties);
+      const refilled = propertiesFormValues(fields, entryFieldValues(stored));
       setInitial(refilled);
       setValues(refilled);
       setPending({});
@@ -195,7 +195,7 @@ function PropertiesDialog({
     Object.keys(patch).length > 0 &&
     !save.isSaving;
 
-  const id = propString(entry.properties.id);
+  const id = entryId(entry);
   // Esc, the overlay, the cancel button and the X all come through here: with
   // something typed they ask first (house pattern of EntryBodyEditor), an
   // untouched form just closes.
@@ -231,7 +231,7 @@ function PropertiesDialog({
             {/* The two values the form does not own — shown, not editable. */}
             <p className="text-[12px] text-body-secondary">
               {t("properties.id")}{" "}
-              <span className="font-mono text-[12px] text-soft">{id ?? entry.path}</span>
+              <span className="font-mono text-[12px] text-soft">{id}</span>
             </p>
             {fields.map((field) => {
               const value = values[field.key];
