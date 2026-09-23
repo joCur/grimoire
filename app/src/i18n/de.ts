@@ -418,6 +418,22 @@ export const de = {
   "chapterOverview.order.conflict":
     "Reihenfolge inzwischen geändert — der aktuelle Stand ist geladen.",
   "chapterOverview.order.failed": "Reihenfolge nicht gespeichert — Server prüfen.",
+  // The chapter's open threads (components/ChapterThreads.tsx) — a list of
+  // rows beside the chapter, never a checklist in its text. The row controls
+  // carry the thread's text in their names, like the scene rows' up/down.
+  "chapterOverview.threads.label": "Offene Handlungsstränge",
+  "chapterOverview.threads.done.aria": "„{text}“ erledigt",
+  "chapterOverview.threads.edit.aria": "„{text}“ bearbeiten",
+  "chapterOverview.threads.remove.aria": "„{text}“ löschen",
+  "chapterOverview.threads.add": "Handlungsstrang hinzufügen",
+  "chapterOverview.threads.addSubmit": "Hinzufügen",
+  "chapterOverview.threads.input": "Offener Handlungsstrang",
+  "chapterOverview.threads.new": "neu aus der Nachbereitung",
+  "chapterOverview.threads.failed": "Nicht gespeichert — Server prüfen.",
+  "chapterOverview.threads.confirmDelete.title": "Handlungsstrang löschen?",
+  "chapterOverview.threads.confirmDelete.body":
+    "„{text}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
+  "chapterOverview.threads.confirmDelete.confirm": "Löschen",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   // The three list titles are already above under `browse.title.*`.

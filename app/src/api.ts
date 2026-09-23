@@ -1,6 +1,6 @@
-// Typed client for the Grimoire server API (endpoint list documented in
-// server/src/server.ts). All response shapes come from @grimoire/shared —
-// the format contract exists exactly once.
+// Typed client for the Grimoire server API (every endpoint is documented at
+// its route in server/src/routes/api.ts). All response shapes come from
+// @grimoire/shared — the format contract exists exactly once.
 
 import type {
   CampaignSummary,
@@ -19,6 +19,7 @@ import type {
   SearchResponse,
   SessionResponse,
   SessionSummary,
+  ThreadsResponse,
 } from "@grimoire/shared/types";
 
 import { encodeAddress } from "@/lib/address";
@@ -65,12 +66,21 @@ async function getJson<T>(path: string): Promise<T> {
 
 /** PUT a JSON body and parse the JSON answer; a non-2xx becomes an ApiError. */
 async function putJson<T>(path: string, body: unknown): Promise<T> {
+  return sendJson<T>("PUT", path, body);
+}
+
+/** Send a JSON body with any write verb; a non-2xx becomes an ApiError. */
+async function sendJson<T>(
+  method: "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body: unknown,
+): Promise<T> {
   const response = await fetch(`/api${path}`, {
-    method: "PUT",
+    method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw await failure(`PUT /api${path}`, response);
+  if (!response.ok) throw await failure(`${method} /api${path}`, response);
   return (await response.json()) as T;
 }
 
@@ -205,6 +215,75 @@ export function putSceneOrder(
     `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/scene-order`,
     { scenes, rev },
   );
+}
+
+// --- a chapter's open threads ------------------------------------------------
+
+/** The request path of a chapter's thread list, or of one row in it. */
+function threadsUrl(campaign: string, chapter: string, id?: string): string {
+  const base = `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/threads`;
+  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+}
+
+/**
+ * The chapter's open threads as ROWS plus the list's own guard token — a
+ * list beside the chapter entry, never a checklist in its text (ADR #29).
+ */
+export function fetchThreads(campaign: string, chapter: string): Promise<ThreadsResponse> {
+  return getJson<ThreadsResponse>(threadsUrl(campaign, chapter));
+}
+
+/**
+ * Append one thread at the end of the chapter's list — „Handlungsstrang
+ * übernehmen" in the review and the overview's add action. No `rev`: an
+ * append has nothing to overwrite, so the list moving elsewhere is no reason
+ * to refuse it.
+ */
+export function appendThread(
+  campaign: string,
+  chapter: string,
+  text: string,
+): Promise<ThreadsResponse> {
+  return postJson<ThreadsResponse>(threadsUrl(campaign, chapter), { text });
+}
+
+/**
+ * Tick, untick or reword ONE thread against the list's `rev`. A stale token
+ * answers 409 with the current list (`threadsConflict`), an id the list does
+ * not hold 404.
+ */
+export function patchThread(
+  campaign: string,
+  chapter: string,
+  id: string,
+  change: { rev: number; text?: string; done?: boolean },
+): Promise<ThreadsResponse> {
+  return sendJson<ThreadsResponse>("PATCH", threadsUrl(campaign, chapter, id), change);
+}
+
+/** Delete ONE thread against the list's `rev`; same refusals as the patch. */
+export function deleteThread(
+  campaign: string,
+  chapter: string,
+  id: string,
+  rev: number,
+): Promise<ThreadsResponse> {
+  return sendJson<ThreadsResponse>("DELETE", threadsUrl(campaign, chapter, id), { rev });
+}
+
+/**
+ * The current list a thread write was refused against — the 409 carries it
+ * under `threads`. `undefined` for any other failure and for a 409 without a
+ * usable list (degrade: the caller then reads the list again).
+ */
+export function threadsConflict(error: unknown): ThreadsResponse | undefined {
+  if (!(error instanceof ApiError) || error.status !== 409) return undefined;
+  const { threads } = error.details;
+  if (threads === null || typeof threads !== "object") return undefined;
+  const candidate = threads as Partial<ThreadsResponse>;
+  return Array.isArray(candidate.entries) && typeof candidate.rev === "number"
+    ? (candidate as ThreadsResponse)
+    : undefined;
 }
 
 // --- the one write path of an entry ----------------------------------------
@@ -438,21 +517,6 @@ export function markLogLineSeen(
   return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/seen`, {
     sessionId,
     logId,
-  });
-}
-
-/**
- * Append `- [ ] text` under `## Offene Fäden` of the chapter's chapter entry
- * (section created when missing). Returns the chapter entry.
- */
-export function adoptThread(
-  campaign: string,
-  chapter: string,
-  text: string,
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/thread`, {
-    chapter,
-    text,
   });
 }
 

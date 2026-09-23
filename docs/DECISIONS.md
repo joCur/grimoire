@@ -1552,3 +1552,37 @@ offenen Fäden eines Kapitels werden eine eigene Liste am Kapitel statt
 diese Stellen unverändert. Das Kapitelziel bleibt Freitext des Kapitels; dass
 die Kapitelübersicht es noch unter `## Ziel des Kapitels` sucht, löst eine
 eigene Änderung ab.
+
+### Nachtrag 2026-09-23: die offenen Fäden sind eine Liste am Kapitel
+
+Zweite Anwendung des Grundsatzes. Die offenen Fäden eines Kapitels sind keine
+Checkliste unter `## Offene Fäden` mehr, sondern eine eigene Liste (ADR #26):
+
+- **Speicher:** die Tabelle `threads` — `campaign_id`, eine opake `id`
+  (eindeutig je Kampagne, nicht je Kapitel und nicht die Position), der
+  Anker `chapter_id` als Fremdschlüssel (ADR #19), `text`, `done`, `pos` —
+  und der Listen-Wächter `chapters.threads_rev` nach dem Muster von
+  `scene_order_rev`. Ein weiterer Anker (Szene, Kampagne) wäre eine weitere
+  Besitzer-Spalte und ein Zähler an dessen Zeile; Zeilen, ids und Antwortform
+  bleiben.
+- **Endpoints:** `GET`/`POST …/chapters/:chapter/threads`, `PATCH` und
+  `DELETE …/threads/:id`; jeder antwortet `ThreadsResponse
+  { entries: [{ id, text, done }], rev }`. Anhängen trägt kein `rev`, wie
+  Idee und Log-Zeile: ein Anhängen überschreibt nichts, und ein Wächter würde
+  „Handlungsstrang übernehmen" nur deshalb abweisen, weil die Liste sich in
+  einem anderen Tab bewegt hat. Abhaken, Umformulieren und Löschen tragen das
+  `rev` der Liste; ein veraltetes ist 409 mit der aktuellen Liste unter
+  `threads`, eine unbekannte `id` 404.
+- **Getrennte Wächter:** kein Schreibzugriff der Liste berührt Text oder
+  `rev` des Kapitel-Eintrags, und ein Kapitel-Write bewegt die Liste nicht —
+  dieselbe Trennung wie bei der Szenenreihenfolge (ADR #27).
+- **Nachbereitung und Kapitelübersicht** lesen Zeilen. „Handlungsstrang
+  übernehmen" hängt eine Zeile an; die Kapitelübersicht zeigt die Liste unter
+  dem Kapitelziel und pflegt sie (abhaken, umformulieren, löschen, von Hand
+  ergänzen). `appendThreadItem` und `parseChecklist` sind entfernt.
+- **Keine Suche, kein Generator-Kontext:** die Fäden werden nicht indexiert,
+  wie die Ideen. Der Kapiteltext hat nie einen Generator-Prompt erreicht — ein
+  Szenen-Lauf kennt vom Kapitel nur die id —, also fehlt dem Generator nichts.
+- Migration `0003_open_threads.sql` legt Tabelle und Zähler an und
+  **überträgt nichts** (ADR #28, Regel 2): die Liste startet leer, ein
+  vorhandener Abschnitt `## Offene Fäden` bleibt freier Text des Kapitels.

@@ -12,8 +12,9 @@
 //      (store/drafts.ts), so references, tags, handouts and the search index
 //      are maintained by the same code a create endpoint runs. What has no
 //      endpoint because it is historic data — the campaign row, sessions with
-//      their pauses and log lines, the inbox list, the glossary — is written
-//      as rows here and indexed the way the store indexes it.
+//      their pauses and log lines, the inbox list, the glossary, a chapter's
+//      open threads — is written as rows here and indexed the way the store
+//      indexes it.
 //   2. A REFERENCE TO SOMETHING THAT DOES NOT EXIST IS AN ERROR. Every
 //      reference is a foreign key (ADR #19) and nothing creates an entry
 //      because something mentioned it, so a seed that names a missing entry
@@ -23,7 +24,8 @@
 //      completely or nothing of it is.
 //
 // The load ORDER inside a campaign follows the foreign keys: campaign →
-// chapters → locations → npcs → scenes → sessions → inbox → glossary. Body
+// chapters (with their threads) → locations → npcs → scenes → sessions →
+// inbox → glossary. Body
 // references (`[[id]]`) are expanded in the search index at the very end,
 // because half the entries a body points at have no row yet while loading.
 
@@ -42,6 +44,7 @@ import {
 } from "./schema";
 import { campaignRow, indexCampaign } from "../store/campaigns";
 import { indexGlossaryTerm } from "../store/glossary";
+import { insertThreadRows } from "../store/threads";
 import { PROPERTY_CONTRACT } from "../store/properties";
 import { insertDraft } from "../store/drafts";
 import { logLineId } from "../store/body-parse";
@@ -70,6 +73,16 @@ export interface SeedInboxEntry {
   done?: boolean;
 }
 
+/**
+ * One open thread of a chapter: its text and whether it is ticked off — the
+ * row `GET …/chapters/:chapter/threads` answers, without the id the store
+ * hands out.
+ */
+export interface SeedThread {
+  text: string;
+  done?: boolean;
+}
+
 /** One glossary row. */
 export interface SeedGlossaryEntry {
   term: string;
@@ -82,7 +95,7 @@ export interface SeedGlossaryEntry {
  */
 export type SeedEntry =
   | { kind: "campaign"; properties: Properties; body?: string }
-  | { kind: "chapter"; properties: Properties; body?: string }
+  | { kind: "chapter"; properties: Properties; body?: string; threads?: SeedThread[] }
   | { kind: "scene"; properties: Properties; body?: string }
   | { kind: "npc"; properties: Properties; body?: string }
   | { kind: "location"; properties: Properties; body?: string }
@@ -193,11 +206,32 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
       }),
     };
   }
+  if (kind === "chapter") {
+    // The chapter's open threads are a LIST beside its entry (ADR #26), so
+    // they travel as rows next to `properties` and `body` — like a session's
+    // log — and never as a checklist in the text.
+    const list = value.threads;
+    if (list !== undefined && !Array.isArray(list)) fail(where, "`threads` must be a list");
+    return {
+      kind,
+      properties,
+      body: typeof body === "string" ? body : "",
+      ...(list === undefined
+        ? {}
+        : { threads: list.map((t, i) => asThread(`${where} thread ${i}`, t)) }),
+    };
+  }
   return {
-    kind: kind as "campaign" | "chapter" | "scene" | "npc" | "location",
+    kind: kind as "campaign" | "scene" | "npc" | "location",
     properties,
     body: typeof body === "string" ? body : "",
   };
+}
+
+function asThread(where: string, value: unknown): SeedThread {
+  if (!isRecord(value)) fail(where, "not a JSON object");
+  const text = requireString(where, "`text`", value.text);
+  return { text, ...(value.done === true ? { done: true } : {}) };
 }
 
 function asInboxEntry(where: string, value: unknown): SeedInboxEntry {
@@ -319,12 +353,17 @@ function writeEntry(tx: GrimoireDb, campaignId: string, entry: SeedEntry): void 
     case "npc":
     case "location": {
       const address = addressOf(entry);
-      return insertDraft(tx, campaignId, {
+      insertDraft(tx, campaignId, {
         rel: address,
         address,
         properties: entry.properties,
         body: entry.body ?? "",
       });
+      // The threads hang off the chapter row, so they follow it directly.
+      if (entry.kind === "chapter" && entry.threads !== undefined) {
+        insertThreadRows(tx, campaignId, asString(entry.properties.id), entry.threads);
+      }
+      return;
     }
     case "session":
       return writeSessionRows(tx, campaignId, entry);

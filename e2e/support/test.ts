@@ -96,9 +96,16 @@ export interface ServerHandle {
  */
 export type SeedEntry =
   | {
-      kind: "campaign" | "chapter" | "scene" | "npc" | "location";
+      kind: "campaign" | "scene" | "npc" | "location";
       properties: Record<string, unknown>;
       body?: string;
+    }
+  | {
+      kind: "chapter";
+      properties: Record<string, unknown>;
+      body?: string;
+      /** The chapter's open threads — ROWS beside the entry, never text in it. */
+      threads?: { text: string; done?: boolean }[];
     }
   | {
       kind: "session";
@@ -193,6 +200,15 @@ export interface ApiInbox {
 }
 
 /**
+ * A chapter's open threads as `GET …/chapters/:chapter/threads` answers them:
+ * rows plus the LIST's guard token — not the chapter entry's `rev`.
+ */
+export interface ApiThreads {
+  entries: { id: string; text: string; done: boolean }[];
+  rev: number;
+}
+
+/**
  * Typed access to the test's own server: the database is the truth, and the
  * API is how one looks at it — the same way the app does.
  */
@@ -233,6 +249,10 @@ export interface Api {
   sessions(): Promise<ApiSessionSummary[]>;
   /** The ideas with the list's guard token. */
   inbox(): Promise<ApiInbox>;
+  /** A chapter's open threads with the list's guard token. */
+  threads(chapter: string): Promise<ApiThreads>;
+  /** The request path of a chapter's thread list, or of one row in it. */
+  threadsPath(chapter: string, id?: string): string;
   /**
    * The ONE write path of an entry: PATCH the address with `rev` and at least
    * one of `properties` and `body` (ADR #23). Fields and text together are one
@@ -450,6 +470,13 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     },
     inbox() {
       return api.get<ApiInbox>(`campaigns/${encodeURIComponent(campaign)}/inbox`);
+    },
+    threads(chapter) {
+      return api.get<ApiThreads>(api.threadsPath(chapter));
+    },
+    threadsPath(chapter, id) {
+      const base = `campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/threads`;
+      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
     },
     async patchEntry(rel, change) {
       const rev = change.rev ?? (await api.entry(rel)).rev;

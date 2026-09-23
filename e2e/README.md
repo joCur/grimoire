@@ -16,8 +16,9 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 - **Die Fixtures sind EINGABE**, einmal pro Test gelesen. `fixtures/beispiel`
   hält die Beispielkampagne als **ein JSON pro Eintrag**, genau in der Form,
   die die API spricht (`{ kind, properties, body }`, dazu `log` als **Zeilen**
-  `{ at, sceneId?, text, reviewed? }` für eine Session und `entries` für
-  Eingang und Glossar — auch dort Zeilen, kein Markdown). Ein Test, der Inhalte
+  `{ at, sceneId?, text, reviewed? }` für eine Session, `entries` für
+  Eingang und Glossar und `threads` als Zeilen `{ text, done? }` für die
+  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Ein Test, der Inhalte
   braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } }, without: ["session-2026-01-15"] } })`.
@@ -303,7 +304,7 @@ mehrere Schreibwege auf ihm liegen:
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
-| 5 Nachbereitung    | `tests/review.e2e.ts`                                         |
+| 5 Nachbereitung    | `tests/review.e2e.ts`, `tests/threads.e2e.ts`                  |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
@@ -327,10 +328,16 @@ lesen darum Zeilen statt Texte:
   Session (`/campaigns/beispiel/sessions/2026-01-15`): Log-Zeilen mit
   Szenen-Links, die geschlossene Pause mit ihrer Dauer, die gespielten
   Szenen — und die alte Eintrags-Adresse derselben Session als 404.
-- **Pfad 5** (`review.e2e.ts`): Review und Ideen benennen ihre Zeilen per
-  `id`, also liest der Spec das `reviewed` der getroffenen Log-Zeile und das
-  `done` der abgehakten Idee — und prüft, dass keine andere Zeile das Flag
-  trägt.
+- **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): Review und Ideen benennen
+  ihre Zeilen per `id`, also liest der Spec das `reviewed` der getroffenen
+  Log-Zeile und das `done` der abgehakten Idee — und prüft, dass keine andere
+  Zeile das Flag trägt. „Handlungsstrang übernehmen" wird eine Zeile der
+  Fäden-Liste des Kapitels (`GET …/chapters/01-salzhafen/threads`); Text und
+  `rev` des Kapitels bleiben gleich, abgehakt wird per `id` (unbekannt: 404,
+  alter Listen-Stand: 409 mit der aktuellen Liste). `threads.e2e.ts` pflegt
+  die Liste in der Kapitelübersicht — anlegen, abhaken, umformulieren,
+  löschen, die Konfliktzeile mit „Neu laden" — und zeigt, dass ein
+  Fäden-Write einen offenen Kapitel-Editor nicht in einen Konflikt treibt.
 - **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Zeile, angehängt;
   der Spec vergleicht die ganze `InboxResponse` samt `rev`, womit
   Append-only und „nichts abgehakt" in einer Zusicherung stehen.

@@ -1,9 +1,9 @@
 // Pure helpers of the review view: hashtag handling, the grouping of
-// player-character notes, the chapter's thread checklist parser and the
-// NPC-slug derivation for the stub dialog. No react, no query imports.
+// player-character notes and the NPC-slug derivation for the stub dialog. No
+// react, no query imports.
 //
-// Log rows and inbox rows arrive as ROWS from the server and are marked done
-// by their id, so nothing here parses a list out of text any more.
+// Log rows, inbox rows and the chapter's open threads arrive as ROWS from the
+// server and are named by their id, so nothing here parses a list out of text.
 //
 // Everything degrades (README): unparsable input yields empty results or
 // passes through unchanged, never an error.
@@ -124,40 +124,6 @@ export function groupByPcTag<T>(
   const groups: PcGroup<T>[] = [...named].map(([tag, items]) => ({ tag, entries: items }));
   if (general.length > 0) groups.push({ tag: undefined, entries: general });
   return groups;
-}
-
-// --- chapter checklist ("Offene Fäden") ---------------------------------------
-
-export interface ChecklistItem {
-  text: string;
-  done: boolean;
-}
-
-/**
- * Checkbox list items below the H2 with the given text (exact match,
- * case-insensitive). Missing heading or non-checkbox lines simply yield
- * fewer items — never an error.
- */
-export function parseChecklist(body: string, heading: string): ChecklistItem[] {
-  const lines = body.split(/\r?\n/);
-  const wanted = heading.trim().toLowerCase();
-  const start = lines.findIndex(
-    (line) =>
-      /^##(?!#)/.test(line.trim()) &&
-      line.trim().replace(/^##\s*/, "").trim().toLowerCase() === wanted,
-  );
-  if (start === -1) return [];
-
-  const items: ChecklistItem[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = (lines[i] ?? "").trim();
-    if (line === "") continue;
-    if (/^#{1,6}(\s|$)/.test(line)) break; // next section ends the list
-    const m = /^-\s+\[([ xX])\]\s*(.*)$/.exec(line);
-    if (m === null) continue;
-    items.push({ text: (m[2] ?? "").trim(), done: (m[1] ?? " ") !== " " });
-  }
-  return items;
 }
 
 // --- npc slug ----------------------------------------------------------------

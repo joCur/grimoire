@@ -71,6 +71,8 @@ export interface ChapterRow {
   rev: number;
   /** Guard token of the chapter's scene ORDER, separate from `rev`. */
   sceneOrderRev: number;
+  /** Guard token of the chapter's thread list, separate from `rev`. */
+  threadsRev: number;
 }
 
 export interface SceneRow {

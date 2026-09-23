@@ -327,6 +327,38 @@ export interface InboxResponse {
   rev: number;
 }
 
+/** One open thread — a row of a chapter's thread list. */
+export interface ThreadEntry {
+  /** The row's stable id — what a tick, an edit and a delete name it by. */
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/**
+ * THE OPEN THREADS of a chapter — every endpoint under
+ * `…/chapters/:chapter/threads` answers it: the rows in their order plus the
+ * LIST's own guard token (`chapters.threads_rev`). Not the chapter entry's
+ * `rev`: the list is not part of the entry, so writing it moves neither the
+ * chapter's text nor its guard (ADR #26, #29).
+ */
+export interface ThreadsResponse {
+  entries: ThreadEntry[];
+  rev: number;
+}
+
+/**
+ * The body of `PATCH …/chapters/:chapter/threads/:id` — tick, untick or
+ * reword ONE thread. `rev` is the list's token as it was read; a stale one
+ * is 409 `rev_conflict` carrying the current list under `threads`. At least
+ * one of `text` and `done` has to be there, otherwise 400 `nothing_to_write`.
+ */
+export interface PatchThreadRequest {
+  rev: number;
+  text?: string;
+  done?: boolean;
+}
+
 /**
  * The body of `PATCH /api/campaigns/:campaign/sessions/:id` — the timestamps
  * of a session, the only fields of it the DM edits by hand (a mistyped start,

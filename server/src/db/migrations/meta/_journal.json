@@ -22,6 +22,13 @@
       "when": 1790181315419,
       "tag": "0002_motivation_atmosphere",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790191271361,
+      "tag": "0003_open_threads",
+      "breakpoints": true
     }
   ]
 }
