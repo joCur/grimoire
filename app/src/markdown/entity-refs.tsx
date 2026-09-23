@@ -11,8 +11,11 @@
 //   * reading views — a resolved reference is a LINK to the entity view;
 //   * the live view — it is a BUTTON that opens the existing entity drawer,
 //     because leaving the live route costs the DM the selected scene and the
-//     half-typed Schnellnotiz (the same reason the aside cards stopped
+//     half-typed quick note (the same reason the aside cards stopped
 //     navigating). The live route supplies `onOpen`.
+//
+// Either way a resolved reference previews its target on hover and keyboard
+// focus (./ref-preview.tsx) — the click stays exactly what it is.
 //
 // Unresolved stays literal text: no red, no tooltip, no icon. The reference
 // simply becomes alive the moment the entity exists — without touching the
@@ -27,6 +30,8 @@ import { ENTITY_REF_KINDS, type EntityRefKind } from "@grimoire/shared/refs";
 
 import { fetchTree } from "@/api";
 import { useT, type MessageKey } from "@/i18n";
+
+import { RefPreview, useCanHover, type RefPreviewTrigger } from "./ref-preview";
 
 /** What a slug resolves to: the CURRENT display name plus where it lives. */
 export interface ResolvedEntityRef {
@@ -179,6 +184,7 @@ export function EntityRefName({ slug, fallback }: { slug: string; fallback: Reac
 export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNode }) {
   const { campaign, resolve, onOpen } = useEntityRefs();
   const t = useT();
+  const canHover = useCanHover();
   const target = resolve(slug);
 
   // Degrade: plain text, exactly as typed. Not an error, not a warning colour.
@@ -189,16 +195,35 @@ export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNod
     name: target.name,
   });
 
-  if (onOpen !== undefined) {
-    return (
-      <button type="button" onClick={() => onOpen(target.path)} aria-label={label} className={REF_CLASS}>
+  const reference = (trigger?: RefPreviewTrigger, anchor?: ReactNode) =>
+    onOpen !== undefined ? (
+      <button
+        type="button"
+        onClick={() => onOpen(target.path)}
+        aria-label={label}
+        className={REF_CLASS}
+        {...trigger}
+      >
+        {anchor}
         {target.name}
       </button>
+    ) : (
+      <Link
+        to={`/campaigns/${campaign}/entries/${target.path}`}
+        aria-label={label}
+        className={REF_CLASS}
+        {...trigger}
+      >
+        {anchor}
+        {target.name}
+      </Link>
     );
-  }
+
+  // Touch: no preview and no listeners — a tap is the click it always was.
+  if (!canHover) return reference();
   return (
-    <Link to={`/campaigns/${campaign}/entries/${target.path}`} aria-label={label} className={REF_CLASS}>
-      {target.name}
-    </Link>
+    <RefPreview campaign={campaign} target={target} nameOf={(other) => resolve(other)?.name}>
+      {reference}
+    </RefPreview>
   );
 }

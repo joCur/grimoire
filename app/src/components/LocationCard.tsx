@@ -1,26 +1,30 @@
 // Location card fed from locations/<id> — the counterpart of
 // NpcCard for the live aside: the DM needs the PLACE of the running scene as
-// readily as its people ("wo stehen wir gerade?"), and until now the scene's
-// `location` was only a line in the scene header.
+// readily as its people ("where are we right now?"), and until now the
+// scene's `location` was only a line in the scene header.
 //
 // Shown: the display name and the one line that is useful mid-sentence — the
 // first paragraph of `## Atmosphäre` when the entry has one, else the Roll20
 // page reference (plain text: the format references Roll20 by name, it never
-// links it — README).
+// links it — README). A `[[slug]]` inside that paragraph reads as the current
+// name, like in the text; the rows are the ones the hover preview of a
+// reference shows too (components/EntityCompact).
 //
 // Degradation like everywhere: while the query runs nothing is claimed, any
-// failure is a one-liner. Never an error. There is no "Ortseintrag fehlt"
-// placeholder any more: a scene's `location` names an entry that exists (the
-// reference is a foreign key), and the caller only mounts this card for an id
-// the tree knows (routes/live.tsx).
+// failure is a one-liner. Never an error. There is no "location entry
+// missing" placeholder any more: a scene's `location` names an entry that
+// exists (the reference is a foreign key), and the caller only mounts this
+// card for an id the tree knows (routes/live.tsx).
 
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
+import { LocationCompact } from "@/components/EntityCompact";
 import { useI18n } from "@/i18n";
+import { locationExcerpt } from "@/lib/entity-excerpt";
 import { propString } from "@/lib/properties";
-import { firstParagraphOfSection } from "@/lib/md-section";
+import { useEntityRefs } from "@/markdown/entity-refs";
 
 /**
  * Fallback path of a location entry — used only when the caller has no tree
@@ -45,7 +49,8 @@ export function LocationCard({
   /** Opens the live drawer instead of navigating (see EntityCardShell). */
   onOpen?: (path: string) => void;
 }) {
-  const { t, tNode } = useI18n();
+  const { tNode } = useI18n();
+  const { resolve } = useEntityRefs();
   const path = knownPath ?? locationPath(id);
   const { data, isPending, isError } = useQuery({
     queryKey: ["entry", campaign, path],
@@ -70,22 +75,10 @@ export function LocationCard({
   }
   if (data === undefined) return null;
 
-  const properties = data.properties;
-  const name = propString(properties.name) ?? id;
-  const mood = firstParagraphOfSection(data.body, "Atmosphäre");
-  const page = propString(properties["roll20-page"]);
-
+  const name = propString(data.properties.name) ?? id;
   return (
     <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-3.5">
-      <p className="mb-px font-serif text-[15px] font-semibold text-foreground">{name}</p>
-      {mood !== undefined && (
-        <p className="mt-1.5 text-[12.5px] leading-[1.5] text-body-secondary">{mood}</p>
-      )}
-      {mood === undefined && page !== undefined && (
-        <p className="mt-1.5 text-[12px] text-muted-foreground">
-          {t("locationCard.roll20", { value: page })}
-        </p>
-      )}
+      <LocationCompact name={name} excerpt={locationExcerpt(data, (slug) => resolve(slug)?.name)} />
     </EntityCardShell>
   );
 }

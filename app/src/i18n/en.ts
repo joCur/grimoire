@@ -3,9 +3,8 @@
 // typecheck.
 //
 // DM vocabulary, not a literal translation: Session · Scene · Chapter ·
-// Location · Session review (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
-// property keys stay as they are on the wire — `id`, `active`, `insight +2`
-// are data, not copy.
+// Location · Session review · Read-aloud · Handout. Ids and property keys stay
+// as they are on the wire — `id`, `active`, `insight +2` are data, not copy.
 
 import type { Messages } from "./messages";
 
@@ -801,6 +800,13 @@ export const en: Messages = {
   "npcCard.voice": "Voice",
   "locationCard.unloadable": "{id} — location not loadable, check the server.",
   "locationCard.roll20": "Roll20 page: {value}",
+
+  // --- hover preview of a `[[ref]]` (components/EntityPreview.tsx) ---------
+  // Everything else it says comes from the shared labels: `kind.*`,
+  // `status.*`, `sceneArticle.type.*`, `sceneArticle.trigger.label`,
+  // `npcCard.will.inline` and `locationCard.roll20`. Only the scene's
+  // location row has a label of its own.
+  "refPreview.scene.location": "Location",
 
   // --- entity reading view (components/EntityArticle.tsx) -------------------
   "entity.npc.statblock": "Statblock: {value}",
