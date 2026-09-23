@@ -513,7 +513,7 @@ export const en: Messages = {
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
   "npcCreate.description":
-    "Creates a new NPC with the status “unknown”; the note becomes its text. If the ID already exists, it links to that NPC instead.",
+    "Creates a new NPC with the status “unknown” and copies this note into its text. If the ID already exists, it only links to that NPC – the note is not added.",
   "npcCreate.idLabel": "ID (appears in the address)",
   "npcCreate.idPlaceholder": "npc-id",
   "npcCreate.idInvalid": "An ID needs lowercase letters, digits and single hyphens.",

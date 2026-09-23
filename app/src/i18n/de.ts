@@ -565,7 +565,7 @@ export const de = {
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
   "npcCreate.description":
-    "Legt einen neuen NPC mit dem Status „Unbekannt“ an; die Notiz wird sein Text. Gibt es die Kennung schon, wird auf diesen NPC verwiesen.",
+    "Legt einen neuen NPC mit dem Status „Unbekannt“ an und übernimmt diese Notiz in seinen Text. Gibt es die Kennung schon, wird nur auf diesen NPC verwiesen – die Notiz wird dann nicht übernommen.",
   "npcCreate.idLabel": "Kennung (steht in der Adresse)",
   "npcCreate.idPlaceholder": "id-des-npcs",
   "npcCreate.idInvalid": "Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
