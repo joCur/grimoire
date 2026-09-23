@@ -14,9 +14,10 @@
 // breadcrumb, so chapter and group for a scene, and the list name for an
 // npc/location, live here, right above the title they belong to.
 //
-// The edit action in the header turns the body into the raw markdown
-// editor — header, chips and status control keep standing, the properties are
-// not part of it. The route owns only the "which path is being edited" bit;
+// The edit action in the header turns the body into the editor — header,
+// chips and status control keep standing; of the properties it carries only
+// the prose an npc or a location keeps beside its text (`motivation`,
+// `atmosphere`). The route owns only the "which path is being edited" bit;
 // the write, the 409 and the discard guard live in EntryBodyEditor.
 //
 // The augment action is the third one: source text and/or an
@@ -24,8 +25,8 @@
 // properties per field, body per block, nothing written until accepted.
 //
 // The properties action next to it is the properties half: a form over
-// all typed fields of the kind — for the campaign entry, the dialog over its
-// name and description. It stays available while the body editor runs;
+// the typed fields of the kind, less the prose the editor carries — for the
+// campaign entry, the dialog over its name and description. It stays available while the body editor runs;
 // each of them is its own editing session, so a save from one while the other
 // stands asks what to do instead of overwriting it.
 

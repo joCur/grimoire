@@ -196,11 +196,17 @@ export const en: Messages = {
   "properties.npc.voice.hint": "What do they sound like?",
   "properties.npc.appearance.label": "Appearance",
   "properties.npc.appearance.hint": "One or two features.",
+  "properties.npc.motivation.label": "Wants",
+  "properties.npc.motivation.hint":
+    "What the character wants — the NPC card and the preview show it. [[id]] reads as a name there.",
 
   "properties.location.name.label": "Name",
   "properties.location.chapter.label": "Chapter",
   "properties.location.roll20.label": "Roll20 page",
   "properties.location.roll20.hint": "A reference to the page, not a copy of the map.",
+  "properties.location.atmosphere.label": "Atmosphere",
+  "properties.location.atmosphere.hint":
+    "How the place feels — the location card and the preview show it. [[id]] reads as a name there.",
 
   "properties.chapter.title.label": "Title",
   "properties.chapter.status.label": "Status",
@@ -540,6 +546,7 @@ export const en: Messages = {
   // --- body editor (components/EntryBodyEditor.tsx) -------------------------
   "bodyEditor.markdown.aria": "Markdown text of {path}",
   "bodyEditor.hint": "The body only — the properties stay unchanged.",
+  "bodyEditor.hint.withFields": "The body and {fields} — the other properties stay unchanged.",
   "bodyEditor.blocked": "One block still needs a decision — see the note on the block.",
   "bodyEditor.discard.title": "Discard changes?",
   "bodyEditor.discard.description":

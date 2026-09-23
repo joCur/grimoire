@@ -111,6 +111,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         quickstats: packJson(asMap(props.quickstats)),
         voice: asOptStr(props.voice),
         appearance: asOptStr(props.appearance),
+        motivation: asOptStr(props.motivation),
         body: draft.body,
       };
       // An entry the DM created and left empty is FILLED — inserting would
@@ -138,6 +139,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         name: asStr(props.name, id),
         chapterId: locationChapter,
         roll20Page: asOptStr(props["roll20-page"]),
+        atmosphere: asOptStr(props.atmosphere),
         body: draft.body,
       };
       // Fill an empty entry rather than collide with it — see the npc case.

@@ -195,6 +195,17 @@ export function reindexReferrers(tx: GrimoireDb, campaign: string, slug: string)
   }
 }
 
+/**
+ * The prose of an entry the index holds as its text: a prose PROPERTY — an
+ * npc's `motivation`, a location's `atmosphere` — ahead of the body, as its
+ * own paragraph. Both are text the DM reads on the card, so a search for a
+ * word in them finds the entry; the same `[[slug]]` expansion runs over both.
+ */
+function indexedProse(property: string | null, body: string): string {
+  const lead = property?.trim() ?? "";
+  return lead === "" ? body : `${lead}\n\n${body}`;
+}
+
 export function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: string[]): void {
   indexEntity(tx, campaign, {
     kind: "scene",
@@ -214,7 +225,7 @@ export function indexNpc(tx: GrimoireDb, campaign: string, row: NpcRow): void {
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: row.role ?? "",
-    body: expandBodyRefs(tx, campaign, row.body),
+    body: expandBodyRefs(tx, campaign, indexedProse(row.motivation, row.body)),
   });
   reindexReferrers(tx, campaign, row.id);
 }
@@ -226,7 +237,7 @@ export function indexLocation(tx: GrimoireDb, campaign: string, row: LocationRow
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: "",
-    body: expandBodyRefs(tx, campaign, row.body),
+    body: expandBodyRefs(tx, campaign, indexedProse(row.atmosphere, row.body)),
   });
   reindexReferrers(tx, campaign, row.id);
 }

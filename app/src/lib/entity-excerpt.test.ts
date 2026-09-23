@@ -23,7 +23,7 @@ const NAMES: Record<string, string> = {
 const nameOf = (slug: string): string | undefined => NAMES[slug];
 
 describe("npcExcerpt", () => {
-  test("role, voice, the first paragraph of `## Will`, quick stats and status", () => {
+  test("role, voice, the `motivation` property, quick stats and status", () => {
     const excerpt = npcExcerpt(fixture("npc-fenn"), nameOf);
     expect(excerpt.role).toBe("Anführer der Schmuggler in der Nordbucht");
     expect(excerpt.voice).toBe("leise, höflich — wird stiller, je gefährlicher es wird");
@@ -38,21 +38,28 @@ describe("npcExcerpt", () => {
     expect(excerpt.status).toBe("alive");
   });
 
-  test("a reference in `## Will` reads as the current name — no brackets", () => {
+  test("a reference in the motivation reads as the current name — no brackets", () => {
     const entry = {
-      properties: { id: "grella", name: "Grella" },
-      body: "## Will\n\nWill [[fenn]] loswerden, bevor [[niemand]] fragt.\n",
+      properties: { id: "grella", name: "Grella", motivation: "[[fenn]] loswerden, bevor [[niemand]] fragt." },
     };
-    expect(npcExcerpt(entry, nameOf).will).toBe("Will Fenn loswerden, bevor [[niemand]] fragt.");
+    expect(npcExcerpt(entry, nameOf).will).toBe("Fenn loswerden, bevor [[niemand]] fragt.");
   });
 
   test("…but a reference quoted as code stays code", () => {
-    const entry = { properties: {}, body: "## Will\n\nSchreibt `[[fenn]]` an jede Wand.\n" };
+    const entry = { properties: { motivation: "Schreibt `[[fenn]]` an jede Wand." } };
     expect(npcExcerpt(entry, nameOf).will).toBe("Schreibt `[[fenn]]` an jede Wand.");
   });
 
+  test("a `## Will` section in the body is not read — only the property is", () => {
+    const entry = {
+      properties: { id: "grella" },
+      body: "## Will\n\nDas steht im Text und bleibt Text.\n",
+    };
+    expect(npcExcerpt(entry, nameOf).will).toBeUndefined();
+  });
+
   test("an empty entry has nothing to show — every field is simply absent", () => {
-    const excerpt = npcExcerpt({ properties: { id: "leer" }, body: "" }, nameOf);
+    const excerpt = npcExcerpt({ properties: { id: "leer" } }, nameOf);
     expect(excerpt).toEqual({
       role: undefined,
       voice: undefined,
@@ -64,16 +71,24 @@ describe("npcExcerpt", () => {
 });
 
 describe("locationExcerpt", () => {
-  test("the first paragraph of `## Atmosphäre` and the Roll20 page", () => {
+  test("the `atmosphere` property and the Roll20 page", () => {
     expect(locationExcerpt(fixture("location-bucht"), nameOf)).toEqual({
       mood: "Arbeit, keine Romantik: Kisten unter Planen, ausgetretene Pfade, niemand redet laut.",
       page: "Nordbucht",
     });
   });
 
-  test("a reference in the mood line reads as the current name", () => {
-    const entry = { properties: {}, body: "## Atmosphäre\n\nHier riecht es nach [[fenn]]s Tabak.\n" };
+  test("a reference in the atmosphere reads as the current name", () => {
+    const entry = { properties: { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." } };
     expect(locationExcerpt(entry, nameOf).mood).toBe("Hier riecht es nach Fenns Tabak.");
+  });
+
+  test("a `## Atmosphäre` section in the body is not read — only the property is", () => {
+    const entry = {
+      properties: { "roll20-page": "Bucht" },
+      body: "## Atmosphäre\n\nDas steht im Text und bleibt Text.\n",
+    };
+    expect(locationExcerpt(entry, nameOf)).toEqual({ mood: undefined, page: "Bucht" });
   });
 });
 
@@ -94,7 +109,7 @@ describe("sceneExcerpt", () => {
 
   test("a location nobody knows stays as written; no trigger, no row", () => {
     const excerpt = sceneExcerpt(
-      { properties: { type: "planned", location: "irgendwo" }, body: "" },
+      { properties: { type: "planned", location: "irgendwo" } },
       () => undefined,
       nameOf,
     );
@@ -108,7 +123,7 @@ describe("sceneExcerpt", () => {
     // `fenn` is an npc for `[[…]]`; as a scene's location only the location
     // lookup answers.
     const excerpt = sceneExcerpt(
-      { properties: { location: "fenn" }, body: "" },
+      { properties: { location: "fenn" } },
       () => undefined,
       nameOf,
     );
@@ -117,7 +132,7 @@ describe("sceneExcerpt", () => {
 
   test("a reference in the trigger reads as the current name", () => {
     const excerpt = sceneExcerpt(
-      { properties: { trigger: "[[jorna]] schlägt Alarm" }, body: "" },
+      { properties: { trigger: "[[jorna]] schlägt Alarm" } },
       () => undefined,
       nameOf,
     );

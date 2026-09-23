@@ -15,6 +15,13 @@
       "when": 1789760000000,
       "tag": "0001_scene_pos_per_chapter",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790181315419,
+      "tag": "0002_motivation_atmosphere",
+      "breakpoints": true
     }
   ]
 }

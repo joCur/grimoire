@@ -212,8 +212,9 @@ function npcStub(over: { id?: string; name?: string; status?: string | null } = 
       role: "Schmugglerin mit eigenen Plänen",
       chapter: "01-salzhafen",
       ...(status === null ? {} : { status }),
+      motivation: "Im Quelltext nur erwähnt — Details fehlen.",
     },
-    body: ["## Will", "", "Im Quelltext nur erwähnt — Details fehlen.", ""].join("\n"),
+    body: ["## Weiß", "", "> [!secret] Kennt den Weg durch die Bucht.", ""].join("\n"),
   };
 }
 
@@ -229,8 +230,9 @@ function locationStub(over: { status?: string } = {}): ScriptedEntry {
       name: "Die alte Räucherkammer",
       chapter: "01-salzhafen",
       ...(over.status === undefined ? {} : { status: over.status }),
+      atmosphere: "Im Quelltext nur erwähnt — Details fehlen.",
     },
-    body: ["## Atmosphäre", "", "Im Quelltext nur erwähnt — Details fehlen.", ""].join("\n"),
+    body: ["## Wer ist hier", "", "- niemand", ""].join("\n"),
   };
 }
 
@@ -1154,7 +1156,9 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(stub.kind).toBe("npc");
     expect(stub.properties.name).toBe("Grella");
     expect(stub.properties.status).toBe("alive");
-    expect(stub.body).toContain("## Will");
+    // The prose property rode along with the proposal and was written.
+    expect(stub.properties.motivation).toBe("Im Quelltext nur erwähnt — Details fehlen.");
+    expect(stub.body).toContain("## Weiß");
   });
 
   test("409 lists all conflicting paths and writes nothing", async () => {
@@ -1307,6 +1311,10 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(await ok.json()).toEqual({
       written: ["npcs/brix", "locations/raeucherkammer"],
     });
+    // The location's prose property came through the accept as a property.
+    expect((await read("locations/raeucherkammer")).properties.atmosphere).toBe(
+      "Im Quelltext nur erwähnt — Details fehlen.",
+    );
   });
 
   test("400 on malformed bodies", async () => {

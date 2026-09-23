@@ -1,4 +1,4 @@
-// The properties form — editing ALL properties fields of one entry from the app.
+// The properties form — editing the properties fields of one entry from the app.
 // This module is the pure half: which fields a kind has, what the open form
 // starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
@@ -27,8 +27,10 @@
 import { NPC_STATUSES, type CampaignTree, type EntityKind } from "@grimoire/shared/types";
 import {
   PROPERTY_FIELDS,
+  fieldSurface,
   isPropertiesKind,
   type FieldControl,
+  type FieldSurface,
   type PropertiesKind,
   type PropertyFieldDef,
   type ReferenceSource,
@@ -58,7 +60,7 @@ import { sceneStatusOptions } from "@/lib/scene-status";
  * once for the whole repo. Re-exported here because every caller in the app
  * already imports them from this module.
  */
-export type { FieldControl, PropertiesKind, ReferenceSource };
+export type { FieldControl, FieldSurface, PropertiesKind, ReferenceSource };
 
 export interface FieldOption {
   /** What is written to the entry. */
@@ -158,11 +160,16 @@ const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
     quickstats: { label: "properties.npc.quickstats.label", hint: "properties.npc.quickstats.hint" },
     voice: { label: "properties.npc.voice.label", hint: "properties.npc.voice.hint" },
     appearance: { label: "properties.npc.appearance.label", hint: "properties.npc.appearance.hint" },
+    motivation: { label: "properties.npc.motivation.label", hint: "properties.npc.motivation.hint" },
   },
   location: {
     name: { label: "properties.location.name.label" },
     chapter: { label: "properties.location.chapter.label" },
     "roll20-page": { label: "properties.location.roll20.label", hint: "properties.location.roll20.hint" },
+    atmosphere: {
+      label: "properties.location.atmosphere.label",
+      hint: "properties.location.atmosphere.hint",
+    },
   },
   chapter: {
     title: { label: "properties.chapter.title.label" },
@@ -230,12 +237,21 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
   };
 }
 
+/**
+ * The fields of a kind that one SURFACE edits (@grimoire/shared
+ * `FieldSurface`): the properties dialog by default, or — with `"text"` — the
+ * entry's own edit surface, where a prose property the cards show is written
+ * beside the text. Undefined for a kind without a form.
+ */
 export function propertiesFieldsFor(
   kind: EntityKind,
   t: Translate,
+  surface: FieldSurface = "dialog",
 ): readonly PropertiesField[] | undefined {
   if (!isPropertiesKind(kind)) return undefined;
-  return PROPERTY_FIELDS[kind].map((def) => fieldOf(kind, def, t));
+  return PROPERTY_FIELDS[kind]
+    .filter((def) => fieldSurface(def) === surface)
+    .map((def) => fieldOf(kind, def, t));
 }
 
 /** The kind's label, used in the dialog title. */

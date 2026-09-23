@@ -391,6 +391,7 @@ function patchLocator(
         quickstats: packJson(quickstats),
         voice: asOptStr(props.voice),
         appearance: asOptStr(props.appearance),
+        motivation: asOptStr(props.motivation),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -404,6 +405,7 @@ function patchLocator(
           quickstats: next.quickstats,
           voice: next.voice,
           appearance: next.appearance,
+          motivation: next.motivation,
           body: next.body,
           rev: next.rev,
         })
@@ -426,6 +428,7 @@ function patchLocator(
         name: asStr(props.name, row.id),
         chapterId: locationChapter,
         roll20Page: asOptStr(props["roll20-page"]),
+        atmosphere: asOptStr(props.atmosphere),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -434,6 +437,7 @@ function patchLocator(
           name: next.name,
           chapterId: next.chapterId,
           roll20Page: next.roll20Page,
+          atmosphere: next.atmosphere,
           body: next.body,
           rev: next.rev,
         })

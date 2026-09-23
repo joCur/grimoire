@@ -6,14 +6,20 @@
 //
 // Reference lines (statblock, roll20-page) stay PLAIN TEXT on purpose: the
 // format references Roll20 by name, it never links or copies it (README).
+//
+// The prose properties — an npc's `motivation`, a location's `atmosphere` —
+// stand in the header, read exactly as the cards read them
+// (lib/entity-excerpt.ts): a `[[slug]]` inside reads as the current name.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel, npcStatusOf } from "@/lib/entity";
+import { locationExcerpt, npcExcerpt } from "@/lib/entity-excerpt";
 import { propQuickstats, propString } from "@/lib/properties";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { useEntityRefs } from "@/markdown/entity-refs";
 import { Markdown } from "@/markdown/Markdown";
 
 /** Reading-view title, identical to the scene article's h1. */
@@ -100,7 +106,9 @@ function NpcHeader({
   actions?: ReactNode;
 }) {
   const t = useT();
+  const { resolve } = useEntityRefs();
   const properties = entry.properties;
+  const motivation = npcExcerpt(entry, (slug) => resolve(slug)?.name).will;
   const role = propString(properties.role);
   const status = npcStatusOf(properties);
   const voice = propString(properties.voice);
@@ -129,6 +137,11 @@ function NpcHeader({
       )}
       {appearance !== undefined && (
         <p className="mt-1 text-[14px] leading-[1.6] text-body-secondary italic">{appearance}</p>
+      )}
+      {motivation !== undefined && (
+        <p className="mt-3 text-[14px] leading-[1.6] text-body">
+          <span className="text-muted-foreground">{t("npcCard.will.inline")}</span> {motivation}
+        </p>
       )}
       {quickstats.length > 0 && (
         <div className="mt-3.5 flex flex-wrap gap-1.5">
@@ -161,13 +174,17 @@ function LocationHeader({
   actions?: ReactNode;
 }) {
   const t = useT();
-  const page = propString(entry.properties["roll20-page"]);
+  const { resolve } = useEntityRefs();
+  const { mood, page } = locationExcerpt(entry, (slug) => resolve(slug)?.name);
   return (
     <header className="mb-7 border-b border-border pb-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <Title>{name}</Title>
         <ActionGroup>{actions}</ActionGroup>
       </div>
+      {mood !== undefined && (
+        <p className="mt-2 text-[14px] leading-[1.6] text-body-secondary">{mood}</p>
+      )}
       {page !== undefined && (
         <p className="mt-2 text-[12.5px] text-muted-foreground">
           {t("entity.location.roll20", { value: page })}

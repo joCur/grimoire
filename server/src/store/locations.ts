@@ -1,4 +1,4 @@
-// Orte: creating a location entry, and what "empty" means for one.
+// Locations: creating a location entry, and what "empty" means for one.
 //
 // A location is the group a scene hangs in (ADR #17), so its id is a
 // reference key long before the entry holds anything. Creating one therefore
@@ -24,6 +24,7 @@ export function isEmptyLocationRow(row: LocationRow): boolean {
     row.name === "" &&
     row.chapterId === null &&
     row.roll20Page === null &&
+    row.atmosphere === null &&
     row.body.trim() === ""
   );
 }

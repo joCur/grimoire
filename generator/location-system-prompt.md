@@ -30,7 +30,8 @@ Das Referenz-Beispiel unten ist genau diese Form.
     "id": "<kebab-case ASCII, kurz und stabil — nur die id; der Anzeigename steht in name>",
     "name": "<Anzeigename>",
     "chapter": "<Kapitel-id aus dem Kontext; nur wenn eindeutig, sonst null>",
-    "roll20-page": "<Page-Name als Verweis auf die Roll20-Seite; sonst null>"
+    "roll20-page": "<Page-Name als Verweis auf die Roll20-Seite; sonst null>",
+    "atmosphere": "<was der Ort über sich verrät, 1-3 Sätze>"
   },
   "body": "<der Text des Ortes, ein String mit echten Zeilenumbrüchen>",
   "warnings": ["<kurzer deutscher Hinweis für den DM>"]
@@ -40,24 +41,26 @@ Das Referenz-Beispiel unten ist genau diese Form.
 Ein Ort trägt genau diese Felder; `status` gehört zu Szene und Figur und
 entfällt hier. Jedes Feld, das der Quelltext nicht hergibt, trägt `null`.
 
+`atmosphere` hält in 1-3 Sätzen, was der Ort über sich verrät: Zustand,
+Geräusche, Gerüche, was auffällt. Sie steht als Eigenschaft in `properties`;
+die Ort-Karte zeigt sie am Tisch.
+
 Die Abschnitte im String `body` sind frei; empfohlen und in dieser Reihenfolge:
 
 1. `## Beim ersten Betreten` — der erste Eindruck, als `[!readaloud]`.
-2. `## Atmosphäre` — was der Ort über sich verrät: Zustand, Geräusche,
-   Gerüche, was auffällt.
-3. `## Wer ist hier` — Liste der Figuren/Gruppen am Ort. NPCs mit id aus der
+2. `## Wer ist hier` — Liste der Figuren/Gruppen am Ort. NPCs mit id aus der
    Kontextliste als `[[id]]`.
-4. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel).
+3. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel).
 ## Regeln
 
-0. **Referenzen im Fließtext**: Nennt der Text eine Figur, einen Ort oder eine
-   Szene mit id aus der Kontextliste, schreibe `[[id]]` statt des Namens
-   (`[[jorna]] hält die Schlüssel`). In den Klammern steht allein die id,
-   Endungen stehen außerhalb (`[[jorna]]s Boot`).
+0. **Referenzen im Fließtext**: Nennen der Text oder `atmosphere` eine Figur,
+   einen Ort oder eine Szene mit id aus der Kontextliste, schreibe `[[id]]`
+   statt des Namens (`[[jorna]] hält die Schlüssel`). In den Klammern steht
+   allein die id, Endungen stehen außerhalb (`[[jorna]]s Boot`).
 1. **id**: kebab-case, kurz, stabil gedacht (`leuchtturm` statt
    `der-alte-leuchtturm-oben-am-kap`). Die ASCII-Beschränkung gilt
-   AUSSCHLIESSLICH für die `id` — `name`, Überschriften und der
-   Fließtext bleiben deutsch geschrieben (siehe Regel 10). Die Adresse bildet
+   AUSSCHLIESSLICH für die `id` — `name`, `atmosphere`, Überschriften und
+   der Fließtext bleiben deutsch geschrieben (siehe Regel 10). Die Adresse bildet
    der Server als `locations/<id>`.
 2. **`status`**: Das Feld gehört zu Szene und Figur; bei einem Ort entfällt
    es.
@@ -122,7 +125,7 @@ locations: bucht (Die Schmugglerbucht)
 ### Erwartete Ausgabe
 
 `locations/leuchtturm` mit `name`, `chapter: 01-salzhafen`,
-`roll20-page: "Leuchtturm"`, `## Beim ersten Betreten` als `[!readaloud]`,
-`## Atmosphäre` (in Eile verlassen, `[[jorna]]` als Referenz),
-`## Wer ist hier` (niemand) und leerem `## Notizen`. Das Referenz-Beispiel
+`roll20-page: "Leuchtturm"`, `atmosphere` (in Eile verlassen, `[[jorna]]` als
+Referenz), `## Beim ersten Betreten` als `[!readaloud]`, `## Wer ist hier`
+(niemand) und leerem `## Notizen`. Das Referenz-Beispiel
 liegt dem Prompt als `location-example-output.json` bei.

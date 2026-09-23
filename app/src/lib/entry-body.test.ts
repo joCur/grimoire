@@ -1,10 +1,10 @@
-// The one rule of the reading view's edit mode: whether there is something to
-// save. The write itself is the shared editing session
+// The rules of the reading view's edit mode: whether there is something to
+// save, and what one save carries. The write itself is the shared editing session
 // (lib/use-entry-edit.ts), so nothing here talks to the server.
 
 import { describe, expect, test } from "bun:test";
 
-import { hasBodyChanges } from "./entry-body";
+import { bodyEditorWrite, hasBodyChanges } from "./entry-body";
 
 describe("hasBodyChanges", () => {
   test("identical text is nothing to save", () => {
@@ -18,5 +18,22 @@ describe("hasBodyChanges", () => {
 
   test("edited text is a change", () => {
     expect(hasBodyChanges("Text.\n", "Anderer Text.\n")).toBe(true);
+  });
+});
+
+describe("bodyEditorWrite", () => {
+  test("only the halves that changed travel — an untouched text stays out", () => {
+    expect(bodyEditorWrite("Text.\n", "Text.\n", {})).toEqual({});
+    expect(bodyEditorWrite("Text.\n", "Neu.\n", {})).toEqual({ body: "Neu.\n" });
+    expect(bodyEditorWrite("Text.\n", "Text.\n", { motivation: "Ruhe." })).toEqual({
+      properties: { motivation: "Ruhe." },
+    });
+  });
+
+  test("text and prose property together are ONE write; `null` clears the field", () => {
+    expect(bodyEditorWrite("Alt.\n", "Neu.\n", { motivation: null })).toEqual({
+      body: "Neu.\n",
+      properties: { motivation: null },
+    });
   });
 });

@@ -21,6 +21,12 @@
 // reloading adopts the stored entry, forcing writes only the fields this
 // request carries, so the other writer's properties survive a forced text save.
 //
+// An npc and a location keep one prose PROPERTY beside their text —
+// `motivation` and `atmosphere` (ADR #29) — and the edit surface carries it:
+// set, cleared, saved in the same write as the text, and under the same
+// guard, so the conflict line and both of its answers hold for it too. The
+// properties dialog does not show it.
+//
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
 // open editor down.
@@ -400,11 +406,11 @@ test("a forced save writes only the text — the other writer's status survives"
   );
 });
 
-// No dialog of the app edits fields and text in the same save today (the
-// properties dialog sends `properties`, the body editor and the chapter text
-// dialog send `body`), so the pair in ONE request is asserted where it lives:
-// on the write path itself. One PATCH, one transaction, ONE step of the
-// version — how much a request carried is not readable from `rev`.
+// The pair in ONE request is asserted here on the write path itself, for a
+// scene (whose edit surface sends `body` alone); the npc's edit surface, which
+// sends text and motivation together, has its own cases below. One PATCH, one
+// transaction, ONE step of the version — how much a request carried is not
+// readable from `rev`.
 test("properties and body in ONE write are one version step", async ({ api }) => {
   const opened = await api.entry(SCENE);
   const before = { properties: opened.properties, body: opened.body };
@@ -653,4 +659,154 @@ test("the glossary is written as a list, on its own page", async ({ page, api })
   await page.goto("/campaigns/beispiel/glossary");
   await expect(page.getByText("Gezeitenwatt")).toBeVisible();
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
+});
+
+// --- the prose property beside the text ---------------------------------------
+
+/** The motivation field of the npc edit surface („Will“). */
+function motivationField(page: Page) {
+  return page.getByRole("textbox", { name: "Will", exact: true });
+}
+
+test("the npc edit surface carries the motivation: set with the text, cleared with null", async ({
+  page,
+  api,
+}) => {
+  const before = await split(api, NPC);
+  const mine = "Das Leuchtfeuer brennen sehen — und [[fenn]] endlich zur Rede stellen.";
+
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await openMarkdownEditor(page);
+  const field = motivationField(page);
+  await expect(field).toHaveValue(String(before.properties.motivation));
+  await expect(
+    page.getByText("Textkörper und Will — die übrigen Eigenschaften bleiben unverändert."),
+  ).toBeVisible();
+
+  // A field change alone is something to save.
+  const save = page.getByRole("button", { name: "Speichern" });
+  await expect(save).toBeDisabled();
+  await field.fill(mine);
+  await expect(save).toBeEnabled();
+  await save.click();
+
+  // Rendered in the header, the reference as the current name.
+  await expect(field).toHaveCount(0);
+  const article = page.getByRole("article");
+  await expect(article).toContainText("und Fenn endlich zur Rede stellen");
+  await expect(article).not.toContainText("[[fenn]]");
+  const saved = await split(api, NPC);
+  expect(saved.properties).toEqual({ ...before.properties, motivation: mine });
+  // The text was not touched, so it was not sent.
+  expect(saved.body).toBe(before.body);
+
+  // Emptying the field DELETES the key — no empty value stays behind.
+  await openMarkdownEditor(page);
+  await motivationField(page).fill("");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(motivationField(page)).toHaveCount(0);
+  await expect.poll(async () => Object.hasOwn(await api.properties(NPC), "motivation")).toBe(false);
+  await expect(article).not.toContainText("zur Rede stellen");
+});
+
+test("the location edit surface carries the atmosphere; the properties dialog shows neither", async ({
+  page,
+  api,
+}) => {
+  const LOCATION = "locations/leuchtturm";
+  const before = await split(api, LOCATION);
+  const mine = "Kaltes Lampenöl, und der Wind pfeift durch die Wendeltreppe.";
+
+  await page.goto(`/campaigns/beispiel/entries/${LOCATION}`);
+  // Not in the dialog: it is edited where the prose is edited.
+  await page.getByRole("button", { name: "Eigenschaften" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Ort: Eigenschaften");
+  await expect(dialog.getByRole("textbox", { name: "Atmosphäre" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await openMarkdownEditor(page);
+  const field = page.getByRole("textbox", { name: "Atmosphäre", exact: true });
+  await expect(field).toHaveValue(String(before.properties.atmosphere));
+  await field.fill(mine);
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(field).toHaveCount(0);
+  await expect(page.getByRole("article")).toContainText(mine);
+  expect((await split(api, LOCATION)).properties.atmosphere).toBe(mine);
+
+  // …and the npc's dialog leaves the motivation out the same way.
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.getByRole("button", { name: "Eigenschaften" }).click();
+  await expect(page.getByRole("dialog")).toContainText("NPC: Eigenschaften");
+  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Will" })).toHaveCount(0);
+});
+
+test("text and motivation share the guard: a second write is the conflict line — „Neu laden“ takes the stored state", async ({
+  page,
+  api,
+}) => {
+  const before = await split(api, NPC);
+  const theirs = "Die Hafenkasse retten, koste es, was es wolle.";
+
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await openMarkdownEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await motivationField(page).fill("Meine Fassung der Motivation.");
+  await textarea.fill(`${before.body}
+Meine Zeile.
+`);
+
+  // Somebody else writes the motivation while the surface stands.
+  await api.patchProperties(NPC, { motivation: theirs });
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  const conflicted = conflict(page);
+  await expect(conflicted.line).toBeVisible();
+  // Nothing of the draft was written.
+  expect((await split(api, NPC)).properties.motivation).toBe(theirs);
+  expect((await split(api, NPC)).body).toBe(before.body);
+
+  // Reloading drops BOTH halves of the draft for the stored state.
+  await conflicted.reload.click();
+  await expect(conflicted.line).toHaveCount(0);
+  await expect(motivationField(page)).toHaveValue(theirs);
+  await expect(textarea).toHaveValue(before.body);
+  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+});
+
+test("„Trotzdem speichern“ writes text and motivation — a foreign status survives", async ({
+  page,
+  api,
+}) => {
+  const before = await split(api, NPC);
+  const mine = "Trotz allem das Leuchtfeuer.";
+  const line = "Trotz des Statuswechsels gespeichert.";
+
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await openMarkdownEditor(page);
+  await motivationField(page).fill(mine);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await textarea.fill(`${before.body}
+${line}
+`);
+
+  // A pure properties write of a second writer is a conflict all the same.
+  await api.patchProperties(NPC, { status: "missing" });
+  await page.getByRole("button", { name: "Speichern" }).click();
+  const conflicted = conflict(page);
+  await expect(conflicted.line).toBeVisible();
+
+  await conflicted.force.click();
+  await expect(textarea).toHaveCount(0);
+  await expect(conflicted.line).toHaveCount(0);
+
+  await expect.poll(async () => (await api.properties(NPC)).motivation).toBe(mine);
+  const after = await split(api, NPC);
+  expect(after.body).toBe(`${before.body}
+${line}
+`);
+  // Only what the surface shows was written: the status set in between stays.
+  expect(after.properties).toEqual({ ...before.properties, motivation: mine, status: "missing" });
+  await expect(page.getByRole("article")).toContainText(mine);
 });

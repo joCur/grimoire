@@ -17,11 +17,14 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
   ASCII_QUOTE_LINE,
+  LOCATION_STUB_ATMOSPHERE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
   NPC_DEFAULT_NAME,
+  NPC_MOTIVATION,
   NPC_ROLE,
   NPC_STUB_ID,
+  NPC_STUB_MOTIVATION,
   NPC_STUB_NAME,
   SCENE_ID,
   SCENE_TITLE,
@@ -162,6 +165,11 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   expect(scene.body).toContain("> [!loot]");
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).status).toBe("alive");
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).status).toBeUndefined();
+  // The prose properties the model proposed rode along with each entry.
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).motivation).toBe(NPC_STUB_MOTIVATION);
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).atmosphere).toBe(
+    LOCATION_STUB_ATMOSPHERE,
+  );
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (ADR #17).
@@ -289,6 +297,24 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   // Quoted quickstats survive as strings — the plus is still there.
   await expect(card).toContainText("insight +1");
   await expect(card.locator("[data-callout='secret']")).toContainText("Hat gesehen");
+  // The motivation is a property of the draft, shown like on the NPC card —
+  // its `[[fenn]]` as the current name.
+  await expect(card).toContainText("Will: Dass die Boote wieder sicher rausfahren können");
+  await expect(card).toContainText("traut Fenn nicht");
+
+  // „Bearbeiten" offers it beside the text, where the entry editor does —
+  // and an edit there is part of the properties half the accept writes.
+  await card.getByRole("button", { name: "Bearbeiten" }).click();
+  const text = card.getByRole("region", { name: "Text" });
+  const motivation = text.getByRole("textbox", { name: "Will", exact: true });
+  await expect(motivation).toHaveValue(NPC_MOTIVATION);
+  await expect(
+    card.getByRole("region", { name: "Eigenschaften" }).getByRole("textbox", { name: "Will" }),
+  ).toHaveCount(0);
+  const edited = `${NPC_MOTIVATION} Und er will seinen Bruder zurück.`;
+  await motivation.fill(edited);
+  await motivation.blur();
+  await expect(page.getByText("Gespeichert")).toBeVisible();
 
   expect(await api.exists("npcs/brakk")).toBe(false);
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
@@ -299,6 +325,9 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   expect(npc.status).toBe("alive");
   // Quoted quickstats stay STRINGS — a relative value is not read as a number.
   expect(npc.quickstats).toMatchObject({ insight: "+1" });
+  // The edited motivation, as a property — the text carries no `## Will`.
+  expect(npc.motivation).toBe(edited);
+  expect(await api.body("npcs/brakk")).not.toContain("## Will");
 
   // "NPC ansehen" opens the entry that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();

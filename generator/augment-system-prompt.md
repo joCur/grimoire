@@ -60,8 +60,9 @@ gepflegt hat.
 9. **Glossar** strikt nutzen. Regelbegriffe (Checks, Skills, Conditions,
    advantage/disadvantage, DCs) bleiben Englisch.
 10. **Referenzen im Fließtext**: NPCs, Orte und Szenen mit id aus der
-   Kontextliste als `[[id]]` schreiben — auch in den Teilen, die du neu
-   schreibst. In den Klammern steht allein die id, Endungen stehen außerhalb.
+   Kontextliste als `[[id]]` schreiben — im Text wie in `motivation` und
+   `atmosphere`, auch in den Teilen, die du neu schreibst. In den Klammern
+   steht allein die id, Endungen stehen außerhalb.
 11. **Warnings**: kurze deutsche Hinweise für den DM — geänderte Stellen
    (Regel 3), Lücken im Quelltext, Figuren ohne id.
 12. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche

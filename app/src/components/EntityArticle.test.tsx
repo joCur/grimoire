@@ -87,6 +87,14 @@ describe("EntityArticle — npc", () => {
     expect(html).not.toContain("Statblock");
   });
 
+  test("the motivation property stands in the header, labelled like the card", () => {
+    const html = render(
+      entry("npc", { id: "jorna", name: "Jorna", motivation: "Das Leuchtfeuer muss brennen." }),
+    );
+    expect(html).toContain("Will:");
+    expect(html).toContain("Das Leuchtfeuer muss brennen.");
+  });
+
   test("a nameless npc entry falls back to the path", () => {
     const html = render(entry("npc", {}, ""));
     expect(html).toContain("npcs/x");
@@ -106,6 +114,13 @@ describe("EntityArticle — location and titled entities", () => {
     expect(html).toContain("Roll20-Seite: Leuchtturm");
     expect(html).toContain("Verlassen in Eile.");
     expect(html).not.toContain("Geplante Szene");
+  });
+
+  test("the atmosphere property stands in the header", () => {
+    const html = render(
+      entry("location", { id: "kai", name: "Der Kai", atmosphere: "Nebel, Möwen, nasses Holz." }),
+    );
+    expect(html).toContain("Nebel, Möwen, nasses Holz.");
   });
 
   test("chapter renders title plus body", () => {

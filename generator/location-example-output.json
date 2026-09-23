@@ -3,8 +3,9 @@
     "id": "leuchtturm",
     "name": "Der Leuchtturm über Salzhafen",
     "chapter": "01-salzhafen",
-    "roll20-page": "Leuchtturm"
+    "roll20-page": "Leuchtturm",
+    "atmosphere": "Verlassen in Eile, nicht im Kampf: nichts ist umgeworfen, aber alles stehen gelassen. [[jorna]] hat den Turm zuletzt vor drei Tagen besetzt gesehen."
   },
-  "body": "## Beim ersten Betreten\n\n> [!readaloud] Drinnen riecht es nach kaltem Lampenöl und Salz. Die\n> Wendeltreppe verliert sich im Dunkel über euch, und auf dem Tisch\n> steht eine halb gegessene Mahlzeit — seit Tagen unberührt.\n\n## Atmosphäre\n\nVerlassen in Eile, nicht im Kampf: nichts ist umgeworfen, aber alles\nstehen gelassen. [[jorna]] hat den Turm zuletzt vor drei Tagen besetzt\ngesehen.\n\n## Wer ist hier\n\n- niemand — genau das ist das Problem\n\n## Notizen\n\n<!-- wird von der App im Review-Schritt befüllt -->\n",
+  "body": "## Beim ersten Betreten\n\n> [!readaloud] Drinnen riecht es nach kaltem Lampenöl und Salz. Die\n> Wendeltreppe verliert sich im Dunkel über euch, und auf dem Tisch\n> steht eine halb gegessene Mahlzeit — seit Tagen unberührt.\n\n## Wer ist hier\n\n- niemand — genau das ist das Problem\n\n## Notizen\n\n<!-- wird von der App im Review-Schritt befüllt -->\n",
   "warnings": []
 }

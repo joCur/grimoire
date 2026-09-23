@@ -177,7 +177,7 @@ test("reading view: hovering a reference previews its target, per kind", async (
   expect(tooltipId).not.toBeNull();
   await expect(jorna).toHaveAttribute("aria-describedby", tooltipId ?? "");
 
-  // Location: name and the first paragraph of `## Atmosphäre`, no status.
+  // Location: name and its `atmosphere` property, no status.
   // Only ever ONE preview is open.
   await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().hover();
   await expect(tooltip).toHaveCount(1);
@@ -254,17 +254,25 @@ test("a reference inside an excerpt reads as the name — in the preview and on 
   page,
   api,
 }) => {
-  const body = await api.body("npcs/jorna");
-  await api.writeBody(
-    "npcs/jorna",
-    body.replace("Das Leuchtfeuer muss", "Das Leuchtfeuer auf [[leuchtturm]] muss"),
-  );
+  // The excerpt is the `motivation` PROPERTY. A `## Will` section written into
+  // the body next to it is free text and shows on neither surface.
+  const { properties, body } = await api.entry("npcs/jorna");
+  await api.patchEntry("npcs/jorna", {
+    properties: {
+      motivation: String(properties.motivation).replace(
+        "Das Leuchtfeuer muss",
+        "Das Leuchtfeuer auf [[leuchtturm]] muss",
+      ),
+    },
+    body: `\n## Will\n\nNur im Text, nie auf der Karte.\n${body}`,
+  });
   await page.goto(SCENE_URL);
 
   // The scene aside's NPC card (callouts are asides too — hence the filter).
   const aside = page.locator("aside").filter({ hasText: "NPCs dieser Szene" });
   await expect(aside).toContainText("Das Leuchtfeuer auf Der Leuchtturm von Salzhafen muss");
   await expect(aside).not.toContainText("[[leuchtturm]]");
+  await expect(aside).not.toContainText("Nur im Text");
 
   // The preview: the same excerpt, and the name in it is TEXT — no link, and
   // hovering it opens nothing further.
@@ -272,7 +280,33 @@ test("a reference inside an excerpt reads as the name — in the preview and on 
   const tooltip = page.getByRole("tooltip");
   await expect(tooltip).toContainText("Das Leuchtfeuer auf Der Leuchtturm von Salzhafen muss");
   await expect(tooltip).not.toContainText("[[leuchtturm]]");
+  await expect(tooltip).not.toContainText("Nur im Text");
   await expect(tooltip.getByRole("link")).toHaveCount(0);
+});
+
+test("a location's atmosphere is the property: a `## Atmosphäre` section does not change it", async ({
+  page,
+  api,
+}) => {
+  const { body } = await api.entry("locations/leuchtturm");
+  await api.patchEntry("locations/leuchtturm", {
+    properties: { atmosphere: "Kalt, still — [[jorna]] war zuletzt hier." },
+    body: `\n## Atmosphäre\n\nNur im Text, nie in der Vorschau.\n${body}`,
+  });
+  await page.goto(SCENE_URL);
+
+  await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().hover();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toContainText(`Kalt, still — ${JORNA} war zuletzt hier.`);
+  await expect(tooltip).not.toContainText("Nur im Text");
+
+  // Emptied, the preview falls back to the Roll20 page — the section in the
+  // body still does not stand in.
+  await api.patchProperties("locations/leuchtturm", { atmosphere: null });
+  await page.reload();
+  await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().hover();
+  await expect(tooltip).toContainText("Roll20-Seite: Leuchtturm");
+  await expect(tooltip).not.toContainText("Nur im Text");
 });
 
 test("session view: previews in the scene column and in the drawer; the click opens the drawer", async ({

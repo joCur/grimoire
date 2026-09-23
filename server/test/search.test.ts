@@ -246,6 +246,27 @@ describe("the index follows every write", () => {
     expect(results[0]).toMatchObject({ kind: "npc", id: "fenn", title: "Bucht-Kapitaen Fenn" });
   });
 
+  test("motivation and atmosphere are indexed, and a patch re-indexes them", async () => {
+    // The seeded values: jorna's motivation names the autumn convoys, the
+    // cove's atmosphere says there is no romance there.
+    expect((await search("Herbstkonvois")).some((r) => r.kind === "npc" && r.id === "jorna")).toBe(
+      true,
+    );
+    expect((await search("Romantik")).some((r) => r.kind === "location" && r.id === "bucht")).toBe(
+      true,
+    );
+
+    const entry = await readEntry("npcs/jorna");
+    const res = await app.request(entriesUrl("beispiel", "npcs/jorna"), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rev: entry.rev, properties: { motivation: "Die Sturmflut überstehen." } }),
+    });
+    expect(res.status).toBe(200);
+    expect((await search("Sturmflut")).some((r) => r.id === "jorna")).toBe(true);
+    expect((await search("Herbstkonvois")).some((r) => r.id === "jorna")).toBe(false);
+  });
+
   test("a properties patch does not un-index an npc's relationship note", async () => {
     // ONE rule for the indexed text of an npc: the whole entry. A status
     // change must not drop `## Beziehungen` out of the index.

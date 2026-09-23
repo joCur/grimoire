@@ -85,6 +85,7 @@ import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
 import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
 import { npcStatusLabel, npcStatusOf } from "@/lib/entity";
+import { npcExcerpt } from "@/lib/entity-excerpt";
 import { propQuickstats, propString, propStringArray } from "@/lib/properties";
 import { sceneStatusMeta, sceneStatusOf } from "@/lib/scene-status";
 import {
@@ -120,6 +121,7 @@ import { promptKnowledgeCount } from "@/lib/entry-list";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
+import { useEntityRefs } from "@/markdown/entity-refs";
 import { Markdown } from "@/markdown/Markdown";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
@@ -1806,8 +1808,8 @@ function PartActions({
  * The generated NPC entry as a card: the generator's own card
  * chrome (title, status pill, edit toggle, mono target path) with the NPC
  * facts of the reading view above the body — role, voice, appearance,
- * quickstats chips, statblock reference, in the same vocabulary and with the
- * same helpers as EntityArticle's NPC header. The presentation is
+ * motivation, quickstats chips, statblock reference, in the same vocabulary
+ * and with the same helpers as EntityArticle's NPC header. The presentation is
  * rebuilt here rather than reused wholesale on purpose: EntityArticle takes a
  * EntryResponse of an entry that EXISTS, and nothing is written yet.
  *
@@ -1836,11 +1838,13 @@ function NpcDraftCard({
   onFlush: () => void;
 }) {
   const t = useT();
+  const { resolve } = useEntityRefs();
   const name = propString(properties.name) ?? path;
   const status = npcStatusOf(properties);
   const role = propString(properties.role);
   const voice = propString(properties.voice);
   const appearance = propString(properties.appearance);
+  const motivation = npcExcerpt({ properties }, (slug) => resolve(slug)?.name).will;
   const statblock = propString(properties.statblock);
   const quickstats = propQuickstats(properties.quickstats);
   const editorId = `gen-draft-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
@@ -1872,6 +1876,11 @@ function NpcDraftCard({
         )}
         {appearance !== undefined && (
           <p className="mt-1 text-[14px] leading-[1.6] text-body-secondary italic">{appearance}</p>
+        )}
+        {motivation !== undefined && (
+          <p className="mt-3 text-[14px] leading-[1.6] text-body">
+            <span className="text-muted-foreground">{t("npcCard.will.inline")}</span> {motivation}
+          </p>
         )}
         {quickstats.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">

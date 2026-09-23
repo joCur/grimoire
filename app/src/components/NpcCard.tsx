@@ -1,9 +1,10 @@
-// NPC card fed from npcs/<id> — voice, "Will" (first paragraph of the
-// `## Will` section) and quickstats, exactly those three per UI-BRIEF.
+// NPC card fed from npcs/<id> — voice, the motivation (the `motivation`
+// property, labelled "Will") and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
-// badge and labeled rows) and the live aside ("compact", inline "Will:" — the
-// same rows the hover preview of a reference shows, components/EntityCompact).
-// A `[[slug]]` inside "Will" reads as the current name, like in the text.
+// badge and labeled rows) and the live aside ("compact", the label inline —
+// the same rows the hover preview of a reference shows,
+// components/EntityCompact). A `[[slug]]` inside the motivation reads as the
+// current name, like in the text; the body is not read at all.
 // The whole card links to the NPC reading view — UNLESS the caller
 // passes `onOpen`: in the live mode the card must not navigate
 // away from the running session, it opens the detail drawer instead. Same

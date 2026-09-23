@@ -35,8 +35,9 @@ export const NPC_KEYS = [
   "quickstats",
   "voice",
   "appearance",
+  "motivation",
 ] as const;
-export const LOCATION_KEYS = ["id", "name", "chapter", "roll20-page"] as const;
+export const LOCATION_KEYS = ["id", "name", "chapter", "roll20-page", "atmosphere"] as const;
 export const CHAPTER_KEYS = ["id", "title", "status"] as const;
 export const CAMPAIGN_KEYS = ["id", "name", "description"] as const;
 /**

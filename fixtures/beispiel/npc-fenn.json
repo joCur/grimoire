@@ -13,7 +13,8 @@
       "passive-perception": 13
     },
     "voice": "leise, höflich — wird stiller, je gefährlicher es wird",
-    "appearance": "salzverkrustete Lederjacke, Silberring am Daumen"
+    "appearance": "salzverkrustete Lederjacke, Silberring am Daumen",
+    "motivation": "Den Auftrag zu Ende bringen, ohne dass jemand stirbt — er ist Schmuggler, kein Mörder, und das ist sein wunder Punkt."
   },
-  "body": "\n## Will\n\nDen Auftrag zu Ende bringen, ohne dass jemand stirbt — er ist\nSchmuggler, kein Mörder, und das ist sein wunder Punkt.\n\n## Weiß\n\n> [!secret] Kennt den Namen des Auftraggebers, nennt ihn aber nur,\n> wenn sein Ausstieg gesichert ist.\n\n## Beziehungen\n\n- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus\n\n## Notizen\n\n<!-- wird von der App im Review-Schritt befüllt -->\n"
+  "body": "\n## Weiß\n\n> [!secret] Kennt den Namen des Auftraggebers, nennt ihn aber nur,\n> wenn sein Ausstieg gesichert ist.\n\n## Beziehungen\n\n- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus\n\n## Notizen\n\n<!-- wird von der App im Review-Schritt befüllt -->\n"
 }

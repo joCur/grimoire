@@ -8,8 +8,8 @@
 // passive popover at a reference. Absent fields are left out — no placeholder.
 //
 // `clamp` is the preview's: there the description is a glimpse, never the
-// whole paragraph, so "Will" and "Atmosphäre" stop after four lines with an
-// ellipsis. The aside card shows them in full.
+// whole paragraph, so the motivation and the atmosphere stop after four lines
+// with an ellipsis. The aside card shows them in full.
 
 import { useT } from "@/i18n";
 import type { LocationExcerpt, NpcExcerpt } from "@/lib/entity-excerpt";

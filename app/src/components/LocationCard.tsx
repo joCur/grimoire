@@ -4,11 +4,11 @@
 // scene's `location` was only a line in the scene header.
 //
 // Shown: the display name and the one line that is useful mid-sentence — the
-// first paragraph of `## Atmosphäre` when the entry has one, else the Roll20
-// page reference (plain text: the format references Roll20 by name, it never
-// links it — README). A `[[slug]]` inside that paragraph reads as the current
-// name, like in the text; the rows are the ones the hover preview of a
-// reference shows too (components/EntityCompact).
+// `atmosphere` property when the entry has one, else the Roll20 page
+// reference (plain text: the format references Roll20 by name, it never links
+// it — README). A `[[slug]]` inside the atmosphere reads as the current name,
+// like in the text; the rows are the ones the hover preview of a reference
+// shows too (components/EntityCompact).
 //
 // Degradation like everywhere: while the query runs nothing is claimed, any
 // failure is a one-liner. Never an error. There is no "location entry

@@ -18,8 +18,9 @@
 // Two of them carry the default rule with them, because it is the rule the
 // whole feature turns on: by default only empty and new units are accepted,
 // and a filled one is never silently replaced. The npc reply therefore
-// proposes a mix — two fields the entry has nothing in, two it already has —
-// and the spec checks the PRESELECTION, not just the outcome.
+// proposes a mix — three fields the entry has nothing in (the motivation
+// among them, a property like any other), two it already has — and the spec
+// checks the PRESELECTION, not just the outcome.
 //
 // Nothing is mocked but the model (fixtures/stub-llm.ts): a real job on a
 // real server, the real OpenAICompatProvider, the real write path with its
@@ -33,11 +34,11 @@ import type { Page } from "@playwright/test";
 
 import {
   AUGMENT_NPC_NAME,
+  AUGMENT_NPC_MOTIVATION,
   AUGMENT_NPC_ROLE,
   AUGMENT_NPC_SECRET,
   AUGMENT_NPC_STATUS,
   AUGMENT_NPC_VOICE,
-  AUGMENT_NPC_WILL,
   AUGMENT_THREAD_CONDITION,
   AUGMENT_THREAD_TEXT,
   TRIGGER,
@@ -104,10 +105,12 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   // The server job finishes and the review takes the dialog over.
   await expect(page.getByText("Vorhanden").first()).toBeVisible({ timeout: 30_000 });
 
-  // The defaults: `role` and `voice` are holes -> new, preselected for
-  // acceptance; `name` and `status` already carry a value -> changed, KEPT.
+  // The defaults: `role`, `voice` and `motivation` are holes -> new,
+  // preselected for acceptance; `name` and `status` already carry a value ->
+  // changed, KEPT.
   await expectDecision(page, "role", "Neu", "Übernehmen");
   await expectDecision(page, "voice", "Neu", "Übernehmen");
+  await expectDecision(page, "motivation", "Neu", "Übernehmen");
   await expectDecision(page, "name", "Geändert", "Behalten");
   await expectDecision(page, "status", "Geändert", "Behalten");
   // The two-column diff really shows both sides.
@@ -115,9 +118,11 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await expect(fieldRow(page, "role")).toContainText(AUGMENT_NPC_ROLE);
   await expect(fieldRow(page, "name")).toContainText(AUGMENT_NPC_NAME);
 
+  await expect(fieldRow(page, "motivation")).toContainText(AUGMENT_NPC_MOTIVATION);
+
   // The body is empty, so every proposed block is an addition — preselected.
-  const willBlock = page.locator("li").filter({ hasText: AUGMENT_NPC_WILL }).last();
-  await expect(willBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+  const secretBlock = page.locator("li").filter({ hasText: "Meldet" }).last();
+  await expect(secretBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -132,7 +137,8 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   const npc = await api.entry(NPC_PATH);
   expect(npc.properties.role).toBe(AUGMENT_NPC_ROLE);
   expect(npc.properties.voice).toBe(AUGMENT_NPC_VOICE);
-  expect(npc.body).toContain(AUGMENT_NPC_WILL);
+  expect(npc.properties.motivation).toBe(AUGMENT_NPC_MOTIVATION);
+  expect(npc.body).not.toContain("## Will");
   expect(npc.body).toContain("> [!secret]");
   // … and what the entry already carried was NOT silently replaced.
   expect(npc.properties.name).toBe(EMPTY_NPC);
@@ -142,9 +148,10 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   // The job is gone with the same transaction.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 
-  // Path 2: the reading view shows the filled entry at once — the callout
-  // renders as a callout and the `[[fenn]]` inside it resolves.
-  await expect(page.getByText(AUGMENT_NPC_WILL)).toBeVisible();
+  // Path 2: the reading view shows the filled entry at once — the motivation
+  // in the header, the callout as a callout with the `[[fenn]]` inside it
+  // resolved.
+  await expect(page.getByText(AUGMENT_NPC_MOTIVATION)).toBeVisible();
   const secret = page.locator("[data-callout='secret']");
   await expect(secret).toContainText("Meldet");
   await expect(secret.getByRole("link", { name: /NPC:/ })).toBeVisible();
@@ -383,14 +390,14 @@ test.describe("at 390px (critical path 8)", () => {
     await createEmptyNpc(api);
     // What a desktop augment run leaves behind, written through the ordinary
     // API — the phone's job is to READ the result, not to review a diff.
-    await api.writeBody(
-      NPC_PATH,
-      `\n## Will\n\n${AUGMENT_NPC_WILL}\n\n## Weiß\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
-    );
+    await api.patchEntry(NPC_PATH, {
+      properties: { motivation: AUGMENT_NPC_MOTIVATION },
+      body: `\n## Weiß\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
+    });
 
     await page.goto(NPC_URL);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByText(AUGMENT_NPC_WILL)).toBeVisible();
+    await expect(page.getByText(AUGMENT_NPC_MOTIVATION)).toBeVisible();
     await expect(page.locator("[data-callout='secret']")).toBeVisible();
     await expect(page.getByRole("button", { name: "Mit KI ergänzen" })).toBeHidden();
 
