@@ -1,10 +1,10 @@
 // Rows → the API's entry shapes.
 //
-// The campaign, chapters, scenes and npcs are rendered here into an
+// The campaign, chapters and scenes are rendered here into an
 // `EntryResponse`: an address, a `properties` mapping, a markdown body, and
-// the concurrency token the client sends back. The location has its own type
-// (ADR #31) and renders itself in its domain module (./locations.ts); its row
-// shape stands below with the others.
+// the concurrency token the client sends back. The npc and the location have
+// their own types (ADR #31) and render themselves in their domain modules
+// (./npcs.ts, ./locations.ts); their row shapes stand below with the others.
 //
 // Three rules hold this together:
 //
@@ -22,10 +22,6 @@
 // all (ADR #26): their rows travel AS rows — `SessionResponse` and
 // `InboxResponse` — and this module builds those shapes too. Nothing here
 // composes a markdown list, and nothing anywhere reads one back.
-//
-// An npc's `## Beziehungen` is prose in the npc's own text and travels
-// verbatim — nothing about an npc is derived from body text (db/schema.ts
-// rule 3).
 
 import type {
   EntryResponse,
@@ -37,8 +33,8 @@ import type {
   SessionSummary,
 } from "@grimoire/shared";
 import { localDateTimeToMs } from "./time";
-import { unpackJson, unpackStringArray } from "../db/schema";
-import { CAMPAIGN_PATH, chapterPath, npcPath, sceneAddress } from "./paths";
+import { unpackStringArray } from "../db/schema";
+import { CAMPAIGN_PATH, chapterPath, sceneAddress } from "./paths";
 
 // --- row shapes (the columns the renderer needs) ----------------------------
 
@@ -250,30 +246,6 @@ export function renderScene(row: SceneRow, npcs: string[], tags: string[]): Entr
     row.body,
     row.rev,
   );
-}
-
-export function npcProperties(row: NpcRow): Record<string, unknown> {
-  const quickstats = unpackJson(row.quickstats);
-  return compact([
-    ["id", row.id],
-    ["name", row.name === "" ? row.id : row.name],
-    ["role", row.role],
-    ["chapter", row.chapterId],
-    ["status", row.status === "" ? "unknown" : row.status],
-    ["statblock", row.statblock],
-    ["quickstats", Object.keys(quickstats).length === 0 ? undefined : quickstats],
-    ["voice", row.voice],
-    ["appearance", row.appearance],
-    ["motivation", row.motivation],
-  ]);
-}
-
-/**
- * The npc entry. Its text is rendered exactly as it is stored,
- * `## Beziehungen` included: nothing about an npc is derived from body text.
- */
-export function renderNpc(row: NpcRow): EntryResponse {
-  return parsed(npcPath(row.id), "npc", npcProperties(row), row.body, row.rev);
 }
 
 // --- sessions ---------------------------------------------------------------

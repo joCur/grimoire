@@ -153,9 +153,9 @@ export function unknownRef(code: ErrorCode, kind: string, value: string): ApiErr
  * The body carries `code: "rev_conflict"` — `what` names WHICH row moved
  * and stays English, as the technical fallback next to it. `current` is the
  * token to retry with, and `stored` is that row as it stands now, under the
- * key of its kind (`{ entry }` for an entry address, `{ location }` for a
- * location), so the conflict dialog can show what is in the way without a
- * second request.
+ * key of its kind (`{ entry }` for an entry address, `{ npc }` for an npc,
+ * `{ location }` for a location), so the conflict dialog can show what is in
+ * the way without a second request.
  */
 export function revConflict(
   current: number,
@@ -260,17 +260,16 @@ export function compareSessionsNewestFirst(
 //      cannot appear. A chapter's optional description is typed, too: it
 //      becomes the chapter's text as it stands, without a heading around it.
 //
-// EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and location, the two kinds
-// that have an empty state at all. An entry that holds nothing but its id is
-// one the DM created and did not fill in, and the npc-create action for
-// exactly that id is what fills it. That is the same rule `createNpcStub` and the
-// generator's apply step follow.
+// AN EMPTY NPC OR LOCATION IS FILLED, NOT COLLIDED WITH — the two entities
+// that have an empty state at all. One that holds nothing but its id is one
+// the DM created and did not fill in, and creating exactly that id again is
+// what fills it. The generator's accept follows the same rule.
 //
-// …but only for the id the DM TYPED. An empty entry is empty, not unclaimed: a
+// …but only for the id the DM TYPED. An empty npc is empty, not unclaimed: a
 // scene may reference it, so the id is already spoken for. Filling it is
 // therefore the DM's own decision about that one id, never something a
 // machine-made PROPOSAL may slide into: rule 2's `suggestion` skips every
-// existing entry, empty ones included, so "Holm" next to a filled `holm` and
+// existing row, empty ones included, so "Holm" next to a filled `holm` and
 // an empty `holm-2` proposes `holm-3` — while typing "Holm 2" still fills
 // `holm-2`.
 //
@@ -289,8 +288,8 @@ export function compareSessionsNewestFirst(
  * label: the sentence the DM reads is built by the app from its own catalog in
  * the UI language. The `error` text here is the English technical
  * fallback that curl, the log and an unknown-code client get. `path` is the
- * address of what is in the way, where it has one; a location, its own
- * resource (ADR #31), is named by `kind` and `id` alone.
+ * address of what is in the way, where it has one; an npc or a location, each
+ * its own resource (ADR #31), is named by `kind` and `id` alone.
  */
 export function slugTaken(
   kind: ErrorKind,

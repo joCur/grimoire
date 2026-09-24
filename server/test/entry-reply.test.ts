@@ -1,4 +1,5 @@
-// The entry reply: one schema-forced JSON object per kind.
+// The scene reply: one schema-forced JSON object. (An npc and a location
+// reply with their own fields: npc-reply.test.ts, location-reply.test.ts.)
 //
 // What this suite is about is the SEAM between the model and the store: the
 // object comes in, the normalized properties and the body come out, and
@@ -12,36 +13,18 @@
 //     with a properties block on top),
 //   * the tolerant way in — a fence, prose around it, one `jsonrepair` pass,
 //   * `null` read as „not given", so the properties carry no empty keys,
-//   * the `{ key, value }` list folded back into the `quickstats` mapping,
 //   * the PO case: a body whose German quotation marks are closed
 //     with an ASCII `"` travels byte for byte, because the transport escapes
 //     it and nobody hand-writes the JSON any more.
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   NOT_AN_ENTRY_ERROR,
   REPAIRED_ENTRY_WARNING,
   parseEntryReply,
   parseJsonReply,
-  toReplyProperties,
   type EntryReply,
 } from "../src/entry-reply";
-
-/**
- * The stored properties of the example campaign's Jorna — read from the
- * fixture instead of copied, because the point of the round-trip case is that
- * the shapes a REAL entry carries survive: `quickstats` as a mapping, and its
- * values as the bare numbers the campaign has always held.
- */
-const JORNA = (() => {
-  const fixturePath = join(import.meta.dir, "..", "..", "fixtures", "beispiel", "npc-jorna.json");
-  const entry = JSON.parse(readFileSync(fixturePath, "utf8")) as {
-    properties: Record<string, unknown>;
-  };
-  return entry.properties;
-})();
 
 /** The PO case: opening U+201E, closed with the ASCII `"`. */
 const PO_LINE = '„Wer nachts hier steht, hat was zu verbergen", murrt die Wache.';
@@ -68,22 +51,14 @@ function sceneObject(over: Record<string, unknown> = {}): string {
   });
 }
 
-function read(
-  raw: string,
-  kind: "scene" | "npc" = "scene",
-  mode: "create" | "augment" = "create",
-): EntryReply {
-  const outcome = parseEntryReply(raw, kind, mode);
+function read(raw: string, mode: "create" | "augment" = "create"): EntryReply {
+  const outcome = parseEntryReply(raw, "scene", mode);
   if (!outcome.ok) throw new Error(`expected a reply, got: ${outcome.errors.join(" | ")}`);
   return outcome.reply;
 }
 
-function errors(
-  raw: string,
-  kind: "scene" | "npc" = "scene",
-  mode: "create" | "augment" = "create",
-): string[] {
-  const outcome = parseEntryReply(raw, kind, mode);
+function errors(raw: string): string[] {
+  const outcome = parseEntryReply(raw, "scene");
   if (outcome.ok) throw new Error("expected errors");
   return outcome.errors;
 }
@@ -122,48 +97,6 @@ describe("parseEntryReply", () => {
       warnings: [],
     });
     expect(Object.keys(read(shuffled).properties)).toEqual(["id", "title", "type", "status"]);
-  });
-
-  test("a key/value list becomes the quickstats mapping", () => {
-    const npc = JSON.stringify({
-      properties: {
-        id: "grella",
-        name: "Grella",
-        status: "alive",
-        quickstats: [
-          { key: "wis", value: "+2" },
-          { key: "passive-perception", value: "13" },
-        ],
-      },
-      body: "## Will\n\nIhren Anteil.\n",
-      warnings: [],
-    });
-    const reply = read(npc, "npc");
-    // The VALUES stay strings, which is the whole point of the detour: a
-    // bare `+2` would lose its plus on the way to a number.
-    expect(reply.properties.quickstats).toEqual({ wis: "+2", "passive-perception": "13" });
-  });
-
-  test("the stored properties in reply shape are the pair list", () => {
-    expect(toReplyProperties("npc", JORNA)).toEqual({
-      ...JORNA,
-      quickstats: [
-        { key: "insight", value: 2 },
-        { key: "passive-perception", value: 12 },
-      ],
-    });
-  });
-
-  test("jorna's properties round-trip stored → reply → stored unchanged", () => {
-    const shown = toReplyProperties("npc", JORNA);
-    const back = read(
-      JSON.stringify({ properties: shown, body: "## Will\n\nX\n", warnings: [] }),
-      "npc",
-    ).properties;
-    // Values included: the example campaign carries bare numbers from its own
-    // history, and an augment run that merely echoes them back must not turn
-    // a 2 into a "2".
-    expect(back).toEqual(JORNA);
   });
 
   test("a fence, prose around it and a single repair all cost no correction turn", () => {
@@ -211,22 +144,15 @@ describe("parseEntryReply", () => {
     );
   });
 
-  test("a nullable field the schema HAS falls back to the kind's default", () => {
-    // Scene `type` and npc `status` are nullable in the schema (the prompt's
-    // „nicht gegeben → null"), and the validators reject an absent one — so
-    // „null" has to mean what such an entry has always meant, spelled out in
-    // the properties instead of left to every reader.
+  test("a nullable field the schema HAS falls back to the scene's default", () => {
+    // A scene's `type` is nullable in the schema (the prompt's „nicht
+    // gegeben → null"), and the validators reject an absent one — so „null"
+    // has to mean what such a scene has always meant, spelled out in the
+    // properties instead of left to every reader.
     const scene = read(sceneObject({ type: null }));
     expect(scene.properties.type).toBe("planned");
-
-    const npc = JSON.stringify({
-      properties: { id: "grella", name: "Grella", status: null },
-      body: "## Will\n",
-      warnings: [],
-    });
-    expect(read(npc, "npc").properties.status).toBe("unknown");
     // A key with no default is still simply dropped.
-    expect(Object.hasOwn(read(npc, "npc").properties, "role")).toBe(false);
+    expect(Object.hasOwn(read(sceneObject({ trigger: null })).properties, "trigger")).toBe(false);
   });
 
   test("a required field of whitespace only is missing, not empty", () => {
@@ -235,12 +161,6 @@ describe("parseEntryReply", () => {
     expect(errors(sceneObject({ title: "   " })).join(" ")).toContain(
       '"properties.title" fehlt',
     );
-    const npc = JSON.stringify({
-      properties: { id: "grella", name: " \t ", status: "alive" },
-      body: "## Will\n",
-      warnings: [],
-    });
-    expect(errors(npc, "npc").join(" ")).toContain('"properties.name" fehlt');
     // …and a field whose SHAPE was wrong is not reported twice.
     expect(errors(sceneObject({ title: 7 }))).toHaveLength(1);
   });
@@ -253,10 +173,10 @@ describe("parseEntryReply", () => {
     expect(errors(sceneObject({ mood: "düster" })).join(" ")).toContain(
       '"properties.mood" ist kein Feld dieser Entität',
     );
-    const augmented = read(sceneObject({ mood: "düster" }), "scene", "augment");
+    const augmented = read(sceneObject({ mood: "düster" }), "augment");
     expect(Object.hasOwn(augmented.properties, "mood")).toBe(false);
-    // …and it is still REPORTED, for the one validator that has a rule about
-    // such a key (a location may not carry a `status`).
+    // …and it is still REPORTED, for a validator that has a rule about such
+    // a key.
     expect(augmented.ignored).toEqual(["mood"]);
   });
 

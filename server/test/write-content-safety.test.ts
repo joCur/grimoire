@@ -13,6 +13,7 @@ import type {
   EntryResponse,
   GlossaryResponse,
   InboxResponse,
+  Npc,
   SessionResponse,
 } from "@grimoire/shared";
 import { app } from "../src/server";
@@ -39,6 +40,23 @@ async function patchOk(rel: string, body: unknown): Promise<EntryResponse> {
   const res = await patchEntry(rel, body);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
+}
+
+/** An npc is its own resource (ADR #31): read and written flat, `body` among its fields. */
+async function getNpc(id: string): Promise<Npc> {
+  const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as Npc;
+}
+
+async function patchNpcOk(id: string, body: unknown): Promise<Npc> {
+  const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  expect(res.status).toBe(200);
+  return (await res.json()) as Npc;
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -91,7 +109,7 @@ async function version(): Promise<number> {
   return ((await res.json()) as { version: number }).version;
 }
 
-const NPC = "npcs/fenn";
+const NPC = "fenn";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const GLOSSARY = "glossary";
 
@@ -107,7 +125,7 @@ afterEach(() => {
 
 describe("an npc's `## Beziehungen` keeps what became no row", () => {
   test("prose and a duplicate counterpart survive the save", async () => {
-    const before = await getEntry(NPC);
+    const before = await getNpc(NPC);
     expect(before.body).toContain("- [[jorna]]: alte Bekannte");
 
     // Three things under the heading: one relation line (a row), one prose
@@ -117,7 +135,7 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
       "\n## Beziehungen\n\n- jorna: alte Bekannte\n" +
       "Beide kennen sich aus der Zeit vor dem Leuchtturm.\n" +
       "- jorna: und schuldet ihr Geld\n\n## Notizen\n";
-    const after = await patchOk(NPC, { rev: before.rev, body });
+    const after = await patchNpcOk(NPC, { rev: before.rev, body });
 
     // the relation is a row and comes back rendered …
     expect(after.body).toContain("- jorna: alte Bekannte");
@@ -127,24 +145,24 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
     // one heading, in its original place — not a second one appended
     expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
     expect(after.body.indexOf("## Beziehungen")).toBeLessThan(after.body.indexOf("## Notizen"));
-    expect(await getEntry(NPC)).toEqual(after);
+    expect(await getNpc(NPC)).toEqual(after);
   });
 
   test("saving the rendered body again is a fixed point", async () => {
-    const before = await getEntry(NPC);
+    const before = await getNpc(NPC);
     const body =
       "\n## Beziehungen\n\n- jorna: alte Bekannte\nEin Satz, der keine Beziehung ist.\n";
-    const first = await patchOk(NPC, { rev: before.rev, body });
-    const second = await patchOk(NPC, { rev: first.rev, body: first.body });
+    const first = await patchNpcOk(NPC, { rev: before.rev, body });
+    const second = await patchNpcOk(NPC, { rev: first.rev, body: first.body });
     expect(second.body).toBe(first.body);
-    const third = await patchOk(NPC, { rev: second.rev, body: second.body });
+    const third = await patchNpcOk(NPC, { rev: second.rev, body: second.body });
     expect(third.body).toBe(first.body);
   });
 
   test("a section that is ONLY relations still renders once, at the end", async () => {
-    const before = await getEntry(NPC);
+    const before = await getNpc(NPC);
     const body = "\n## Will\n\nRaus aus dem Geschäft.\n\n## Beziehungen\n\n- jorna: Ex-Kollegin\n";
-    const after = await patchOk(NPC, { rev: before.rev, body });
+    const after = await patchNpcOk(NPC, { rev: before.rev, body });
     expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
     expect(after.body).toContain("- jorna: Ex-Kollegin");
     expect(after.body).toContain("Raus aus dem Geschäft.");

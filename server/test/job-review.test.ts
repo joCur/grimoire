@@ -32,7 +32,8 @@ const SCENE_A = "01-salzhafen/treffen-am-kai";
 const SCENE_B = "01-salzhafen/nacht-am-kai";
 const ADDRESS_A = "01-salzhafen/leuchtturm/treffen-am-kai";
 const ADDRESS_B = "01-salzhafen/leuchtturm/nacht-am-kai";
-const STUB_PATH = "npcs/grella";
+/** The npc the run proposes — named by its id, on its own resource (ADR #31). */
+const NPC_ID = "grella";
 
 interface Draft {
   properties: Record<string, unknown>;
@@ -57,7 +58,7 @@ function sceneDraft(id: string, title: string, chapter = "01-salzhafen"): Draft 
   };
 }
 
-function npcStub(chapter = "01-salzhafen"): Draft {
+function proposedNpc(chapter = "01-salzhafen"): Draft {
   return {
     properties: {
       id: "grella",
@@ -75,7 +76,7 @@ const REPLY = JSON.stringify({
     { content: sceneDraft("treffen-am-kai", "Treffen am Kai") },
     { content: sceneDraft("nacht-am-kai", "Nacht am Kai") },
   ],
-  entries: [{ kind: "npc", content: npcStub() }],
+  entries: [{ kind: "npc", content: proposedNpc() }],
   warnings: [],
 });
 
@@ -130,10 +131,15 @@ async function exists(rel: string): Promise<boolean> {
   return res.status === 200;
 }
 
+async function npcExists(id: string): Promise<boolean> {
+  const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  return res.status === 200;
+}
+
 beforeEach(async () => {
   await seedStore();
   // Pipeline-aware: a scene run is the outline call plus one
-  // call per scene and per suggested entry, and the fake routes this one
+  // call per scene and per proposed npc, and the fake routes this one
   // scripted batch reply over all of them (support/pipeline-fake.ts).
   setProviderForTests(new PipelineFake([REPLY]));
 });
@@ -150,14 +156,16 @@ test("a fresh job carries an empty review state and rev 0", async () => {
   const job = await runJob();
   expect(job.rev).toBe(0);
   expect(job.review).toEqual({
-    entries: {},
     dropped: [],
     fields: {},
     blocks: {},
     written: {},
+    npcs: {},
+    writtenNpcs: [],
     locations: {},
     writtenLocations: [],
   });
+  expect(job.npcEdits).toEqual({});
 });
 
 test("the patch merges text, decisions and drops — and bumps the rev", async () => {
@@ -168,15 +176,15 @@ test("the patch merges text, decisions and drops — and bumps the rev", async (
   expect(job.rev).toBe(1);
 
   // Only what the patch names moves — the earlier edit stays.
-  job = await patch(job, { entries: { [STUB_PATH]: "rejected" }, dropped: [SCENE_B] });
+  job = await patch(job, { npcs: { [NPC_ID]: "rejected" }, dropped: [SCENE_B] });
   expect(job.draftEdits[SCENE_A]).toEqual({ body: "edited body" });
-  expect(job.review?.entries[STUB_PATH]).toBe("rejected");
+  expect(job.review?.npcs[NPC_ID]).toBe("rejected");
   expect(job.review?.dropped).toEqual([SCENE_B]);
   expect(job.rev).toBe(2);
 
   // `null` puts a decided entry back to OPEN — the review's third state.
-  job = await patch(job, { entries: { [STUB_PATH]: null } });
-  expect(job.review?.entries).toEqual({});
+  job = await patch(job, { npcs: { [NPC_ID]: null } });
+  expect(job.review?.npcs).toEqual({});
 });
 
 test("augment decisions per property and per block are stored as booleans", async () => {
@@ -237,7 +245,7 @@ test("the review state comes back from the row — the round trip a restart make
   const started = await runJob();
   const job = await patch(started, {
     edits: { [SCENE_A]: { body: "survives" } },
-    entries: { [STUB_PATH]: "accepted" },
+    npcs: { [NPC_ID]: "accepted" },
     dropped: [SCENE_B],
   });
 
@@ -245,9 +253,47 @@ test("the review state comes back from the row — the round trip a restart make
   // review state of its own, which is the whole point of the column.
   const again = await fetchJob();
   expect(again?.draftEdits[SCENE_A]).toEqual({ body: "survives" });
-  expect(again?.review?.entries[STUB_PATH]).toBe("accepted");
+  expect(again?.review?.npcs[NPC_ID]).toBe("accepted");
   expect(again?.review?.dropped).toEqual([SCENE_B]);
   expect(again?.rev).toBe(job.rev);
+});
+
+test("an npc edit is stored by id, field by field, and is what the accept writes", async () => {
+  let job = await runJob();
+  job = await patch(job, { npcEdits: { [NPC_ID]: { role: "Schmugglerin, die aussteigen will" } } });
+  job = await patch(job, { npcEdits: { [NPC_ID]: { body: "Kennt jeden Steg.\n", chapter: null } } });
+  expect(job.npcEdits[NPC_ID]).toEqual({
+    role: "Schmugglerin, die aussteigen will",
+    body: "Kennt jeden Steg.\n",
+    chapter: null,
+  });
+  // The model's npc stays the model's; the change lives beside it.
+  expect(job.result?.npcs[0]?.role).toBe("Schmugglerin mit eigenen Plänen");
+
+  expect((await accept(job, { npcs: [NPC_ID] })).status).toBe(200);
+  const res = await app.request(`/api/campaigns/beispiel/npcs/${NPC_ID}`);
+  expect(await res.json()).toMatchObject({
+    id: NPC_ID,
+    name: "Grella",
+    role: "Schmugglerin, die aussteigen will",
+    status: "alive",
+    body: "Kennt jeden Steg.\n",
+  });
+  expect(Object.hasOwn(await (await app.request(`/api/campaigns/beispiel/npcs/${NPC_ID}`)).json(), "chapter")).toBe(false);
+});
+
+test("an npc edit for an npc the run did not propose, or with a foreign field, is a 400", async () => {
+  const job = await runJob();
+  const url = `/api/campaigns/beispiel/generate/job/${job.id}/review`;
+  const unknown = await send("PATCH", url, { rev: job.rev ?? 0, npcEdits: { holm: { role: "X" } } });
+  expect(unknown.status).toBe(400);
+  const foreign = await send("PATCH", url, { rev: job.rev ?? 0, npcEdits: { [NPC_ID]: { atmosphere: "X" } } });
+  expect(foreign.status).toBe(400);
+  expect(((await foreign.json()) as { error: string }).error).toContain("atmosphere");
+  // The id is what the edit is keyed by — an edit never changes it.
+  const renamed = await send("PATCH", url, { rev: job.rev ?? 0, npcEdits: { [NPC_ID]: { id: "x" } } });
+  expect(renamed.status).toBe(400);
+  expect((await fetchJob())?.npcEdits).toEqual({});
 });
 
 // --- partial accept -------------------------------------------------------------
@@ -297,7 +343,7 @@ test("accepting the same part twice answers 200 with nothing written", async () 
   const again = (await fetchJob()) as GenerateJob;
   const res = await accept(again, { paths: [SCENE_A] });
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ written: {}, locations: [], jobDeleted: false });
+  expect(await res.json()).toEqual({ written: {}, npcs: [], locations: [], jobDeleted: false });
   // Nothing moved: the rest is still reviewable and the job is still there.
   expect((await fetchJob())?.review?.written).toEqual({ [SCENE_A]: ADDRESS_A });
 });
@@ -307,7 +353,7 @@ test("a bulk accept with nothing open left stays a 400", async () => {
   // there is nothing — a client bug, and still an error.
   const job = await patch(await runJob(), {
     dropped: [SCENE_A, SCENE_B],
-    entries: { [STUB_PATH]: "rejected" },
+    npcs: { [NPC_ID]: "rejected" },
   });
   expect((await accept(job, {})).status).toBe(400);
 });
@@ -319,9 +365,9 @@ test("an unknown path is a 400", async () => {
 
 test("the job deletes itself when every part is written, dropped or rejected", async () => {
   let job = await runJob();
-  // The second scene is dropped and the suggested entry rejected — so the
+  // The second scene is dropped and the proposed npc rejected — so the
   // ONE remaining part settles the whole run.
-  job = await patch(job, { dropped: [SCENE_B], entries: { [STUB_PATH]: "rejected" } });
+  job = await patch(job, { dropped: [SCENE_B], npcs: { [NPC_ID]: "rejected" } });
 
   const res = await accept(job, { paths: [SCENE_A] });
   expect(((await res.json()) as { jobDeleted: boolean }).jobDeleted).toBe(true);
@@ -329,12 +375,12 @@ test("the job deletes itself when every part is written, dropped or rejected", a
   // Only the accepted part exists.
   expect(await exists(ADDRESS_A)).toBe(true);
   expect(await exists(ADDRESS_B)).toBe(false);
-  expect(await exists(STUB_PATH)).toBe(false);
+  expect(await npcExists(NPC_ID)).toBe(false);
 });
 
 test('„Alle übernehmen" writes the open rest — never a dropped or rejected part', async () => {
   let job = await runJob();
-  job = await patch(job, { entries: { [STUB_PATH]: "rejected" } });
+  job = await patch(job, { npcs: { [NPC_ID]: "rejected" } });
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
 
   const rest = (await fetchJob()) as GenerateJob;
@@ -344,12 +390,12 @@ test('„Alle übernehmen" writes the open rest — never a dropped or rejected 
   };
   expect(Object.keys(body.written)).toEqual([SCENE_B]);
   expect(body.jobDeleted).toBe(true);
-  expect(await exists(STUB_PATH)).toBe(false);
+  expect(await npcExists(NPC_ID)).toBe(false);
 });
 
-test("a bulk accept skips an UNDECIDED suggested entry, an explicit one writes it", async () => {
+test("a bulk accept skips an UNDECIDED proposed npc, an explicit one writes it", async () => {
   const job = await runJob();
-  // Nothing decided about the entry: „Alle übernehmen" writes the scenes and
+  // Nothing decided about the npc: „Alle übernehmen" writes the scenes and
   // leaves it alone — the earlier rule, and the reason the job stays.
   const bulk = (await (await accept(job, {})).json()) as {
     written: Record<string, string>;
@@ -357,16 +403,16 @@ test("a bulk accept skips an UNDECIDED suggested entry, an explicit one writes i
   };
   expect(Object.keys(bulk.written).sort()).toEqual([SCENE_B, SCENE_A].sort());
   expect(bulk.jobDeleted).toBe(false);
-  expect(await exists(STUB_PATH)).toBe(false);
+  expect(await npcExists(NPC_ID)).toBe(false);
 
   // Naming it is the decision: „Diesen übernehmen" on its row writes it, and
   // then nothing is open.
   const rest = (await fetchJob()) as GenerateJob;
-  const one = (await (await accept(rest, { paths: [STUB_PATH] })).json()) as {
+  const one = (await (await accept(rest, { npcs: [NPC_ID] })).json()) as {
     jobDeleted: boolean;
   };
   expect(one.jobDeleted).toBe(true);
-  expect(await exists(STUB_PATH)).toBe(true);
+  expect(await npcExists(NPC_ID)).toBe(true);
 });
 
 test('„Verwerfen" removes only the open rest — what was written stays', async () => {
@@ -384,7 +430,7 @@ test('„Verwerfen" removes only the open rest — what was written stays', asyn
 test("an accept with a stale rev is a 409 rev_conflict and writes nothing", async () => {
   const job = await runJob();
   // Another tab decides something — the rev moves and this one's is stale.
-  await patch(job, { entries: { [STUB_PATH]: "rejected" } });
+  await patch(job, { npcs: { [NPC_ID]: "rejected" } });
 
   const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     rev: job.rev ?? 0,
@@ -427,6 +473,7 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
     db.transaction((handle) =>
       markWrittenInTx(handle as never, "beispiel", "a-job-that-is-gone", job.rev ?? 0, {
         paths: { [SCENE_A]: ADDRESS_A },
+        npcs: [],
         locations: [],
       }),
     ),
@@ -456,7 +503,7 @@ const NEW_CHAPTER_REPLY = JSON.stringify({
     { content: sceneDraft("treffen-am-kai", "Treffen am Kai", NEW_CHAPTER) },
     { content: sceneDraft("nacht-am-kai", "Nacht am Kai", NEW_CHAPTER) },
   ],
-  entries: [{ kind: "npc", content: npcStub(NEW_CHAPTER) }],
+  entries: [{ kind: "npc", content: proposedNpc(NEW_CHAPTER) }],
   warnings: [],
 });
 
@@ -537,16 +584,16 @@ test("creating the chapter is idempotent across two partial accepts", async () =
   expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
 });
 
-// A partial accept of the suggested entry ALONE — no scene in the batch, so
+// A partial accept of the proposed npc ALONE — no scene in the batch, so
 // nothing in it names the chapter. The chapter is still created, and that is
 // intended: the target is decided from the job, not from what the accept
 // happens to contain, so the chapter the run is for exists from the first
 // accept onwards and the scenes accepted afterwards find it.
-test("accepting only the suggested entry already creates the run's chapter", async () => {
+test("accepting only the proposed npc already creates the run's chapter", async () => {
   const job = await runNewChapterJob("Die Drachenbrut");
-  expect((await accept(job, { paths: [STUB_PATH] })).status).toBe(200);
+  expect((await accept(job, { npcs: [NPC_ID] })).status).toBe(200);
 
-  expect(await exists(STUB_PATH)).toBe(true);
+  expect(await npcExists(NPC_ID)).toBe(true);
   expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
   expect(await exists(NEW_CHAPTER)).toBe(true);
   // …and no scene was written by this accept.

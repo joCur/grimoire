@@ -43,8 +43,8 @@ import type { NamingHint } from "@grimoire/shared";
  * Properties whose value is PROSE and therefore in scope. Everything not
  * listed is an address, a status token or a list — see the header.
  *
- * `name` and `title` are both here because a scene has a title and an npc a
- * name, and a run produces either kind of draft. One consequence worth
+ * `name` and `title` are both here because a scene has a title and an npc or
+ * a location a name, and a run produces all three. One consequence worth
  * knowing: a draft whose display name is missing carries its id there
  * instead (the validators fill it in), so such a draft is checked against
  * its id. That is not a bug to guard against — the id is then literally what
@@ -182,13 +182,24 @@ function excerpt(line: string): string {
 }
 
 /**
- * One text as the check reads it: a scene or npc draft by its address, its
- * properties and its body, or a location by its id, the fields to check and
- * its body.
+ * One text as the check reads it: a scene draft by its address, its
+ * properties and its body, or an npc or a location by its id, the fields to
+ * check and its body.
  */
 export type CheckedDraft =
   | { path: string; properties: Record<string, unknown>; body: string }
+  | { npc: string; fields: Record<string, unknown>; body: string }
   | { location: string; fields: Record<string, unknown>; body: string };
+
+/** Where a finding sits — the key of the draft's own kind — and the fields it reads. */
+function placeOf(draft: CheckedDraft): {
+  where: { path: string } | { npc: string } | { location: string };
+  fields: Record<string, unknown>;
+} {
+  if ("npc" in draft) return { where: { npc: draft.npc }, fields: draft.fields };
+  if ("location" in draft) return { where: { location: draft.location }, fields: draft.fields };
+  return { where: { path: draft.path }, fields: draft.properties };
+}
 
 /**
  * Check ONE draft against the campaign's naming conventions.
@@ -203,8 +214,7 @@ export type CheckedDraft =
  */
 export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule[]): NamingHint[] {
   if (rules.length === 0) return [];
-  const where = "location" in draft ? { location: draft.location } : { path: draft.path };
-  const fields = "location" in draft ? draft.fields : draft.properties;
+  const { where, fields } = placeOf(draft);
   const hints: NamingHint[] = [];
 
   for (const rule of rules) {

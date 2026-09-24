@@ -296,9 +296,9 @@ export async function appendLogEntry(
   text: string,
   sceneId?: string,
 ): Promise<SessionResponse> {
-  // A scene is referenced by its id, and an id is a slug — the same rule
-  // `createNpcStub` holds. The column is a foreign key, so a value outside
-  // that shape could only be a client bug.
+  // A scene is referenced by its id, and an id is a slug — the rule every
+  // create holds. The column is a foreign key, so a value outside that shape
+  // could only be a client bug.
   if (sceneId !== undefined && !ENTITY_SLUG.test(sceneId)) {
     throw new ApiError(400, "sceneId must be a kebab-case slug (a-z, 0-9, single dashes)");
   }

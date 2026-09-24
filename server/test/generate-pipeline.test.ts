@@ -18,9 +18,11 @@ import { setProviderForTests } from "../src/generator";
 import {
   assignmentBlock,
   cutExcerpt,
-  MAX_OUTLINE_ENTRIES,
-  entryContext,
+  locationContext,
+  MAX_OUTLINE_LOCATIONS,
+  MAX_OUTLINE_NPCS,
   MAX_OUTLINE_SCENES,
+  npcContext,
   outlineBlock,
   planOf,
   outlineParts,
@@ -68,7 +70,8 @@ function outlineReply(over: Record<string, unknown> = {}): string {
         refs: [],
       },
     ],
-    entries: [],
+    npcs: [],
+    locations: [],
     warnings: [],
     ...over,
   });
@@ -101,7 +104,8 @@ test("an almost-JSON outline is repaired instead of costing a correction turn", 
         "refs": [],
       },
     ],
-    "entries": [],
+    "npcs": [],
+    "locations": [],
     "warnings": ["Der Quelltext nennt keinen DC."],
   }`;
   const outcome = validateOutlineReply(almost, CTX);
@@ -189,19 +193,25 @@ test("the schema's nullable optionals read as „not given“", () => {
   expect(outcome.result.scenes[0]!.sourceExcerpt).toBeUndefined();
 });
 
-test("the outline's ids are kebab slugs and unique across scenes AND entries", () => {
+test("the outline's ids are kebab slugs and unique across scenes, npcs AND locations", () => {
   expect(
     outlineErrors(outlineReply({ scenes: [{ id: "Night Watch", type: "planned", refs: [] }] })),
   ).toEqual(expect.arrayContaining([expect.stringContaining("kebab-case id")]));
-  // The same id twice — even across the two lists — describes two entities
-  // that cannot both exist under one reference key.
+  // The same id twice — even across the lists — describes two entities that
+  // cannot both exist under one reference key.
+  expect(
+    outlineErrors(
+      outlineReply({ npcs: [{ id: "night-watch", name: "Grella", summary: "x" }] }),
+    ),
+  ).toEqual(expect.arrayContaining([expect.stringContaining("duplicate id")]));
   expect(
     outlineErrors(
       outlineReply({
-        entries: [{ kind: "npc", id: "night-watch", name: "Grella", summary: "x" }],
+        npcs: [{ id: "grella", name: "Grella", summary: "x" }],
+        locations: [{ id: "grella", name: "Grellas Hütte", summary: "x" }],
       }),
     ),
-  ).toEqual(expect.arrayContaining([expect.stringContaining("duplicate id")]));
+  ).toEqual([expect.stringContaining('locations[0]: duplicate id "grella"')]);
 });
 
 test("an id the campaign already has is NOT an outline error", () => {
@@ -210,7 +220,7 @@ test("an id the campaign already has is NOT an outline error", () => {
   // this run should fill. Collisions are the apply path's question.
   expect(
     outlineErrors(
-      outlineReply({ entries: [{ kind: "npc", id: "fenn", name: "Fenn", summary: "x" }] }),
+      outlineReply({ npcs: [{ id: "fenn", name: "Fenn", summary: "x" }] }),
     ),
   ).toEqual([]);
 });
@@ -225,21 +235,30 @@ test("the chapter is the RUN's — an invented one is a correction turn", () => 
   ).toEqual([expect.stringContaining('"chapter" ist "01-salzhafen"')]);
 });
 
-test("a location resolves against the campaign OR the outline's own entries", () => {
+test("a location resolves against the campaign OR the outline's own locations", () => {
   expect(
     outlineErrors(
       outlineReply({ scenes: [{ id: "night-watch", type: "planned", location: "bucht", refs: [] }] }),
     ),
   ).toEqual([expect.stringContaining('location "bucht" does not exist')]);
-  // …and with the entry that provides it, the same outline is fine.
+  // …and with the location that provides it, the same outline is fine.
   expect(
     outlineErrors(
       outlineReply({
         scenes: [{ id: "night-watch", type: "planned", location: "bucht", refs: [] }],
-        entries: [{ kind: "location", id: "bucht", name: "Nordbucht", summary: "x" }],
+        locations: [{ id: "bucht", name: "Nordbucht", summary: "x" }],
       }),
     ),
   ).toEqual([]);
+  // An npc of the outline is no place a scene can be set at.
+  expect(
+    outlineErrors(
+      outlineReply({
+        scenes: [{ id: "night-watch", type: "planned", location: "bucht", refs: [] }],
+        npcs: [{ id: "bucht", name: "Bucht", summary: "x" }],
+      }),
+    ),
+  ).toEqual([expect.stringContaining('location "bucht" does not exist')]);
 });
 
 test("cross references must name scenes of this outline (AK4)", () => {
@@ -280,16 +299,26 @@ test("an outline over the part bound is a correction turn, not a run", () => {
   // Exactly at the bound is fine — the bound is a bound, not a target.
   expect(validateOutlineReply(outlineReply({ scenes: many.slice(1) }), CTX).ok).toBe(true);
 
-  const entries = Array.from({ length: MAX_OUTLINE_ENTRIES + 1 }, (_, i) => ({
-    kind: "npc",
+  // The npcs and the locations are bounded list by list.
+  const npcs = Array.from({ length: MAX_OUTLINE_NPCS + 1 }, (_, i) => ({
     id: `figur-${i}`,
     name: `Figur ${i}`,
     summary: "aus dem Quelltext",
   }));
-  const tooManyEntries = validateOutlineReply(outlineReply({ entries }), CTX);
-  expect(tooManyEntries.ok).toBe(false);
-  expect((tooManyEntries as { errors: string[] }).errors.join("\n")).toContain(
-    `höchstens ${MAX_OUTLINE_ENTRIES}`,
+  const tooManyNpcs = validateOutlineReply(outlineReply({ npcs }), CTX);
+  expect(tooManyNpcs.ok).toBe(false);
+  expect((tooManyNpcs as { errors: string[] }).errors.join("\n")).toContain(
+    `"npcs": ${MAX_OUTLINE_NPCS + 1} neue Figuren`,
+  );
+  expect(validateOutlineReply(outlineReply({ npcs: npcs.slice(1) }), CTX).ok).toBe(true);
+  const locations = Array.from({ length: MAX_OUTLINE_LOCATIONS + 1 }, (_, i) => ({
+    id: `ort-${i}`,
+    name: `Ort ${i}`,
+    summary: "aus dem Quelltext",
+  }));
+  const tooManyLocations = validateOutlineReply(outlineReply({ locations }), CTX);
+  expect((tooManyLocations as { errors: string[] }).errors.join("\n")).toContain(
+    `"locations": ${MAX_OUTLINE_LOCATIONS + 1} neue Orte`,
   );
 });
 
@@ -373,24 +402,30 @@ test("an entry's context is the passages that mention it — by name OR by id wo
         refs: [],
       },
     ],
-    entries: [
-      { kind: "npc", id: "harbour-master", name: "Hafenmeisterin", summary: "zählt Kisten" },
-      { kind: "npc", id: "grella", name: "Grella", summary: "Schmugglerin" },
+    npcs: [
+      { id: "harbour-master", name: "Hafenmeisterin", summary: "zählt Kisten" },
+      { id: "grella", name: "Grella", summary: "Schmugglerin" },
     ],
+    locations: [{ id: "watt", name: "Das Watt", summary: "bei Ebbe begehbar" }],
     warnings: [],
   };
   const plan = planOf({ campaign: "beispiel", ctx: CTX, outline, sourceText: source });
   // The id is kebab-case English, the name German — so a source text that
   // never writes „Hafenmeisterin" and never writes „harbour-master" still
-  // has to reach its entry, through the WORDS of the id.
-  const master = entryContext(plan, outline.entries[0]!);
+  // has to reach its npc, through the WORDS of the id.
+  const master = npcContext(plan, outline.npcs[0]!);
   expect(master).toContain("The harbour master counts crates");
   expect(master).not.toContain("Grella waits in the mudflats");
   // …and the plain name match still works, and matches only its own scene.
-  const grella = entryContext(plan, outline.entries[1]!);
+  const grella = npcContext(plan, outline.npcs[1]!);
   expect(grella).toContain("Grella waits in the mudflats");
   expect(grella).not.toContain("harbour master counts");
-  // The excerpts are cut ONCE for the whole run, not per entry × scene.
+  // A location is reached by the scenes that are set there — and no scene of
+  // this outline names one, so its call gets the whole source text.
+  const watt = locationContext(plan, outline.locations[0]!);
+  expect(watt).toContain("Das Watt (watt): bei Ebbe begehbar");
+  expect(watt).toContain(source);
+  // The excerpts are cut ONCE for the whole run, not per npc × scene.
   expect([...plan.excerpts.keys()]).toEqual(["kai", "watt"]);
   expect(plan.excerpts.get("kai")!.matched).toBe(true);
 });
@@ -427,23 +462,28 @@ test("the outline block names every id — and nothing about the assigned part",
       { id: "night-watch", title: "Nachtwache", type: "planned", location: "hafen", refs: ["captured"] },
       { id: "captured", title: "Erwischt", type: "contingency", refs: [] },
     ],
-    entries: [{ kind: "npc", id: "grella", name: "Grella", summary: "Schmugglerin" }],
+    npcs: [{ id: "grella", name: "Grella", summary: "Schmugglerin" }],
+    locations: [{ id: "watt", name: "Das Watt", summary: "bei Ebbe begehbar" }],
     warnings: [],
   };
   const block = outlineBlock(outline);
   expect(block).toContain("night-watch — Nachtwache (planned, location: hafen)");
   expect(block).toContain("→ verweist auf: captured");
-  expect(block).toContain("npc: grella (Grella) — Schmugglerin");
+  expect(block).toContain("Neue Figuren dieses Durchlaufs");
+  expect(block).toContain("- grella (Grella) — Schmugglerin");
+  expect(block).toContain("Neue Orte dieses Durchlaufs");
+  expect(block).toContain("- watt (Das Watt) — bei Ebbe begehbar");
   // Which scene THIS call writes is NOT in here — it is a section of its own
   // in the variable half, so the block stays cacheable.
   expect(block).not.toContain("DIESE Szene");
   expect(assignmentBlock(outline.scenes[1]!)).toBe("captured — Erwischt");
 
-  // The part list follows the outline's order: scenes first, then entries.
+  // The part list follows the outline's order: scenes, then npcs, then locations.
   expect(outlineParts(outline).map((p) => p.key)).toEqual([
     "scene:night-watch",
     "scene:captured",
     "npc:grella",
+    "location:watt",
   ]);
 });
 
@@ -457,7 +497,8 @@ test("two parts of one run share a byte-identical constant prefix", () => {
       { id: "eins", title: "Eins", type: "planned", location: "hafen", refs: [] },
       { id: "zwei", title: "Zwei", type: "contingency", refs: ["eins"] },
     ],
-    entries: [],
+    npcs: [],
+    locations: [],
     warnings: [],
   };
   const base = {
@@ -537,7 +578,8 @@ class ThreeSceneProvider implements LLMProvider {
             sourceExcerpt: { first: "Fenn waits at the docks.", last: "Fenn waits at the docks." },
             refs: [],
           })),
-          entries: [],
+          npcs: [],
+          locations: [],
           warnings: [],
         }),
         truncated: false,
@@ -646,6 +688,7 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
     written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    npcs: [],
     locations: [],
     // The job stays: the failed part is not settled.
     jobDeleted: false,
@@ -685,6 +728,7 @@ test("a done part is acceptable while the run is still RUNNING (AK2)", async () 
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
     written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    npcs: [],
     locations: [],
     jobDeleted: false,
   });

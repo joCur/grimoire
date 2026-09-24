@@ -22,8 +22,9 @@
 //      TWO CONSEQUENCES, and they are the point. A write that names an
 //      entry which does not exist is refused (400) instead of storing a
 //      hole, and NOTHING creates an entry because something mentioned it.
-//      The creation paths are: the create endpoints, „NPC-Stub anlegen" from
-//      a review line, accepting a generator proposal — and, inside that
+//      The creation paths are: the create endpoints (the review's „NPC
+//      anlegen" from a log line among them), accepting a generator
+//      proposal — and, inside that
 //      accept, the chapter a „Neues Kapitel" run decided on. Nowhere else.
 //      A `[[slug]]` in prose is not a
 //      reference in this sense: it is body text, it stays visible text, and
@@ -66,12 +67,8 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import {
-  CHAPTER_STATUSES,
-  NPC_STATUSES,
-  SCENE_STATUSES,
-  SCENE_TYPES,
-} from "@grimoire/shared/types";
+import { NPC_STATUSES } from "@grimoire/shared/npc";
+import { CHAPTER_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/types";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -815,14 +812,21 @@ export const generateJobs = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** "scene" | "npc" | "augment" | "location-augment". */
+    /** "scene" | "npc" | "augment" | "npc-augment" | "location-augment". */
     kind: text("kind").notNull().default("scene"),
     /**
-     * Address of the npc or scene an `augment` run targets; NULL for every
-     * other run. Stored from the start of the run, so a job that is still
-     * going can already name what it works on.
+     * Address of the scene an `augment` run targets; NULL for every other
+     * run. Stored from the start of the run, so a job that is still going can
+     * already name what it works on.
      */
     targetPath: text("target_path"),
+    /**
+     * The id of the npc an `npc-augment` run works on; NULL for every other
+     * run. Stored from the start of the run, like `target_path`. No foreign
+     * key: a job is a cache of a run, and deleting the npc leaves a proposal
+     * that simply can no longer be accepted.
+     */
+    npcId: text("npc_id"),
     /**
      * The id of the location a `location-augment` run works on; NULL for
      * every other run. Stored from the start of the run, like `target_path`.
@@ -845,15 +849,22 @@ export const generateJobs = sqliteTable(
     result: text("result"),
     npcResult: text("npc_result"),
     /**
-     * The augment PROPOSAL — JSON: an `AugmentResult` for an `augment` run, a
+     * The augment PROPOSAL — JSON: an `AugmentResult` for an `augment` run,
+     * an `NpcAugmentResult` for an `npc-augment` run, a
      * `LocationAugmentResult` for a `location-augment` run.
      */
     augmentResult: text("augment_result"),
     error: text("error"),
     draftEdits: text("draft_edits").notNull().default("{}"),
     /**
+     * The DM's changes to the proposed npcs — JSON, one `NpcChange` per npc
+     * id (`GenerateJob.npcEdits`), applied on top of the proposal when it is
+     * accepted.
+     */
+    npcEdits: text("npc_edits").notNull().default("{}"),
+    /**
      * The DM's REVIEW STATE — JSON, see `GenerateJobReview`:
-     * the decision per suggested entry, the dropped scenes, the per
+     * the decision per proposed npc and location, the dropped scenes, the per
      * field/block decisions of an augment run and the parts a partial
      * accept already wrote. JSON for the same reason as the payloads above:
      * it is the API's own shape and nothing queries inside it.

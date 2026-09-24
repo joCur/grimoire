@@ -12,7 +12,7 @@ sind und jeder folgende Aufruf sich daran halten kann.
 ## Ausgabeformat
 
 Dieser Aufruf antwortet mit der **Gliederung** als JSON-Objekt; die Szenen,
-NPCs und Orte selbst entstehen danach als eigene Einträge. Das Schema
+NPCs und Orte selbst entstehen danach in eigenen Aufrufen. Das Schema
 erzwingt der Server über die API (Tool-Aufruf bzw. `response_format`), also
 halte dich genau daran; `location` und `sourceExcerpt` gibst du als `null`
 an, wenn der Quelltext sie offen lässt, `chapterDescription` bei einem
@@ -27,7 +27,7 @@ Gib genau dieses JSON-Objekt zurück:
       "id": "<kebab-case ASCII, Englisch, kurz, stabil>",
       "title": "<deutscher Anzeigetitel>",
       "type": "planned | contingency",
-      "location": "<Orts-id aus dem Kontext oder aus entries; sonst null>",
+      "location": "<Orts-id aus dem Kontext oder aus locations; sonst null>",
       "sourceExcerpt": {
         "first": "<erster Satz des zugehörigen Quelltext-Abschnitts, WÖRTLICH>",
         "last": "<letzter Satz des zugehörigen Quelltext-Abschnitts, WÖRTLICH>"
@@ -35,9 +35,11 @@ Gib genau dieses JSON-Objekt zurück:
       "refs": ["<ids anderer Szenen dieser Gliederung, auf die diese Szene verweist>"]
     }
   ],
-  "entries": [
-    { "kind": "npc", "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" },
-    { "kind": "location", "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" }
+  "npcs": [
+    { "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" }
+  ],
+  "locations": [
+    { "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" }
   ],
   "chapterDescription": "<bei „neues Kapitel: ja“: worum es im Kapitel geht und was die Gruppe erreichen soll; sonst null>",
   "warnings": ["<alles, was der DM prüfen sollte>"]
@@ -63,7 +65,7 @@ bildet der Server aus dem Kapitel im Kontext und der `id`.
    `contingency` für Szenen, die auf ein Spielerereignis reagieren.
 3. **ids**: kebab-case, Englisch, kurz, stabil gedacht (z. B. `captured`
    statt `gefangen-genommen-im-lager`). Jede `id` kommt im ganzen Durchlauf
-   genau EINMAL vor, über `scenes` und `entries` zusammen.
+   genau EINMAL vor, über `scenes`, `npcs` und `locations` zusammen.
 4. **sourceExcerpt**: `first` und `last` sind **wörtliche Zitate** aus dem
    Quelltext — der erste und der letzte Satz des Abschnitts, aus dem diese
    Szene entsteht, Zeichen für Zeichen so, wie sie dort stehen — in der
@@ -72,16 +74,16 @@ bildet der Server aus dem Kapitel im Kontext und der `id`.
    bekommt die Szene genau ihren Abschnitt. Die Abschnitte dürfen
    aneinandergrenzen und bleiben disjunkt.
 5. **location**: eine Orts-id (kebab-case) aus dem Kontext oder aus
-   `entries` desselben Durchlaufs. Die Orts-id ist zugleich die Gruppe, unter
+   `locations` desselben Durchlaufs. Die Orts-id ist zugleich die Gruppe, unter
    der die Szene in der Kapitelübersicht steht. Nennt der Quelltext einen Ort,
    steht der Key; sonst entfällt er.
 6. **refs**: ids ANDERER Szenen dieser Gliederung, auf die die Szene
    verweist (Kontingenzen, „wenn die Gruppe entdeckt wird → …“) — es gelten
    allein die ids aus `scenes` dieser Antwort.
-7. **entries**: Hierher gehört jede Figur und jeder Ort, die der Quelltext
-   nennt und die im Kontext erst noch eine id brauchen — mit `kind`, `id`, `name`
-   und einem Satz, der sagt, was sie im Abenteuer sind. Was im Kontext schon
-   steht, bleibt dort.
+7. **npcs** und **locations**: Nach `npcs` gehört jede Figur, nach
+   `locations` jeder Ort, die der Quelltext nennt und die im Kontext erst noch
+   eine id brauchen — mit `id`, `name` und einem Satz, der sagt, was sie im
+   Abenteuer sind. Was im Kontext schon steht, bleibt dort.
 8. **chapterDescription**: Nennt der Kontext die Zeile `neues Kapitel: ja`,
    legt dieser Durchlauf das Kapitel aus der Zeile `chapter:` neu an, und
    `chapterDescription` wird sein Text. Schreib dafür eine kurze Beschreibung
@@ -110,4 +112,4 @@ bildet der Server aus dem Kapitel im Kontext und der `id`.
 Der Prompt trägt eine Beispiel-Gliederung als Referenz bei
 (`outline-example-output.json`): drei Szenen aus einem neuen Hafen-Kapitel,
 eine davon `contingency` mit `refs` auf die Szene, aus der sie ausgelöst wird,
-zwei neue Einträge und die Beschreibung des Kapitels.
+eine neue Figur, ein neuer Ort und die Beschreibung des Kapitels.

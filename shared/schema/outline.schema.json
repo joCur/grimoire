@@ -5,7 +5,8 @@
   "additionalProperties": false,
   "required": [
     "scenes",
-    "entries",
+    "npcs",
+    "locations",
     "chapterDescription",
     "warnings"
   ],
@@ -44,7 +45,7 @@
               "string",
               "null"
             ],
-            "description": "Orts-id aus dem Kontext oder aus entries; null, wenn keine."
+            "description": "Orts-id aus dem Kontext oder aus locations; null, wenn keine."
           },
           "sourceExcerpt": {
             "type": [
@@ -77,26 +78,43 @@
         }
       }
     },
-    "entries": {
+    "npcs": {
       "type": "array",
-      "description": "Höchstens 12 neue Figuren und Orte.",
+      "description": "Höchstens 12 neue Figuren.",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "kind",
           "id",
           "name",
           "summary"
         ],
         "properties": {
-          "kind": {
+          "id": {
             "type": "string",
-            "enum": [
-              "npc",
-              "location"
-            ]
+            "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
           },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "description": "Höchstens 12 neue Orte.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "summary"
+        ],
+        "properties": {
           "id": {
             "type": "string",
             "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."

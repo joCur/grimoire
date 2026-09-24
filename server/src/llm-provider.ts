@@ -9,9 +9,11 @@
 // exception (generator/README.md step 4).
 //
 // EVERY request carries the schema of the object it wants
-// back — the outline its own (shared/outline-schema), an entry call the
-// object that mirrors the stored row (shared/entry-schema) — and the
-// transports force it, because that is the one guarantee an API can give:
+// back — the outline its own (shared/outline-schema), a scene call the
+// object that mirrors the stored row (shared/entry-schema), an npc or a
+// location call the entity's own reply schema (shared/npc, shared/location)
+// — and the transports force it, because that is the one guarantee an API
+// can give:
 //
 //   Claude — the schema travels as a TOOL and `tool_choice` forces the call,
 //       so the reply cannot be prose, cannot miss a required key and cannot
@@ -31,10 +33,8 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
-import type { GeneratedEntryKind, LocationProposal } from "@grimoire/shared";
+import type { GeneratedEntryKind, LocationProposal, NpcReplyFields } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
-
-import { toReplyProperties } from "./entry-reply";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
@@ -59,11 +59,12 @@ export interface GenerateRequest {
   };
   sourceText: string; // English source text ("" when a run has none)
   /**
-   * The run's OUTLINE, rendered as prompt lines: every scene id
-   * with its title/type/location and every suggested entry. It travels with
-   * each per-scene and per-entry call so cross references can only ever name
-   * ids that exist — and it is part of the CONSTANT prefix, which is what
-   * makes prompt caching worth having for a run with many parts.
+   * The run's OUTLINE, rendered as prompt lines: every scene id with its
+   * title/type/location, every new npc and every new location. It travels
+   * with each per-scene, per-npc and per-location call so cross references
+   * can only ever name ids that exist — and it is part of the CONSTANT
+   * prefix, which is what makes prompt caching worth having for a run with
+   * many parts.
    *
    * Absent for the single-call runs; then the prompt has no such section.
    */
@@ -80,16 +81,13 @@ export interface GenerateRequest {
    */
   assignment?: string;
   /**
-   * The entry an AUGMENT run works on: its address, its kind and its two
+   * The scene an AUGMENT run works on: its address, its kind and its two
    * halves, the properties and the body, exactly as the store holds them.
-   * Absent for the two runs that create something — and then the prompt has
-   * no such section.
+   * Absent for every other run — and then the prompt has no such section.
    *
    * The transport decides how it LOOKS in the prompt
-   * (`formatExistingEntry`): the entry travels as data here, and turning it
-   * into prompt text is formatting, not a storage format. The `kind` is what
-   * that formatting needs to know which properties a reply shapes differently
-   * from the store.
+   * (`formatExistingEntry`): the scene travels as data here, and turning it
+   * into prompt text is formatting, not a storage format.
    */
   existingEntry?: {
     path: string;
@@ -97,6 +95,12 @@ export interface GenerateRequest {
     properties: Record<string, unknown>;
     body: string;
   };
+  /**
+   * The npc an NPC augment run works on, every field of it in its reply form
+   * (`npcToReply`, @grimoire/shared/npc) — shown as the very object the reply
+   * is forced into. Absent for every other run.
+   */
+  existingNpc?: NpcReplyFields;
   /**
    * The location a LOCATION augment run works on, every field of it without
    * its guard — shown as the very object the reply is forced into. Absent
@@ -252,6 +256,9 @@ export const KNOWLEDGE_HEADING =
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
 
+/** The same block of an npc augment run. */
+export const EXISTING_NPC_HEADING = "## Bestehender NPC — ergänzen, nicht ersetzen";
+
 /** The same block of a location augment run. */
 export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
 
@@ -286,18 +293,12 @@ export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
 export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
 
 /**
- * The existing entry of an augment run, as PROMPT TEXT: the `properties` and
+ * The existing scene of an augment run, as PROMPT TEXT: the `properties` and
  * `body` pair as pretty-printed JSON — the very shape the reply is forced
- * into, so the model reads the entry the way it has to write it back.
- *
- * „The way it has to write it back" is why the properties go through
- * `toReplyProperties` (entry-reply.ts) first: a `pairs` field is STORED as a
- * mapping (`{ "insight": 2 }`) and REPLIED as a `{ key, value }` list, and a
- * model shown the mapping answers with the mapping — which its own schema
- * then rejects.
+ * into, so the model reads the scene the way it has to write it back.
  *
  * This is formatting and nothing else. Nothing parses this text again: the
- * proposal is validated against the entry's own halves
+ * proposal is validated against the scene's own halves
  * (generator-augment.ts), and the store never sees it.
  */
 export function formatExistingEntry(entry: {
@@ -305,11 +306,7 @@ export function formatExistingEntry(entry: {
   properties: Record<string, unknown>;
   body: string;
 }): string {
-  return JSON.stringify(
-    { properties: toReplyProperties(entry.kind, entry.properties), body: entry.body },
-    null,
-    2,
-  );
+  return JSON.stringify({ properties: entry.properties, body: entry.body }, null, 2);
 }
 
 // The prompt content is German on purpose — the pipeline's target language
@@ -384,6 +381,14 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
           `${EXISTING_ENTRY_HEADING} (${req.existingEntry.path})`,
           "```json",
           formatExistingEntry(req.existingEntry),
+          "```",
+        ]),
+    ...(req.existingNpc === undefined
+      ? []
+      : [
+          `${EXISTING_NPC_HEADING} (${req.existingNpc.id})`,
+          "```json",
+          JSON.stringify(req.existingNpc, null, 2),
           "```",
         ]),
     ...(req.existingLocation === undefined

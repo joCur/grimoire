@@ -1,29 +1,27 @@
 {
-  "properties": {
-    "id": "fenn",
-    "name": "Fenn",
-    "role": "Anführer der Schmuggler in der Nordbucht",
-    "chapter": null,
-    "status": "alive",
-    "statblock": "Roll20: Fenn",
-    "quickstats": [
-      {
-        "key": "wis",
-        "value": "+2"
-      },
-      {
-        "key": "insight",
-        "value": "+2"
-      },
-      {
-        "key": "passive-perception",
-        "value": "13"
-      }
-    ],
-    "voice": "leise, höflich — wird stiller, je gefährlicher es wird",
-    "appearance": "salzverkrustete Lederjacke, Silberring am Daumen",
-    "motivation": "Den Auftrag zu Ende bringen, ohne dass jemand stirbt — er ist Schmuggler, kein Mörder, und das ist sein wunder Punkt."
-  },
+  "id": "fenn",
+  "name": "Fenn",
+  "role": "Anführer der Schmuggler in der Nordbucht",
+  "chapter": null,
+  "status": "alive",
+  "statblock": "Roll20: Fenn",
+  "quickstats": [
+    {
+      "key": "wis",
+      "value": "+2"
+    },
+    {
+      "key": "insight",
+      "value": "+2"
+    },
+    {
+      "key": "passive-perception",
+      "value": "13"
+    }
+  ],
+  "voice": "leise, höflich — wird stiller, je gefährlicher es wird",
+  "appearance": "salzverkrustete Lederjacke, Silberring am Daumen",
+  "motivation": "Den Auftrag zu Ende bringen, ohne dass jemand stirbt — er ist Schmuggler, kein Mörder, und das ist sein wunder Punkt.",
   "body": "## Weiß\n\n> [!secret] Kennt den Namen des Auftraggebers, nennt ihn aber nur,\n> wenn sein Ausstieg gesichert ist.\n\n## Beziehungen\n\n- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus\n",
   "warnings": []
 }

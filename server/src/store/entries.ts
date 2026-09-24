@@ -1,21 +1,21 @@
 // An entry, read and written through its address.
 //
-// Four kinds are reached this way — campaign, chapter, scene, npc — and they
+// Three kinds are reached this way — campaign, chapter, scene — and they
 // share exactly one read (`readEntry`) and exactly one write (`patchEntry`,
 // ADR #23): fields, text, or both, in ONE transaction against ONE `rev`. The
 // property contract per kind is its own module (./properties.ts), because the
 // seed reads it too.
 //
-// A location is its own resource (ADR #31, ./locations.ts): an address that
-// names one answers 404 here. Lists have no address and no case in either
-// switch (ADR #26).
+// An npc and a location are each their own resource (ADR #31, ./npcs.ts,
+// ./locations.ts): an address that names one answers 404 here. Lists have no
+// address and no case in either switch (ADR #26).
 
 import { and, eq } from "drizzle-orm";
 import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import { campaigns, chapters, generateJobs, npcs, packJson, scenes } from "../db/schema";
+import { campaigns, chapters, generateJobs, packJson, scenes } from "../db/schema";
 import {
   campaignRow,
   indexCampaign,
@@ -39,21 +39,17 @@ import {
   assertNpcRefs,
   chapterRowOf,
   indexChapter,
-  indexNpc,
   indexScene,
-  npcRowOf,
   refNpcs,
   refTags,
   sceneRowAt,
 } from "./entity-rows";
 import { getDb } from "./handle";
-import { NPC_DEFAULT_STATUS, readNpcEntry } from "./npcs";
 import { locatorFromPath, type Locator } from "./paths";
 import {
   applyPatch,
   CAMPAIGN_KEYS,
   CHAPTER_KEYS,
-  NPC_KEYS,
   rejectIdPatch,
   rejectUnknownKeys,
   SCENE_KEYS,
@@ -61,20 +57,16 @@ import {
 import {
   renderCampaign,
   renderChapter,
-  renderNpc,
   renderScene,
   type CampaignRow,
   type ChapterRow,
-  type NpcRow,
   type SceneRow,
 } from "./render";
 import {
-  asMap,
   asOptStr,
   asStr,
   asStrArray,
   assertChapterStatus,
-  assertNpcStatus,
   assertSceneClosedFields,
   normalizeBody,
   revConflict,
@@ -89,8 +81,8 @@ import {
  *
  * A session, the inbox and the glossary have no address (ADR #26), so
  * `locatorFromPath` already answered 404 for them and this switch has no case
- * to spend on a list. A location is its own resource (ADR #31), so an
- * address that names one is a 404 too.
+ * to spend on a list. An npc and a location are each their own resource
+ * (ADR #31), so an address that names one is a 404 too.
  */
 export function readByLocator(
   db: GrimoireDb,
@@ -105,8 +97,6 @@ export function readByLocator(
       return readChapterEntry(db, campaign, locator.id);
     case "scene":
       return readSceneEntry(db, campaign, locator.id);
-    case "npc":
-      return readNpcEntry(db, campaign, locator.id);
   }
 }
 
@@ -163,8 +153,8 @@ function guardEntryRev(
  * transaction (drafts and job can never disagree after a crash). A stale id
  * matches nothing and is ignored.
  *
- * An address that names a location is a 404: a location is written through
- * its own resource (ADR #31).
+ * An address that names an npc or a location is a 404: each is written
+ * through its own resource (ADR #31).
  */
 export async function patchEntry(
   campaign: string,
@@ -353,50 +343,6 @@ function patchLocator(
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
     }
-    case "npc": {
-      const row = npcRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "npc changed");
-      rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, NPC_KEYS);
-      assertNpcStatus(patch);
-      const props = applyPatch(renderNpc(row).properties, patch);
-      const quickstats = asMap(props.quickstats);
-      const npcChapter = asOptStr(props.chapter);
-      assertChapterRef(tx, campaign, npcChapter);
-      const next: NpcRow = {
-        ...row,
-        name: asStr(props.name, row.id),
-        role: asOptStr(props.role),
-        chapterId: npcChapter,
-        status: asStr(props.status, NPC_DEFAULT_STATUS),
-        statblock: asOptStr(props.statblock),
-        quickstats: packJson(quickstats),
-        voice: asOptStr(props.voice),
-        appearance: asOptStr(props.appearance),
-        motivation: asOptStr(props.motivation),
-        body: body ?? row.body,
-        rev: row.rev + 1,
-      };
-      tx.update(npcs)
-        .set({
-          name: next.name,
-          role: next.role,
-          chapterId: next.chapterId,
-          status: next.status,
-          statblock: next.statblock,
-          quickstats: next.quickstats,
-          voice: next.voice,
-          appearance: next.appearance,
-          motivation: next.motivation,
-          body: next.body,
-          rev: next.rev,
-        })
-        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
-        .run();
-      indexNpc(tx, campaign, next);
-      return renderNpc(next);
-    }
   }
 }
 
@@ -450,20 +396,6 @@ function writeBodyIn(
       const tags = refTags(tx, campaign, row.id);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), tags);
-    }
-    case "npc": {
-      const row = npcRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "npc changed");
-      // The whole text is stored as it was written, `## Beziehungen`
-      // included: nothing in the storage is derived from body text.
-      const next: NpcRow = { ...row, body, rev: row.rev + 1 };
-      tx.update(npcs)
-        .set({ body: next.body, rev: next.rev })
-        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
-        .run();
-      indexNpc(tx, campaign, next);
-      return renderNpc(next);
     }
   }
 }

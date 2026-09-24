@@ -13,6 +13,7 @@
     "./property-fields": "./src/property-fields.ts",
     "./entry-schema": "./src/entry-schema.ts",
     "./location": "./src/location.ts",
+    "./npc": "./src/npc.ts",
     "./session-state": "./src/session-state.ts"
   },
   "scripts": {

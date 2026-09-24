@@ -36,6 +36,7 @@ import {
 } from "@grimoire/shared/outline-schema";
 import { entryReplySchema, entrySchemaName } from "@grimoire/shared/entry-schema";
 import { locationReplyRequest } from "../src/location-reply";
+import { npcReplyRequest } from "../src/npc-reply";
 
 // --- factory ------------------------------------------------------------------
 
@@ -142,23 +143,23 @@ const OUTLINE_REQ: GenerateRequest = {
   },
 };
 
-/** Every entry request a run can make — kind x mode, a location's included. */
+/** Every entry request a run can make — per mode a scene's, an npc's and a location's. */
 const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
-  ...(["scene", "npc"] as const).flatMap((kind) =>
-    (["create", "augment"] as const).map((mode) => ({
-      label: `${kind}/${mode}`,
-      name: entrySchemaName(kind, mode),
-      req: { ...REQ, jsonSchema: entryReplySchema(kind, mode) } as GenerateRequest,
-    })),
-  ),
-  ...(["create", "augment"] as const).map((mode) => {
-    const reply = locationReplyRequest(mode);
-    return {
-      label: `location/${mode}`,
+  ...(["create", "augment"] as const).map((mode) => ({
+    label: `scene/${mode}`,
+    name: entrySchemaName("scene", mode),
+    req: { ...REQ, jsonSchema: entryReplySchema("scene", mode) } as GenerateRequest,
+  })),
+  ...(["create", "augment"] as const).flatMap((mode) =>
+    [
+      { label: `npc/${mode}`, reply: npcReplyRequest(mode) },
+      { label: `location/${mode}`, reply: locationReplyRequest(mode) },
+    ].map(({ label, reply }) => ({
+      label,
       name: reply.name,
       req: { ...REQ, jsonSchema: reply } as GenerateRequest,
-    };
-  }),
+    })),
+  ),
 ];
 
 // --- prompt assembly ------------------------------------------------------------

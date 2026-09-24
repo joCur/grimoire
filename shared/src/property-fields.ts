@@ -5,9 +5,9 @@
 // the GENERATOR needs the very same list: an entry reply is a JSON object
 // whose fields are schema-enforced per kind, and a schema that allowed a key
 // the dialog does not know — or forgot one it offers — would be a model
-// writing fields the DM can never see or edit. The location keeps its list
-// beside its zod schema, typed against it (ADR #31, ./location.ts), and the
-// table below refers to it.
+// writing fields the DM can never see or edit. The npc and the location keep
+// their lists beside their zod schemas, typed against them (ADR #31,
+// ./npc.ts, ./location.ts), and the table below refers to them.
 //
 // This is the one place server and app both import, and the definitions carry
 // only what both need: the key, the shape of its value, and the known value
@@ -21,7 +21,8 @@
 // kind's list and is left out of the dialog.
 
 import { LOCATION_FIELDS } from "./location";
-import { CHAPTER_STATUSES, NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
+import { NPC_FIELDS } from "./npc";
+import { CHAPTER_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
 
 /** The kinds whose properties are described field by field (README entities). */
 export const PROPERTY_KINDS = ["scene", "npc", "location", "chapter"] as const;
@@ -85,9 +86,9 @@ export interface PropertyFieldDef {
 
 /**
  * `id` is deliberately NOT in any list: it is fixed at creation (ADR #21),
- * and in a generator reply it is required separately (./entry-schema)
- * because it is what the server builds the ADDRESS from — the one thing that
- * is not an editable property.
+ * and in a scene's generator reply it is required separately
+ * (./entry-schema) because it is what the server builds the ADDRESS from —
+ * the one thing that is not an editable property.
  */
 export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]> = {
   scene: [
@@ -101,17 +102,7 @@ export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]
     { key: "tags", control: "chips" },
     { key: "status", control: "select", values: SCENE_STATUSES },
   ],
-  npc: [
-    { key: "name", control: "text", required: true },
-    { key: "role", control: "text" },
-    { key: "chapter", control: "reference", source: "chapters" },
-    { key: "status", control: "select", values: NPC_STATUSES },
-    { key: "statblock", control: "text" },
-    { key: "quickstats", control: "pairs" },
-    { key: "voice", control: "textarea" },
-    { key: "appearance", control: "textarea" },
-    { key: "motivation", control: "textarea", surface: "text" },
-  ],
+  npc: NPC_FIELDS,
   location: LOCATION_FIELDS,
   chapter: [
     { key: "title", control: "text", required: true },

@@ -2,7 +2,8 @@
 // server's own validation reads.
 //
 // The outline is a small, flat object — which scenes exist, what they are
-// called, which ids the run introduces — and both providers force it: the
+// called, which npcs and which locations the run introduces, each in its own
+// list — and both providers force it: the
 // Claude provider sends the schema as a tool and forces the call, an
 // OpenAI-compatible endpoint sends it as `response_format: json_schema`
 // (server/src/llm-provider.ts).
@@ -26,8 +27,8 @@ import { ENTITY_SLUG } from "./slug";
 import outlineSchema from "../schema/outline.schema.json";
 
 /**
- * The most parts ONE outline may produce — 12 scenes and 12 suggested
- * entries, counted separately.
+ * The most parts ONE outline may produce — 12 scenes, 12 new npcs and 12 new
+ * locations, each list counted on its own.
  *
  * Without the bound the outline decides how many provider calls a run makes,
  * and a source text that is a whole adventure turns one „Entwürfe
@@ -36,10 +37,8 @@ import outlineSchema from "../schema/outline.schema.json";
  * mode) and the validation enforces it, and both read the same number.
  */
 export const MAX_OUTLINE_SCENES = 12;
-export const MAX_OUTLINE_ENTRIES = 12;
-
-/** The two kinds an outline entry can have — an npc or a location. */
-export const OUTLINE_ENTRY_KINDS = ["npc", "location"] as const;
+export const MAX_OUTLINE_NPCS = 12;
+export const MAX_OUTLINE_LOCATIONS = 12;
 
 /**
  * The id rule as PROSE for the model, as the schema modules spell it out. It is

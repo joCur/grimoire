@@ -1,12 +1,12 @@
-// The review actions after a session: a log row reviewed, an npc stub
-// created, an idea ticked off.
+// The review actions after a session: a log row reviewed, an idea ticked
+// off. An npc the review makes out of a note is created on the npc's own
+// resource (`POST …/npcs`, ./npcs.ts).
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";
 import { markInboxLineDone } from "../store/inbox";
-import { createNpcStub } from "../store/npcs";
 import { markLogLineSeen } from "../store/sessions";
-import { jsonBody, normalizeLineText } from "./http";
+import { jsonBody } from "./http";
 
 export const reviewRoutes = new Hono();
 
@@ -41,28 +41,6 @@ reviewRoutes.post("/campaigns/:campaign/review/seen", async (c) => {
       reviewId(body.logId, "logId"),
     ),
   );
-});
-
-// POST /api/campaigns/:campaign/review/npc-stub { id, name?, note? } -> EntryResponse
-// Creates the npc entry (status: unknown) whose text is the note, no heading
-// around it; without a note the text is empty — or, when the id already has
-// one, answers with THAT entry: the caller's goal is "this id has an
-// entry", so the call is idempotent. An entry that holds content is never
-// overwritten; an EMPTY one — created and never filled in — is filled in.
-reviewRoutes.post("/campaigns/:campaign/review/npc-stub", async (c) => {
-  const body = await jsonBody(c, ["id", "name", "note"]);
-  if (typeof body.id !== "string") throw new ApiError(400, "id must be a string");
-  let name: string | undefined;
-  if (body.name !== undefined && body.name !== null) {
-    if (typeof body.name !== "string") throw new ApiError(400, "name must be a string");
-    name = normalizeLineText(body.name); // empty after trim -> default (the id)
-  }
-  let note: string | undefined;
-  if (body.note !== undefined && body.note !== null) {
-    if (typeof body.note !== "string") throw new ApiError(400, "note must be a string");
-    note = normalizeLineText(body.note); // empty after trim -> an empty text
-  }
-  return c.json(await createNpcStub(c.req.param("campaign"), body.id, name, note));
 });
 
 // POST /api/campaigns/:campaign/review/inbox-done { id } -> InboxResponse

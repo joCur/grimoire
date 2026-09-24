@@ -39,7 +39,7 @@ import {
   sceneRowOf,
 } from "./entity-rows";
 import { getDb } from "./handle";
-import { chapterPath, npcPath, sceneAddress, RESERVED_SEGMENTS } from "./paths";
+import { chapterPath, sceneAddress, RESERVED_SEGMENTS } from "./paths";
 import {
   renderChapter,
   renderScene,
@@ -461,8 +461,8 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     db.select().from(npcs).where(eq(npcs.campaignId, campaign)).all() as NpcRow[]
   )
     .map((row) => {
+      // No address: an npc is its own resource (ADR #31).
       const summary: NpcSummary = {
-        path: npcPath(row.id),
         id: row.id,
         name: row.name === "" ? row.id : row.name,
         status: row.status as NpcStatus,

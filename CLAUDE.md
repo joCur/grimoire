@@ -32,9 +32,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Projektstruktur
 
 - `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
-  ein Objekt je Datei in der Form der API: ein Ort unter
-  `fixtures/beispiel/locations/<id>.json` als das Objekt, das seine
-  Ressource liefert, ohne `rev`; Kampagne, Kapitel, Szene und NPC
+  ein Objekt je Datei in der Form der API: ein NPC unter
+  `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
+  `fixtures/beispiel/locations/<id>.json`, jeder als das Objekt, das seine
+  Ressource liefert, ohne `rev`; Kampagne, Kapitel und Szene
   `properties` + `body`;
   Sessions, Ideen und Glossar strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
@@ -90,13 +91,13 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>`,
-  `<kapitel>/<szenen-id>`, `campaign`); das Schema steht in
-  `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
-  Eintrags `properties`, sein Markdown `body`. Der Ort ist seine eigene
-  Ressource (ADR #31): `…/locations/<id>` antwortet mit `Location`, alle
-  Felder nebeneinander, ohne `kind` und `path`; die App-Route ist
-  `/campaigns/:id/locations/<id>`.
+- Jeder Eintrag hat eine Adresse (`<kapitel>`, `<kapitel>/<szenen-id>`,
+  `campaign`); das Schema steht in `server/src/store/paths.ts`. Auf der
+  Leitung heißen die Felder eines Eintrags `properties`, sein Markdown
+  `body`. NPC und Ort sind jeweils ihre eigene Ressource (ADR #31):
+  `…/npcs/<id>` antwortet mit `Npc`, `…/locations/<id>` mit `Location`, alle
+  Felder nebeneinander, ohne `kind` und `path`; die App-Routen sind
+  `/campaigns/:id/npcs/<id>` und `/campaigns/:id/locations/<id>`.
 - Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
   **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
   ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
@@ -228,10 +229,11 @@ Die Pfade:
 2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
    NPC-Karten der Referenzszenen
 3. ⌘K-Suche findet und öffnet: indexiert sind Kampagne, Kapitel, Szenen,
-   NPCs, Orte und die Glossar-Begriffe. Ein Orts-Treffer nennt sich mit `kind` + `id` ohne
-   Adresse und öffnet `/campaigns/:id/locations/<id>`, ein Glossar-Treffer
-   ebenso und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
-   nicht indexiert
+   NPCs, Orte und die Glossar-Begriffe. Ein NPC-Treffer nennt sich mit `kind`
+   + `id` ohne Adresse und öffnet `/campaigns/:id/npcs/<id>`, ein
+   Orts-Treffer ebenso und öffnet `/campaigns/:id/locations/<id>`, ein
+   Glossar-Treffer ebenso und öffnet `/campaigns/:id/glossary`; Sessions und
+   Ideen sind nicht indexiert
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →
    Log-**Zeile** (mit `sceneId`) + `scenesPlayed` → „Nächste Szene" führt

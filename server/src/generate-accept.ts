@@ -6,7 +6,7 @@
 // third module keeps that import graph a tree — the same split db/job-boot.ts
 // exists for.
 
-import type { DraftEdit, LocationProposal } from "@grimoire/shared";
+import { withNpcChange, type DraftEdit, type LocationProposal, type NpcProposal } from "@grimoire/shared";
 import { ApiError } from "./api-error";
 import {
   draftSceneId,
@@ -16,35 +16,52 @@ import {
 } from "./generate-jobs";
 import {
   applyLocationItem,
-  applyNpcTarget,
+  applyNpcItem,
   applySceneTarget,
-  applyStubTarget,
   draftAddress,
   jobChapterTarget,
   storedDraftProperties,
   type ApplyTarget,
 } from "./generator";
-import { npcPath } from "./store/paths";
 import { requireCampaign } from "./store/campaigns";
 import { sceneRunPos, takeSceneRunStart, type SceneRunStart } from "./store/chapters";
 import { applyDrafts, type ScenePlacement } from "./store/drafts";
 
 /**
- * Accept PART of a finished run — „Diesen übernehmen" per scene
- * and per suggested entry, and „Alle übernehmen" for whatever is left.
+ * One scene draft with the DM's review edit applied, half by half: a
+ * `properties` edit replaces the whole properties object, a `body` edit the
+ * whole body, and the half the edit does not carry keeps the model's own
+ * value (see DraftEdit). So a text edit cannot reset a field and a field edit
+ * cannot reset the text.
+ */
+function edit(
+  draft: { properties: Record<string, unknown>; body: string },
+  edited: DraftEdit | undefined,
+): { properties: Record<string, unknown>; body: string } {
+  return {
+    properties: edited?.properties ?? draft.properties,
+    body: edited?.body ?? draft.body,
+  };
+}
+
+/**
+ * Accept PART of a finished run — „Diesen übernehmen" per scene, npc and
+ * location, and „Alle übernehmen" for whatever is left.
  *
  * The whole-run apply (`applyGenerated`) stays exactly as it was; this is
  * the same write with a selection in front of it and different job
  * bookkeeping behind it:
  *
- *   selection   scene draft paths and npc stub addresses (`npcs/grella`)
- *               under `paths`, proposed locations by id under `locations`.
- *               Both absent is "accept all": every scene that is neither
+ *   selection   scene draft paths under `paths`, proposed npcs by id under
+ *               `npcs`, proposed locations by id under `locations`. All
+ *               three absent is "accept all": every scene that is neither
  *               written nor dropped, plus the npcs and locations the DM
  *               ACCEPTED — an undecided one is not written by a bulk action,
- *               and a rejected one never is. Naming one explicitly is the
- *               one way an undecided npc or location gets written (the
- *               accept action on its row is the decision).
+ *               and a rejected one never is. The NPC run's one npc is
+ *               written by a bulk action unless it was rejected: it is the
+ *               whole run. Naming one explicitly is the one way an
+ *               undecided npc or location gets written (the accept action on
+ *               its row is the decision).
  *               A SCENE CARRIES WHAT IT NAMES. A scene cannot be written
  *               while its `npcs`/`location` name nothing (ADR #19), so a
  *               selected scene pulls in the run's own npcs and locations for
@@ -66,29 +83,23 @@ import { applyDrafts, type ScenePlacement } from "./store/drafts";
  *               open. „Verwerfen" (DELETE …/job) therefore removes only the
  *               open rest — what was written is an entry now, not a job.
  */
-/**
- * One draft with the DM's review edit applied, half by half: a `properties`
- * edit replaces the whole properties object, a `body` edit the whole body,
- * and the half the edit does not carry keeps the model's own value (see
- * DraftEdit). So a text edit cannot reset a field and a field edit cannot
- * reset the text.
- */
-function edit(
-  draft: { properties: Record<string, unknown>; body: string },
-  edited: DraftEdit | undefined,
-): { properties: Record<string, unknown>; body: string } {
-  return {
-    properties: edited?.properties ?? draft.properties,
-    body: edited?.body ?? draft.body,
-  };
-}
-
 export async function acceptJobParts(
   campaign: string,
   jobId: string,
   rev: number,
-  body: { paths?: unknown; locations?: unknown; chapter?: unknown; chapterTitle?: unknown },
-): Promise<{ written: Record<string, string>; locations: string[]; jobDeleted: boolean }> {
+  body: {
+    paths?: unknown;
+    npcs?: unknown;
+    locations?: unknown;
+    chapter?: unknown;
+    chapterTitle?: unknown;
+  },
+): Promise<{
+  written: Record<string, string>;
+  npcs: string[];
+  locations: string[];
+  jobDeleted: boolean;
+}> {
   await requireCampaign(campaign);
   const job = await getJob(campaign);
   if (job === undefined || job.id !== jobId) {
@@ -110,7 +121,7 @@ export async function acceptJobParts(
 
   const review = job.review;
   const dropped = new Set(review.dropped);
-  /** Every part of this run, by the path the review addresses it with. */
+  /** Every scene draft of this run, by the path the review addresses it with. */
   const parts = new Map<string, { target: ApplyTarget; open: boolean; bulk: boolean }>();
   job.result?.scenes.forEach((scene, index) => {
     const edited = edit(scene, job.draftEdits.get(scene.path));
@@ -121,27 +132,24 @@ export async function acceptJobParts(
       bulk: open,
     });
   });
-  job.result?.stubs.forEach((stub, index) => {
-    const rel = npcPath(stub.id);
-    const decision = review.entries[rel];
-    const open =
-      review.written[rel] === undefined && decision !== "rejected" && !dropped.has(rel);
-    parts.set(rel, {
-      target: applyStubTarget({ ...stub, ...edit(stub, job.draftEdits.get(rel)) }, index),
+  /**
+   * Every proposed npc of this run, by its id — with the DM's change applied
+   * on top of the model's npc (`withNpcChange`) and checked against the
+   * npc's schema like any other npc the accept writes.
+   */
+  const npcParts = new Map<string, { npc: NpcProposal; open: boolean; bulk: boolean }>();
+  const addNpc = (proposal: NpcProposal, index: number, wholeRun: boolean): void => {
+    const decision = review.npcs[proposal.id];
+    const open = !review.writtenNpcs.includes(proposal.id) && decision !== "rejected";
+    const change = job.npcEdits[proposal.id];
+    npcParts.set(proposal.id, {
+      npc: applyNpcItem(change === undefined ? proposal : withNpcChange(proposal, change), index),
       open,
-      bulk: open && decision === "accepted",
+      bulk: open && (wholeRun || decision === "accepted"),
     });
-  });
-  const npcDraft = job.npcResult?.npc;
-  if (npcDraft !== undefined) {
-    const edited = edit(npcDraft, job.draftEdits.get(npcDraft.path));
-    const open = review.written[npcDraft.path] === undefined;
-    parts.set(npcDraft.path, {
-      target: applyNpcTarget({ path: npcDraft.path, ...edited }),
-      open,
-      bulk: open,
-    });
-  }
+  };
+  job.result?.npcs.forEach((proposal, index) => addNpc(proposal, index, false));
+  if (job.npcResult !== undefined) addNpc(job.npcResult.npc, 0, true);
   /** Every proposed location of this run, by its id. */
   const locationParts = new Map<
     string,
@@ -163,17 +171,16 @@ export async function acceptJobParts(
    * properties, so an edit of the scene in the review counts.
    */
   const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
-  const referencedOf = (rel: string): { paths: string[]; locations: string[] } => {
+  const referencedOf = (rel: string): { npcs: string[]; locations: string[] } => {
     const part = parts.get(rel);
-    if (part === undefined || !scenePaths.has(rel)) return { paths: [], locations: [] };
+    if (part === undefined || !scenePaths.has(rel)) return { npcs: [], locations: [] };
     const { properties } = part.target;
-    const npcIds = Array.isArray(properties.npcs) ? properties.npcs : [];
+    const npcIds: unknown[] = Array.isArray(properties.npcs) ? properties.npcs : [];
     const location = properties.location;
     return {
-      paths: npcIds
+      npcs: npcIds
         .filter((id): id is string => typeof id === "string")
-        .map(npcPath)
-        .filter((candidate) => parts.get(candidate)?.open === true),
+        .filter((id) => npcParts.get(id)?.open === true),
       locations:
         typeof location === "string" && locationParts.get(location)?.open === true
           ? [location]
@@ -186,10 +193,12 @@ export async function acceptJobParts(
    * `parts` below.
    */
   const chosen = new Set<string>();
+  const chosenNpcs = new Set<string>();
   const chosenLocations = new Set<string>();
-  const bulk = body.paths === undefined && body.locations === undefined;
+  const bulk = body.paths === undefined && body.npcs === undefined && body.locations === undefined;
   if (bulk) {
     for (const [rel, part] of parts) if (part.bulk) chosen.add(rel);
+    for (const [id, part] of npcParts) if (part.bulk) chosenNpcs.add(id);
     for (const [id, part] of locationParts) if (part.bulk) chosenLocations.add(id);
   } else {
     // An unknown path or id is a client bug worth seeing; an already WRITTEN
@@ -200,6 +209,11 @@ export async function acceptJobParts(
       if (part === undefined) throw new ApiError(400, `unknown draft path: ${rel}`);
       if (part.open) chosen.add(rel);
     }
+    for (const id of stringList(body.npcs, "npcs")) {
+      const part = npcParts.get(id);
+      if (part === undefined) throw new ApiError(400, `unknown npc: ${id}`);
+      if (part.open) chosenNpcs.add(id);
+    }
     for (const id of stringList(body.locations, "locations")) {
       const part = locationParts.get(id);
       if (part === undefined) throw new ApiError(400, `unknown location: ${id}`);
@@ -208,9 +222,10 @@ export async function acceptJobParts(
   }
   for (const rel of [...chosen]) {
     const referenced = referencedOf(rel);
-    for (const path of referenced.paths) chosen.add(path);
+    for (const id of referenced.npcs) chosenNpcs.add(id);
     for (const id of referenced.locations) chosenLocations.add(id);
   }
+  const npcs = [...npcParts].filter(([id]) => chosenNpcs.has(id)).map(([, part]) => part.npc);
   const locations = [...locationParts]
     .filter(([id]) => chosenLocations.has(id))
     .map(([, part]) => part.location);
@@ -223,11 +238,8 @@ export async function acceptJobParts(
    * way the chapter does not depend on the order the review happened to name
    * its paths in.
    *
-   * The carried-along referenced entries sit at their own outline place here
-   * rather than appended at the end: they are parts of this run like any
-   * other, and `applyDrafts` sorts every entry ahead of the scenes anyway
-   * (`inReferenceOrder`), so appending them would buy no reference safety and
-   * only let one scene's references shift another scene's position.
+   * The npcs and locations a selected scene carries along are written ahead
+   * of every scene by `applyDrafts`, so they cannot shift a scene's position.
    */
   const selected = [...parts.keys()].filter((rel) => chosen.has(rel));
   // A selection whose parts are ALL written already is a double click or a
@@ -235,8 +247,8 @@ export async function acceptJobParts(
   // state, so it gets the honest empty answer.
   // Only a BULK accept with nothing open left stays a 400 — there the caller
   // named nothing and there was nothing, which is a client bug.
-  if (selected.length === 0 && locations.length === 0) {
-    if (!bulk) return { written: {}, locations: [], jobDeleted: false };
+  if (selected.length === 0 && npcs.length === 0 && locations.length === 0) {
+    if (!bulk) return { written: {}, npcs: [], locations: [], jobDeleted: false };
     throw new ApiError(400, "nothing to apply");
   }
 
@@ -287,9 +299,11 @@ export async function acceptJobParts(
     return sceneRunPos(tx, campaign, chapter, sceneStart, number);
   };
 
+  const writtenNpcs = npcs.map((npc) => npc.id);
   const writtenLocations = locations.map((location) => location.id);
   let jobDeleted = false;
   await applyDrafts(campaign, drafts, {
+    npcs,
     locations,
     placeScene,
     onWritten: (tx) => {
@@ -298,12 +312,12 @@ export async function acceptJobParts(
         campaign,
         jobId,
         rev,
-        { paths: written, locations: writtenLocations },
+        { paths: written, npcs: writtenNpcs, locations: writtenLocations },
         tookStart ? sceneStart : undefined,
       );
     },
   });
-  return { written, locations: writtenLocations, jobDeleted };
+  return { written, npcs: writtenNpcs, locations: writtenLocations, jobDeleted };
 }
 
 /** A request list of strings, or none; anything else is a 400 naming it. */

@@ -60,6 +60,18 @@ async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
   expect(res.status).toBe(200);
 }
 
+/** Write fields of an npc — its own resource, fields flat, `body` among them (ADR #31). */
+async function patchNpc(id: string, fields: Record<string, unknown>): Promise<void> {
+  const url = `/api/campaigns/beispiel/npcs/${id}`;
+  const npc = (await (await app.request(url)).json()) as { rev: number };
+  const res = await app.request(url, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: npc.rev, ...fields }),
+  });
+  expect(res.status).toBe(200);
+}
+
 /** Write fields of a location — its own resource, fields flat (ADR #31). */
 async function patchLocation(id: string, fields: Record<string, unknown>): Promise<void> {
   const url = `/api/campaigns/beispiel/locations/${id}`;
@@ -134,7 +146,7 @@ describe("the index resolves references", () => {
     await writeBody(SCENE, "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n");
     expect(findsScene(await search("Salzhand"))).toBe(false);
 
-    await patch("npcs/jorna", { name: "Jorna Salzhand" });
+    await patchNpc("jorna", { name: "Jorna Salzhand" });
 
     // The scene's own row never changed — only what its indexed text says.
     expect((await readEntry(SCENE)).body).toContain("[[jorna]]");
@@ -146,9 +158,9 @@ describe("the index resolves references", () => {
     // Two entities that mention each other: the cascade latch (write.ts) is
     // what keeps this from ping-ponging forever.
     await writeBody(SCENE, "## Flow\n\n[[jorna]] und [[fenn]].\n");
-    await writeBody("npcs/jorna", "## Will\n\nDass [[fenn]] verschwindet.\n");
-    await writeBody("npcs/fenn", "## Will\n\nDass [[jorna]] schweigt.\n");
-    await patch("npcs/fenn", { name: "Fenn Silberring" });
+    await patchNpc("jorna", { body: "## Will\n\nDass [[fenn]] verschwindet.\n" });
+    await patchNpc("fenn", { body: "## Will\n\nDass [[jorna]] schweigt.\n" });
+    await patchNpc("fenn", { name: "Fenn Silberring" });
     expect((await search("Silberring")).some((r) => r.id === "jorna")).toBe(true);
   });
 });
@@ -190,7 +202,7 @@ describe("referrersOf", () => {
   test("a reference in a motivation or an atmosphere is a referrer too", async () => {
     // The cards show these properties with the reference as a NAME, and the
     // index spells it out — so a rename has to find them.
-    await patch("npcs/fenn", { motivation: "Weg von [[jorna]], bevor sie fragt." });
+    await patchNpc("fenn", { motivation: "Weg von [[jorna]], bevor sie fragt." });
     await patchLocation("bucht", { atmosphere: "Hier schaut [[jorna]] nie vorbei." });
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
@@ -198,7 +210,7 @@ describe("referrersOf", () => {
       { kind: "location", id: "bucht" },
     ]);
 
-    await patch("npcs/jorna", { name: "Jorna Salzhand" });
+    await patchNpc("jorna", { name: "Jorna Salzhand" });
     const hits = await search("Salzhand");
     expect(hits.some((r) => r.kind === "location" && r.id === "bucht")).toBe(true);
   });
@@ -212,7 +224,7 @@ describe("referrersOf", () => {
     ]);
 
     // A NAME change re-indexes the campaign row like any other referrer.
-    await patch("npcs/jorna", { name: "Jorna Salzhand" });
+    await patchNpc("jorna", { name: "Jorna Salzhand" });
     expect((await search("Salzhand")).some((r) => r.kind === "campaign")).toBe(true);
   });
 });

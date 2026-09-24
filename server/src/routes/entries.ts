@@ -4,8 +4,7 @@
 // all. The complete schema is in ../store/paths.ts:
 //
 //   campaign · <chapter> ·
-//   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
-//   npcs/<id>
+//   <chapter>/<scene-id> · <chapter>/<group>/<scene-id>
 //
 // The wire vocabulary follows from that: an entry's fields are `properties`,
 // its markdown is `body`, and its optimistic-concurrency token is `rev` (the
@@ -39,8 +38,9 @@ function entryAddress(c: Context): string {
 
 // GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
 // (properties, body, rev). The address IS the path — the schema is in
-// store/paths.ts, and it describes the campaign, its chapters, scenes and
-// npcs. An address that names a location is a 404: see the location routes.
+// store/paths.ts, and it describes the campaign, its chapters and scenes. An
+// address that names an npc or a location is a 404: see the npc and location
+// routes.
 entryRoutes.get("/campaigns/:campaign/entries/*", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), entryAddress(c))),
 );
@@ -77,7 +77,7 @@ entryRoutes.get("/campaigns/:campaign/entries/*", async (c) =>
 //
 // 404 for an entry that does not exist — including for an address that reaches
 // for one of the three LISTS, which have none (ADR #26), and for one that
-// names a location, which is written through its own resource. The lists are
+// names an npc or a location, each written through its own resource. The lists are
 // written through their own endpoints: PUT /glossary, POST /inbox, POST /log,
 // the session verbs, PATCH /sessions/:id and the review actions.
 entryRoutes.patch("/campaigns/:campaign/entries/*", async (c) => {

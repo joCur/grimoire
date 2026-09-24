@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import type {
   EntryResponse,
   InboxResponse,
+  Npc,
   SessionLogEntry,
   SessionResponse,
 } from "@grimoire/shared";
@@ -189,104 +190,46 @@ describe("POST /api/campaigns/:campaign/review/seen", () => {
   });
 });
 
-describe("POST /api/campaigns/:campaign/review/npc-stub", () => {
-  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+describe("a #npc note becomes an npc on the npc's own resource", () => {
+  // The review creates the npc with `POST …/npcs { name, id, body }` — the
+  // note is its text (ADR #31). There is no review action for it.
+  async function createFromNote(body: Record<string, unknown>): Promise<Response> {
+    return postJson("/api/campaigns/beispiel/npcs", body);
+  }
 
-  test("creates the npc with the documented shape", async () => {
-    const entry = await postOk("/api/campaigns/beispiel/review/npc-stub", {
+  test("the note is the npc's text, without a heading; the status claims nothing", async () => {
+    const res = await createFromNote({
+      name: "Old Metta",
+      id: "old-metta",
+      body: "Fischerin am Steg, kennt die Gezeiten #npc",
+    });
+    expect(res.status).toBe(201);
+    const npc = (await res.json()) as Npc;
+    expect(npc).toEqual({
       id: "old-metta",
       name: "Old Metta",
-      note: "Fischerin am Steg, kennt die Gezeiten #npc",
+      status: "unknown",
+      body: "Fischerin am Steg, kennt die Gezeiten #npc\n",
+      rev: 1,
     });
-    expect(entry.path).toBe("npcs/old-metta");
-    expect(entry.kind).toBe("npc");
-    // status is the column default — the log line said nothing about it, so
-    // the entry must not claim "alive".
-    expect(entry.properties.status).toBe("unknown");
-    expect(entry.properties).toEqual({ id: "old-metta", name: "Old Metta", status: "unknown" });
-    // The text IS the note — no heading, nothing around it.
-    expect(entry.body).toBe("Fischerin am Steg, kennt die Gezeiten #npc");
-    // A fresh row starts at rev 1 — the token the app sends with its first edit.
-    expect(entry.rev).toBe(1);
-    expect(await getEntry("npcs/old-metta")).toEqual(entry);
   });
 
-  test("name defaults to the id; without a note the text is empty", async () => {
-    const entry = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "kai" });
-    expect(entry.properties).toEqual({ id: "kai", name: "kai", status: "unknown" });
-    expect(entry.body).toBe("");
+  test("an npc with content is a 409 with a proposal, and the note is not written", async () => {
+    const before = (await (await app.request("/api/campaigns/beispiel/npcs/fenn")).json()) as Npc;
+    const res = await createFromNote({ name: "Fenn", id: "fenn", body: "doppelt #npc" });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "slug_taken", id: "fenn", suggestion: "fenn-2" });
+    expect(await (await app.request("/api/campaigns/beispiel/npcs/fenn")).json()).toEqual(before);
   });
 
-  test("a stub without name and note is still EMPTY — a later create fills it, no 409", async () => {
-    // Nothing but the id: the entry holds nothing, so creating it from the
-    // list (or applying a generator draft for it) fills it like any other
-    // empty entry instead of colliding with it.
-    const stub = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "wirt" });
-    expect(stub.body).toBe("");
-    const created = await app.request("/api/campaigns/beispiel/npcs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Der Wirt", id: "wirt" }),
-    });
-    expect(created.status).toBe(201);
-    const filled = (await created.json()) as EntryResponse;
-    expect(filled.path).toBe("npcs/wirt");
-    expect(filled.properties.name).toBe("Der Wirt");
-    expect(filled.rev).toBe(stub.rev + 1);
-  });
-
-  test("an existing entry is ANSWERED, not overwritten and not refused", async () => {
-    // Create-or-link: the caller wants this id to have an entry. One with
-    // content comes back untouched — the old 409 made the review correct an
-    // id that was right.
-    const before = await getEntry("npcs/fenn");
-    const linked = await postOk("/api/campaigns/beispiel/review/npc-stub", {
-      id: "fenn",
-      name: "Anders",
-      note: "doppelt",
-    });
-    expect(linked).toEqual(before);
-    expect(await getEntry("npcs/fenn")).toEqual(before);
-    // and a stub created in this run is linked the same way
-    const first = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "old-metta" });
-    const second = await postOk("/api/campaigns/beispiel/review/npc-stub", { id: "old-metta" });
-    expect(second).toEqual(first);
-  });
-
-  test("an EMPTY entry is filled in", async () => {
-    // An entry the DM created and did not fill in — the review is the first
-    // thing that knows a name and a note for it.
-    const created = await app.request("/api/campaigns/beispiel/npcs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "holm" }),
-    });
-    expect(created.status).toBe(201);
-    const empty = await getEntry("npcs/holm");
-    expect(empty.properties.name).toBe("holm");
-    const filled = await postOk("/api/campaigns/beispiel/review/npc-stub", {
-      id: "holm",
-      name: "Holm",
-      note: "war am Steg #npc",
-    });
-    expect(filled.properties.name).toBe("Holm");
-    expect(filled.body).toBe("war am Steg #npc");
+  test("an EMPTY npc is filled with the name and the note", async () => {
+    const empty = (await (await createFromNote({ name: "holm" })).json()) as Npc;
+    const res = await createFromNote({ name: "Holm", id: "holm", body: "war am Steg #npc" });
+    expect(res.status).toBe(201);
+    const filled = (await res.json()) as Npc;
+    expect(filled.name).toBe("Holm");
+    expect(filled.body).toBe("war am Steg #npc\n");
     expect(filled.rev).toBe(empty.rev + 1);
-  });
-
-  test("400 unless id is a kebab-case slug", async () => {
-    const bad = ["Old Metta", "old_metta", "-metta", "metta-", "a--b", "", "a/b", "ä", "A1"];
-    for (const id of bad) {
-      expect((await postJson("/api/campaigns/beispiel/review/npc-stub", { id })).status).toBe(400);
-    }
-    expect((await postJson("/api/campaigns/beispiel/review/npc-stub", {})).status).toBe(400);
-    expect((await postJson("/api/campaigns/beispiel/review/npc-stub", { id: 42 })).status).toBe(400);
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/npc-stub", { id: "ok-slug", name: 42 })).status,
-    ).toBe(400);
-    expect(
-      (await postJson("/api/campaigns/beispiel/review/npc-stub", { id: "ok-slug", note: 42 })).status,
-    ).toBe(400);
   });
 });
 
@@ -357,7 +300,7 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
     expect(res.status).toBe(404);
   });
 
-  test("404 for an unknown campaign on all three endpoints", async () => {
+  test("404 for an unknown campaign on both endpoints", async () => {
     expect(
       (
         await postJson("/api/campaigns/nope/review/seen", {
@@ -366,7 +309,6 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
         })
       ).status,
     ).toBe(404);
-    expect((await postJson("/api/campaigns/nope/review/npc-stub", { id: "a" })).status).toBe(404);
     expect((await postJson("/api/campaigns/nope/review/inbox-done", { id: "0" })).status).toBe(404);
   });
 });

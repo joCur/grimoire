@@ -32,7 +32,6 @@ import { getDb } from "./handle";
 import {
   CAMPAIGN_PATH,
   chapterPath,
-  npcPath,
   sceneAddress,
   scenePath,
 } from "./paths";
@@ -123,16 +122,15 @@ function pathForHit(
         id,
       });
     }
-    case "npc":
-      return npcPath(id);
     case "chapter":
       return chapterPath(id);
     case "campaign":
       return CAMPAIGN_PATH;
     default:
-      // A location — its own resource, opened by `kind` and `id` (ADR #31) —
-      // `glossary`, and any list kind added to the index later: the row is
-      // named by `kind` and `id`, and there is no address to offer.
+      // An npc and a location — each its own resource, opened by `kind` and
+      // `id` (ADR #31) —, `glossary`, and any list kind added to the index
+      // later: the row is named by `kind` and `id`, and there is no address
+      // to offer.
       return undefined;
   }
 }

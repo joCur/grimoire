@@ -1,13 +1,13 @@
 // The consistency test over the generator's reply schemas.
 //
-// Two kinds of schema are here. The WRITTEN ones — a scene's and an npc's,
-// each a schema file in ../schema, plain JSON on disk — can slowly disagree
-// with the code that reads the same data; points 1 and 2 are what stop it,
-// asserting schema by schema against the definitions the rest of the app
-// already uses. A DERIVED schema (a location's, from its zod schema via
-// `z.toJSONSchema`, ADR #31) cannot drift from its kind — it is the kind — so
-// for it only point 3 has to hold: the derivation must come out in the form
-// the providers enforce.
+// Two kinds of schema are here. The WRITTEN ones — a scene's, a schema file
+// in ../schema, plain JSON on disk — can slowly disagree with the code that
+// reads the same data; points 1 and 2 are what stop it, asserting schema by
+// schema against the definitions the rest of the app already uses. A DERIVED
+// schema (an npc's and a location's, from their zod schemas via
+// `z.toJSONSchema`, ADR #31) cannot drift from its entity — it is the entity
+// — so for it only point 3 has to hold: the derivation must come out in the
+// form the providers enforce.
 //
 //   1. the `properties` of a written schema ARE its kind's field list,
 //      in order — the same list the dialog is built from. A
@@ -38,9 +38,9 @@ import {
   type PropertiesKind,
 } from "../src/property-fields";
 import {
-  MAX_OUTLINE_ENTRIES,
+  MAX_OUTLINE_LOCATIONS,
+  MAX_OUTLINE_NPCS,
   MAX_OUTLINE_SCENES,
-  OUTLINE_ENTRY_KINDS,
   OUTLINE_ID_DESCRIPTION,
   outlineJsonSchema,
 } from "../src/outline-schema";
@@ -49,12 +49,11 @@ import {
   entryJsonSchema,
   entryReplySchema,
   entrySchemaName,
-  PAIR_KEY,
-  PAIR_VALUE,
   type EntryMode,
 } from "../src/entry-schema";
 import { z } from "zod";
 import { locationReplySchema } from "../src/location";
+import { npcReplySchema } from "../src/npc";
 
 /** The keywords OpenAI's strict mode refuses — see point 3 above. */
 const UNSUPPORTED = [
@@ -159,13 +158,7 @@ describe("the entry schemas", () => {
             expect(node.enum, label).toEqual([...(def.values ?? []), null]);
           }
           if (def.control !== "select") expect(node.enum, label).toBeUndefined();
-          // The free key/value map travels as the pair LIST strict mode
-          // needs — a mapping cannot be expressed at all.
-          if (def.control === "pairs") {
-            expect(at(node, ["items"]).required, label).toEqual([PAIR_KEY, PAIR_VALUE]);
-          } else if (base === "array") {
-            expect(node.items, label).toEqual({ type: "string" });
-          }
+          if (base === "array") expect(node.items, label).toEqual({ type: "string" });
         }
       }
     }
@@ -183,7 +176,6 @@ describe("the entry schemas", () => {
 
   test("the schema name says kind and run, and nothing else does", () => {
     expect(entrySchemaName("scene", "create")).toBe("scene");
-    expect(entrySchemaName("npc", "create")).toBe("npc");
     // The augment run prefixes the same kind: the correction turn names the
     // schema, so the name the model was handed says kind AND run.
     for (const kind of GENERATED_ENTRY_KINDS) {
@@ -195,17 +187,18 @@ describe("the entry schemas", () => {
     const first = entryJsonSchema("scene", "create");
     expect(entryJsonSchema("scene", "create")).not.toBe(first);
     expect(entryJsonSchema("scene", "create")).toEqual(first);
-    const reply = entryReplySchema("npc", "create");
-    expect(reply.name).toBe("npc");
-    expect(reply.description).toContain("Figur");
-    expect(reply.schema).toEqual(entryJsonSchema("npc", "create"));
+    const reply = entryReplySchema("scene", "create");
+    expect(reply.name).toBe("scene");
+    expect(typeof reply.description).toBe("string");
+    expect(reply.schema).toEqual(entryJsonSchema("scene", "create"));
   });
 });
 
 describe("the outline schema", () => {
   const scenes = () => at(outlineJsonSchema(), ["properties", "scenes"]);
   const sceneProps = () => at(outlineJsonSchema(), ["properties", "scenes", "items", "properties"]);
-  const entries = () => at(outlineJsonSchema(), ["properties", "entries"]);
+  const npcs = () => at(outlineJsonSchema(), ["properties", "npcs"]);
+  const locations = () => at(outlineJsonSchema(), ["properties", "locations"]);
 
   test("names the same scene types, ids and bounds as the validation", () => {
     expect(sceneProps().type).toEqual({ type: "string", enum: [...SCENE_TYPES] });
@@ -215,8 +208,17 @@ describe("the outline schema", () => {
     expect(sceneProps().id).toEqual({ type: "string", description: OUTLINE_ID_DESCRIPTION });
     expect(OUTLINE_ID_DESCRIPTION).toContain(ENTITY_SLUG.source);
     expect(scenes().description).toContain(String(MAX_OUTLINE_SCENES));
-    expect(entries().description).toContain(String(MAX_OUTLINE_ENTRIES));
-    expect(at(entries(), ["items", "properties", "kind"]).enum).toEqual([...OUTLINE_ENTRY_KINDS]);
+    expect(npcs().description).toContain(String(MAX_OUTLINE_NPCS));
+    expect(locations().description).toContain(String(MAX_OUTLINE_LOCATIONS));
+    // The new npcs and the new locations are two lists of their own: an item
+    // names neither a kind nor anything beside its id, name and summary.
+    for (const list of [npcs(), locations()]) {
+      expect(at(list, ["items"]).required).toEqual(["id", "name", "summary"]);
+      expect(at(list, ["items", "properties", "id"])).toEqual({
+        type: "string",
+        description: OUTLINE_ID_DESCRIPTION,
+      });
+    }
   });
 
   test("the genuinely optional fields are nullable instead of absent", () => {
@@ -238,10 +240,11 @@ describe("every schema", () => {
     ),
     ["outline", outlineJsonSchema()] as const,
   ];
-  // The location's reply is derived from its zod schema, so the check runs
-  // on exactly what `z.toJSONSchema` makes of it.
+  // The npc's and the location's replies are derived from their zod schemas,
+  // so the check runs on exactly what `z.toJSONSchema` makes of them.
   const all = [
     ...written,
+    ["npc", z.toJSONSchema(npcReplySchema) as Record<string, unknown>] as const,
     ["location", z.toJSONSchema(locationReplySchema) as Record<string, unknown>] as const,
   ];
 
