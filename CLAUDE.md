@@ -138,7 +138,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   nachgebaut. Das Schema einer Art ist ihr zod-Schema, und Typ,
   Patch-, Seed- und Generator-Form werden daraus abgeleitet (ADR #31).
   Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
-  das Objekt, ein Eintrag als sein JSON).
+  das Objekt selbst, eine Art als das Objekt, das ihre Ressource liefert).
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
