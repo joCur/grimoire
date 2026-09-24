@@ -191,7 +191,7 @@ export async function namingRules(campaign: string): Promise<Array<{ from: strin
  *
  * The lists are assembled into a markdown prompt, so an entry is a
  * fragment of an entry the model reads as instructions. The endpoints
- * already refuse newlines (routes/api.ts), and this is the second half of
+ * already refuse newlines (routes/knowledge.ts), and this is the second half of
  * that: whatever is in the database — a row from an older build, a hand-made
  * one, a value that slipped past a validator — can only ever become ONE line
  * of text here.

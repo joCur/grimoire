@@ -1,6 +1,7 @@
 // Typed client for the Grimoire server API (every endpoint is documented at
-// its route in server/src/routes/api.ts). All response shapes come from
-// @grimoire/shared — the format contract exists exactly once.
+// its route, in its resource's module server/src/routes/<resource>.ts). All
+// response shapes come from @grimoire/shared — the format contract exists
+// exactly once.
 
 import type {
   CampaignSummary,
@@ -236,8 +237,8 @@ export function fetchThreads(campaign: string, chapter: string): Promise<Threads
 }
 
 /**
- * Append one thread at the end of the chapter's list — „Handlungsstrang
- * übernehmen" in the review and the overview's add action. No `rev`: an
+ * Append one thread at the end of the chapter's list — adopting a plot
+ * thread in the review and the overview's add action. No `rev`: an
  * append has nothing to overwrite, so the list moving elsewhere is no reason
  * to refuse it.
  */
@@ -502,7 +503,7 @@ export function fetchSessions(campaign: string): Promise<SessionSummary[]> {
 }
 
 /**
- * Start a NEW session: "beenden" is final, so a start after an
+ * Start a NEW session: ending one is final, so a start after an
  * ended session creates the next one of the day with an
  * empty log. Idempotent only while today's session is the RUNNING one; the
  * single 409 left is `session_running` — an OLDER session is still open (see
@@ -914,7 +915,7 @@ export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | 
   return (await response.json()) as GenerateJob;
 }
 
-/** Discard the campaign's generate job ("Verwerfen"). A missing job is fine. */
+/** Discard the campaign's generate job. A missing job is fine. */
 export async function deleteGenerateJob(campaign: string): Promise<void> {
   const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job`;
   const response = await fetch(`/api${path}`, { method: "DELETE" });

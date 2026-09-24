@@ -1,12 +1,12 @@
 // The list mechanics of the two campaign-content pages:
-// „Kampagnenwissen" (/campaigns/:campaign/knowledge) and „Glossar"
+// the knowledge page (/campaigns/:campaign/knowledge) and the glossary page
 // (/campaigns/:campaign/glossary).
 //
-// Both lists are ONE text the server takes as a whole (server/src/server.ts):
-// the array order is the stored order, so reordering, deleting and editing are
-// all the same request — a whole-list PUT guarded by the list's `rev`. This
-// module is that arithmetic — pure, so the pages stay about layout and the
-// rules are testable without a DOM.
+// The server writes both lists as a whole (server/src/routes/glossary.ts,
+// server/src/routes/knowledge.ts): the array order is the stored order, so
+// reordering, deleting and editing are all the same request — a whole-list
+// PUT guarded by the list's `rev`. This module is that arithmetic — pure, so
+// the pages stay about layout and the rules are testable without a DOM.
 //
 // Each page holds exactly ONE open entry at a time, so no per-row client key
 // is needed to follow a row through a reorder. WHICH entry is open is a
@@ -117,7 +117,7 @@ export function knowledgeRows(
 
 /**
  * The one line a knowledge row shows next to its kind badge: the pair as
- * „Alt → Neu", or the sentence. Empty for an entry with nothing in it yet —
+ * `from → to`, or the sentence. Empty for an entry with nothing in it yet —
  * the row then falls back to its own placeholder rather than showing a lone
  * arrow.
  */
@@ -131,7 +131,7 @@ export function knowledgeSummary(entry: KnowledgeEntry): string {
 
 // --- the entries themselves ---------------------------------------------------
 
-/** An empty glossary entry — what „Neuer Begriff" opens. */
+/** An empty glossary entry — what the new-term button opens. */
 export function emptyGlossaryEntry(): GlossaryEntry {
   return { term: "", explanation: "" };
 }
@@ -148,7 +148,7 @@ export function emptyKnowledgeEntry(kind: KnowledgeKind = "naming"): KnowledgeEn
 /**
  * Is a glossary entry worth saving? A term-less entry is one the DM opened and
  * left alone — the server would refuse it (400 „needs a non-empty term"), so
- * „Speichern" stays disabled instead of answering with an error.
+ * the save button stays disabled instead of answering with an error.
  */
 export function isSendableGlossaryEntry(entry: GlossaryEntry): boolean {
   return entry.term.trim() !== "";
@@ -159,8 +159,8 @@ export function isSendableGlossaryEntry(entry: GlossaryEntry): boolean {
  * since `switchKnowledgeKind` is the same thing as „any column", because the
  * columns the current kind has no field for are always empty.
  *
- * A `naming` with only its „Alt" half is kept on purpose (the server stores
- * it, the prompt skips it — see server/src/routes/api.ts), because throwing
+ * A `naming` with only its `from` half is kept on purpose (the server stores
+ * it, the prompt skips it — see server/src/routes/knowledge.ts), because throwing
  * away half-typed work on save is worse than carrying an unfinished rule.
  */
 export function isSendableKnowledgeEntry(entry: KnowledgeEntry): boolean {
@@ -180,9 +180,9 @@ export function isSendableKnowledgeEntry(entry: KnowledgeEntry): boolean {
  * Clearing them instead would throw the sentence away on a mis-click. So the
  * text MOVES into the new form, and the old kind's columns are emptied:
  *
- *   * fact/style → naming: the sentence becomes „Alt", which is where the DM
+ *   * fact/style → naming: the sentence becomes `from`, which is where the DM
  *     was typing and where they will see it;
- *   * naming → fact/style: the pair becomes „Alt → Neu" as one sentence, so
+ *   * naming → fact/style: the pair becomes `from → to` as one sentence, so
  *     both halves survive in the field that is now on screen;
  *   * fact ↔ style: the sentence is the same sentence.
  *
@@ -254,7 +254,7 @@ export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
  * POST-delete display list — computing the target from pre-delete indices
  * would land the focus on an unrelated term two rows away.
  *
- * With nothing left there is no row to focus, so „Neuer Eintrag" takes it: the
+ * With nothing left there is no row to focus, so the new-entry button takes it: the
  * only thing still worth doing.
  */
 export type RemoveFocus = { target: "row"; index: number } | { target: "add" };

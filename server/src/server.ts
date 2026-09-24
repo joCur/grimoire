@@ -1,8 +1,9 @@
 // Grimoire server — assembles the Hono app: it mounts the API under /api and,
 // in production, serves the frontend build (app/dist) with an index.html
 // fallback for client-side routes (./static-files; in dev Vite serves the app
-// and proxies /api). The API itself is documented AT ITS ROUTES
-// (./routes/api) — one comment per endpoint, no second list.
+// and proxies /api). The API itself is documented AT ITS ROUTES — one module
+// per resource (./routes/<resource>.ts), assembled in ./routes/api.ts, one
+// comment per endpoint, no second list.
 //
 // Runs on Bun (bun run src/server.ts). No Bun-only runtime APIs are used
 // (DECISIONS #5/#7): Bun picks up the default { port, fetch } export below;
