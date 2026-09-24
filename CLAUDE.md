@@ -12,6 +12,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
    `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
    normativ.
 2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
+   Ein ADR hält nur Zielentscheidungen fest: keine befristeten ADRs, keine
+   Zwischenstände. Der Zwischenstand eines in Scheiben geschnittenen Umbaus
+   steht allein im Ticket.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
 ## Stack (Kurzfassung, Details in docs/DECISIONS.md #5)
@@ -109,7 +112,22 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
 - Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
   kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
-  Übergangscode nur per eigenem ADR und befristet (ADR #28).
+  Übergangscode gibt es nicht: Ein Umbau wird so geschnitten, dass weder
+  Adapter noch Doppelwege entstehen.
+- Eine Ressource je Art (ADR #31): Jede Art hat ihren eigenen Endpunkt,
+  ihren eigenen Typ und ihre eigene App-Route; einen allgemeinen Endpunkt
+  über mehrere Arten gibt es nicht. Jedes Feld ist ein Feld der Art, `body`
+  eingeschlossen — keine Sammelbegriffe wie „Eigenschaften“ gegenüber „Text“,
+  kein „Eintrag“ oder „Entwurf“ als gemeinsame Form. Wo wirklich gemischt
+  wird (Suche), nennt der Treffer seine Art ausdrücklich (`kind`).
+- Daten sind Zeilen ihrer Art in der Datenbank, keine Dateien und keine
+  Dokumente — in Prompts, Schema-Namen und -Beschreibungen, Bezeichnern,
+  Kommentaren, Doku und Katalog. Prompts sagen nur, was das Modell tun soll:
+  keine Verbote, keine „nicht mehr“-Hinweise, keine Geschichte.
+- Fixes beschränken sich auf die Ursache: kein zusätzlicher Schutz, keine
+  Tests und keine Betriebsdoku über den Auftrag hinaus. Kommentare
+  beschreiben den Zustand, nie die Geschichte eines Fehlers oder das Setup
+  des PO.
 - Abhängigkeiten statt Eigenbau (ADR #30): Für allgemeine Aufgaben
   (Validierung, Schemata, Datum und Zeit, …) wird ein etabliertes Paket
   eingebunden, nicht selbst gebaut. Eintragspflichtig in docs/DECISIONS.md
@@ -125,6 +143,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `app/src/lib/` bekommen den Translator als Argument. Details: ADR #15.
   `bun run lint` ist das Gate — scharf für migrierte Dateien, `warn` für den
   Rest (Scheibe 2 von #69 arbeitet die Warnungen ab).
+- UI-Texte sind ganze Sätze, die der DM versteht: Ändert sich das Verhalten
+  hinter einem Text, wird der de/en-Satz neu formuliert, nie ein Satzteil
+  ausgetauscht. Keine rohen Leitungswerte (`status: unknown`) im Satz,
+  sondern das UI-Label. Der Lead prüft die Formulierung auf Logik, bevor der
+  PR zum PO geht.
 
 ## Backlog-Prozess
 
@@ -133,7 +156,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Refinement findet IM Issue statt: Rückfragen als Kommentare stellen;
   danach den Issue-Body zum Ticket ausbauen — User Story („Als DM will
   ich … damit …"), Akzeptanzkriterien (nachprüfbar), Scope/Nicht-Ziele,
-  Abhängigkeiten. Erst nach PO-Ok im Thread: Label `idee` → `ready`.
+  Abhängigkeiten. Erst nach PO-Ok im Thread: Label `idee` → `ready`. Ein
+  Ok des PO im Gespräch mit dem Lead gilt genauso; der Lead hält es im
+  Thread fest, bevor er `ready` setzt.
 - Das Team nimmt nur `ready`-Tickets. Übernahme = Label „in Arbeit" +
   Kommentar mit Zuschnitt; fertig = Schließen mit Commit-Verweis.
 - Zu Beginn jeder Arbeitssitzung: offene `idee`-Issues sichten, bevor
@@ -150,6 +175,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Jedes Ticket: eigener Worktree + Feature-Branch (`<nr>-<slug>`),
   Ergebnis als PR. Merge-Voraussetzungen: CI grün (Tests, Typecheck,
   Build, E2E), Lead-Klickpfad, UND PO-Approval auf dem PR.
+- Der Lead implementiert nicht, auch keine Kleinigkeiten. Umgesetzt wird von
+  Engineer-Agents auf Opus (`model: "opus"`, eigener Worktree); Fable nur für
+  den Lead und, auf ausdrücklichen Wunsch des PO, für einen Designer.
+- Der Lead-Klickpfad läuft auf dem FINALEN PR-Stand nach dem letzten Commit,
+  auch nach Review-Fix-Runden. Ungetestet geht kein PR zum PO.
 - main ist per Definition deploybar, veröffentlicht aber nichts: Images
   entstehen nur beim Release (DECISIONS #12). Der PO pullt bewusst einen
   Versions-Tag (nie direkt vor einer Session); Rollback = älterer

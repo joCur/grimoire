@@ -1509,6 +1509,12 @@ jede Migration nach der Baseline vier Regeln:
    ausnahmsweise TypeScript (etwa weil SQLite kein Markdown parsen kann), ist
    das ein eigener ADR mit Begründung, und ein Folge-Release nimmt den Code
    wieder heraus.
+
+   > **Teilweise überholt:** Übergangscode gibt es nicht, auch nicht per
+   > eigenem, befristetem ADR. Ein ADR hält nur Zielentscheidungen fest, und
+   > ein Umbau wird so geschnitten, dass weder Adapter noch Doppelwege
+   > entstehen (`CLAUDE.md`, „Arbeitsweise“). Der Grundsatz der Regel — kein
+   > Code, der nur für eine Migration existiert — gilt weiter.
 4. **Ungültige Daten entstehen gar nicht erst.** Das leisten CHECK-Constraints,
    Fremdschlüssel und die 400 am Schreibpfad. Deshalb braucht es auch künftig
    keine Vorabprüfung.
