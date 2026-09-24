@@ -84,6 +84,30 @@ export const locationReplySchema = locationProposalSchema.extend({
   warnings: z.array(z.string()),
 });
 
+export type LocationReplyObject = z.infer<typeof locationReplySchema>;
+
+/**
+ * A location reply as the proposal it stands for, the one conversion every
+ * run uses: the location without its guard — an optional field the model
+ * answered with `null` is absent, never `null` — and the model's `warnings`
+ * apart from it.
+ */
+export function locationFromReply(reply: LocationReplyObject): {
+  location: LocationProposal;
+  warnings: string[];
+} {
+  const { chapter, roll20Page, atmosphere, warnings, ...fields } = reply;
+  return {
+    location: {
+      ...fields,
+      ...(chapter === null ? {} : { chapter }),
+      ...(roll20Page === null ? {} : { roll20Page }),
+      ...(atmosphere === null ? {} : { atmosphere }),
+    },
+    warnings,
+  };
+}
+
 // --- the form fields ------------------------------------------------------------
 
 /**

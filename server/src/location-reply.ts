@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import {
+  locationFromReply,
   locationProposalSchema,
   locationReplySchema,
   type EntryMode,
@@ -119,27 +120,22 @@ export function parseLocationReply(
       }),
     };
   }
-  const { id, name, body, warnings, chapter, roll20Page, atmosphere } = read.data;
   const errors: string[] = [];
-  if (id === "") errors.push('"id" fehlt — jeder Ort nennt seine kebab-case id');
-  if (name === "") errors.push('"name" fehlt — das Feld ist verpflichtend');
+  if (read.data.id === "") errors.push('"id" fehlt — jeder Ort nennt seine kebab-case id');
+  if (read.data.name === "") errors.push('"name" fehlt — das Feld ist verpflichtend');
   if (errors.length > 0) return { ok: false, errors };
 
-  const location: LocationProposal = {
-    id,
-    name,
-    ...(chapter === null ? {} : { chapter }),
-    ...(roll20Page === null ? {} : { roll20Page }),
-    ...(atmosphere === null ? {} : { atmosphere }),
-    // The body is stored the way the store keeps it: no leading blank lines
-    // and exactly one trailing newline.
-    body: `${body.replace(/^\n+/, "").trimEnd()}\n`,
-  };
+  const { location, warnings } = locationFromReply(read.data);
   const notes = warnings.map((warning) => warning.trim()).filter((warning) => warning !== "");
   return {
     ok: true,
     reply: {
-      location,
+      location: {
+        ...location,
+        // The body is stored the way the store keeps it: no leading blank
+        // lines and exactly one trailing newline.
+        body: `${location.body.replace(/^\n+/, "").trimEnd()}\n`,
+      },
       warnings: parsed.repaired ? [...notes, REPAIRED_ENTRY_WARNING] : notes,
       ignored,
     },

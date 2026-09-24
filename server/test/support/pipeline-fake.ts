@@ -135,8 +135,8 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
  * script cannot write a shape no provider could deliver.
  *
  * A location replies with its own fields (ADR #31): the script's fields stand
- * beside `body` and `warnings`, and a field the script leaves out is simply
- * absent — the server reads that as `null`, "not given".
+ * beside `body` and `warnings`, and an optional field the script leaves out
+ * is `null` — "not given", exactly as a strict provider delivers it.
  */
 export function entryReply(
   entry: ScriptedEntry,
@@ -144,7 +144,14 @@ export function entryReply(
   kind: GeneratedEntryKind | "location" = "scene",
 ): string {
   if (kind === "location") {
-    return JSON.stringify({ ...entry.properties, body: entry.body, warnings: [...warnings] });
+    return JSON.stringify({
+      chapter: null,
+      roll20Page: null,
+      atmosphere: null,
+      ...entry.properties,
+      body: entry.body,
+      warnings: [...warnings],
+    });
   }
   return JSON.stringify({
     properties: toReplyProperties(kind, entry.properties),

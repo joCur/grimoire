@@ -3,7 +3,7 @@
 // (`accept { locations }`) and recorded by id (`review.writtenLocations`).
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import type { GenerateJob, Location } from "@grimoire/shared";
+import { locationProposalSchema, type GenerateJob, type Location } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
@@ -103,6 +103,13 @@ test("a proposed location is a location of its own list — no stub, no kind, no
   expect(job.result?.locations).toEqual([
     { ...MOLE, body: "## Beim ersten Betreten\n\nNebel.\n" },
   ]);
+  // The reply said `roll20Page: null` ("not given"); the proposal is the
+  // location without its guard, where an optional field is absent instead.
+  for (const location of job.result?.locations ?? []) {
+    expect(Object.keys(location)).not.toContain("roll20Page");
+    expect(Object.values(location)).not.toContain(null);
+    expect(locationProposalSchema.safeParse(location).success).toBe(true);
+  }
   expect(job.review?.locations).toEqual({});
   expect(job.review?.writtenLocations).toEqual([]);
 });
