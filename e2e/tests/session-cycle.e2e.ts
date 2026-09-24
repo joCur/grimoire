@@ -266,6 +266,11 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
+  // The way out leads to the location's own route (ADR #31).
+  await expect(page.getByRole("dialog").getByRole("link")).toHaveAttribute(
+    "href",
+    "/campaigns/beispiel/locations/leuchtturm",
+  );
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
 

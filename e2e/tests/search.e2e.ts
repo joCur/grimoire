@@ -7,9 +7,10 @@
 // the search index is maintained in the same transaction as the write, so
 // there is no watcher to wait for.
 //
-// And what the index HOLDS: the five entry kinds plus the glossary terms.
-// A glossary term is a row of a list (ADR #26), so its hit carries `kind` and
-// `id` and no address — the palette opens it through the glossary page.
+// And what the index HOLDS: the entry kinds, the locations and the glossary
+// terms. A location is its own resource (ADR #31) and a glossary term a row of
+// a list (ADR #26), so their hits carry `kind` and `id` and no address — the
+// palette opens the location's route and the glossary page.
 // Sessions and ideas are not indexed at all, so no query can produce one.
 
 import { expect, test } from "../support/test";
@@ -97,6 +98,35 @@ test("content the APP just wrote is findable right away", async ({
   await hit.click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/entries/${SCENE.replace(/\./g, "\\.")}$`));
   await expect(page.getByRole("article")).toContainText(WORD);
+});
+
+test("a location hit opens the location's own route — its kind and id, no address", async ({
+  page,
+  api,
+}) => {
+  // On the wire: `{ kind: "location", id, title }` and no `path` — a location
+  // is its own resource (ADR #31).
+  const { results } = await api.get<{
+    results: { kind: string; id: string; path?: string; title: string }[];
+  }>("campaigns/beispiel/search?q=Lampen");
+  const location = results.find((hit) => hit.kind === "location");
+  expect(location).toMatchObject({ kind: "location", id: "leuchtturm" });
+  expect(location).not.toHaveProperty("path");
+
+  await page.goto("/campaigns/beispiel");
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByRole("combobox").fill("Lampen");
+  const hit = page.getByRole("option").filter({ hasText: "Der Leuchtturm von Salzhafen" });
+  await expect(hit).toHaveCount(1);
+  await hit.click();
+
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations\/leuchtturm$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  // The context line points at the location list, on its own route too.
+  await expect(page.getByRole("link", { name: "Orte" }).first()).toHaveAttribute(
+    "href",
+    "/campaigns/beispiel/locations",
+  );
 });
 
 test("a glossary hit opens the glossary page — no address, and none needed", async ({

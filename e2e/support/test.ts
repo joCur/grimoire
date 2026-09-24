@@ -25,7 +25,9 @@
 // The keys are FIXTURE FILE STEMS, not addresses: a stem that already exists
 // in `fixtures/beispiel` REPLACES that entry, any other stem adds one. The
 // address an entry gets is the server's decision (`server/src/store/paths.ts`
-// — a scene's segments are its chapter, its location and its id).
+// — a scene's segments are its chapter, its location and its id). A location
+// is its own resource (ADR #31): its stem is `locations/<id>` and its fixture
+// is the location itself, every field flat, without a guard.
 //
 // Without overrides the pristine copy from the global setup is used directly
 // (it is never written to), so most tests copy nothing at all.
@@ -101,16 +103,6 @@ export type SeedEntry =
       body?: string;
     }
   | {
-      /** A location is its draft: its fields flat beside `kind`, `id` and `body` (ADR #31). */
-      kind: "location";
-      id: string;
-      name: string;
-      chapter?: string;
-      "roll20-page"?: string;
-      atmosphere?: string;
-      body?: string;
-    }
-  | {
       kind: "chapter";
       properties: Record<string, unknown>;
       body?: string;
@@ -134,10 +126,26 @@ export type SeedEntry =
       entries: { term: string; explanation: string }[];
     };
 
+/**
+ * One location as its fixture holds it (`locations/<id>.json`) — every field
+ * flat, `body` among them, no guard (ADR #31).
+ */
+export interface SeedLocation {
+  id: string;
+  name: string;
+  chapter?: string;
+  roll20Page?: string;
+  atmosphere?: string;
+  body: string;
+}
+
 /** What a test changes about the fixtures its database is seeded from. */
 export interface Seed {
-  /** fixture file stem -> entry; a stem that exists in fixtures/beispiel REPLACES it */
-  entries?: Record<string, SeedEntry>;
+  /**
+   * fixture file stem -> entry; a stem that exists in fixtures/beispiel
+   * REPLACES it. A location's stem is `locations/<id>`.
+   */
+  entries?: Record<string, SeedEntry | SeedLocation>;
   /** fixture file stems to leave out, e.g. "session-2026-01-15" */
   without?: string[];
   /**
@@ -156,13 +164,7 @@ export interface Seed {
   skip?: boolean;
 }
 
-/**
- * One entry as GET /api/campaigns/:campaign/entries/<address> answers it, for
- * a kind whose fields travel under `properties`. A location answers its
- * fields flat beside `kind`, `id`, `path`, `body` and `rev` (ADR #31) — read
- * them through `api.properties`, which answers the fields by name for every
- * kind.
- */
+/** One entry as GET /api/campaigns/:campaign/entries/<address> answers it. */
 export interface ApiEntry {
   path: string;
   kind: string;
@@ -172,9 +174,19 @@ export interface ApiEntry {
   rev: number;
 }
 
-/** Is this address a location's, whose fields travel flat (ADR #31)? */
-function isLocationAddress(rel: string): boolean {
-  return rel.startsWith("locations/");
+/**
+ * One location as GET /api/campaigns/:campaign/locations/:id answers it —
+ * its own resource (ADR #31): every field flat, `body` among them, beside
+ * its guard.
+ */
+export interface ApiLocation {
+  id: string;
+  name: string;
+  chapter?: string;
+  roll20Page?: string;
+  atmosphere?: string;
+  body: string;
+  rev: number;
 }
 
 /** One log row of a session — columns, never a markdown line (ADR #26). */
@@ -250,6 +262,21 @@ export interface Api {
   properties(rel: string): Promise<Record<string, unknown>>;
   /** Whether the address names an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
+  /** GET one location from its own resource; throws when it is unknown. */
+  location(id: string): Promise<ApiLocation>;
+  /** Whether the campaign has a location with that id (404 = no). */
+  locationExists(id: string): Promise<boolean>;
+  /** The request path of a location (or, without an id, of the location list). */
+  locationPath(id?: string): string;
+  /**
+   * The ONE write of a location: PATCH its resource with `rev` and any subset
+   * of its fields, `body` among them. Omitted, `rev` is read first — the
+   * helper then plays the second writer.
+   */
+  patchLocation(
+    id: string,
+    change: { rev?: number; force?: boolean } & Record<string, unknown>,
+  ): Promise<ApiLocation>;
   /**
    * The ACTIVE session — or, with `includeEnded`, the last started one.
    * `undefined` when the campaign has no such session: the endpoint answers
@@ -460,18 +487,30 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       return (await api.entry(rel)).body;
     },
     async properties(rel) {
-      const entry = await api.entry(rel);
-      if (!isLocationAddress(rel)) return entry.properties;
-      // A location's fields stand flat beside the entry's own keys.
-      const fields: Record<string, unknown> = { ...entry };
-      for (const key of ["kind", "path", "body", "rev"]) delete fields[key];
-      return fields;
+      return (await api.entry(rel)).properties;
     },
     async exists(rel) {
       const response = await fetchApi(entriesPath(campaign, rel));
       if (response.status === 404) return false;
       if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
       return true;
+    },
+    location(id) {
+      return api.get<ApiLocation>(api.locationPath(id));
+    },
+    async locationExists(id) {
+      const response = await fetchApi(api.locationPath(id));
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error(`GET location ${id}: HTTP ${response.status}`);
+      return true;
+    },
+    locationPath(id) {
+      const base = `campaigns/${encodeURIComponent(campaign)}/locations`;
+      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+    },
+    async patchLocation(id, change) {
+      const rev = change.rev ?? (await api.location(id)).rev;
+      return api.send<ApiLocation>("PATCH", api.locationPath(id), { ...change, rev });
     },
     async activeSession(includeEnded = false) {
       const path = `campaigns/${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`;
@@ -507,12 +546,9 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     async patchEntry(rel, change) {
       const rev = change.rev ?? (await api.entry(rel)).rev;
       const { properties, body, force } = change;
-      // The request speaks the kind's shape: a location's fields flat.
-      const fields =
-        properties === undefined ? {} : isLocationAddress(rel) ? properties : { properties };
       return api.send<ApiEntry>("PATCH", entriesPath(campaign, rel), {
         rev,
-        ...fields,
+        ...(properties === undefined ? {} : { properties }),
         ...(body === undefined ? {} : { body }),
         ...(force === undefined ? {} : { force }),
       });
@@ -568,6 +604,8 @@ export const test = base.extend<Fixtures>({
       await rm(path.join(campaignDir, `${stem}.json`), { force: true });
     }
     for (const [stem, entry] of Object.entries(entries)) {
+      // A stem may name a kind's own directory (`locations/<id>`).
+      await mkdir(path.dirname(path.join(campaignDir, `${stem}.json`)), { recursive: true });
       await writeFile(
         path.join(campaignDir, `${stem}.json`),
         `${JSON.stringify(entry, null, 2)}\n`,

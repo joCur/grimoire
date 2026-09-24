@@ -35,13 +35,9 @@ const NPC = "npcs/jorna";
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
 const CONFLICT_LINE = "Inzwischen geändert";
 
-/**
- * Read the entry: its properties and its text — the two halves every
- * assertion looks at. The fields by name for every kind, a location's
- * included (they travel flat, ADR #31).
- */
+/** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const [properties, body] = await Promise.all([api.properties(rel), api.body(rel)]);
+  const { properties, body } = await api.entry(rel);
   return { properties, body };
 }
 
@@ -198,7 +194,7 @@ test("scene properties: chips, reference and status land in the entry — nothin
   expect(after.properties.location).toBe("nordbucht");
   // …and the location it names is untouched: a scene references its group, it
   // never writes it.
-  expect((await api.properties("locations/nordbucht")).name).toBe("Nordbucht");
+  expect((await api.location("nordbucht")).name).toBe("Nordbucht");
   expect(after.properties.status).toBe("draft");
   // … the untouched ones with their values …
   expect(after.properties.id).toBe("lighthouse-arrival");
@@ -246,7 +242,7 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
     dialog.getByText('Den Ort „der-alte-hafen“ gibt es nicht — bitte zuerst anlegen.'),
   ).toBeVisible();
   await expect(ort).toHaveValue("Der alte Hafen");
-  expect(await api.exists("locations/der-alte-hafen")).toBe(false);
+  expect(await api.locationExists("der-alte-hafen")).toBe(false);
   expect((await api.properties(SCENE)).location).toBe("leuchtturm");
 
   // With the location created, the same save lands and the scene moves into it.
@@ -432,47 +428,43 @@ test("a forced save writes the dialog's fields only — a concurrent body surviv
   await expect(page.getByRole("article")).toContainText("#erzwungen");
 });
 
-test("a location's dialog writes its own fields — a second writer is a conflict, force keeps its text", async ({
+test("a location's dialog: a second writer is the conflict line, and a forced save keeps the text", async ({
   page,
   api,
 }) => {
-  // A location is its own typed entry (ADR #31): the dialog's save travels
-  // as the location's flat PATCH, and the guard and force work as for every
-  // other kind.
-  const LOCATION = "locations/leuchtturm";
-  const before = await split(api, LOCATION);
+  // The location is its own resource (ADR #31): its dialog writes the
+  // location's PATCH, fields flat, against the location's `rev`.
+  const before = await api.location("leuchtturm");
+  const externalBody = "\n## Wer ist hier\n\nVon einem zweiten Schreiber geändert.\n";
 
-  await page.goto(`/campaigns/beispiel/entries/${LOCATION}`);
-  let dialog = await openProperties(page);
+  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  const dialog = await openProperties(page);
   await expect(dialog).toContainText("Ort: Eigenschaften");
-  const page20 = dialog.getByLabel("Roll20-Seite");
-  await expect(page20).toHaveValue("Leuchtturm");
-  await page20.fill("Leuchtturm (oben)");
-  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect.poll(async () => (await api.properties(LOCATION))["roll20-page"]).toBe(
-    "Leuchtturm (oben)",
-  );
-  // Only the changed field moved.
-  const saved = await split(api, LOCATION);
-  expect(saved.properties).toEqual({ ...before.properties, "roll20-page": "Leuchtturm (oben)" });
-  expect(saved.body).toBe(before.body);
+  await dialog.getByLabel("Roll20-Seite").fill("Leuchtturm (Nacht)");
 
-  // A second writer changes the TEXT while the dialog stands: the save is
-  // refused, and forcing writes the dialog's field only.
-  const externalBody = "\n## Beim ersten Betreten\n\nVon einem zweiten Schreiber.\n";
-  dialog = await openProperties(page);
-  await dialog.getByLabel("Name").fill("Der alte Leuchtturm");
-  await api.writeBody(LOCATION, externalBody);
+  // The second writer touches only the TEXT.
+  await api.patchLocation("leuchtturm", { body: externalBody });
+
   await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   const conflicted = conflict(dialog);
   await expect(conflicted.line).toBeVisible();
+  await expect(conflicted.reload).toBeVisible();
+  // Nothing was written by the refused save.
+  expect((await api.location("leuchtturm")).roll20Page).toBe(before.roll20Page);
+
+  // Forcing writes the dialog's field on top of the row as it stands — the
+  // text it never saw survives.
   await conflicted.force.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await expect.poll(async () => (await api.properties(LOCATION)).name).toBe("Der alte Leuchtturm");
-  expect(await api.body(LOCATION)).toBe(externalBody);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der alte Leuchtturm");
+  await expect.poll(async () => (await api.location("leuchtturm")).roll20Page).toBe(
+    "Leuchtturm (Nacht)",
+  );
+  const after = await api.location("leuchtturm");
+  expect(after.body).toBe(externalBody);
+  expect(after.name).toBe(before.name);
+  expect(after.atmosphere).toBe(before.atmosphere);
+  await expect(page.getByRole("article")).toContainText("Roll20-Seite: Leuchtturm (Nacht)");
 });
 
 test("clearing a field deletes the key instead of writing an empty value", async ({
@@ -663,15 +655,16 @@ test("navigating away closes the dialog — no diff of entry A lands in entry B"
 test("Ort and Kapitel have the form too — the campaign brings its own", async ({
   page,
 }) => {
-  // The four kinds with typed properties offer it …
+  // The four kinds with typed fields offer it — a location on its own route
+  // (ADR #31) …
   const withForm: [string, string, string][] = [
-    ["01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
-    ["npcs/fenn", "Fenn", "NPC"],
+    ["entries/01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
+    ["entries/npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
-    ["01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
+    ["entries/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
   ];
-  for (const [rel, heading, kindLabel] of withForm) {
-    await page.goto(`/campaigns/beispiel/entries/${rel}`);
+  for (const [route, heading, kindLabel] of withForm) {
+    await page.goto(`/campaigns/beispiel/${route}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
     const dialog = await openProperties(page);
     await expect(dialog).toContainText(`${kindLabel}: Eigenschaften`);

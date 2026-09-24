@@ -23,6 +23,7 @@
 // the stub stays stateless and can serve several test workers at once:
 //
 //   - a "## Bestehender Eintrag" section in the prompt        -> augment run
+//   - a "## Bestehender Ort" section in the prompt            -> location augment run
 //     (the reply echoes that entry and adds to it)
 //   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
 //     (the reply's scene path uses exactly that chapter)
@@ -66,9 +67,9 @@
 //
 // REPLY SHAPE: every reply is an OBJECT and is serialized as
 // JSON into the message content — the outline its own, an entry call
-// `{ properties, body, warnings }`, a location its fields flat beside `body`
-// and `warnings` (ADR #31; replies.ts assembles them all). A reply that is a
-// plain STRING is one a spec wrote to be unreadable, and it travels verbatim.
+// `{ properties, body, warnings }` (replies.ts assembles both). A reply that
+// is a plain STRING is one a spec wrote to be unreadable, and it travels
+// verbatim.
 //
 // The stub is an OpenAI-compatible endpoint and simply IGNORES the
 // `response_format` the server sends, which is exactly what the tolerant
@@ -79,6 +80,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import {
   EXISTING_ENTRY_HEADING,
+  EXISTING_LOCATION_HEADING,
   FAILING_SCENE_ID,
   LATE_REPLY_MS,
   NEW_CHAPTER_LINE,
@@ -86,6 +88,10 @@ import {
   THREE_SCENES,
   TRIGGER,
   augmentReply,
+  invalidLocationAugmentReply,
+  locationAugmentReply,
+  unknownRefLocationAugmentReply,
+  type ExistingLocation,
   entryPartReply,
   invalidAugmentReply,
   invalidNpcReply,
@@ -173,9 +179,8 @@ const partCalls = new Map<string, number>();
 /**
  * The augment run's target: the address out of the „Bestehender Eintrag"
  * heading, and the entry itself out of the fenced JSON block right below it —
- * the `{ properties, body }` pair, or a location's fields flat beside its
- * body, which is the very shape the reply is forced into (ADR #24, #31).
- * Returns null when the prompt has no such section — which is
+ * the `{ properties, body }` pair, which is the very shape the reply is forced
+ * into (ADR #24). Returns null when the prompt has no such section — which is
  * every create run, and then nothing about the stub changes.
  */
 function existingEntry(prompt: string): { path: string; entry: ExistingEntry } | null {
@@ -195,17 +200,33 @@ function existingEntry(prompt: string): { path: string; entry: ExistingEntry } |
     return null;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const path = address[1]!.trim();
-  const { properties, body, ...flat } = parsed as Record<string, unknown>;
+  const { properties, body } = parsed as Record<string, unknown>;
   return {
-    path,
+    path: address[1]!.trim(),
     entry: {
-      // A location is shown FLAT — its fields beside its body (ADR #31) —
-      // the other kinds as their `properties`/`body` pair.
-      properties: path.startsWith("locations/") ? flat : isRecord(properties) ? properties : {},
+      properties: isRecord(properties) ? properties : {},
       body: typeof body === "string" ? body : "",
     },
   };
+}
+
+/**
+ * The location a LOCATION augment run works on, out of the fenced JSON below
+ * the „Bestehender Ort" heading — every field of the location, the very
+ * object the reply is forced into (ADR #31). Null for every other prompt.
+ */
+function existingLocation(prompt: string): ExistingLocation | null {
+  const start = prompt.indexOf(EXISTING_LOCATION_HEADING);
+  if (start === -1) return null;
+  const fence = /```json\n([\s\S]*?)```/.exec(prompt.slice(start));
+  if (fence === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(fence[1]!);
+    if (!isRecord(parsed) || typeof parsed.id !== "string") return null;
+    return parsed as unknown as ExistingLocation;
+  } catch {
+    return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -257,6 +278,22 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // first call of a run is the one without it.
   const unknownRef =
     source.includes(TRIGGER.unknownRef) && !messages.some((m) => m.role === "assistant");
+
+  // A location augment run carries the location it works on (ADR #31).
+  const location = existingLocation(prompt);
+  if (location !== null) {
+    return {
+      kind: "augment",
+      truncated,
+      delayMs,
+      pauseMs: latePart,
+      reply: invalid
+        ? invalidLocationAugmentReply(location)
+        : unknownRef
+          ? unknownRefLocationAugmentReply(location)
+          : locationAugmentReply(location, knowledge),
+    };
+  }
 
   // An augment run is the one prompt that carries an EXISTING entry. It is
   // checked FIRST — a scene augment also carries a `chapter:` line, and that

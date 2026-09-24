@@ -37,7 +37,7 @@ interface TreeResponse {
   campaign: string;
   chapters: { id: string; title: string; scenes: { path: string; id: string; title: string }[] }[];
   npcs: { path: string; id: string }[];
-  locations: { path: string }[];
+  locations: { id: string }[];
   /** A session SUMMARY — id and timestamps, no address (ADR #26). */
   sessions: { id: string; started: string }[];
 }
@@ -76,16 +76,25 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // are here. A mention creates nothing (ADR #19): an Ort without an entry
   // would be a reference to nothing, and the run would fail on the scene
   // that names it.
-  expect(tree.locations.map((l) => l.path).sort()).toEqual([
-    "locations/bucht",
-    "locations/leuchtturm",
-  ]);
-  // What says the entry was SEEDED rather than conjured: it carries the name
-  // and the chapter its fixture spells, which a synthesized stub would not
-  // have.
-  const bucht = await api.properties("locations/bucht");
+  expect(tree.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
+  // What says the location was SEEDED rather than conjured: it carries the
+  // name, the chapter and the Roll20 page its fixture
+  // (`locations/bucht.json`) spells, which a synthesized stub would not have.
+  const bucht = await api.location("bucht");
   expect(bucht.name).toBe("Die Nordbucht");
   expect(bucht.chapter).toBe("01-salzhafen");
+  expect(bucht.roll20Page).toBe("Nordbucht");
+  // …and the resource answers the location itself: every field flat, beside
+  // its guard — no kind, no path, no properties (ADR #31).
+  expect(Object.keys(bucht).sort()).toEqual([
+    "atmosphere",
+    "body",
+    "chapter",
+    "id",
+    "name",
+    "rev",
+    "roll20Page",
+  ]);
   // A session in the tree is a SUMMARY: its id and when it ran, no address.
   expect(tree.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
 

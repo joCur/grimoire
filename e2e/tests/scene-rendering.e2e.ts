@@ -201,7 +201,7 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
     code: "location_unknown",
     value: "nordbucht",
   });
-  expect(await api.exists("locations/nordbucht")).toBe(false);
+  expect(await api.locationExists("nordbucht")).toBe(false);
 
   // Free text is refused too, with the slug it would have used — the
   // README's free-text exception is gone.
@@ -211,7 +211,7 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
     code: "location_not_an_id",
     suggestion: "der-alte-hafen",
   });
-  expect(await api.exists("locations/der-alte-hafen")).toBe(false);
+  expect(await api.locationExists("der-alte-hafen")).toBe(false);
 
   // With the Ort created, the patch lands and the scene MOVES with it.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });

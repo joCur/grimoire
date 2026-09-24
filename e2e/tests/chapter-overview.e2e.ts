@@ -284,7 +284,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   ).toHaveText(["NPCs", "Orte", "Glossar", "Kampagnenwissen"]);
 
   await nav.getByRole("link", { name: "Orte" }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/locations$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
   // Both example Orte sit in the same chapter and each row names that chapter
   // under the Ort, so the name is anchored: the row STARTS with the Ort's own

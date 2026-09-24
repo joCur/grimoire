@@ -5,9 +5,9 @@
 //
 //   an entry call   `{ properties, body, warnings }` — the properties of
 //                     the entry, its whole text as one string, and the
-//                     notes the review shows the DM; a LOCATION answers its
-//                     fields flat beside `body` and `warnings` instead
-//                     (ADR #31)
+//                     notes the review shows the DM
+//   a location call   every field of the location — `body` among them —
+//                     beside `warnings` (ADR #31)
 //   the outline call  the run's scene and entry list
 //
 // The fixtures write those objects DIRECTLY. A reply that is a plain STRING
@@ -50,19 +50,28 @@ export interface EntryReply {
 }
 
 /**
- * A LOCATION reply: its fields flat beside `body` and `warnings` — a
- * location has its own typed entry (ADR #31), and its reply mirrors it.
+ * A location reply: every field of the location, `body` among them, beside
+ * the notes (ADR #31). A field the source does not give is `null`, as the
+ * schema asks.
  */
-export type LocationReply = Record<string, unknown> & { body: string; warnings: string[] };
-
-/** An entry reply in the flat shape a location answers with. */
-function flatLocation(reply: EntryReply): LocationReply {
-  return { ...reply.properties, body: reply.body, warnings: reply.warnings };
+export interface LocationReply {
+  id: string;
+  name: string;
+  chapter: string | null;
+  roll20Page: string | null;
+  atmosphere: string | null;
+  body: string;
+  warnings: string[];
 }
 
-/** Is this the address of a location — the kind that replies flat? */
-function isLocationPath(path: string): boolean {
-  return path.startsWith("locations/");
+/** A location as the augment prompt shows it — its fields, without its guard. */
+export interface ExistingLocation {
+  id: string;
+  name: string;
+  chapter?: string;
+  roll20Page?: string;
+  atmosphere?: string;
+  body: string;
 }
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
@@ -327,16 +336,12 @@ const npcStub: EntryReply = {
 /** The atmosphere of the location stub a scene run proposes. */
 export const LOCATION_STUB_ATMOSPHERE = "Salz in der Luft, Möwen über dem Schlick, kein Mensch zu sehen.";
 
-/**
- * The location stub a scene run's entry call answers with — FLAT, its fields
- * beside `body` and `warnings` (ADR #31). A field the source does not give is
- * `null`, as the schema asks.
- */
+/** The location a scene run's location call answers with. */
 const locationStub: LocationReply = {
   id: LOCATION_STUB_ID,
   name: LOCATION_STUB_NAME,
   chapter: null,
-  "roll20-page": null,
+  roll20Page: null,
   atmosphere: LOCATION_STUB_ATMOSPHERE,
   // `[[grella]]` is the npc the SAME run proposes: a reference to it is
   // valid before either entry is written.
@@ -435,6 +440,9 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
 
+/** The same heading of a location augment run — EXISTING_LOCATION_HEADING there. */
+export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
+
 /** The `## If:` section a scene augment run adds — asserted in the spec. */
 export const AUGMENT_THREAD_CONDITION = "die Gruppe fragt nach dem Spitzel";
 
@@ -463,12 +471,10 @@ export const AUGMENT_NPC_MOTIVATION =
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
 /**
- * The existing entry as the PROMPT shows it — its fields and its body, read
- * out of the JSON the prompt carries in the very shape the reply is forced
- * into (ADR #24): a `properties`/`body` pair, or a location's fields flat
- * beside its body (stub-llm.ts reads both into this). The augment run is the
- * one case that has to read it — its reply echoes the entry it was given, so
- * nothing here reconstructs properties from text.
+ * The existing entry as the PROMPT shows it: the `properties` and `body` pair
+ * as JSON, which is the same shape the reply is forced into (ADR #24). The
+ * augment run is the one case that has to read it — its reply echoes the
+ * entry it was given, so nothing here reconstructs properties from text.
  */
 export interface ExistingEntry {
   properties: Record<string, unknown>;
@@ -485,17 +491,7 @@ export interface ExistingEntry {
  *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(
-  path: string,
-  entry: ExistingEntry,
-  knowledge = "",
-): EntryReply | LocationReply {
-  const reply = augmentedEntry(path, entry, knowledge);
-  return isLocationPath(path) ? flatLocation(reply) : reply;
-}
-
-/** The augment reply's content, before it takes the shape of its kind. */
-function augmentedEntry(path: string, entry: ExistingEntry, knowledge: string): EntryReply {
+export function augmentReply(path: string, entry: ExistingEntry, knowledge = ""): EntryReply {
   const { properties, body } = entry;
   const id = String(properties.id ?? path.slice(path.lastIndexOf("/") + 1));
   const isEmptyNpc =
@@ -530,10 +526,7 @@ function augmentedEntry(path: string, entry: ExistingEntry, knowledge: string): 
  * The first reply of a TRIGGER.unknownRef augment run: the good proposal plus
  * a sentence naming an entry that does not exist — a correction turn.
  */
-export function unknownRefAugmentReply(
-  path: string,
-  entry: ExistingEntry,
-): EntryReply | LocationReply {
+export function unknownRefAugmentReply(path: string, entry: ExistingEntry): EntryReply {
   const good = augmentReply(path, entry);
   return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
@@ -544,9 +537,39 @@ export function unknownRefAugmentReply(
  * a shape a reply can have — rewriting the reference key is, and it is the
  * rule the augment run cares about most.
  */
-export function invalidAugmentReply(path: string): EntryReply | LocationReply {
-  const reply: EntryReply = { properties: { id: "not-the-entry" }, body: "", warnings: [] };
-  return isLocationPath(path) ? flatLocation(reply) : reply;
+export function invalidAugmentReply(_path: string): EntryReply {
+  return { properties: { id: "not-the-entry" }, body: "", warnings: [] };
+}
+
+// --- augmenting a location ---------------------------------------------------
+
+/**
+ * The reply of a location augment run (ADR #31): the location as it was
+ * shown, every field echoed, plus one NEW `## If:` section at the end of its
+ * text — every existing block comes back unchanged.
+ */
+export function locationAugmentReply(location: ExistingLocation, knowledge = ""): LocationReply {
+  const kept = location.body.replace(/^\n+/, "").replace(/\n*$/, "\n");
+  return {
+    id: location.id,
+    name: location.name,
+    chapter: location.chapter ?? null,
+    roll20Page: location.roll20Page ?? null,
+    atmosphere: location.atmosphere ?? null,
+    body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
+    warnings: contextEchoWarnings(knowledge),
+  };
+}
+
+/** A location augment reply that FAILS validation: it changes the id. */
+export function invalidLocationAugmentReply(location: ExistingLocation): LocationReply {
+  return { ...locationAugmentReply(location), id: "not-the-location" };
+}
+
+/** The first reply of a TRIGGER.unknownRef location augment run — a correction turn. */
+export function unknownRefLocationAugmentReply(location: ExistingLocation): LocationReply {
+  const good = locationAugmentReply(location);
+  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 // --- the pipelined scene run -------------------------------------------------
@@ -769,7 +792,7 @@ function plainSceneDraft(chapter: string, id: string, title: string): EntryReply
   };
 }
 
-/** One suggested entry — the entry itself. */
+/** One proposed npc or location — the npc stub, or the location itself. */
 export function entryPartReply(kind: "npc" | "location"): EntryReply | LocationReply {
   return kind === "location" ? locationStub : npcStub;
 }
