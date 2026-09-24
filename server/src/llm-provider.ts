@@ -31,18 +31,10 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
-import type { Location } from "@grimoire/shared";
+import type { GeneratedEntryKind, LocationProposal } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
 
-import { toReplyProperties, type PropertiesReplyKind } from "./entry-reply";
-
-/**
- * The entry an augment run works on, as the store holds it: a location as
- * its own typed entry (ADR #31), the other kinds as their two halves.
- */
-export type ExistingEntry =
-  | { path: string; kind: PropertiesReplyKind; properties: Record<string, unknown>; body: string }
-  | { path: string; kind: "location"; location: Location };
+import { toReplyProperties } from "./entry-reply";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
@@ -88,18 +80,29 @@ export interface GenerateRequest {
    */
   assignment?: string;
   /**
-   * The entry an AUGMENT run works on: its address, its kind and its fields
-   * and body, exactly as the store holds them (`ExistingEntry`). Absent for
-   * the two runs that create something — and then the prompt has no such
-   * section.
+   * The entry an AUGMENT run works on: its address, its kind and its two
+   * halves, the properties and the body, exactly as the store holds them.
+   * Absent for the two runs that create something — and then the prompt has
+   * no such section.
    *
    * The transport decides how it LOOKS in the prompt
    * (`formatExistingEntry`): the entry travels as data here, and turning it
    * into prompt text is formatting, not a storage format. The `kind` is what
-   * that formatting needs to know which fields a reply shapes differently
+   * that formatting needs to know which properties a reply shapes differently
    * from the store.
    */
-  existingEntry?: ExistingEntry;
+  existingEntry?: {
+    path: string;
+    kind: GeneratedEntryKind;
+    properties: Record<string, unknown>;
+    body: string;
+  };
+  /**
+   * The location a LOCATION augment run works on, every field of it without
+   * its guard — shown as the very object the reply is forced into. Absent
+   * for every other run.
+   */
+  existingLocation?: LocationProposal;
   /**
    * The DM's free instruction of an augment run („Führe einen Handlungsstrang
    * um den Schmuggler-Spitzel ein"). Either this or `sourceText` is there —
@@ -249,6 +252,9 @@ export const KNOWLEDGE_HEADING =
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
 
+/** The same block of a location augment run. */
+export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
+
 /** Heading of the DM's free instruction of an augment run. */
 export const INSTRUCTION_HEADING = "## Anweisung des DM";
 
@@ -290,18 +296,15 @@ export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
  * model shown the mapping answers with the mapping — which its own schema
  * then rejects.
  *
- * A location replies flat, so it is shown flat: its fields by name, beside
- * its body — the entry without its kind, address and guard.
- *
  * This is formatting and nothing else. Nothing parses this text again: the
  * proposal is validated against the entry's own halves
  * (generator-augment.ts), and the store never sees it.
  */
-export function formatExistingEntry(entry: ExistingEntry): string {
-  if (entry.kind === "location") {
-    const { kind: _kind, path: _path, rev: _rev, ...shown } = entry.location;
-    return JSON.stringify(shown, null, 2);
-  }
+export function formatExistingEntry(entry: {
+  kind: GeneratedEntryKind;
+  properties: Record<string, unknown>;
+  body: string;
+}): string {
   return JSON.stringify(
     { properties: toReplyProperties(entry.kind, entry.properties), body: entry.body },
     null,
@@ -381,6 +384,14 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
           `${EXISTING_ENTRY_HEADING} (${req.existingEntry.path})`,
           "```json",
           formatExistingEntry(req.existingEntry),
+          "```",
+        ]),
+    ...(req.existingLocation === undefined
+      ? []
+      : [
+          `${EXISTING_LOCATION_HEADING} (${req.existingLocation.id})`,
+          "```json",
+          JSON.stringify(req.existingLocation, null, 2),
           "```",
         ]),
     ...(req.instruction === undefined || req.instruction.trim() === ""

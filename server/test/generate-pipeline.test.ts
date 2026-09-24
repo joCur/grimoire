@@ -646,6 +646,7 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
     written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    locations: [],
     // The job stays: the failed part is not settled.
     jobDeleted: false,
   });
@@ -684,6 +685,7 @@ test("a done part is acceptable while the run is still RUNNING (AK2)", async () 
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
     written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    locations: [],
     jobDeleted: false,
   });
   // The run is untouched by it: still running, still holding its third part.

@@ -181,12 +181,14 @@ function excerpt(line: string): string {
   return trimmed.length <= EXCERPT_LIMIT ? trimmed : `${trimmed.slice(0, EXCERPT_LIMIT)}…`;
 }
 
-/** One draft as the check reads it: its address, its properties, its body. */
-export interface CheckedDraft {
-  path: string;
-  properties: Record<string, unknown>;
-  body: string;
-}
+/**
+ * One text as the check reads it: a scene or npc draft by its address, its
+ * properties and its body, or a location by its id, the fields to check and
+ * its body.
+ */
+export type CheckedDraft =
+  | { path: string; properties: Record<string, unknown>; body: string }
+  | { location: string; fields: Record<string, unknown>; body: string };
 
 /**
  * Check ONE draft against the campaign's naming conventions.
@@ -201,16 +203,17 @@ export interface CheckedDraft {
  */
 export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule[]): NamingHint[] {
   if (rules.length === 0) return [];
-  const { path } = draft;
+  const where = "location" in draft ? { location: draft.location } : { path: draft.path };
+  const fields = "location" in draft ? draft.fields : draft.properties;
   const hints: NamingHint[] = [];
 
   for (const rule of rules) {
-    // Properties first: a wrong title is the thing the DM sees in the chapter overview.
+    // Fields first: a wrong title is the thing the DM sees in the chapter overview.
     for (const key of CHECKED_PROPERTIES) {
-      const value = draft.properties[key];
+      const value = fields[key];
       if (typeof value !== "string") continue;
       if (findRuleHits(value, rule).length === 0) continue;
-      hints.push({ from: rule.from, to: rule.to, path, field: key, excerpt: excerpt(value) });
+      hints.push({ from: rule.from, to: rule.to, ...where, field: key, excerpt: excerpt(value) });
     }
     const lines = draft.body.split("\n");
     for (const [index, line] of lines.entries()) {
@@ -218,7 +221,7 @@ export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule
       hints.push({
         from: rule.from,
         to: rule.to,
-        path,
+        ...where,
         field: "body",
         line: index + 1,
         excerpt: excerpt(line),

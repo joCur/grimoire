@@ -1,15 +1,16 @@
 // The consistency test over the generator's reply schemas.
 //
-// Two kinds of schema are here. The WRITTEN ones — each a schema file in
-// ../schema, plain JSON on disk — can slowly disagree with the code that
-// reads the same data; points 1 and 2 are what stop it, asserting schema by
-// schema against the definitions the rest of the app already uses. A DERIVED
-// schema (a location's, from its zod schema via `z.toJSONSchema`, ADR #31)
-// cannot drift from its kind — it is the kind — so for it only point 3 has
-// to hold: the derivation must come out in the form the providers enforce.
+// Two kinds of schema are here. The WRITTEN ones — a scene's and an npc's,
+// each a schema file in ../schema, plain JSON on disk — can slowly disagree
+// with the code that reads the same data; points 1 and 2 are what stop it,
+// asserting schema by schema against the definitions the rest of the app
+// already uses. A DERIVED schema (a location's, from its zod schema via
+// `z.toJSONSchema`, ADR #31) cannot drift from its kind — it is the kind — so
+// for it only point 3 has to hold: the derivation must come out in the form
+// the providers enforce.
 //
 //   1. the `properties` of a written schema ARE its kind's field list,
-//      in order — the same list the „Eigenschaften" dialog is built from. A
+//      in order — the same list the dialog is built from. A
 //      schema that knew a field the dialog does not would be a model writing
 //      something the DM cannot edit; a schema that forgot one would be a
 //      field no run can ever fill.
@@ -52,6 +53,7 @@ import {
   PAIR_VALUE,
   type EntryMode,
 } from "../src/entry-schema";
+import { locationReplyRequest } from "../src/location";
 
 /** The keywords OpenAI's strict mode refuses — see point 3 above. */
 const UNSUPPORTED = [
@@ -97,7 +99,7 @@ function at(schema: Record<string, unknown>, path: string[]): Record<string, unk
 }
 
 /** The kinds whose reply schema is written, a schema file in ../schema (points 1 and 2). */
-const WRITTEN_KINDS = ["scene", "npc"] as const;
+const WRITTEN_KINDS = GENERATED_ENTRY_KINDS;
 
 /** The `properties` half of a written entry schema, field by field. */
 function entryFields(
@@ -181,12 +183,13 @@ describe("the entry schemas", () => {
   test("the schema name says kind and run, and nothing else does", () => {
     expect(entrySchemaName("scene", "create")).toBe("scene");
     expect(entrySchemaName("npc", "create")).toBe("npc");
-    expect(entrySchemaName("location", "create")).toBe("location");
+    expect(locationReplyRequest("create").name).toBe("location");
     // The augment run prefixes the same kind: the correction turn names the
     // schema, so the name the model was handed says kind AND run.
     for (const kind of GENERATED_ENTRY_KINDS) {
       expect(entrySchemaName(kind, "augment")).toBe(`augmented_${kind}`);
     }
+    expect(locationReplyRequest("augment").name).toBe("augmented_location");
   });
 
   test("a copy every call — both transports serialize it into a body", () => {
@@ -234,6 +237,7 @@ describe("every schema", () => {
     ...GENERATED_ENTRY_KINDS.flatMap((kind) =>
       MODES.map((mode) => [`${kind}/${mode}`, entryJsonSchema(kind, mode)] as const),
     ),
+    ...MODES.map((mode) => [`location/${mode}`, locationReplyRequest(mode).schema] as const),
     ["outline", outlineJsonSchema()] as const,
   ];
 

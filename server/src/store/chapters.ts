@@ -39,7 +39,7 @@ import {
   sceneRowOf,
 } from "./entity-rows";
 import { getDb } from "./handle";
-import { chapterPath, locationPath, npcPath, sceneAddress, RESERVED_SEGMENTS } from "./paths";
+import { chapterPath, npcPath, sceneAddress, RESERVED_SEGMENTS } from "./paths";
 import {
   renderChapter,
   renderScene,
@@ -475,8 +475,8 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
 
   const locationList: LocationSummary[] = locationRows
     .map((row) => {
+      // No address: a location is its own resource (ADR #31).
       const summary: LocationSummary = {
-        path: locationPath(row.id),
         id: row.id,
         name: row.name === "" ? row.id : row.name,
       };

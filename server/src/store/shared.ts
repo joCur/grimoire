@@ -15,7 +15,6 @@ import {
   SCENE_STATUSES,
   SCENE_TYPES,
   toSlug,
-  type Entry,
   type ErrorCode,
   type ErrorField,
   type ErrorKind,
@@ -151,16 +150,22 @@ export function unknownRef(code: ErrorCode, kind: string, value: string): ApiErr
 /**
  * The optimistic-concurrency check: the row's `rev` must be the one read.
  *
- * The body carries `code: "rev_conflict"` — `what` names WHICH entry moved
+ * The body carries `code: "rev_conflict"` — `what` names WHICH row moved
  * and stays English, as the technical fallback next to it. `current` is the
- * token to retry with, and `entry` is that entry as it stands now, so the
- * conflict dialog can show what is in the way without a second request.
+ * token to retry with, and `stored` is that row as it stands now, under the
+ * key of its kind (`{ entry }` for an entry address, `{ location }` for a
+ * location), so the conflict dialog can show what is in the way without a
+ * second request.
  */
-export function revConflict(current: number, what: string, entry?: Entry): ApiError {
+export function revConflict(
+  current: number,
+  what: string,
+  stored: Record<string, unknown> = {},
+): ApiError {
   return new ApiError(409, `${what} — reload before saving`, {
     code: "rev_conflict",
     rev: current,
-    ...(entry === undefined ? {} : { entry }),
+    ...stored,
   });
 }
 
@@ -283,15 +288,22 @@ export function compareSessionsNewestFirst(
  * `kind` is a stable TOKEN (`@grimoire/shared/error-codes`, ErrorKind), not a
  * label: the sentence the DM reads is built by the app from its own catalog in
  * the UI language. The `error` text here is the English technical
- * fallback that curl, the log and an unknown-code client get.
+ * fallback that curl, the log and an unknown-code client get. `path` is the
+ * address of what is in the way, for a kind reached through one; a kind with
+ * its own resource (a location, ADR #31) is named by `kind` and `id` alone.
  */
-export function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string): ApiError {
+export function slugTaken(
+  kind: ErrorKind,
+  id: string,
+  suggestion: string,
+  path?: string,
+): ApiError {
   return new ApiError(409, `${kind} "${id}" already exists — suggestion: "${suggestion}"`, {
     code: "slug_taken",
     kind,
     id,
     suggestion,
-    path,
+    ...(path === undefined ? {} : { path }),
   });
 }
 

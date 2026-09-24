@@ -22,11 +22,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   NOT_AN_ENTRY_ERROR,
-  NOT_A_LOCATION_ERROR,
   REPAIRED_ENTRY_WARNING,
   parseEntryReply,
   parseJsonReply,
-  parseLocationReply,
   toReplyProperties,
   type EntryReply,
 } from "../src/entry-reply";
@@ -311,76 +309,5 @@ describe("parseJsonReply", () => {
     // a message about the wrong thing.
     expect(parseJsonReply("kein Objekt")).toBeNull();
     expect(parseJsonReply("")).toBeNull();
-  });
-});
-
-describe("parseLocationReply", () => {
-  // A location replies FLAT (ADR #31): its fields beside `body` and
-  // `warnings`, read by the very reply schema the provider enforced.
-  function location(over: Record<string, unknown> = {}): string {
-    return JSON.stringify({
-      id: "alte-mole",
-      name: " Die alte Mole ",
-      chapter: null,
-      "roll20-page": "",
-      atmosphere: "Salz in der Luft.",
-      body: "\n## Beim ersten Betreten\n\nNebel.",
-      warnings: [" Kein Roll20-Name im Quelltext. ", ""],
-      ...over,
-    });
-  }
-
-  test("reads the flat object as the location draft", () => {
-    const outcome = parseLocationReply(location());
-    if (!outcome.ok) throw new Error(outcome.errors.join(" | "));
-    // Trimmed, a null or blank field left out, the body in its stored form.
-    expect(outcome.reply.draft).toEqual({
-      kind: "location",
-      id: "alte-mole",
-      name: "Die alte Mole",
-      atmosphere: "Salz in der Luft.",
-      body: "## Beim ersten Betreten\n\nNebel.\n",
-    });
-    expect(outcome.reply.warnings).toEqual(["Kein Roll20-Name im Quelltext."]);
-    expect(outcome.reply.ignored).toEqual([]);
-  });
-
-  test("a nullable field the reply leaves out entirely is not given", () => {
-    const reply = JSON.parse(location()) as Record<string, unknown>;
-    delete reply.chapter;
-    expect(parseLocationReply(JSON.stringify(reply)).ok).toBe(true);
-  });
-
-  test("a blank name is missing, and a wrong shape is named", () => {
-    const blank = parseLocationReply(location({ name: "  " }));
-    expect(blank.ok).toBe(false);
-    if (!blank.ok) expect(blank.errors.join(" ")).toContain('"name" fehlt');
-    const wrong = parseLocationReply(location({ atmosphere: 7 }));
-    expect(wrong.ok).toBe(false);
-    if (!wrong.ok) expect(wrong.errors.join(" ")).toContain('"atmosphere"');
-  });
-
-  test("an unknown key fails a create run and is dropped by an augment run", () => {
-    const created = parseLocationReply(location({ status: "alive" }));
-    expect(created.ok).toBe(false);
-    if (!created.ok) expect(created.errors.join(" ")).toContain('"status"');
-    const augmented = parseLocationReply(location({ status: "alive" }), "augment");
-    if (!augmented.ok) throw new Error(augmented.errors.join(" | "));
-    expect(augmented.reply.ignored).toEqual(["status"]);
-  });
-
-  test("the earlier `properties` shape is not a location reply", () => {
-    const nested = JSON.stringify({
-      properties: { id: "alte-mole", name: "Die alte Mole" },
-      body: "## Text\n",
-      warnings: [],
-    });
-    const outcome = parseLocationReply(nested);
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) expect(outcome.errors.join(" ")).toContain('"properties"');
-    expect(parseLocationReply("kein Objekt")).toEqual({
-      ok: false,
-      errors: [NOT_A_LOCATION_ERROR],
-    });
   });
 });

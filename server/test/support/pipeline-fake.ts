@@ -134,14 +134,14 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
  * (`toReplyProperties`), the same one an augment prompt shows the model, so a
  * script cannot write a shape no provider could deliver.
  *
- * A location replies FLAT (ADR #31): the script's fields stand beside `body`
- * and `warnings`, and a field the script leaves out is simply absent — the
- * server reads that as `null`, „not given".
+ * A location replies with its own fields (ADR #31): the script's fields stand
+ * beside `body` and `warnings`, and a field the script leaves out is simply
+ * absent — the server reads that as `null`, "not given".
  */
 export function entryReply(
   entry: ScriptedEntry,
   warnings: readonly string[] = [],
-  kind: GeneratedEntryKind = "scene",
+  kind: GeneratedEntryKind | "location" = "scene",
 ): string {
   if (kind === "location") {
     return JSON.stringify({ ...entry.properties, body: entry.body, warnings: [...warnings] });
@@ -310,15 +310,15 @@ export class PipelineFake implements LLMProvider {
       if (entry === null) return completionOf(scripted);
       return {
         ...completionOf(scripted),
-        // An augment run names its entry's kind in the request, and a
-        // location replies in its own flat shape. Otherwise the npc run and
-        // an npc augment are the ones with key/value fields, so npc is the
+        // A location augment run carries the location it works on, and a
+        // location replies with its own fields. Otherwise the npc run and an
+        // npc augment are the ones with key/value fields, so npc is the
         // honest default here (a scene entry simply has no `pairs` field to
         // convert).
         text: entryReply(
           entry.content,
           entry.warnings,
-          req.existingEntry?.kind === "location" ? "location" : "npc",
+          req.existingLocation === undefined ? "npc" : "location",
         ),
       };
     }

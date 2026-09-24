@@ -815,14 +815,21 @@ export const generateJobs = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** "scene" | "npc" | "augment". */
+    /** "scene" | "npc" | "augment" | "location-augment". */
     kind: text("kind").notNull().default("scene"),
     /**
-     * Address of the entry an `augment` run targets; NULL for the
-     * two runs that CREATE something. Stored from the start of the run, so a
-     * job that is still going can already name the entry it works on.
+     * Address of the npc or scene an `augment` run targets; NULL for every
+     * other run. Stored from the start of the run, so a job that is still
+     * going can already name what it works on.
      */
     targetPath: text("target_path"),
+    /**
+     * The id of the location a `location-augment` run works on; NULL for
+     * every other run. Stored from the start of the run, like `target_path`.
+     * No foreign key: a job is a cache of a run, and deleting the location
+     * leaves a proposal that simply can no longer be accepted.
+     */
+    locationId: text("location_id"),
     /**
      * Target chapter of a scene run; NULL for an npc run. The one reference
      * WITHOUT a foreign key (rule 3): a run with „Neues Kapitel" names the
@@ -837,7 +844,10 @@ export const generateJobs = sqliteTable(
     finishedAt: text("finished_at"),
     result: text("result"),
     npcResult: text("npc_result"),
-    /** The augment PROPOSAL — JSON, see AugmentResult. */
+    /**
+     * The augment PROPOSAL — JSON: an `AugmentResult` for an `augment` run, a
+     * `LocationAugmentResult` for a `location-augment` run.
+     */
     augmentResult: text("augment_result"),
     error: text("error"),
     draftEdits: text("draft_edits").notNull().default("{}"),

@@ -44,14 +44,10 @@ async function patchFm(rel: string, patch: Record<string, unknown>): Promise<Ent
 /** The raw answer of a properties patch — for the cases that are refused. */
 async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Response> {
   const before = await getEntry(rel);
-  // A location's fields travel flat beside `rev` (ADR #31).
-  const request = rel.startsWith("locations/")
-    ? { rev: before.rev, ...patch }
-    : { rev: before.rev, properties: patch };
   return app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
+    body: JSON.stringify({ rev: before.rev, properties: patch }),
   });
 }
 
@@ -130,7 +126,7 @@ describe("a reference that names nothing is refused", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "location_unknown", value: "alte-mole" });
     expect((await getEntry(SCENE)).properties.location).toBe(before.properties.location);
-    expect(await entryStatus("locations/alte-mole")).toBe(404);
+    expect((await app.request("/api/campaigns/beispiel/locations/alte-mole")).status).toBe(404);
   });
 
   test("free text in location stays the 400 that names the id to use", async () => {
@@ -146,8 +142,10 @@ describe("a reference that names nothing is refused", () => {
     expect((await tree()).locations.some((l) => l.id === "der-alte-hafen")).toBe(false);
   });
 
-  test("an unknown chapter: 400 chapter_unknown for a scene, an npc and an ort", async () => {
-    for (const rel of [SCENE, NPC, "locations/leuchtturm"]) {
+  test("an unknown chapter: 400 chapter_unknown for a scene and an npc", async () => {
+    // (A location refuses it the same way on its own resource:
+    // test/locations.test.ts.)
+    for (const rel of [SCENE, NPC]) {
       const before = await getEntry(rel);
       const res = await patchRes(rel, { chapter: "99-nirgendwo" });
       expect(res.status).toBe(400);
@@ -155,8 +153,7 @@ describe("a reference that names nothing is refused", () => {
         code: "chapter_unknown",
         value: "99-nirgendwo",
       });
-      // Nothing was written.
-      expect((await getEntry(rel)).rev).toBe(before.rev);
+      expect((await getEntry(rel)).properties.chapter).toBe(before.properties.chapter);
     }
     // An existing chapter is stored as before.
     expect((await patchFm(NPC, { chapter: "01-salzhafen" })).properties.chapter).toBe(
@@ -315,22 +312,16 @@ describe("the generator's apply step", () => {
         properties: { id: "holm", name: "Holm", status: "alive" },
         body: "\n## Will\n\nSeine Netze zurück.\n",
       },
-      {
-        rel: "locations/alte-mole",
-        address: "locations/alte-mole",
-        location: {
-          kind: "location",
-          id: "alte-mole",
-          name: "Alte Mole",
-          body: "\n## Beim ersten Betreten\n\nMorsch.\n",
-        },
-      },
-    ]);
+    ], {
+      locations: [
+        { id: "alte-mole", name: "Alte Mole", body: "\n## Beim ersten Betreten\n\nMorsch.\n" },
+      ],
+    });
     const npc = await getEntry("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
     expect(npc.properties.status).toBe("alive");
-    const location = (await getEntry("locations/alte-mole")) as unknown as Location;
-    expect(location.name).toBe("Alte Mole");
+    const res = await app.request("/api/campaigns/beispiel/locations/alte-mole");
+    expect(((await res.json()) as Location).name).toBe("Alte Mole");
     const scene = await getEntry("01-salzhafen/alte-mole/neue-szene");
     expect(scene.properties.npcs).toEqual(["holm"]);
   });

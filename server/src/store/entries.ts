@@ -1,18 +1,17 @@
 // An entry, read and written through its address.
 //
-// Five kinds have one — campaign, chapter, scene, npc, location — and they
+// Four kinds are reached this way — campaign, chapter, scene, npc — and they
 // share exactly one read (`readEntry`) and exactly one write (`patchEntry`,
-// ADR #23): fields, text, or both, in ONE transaction against ONE `rev`.
+// ADR #23): fields, text, or both, in ONE transaction against ONE `rev`. The
+// property contract per kind is its own module (./properties.ts), because the
+// seed reads it too.
 //
-// A kind with its own zod schema (ADR #31) parses, renders and writes itself
-// in its domain module (a location: ./locations.ts), and this module only
-// hands the address and the request over. The other kinds are written here,
-// with the property contract per kind in its own module (./properties.ts),
-// because the seed reads it too. Lists have no address and no case in either
+// A location is its own resource (ADR #31, ./locations.ts): an address that
+// names one answers 404 here. Lists have no address and no case in either
 // switch (ADR #26).
 
 import { and, eq } from "drizzle-orm";
-import type { Entry, EntryResponse, PatchEntryRequest } from "@grimoire/shared";
+import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
@@ -49,7 +48,6 @@ import {
 } from "./entity-rows";
 import { getDb } from "./handle";
 import { NPC_DEFAULT_STATUS, readNpcEntry } from "./npcs";
-import { patchLocationIn, readLocationEntry, readLocationPatch } from "./locations";
 import { locatorFromPath, type Locator } from "./paths";
 import {
   applyPatch,
@@ -82,9 +80,6 @@ import {
   revConflict,
 } from "./shared";
 
-/** An address of a kind whose fields travel under `properties`. */
-type PropertiesLocator = Exclude<Locator, { kind: "location" }>;
-
 // --- reading one entry --------------------------------------------------------
 
 /**
@@ -92,15 +87,16 @@ type PropertiesLocator = Exclude<Locator, { kind: "location" }>;
  * the domain module that owns the kind. Each of them answers the same 404
  * when the campaign has no row with that id.
  *
- * Only the five ENTRY kinds reach here. A session, the inbox and the glossary
- * have no address (ADR #26), so `locatorFromPath` already answered 404 for
- * them and this switch has no case to spend on a list.
+ * A session, the inbox and the glossary have no address (ADR #26), so
+ * `locatorFromPath` already answered 404 for them and this switch has no case
+ * to spend on a list. A location is its own resource (ADR #31), so an
+ * address that names one is a 404 too.
  */
 export function readByLocator(
   db: GrimoireDb,
   campaignRowValue: CampaignRow,
   locator: Locator,
-): Entry {
+): EntryResponse {
   const campaign = campaignRowValue.id;
   switch (locator.kind) {
     case "campaign":
@@ -111,13 +107,11 @@ export function readByLocator(
       return readSceneEntry(db, campaign, locator.id);
     case "npc":
       return readNpcEntry(db, campaign, locator.id);
-    case "location":
-      return readLocationEntry(db, campaign, locator.id);
   }
 }
 
 /** GET /api/campaigns/:campaign/entries/<address> */
-export async function readEntry(campaign: string, rel: string): Promise<Entry> {
+export async function readEntry(campaign: string, rel: string): Promise<EntryResponse> {
   const row = await requireCampaign(campaign);
   assertSafeAddress(rel); // 400 unsafe id/address
   const db = await getDb();
@@ -140,7 +134,9 @@ function guardEntryRev(
   what: string,
 ): void {
   if (current === sent) return;
-  throw revConflict(current, what, readByLocator(tx, requireCampaignRow(tx, campaign), locator));
+  throw revConflict(current, what, {
+    entry: readByLocator(tx, requireCampaignRow(tx, campaign), locator),
+  });
 }
 
 // --- PATCH /api/campaigns/:campaign/entries/<address> -------------------------
@@ -167,81 +163,17 @@ function guardEntryRev(
  * transaction (drafts and job can never disagree after a crash). A stale id
  * matches nothing and is ignored.
  *
- * `raw` is the request body as it arrived. Its shape is the kind's: a
- * location's fields stand flat beside `rev`, `force` and `body` and are
- * checked against its schema (./locations.ts); the other kinds carry theirs
- * under `properties` (`readPatchRequest`).
+ * An address that names a location is a 404: a location is written through
+ * its own resource (ADR #31).
  */
 export async function patchEntry(
   campaign: string,
   rel: string,
-  raw: Record<string, unknown>,
-  jobId?: string,
-): Promise<Entry> {
-  assertSafeAddress(rel);
-  const locator = locatorFromPath(rel);
-  if (locator.kind === "location") {
-    const patch = readLocationPatch(raw);
-    return mutate(campaign, (tx) => {
-      const written = patchLocationIn(tx, campaign, locator.id, patch);
-      discardJob(tx, campaign, jobId);
-      return written;
-    });
-  }
-  return patchPropertiesEntry(campaign, locator, readPatchRequest(raw), jobId);
-}
-
-/** Keys of a request body for a kind whose fields travel under `properties`. */
-const PATCH_REQUEST_KEYS = new Set(["rev", "properties", "body", "force"]);
-
-/**
- * The request body of a kind whose fields travel under `properties`, shape
- * by shape: `rev` a number, `properties` an object, `body` a string, `force`
- * a boolean, and nothing else.
- */
-function readPatchRequest(raw: Record<string, unknown>): PatchEntryRequest {
-  for (const key of Object.keys(raw)) {
-    if (!PATCH_REQUEST_KEYS.has(key)) throw new ApiError(400, `unknown body key: ${key}`);
-  }
-  const { rev, properties, body, force } = raw;
-  if (typeof rev !== "number" || !Number.isFinite(rev)) {
-    throw new ApiError(400, "rev must be a number");
-  }
-  if (
-    properties !== undefined &&
-    (properties === null || typeof properties !== "object" || Array.isArray(properties))
-  ) {
-    throw new ApiError(400, "properties must be an object");
-  }
-  if (body !== undefined && typeof body !== "string") {
-    throw new ApiError(400, "body must be a string");
-  }
-  if (force !== undefined && typeof force !== "boolean") {
-    throw new ApiError(400, "force must be a boolean");
-  }
-  return {
-    rev,
-    ...(properties === undefined ? {} : { properties: properties as Record<string, unknown> }),
-    ...(body === undefined ? {} : { body }),
-    ...(force === undefined ? {} : { force }),
-  };
-}
-
-/** Delete the generator job a write came from, inside the write's transaction. */
-function discardJob(tx: GrimoireDb, campaign: string, jobId: string | undefined): void {
-  if (jobId === undefined) return;
-  tx.delete(generateJobs)
-    .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
-    .run();
-}
-
-/** The write of a kind whose fields travel under `properties`. */
-async function patchPropertiesEntry(
-  campaign: string,
-  locator: PropertiesLocator,
   request: PatchEntryRequest,
   jobId?: string,
 ): Promise<EntryResponse> {
+  assertSafeAddress(rel);
+  const locator = locatorFromPath(rel);
   const patch = request.properties;
   const markdown = request.body;
   // An EMPTY properties object counts as nothing either: it would pass the
@@ -264,7 +196,11 @@ async function patchPropertiesEntry(
     const written = hasProperties
       ? patchLocator(tx, campaign, locator, guard, patch as Record<string, unknown>, body)
       : writeBodyIn(tx, campaign, locator, guard, body as string);
-    discardJob(tx, campaign, jobId);
+    if (jobId !== undefined) {
+      tx.delete(generateJobs)
+        .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
+        .run();
+    }
     return written;
   });
 }
@@ -278,7 +214,7 @@ async function patchPropertiesEntry(
 function patchLocator(
   tx: GrimoireDb,
   campaign: string,
-  locator: PropertiesLocator,
+  locator: Locator,
   rev: number,
   patch: Record<string, unknown>,
   body?: string,
@@ -474,7 +410,7 @@ function patchLocator(
 function writeBodyIn(
   tx: GrimoireDb,
   campaign: string,
-  locator: PropertiesLocator,
+  locator: Locator,
   rev: number,
   body: string,
 ): EntryResponse {

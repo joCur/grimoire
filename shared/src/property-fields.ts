@@ -70,7 +70,7 @@ export type FieldSurface = "dialog" | "text";
 
 /** One field of one kind — the shape, never the copy. */
 export interface PropertyFieldDef {
-  /** The properties key, verbatim (`roll20-page` included). */
+  /** The field key, verbatim. */
   key: string;
   control: FieldControl;
   /** `select` only: the known value set. An entry may still say more. */

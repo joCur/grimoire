@@ -52,14 +52,22 @@ async function writeBody(rel: string, body: string): Promise<void> {
 
 async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
   const entry = await readEntry(rel);
-  // A location's fields travel flat beside `rev` (ADR #31).
-  const request = rel.startsWith("locations/")
-    ? { rev: entry.rev, ...p }
-    : { rev: entry.rev, properties: p };
   const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
+    body: JSON.stringify({ rev: entry.rev, properties: p }),
+  });
+  expect(res.status).toBe(200);
+}
+
+/** Write fields of a location — its own resource, fields flat (ADR #31). */
+async function patchLocation(id: string, fields: Record<string, unknown>): Promise<void> {
+  const url = `/api/campaigns/beispiel/locations/${id}`;
+  const location = (await (await app.request(url)).json()) as { rev: number };
+  const res = await app.request(url, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: location.rev, ...fields }),
   });
   expect(res.status).toBe(200);
 }
@@ -148,7 +156,7 @@ describe("the index resolves references", () => {
 describe("referrersOf", () => {
   test("finds every body kind that mentions the slug", async () => {
     await writeBody(SCENE, "## Flow\n\n[[jorna]] wartet.\n");
-    await writeBody("locations/leuchtturm", "[[jorna]] hat den Schl\u00fcssel.\n");
+    await patchLocation("leuchtturm", { body: "[[jorna]] hat den Schl\u00fcssel.\n" });
     await writeBody("01-salzhafen", "## Ziel\n\n[[jorna]] zahlt.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
@@ -173,7 +181,7 @@ describe("referrersOf", () => {
     // Two entities called `jorna`: the npc owns the slug (kind priority
     // npc > location > scene), so `[[jorna]]` in prose is the NPC.
     await createScene("Jorna", "01-salzhafen", "jorna");
-    await writeBody("locations/leuchtturm", "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n");
+    await patchLocation("leuchtturm", { body: "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n" });
     const db = await getDb();
     expect(expandBodyRefs(db, "beispiel", "[[jorna]]")).toBe("Hafenmeisterin Jorna");
     expect((await search("Hafenmeisterin")).some((r) => r.kind === "location")).toBe(true);
@@ -183,7 +191,7 @@ describe("referrersOf", () => {
     // The cards show these properties with the reference as a NAME, and the
     // index spells it out — so a rename has to find them.
     await patch("npcs/fenn", { motivation: "Weg von [[jorna]], bevor sie fragt." });
-    await patch("locations/bucht", { atmosphere: "Hier schaut [[jorna]] nie vorbei." });
+    await patchLocation("bucht", { atmosphere: "Hier schaut [[jorna]] nie vorbei." });
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
       FENN_REFERS_TO_JORNA,

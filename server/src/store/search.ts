@@ -4,11 +4,12 @@
 // (./fts). The response is `{ results: SearchResult[] }`, max 20, with
 // `score` meaning "0 is a perfect match, values grow toward 1".
 //
-// A hit carries `path` only when it IS an entry. The index also holds the
-// glossary terms, and a term is a row of a LIST (ADR #26): it has no address,
-// so such a hit is named by `kind` and `id` alone and the app opens it
-// through its list. Leaving `path` out is the point — an address that names
-// nothing would 404 the moment somebody followed it.
+// A hit carries `path` only for a kind reached through its address. A
+// location is its own resource (ADR #31), and a glossary term is a row of a
+// LIST (ADR #26): neither has an address, so such a hit is named by `kind` and
+// `id` alone and the app opens the resource or the list from those. Leaving
+// `path` out is the point — an address that names nothing would 404 the
+// moment somebody followed it.
 //
 // The two properties the reference queries depend on:
 //
@@ -31,7 +32,6 @@ import { getDb } from "./handle";
 import {
   CAMPAIGN_PATH,
   chapterPath,
-  locationPath,
   npcPath,
   sceneAddress,
   scenePath,
@@ -125,13 +125,12 @@ function pathForHit(
     }
     case "npc":
       return npcPath(id);
-    case "location":
-      return locationPath(id);
     case "chapter":
       return chapterPath(id);
     case "campaign":
       return CAMPAIGN_PATH;
     default:
+      // A location — its own resource, opened by `kind` and `id` (ADR #31) —
       // `glossary`, and any list kind added to the index later: the row is
       // named by `kind` and `id`, and there is no address to offer.
       return undefined;

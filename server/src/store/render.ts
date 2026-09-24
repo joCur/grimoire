@@ -4,7 +4,7 @@
 // `EntryResponse`: an address, a `properties` mapping, a markdown body, and
 // the concurrency token the client sends back. A kind with its own type
 // (ADR #31) renders itself in its domain module (a location: ./locations.ts);
-// its row shape still stands below with the others.
+// its row shape stands below with the others.
 //
 // Three rules hold this together:
 //

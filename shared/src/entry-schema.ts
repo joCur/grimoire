@@ -6,25 +6,19 @@
 // `response_format: json_schema` (server/src/llm-provider.ts). A shape the
 // API guarantees is a shape no correction turn has to buy.
 //
-// The shape MIRRORS THE STORED ENTRY. A kind with its own zod schema
-// (ADR #31, a location) replies with its fields side by side with the text:
-//
-//     { "id": "alte-mole", "name": "Die alte Mole", "chapter": null, …,
-//       "body": "## Beim ersten Betreten\n…", "warnings": [] }
-//
-// and its reply schema is DERIVED from that one zod schema with
-// `z.toJSONSchema` (./entry-form `replyForm`, ./location.ts) — never written
-// down by hand. The other kinds reply with their fields under `properties`:
+// The shape mirrors the stored row of a scene or an npc: the kind's fields
+// under `properties`, beside them the text and the notes for the DM,
 //
 //     { "properties": { "id": "night-watch-quay", … }, "body": "## Ablauf\n…",
 //       "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."] }
 //
-// and their schemas live in ../schema, one per kind and run; `shared/test/
+// and the schemas live in ../schema, one per kind and run; `shared/test/
 // entry-schema.test.ts` asserts that their keys and enums still match the
-// property field definitions the „Eigenschaften" dialog is built from
-// (./property-fields).
+// field definitions the dialog is built from (./property-fields). A kind with
+// its own resource derives its reply schema from its zod schema instead
+// (ADR #31 — a location, ./location.ts `locationReplyRequest`).
 //
-// Either way `body` is the whole text as one string and `warnings` what the
+// `body` is the whole text as one string and `warnings` what the
 // DM reads in the review. The body travels verbatim: a forced object cannot
 // miss a delimiter, fence itself, append a sign-off or break on a quotation
 // mark.
@@ -39,26 +33,23 @@
 //   * `additionalProperties: false` everywhere,
 //   * every property in `required` — a genuinely optional field is NULLABLE
 //     instead, and the server reads `null` as „not given" (it drops the key
-//     before the draft is stored),
+//     before the row is written),
 //   * a free key/value map (`quickstats`) cannot be expressed at all, so it
 //     travels as a LIST of `{ key, value }` pairs and the server folds it
 //     back into the mapping the format contract asks for.
 
 import type { JsonSchema } from "./outline-schema";
-import { replyJsonSchema } from "./entry-form";
-import { locationReplySchemas } from "./location";
 import augmentedNpcEntry from "../schema/augmented-npc.schema.json";
 import augmentedSceneEntry from "../schema/augmented-scene.schema.json";
 import npcEntry from "../schema/npc.schema.json";
 import sceneEntry from "../schema/scene.schema.json";
 
 /**
- * The kinds a GENERATOR call can write an entry for — three of the five entry
- * kinds (`EntryKind` in ./types is all of them). A chapter comes out of the
- * run itself (ADR #18) and the campaign entry is nobody's proposal, so
- * neither has a schema here.
+ * The kinds whose generator reply carries `properties` — a scene and an npc.
+ * A chapter comes out of the run itself (ADR #18), the campaign is nobody's
+ * proposal, and a location has its own reply form (./location.ts).
  */
-export const GENERATED_ENTRY_KINDS = ["scene", "npc", "location"] as const;
+export const GENERATED_ENTRY_KINDS = ["scene", "npc"] as const;
 export type GeneratedEntryKind = (typeof GENERATED_ENTRY_KINDS)[number];
 
 /**
@@ -78,17 +69,15 @@ export type EntryMode = "create" | "augment";
 export const PAIR_KEY = "key";
 export const PAIR_VALUE = "value";
 
-/** Every entry schema, by kind and run — loaded or derived once, at start. */
+/** Every entry schema, by kind and run — loaded once, at start. */
 const ENTRY_SCHEMAS: Record<EntryMode, Record<GeneratedEntryKind, JsonSchema>> = {
   create: {
     scene: sceneEntry,
     npc: npcEntry,
-    location: replyJsonSchema(locationReplySchemas.create),
   },
   augment: {
     scene: augmentedSceneEntry,
     npc: augmentedNpcEntry,
-    location: replyJsonSchema(locationReplySchemas.augment),
   },
 };
 

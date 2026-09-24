@@ -10,13 +10,17 @@
 //
 //   campaign · <chapter> ·
 //   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
-//   npcs/<id> · locations/<id>
+//   npcs/<id>
 //
-// The wire vocabulary follows from that: an entry carries its `kind`, its
-// markdown as `body` and its optimistic-concurrency token as `rev` (the row
-// version). Its fields — its properties — stand flat beside them for a kind
-// with its own zod schema (ADR #31: a location, `{ kind, id, path, name, …,
-// body, rev }`); the other kinds carry them under `properties`.
+// The wire vocabulary follows from that: an entry's fields are `properties`,
+// its markdown is `body`, and its optimistic-concurrency token is `rev` (the
+// row version).
+//
+// A LOCATION IS ITS OWN RESOURCE (ADR #31): `…/locations` and
+// `…/locations/:id`, answering the `Location` type — every field of the
+// location flat, `body` among them, beside its `rev`. It has no address, so
+// `…/entries/locations/<id>` answers 404 like any other address the schema
+// does not describe.
 //
 // LISTS ARE NOT ENTRIES (ADR #26). A session, the inbox, the glossary and a
 // chapter's open threads are tables, and they answer their OWN shapes on
@@ -68,7 +72,7 @@ import { readGlossary, writeGlossary } from "../store/glossary";
 import { appendInboxEntry, markInboxLineDone, readInbox } from "../store/inbox";
 import { readKnowledge, writeKnowledge } from "../store/knowledge";
 import { appendThread, deleteThread, patchThread, readThreads } from "../store/threads";
-import { createLocation } from "../store/locations";
+import { createLocation, listLocations, patchLocation, readLocation } from "../store/locations";
 import { createNpc, createNpcStub } from "../store/npcs";
 import {
   appendLogEntry,
@@ -94,6 +98,7 @@ import {
   obtainProvider,
 } from "../generator";
 import { applyAugment, readAugmentTarget } from "../generator-augment";
+import { applyLocationAugment } from "../location-augment";
 import {
   deleteJob,
   getJob,
@@ -134,8 +139,8 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 /**
  * Parse the JSON body; must be an object with no keys outside `allowed`.
- * `null` leaves the keys to the caller — a body whose shape depends on the
- * kind of entry it writes is checked where the kind is known.
+ * `null` leaves the keys to the kind's schema, which names an unknown one
+ * itself (a location's PATCH).
  */
 async function jsonBody(c: Context, allowed: string[] | null): Promise<Record<string, unknown>> {
   let body: unknown;
@@ -248,13 +253,27 @@ api.get("/campaigns/:campaign", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), "campaign")),
 );
 
-// GET /api/campaigns/:campaign/entries/<address> -> the entry: `kind`, `id`,
-// `path`, its fields, `body` and `rev` for a location (`Location`), the fields
-// under `properties` for the other kinds (`EntryResponse`). The address IS the
-// path — the schema is in store/paths.ts, and it describes the five ENTRY
-// kinds only.
+// GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
+// (properties, body, rev). The address IS the path — the schema is in
+// store/paths.ts, and it describes the campaign, its chapters, scenes and
+// npcs. An address that names a location is a 404: see the location routes.
 api.get("/campaigns/:campaign/entries/*", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), entryAddress(c))),
+);
+
+// GET /api/campaigns/:campaign/locations -> Location[] — every location of
+// the campaign, sorted by name, each exactly as its own GET answers it.
+api.get("/campaigns/:campaign/locations", async (c) =>
+  c.json(await listLocations(c.req.param("campaign"))),
+);
+
+// GET /api/campaigns/:campaign/locations/:id -> Location
+// `{ id, name, chapter?, roll20Page?, atmosphere?, body, rev }` — every field
+// of the location flat, an optional one absent when the location does not
+// carry it, and `rev` the guard its PATCH sends back. 404 for an unknown
+// campaign or location.
+api.get("/campaigns/:campaign/locations/:id", async (c) =>
+  c.json(await readLocation(c.req.param("campaign"), c.req.param("id"))),
 );
 
 // GET /api/campaigns/:campaign/session -> SessionResponse | null — the ACTIVE
@@ -364,10 +383,8 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 
 // --- write endpoints --------------------------------------------------------------
 
-// PATCH /api/campaigns/:campaign/entries/<address>
-//   location:      { rev, force?, body?, name?, chapter?, "roll20-page"?, atmosphere? }
-//   other kinds:   { rev, properties?, body?, force? }
-//   -> the entry, in the shape GET answers
+// PATCH /api/campaigns/:campaign/entries/<address> { rev, properties?, body?, force? }
+//   -> EntryResponse
 // THE write of one entry (ADR #23): its fields, its text, or both in ONE
 // request against ONE `rev`. The address is the path behind `entries/`, the
 // same one GET reads.
@@ -375,23 +392,19 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // Fields and text together are ONE write: the row changes once, so `rev`
 // steps once no matter how much the request carried.
 //
-// The fields travel the way the kind's entry carries them. A location's
-// stand flat beside `rev` (ADR #31) and are checked against its zod schema:
-// any subset of them, `null` clears an optional one, and a key that is not a
-// field of a location — or a value of the wrong shape — is a 400 that names
-// it. The other kinds carry theirs under `properties`, a flat object of keys
-// to set where null deletes a key. `body` is the markdown — exactly what GET
-// hands out as `body` — and replaces the stored text. A request with neither
-// fields nor text is a 400 { code: "nothing_to_write" }: a request that
-// changes nothing is a bug in the caller, not a save. The `id` may be echoed,
-// never changed (400).
+// `properties` is a flat object of keys to set; null deletes a key. `body` is
+// the markdown WITHOUT the properties block — exactly what GET hands out as
+// `body` — and replaces the stored text. Neither of the two present is a 400
+// { code: "nothing_to_write" }: a request that changes nothing is a bug in
+// the caller, not a save.
 //
-// A reference among the fields — `chapter`, `location`, an `npcs` entry — has
+// A reference in `properties` — `chapter`, `location`, an `npcs` entry — has
 // to name an entry that exists: 400 with the code the app turns into its
 // create-this-first hint, never a new entry as a side effect. A scene's
 // `chapter` may be SET that way but never REMOVED (400): a scene belongs to
 // a chapter and must not fall out of the tree. A key the entry's kind has no
-// field for is a 400 as well.
+// field for is a 400 as well; a key that is not part of the kind but sits on
+// the row may still be changed or deleted with null.
 //
 // A stale `rev` is 409 { code: "rev_conflict", rev, entry } and writes
 // nothing — `entry` is the entry as it stands now, so the conflict dialog
@@ -401,13 +414,51 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // save.
 //
 // 404 for an entry that does not exist — including for an address that reaches
-// for one of the three LISTS, which have none (ADR #26). They are written
-// through their own endpoints: PUT /glossary, POST /inbox, POST /log, the
-// session verbs, PATCH /sessions/:id and the review actions.
+// for one of the three LISTS, which have none (ADR #26), and for one that
+// names a location, which is written through its own resource. The lists are
+// written through their own endpoints: PUT /glossary, POST /inbox, POST /log,
+// the session verbs, PATCH /sessions/:id and the review actions.
 api.patch("/campaigns/:campaign/entries/*", async (c) => {
-  // The shape of the body is the KIND's, so the store checks it (see above).
+  const body = await jsonBody(c, ["rev", "properties", "body", "force"]);
+  const properties = body.properties;
+  const markdown = body.body;
+  if (properties !== undefined && !isPlainObject(properties)) {
+    throw new ApiError(400, "properties must be an object");
+  }
+  if (markdown !== undefined && typeof markdown !== "string") {
+    throw new ApiError(400, "body must be a string");
+  }
+  if (body.force !== undefined && typeof body.force !== "boolean") {
+    throw new ApiError(400, "force must be a boolean");
+  }
+  return c.json(
+    await patchEntry(c.req.param("campaign"), entryAddress(c), {
+      rev: requireRev(body.rev),
+      ...(properties === undefined ? {} : { properties }),
+      ...(markdown === undefined ? {} : { body: markdown }),
+      ...(body.force === undefined ? {} : { force: body.force }),
+    }),
+  );
+});
+
+// PATCH /api/campaigns/:campaign/locations/:id
+//   { rev, force?, id?, name?, chapter?, roll20Page?, atmosphere?, body? } -> Location
+// THE write of one location (ADR #23): any subset of its fields — `body` is
+// one of them — in ONE row update against ONE `rev`, checked against the
+// location's schema. `null` clears an optional field; a key that is not a
+// field of a location, or a value of the wrong shape, is a 400 that names it.
+// A request that names no field is a 400 { code: "nothing_to_write" }. The
+// `id` may be echoed, never changed (400), and a `chapter` has to name a
+// chapter that exists (400 with the create-this-first code).
+//
+// A stale `rev` is 409 { code: "rev_conflict", rev, location } and writes
+// nothing — `location` is the location as it stands now. `force: true`
+// writes the given fields on top of that current row instead: only what this
+// request carries is written, so a field changed in between survives a
+// forced save of the text. 404 for an unknown campaign or location.
+api.patch("/campaigns/:campaign/locations/:id", async (c) => {
   const body = await jsonBody(c, null);
-  return c.json(await patchEntry(c.req.param("campaign"), entryAddress(c), body));
+  return c.json(await patchLocation(c.req.param("campaign"), c.req.param("id"), body));
 });
 
 // POST /api/campaigns/:campaign/session/start -> SessionResponse
@@ -736,10 +787,11 @@ api.delete("/campaigns/:campaign/chapters/:chapter/threads/:id", async (c) => {
 // --- creating content ---------------------------------------------------------------
 //
 // Five POSTs, one shape: the DM types a NAME, the server derives the id with
-// the shared slug rule (@grimoire/shared/slug) and answers with the created
-// ENTRY — the same `EntryResponse` every other write returns, so the app can
-// navigate straight into it. A taken id is
-// `409 { code: "slug_taken", id, suggestion, path }`; a name that yields no
+// the shared slug rule (@grimoire/shared/slug) and answers with what it
+// created in the shape its kind's GET answers — an `EntryResponse`, or a
+// `Location` for a location — so the app can navigate straight into it. A
+// taken id is `409 { code: "slug_taken", id, suggestion, path }` (a
+// location's without `path`); a name that yields no
 // slug at all is a 400 that says so (store/shared.ts explains why neither is
 // silently resolved). Every one of them also accepts an explicit `id` — that
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of
@@ -1035,15 +1087,16 @@ api.post("/campaigns/:campaign/generate/npc", async (c) => {
 
 // POST /api/campaigns/:campaign/generate/augment { path, sourceText?, instruction? }
 // -> 202 { jobId } — the AI augment run: the same background job
-// model as the two create runs, pointed at an entry that already EXISTS.
-// ONE generator job per campaign, so a start while ANY run is going answers
-// 409 { jobId }. Writes NOTHING; the proposal waits in the job.
+// model as the two create runs, pointed at an npc or scene that already
+// EXISTS. ONE generator job per campaign, so a start while ANY run is going
+// answers 409 { jobId }. Writes NOTHING; the proposal waits in the job.
 //
 // Synchronous, before a job exists: 400 for a malformed body, for an unsafe
-// address, for a kind that has no augment prompt (only npc/location/scene),
-// and when NEITHER sourceText nor instruction carries text — the dialog
-// requires at least one of them; 404 for an unknown campaign/entry; 503
-// without a configured provider.
+// address, for a kind that has no augment prompt here (only npc/scene), and
+// when NEITHER sourceText nor instruction carries text — the dialog requires
+// at least one of them; 404 for an unknown campaign/entry, and for an address
+// that names a location (a location is augmented on its own resource, below);
+// 503 without a configured provider.
 api.post("/campaigns/:campaign/generate/augment", async (c) => {
   const body = await jsonBody(c, ["path", "sourceText", "instruction"]);
   const campaign = c.req.param("campaign");
@@ -1070,32 +1123,85 @@ api.post("/campaigns/:campaign/generate/augment", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/augment/apply
-// { path, jobId?, ...the entry PATCH } -> the written entry.
+// { path, rev, properties?, body?, jobId? } -> the written EntryResponse.
 // Accepting the reviewed proposal: the DM's chosen fields
 // and the body they assembled from the accepted blocks, written in ONE
 // transaction against `rev` — 409 { code: "rev_conflict", rev } when the
-// entry moved underneath, and then NOTHING is written. Beside `path` and
-// `jobId` the body is the entry PATCH of the target's kind (see PATCH
-// …/entries above): a location's chosen fields flat beside `rev` and `body`,
-// the other kinds' under `properties`; there is no `force`. FTS and `[[slug]]`
+// entry moved underneath, and then NOTHING is written. FTS and `[[slug]]`
 // reference rows follow because this is the ordinary write path; `jobId`
 // discards the augment job in that same transaction.
 api.post("/campaigns/:campaign/generate/augment/apply", async (c) => {
-  const { path, jobId, ...patch } = await jsonBody(c, null);
+  const body = await jsonBody(c, ["path", "rev", "properties", "body", "jobId"]);
+  const jobId = body.jobId;
   if (jobId !== undefined && typeof jobId !== "string") {
     throw new ApiError(400, "jobId must be a string");
   }
-  return c.json(await applyAugment(c.req.param("campaign"), path, patch, jobId));
+  return c.json(await applyAugment(c.req.param("campaign"), body, jobId));
+});
+
+// POST /api/campaigns/:campaign/locations/:id/augment { sourceText?, instruction? }
+// -> 202 { jobId } — the AI augment run of one location, on the location's
+// own resource: the same background job model as every other run
+// (`kind: "location-augment"`, the job's `location` the id), ONE generator
+// job per campaign, so a start while ANY run is going answers 409 { jobId }.
+// Writes NOTHING; the proposal waits in the job as `locationAugmentResult` —
+// the location as the run read it (`current`) beside the location as the
+// model proposes it (`proposed`), both without their guard.
+//
+// Synchronous, before a job exists: 400 for a malformed body and when
+// NEITHER sourceText nor instruction carries text; 404 for an unknown
+// campaign or location; 503 without a configured provider.
+api.post("/campaigns/:campaign/locations/:id/augment", async (c) => {
+  const body = await jsonBody(c, ["sourceText", "instruction"]);
+  const campaign = c.req.param("campaign");
+  const location = c.req.param("id");
+  const sourceText = optionalText(body.sourceText, "sourceText") ?? "";
+  const instruction = optionalText(body.instruction, "instruction") ?? "";
+  if (sourceText === "" && instruction === "") {
+    throw new ApiError(400, "sourceText or instruction is required");
+  }
+  await readLocation(campaign, location); // 404 unknown
+  const provider = obtainProvider(); // 503 when nothing is configured
+  const job = await startJob({
+    kind: "location-augment",
+    campaign,
+    location,
+    sourceText,
+    instruction,
+    provider,
+  });
+  return c.json({ jobId: job.id }, 202);
+});
+
+// POST /api/campaigns/:campaign/locations/:id/augment/apply
+// { rev, jobId?, name?, chapter?, roll20Page?, atmosphere?, body? } -> Location
+// Accepting the reviewed proposal: the fields the DM took and the body they
+// assembled from the accepted blocks — the location's PATCH without `force`
+// and without `id` (a proposal never changes it) — written in ONE
+// transaction against `rev`: 409 { code: "rev_conflict", rev, location }
+// when the location moved underneath, and then NOTHING is written. FTS and
+// `[[id]]` reference rows follow because this is the location's ordinary
+// write; `jobId` discards the augment job in that same transaction. A request
+// that takes nothing is a 400.
+api.post("/campaigns/:campaign/locations/:id/augment/apply", async (c) => {
+  const { jobId, ...patch } = await jsonBody(c, null);
+  if (jobId !== undefined && typeof jobId !== "string") {
+    throw new ApiError(400, "jobId must be a string");
+  }
+  return c.json(
+    await applyLocationAugment(c.req.param("campaign"), c.req.param("id"), patch, jobId),
+  );
 });
 
 // PATCH /api/campaigns/:campaign/generate/job/:id/review { rev, edits?, entries?,
-// dropped?, fields?, blocks? } -> the job.
+// locations?, dropped?, fields?, blocks? } -> the job.
 // The review state of a run lives ON THE JOB: the edited halves per draft
-// (`{ "<path>": { properties?, body? } }`), the decision per suggested
-// entry, the dropped scenes and
-// (for an augment run) the decision per property/block. Everything merges,
-// so the app sends the ONE thing that just changed — text debounced,
-// decisions immediately.
+// (`{ "<path>": { properties?, body? } }`), the decision per npc stub
+// (`entries`, by address) and per proposed location (`locations`, by id),
+// the dropped scenes and (for an augment run) the decision per field/block.
+// Everything merges, so the app sends the ONE thing that just changed — text
+// debounced, decisions immediately. A path or location id the run did not
+// produce is a 400.
 //
 // `rev` is the job's review rev as the client read it: a second tab that
 // decided first makes this a 409 { code: "rev_conflict", rev } and nothing
@@ -1103,7 +1209,15 @@ api.post("/campaigns/:campaign/generate/augment/apply", async (c) => {
 // 404 when the campaign has no job, or when :id names a different one (a
 // patch for a replaced run must not land on its successor).
 api.patch("/campaigns/:campaign/generate/job/:id/review", async (c) => {
-  const body = await jsonBody(c, ["rev", "edits", "entries", "dropped", "fields", "blocks"]);
+  const body = await jsonBody(c, [
+    "rev",
+    "edits",
+    "entries",
+    "locations",
+    "dropped",
+    "fields",
+    "blocks",
+  ]);
   const rev = body.rev;
   if (typeof rev !== "number" || !Number.isInteger(rev) || rev < 0) {
     throw new ApiError(400, "rev must be a non-negative integer");
@@ -1112,6 +1226,9 @@ api.patch("/campaigns/:campaign/generate/job/:id/review", async (c) => {
   if (body.edits !== undefined) patch.edits = reviewRecord(body.edits, "edits", isDraftEdit);
   if (body.entries !== undefined) {
     patch.entries = reviewRecord(body.entries, "entries", isDecision);
+  }
+  if (body.locations !== undefined) {
+    patch.locations = reviewRecord(body.locations, "locations", isDecision);
   }
   if (body.dropped !== undefined) {
     if (!Array.isArray(body.dropped) || body.dropped.some((v) => typeof v !== "string")) {
@@ -1126,30 +1243,35 @@ api.patch("/campaigns/:campaign/generate/job/:id/review", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/job/:id/accept
-// { paths?, chapter?, chapterTitle? } -> { written, jobDeleted }
-// The single-accept action per scene / per suggested entry, and the
-// accept-all action for the rest. `paths` selects scene draft paths
-// and suggested-entry addresses (`npcs/grella`); without it EVERY part that
-// is still open is written — a dropped scene and a rejected entry are not
-// open, so the bulk action never resurrects a "no".
+// { rev, paths?, locations?, chapter?, chapterTitle? }
+//   -> { written, locations, jobDeleted }
+// The single-accept action per scene / npc stub / proposed location, and the
+// accept-all action for the rest. `paths` selects scene draft paths and npc
+// stub addresses (`npcs/grella`), `locations` proposed locations by id; with
+// neither, EVERY scene still open is written plus every npc and location the
+// DM accepted — a dropped scene and a rejected npc or location are not open,
+// so the bulk action never resurrects a "no". A selected scene carries the
+// run's own npcs and location it names. `written` maps each written draft
+// path to the address it landed at, `locations` lists the written location
+// ids.
 //
 // One transaction with the ordinary draft write: the conflict check lives
-// inside it (409 { conflicts }), FTS and reference rows follow, and the
-// job records what was written in that same commit. The job row disappears
-// the moment nothing is left open (`jobDeleted`). `rev` is the review rev
-// the client read and is re-checked inside that transaction: a decision
-// made in between is a 409 `rev_conflict` and nothing is written. 404
-// without a job or for a stale :id, 409 for a job that has no result, 400
-// for an unknown path and for a BULK accept with nothing left to do. A
-// named selection that is already written is not an error — a double click
-// gets 200 with an empty `written`.
+// inside it (409 { conflicts, locations }), FTS and reference rows follow,
+// and the job records what was written in that same commit. The job row
+// disappears the moment nothing is left open (`jobDeleted`). `rev` is the
+// review rev the client read and is re-checked inside that transaction: a
+// decision made in between is a 409 `rev_conflict` and nothing is written.
+// 404 without a job or for a stale :id, 409 for a job that has no result,
+// 400 for an unknown path or location id and for a BULK accept with nothing
+// left to do. A named selection that is already written is not an error — a
+// double click gets 200 with an empty `written`.
 //
 // A RUNNING pipelined run is acceptable part by part: it
 // stays `running` while parts are open, and a `done` part is in the result
 // and therefore acceptable before its siblings are. The 409 "no result" is
 // kept for a failed run, and for a run that has not finished a single part.
 api.post("/campaigns/:campaign/generate/job/:id/accept", async (c) => {
-  const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
+  const body = await jsonBody(c, ["rev", "paths", "locations", "chapter", "chapterTitle"]);
   const rev = requireRev(body.rev);
   return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), rev, body));
 });
@@ -1180,15 +1302,19 @@ api.post("/campaigns/:campaign/generate/job/:id/parts/:key/retry", async (c) => 
 
 // GET /api/campaigns/:campaign/generate/job -> GenerateJob (404 when there is none).
 // The job carries its status (running/done/failed) with `kind`,
-// result/npcResult/augmentResult, the error body and the review edits; an
-// `augment` job also carries `target` — the entry's address — from the
-// moment it STARTS. A finished result may carry `namingHints`: the SERVER's
-// own findings that a draft still spells something a naming convention
-// replaces — hints for the review, never a reason to fail or block. And it
-// carries the REVIEW STATE with that state's `rev`: the decision per
-// suggested entry, the dropped scenes, the per field/block decisions of an
-// augment run and the parts a partial accept already wrote
-// (`review.written`, draft path -> the address it landed at).
+// result/npcResult/augmentResult/locationAugmentResult, the error body and
+// the review edits; an `augment` job also carries `target` — the npc's or
+// scene's address — and a `location-augment` job `location` — the
+// location's id — from the moment it STARTS. A scene run's `result` lists
+// its scene drafts under `scenes`, its npc stubs under `stubs` and its
+// proposed locations under `locations` (each a location without its guard).
+// A finished result may carry `namingHints`: the SERVER's own findings that
+// a draft still spells something a naming convention replaces — hints for
+// the review, never a reason to fail or block. And it carries the REVIEW
+// STATE with that state's `rev`: the decision per npc stub and per proposed
+// location, the dropped scenes, the per field/block decisions of an augment
+// run and the parts a partial accept already wrote (`review.written`, draft
+// path -> the address it landed at; `review.writtenLocations`, location ids).
 // The campaign is NOT re-validated here: the job store is the authority for
 // this endpoint, and "no job" is the honest answer for an unknown campaign
 // too. Polled by the generator route while a job runs (~3s) and once per
@@ -1210,15 +1336,15 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/apply
-// { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
+// { scenes?, stubs?, locations?, npc?, chapter?, chapterTitle?, jobId? }
+//   -> { written, locations }
 // Writes the reviewed drafts — synchronous on purpose: this is a short
 // write, and the DM waits for its result. Every draft is
 // `{ path, properties, body }` (an npc stub `{ kind, id, name, properties,
-// body }`, a location stub the location draft itself, `{ kind, id, name, …,
-// body }`, checked against the location's schema — ADR #31) and is
-// re-validated server-side (status draft, safe paths, the id matching the
-// address); 409 { conflicts } when any
-// target entry exists — then nothing is written at all. chapter +
+// body }`) and is re-validated server-side (status draft, safe paths, the id
+// matching the address); a proposed location is a location without its
+// guard, checked against the location's schema. 409 { conflicts, locations }
+// when any target exists — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create the chapter entry
 // when it is missing, in the same all-or-nothing batch (the app's
 // new-chapter flow).
@@ -1232,7 +1358,15 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 // endpoint: it needs exactly the same all-or-nothing write, the same 409 and
 // the same job cleanup, and re-validates server-side just like a scene.
 api.post("/campaigns/:campaign/generate/apply", async (c) => {
-  const body = await jsonBody(c, ["scenes", "stubs", "npc", "chapter", "chapterTitle", "jobId"]);
+  const body = await jsonBody(c, [
+    "scenes",
+    "stubs",
+    "locations",
+    "npc",
+    "chapter",
+    "chapterTitle",
+    "jobId",
+  ]);
   const campaign = c.req.param("campaign");
   const jobId = body.jobId;
   if (jobId !== undefined && typeof jobId !== "string") {

@@ -10,7 +10,6 @@
 //   <chapter>/<scene-id>             a scene without a `location`
 //   <chapter>/<location>/<scene-id>  a scene whose `location` names that location
 //   npcs/<id>                        an npc row
-//   locations/<id>                   a location row
 //
 // Two things to know about the segments:
 //
@@ -27,7 +26,8 @@
 //     inbox, the glossary and a session are LISTS with their own endpoints
 //     (ADR #26), so none of them has an address here. They stay reserved
 //     because a chapter that claimed one of those ids would collide with the
-//     API path of its list.
+//     API path of its list. `locations` is the same: a location is its own
+//     resource (ADR #31, `…/locations/:id`) and has no address either.
 //
 // An address the schema does not describe names nothing and answers 404.
 
@@ -45,8 +45,7 @@ export type Locator =
   | { kind: "campaign" }
   | { kind: "chapter"; id: string }
   | { kind: "scene"; id: string; chapterId: string; groupSlug: string }
-  | { kind: "npc"; id: string }
-  | { kind: "location"; id: string };
+  | { kind: "npc"; id: string };
 
 /** The one campaign-level entry. */
 export const CAMPAIGN_PATH = "campaign";
@@ -94,10 +93,6 @@ export function npcPath(id: string): string {
   return `npcs/${id}`;
 }
 
-export function locationPath(id: string): string {
-  return `locations/${id}`;
-}
-
 /**
  * The ROW one address names, as a comparable key: `<kind>/<id>`.
  *
@@ -140,9 +135,9 @@ export function locatorFromPath(rel: string): Locator {
   if (RESERVED.has(first)) {
     if (segments.length !== 2 || last === "") throw new ApiError(404, "entry not found");
     if (first === "npcs") return { kind: "npc", id: last };
-    if (first === "locations") return { kind: "location", id: last };
-    // `sessions/<id>` falls through with the other two list segments: a list
-    // has no entry address, so these name nothing (ADR #26).
+    // `locations/<id>` and the list segments fall through: a location is its
+    // own resource (ADR #31) and a list has none at all (ADR #26), so these
+    // name nothing here.
     throw new ApiError(404, "entry not found");
   }
 

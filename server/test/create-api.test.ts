@@ -290,8 +290,9 @@ describe("the per-campaign creates", () => {
 
   test("an ort is created from the name alone and collides the same way", async () => {
     const location = await created<Location>("/campaigns/nordwind/locations", { name: "Hafen" });
-    expect(location.path).toBe("locations/hafen");
+    expect(location.id).toBe("hafen");
     expect(location.name).toBe("Hafen");
+    expect(Object.hasOwn(location, "path")).toBe(false);
     expect((await post("/campaigns/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
