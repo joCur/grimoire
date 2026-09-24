@@ -150,6 +150,14 @@ describe("chips and selects", () => {
     expect(html).toContain("— nicht gesetzt —");
     expect(count(html, "<option")).toBe(5);
   });
+
+  test("an npc's status select has no empty option — an npc always has a status", () => {
+    const html = render(fieldOf("npc", "status"), { kind: "text", text: "alive" });
+    expect(html).toContain('value="alive" selected');
+    expect(html).not.toContain("— nicht gesetzt —");
+    expect(html).not.toContain('value=""');
+    expect(count(html, "<option")).toBe(4);
+  });
 });
 
 describe("quickstats", () => {

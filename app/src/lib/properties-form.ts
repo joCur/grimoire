@@ -78,7 +78,10 @@ export interface PropertiesField {
   control: FieldControl;
   /** Quiet line under the control; the format's own note in most cases. */
   hint?: string;
-  /** A field the entity cannot lose (`title`/`name`) — blank blocks the save. */
+  /**
+   * A field the entity cannot lose (`title`/`name`, an npc's `status`) — blank
+   * blocks the save, and a `select` offers no empty choice.
+   */
   required?: boolean;
   /**
    * A REFERENCE the entry cannot lose — a scene's chapter, which is part of

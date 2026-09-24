@@ -221,7 +221,8 @@ export function withNpcChange(npc: NpcProposal, change: NpcChange): Record<strin
  * How the app edits each field, in the order the dialog shows them. `id` is
  * fixed at creation (ADR #21) and `body` has its own editor, so neither is
  * here; `motivation` is edited beside the body, not in the dialog
- * (`surface: "text"`, ADR #29).
+ * (`surface: "text"`, ADR #29). `name` and `status` are required like the
+ * schema's own fields: an npc always has both, so neither can be emptied.
  */
 const NPC_FORM: {
   [K in Exclude<keyof NpcFields, "id" | "body">]-?: Omit<PropertyFieldDef, "key">;
@@ -229,7 +230,7 @@ const NPC_FORM: {
   name: { control: "text", required: true },
   role: { control: "text" },
   chapter: { control: "reference", source: "chapters" },
-  status: { control: "select", values: NPC_STATUSES },
+  status: { control: "select", values: NPC_STATUSES, required: true },
   statblock: { control: "text" },
   quickstats: { control: "pairs" },
   voice: { control: "textarea" },

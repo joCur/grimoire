@@ -144,8 +144,9 @@ export function PropertiesFieldControl({
             onChange={(e) => setText(e.target.value)}
             className={cn(INPUT_CLASS, "appearance-none pr-9")}
           >
-            {/* Clearing is a real choice: it deletes the key. */}
-            <option value="">{t("properties.field.unset")}</option>
+            {/* Clearing is a real choice: it deletes the key — except for a
+                field the entity cannot lose (an npc's status). */}
+            {field.required !== true && <option value="">{t("properties.field.unset")}</option>}
             {/* The closed list itself — the column admits nothing else (ADR #25). */}
             {(field.options ?? []).map((option) => (
               <option key={option.value} value={option.value}>

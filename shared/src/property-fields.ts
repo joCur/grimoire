@@ -78,7 +78,10 @@ export interface PropertyFieldDef {
   values?: readonly string[];
   /** `reference`/`references` only: which entity list the value names. */
   source?: ReferenceSource;
-  /** A field the entity cannot lose (`title`/`name`) — never blank. */
+  /**
+   * A field the entity cannot lose (`title`/`name`, an npc's `status`) —
+   * never blank; a required `select` offers no empty choice.
+   */
   required?: boolean;
   /** Where the app edits it; absent means the dialog (see `FieldSurface`). */
   surface?: FieldSurface;
