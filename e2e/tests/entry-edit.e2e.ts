@@ -21,11 +21,12 @@
 // reloading adopts the stored entry, forcing writes only the fields this
 // request carries, so the other writer's properties survive a forced text save.
 //
-// An npc and a location keep one prose PROPERTY beside their text —
+// An npc and a location keep one prose FIELD beside their text —
 // `motivation` and `atmosphere` (ADR #29) — and the edit surface carries it:
 // set, cleared, saved in the same write as the text, and under the same
 // guard, so the conflict line and both of its answers hold for it too. The
-// properties dialog does not show it.
+// properties dialog does not show it. Both are their own resources (ADR #31)
+// and are read back from there.
 //
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
@@ -43,7 +44,9 @@ import { expect, test, type Api } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
-const NPC = "npcs/jorna";
+/** The npc the npc cases edit — its own resource and route (ADR #31). */
+const NPC = "jorna";
+const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
 const CONFLICT_LINE = "Inzwischen geändert";
 /** aria-label of the raw-markdown textarea (EntryBodyEditor). */
@@ -53,6 +56,12 @@ const TEXTAREA = "Markdown-Text von";
 async function split(api: Api, rel: string) {
   const { properties, body } = await api.entry(rel);
   return { properties, body };
+}
+
+/** Read the npc: its fields, `body` among them, without its guard. */
+async function npcFields(api: Api) {
+  const { rev: _rev, ...fields } = await api.npc(NPC);
+  return fields;
 }
 
 /**
@@ -138,16 +147,16 @@ test("editing the body: save writes the entry and the reading view shows it", as
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
-test("a mention in the text stays text — no entry, no error", async ({ page, api }) => {
-  // A reference names an entry that exists (ADR #19) — but a MENTION in the
-  // body is not a reference: `[[niemand]]` and a `## Beziehungen` line are
-  // prose. Saving them is a normal save: nothing is created, nothing is
+test("a mention in the text stays text — nothing created, no error", async ({ page, api }) => {
+  // A reference names something that exists (ADR #19) — but a MENTION in
+  // the body is not a reference: `[[niemand]]` and a `## Beziehungen` line
+  // are prose. Saving them is a normal save: nothing is created, nothing is
   // refused, and the text comes back as written.
-  const before = await split(api, NPC);
+  const before = await npcFields(api);
   const mention = "Sie spricht von [[niemand]] und meint es ernst.";
   const relation = "- holm: schuldet ihr noch Hafengeld";
 
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await textarea.fill(`${before.body}\n${mention}\n\n## Beziehungen\n\n${relation}\n`);
@@ -159,10 +168,10 @@ test("a mention in the text stays text — no entry, no error", async ({ page, a
   await expect(article).toContainText("[[niemand]]");
   // Rendered as the list item it is, so without the markdown dash.
   await expect(article).toContainText("holm: schuldet ihr noch Hafengeld");
-  // …and neither mention brought an entry into existence.
-  expect(await api.exists("npcs/niemand")).toBe(false);
-  expect(await api.exists("npcs/holm")).toBe(false);
-  const after = await split(api, NPC);
+  // …and neither mention brought an npc into existence.
+  expect(await api.npcExists("niemand")).toBe(false);
+  expect(await api.npcExists("holm")).toBe(false);
+  const after = await npcFields(api);
   expect(after.body).toContain(mention);
   expect(after.body).toContain(relation);
 });
@@ -176,7 +185,7 @@ test("a scene that MOVED is still editable under its old address", async ({
   // that (a bookmark, another tab) names the old address. Opening it has to
   // land on the scene, replace the URL with the one it has now, and save
   // through it like any other edit.
-  // The Ort has to exist before a scene can name it (ADR #19).
+  // The location has to exist before a scene can name it (ADR #19).
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(SCENE, { location: "nordbucht" });
   const moved = "01-salzhafen/nordbucht/lighthouse-arrival";
@@ -548,10 +557,10 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
 });
 
 test("the NPC reading view edits its body the same way", async ({ page, api }) => {
-  const before = await split(api, NPC);
+  const before = await npcFields(api);
   const added = "- metta: schuldet Jorna einen Gefallen aus dem letzten Herbst";
 
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
   await openMarkdownEditor(page);
@@ -565,9 +574,11 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   await expect(page.getByRole("article")).toContainText("knapp, wetterrau, duzt jeden");
   await expect(page.getByRole("article")).toContainText("schuldet Jorna einen Gefallen");
 
-  await expect.poll(() => api.body(NPC)).toContain(added);
-  const after = await split(api, NPC);
-  expect(after.properties).toEqual(before.properties);
+  await expect.poll(async () => (await api.npc(NPC)).body).toContain(added);
+  // Every other field of the npc is as it was.
+  const { body: _before, ...fieldsBefore } = before;
+  const { body: _after, ...fieldsAfter } = await npcFields(api);
+  expect(fieldsAfter).toEqual(fieldsBefore);
 });
 
 test("location and chapter offer the editor; the list addresses are gone", async ({
@@ -590,9 +601,16 @@ test("location and chapter offer the editor; the list addresses are gone", async
   // address itself answers 404 like any other the schema does not describe.
   // No redirect and no alias — this is the ONE place the suite asserts it.
   //
-  // A location has no entry address either: it is its own resource
-  // (`…/locations/:id`), and `…/entries/locations/<id>` names nothing.
-  for (const rel of ["sessions/2026-01-15", "inbox", "glossary", "locations/leuchtturm"]) {
+  // An npc and a location have no entry address either: each is its own
+  // resource (`…/npcs/:id`, `…/locations/:id`), and `…/entries/npcs/<id>`
+  // and `…/entries/locations/<id>` name nothing.
+  for (const rel of [
+    "sessions/2026-01-15",
+    "inbox",
+    "glossary",
+    "npcs/jorna",
+    "locations/leuchtturm",
+  ]) {
     const address = rel.split("/").map(encodeURIComponent).join("/");
     for (const method of ["GET", "PATCH"] as const) {
       const res = await api.fetch(`campaigns/beispiel/entries/${address}`, {
@@ -665,7 +683,7 @@ test("the glossary is written as a list, on its own page", async ({ page, api })
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 });
 
-// --- the prose property beside the text ---------------------------------------
+// --- the prose field beside the text ------------------------------------------
 
 /** The motivation field of the npc edit surface („Will“). */
 function motivationField(page: Page) {
@@ -676,13 +694,13 @@ test("the npc edit surface carries the motivation: set with the text, cleared wi
   page,
   api,
 }) => {
-  const before = await split(api, NPC);
+  const before = await npcFields(api);
   const mine = "Das Leuchtfeuer brennen sehen — und [[fenn]] endlich zur Rede stellen.";
 
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   const field = motivationField(page);
-  await expect(field).toHaveValue(String(before.properties.motivation));
+  await expect(field).toHaveValue(String(before.motivation));
   await expect(
     page.getByText("Textkörper und Will — die übrigen Eigenschaften bleiben unverändert."),
   ).toBeVisible();
@@ -699,17 +717,16 @@ test("the npc edit surface carries the motivation: set with the text, cleared wi
   const article = page.getByRole("article");
   await expect(article).toContainText("und Fenn endlich zur Rede stellen");
   await expect(article).not.toContainText("[[fenn]]");
-  const saved = await split(api, NPC);
-  expect(saved.properties).toEqual({ ...before.properties, motivation: mine });
-  // The text was not touched, so it was not sent.
-  expect(saved.body).toBe(before.body);
+  const saved = await npcFields(api);
+  // Only the motivation moved — the text was not touched, so it was not sent.
+  expect(saved).toEqual({ ...before, motivation: mine });
 
-  // Emptying the field DELETES the key — no empty value stays behind.
+  // Emptying the field clears it — no empty value stays behind.
   await openMarkdownEditor(page);
   await motivationField(page).fill("");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(motivationField(page)).toHaveCount(0);
-  await expect.poll(async () => Object.hasOwn(await api.properties(NPC), "motivation")).toBe(false);
+  await expect.poll(async () => Object.hasOwn(await api.npc(NPC), "motivation")).toBe(false);
   await expect(article).not.toContainText("zur Rede stellen");
 });
 
@@ -742,7 +759,7 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
   expect(after.body).toBe(before.body);
 
   // …and the npc's dialog leaves the motivation out the same way.
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await page.getByRole("button", { name: "Eigenschaften" }).click();
   await expect(page.getByRole("dialog")).toContainText("NPC: Eigenschaften");
   await expect(page.getByRole("dialog").getByRole("textbox", { name: "Will" })).toHaveCount(0);
@@ -752,10 +769,10 @@ test("text and motivation share the guard: a second write is the conflict line �
   page,
   api,
 }) => {
-  const before = await split(api, NPC);
+  const before = await npcFields(api);
   const theirs = "Die Hafenkasse retten, koste es, was es wolle.";
 
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await motivationField(page).fill("Meine Fassung der Motivation.");
@@ -764,14 +781,14 @@ Meine Zeile.
 `);
 
   // Somebody else writes the motivation while the surface stands.
-  await api.patchProperties(NPC, { motivation: theirs });
+  await api.patchNpc(NPC, { motivation: theirs });
   await page.getByRole("button", { name: "Speichern" }).click();
 
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
   // Nothing of the draft was written.
-  expect((await split(api, NPC)).properties.motivation).toBe(theirs);
-  expect((await split(api, NPC)).body).toBe(before.body);
+  expect((await api.npc(NPC)).motivation).toBe(theirs);
+  expect((await api.npc(NPC)).body).toBe(before.body);
 
   // Reloading drops BOTH halves of the draft for the stored state.
   await conflicted.reload.click();
@@ -785,11 +802,11 @@ test("„Trotzdem speichern“ writes text and motivation — a foreign status s
   page,
   api,
 }) => {
-  const before = await split(api, NPC);
+  const before = await npcFields(api);
   const mine = "Trotz allem das Leuchtfeuer.";
   const line = "Trotz des Statuswechsels gespeichert.";
 
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   await motivationField(page).fill(mine);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
@@ -797,8 +814,8 @@ test("„Trotzdem speichern“ writes text and motivation — a foreign status s
 ${line}
 `);
 
-  // A pure properties write of a second writer is a conflict all the same.
-  await api.patchProperties(NPC, { status: "missing" });
+  // A write of another field by a second writer is a conflict all the same.
+  await api.patchNpc(NPC, { status: "missing" });
   await page.getByRole("button", { name: "Speichern" }).click();
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
@@ -807,12 +824,16 @@ ${line}
   await expect(textarea).toHaveCount(0);
   await expect(conflicted.line).toHaveCount(0);
 
-  await expect.poll(async () => (await api.properties(NPC)).motivation).toBe(mine);
-  const after = await split(api, NPC);
-  expect(after.body).toBe(`${before.body}
-${line}
-`);
+  await expect.poll(async () => (await api.npc(NPC)).motivation).toBe(mine);
+  const after = await npcFields(api);
   // Only what the surface shows was written: the status set in between stays.
-  expect(after.properties).toEqual({ ...before.properties, motivation: mine, status: "missing" });
+  expect(after).toEqual({
+    ...before,
+    motivation: mine,
+    status: "missing",
+    body: `${before.body}
+${line}
+`,
+  });
   await expect(page.getByRole("article")).toContainText(mine);
 });

@@ -3,12 +3,16 @@
 // Every reply is an OBJECT, exactly as the schema the server forces through
 // the provider describes it:
 //
-//   an entry call   `{ properties, body, warnings }` — the properties of
-//                     the entry, its whole text as one string, and the
+//   a scene call      `{ properties, body, warnings }` — the properties of
+//                     the scene, its whole text as one string, and the
 //                     notes the review shows the DM
+//   an npc call       every field of the npc — `body` among them, an absent
+//                     optional field as `null`, `quickstats` as a list of
+//                     `{ key, value }` pairs — beside `warnings` (ADR #31)
 //   a location call   every field of the location — `body` among them —
 //                     beside `warnings` (ADR #31)
-//   the outline call  the run's scene and entry list
+//   the outline call  the run's scenes, and its new npcs and new locations
+//                     as two lists of their own
 //
 // The fixtures write those objects DIRECTLY. A reply that is a plain STRING
 // is one a spec wrote to be unreadable on purpose, and it travels verbatim.
@@ -21,16 +25,15 @@
 //                  chapter and the `id` property — a kebab `id` used only
 //                  once, type planned|contingency, status draft, only known
 //                  callouts, npc/location references either existing in the
-//                  campaign or shipped as an entry in the same run, and a
-//                  `location` that is an id (it IS the scene's group)
-//   entries        `kind: "npc" | "location"` plus the entry's `id`. An npc
-//                  entry carries a status (alive unless the source says
-//                  otherwise), a location entry carries none
-//   npc run        one entry, kebab `id`, no `chapter`, quickstats values
+//                  campaign or proposed by the same run, and a `location`
+//                  that is an id (it IS the scene's group)
+//   proposals      an npc carries a status (alive unless the source says
+//                  otherwise), a location carries none
+//   npc run        one npc, kebab `id`, no `chapter`, quickstats values
 //                  as STRINGS ("+2" — a number would lose the plus on the
 //                  way into the store)
-//   every body     each `[[id]]` names an entry of the campaign or one the
-//                  same run proposes; the sections (`## Weiß`,
+//   every body     each `[[id]]` names something of the campaign or
+//                  something the same run proposes; the sections (`## Weiß`,
 //                  `## Beziehungen`, …) are free text and nothing checks them
 //
 // When a validation rule changes, THIS file is the place to follow along —
@@ -38,12 +41,12 @@
 //
 // The prose uses `[[slug]]` ENTITY REFERENCES, because that is what the
 // prompt asks a well-behaved model for: `[[fenn]]` (exists in the campaign),
-// `[[grella]]` (shipped as a stub in the same run, so it stays literal text
-// until the stub is applied) and `[[smuggler-captured]]` (a scene — the third
+// `[[grella]]` (proposed by the same run, so it stays literal text until the
+// proposal is accepted) and `[[smuggler-captured]]` (a scene — the third
 // referenceable kind).
 
-/** One entry reply, the shape the forced schema describes. */
-export interface EntryReply {
+/** One scene reply, the shape the forced schema describes. */
+export interface SceneReply {
   properties: Record<string, unknown>;
   body: string;
   warnings: string[];
@@ -61,6 +64,37 @@ export interface LocationReply {
   roll20Page: string | null;
   atmosphere: string | null;
   body: string;
+  warnings: string[];
+}
+
+/** One `quickstats` value of an npc reply: the key and its value as a string. */
+export interface QuickstatPair {
+  key: string;
+  value: string;
+}
+
+/**
+ * An npc as its reply form carries it (ADR #31): every field of the npc,
+ * `body` among them, an optional one the source does not give as `null`,
+ * and `quickstats` as its list of pairs — the very form an npc augment
+ * prompt shows the npc in.
+ */
+export interface NpcFields {
+  id: string;
+  name: string;
+  role: string | null;
+  chapter: string | null;
+  status: string;
+  statblock: string | null;
+  quickstats: QuickstatPair[] | null;
+  voice: string | null;
+  appearance: string | null;
+  motivation: string | null;
+  body: string;
+}
+
+/** An npc reply: the npc's fields beside the notes. */
+export interface NpcReply extends NpcFields {
   warnings: string[];
 }
 
@@ -96,8 +130,8 @@ export const TRIGGER = {
   /**
    * The run is decomposed into THREE scenes instead of one, so a spec can
    * watch parts finish, fail and be retried one by one. The outline then
-   * proposes no new entries — the entry calls have their own coverage in the
-   * default (one-scene) run.
+   * proposes no new npc and no new location — those calls have their own
+   * coverage in the default (one-scene) run.
    */
   threeScenes: "E2E_THREE_SCENES",
   /**
@@ -140,7 +174,7 @@ export const TRIGGER = {
    */
   asciiQuotes: "E2E_ASCII_QUOTES",
   /**
-   * The FIRST reply of an npc or augment run names an entry nobody has
+   * The FIRST reply of an npc or augment run names an id nobody has
    * (UNKNOWN_REF_ID); the correction turn — the call that carries the
    * previous reply as an assistant turn — gets the good reply. So the run
    * costs exactly one correction and ends with a draft that has no such
@@ -166,7 +200,7 @@ export const OLD_NAME = "Saltmarsh";
 
 /**
  * The id TRIGGER.unknownRef puts into a first reply as `[[…]]` — neither the
- * example campaign nor any run of the suite has an entry by that id.
+ * example campaign nor any run of the suite has anything by that id.
  */
 export const UNKNOWN_REF_ID = "der-fremde";
 
@@ -191,9 +225,9 @@ export const SCENE_TITLE = "Nachtwache am Kai";
  */
 export const SCENE_ID = "night-watch-quay";
 /**
- * The npc and the location the scene run proposes as new entries. Both ids
- * are deliberately ABSENT from the example campaign: a proposal for an entry
- * that already exists is the apply step's 409, not a stub.
+ * The npc and the location the scene run proposes. Both ids are deliberately
+ * ABSENT from the example campaign: a proposal for an id that already exists
+ * is the apply step's 409, not a proposal.
  */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
@@ -225,9 +259,9 @@ export const ASCII_QUOTE_LINE =
   '„Bleibt, wo ihr seid", ruft jemand aus dem Dunkeln — und die Stimme klingt';
 
 /** The scene draft of the default one-scene run, in its three variants. */
-function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): EntryReply {
+function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): SceneReply {
   if (asciiQuotes) {
-    // Deliberately WITHOUT the entry references of the rich draft below: this
+    // Deliberately WITHOUT the references of the rich draft below: this
     // case is about the quotation marks, and every reference is one more
     // thing that could fail for another reason.
     return {
@@ -314,18 +348,22 @@ er will reden, nicht kämpfen.
   };
 }
 
-/** The motivation of the npc stub a scene run proposes — a property, not a section. */
+/** The motivation of the npc a scene run proposes — a field, not a section. */
 export const NPC_STUB_MOTIVATION =
   "Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen — und zwar von [[fenn]] persönlich.";
 
-/** The npc stub a scene run's entry call answers with. */
-const npcStub: EntryReply = {
-  properties: {
-    id: NPC_STUB_ID,
-    name: NPC_STUB_NAME,
-    status: "alive",
-    motivation: NPC_STUB_MOTIVATION,
-  },
+/** The npc a scene run's npc call answers with. */
+const npcStub: NpcReply = {
+  id: NPC_STUB_ID,
+  name: NPC_STUB_NAME,
+  role: null,
+  chapter: null,
+  status: "alive",
+  statblock: null,
+  quickstats: null,
+  voice: null,
+  appearance: null,
+  motivation: NPC_STUB_MOTIVATION,
   body: `## Weiß
 
 > [!secret] Weiß, an welchem Poller [[fenn]] sein Boot festmacht.
@@ -333,7 +371,7 @@ const npcStub: EntryReply = {
   warnings: [],
 };
 
-/** The atmosphere of the location stub a scene run proposes. */
+/** The atmosphere of the location a scene run proposes. */
 export const LOCATION_STUB_ATMOSPHERE = "Salz in der Luft, Möwen über dem Schlick, kein Mensch zu sehen.";
 
 /** The location a scene run's location call answers with. */
@@ -344,7 +382,7 @@ const locationStub: LocationReply = {
   roll20Page: null,
   atmosphere: LOCATION_STUB_ATMOSPHERE,
   // `[[grella]]` is the npc the SAME run proposes: a reference to it is
-  // valid before either entry is written.
+  // valid before either of them is written.
   body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 
 ## Wer ist hier
@@ -365,25 +403,24 @@ export const NPC_MOTIVATION =
   "Dass die Boote wieder sicher rausfahren können — er hat seit drei Nächten keinen Fang verkauft und traut [[fenn]] nicht.";
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
-export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): EntryReply {
+export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): NpcReply {
   return {
-    properties: {
-      id,
-      name: NPC_DEFAULT_NAME,
-      role: NPC_ROLE,
-      status: "alive",
-      statblock: "Roll20: Commoner",
-      // A key/value field travels as the `{ key, value }` LIST the schema
-      // asks for — strict mode cannot express a free mapping — and the
-      // values are strings, plus sign included.
-      quickstats: [
-        { key: "insight", value: "+1" },
-        { key: "passive-perception", value: "11" },
-      ],
-      voice: NPC_VOICE,
-      appearance: "geflickter Ölmantel, Hände voller Angelschnüre",
-      motivation: NPC_MOTIVATION,
-    },
+    id,
+    name: NPC_DEFAULT_NAME,
+    role: NPC_ROLE,
+    chapter: null,
+    status: "alive",
+    statblock: "Roll20: Commoner",
+    // A key/value field travels as the `{ key, value }` LIST the schema
+    // asks for — strict mode cannot express a free mapping — and the
+    // values are strings, plus sign included.
+    quickstats: [
+      { key: "insight", value: "+1" },
+      { key: "passive-perception", value: "11" },
+    ],
+    voice: NPC_VOICE,
+    appearance: "geflickter Ölmantel, Hände voller Angelschnüre",
+    motivation: NPC_MOTIVATION,
     body: `## Weiß
 
 > [!secret] Hat gesehen, wie zwei Fremde nachts Kisten von der Mole
@@ -402,26 +439,29 @@ export const UNKNOWN_REF_LINE = `- [[${UNKNOWN_REF_ID}]]: schuldet ihm Geld`;
 
 /**
  * The first reply of a TRIGGER.unknownRef npc run: the good reply plus one
- * relation to an entry that does not exist — a correction turn.
+ * relation to an id nothing has — a correction turn.
  */
-export function unknownRefNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
+export function unknownRefNpcReply(id: string = NPC_DEFAULT_ID): NpcReply {
   const good = npcReply(id);
   return { ...good, body: `${good.body}${UNKNOWN_REF_LINE}\n` };
 }
 
 /**
  * An NPC reply that FAILS validation: a quickstats value that is a NUMBER
- * (the plus is gone), a missing status and an invented `chapter`.
+ * (the plus is gone), a missing status and an invented `chapter`. Written
+ * as a plain object because it breaks the reply form on purpose.
  */
-export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
+export function invalidNpcReply(id: string = NPC_DEFAULT_ID): Record<string, unknown> {
   return {
-    properties: {
-      id,
-      name: NPC_DEFAULT_NAME,
-      chapter: "01-salzhafen",
-      quickstats: [{ key: "insight", value: 1 }],
-      motivation: "Irgendwas.",
-    },
+    id,
+    name: NPC_DEFAULT_NAME,
+    role: null,
+    chapter: "01-salzhafen",
+    statblock: null,
+    quickstats: [{ key: "insight", value: 1 }],
+    voice: null,
+    appearance: null,
+    motivation: "Irgendwas.",
     body: `## Weiß
 
 > [!secret] Irgendwas.
@@ -433,17 +473,21 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
 // --- augment run -------------------------------------------------------------
 
 /**
- * The heading the „Mit KI ergänzen" prompt puts the existing entry under —
- * server/src/llm-provider.ts EXISTING_ENTRY_HEADING. Duplicated on purpose,
- * like KNOWLEDGE_HEADING in the stub: the fixture reads the prompt the way a
- * model does, so the server agrees with it by ASSERTION and not by import.
+ * The heading the „Mit KI ergänzen" prompt of a scene puts the existing scene
+ * under — server/src/llm-provider.ts EXISTING_ENTRY_HEADING. Duplicated on
+ * purpose, like KNOWLEDGE_HEADING in the stub: the fixture reads the prompt
+ * the way a model does, so the server agrees with it by ASSERTION and not by
+ * import.
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
+
+/** The same heading of an npc augment run — EXISTING_NPC_HEADING there. */
+export const EXISTING_NPC_HEADING = "## Bestehender NPC — ergänzen, nicht ersetzen";
 
 /** The same heading of a location augment run — EXISTING_LOCATION_HEADING there. */
 export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
 
-/** The `## If:` section a scene augment run adds — asserted in the spec. */
+/** The `## If:` section an augment run adds — asserted in the spec. */
 export const AUGMENT_THREAD_CONDITION = "die Gruppe fragt nach dem Spitzel";
 
 /** The paragraph inside that section. */
@@ -451,16 +495,16 @@ export const AUGMENT_THREAD_TEXT =
   "[[jorna]] wird einsilbig und schiebt die Frage auf den nächsten Morgen.";
 
 /**
- * What an augment run proposes for an EMPTY npc (the kind „Referenzieren
- * legt an" leaves behind: id, name == id, `status: unknown`, no body).
- * Deliberately a MIX, because the default rule of the accept step is what the
- * spec is about:
+ * What an augment run proposes for an EMPTY npc (one created with a name and
+ * nothing else: id, name == id, `status: unknown`, no body). Deliberately a
+ * MIX, because the default rule of the accept step is what the spec is
+ * about:
  *
- *   role, voice, motivation   the entry has nothing there  -> `new`,     preselected
- *   name, status              the entry HAS a value        -> `changed`, kept
+ *   role, voice, motivation   the npc has nothing there  -> `new`,     preselected
+ *   name, status              the npc HAS a value        -> `changed`, kept
  *
  * so an accept with the defaults fills the holes and leaves the two fields
- * the DM (or the reference) already authored exactly as they were.
+ * the DM already authored exactly as they were.
  */
 export const AUGMENT_NPC_ROLE = "Spitzel der Schmuggler in der Hafenwache";
 export const AUGMENT_NPC_VOICE = "leise, weicht Blicken aus";
@@ -471,42 +515,69 @@ export const AUGMENT_NPC_MOTIVATION =
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
 /**
- * The existing entry as the PROMPT shows it: the `properties` and `body` pair
+ * The existing scene as the PROMPT shows it: the `properties` and `body` pair
  * as JSON, which is the same shape the reply is forced into (ADR #24). The
  * augment run is the one case that has to read it — its reply echoes the
- * entry it was given, so nothing here reconstructs properties from text.
+ * scene it was given, so nothing here reconstructs properties from text.
  */
-export interface ExistingEntry {
+export interface ExistingScene {
   properties: Record<string, unknown>;
   body: string;
 }
 
 /**
- * The augment reply: the existing entry, unchanged, plus what the run adds.
- * Which addition depends on what the entry IS — that is the whole point of
- * the two E2E cases:
- *
- *   an EMPTY npc (created, never filled in)  ->  properties (the motivation
- *       among them) and the body's `## Weiß` are filled,
- *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
- *       section at the end; every existing block comes back unchanged.
+ * The reply of a scene augment run: the scene as it was shown, unchanged,
+ * plus one NEW `## If:` section at the end — every existing block comes back
+ * unchanged.
  */
-export function augmentReply(path: string, entry: ExistingEntry, knowledge = ""): EntryReply {
-  const { properties, body } = entry;
-  const id = String(properties.id ?? path.slice(path.lastIndexOf("/") + 1));
-  const isEmptyNpc =
-    path.startsWith("npcs/") && properties.role === undefined && body.trim() === "";
+export function augmentReply(scene: ExistingScene, knowledge = ""): SceneReply {
+  const kept = scene.body.replace(/^\n+/, "").replace(/\n*$/, "\n");
+  return {
+    properties: scene.properties,
+    body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
+    warnings: contextEchoWarnings(knowledge),
+  };
+}
+
+/**
+ * The first reply of a TRIGGER.unknownRef augment run: the good proposal plus
+ * a sentence naming an id nothing has — a correction turn.
+ */
+export function unknownRefAugmentReply(scene: ExistingScene): SceneReply {
+  const good = augmentReply(scene);
+  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
+}
+
+/**
+ * An augment reply that FAILS validation: it CHANGES the id — the rule the
+ * augment run cares about most.
+ */
+export function invalidAugmentReply(): SceneReply {
+  return { properties: { id: "not-the-scene" }, body: "", warnings: [] };
+}
+
+// --- augmenting an npc -------------------------------------------------------
+
+/**
+ * The reply of an npc augment run (ADR #31). Which addition depends on what
+ * the npc IS — that is the whole point of the two E2E cases:
+ *
+ *   an EMPTY npc (created, never filled in)  ->  its fields (the motivation
+ *       among them) and the body's `## Weiß` are filled,
+ *   a filled npc  ->  every field echoed as it was shown, plus one NEW
+ *       `## If:` section at the end of its text; every existing block comes
+ *       back unchanged.
+ */
+export function npcAugmentReply(npc: NpcFields, knowledge = ""): NpcReply {
   const warnings = contextEchoWarnings(knowledge);
-  if (isEmptyNpc) {
+  if (npc.role === null && npc.body.trim() === "") {
     return {
-      properties: {
-        id,
-        name: AUGMENT_NPC_NAME,
-        role: AUGMENT_NPC_ROLE,
-        status: AUGMENT_NPC_STATUS,
-        voice: AUGMENT_NPC_VOICE,
-        motivation: AUGMENT_NPC_MOTIVATION,
-      },
+      ...npc,
+      name: AUGMENT_NPC_NAME,
+      role: AUGMENT_NPC_ROLE,
+      status: AUGMENT_NPC_STATUS,
+      voice: AUGMENT_NPC_VOICE,
+      motivation: AUGMENT_NPC_MOTIVATION,
       body: `## Weiß
 
 > [!secret] ${AUGMENT_NPC_SECRET}
@@ -514,31 +585,23 @@ export function augmentReply(path: string, entry: ExistingEntry, knowledge = "")
       warnings,
     };
   }
-  const kept = body.replace(/^\n+/, "").replace(/\n*$/, "\n");
+  const kept = npc.body.replace(/^\n+/, "").replace(/\n*$/, "\n");
   return {
-    properties,
+    ...npc,
     body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
     warnings,
   };
 }
 
-/**
- * The first reply of a TRIGGER.unknownRef augment run: the good proposal plus
- * a sentence naming an entry that does not exist — a correction turn.
- */
-export function unknownRefAugmentReply(path: string, entry: ExistingEntry): EntryReply {
-  const good = augmentReply(path, entry);
-  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
+/** An npc augment reply that FAILS validation: it changes the id. */
+export function invalidNpcAugmentReply(npc: NpcFields): NpcReply {
+  return { ...npcAugmentReply(npc), id: "not-the-npc" };
 }
 
-/**
- * An augment reply that FAILS validation: it CHANGES the id. The model does
- * not address anything any more, so "answers for another entry" is no longer
- * a shape a reply can have — rewriting the reference key is, and it is the
- * rule the augment run cares about most.
- */
-export function invalidAugmentReply(_path: string): EntryReply {
-  return { properties: { id: "not-the-entry" }, body: "", warnings: [] };
+/** The first reply of a TRIGGER.unknownRef npc augment run — a correction turn. */
+export function unknownRefNpcAugmentReply(npc: NpcFields): NpcReply {
+  const good = npcAugmentReply(npc);
+  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 // --- augmenting a location ---------------------------------------------------
@@ -574,25 +637,26 @@ export function unknownRefLocationAugmentReply(location: ExistingLocation): Loca
 
 // --- the pipelined scene run -------------------------------------------------
 //
-// A scene run is the OUTLINE call plus one call per scene and per suggested
-// entry. The stub answers all of them (see stub-llm.ts, which tells them
-// apart by the prompt), and these are the canned answers:
+// A scene run is the OUTLINE call plus one call per scene, per proposed npc
+// and per proposed location. The stub answers all of them (see stub-llm.ts,
+// which tells them apart by the prompt), and these are the canned answers:
 //
 //   outline        the scene list with a verbatim `sourceExcerpt` per scene —
 //                  the server cuts the passage with it, so the fixture has to
-//                  quote the SOURCE TEXT and not paraphrase it
-//   scene          the scene as an entry reply
-//   entry          the npc/location entry, likewise
+//                  quote the SOURCE TEXT and not paraphrase it — and the lists
+//                  of new npcs and new locations
+//   scene          the scene as a scene reply
+//   npc, location  the proposed npc or location, each in its own reply form
 //
-// The default run has ONE scene and the two entries the specs already know.
-// TRIGGER.threeScenes turns it into three scenes and no entries, which is what
-// „ein Teil schlägt fehl, zwei sind prüfbar“ needs.
+// The default run has ONE scene, one npc and one location the specs already
+// know. TRIGGER.threeScenes turns it into three scenes and no proposals, which
+// is what „ein Teil schlägt fehl, zwei sind prüfbar“ needs.
 
 /** The three scenes of the pipelined run — ids asserted in the specs. */
 export const THREE_SCENES = [
   // Ids of their own — none of them is SCENE_ID, so the rich one-scene draft
-  // (with its entry references) can never be served for a run whose outline
-  // proposes no entries.
+  // (with its references) can never be served for a run whose outline
+  // proposes no npc and no location.
   { id: "night-watch", title: "Nachtwache an der Mole" },
   { id: "smuggler-caught", title: "Von Schmugglern erwischt" },
   { id: "dawn-escape", title: "Flucht im Morgengrauen" },
@@ -633,7 +697,7 @@ export const CHAPTER_DESCRIPTION =
   "Laternen, wo niemand sein sollte.\n\nDie Gruppe soll herausfinden, wer die " +
   "Schmuggler deckt, und die Ladung sicherstellen, bevor sie ins Dorf gelangt.";
 
-/** The outline reply: one scene plus two entries, or three scenes and none. */
+/** The outline reply: one scene plus one npc and one location, or three scenes and none. */
 export function outlineReply(input: {
   source: string;
   knowledge?: string;
@@ -648,15 +712,17 @@ export function outlineReply(input: {
   describeAnyway?: boolean;
   three?: boolean;
   /**
-   * TRIGGER.oldName: the naming-check case. Its draft proposes no entries, so
-   * the outline must not either — otherwise „Übernehmen“ leaves two undecided
-   * entries behind and the run does not finish (the badly-behaved model this
-   * trigger stands for is about SPELLING, nothing else).
+   * TRIGGER.oldName: the naming-check case. Its draft references no new npc
+   * or location, so the outline must not propose one either — otherwise
+   * „Übernehmen“ leaves two undecided proposals behind and the run does not
+   * finish (the badly-behaved model this trigger stands for is about
+   * SPELLING, nothing else).
    */
   oldName?: boolean;
   /**
-   * TRIGGER.asciiQuotes: same reasoning as `oldName` — the draft has no entry
-   * references, so the outline proposes none and the run is exactly one part.
+   * TRIGGER.asciiQuotes: same reasoning as `oldName` — the draft references
+   * nothing new, so the outline proposes nothing and the run is exactly one
+   * part.
    * The case is about the quotation marks.
    */
   asciiQuotes?: boolean;
@@ -679,7 +745,8 @@ export function outlineReply(input: {
         sourceExcerpt,
         refs: [],
       })),
-      entries: [],
+      npcs: [],
+      locations: [],
       chapterDescription,
       warnings,
     };
@@ -687,7 +754,8 @@ export function outlineReply(input: {
   if (input.oldName === true || input.asciiQuotes === true) {
     return {
       scenes: [{ id: SCENE_ID, title: SCENE_TITLE, type: "planned", sourceExcerpt, refs: [] }],
-      entries: [],
+      npcs: [],
+      locations: [],
       chapterDescription,
       warnings,
     };
@@ -703,10 +771,9 @@ export function outlineReply(input: {
         refs: [],
       },
     ],
-    entries: [
-      { kind: "npc", id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Schmugglerin am Kai." },
+    npcs: [{ id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Schmugglerin am Kai." }],
+    locations: [
       {
-        kind: "location",
         id: LOCATION_STUB_ID,
         name: LOCATION_STUB_NAME,
         summary: "Die flache Bucht nördlich des Hafens.",
@@ -718,7 +785,7 @@ export function outlineReply(input: {
 }
 
 /**
- * An outline that FAILS validation (TRIGGER.invalid): one scene, no entries —
+ * An outline that FAILS validation (TRIGGER.invalid): one scene, nothing else —
  * so the broken scene draft below is the run's only part and „jeder Teil
  * ist fehlgeschlagen“ is what the DM sees. The outline itself is fine; the
  * error is in the draft, which is where the 422 block's messages come from.
@@ -734,7 +801,8 @@ export function invalidRunOutline(source: string): unknown {
         refs: [],
       },
     ],
-    entries: [],
+    npcs: [],
+    locations: [],
     chapterDescription: null,
     warnings: [],
   };
@@ -746,14 +814,14 @@ export function scenePartReply(
   sceneId: string,
   oldName = false,
   asciiQuotes = false,
-): EntryReply {
+): SceneReply {
   if (sceneId === SCENE_ID) return sceneDraft(chapter, oldName, asciiQuotes);
   const scene = THREE_SCENES.find((s) => s.id === sceneId);
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
 /** A scene draft that FAILS validation — `status: ready` is drafts only. */
-export function invalidScenePartReply(chapter: string, sceneId: string): EntryReply {
+export function invalidScenePartReply(chapter: string, sceneId: string): SceneReply {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
   return {
     properties: { id: sceneId, title, type: "planned", chapter, status: "ready" },
@@ -766,11 +834,11 @@ export function invalidScenePartReply(chapter: string, sceneId: string): EntryRe
 }
 
 /**
- * A plain, well-formed scene of the three-scene run. No entry references and
- * no location: the pipelined specs are about the PARTS, and every reference a
+ * A plain, well-formed scene of the three-scene run. No references and no
+ * location: the pipelined specs are about the PARTS, and every reference a
  * fixture adds is one more thing that can fail for another reason.
  */
-function plainSceneDraft(chapter: string, id: string, title: string): EntryReply {
+function plainSceneDraft(chapter: string, id: string, title: string): SceneReply {
   return {
     properties: {
       id,
@@ -792,7 +860,7 @@ function plainSceneDraft(chapter: string, id: string, title: string): EntryReply
   };
 }
 
-/** One proposed npc or location — the npc stub, or the location itself. */
-export function entryPartReply(kind: "npc" | "location"): EntryReply | LocationReply {
+/** One proposed npc or location — each in its own reply form. */
+export function proposalPartReply(kind: "npc" | "location"): NpcReply | LocationReply {
   return kind === "location" ? locationStub : npcStub;
 }

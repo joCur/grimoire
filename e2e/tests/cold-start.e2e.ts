@@ -214,7 +214,8 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // --- create the npc -------------------------------------------------------
-  await page.goto(`/campaigns/${CAMPAIGN_ID}/list/npcs`);
+  // The npc list is the npc's own route (ADR #31).
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/npcs`);
   await expect(page.getByText("Noch keine NPCs.")).toBeVisible();
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   const npcName = page.getByLabel("Name");
@@ -223,33 +224,68 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await expect(page.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
-  // The dialog only ever asks for a name — the reading view opens, and the
-  // rest of the fields live in the properties form.
-  await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna$/);
+  // The dialog only ever asks for a name — the npc's reading view on its
+  // own route opens, and the rest of the fields live in the properties form.
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs/hafenmeisterin-jorna$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
-  expect((await api.entry("npcs/hafenmeisterin-jorna")).properties.name).toBe(
-    "Hafenmeisterin Jorna",
+  // The create answers the npc itself: every field flat, no kind, no path,
+  // no properties map (ADR #31).
+  const created = await api.npc("hafenmeisterin-jorna");
+  expect(created.name).toBe("Hafenmeisterin Jorna");
+  expect(created.status).toBe("unknown");
+  expect(Object.keys(created).sort()).toEqual(["body", "id", "name", "rev", "status"]);
+  // …and it lists on that route.
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/npcs`);
+  await expect(page.getByRole("link", { name: /Hafenmeisterin Jorna/ })).toHaveAttribute(
+    "href",
+    `/campaigns/${CAMPAIGN_ID}/npcs/hafenmeisterin-jorna`,
   );
 
   // --- the collision --------------------------------------------------------
   // Same name again: the id is taken, so nothing is written and the dialog
   // says what is in the way — plus the free proposal as ONE click. No silent
   // `-2`: an id is permanent, so the DM decides.
-  await page.goto(`/campaigns/${CAMPAIGN_ID}/list/npcs`);
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/npcs`);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill("Hafenmeisterin Jorna");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page.getByText("existiert schon", { exact: false })).toBeVisible();
-  // Still exactly one entry — the 409 wrote nothing.
-  expect(await api.exists("npcs/hafenmeisterin-jorna-2")).toBe(false);
+  // Still exactly one npc — the 409 wrote nothing.
+  expect(await api.npcExists("hafenmeisterin-jorna-2")).toBe(false);
+  expect(await api.npc("hafenmeisterin-jorna")).toEqual(created);
+  expect((await api.get<unknown[]>(api.npcPath())).length).toBe(1);
 
   await page.getByRole("button", { name: /„hafenmeisterin-jorna-2“ verwenden/ }).click();
-  await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna-2$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs/hafenmeisterin-jorna-2$`));
   // The NAME is the one that was typed; only the id came from the proposal.
-  expect((await api.entry("npcs/hafenmeisterin-jorna-2")).properties.name).toBe(
-    "Hafenmeisterin Jorna",
-  );
+  expect((await api.npc("hafenmeisterin-jorna-2")).name).toBe("Hafenmeisterin Jorna");
+
+  // The same collision on the wire: 409 slug_taken with the next free id,
+  // and nothing is written.
+  const taken = await api.fetch(api.npcPath(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Jemand anderes", id: "hafenmeisterin-jorna" }),
+  });
+  expect(taken.status).toBe(409);
+  expect(await taken.json()).toMatchObject({
+    code: "slug_taken",
+    id: "hafenmeisterin-jorna",
+    suggestion: "hafenmeisterin-jorna-3",
+  });
+  expect((await api.npc("hafenmeisterin-jorna")).name).toBe("Hafenmeisterin Jorna");
+  expect(await api.npcExists("hafenmeisterin-jorna-3")).toBe(false);
+
+  // A key the create does not take is a 400 that names it, and writes nothing.
+  const unknownField = await api.fetch(api.npcPath(), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Holm", status: "alive" }),
+  });
+  expect(unknownField.status).toBe(400);
+  expect(((await unknownField.json()) as { error: string }).error).toContain('"status"');
+  expect(await api.npcExists("holm")).toBe(false);
 
   // --- create the location --------------------------------------------------
   // The location list is the location's own route (ADR #31).
@@ -395,7 +431,7 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   expect(await api.exists("erstes-kapitel")).toBe(false);
 
   // --- an NPC: the prefix stays in front, only the id is typed -------------
-  await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/list/npcs`);
+  await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/npcs`);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   const npcDialog = page.getByRole("dialog");
   await npcDialog.getByLabel("Name").fill("Hafenmeisterin Jorna");
@@ -408,27 +444,30 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await expect(npcId).toHaveValue("jorna");
   await npcDialog.getByRole("button", { name: "Anlegen" }).click();
 
-  // The typed id lands in the address AND in the URL.
-  await expect(page).toHaveURL(/\/npcs\/jorna$/);
+  // The typed id is the npc's id AND in the URL of its own route.
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}/npcs/jorna$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
-  expect((await api.entry("npcs/jorna")).properties.name).toBe("Hafenmeisterin Jorna");
+  expect((await api.npc("jorna")).name).toBe("Hafenmeisterin Jorna");
+  // The derived id was never written — only the one that was typed.
+  expect(await api.npcExists("hafenmeisterin-jorna")).toBe(false);
 
   // --- a typed id that is TAKEN: the 409 path is unchanged -----------------
   // No silent `-2` here either: nothing is written, the dialog says what is in
   // the way and offers the free proposal as ONE click.
-  await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/list/npcs`);
+  await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/npcs`);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill("Hafenarbeiter Holm");
   await page.getByRole("button", { name: "Kennung selbst setzen" }).click();
   await page.getByLabel("Kennung", { exact: true }).fill("jorna");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page.getByText("existiert schon", { exact: false })).toBeVisible();
-  expect(await api.exists("npcs/jorna-2")).toBe(false);
+  expect(await api.npcExists("jorna-2")).toBe(false);
+  expect((await api.npc("jorna")).name).toBe("Hafenmeisterin Jorna");
 
   await page.getByRole("button", { name: /„jorna-2“ verwenden/ }).click();
-  await expect(page).toHaveURL(/\/npcs\/jorna-2$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}/npcs/jorna-2$`));
   // The NAME is the one that was typed; only the id came from the proposal.
-  expect((await api.entry("npcs/jorna-2")).properties.name).toBe("Hafenarbeiter Holm");
+  expect((await api.npc("jorna-2")).name).toBe("Hafenarbeiter Holm");
 });
 
 test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server }) => {
@@ -451,7 +490,7 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   // The mobile start surface reaches the lists through its lookup section,
   // and the list is where an NPC is created.
   await page.getByRole("link", { name: /NPCs/ }).click();
-  await expect(page).toHaveURL(/\/list\/npcs$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs$`));
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill("Alte Fischerin");
   // The pencil works on a phone too: the line wraps instead of pushing the
@@ -463,6 +502,6 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   expect((idBox?.x ?? 0) + (idBox?.width ?? 0)).toBeLessThanOrEqual(390);
   await npcId.fill("fischerin");
   await page.getByRole("button", { name: "Anlegen" }).click();
-  await expect(page).toHaveURL(/\/npcs\/fischerin$/);
-  expect((await api.entry("npcs/fischerin")).properties.name).toBe("Alte Fischerin");
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs/fischerin$`));
+  expect((await api.npc("fischerin")).name).toBe("Alte Fischerin");
 });

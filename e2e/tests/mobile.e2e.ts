@@ -40,7 +40,12 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup.getByRole("link", { name: /Szenen/ })).toContainText("2 Szenen");
   await expect(lookup.getByRole("link", { name: /NPCs/ })).toContainText("2 NPCs");
-  // Two locations: each one a scene names has an entry of its own, because a
+  // The npc row leads to the npc list on its own route (ADR #31).
+  await expect(lookup.getByRole("link", { name: /NPCs/ })).toHaveAttribute(
+    "href",
+    "/campaigns/beispiel/npcs",
+  );
+  // Two locations: each one a scene names exists on its own, because a
   // reference creates nothing (ADR #19).
   await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("2 Orte");
 
@@ -73,7 +78,8 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await search.fill("fenn");
   await page.getByRole("option").filter({ hasText: "Fenn" }).first().click();
 
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/fenn$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/fenn$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   // The mobile read view has its own way back to the start surface.
   const back = page.getByRole("link", { name: "Kapitel" });
   await expect(back).toBeVisible();
@@ -111,7 +117,7 @@ test("mobile: the reference scene's reading view stays readable", async ({ page 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
   // The NPC cards stack below the body instead of sitting in a sticky aside.
-  await expect(page.getByRole("link", { name: /Hafenmeisterin Jorna/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Hafenmeisterin Jorna/ }).first()).toBeVisible();
 
   // Nothing may scroll the page sideways at 390px.
   const overflow = await page.evaluate(

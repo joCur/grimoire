@@ -36,7 +36,7 @@ import {
 interface TreeResponse {
   campaign: string;
   chapters: { id: string; title: string; scenes: { path: string; id: string; title: string }[] }[];
-  npcs: { path: string; id: string }[];
+  npcs: { id: string; path?: string }[];
   locations: { id: string }[];
   /** A session SUMMARY — id and timestamps, no address (ADR #26). */
   sessions: { id: string; started: string }[];
@@ -66,16 +66,19 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.scenes);
   // A scene's address is its chapter, its location and its id — the two
-  // scenes name different Orte, so the location shows up in both addresses.
+  // scenes name different locations, so the location shows up in both
+  // addresses.
   expect(scenes.map((s) => s.path).sort()).toEqual([
     "01-salzhafen/bucht/smuggler-captured",
     "01-salzhafen/leuchtturm/lighthouse-arrival",
   ]);
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-  // BOTH Orte have an entry of their own — and that is the only reason they
-  // are here. A mention creates nothing (ADR #19): an Ort without an entry
-  // would be a reference to nothing, and the run would fail on the scene
-  // that names it.
+  // An npc in the tree names itself by its id — it has no address (ADR #31).
+  for (const npc of tree.npcs) expect(npc.path).toBeUndefined();
+  // BOTH locations exist on their own — and that is the only reason they are
+  // here. A mention creates nothing (ADR #19): a location that does not
+  // exist would be a reference to nothing, and the run would fail on the
+  // scene that names it.
   expect(tree.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
   // What says the location was SEEDED rather than conjured: it carries the
   // name, the chapter and the Roll20 page its fixture
@@ -105,14 +108,31 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
 
-  // --- an npc: typed properties (voice, quickstats, motivation) and its prose
-  const npc = await api.entry("npcs/jorna");
-  expect(npc.properties.name).toBe("Hafenmeisterin Jorna");
-  expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
-  expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
-  expect(npc.properties.motivation).toContain("Das Leuchtfeuer muss wieder brennen");
+  // --- an npc: its typed fields (voice, quickstats, motivation) and its prose,
+  // as its fixture (`npcs/jorna.json`) spells them
+  const npc = await api.npc("jorna");
+  expect(npc.name).toBe("Hafenmeisterin Jorna");
+  expect(npc.voice).toBe("knapp, wetterrau, duzt jeden");
+  expect(npc.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+  expect(npc.motivation).toContain("Das Leuchtfeuer muss wieder brennen");
   expect(npc.body).not.toContain("## Will");
   expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
+  // …and the resource answers the npc itself: every field flat, beside its
+  // guard — no kind, no path, no properties (ADR #31).
+  expect(Object.keys(npc).sort()).toEqual([
+    "appearance",
+    "body",
+    "chapter",
+    "id",
+    "motivation",
+    "name",
+    "quickstats",
+    "rev",
+    "role",
+    "statblock",
+    "status",
+    "voice",
+  ]);
 
   // --- the session: its own TABLE, read through its own endpoint ------------
   const session = await api.session("2026-01-15");

@@ -20,7 +20,13 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
-import { LOCATION_STUB_ID, SCENE_ID, TRIGGER } from "../fixtures/replies";
+import {
+  LOCATION_STUB_ID,
+  NPC_STUB_ID,
+  NPC_STUB_NAME,
+  SCENE_ID,
+  TRIGGER,
+} from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
 import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
 
@@ -186,23 +192,26 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(edit.properties).toMatchObject({ title: EDITED_TITLE });
     expect(edit.body).toContain(edited.trim());
 
-    // The scene AND the entries it references: a proposal is applied as one
-    // batch, because a scene cannot name an entry that does not exist
-    // (ADR #19). The payload is the run's drafts with the stored edits folded
-    // in, which is what the review screen sends.
-    const result = after.result as { scenes: SceneDraft[]; stubs: unknown[]; locations: unknown[] };
-    const written = await api.send<{ written: string[]; locations: string[] }>(
+    // The scene AND the npc and location it references: a proposal is
+    // applied as one batch, because a scene cannot name anything that does
+    // not exist (ADR #19). The payload is the run's drafts with the stored
+    // edits folded in, plus the run's proposed npcs and locations as they
+    // stand — which is what the review screen sends.
+    const result = after.result as { scenes: SceneDraft[]; npcs: unknown[]; locations: unknown[] };
+    const written = await api.send<{ written: string[]; npcs: string[]; locations: string[] }>(
       "POST",
       "campaigns/beispiel/generate/apply",
       {
         scenes: result.scenes.map((scene) => ({ ...scene, ...edit })),
-        stubs: result.stubs,
+        npcs: result.npcs,
         locations: result.locations,
         jobId: after.id,
       },
     );
     expect(written.written).toContain(SCENE_PATH);
+    expect(written.npcs).toEqual([NPC_STUB_ID]);
     expect(written.locations).toEqual([LOCATION_STUB_ID]);
+    expect((await api.npc(NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
     const stored = await api.entry(SCENE_PATH);
     // Both halves as the DM left them before the restart.
     expect(stored.properties.title).toBe(EDITED_TITLE);

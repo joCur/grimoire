@@ -31,7 +31,9 @@ import { expect, test, type Api } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
-const NPC = "npcs/jorna";
+/** The npc of the example campaign the npc cases edit — its own resource (ADR #31). */
+const NPC = "jorna";
+const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
 const CONFLICT_LINE = "Inzwischen geändert";
 
@@ -467,6 +469,74 @@ test("a location's dialog: a second writer is the conflict line, and a forced sa
   await expect(page.getByRole("article")).toContainText("Roll20-Seite: Leuchtturm (Nacht)");
 });
 
+test("an npc's dialog: a second writer is the conflict line, and a forced save keeps the text", async ({
+  page,
+  api,
+}) => {
+  // The npc is its own resource (ADR #31): its dialog writes the npc's
+  // PATCH, fields flat, against the npc's `rev`.
+  const before = await api.npc(NPC);
+  const externalBody = "\n## Weiß\n\nVon einem zweiten Schreiber geändert.\n";
+  const role = "Hafenmeisterin, im Streit mit dem Rat";
+
+  await page.goto(NPC_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  const dialog = await openProperties(page);
+  await expect(dialog).toContainText("NPC: Eigenschaften");
+  await dialog.getByLabel("Rolle").fill(role);
+
+  // The second writer touches only the TEXT.
+  await api.patchNpc(NPC, { body: externalBody });
+
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  const conflicted = conflict(dialog);
+  await expect(conflicted.line).toBeVisible();
+  await expect(conflicted.reload).toBeVisible();
+  // Nothing was written by the refused save.
+  expect((await api.npc(NPC)).role).toBe(before.role);
+
+  // Forcing writes the dialog's field on top of the row as it stands — the
+  // text it never saw survives.
+  await conflicted.force.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect.poll(async () => (await api.npc(NPC)).role).toBe(role);
+  const after = await api.npc(NPC);
+  expect(after.body).toBe(externalBody);
+  expect(after.name).toBe(before.name);
+  expect(after.motivation).toBe(before.motivation);
+  expect(after.quickstats).toEqual(before.quickstats);
+  await expect(page.getByRole("article")).toContainText(role);
+});
+
+test("the npc's PATCH: a stale rev is a 409 with the npc, an unknown field a 400 naming it", async ({
+  api,
+}) => {
+  const patch = (body: unknown) =>
+    api.fetch(api.npcPath(NPC), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const before = await api.npc(NPC);
+  // A second writer moves the row …
+  const moved = await api.patchNpc(NPC, { voice: "heiser vom Wind" });
+  expect(moved.rev).toBe(before.rev + 1);
+
+  // … so the token read before it is stale: 409, nothing written, and the
+  // answer carries the npc as it stands now.
+  const stale = await patch({ rev: before.rev, role: "Niemand mehr" });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ code: "rev_conflict", rev: moved.rev, npc: moved });
+  expect(await api.npc(NPC)).toEqual(moved);
+
+  // A key that is no field of an npc is a 400 that names it, and writes
+  // nothing either.
+  const unknown = await patch({ rev: moved.rev, title: "Hafenmeisterin" });
+  expect(unknown.status).toBe(400);
+  expect(((await unknown.json()) as { error: string }).error).toContain('"title"');
+  expect(await api.npc(NPC)).toEqual(moved);
+});
+
 test("clearing a field deletes the key instead of writing an empty value", async ({
   page,
   api,
@@ -512,10 +582,10 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   page,
   api,
 }) => {
-  const before = await split(api, NPC);
+  const before = await api.npc(NPC);
   const role = "Auftraggeberin, seit dem Herbst auch im Rat";
 
-  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
+  await page.goto(NPC_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
   const dialog = await openProperties(page);
@@ -529,7 +599,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
 
   await dialog.getByLabel("Rolle").fill(role);
   await dialog.getByLabel("Status").selectOption("missing");
-  // Kurzwerte are free key/value rows — jorna has two, this is the third.
+  // Quickstats are free key/value rows — jorna has two, this is the third.
   const save = dialog.getByRole("button", { name: "Speichern" });
   await dialog.getByRole("button", { name: "Zeile hinzufügen" }).click();
   const statName = dialog.getByLabel("Kurzwerte, Zeile 3: Name");
@@ -563,15 +633,15 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(article).toContainText("knapp, wetterrau, duzt jeden");
   await expect(article).toContainText("Statblock: Roll20: Jorna");
 
-  await expect.poll(() => api.properties(NPC)).toHaveProperty("status", "missing");
-  const after = await split(api, NPC);
-  expect(after.properties.role).toBe(role);
+  await expect.poll(async () => (await api.npc(NPC)).status).toBe("missing");
+  const after = await api.npc(NPC);
+  expect(after.role).toBe(role);
   // A DM-typed relative value stays the STRING it was typed as; the numbers
   // already stored stay numbers.
-  expect(after.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12, deception: "+1" });
-  expect(after.properties.id).toBe("jorna");
-  expect(after.properties.name).toBe("Hafenmeisterin Jorna");
-  expect(after.properties.voice).toBe("knapp, wetterrau, duzt jeden");
+  expect(after.quickstats).toEqual({ insight: 2, "passive-perception": 12, deception: "+1" });
+  expect(after.id).toBe("jorna");
+  expect(after.name).toBe("Hafenmeisterin Jorna");
+  expect(after.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(after.body).toBe(before.body);
 });
 
@@ -628,7 +698,7 @@ test("navigating away closes the dialog — no diff of entry A lands in entry B"
   await expect(search).toBeFocused();
   await search.fill("Hafenmeisterin");
   await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
 
   // The dialog is gone with its entry — it may not stand over another entry's
   // reading view, holding the frozen values (and the rev) of the one it left.
@@ -643,23 +713,23 @@ test("navigating away closes the dialog — no diff of entry A lands in entry B"
   await expect(npcDialog.getByLabel(/^Name/)).toHaveValue("Hafenmeisterin Jorna");
   await expect(npcDialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
 
-  // A save from here writes THIS entry only.
+  // A save from here writes THIS npc only.
   await npcDialog.getByLabel("Rolle").fill(role);
   await npcDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await expect.poll(() => api.properties(NPC)).toHaveProperty("role", role);
+  await expect.poll(async () => (await api.npc(NPC)).role).toBe(role);
   expect(await split(api, SCENE)).toEqual(scene);
 });
 
 test("Ort and Kapitel have the form too — the campaign brings its own", async ({
   page,
 }) => {
-  // The four kinds with typed fields offer it — a location on its own route
-  // (ADR #31) …
+  // The four kinds with typed fields offer it — an npc and a location on
+  // their own routes (ADR #31) …
   const withForm: [string, string, string][] = [
     ["entries/01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
-    ["entries/npcs/fenn", "Fenn", "NPC"],
+    ["npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
     ["entries/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
   ];
