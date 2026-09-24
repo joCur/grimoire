@@ -14,9 +14,9 @@
 //
 // and the schemas live in ../schema, one per kind and run; `shared/test/
 // entry-schema.test.ts` asserts that their keys and enums still match the
-// field definitions the dialog is built from (./property-fields). A kind with
-// its own resource derives its reply schema from its zod schema instead
-// (ADR #31 — a location, ./location.ts `locationReplySchema`).
+// field definitions the dialog is built from (./property-fields). The
+// location derives its reply schema from its zod schema instead (ADR #31,
+// ./location.ts `locationReplySchema`).
 //
 // `body` is the whole text as one string and `warnings` what the
 // DM reads in the review. The body travels verbatim: a forced object cannot

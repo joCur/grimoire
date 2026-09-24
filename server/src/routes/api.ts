@@ -53,7 +53,7 @@ import {
 } from "@grimoire/shared";
 import { getBuildId } from "../config";
 import { ApiError } from "../api-error";
-// The store, by domain — one module per kind of entry and per list.
+// The store, by domain — one module per entity.
 import {
   campaignVersion,
   createCampaign,

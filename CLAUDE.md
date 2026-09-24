@@ -34,7 +34,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
   ein Objekt je Datei in der Form der API: ein Ort unter
   `fixtures/beispiel/locations/<id>.json` als das Objekt, das seine
-  Ressource liefert, ohne `rev`; die übrigen Arten `properties` + `body`;
+  Ressource liefert, ohne `rev`; Kampagne, Kapitel, Szene und NPC
+  `properties` + `body`;
   Sessions, Ideen und Glossar strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
@@ -45,8 +46,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   gemeinsam genutzt. Autorität über das Format sind
   `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
   (Adressen), beschrieben in README.md — die drei synchron halten. Eine
-  Art mit eigener Ressource hat ihr zod-Schema in `shared/src/<art>.ts`
-  (ADR #31).
+  Entität mit eigener Ressource hat ihr zod-Schema in
+  `shared/src/<entität>.ts` (ADR #31).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
   Abhaken. `server/src/server.ts` setzt nur die App zusammen. Datenzugriff
@@ -116,13 +117,14 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
   Übergangscode gibt es nicht: Ein Umbau wird so geschnitten, dass weder
   Adapter noch Doppelwege entstehen.
-- Eine Ressource je Art (ADR #31): Jede Art hat ihren eigenen Endpunkt,
-  ihren eigenen Typ und ihre eigene App-Route; einen allgemeinen Endpunkt
-  über mehrere Arten gibt es nicht. Jedes Feld ist ein Feld der Art, `body`
+- Eine Ressource je Entität (ADR #31): Jede Entität der Datenbank hat ihren
+  eigenen Endpunkt, ihren eigenen Typ, ihr eigenes zod-Modul als einzige
+  Quelle und ihre eigene App-Route; einen allgemeinen Endpunkt über mehrere
+  Entitäten gibt es nicht. Jedes Feld ist ein Feld der Entität, `body`
   eingeschlossen — keine Sammelbegriffe wie „Eigenschaften“ gegenüber „Text“,
   kein „Eintrag“ oder „Entwurf“ als gemeinsame Form. Wo wirklich gemischt
-  wird (Suche), nennt der Treffer seine Art ausdrücklich (`kind`).
-- Daten sind Zeilen ihrer Art in der Datenbank, keine Dateien und keine
+  wird (Suche), nennt der Treffer seine Entität ausdrücklich (`kind`).
+- Daten sind Zeilen ihrer Tabelle in der Datenbank, keine Dateien und keine
   Dokumente — in Prompts, Schema-Namen und -Beschreibungen, Bezeichnern,
   Kommentaren, Doku und Katalog. Prompts sagen nur, was das Modell tun soll:
   keine Verbote, keine „nicht mehr“-Hinweise, keine Geschichte.
@@ -135,10 +137,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   eingebunden, nicht selbst gebaut. Eintragspflichtig in docs/DECISIONS.md
   bleiben allein Bun-only-APIs (Node-Portabilität).
 - Ein Schema hat genau eine Quelle; eine abgeleitete Form wird nie von Hand
-  nachgebaut. Das Schema einer Art ist ihr zod-Schema, und Typ,
+  nachgebaut. Das Schema einer Entität ist ihr zod-Schema, und Typ,
   Patch-, Seed- und Generator-Form werden daraus abgeleitet (ADR #31).
   Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
-  das Objekt selbst, eine Art als das Objekt, das ihre Ressource liefert).
+  das Objekt selbst, eine Entität als das Objekt, das ihre Ressource
+  liefert).
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
@@ -221,8 +224,8 @@ Die Pfade:
    409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei
 2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
    NPC-Karten der Referenzszenen
-3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Arten und die
-   Glossar-Begriffe. Ein Orts-Treffer nennt sich mit `kind` + `id` ohne
+3. ⌘K-Suche findet und öffnet: indexiert sind Kampagne, Kapitel, Szenen,
+   NPCs, Orte und die Glossar-Begriffe. Ein Orts-Treffer nennt sich mit `kind` + `id` ohne
    Adresse und öffnet `/campaigns/:id/locations/<id>`, ein Glossar-Treffer
    ebenso und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
    nicht indexiert

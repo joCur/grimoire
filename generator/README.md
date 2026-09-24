@@ -55,7 +55,7 @@ ganzen Text als **ein** String unter `body`, die Hinweise für den DM unter
 }
 ```
 
-Die Felder sind **je Art** getypt — ein Modell kann genau die Felder
+Die Felder sind **je Entität** getypt — ein Modell kann genau die Felder
 schreiben, die der DM auch bearbeiten kann, und keins mehr. Nichts setzt aus
 einer Antwort einen Markdown-Text zusammen und nichts liest einen zurück,
 also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Bei Szene
@@ -77,7 +77,7 @@ id-Regel, welche Kapitel-id `chapter` nennen darf, was `atmosphere` ist, die
 Form von `body` und `warnings`), steht in `location-system-prompt.md` unter
 „## Die Felder des Orts“, und der Ergänzen-Lauf bekommt genau diesen
 Abschnitt mit. Szene und NPC laden ihre Schemata als **lesbares
-JSON** aus `shared/schema/`, eines je Art
+JSON** aus `shared/schema/`, eines je Entität
 und Lauf (`scene.schema.json`, `npc.schema.json`,
 `augmented-scene.schema.json`, `augmented-npc.schema.json`), dazu
 `outline.schema.json`; `shared/test/entry-schema.test.ts` prüft deren
@@ -90,7 +90,7 @@ der DM ihr gegeben hat, während eine **neue** Szene nur `draft` sein kann.
 **Die Prompts zeigen genau dieses Objekt.** Der Formatabschnitt jedes
 Create-Prompts — „## Eigenschaften und Text des Eintrags“ bei Szene und NPC,
 „## Die Felder des Orts“ beim Ort — führt ein ```json-Beispiel des
-Antwort-Objekts: die Felder in derselben Reihenfolge wie das Schema der Art
+Antwort-Objekts: die Felder in derselben Reihenfolge wie das Schema der Entität
 (ein Feld ohne Quelle als `null`) — bei Szene und NPC unter `properties`,
 beim Ort nebeneinander —, `body` als **ein** String — dessen
 Aufbau, `## Flow`, `## If:`, die sechs Callouts und `[[id]]`-Verweise, steht
@@ -104,7 +104,7 @@ Prozess):
 
 * kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
   nicht sagen kann, steht in einer `description` (bei Szene und NPC) bzw. im
-  Prompt der Art (beim Ort) und wird dort geprüft, wo es immer geprüft wurde
+  Orts-Prompt (beim Ort) und wird dort geprüft, wo es immer geprüft wurde
   (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
 * **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
   stattdessen `null`-fähig, und der Server liest `null` als „nicht

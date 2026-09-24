@@ -5,9 +5,9 @@
 // the GENERATOR needs the very same list: an entry reply is a JSON object
 // whose fields are schema-enforced per kind, and a schema that allowed a key
 // the dialog does not know — or forgot one it offers — would be a model
-// writing fields the DM can never see or edit. A kind with its own zod schema
-// (ADR #31) keeps its list beside that schema, typed against it
-// (./location.ts), and the table below refers to it.
+// writing fields the DM can never see or edit. The location keeps its list
+// beside its zod schema, typed against it (ADR #31, ./location.ts), and the
+// table below refers to it.
 //
 // This is the one place server and app both import, and the definitions carry
 // only what both need: the key, the shape of its value, and the known value

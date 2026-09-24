@@ -89,15 +89,15 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 ## Eigenschaften
 
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
-außer dem Text (`body`). Jede Art hat ihren eigenen Typ aus genau einem
-zod-Schema (ADR #31). Der **Ort** ist seine eigene Ressource mit seinen
+außer dem Text (`body`). Jede Entität hat ihren eigenen Typ aus genau
+einem zod-Schema (ADR #31). Der **Ort** ist seine eigene Ressource mit seinen
 eigenen Feldern (siehe „Ort“ unten); bei Kampagne, Kapitel, Szene und NPC
 reisen die Felder gesammelt unter `properties`. Die App zeigt sie im
 Eigenschaften-Dialog — das Prosa-Feld `motivation` (NPC) stattdessen auf der
 Bearbeiten-Fläche des Eintrags, neben seinem Text —, und `PATCH
 /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die Felder, die der
-DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die Art
-nicht kennt, legt die API nicht an (400).
+DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die
+Entität nicht kennt, legt die API nicht an (400).
 
 Was eine Ansicht als Daten braucht, ist eine Eigenschaft oder eine Zeile einer
 Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
@@ -473,7 +473,7 @@ den DM unter `warnings`; der Ort leitet sein Schema selbst aus seinem
 zod-Schema ab (`z.toJSONSchema`, ADR #31), und was das Modell über seine
 Felder wissen muss, steht im Orts-Prompt (`generator/location-system-prompt.md`).
 Ein Job listet die vorgeschlagenen Orte unter `result.locations`. Ein Aufruf für Szene, NPC oder
-eine ihrer Ergänzungen liefert die Eigenschaften je Art getypt unter
+eine ihrer Ergänzungen liefert die Eigenschaften von Szene bzw. NPC getypt unter
 `properties`, den Text als einen String unter `body` und `warnings`; dieses
 Paar ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim
 Übernehmen (ADR #24), nie ein Markdown-Text mit Eigenschaften davor. Die
@@ -495,7 +495,8 @@ je Datei, genau in der Form, die die API spricht: `kind`, die
 strukturierten Felder und der Text als ein String unter `body`. Ein Ort
 liegt in einer eigenen Datei unter `fixtures/beispiel/locations/<id>.json`,
 genau als das Objekt, das `GET …/locations/<id>` liefert, ohne `rev` (ADR
-#31); die übrigen Arten tragen ihre Felder unter `properties`. Ideen, Glossar
+#31); Kampagne, Kapitel, Szene und NPC tragen ihre Felder unter
+`properties`. Ideen, Glossar
 und Sessions tragen ihre Listen ebenso strukturiert,
 als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
 `threads`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee

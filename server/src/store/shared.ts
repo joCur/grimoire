@@ -289,8 +289,8 @@ export function compareSessionsNewestFirst(
  * label: the sentence the DM reads is built by the app from its own catalog in
  * the UI language. The `error` text here is the English technical
  * fallback that curl, the log and an unknown-code client get. `path` is the
- * address of what is in the way, for a kind reached through one; a kind with
- * its own resource (a location, ADR #31) is named by `kind` and `id` alone.
+ * address of what is in the way, where it has one; a location, its own
+ * resource (ADR #31), is named by `kind` and `id` alone.
  */
 export function slugTaken(
   kind: ErrorKind,

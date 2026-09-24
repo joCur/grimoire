@@ -80,10 +80,10 @@ Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 
 > **Teilweise überholt (ADR #30, ADR #31):** Abhängigkeiten für allgemeine
 > Aufgaben sind erwünscht (ADR #30); eintragspflichtig bleiben Bun-only-APIs.
-> ADR #31 ersetzt die Form der Antwort: sie ist der Typ der Art ohne `rev`,
+> ADR #31 ersetzt die Form der Antwort: sie ist der Typ der Entität ohne `rev`,
 > alle Felder flach nebeneinander, `body` eines davon, dazu `warnings` — keine
 > Abbildung `properties` und keine Trennung in Eigenschaften und Text. Ihr
-> Schema wird aus dem zod-Schema der Art abgeleitet, statt als JSON in
+> Schema wird aus dem zod-Schema der Entität abgeleitet, statt als JSON in
 > `shared/schema/` zu liegen. Was GILT: jede Modell-Antwort ist ein per Schema
 > erzwungenes JSON-Objekt, und `jsonrepair` repariert sie vor der Validierung.
 
@@ -829,8 +829,9 @@ Schreibweg gelten unverändert.
 ## 20. Fixtures sind JSON-Einträge, es gibt keinen Import
 
 > **Teilweise überholt (ADR #31):** ADR #31 ersetzt die Form und die Ablage
-> der Fixtures: eine Datei je Art und id unter `<kampagne>/<art>/<id>.json`,
-> jede das Objekt, das die Ressource der Art liefert, ohne `rev` — kein `kind`
+> der Fixtures: eine Datei je Entität und id unter
+> `<kampagne>/<ressource>/<id>.json`, jede das Objekt, das die Ressource
+> liefert, ohne `rev` — kein `kind`
 > und keine Abbildung `properties`. Was GILT: ein Fixture-Format, und es ist
 > die Form der API; kein Importer; Sessions, Ideen und Glossar strukturiert.
 
@@ -883,7 +884,7 @@ aktuellen Anzeigenamen auf, also stimmt der Text ohnehin überall.
 
 > **Teilweise überholt (ADR #31):** ADR #31 ersetzt die Adresse als
 > allgemeines Schema und mit ihr `…/entries/<adresse>` in API und App: jede
-> Art hat ihre eigene Ressource und ihre eigene App-Route
+> Entität hat ihre eigene Ressource und ihre eigene App-Route
 > (`/campaigns/:c/locations/:id` usw.), und `PUT …/entries/<adresse>` aus den
 > Folgen unten gibt es nicht. Was GILT: alles Kampagnenabhängige hängt unter
 > `/api/campaigns/:id/…` bzw. `/campaigns/:id/…`, die Mehrzahl `campaigns` ist
@@ -924,8 +925,8 @@ kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
 
 > **Teilweise überholt (ADR #31):** ADR #31 ersetzt den Endpunkt
 > `PATCH …/entries/<adresse>` und die Form `{ rev, properties?, body?, force? }`:
-> jede Art wird über `PATCH` auf ihrer eigenen Ressource geschrieben, mit
-> `{ rev, force?, …Teilmenge der Felder der Art }`, `body` eines dieser Felder
+> jede Entität wird über `PATCH` auf ihrer eigenen Ressource geschrieben, mit
+> `{ rev, force?, …Teilmenge ihrer Felder }`, `body` eines dieser Felder
 > — keine Trennung in Eigenschaften und Text. Was GILT: ein Schreibweg je
 > Ressource, eine Transaktion, ein `rev`, die 409 mit dem aktuellen Stand,
 > `force` schreibt nur die mitgeschickten Felder, und eine Anfrage ohne Feld
@@ -989,9 +990,9 @@ Spalten geparst wurde.
 
 > **Teilweise überholt (ADR #31):** ADR #31 ersetzt das Paar aus
 > `properties` und `body`, die Adresse `path` und die Änderungen „je Hälfte“:
-> ein Vorschlag des Generators ist der Typ seiner Art ohne `rev`, alle Felder
+> ein Vorschlag des Generators ist der Typ seiner Entität ohne `rev`, alle Felder
 > flach, `body` eines davon, und ein Job-Ergebnis listet `scenes`, `npcs` und
-> `locations` getrennt; das Antwort-Schema wird aus dem zod-Schema der Art
+> `locations` getrennt; das Antwort-Schema wird aus dem zod-Schema der Entität
 > abgeleitet. Was GILT: kein Markdown-Zwischenformat — der Server setzt nirgends
 > einen Text mit vorangestellten Feldern zusammen und liest keinen zurück —,
 > und der bestehende Stand, den ein Ergänzen-Lauf dem Modell zeigt, ist
@@ -1733,24 +1734,26 @@ kleiner als die eines eigenen Nachbaus.
 - Der Satz „Weitere Abhängigkeiten braucht es nicht“ in ADR #5 ist damit keine
   Regel mehr, sondern die Feststellung, dass der Generator damals keine
   brauchte.
-- Anwendungen: `date-fns` für Datum und Zeit, `zod` für das Schema jeder Art
-  (ADR #31).
+- Anwendungen: `date-fns` für Datum und Zeit, `zod` für das Schema jeder
+  Entität (ADR #31).
 
-## 31. Eine Ressource und ein Typ je Art
+## 31. Eine Ressource und ein Typ je Entität
 
-**Kontext:** Die Datenbank hält jede Art in ihrer eigenen Tabelle mit eigenen
-Spalten. Ein gemeinsamer Endpunkt über alle Arten mit einer untypisierten
-Abbildung der Felder verliert diese Typisierung auf dem Weg zur Leitung: die
-zulässigen Schlüssel brauchen dann eine eigene Liste, ihre Formen eine eigene
-Beschreibung, die Generator-Schemata eine dritte Fassung, und Store wie App
-verzweigen an jeder Stelle über die Art. Ein neues Feld kostet so fünf Stellen
-statt einer.
+**Kontext:** Die Datenbank hält jede Entität in ihrer eigenen Tabelle mit
+eigenen Spalten. Ein gemeinsamer Endpunkt über mehrere Entitäten mit einer
+untypisierten Abbildung der Felder verliert diese Typisierung auf dem Weg zur
+Leitung: die zulässigen Schlüssel brauchen dann eine eigene Liste, ihre Formen
+eine eigene Beschreibung, die Generator-Schemata eine dritte Fassung, und
+Store wie App verzweigen an jeder Stelle darüber, welche Entität gemeint ist.
+Ein neues Feld kostet so mehrere Stellen statt einer.
 
-**Entscheidung:** Jede Art — Kampagne, Kapitel, Szene, NPC, Ort — ist eine
-eigene Ressource mit eigenem Typ. Einen allgemeinen Endpunkt über mehrere Arten
-gibt es weder in der API noch in der App.
+**Entscheidung:** Jede Entität der Datenbank ist eine eigene Ressource mit
+eigenem Typ und eigenem zod-Modul als einziger Quelle. Einen allgemeinen
+Endpunkt über mehrere Entitäten gibt es weder in der API noch in der App.
 
-| Art | Lesen/Ändern | Anlegen/Liste | App-Route |
+Die Ressourcen der bisher erfassten Entitäten:
+
+| Entität | Lesen/Ändern | Anlegen/Liste | App-Route |
 |---|---|---|---|
 | Kampagne | `GET/PATCH /campaigns/:c` | `POST /campaigns` | `/campaigns/:c` |
 | Kapitel | `GET/PATCH /campaigns/:c/chapters/:id` | `GET/POST /campaigns/:c/chapters` | `/campaigns/:c/chapters/:id` |
@@ -1763,50 +1766,51 @@ Die API-Pfade stehen unter `/api` (ADR #22).
 - **Leitung:** Jede Ressource antwortet mit ihrem eigenen Typ, etwa
   `Location { id, name, chapter?, roll20Page?, atmosphere?, body, rev }`. Es
   gibt kein `kind`, kein `path`, keinen gemeinsamen Basistyp und keine
-  Vereinigung aller Arten; welche Art gemeint ist, steht in der URL.
+  Vereinigung mehrerer Entitäten; welche gemeint ist, steht in der URL.
   Feldnamen sind gewöhnliche Bezeichner (`roll20Page`).
 - **Szenen liegen flach** unter `…/scenes/:id`: Szenen-ids sind je Kampagne
   eindeutig, und das Kapitel ist ein Feld der Szene, das sich ändern kann.
-- **Keine Sammelbegriffe.** Jedes Feld ist ein Feld seiner Art, `body`
-  eingeschlossen. Typen, Code und Doku beschreiben jede Art mit ihren eigenen
-  Feldern; es gibt keine Hälften einer Art und keine gemeinsame Form, die
-  mehrere Arten vertritt.
-- **Schreiben:** `PATCH` nimmt `{ rev, force?, …Teilmenge der Felder der Art }`
-  und prüft sie gegen das Schema der Art. `null` löscht ein optionales Feld;
-  ein Feld, das die Art nicht hat, oder ein Wert der falschen Form ist eine
-  400, die das Feld nennt. Die `id` wird nie geändert (ADR #21). Ein
+- **Keine Sammelbegriffe.** Jedes Feld ist ein Feld seiner Entität, `body`
+  eingeschlossen. Typen, Code und Doku beschreiben jede Entität mit ihren
+  eigenen Feldern; es gibt keine Hälften einer Entität und keine gemeinsame
+  Form, die mehrere Entitäten vertritt.
+- **Schreiben:** `PATCH` nimmt `{ rev, force?, …Teilmenge der Felder }` und
+  prüft sie gegen das Schema der Entität. `null` löscht ein optionales Feld;
+  ein Feld, das die Entität nicht hat, oder ein Wert der falschen Form ist
+  eine 400, die das Feld nennt. Die `id` wird nie geändert (ADR #21). Ein
   veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource; `force` und
   `nothing_to_write` gelten wie in ADR #23. Anlegen antwortet mit dem Typ der
-  Art.
-- **Eine Quelle je Art: ein zod-Schema** in `shared/src/<art>.ts`. Aus ihm
-  kommen der TypeScript-Typ (`z.infer`), die Prüfung von `PATCH`, `POST` und
-  Seed und das Antwort-Schema des Generators. Keine dieser Formen wird von Hand
-  nachgebaut: jede Art leitet ihre Formen selbst und ausdrücklich mit der API
-  von zod ab (`omit`, `extend`, `partial`, `nullable`, `z.toJSONSchema`) — ein
-  gemeinsames Modul, das über die Felder beliebiger Arten läuft, gibt es
-  nicht.
-- **Generator-Schema:** Das Antwort-Schema einer Art ist ihr Typ ohne `rev` in
-  der strengen Form der Provider, abgeleitet mit `z.toJSONSchema`: null-fähig
-  statt optional, `additionalProperties: false`, jedes Feld in `required`,
-  kein `pattern`, kein `format`, keine Grenzen. Das Schema trägt allein die
-  Form, keine `description`; was das Modell über die Felder wissen muss und
-  das Schema nicht sagen kann, steht im Prompt seiner Art unter `generator/`
-  und wird in der Validierung geprüft. Ein Test prüft genau die Regeln des
-  strict mode an den abgeleiteten Schemata.
-- **Wo gemischt wird, nennt der Treffer seine Art.** Ein Suchtreffer ist
+  Entität.
+- **Eine Quelle je Entität: ein zod-Schema** in `shared/src/<entität>.ts`.
+  Aus ihm kommen der TypeScript-Typ (`z.infer`), die Prüfung von `PATCH`,
+  `POST` und Seed und das Antwort-Schema des Generators. Keine dieser Formen
+  wird von Hand nachgebaut: jede Entität leitet ihre Formen selbst und
+  ausdrücklich mit der API von zod ab (`omit`, `extend`, `partial`,
+  `nullable`, `z.toJSONSchema`) — ein gemeinsames Modul, das über die Felder
+  beliebiger Entitäten läuft, gibt es nicht.
+- **Generator-Schema:** Das Antwort-Schema einer Entität ist ihr Typ ohne
+  `rev` in der strengen Form der Provider, abgeleitet mit `z.toJSONSchema`:
+  null-fähig statt optional, `additionalProperties: false`, jedes Feld in
+  `required`, kein `pattern`, kein `format`, keine Grenzen. Das Schema trägt
+  allein die Form, keine `description`; was das Modell über die Felder wissen
+  muss und das Schema nicht sagen kann, steht in ihrem Prompt unter
+  `generator/` und wird in der Validierung geprüft. Ein Test prüft genau die
+  Regeln des strict mode an den abgeleiteten Schemata.
+- **Wo gemischt wird, nennt der Treffer seine Entität.** Ein Suchtreffer ist
   `{ kind, id, title }`: die Suche ist wirklich gemischt, deshalb trägt der
-  Treffer `kind`, und die App öffnet daraus die Route der Art. `[[id]]`-
-  Verweise lösen gegen die Ressourcen auf.
-- **Ergänzen hängt an der Ressource:** `POST …/<art>/:id/augment` startet den
-  Lauf, `POST …/<art>/:id/augment/apply` übernimmt ihn. Der Vorschlag ist der
-  gelesene Stand neben dem vorgeschlagenen, beide im Typ der Art ohne `rev`.
+  Treffer `kind`, und die App öffnet daraus die Route der Entität.
+  `[[id]]`-Verweise lösen gegen die Ressourcen auf.
+- **Ergänzen hängt an der Ressource:** `POST …/<ressource>/:id/augment`
+  startet den Lauf, `POST …/<ressource>/:id/augment/apply` übernimmt ihn. Der
+  Vorschlag ist der gelesene Stand neben dem vorgeschlagenen, beide im Typ der
+  Entität ohne `rev`.
 - **Generator-Ergebnis:** Ein Job listet in seinem Ergebnis `scenes`, `npcs`
-  und `locations` als eigene getypte Listen, jede im Typ ihrer Art ohne `rev`.
-  Prüfen, Entscheiden und Übernehmen laufen je Art.
-- **Server:** Das Domänenmodul einer Art (`server/src/store/<art>.ts`)
+  und `locations` als eigene getypte Listen, jede im Typ ihrer Entität ohne
+  `rev`. Prüfen, Entscheiden und Übernehmen laufen je Entität.
+- **Server:** Das Domänenmodul einer Entität (`server/src/store/<entität>.ts`)
   rendert, liest, schreibt und übernimmt sie getypt.
-- **App:** Die Formularfelder einer Art stehen neben ihrem Schema und sind
-  gegen dessen Felder getypt, sodass ein Feld ohne Beschreibung nicht
+- **App:** Die Formularfelder einer Entität stehen neben ihrem Schema und
+  sind gegen dessen Felder getypt, sodass ein Feld ohne Beschreibung nicht
   übersetzt.
 
 **Warum zod:** Validierung und Schemata sind eine allgemeine Aufgabe (ADR #30).
@@ -1816,17 +1820,14 @@ auseinanderlaufen, weil es nur eine gibt.
 
 **Folgen:**
 
-- Ein neues Feld ist eine Zeile im Schema seiner Art und eine in ihren
+- Ein neues Feld ist eine Zeile im Schema seiner Entität und eine in ihren
   Formularfeldern, dazu seine Spalte samt Migration. Typ, Prüfung und
   Generator-Schema folgen.
-- Die Fixtures liegen je Art: `fixtures/<kampagne>/<art>/<id>.json`, etwa
-  `fixtures/beispiel/locations/leuchtturm.json`. Jede Datei ist das Objekt,
-  das die Ressource liefert, ohne `rev`. Die Bodies bleiben Zeichen für
-  Zeichen, wie sie sind.
-- Gespeicherte Generator-Jobs, deren Nutzlast eine Art in einer früheren Form
-  trägt, werden nicht überführt: die Migration löscht sie per SQL (ADR #28,
-  Regel 2). Ein Lauf kostet ein paar Token, ein halb überführter Vorschlag
-  eine falsche Zeile in der Kampagne.
-- Die Tabellen der Arten, Sessions, Ideen, Glossar, Kampagnenwissen und offene
-  Fäden bleiben, wie sie sind; Listen haben ihre eigenen Endpunkte
-  (ADR #26).
+- Die Fixtures liegen je Entität: `fixtures/<kampagne>/<ressource>/<id>.json`,
+  etwa `fixtures/beispiel/locations/leuchtturm.json`. Jede Datei ist das
+  Objekt, das die Ressource liefert, ohne `rev`. Die Bodies bleiben Zeichen
+  für Zeichen, wie sie sind.
+- Gespeicherte Generator-Jobs, deren Nutzlast eine Entität in einer früheren
+  Form trägt, werden nicht überführt: die Migration löscht sie per SQL
+  (ADR #28, Regel 2). Ein Lauf kostet ein paar Token, ein halb überführter
+  Vorschlag eine falsche Zeile in der Kampagne.

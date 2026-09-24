@@ -5,8 +5,8 @@
 // seed naming one is refused. Applying a flat patch to a rendered properties
 // mapping is the other half, `null` deleting a key.
 //
-// A kind with its own zod schema (ADR #31) has no list here: its schema is
-// the contract (a location: @grimoire/shared/location).
+// The location has no list here: its zod schema is the contract (ADR #31,
+// @grimoire/shared/location).
 
 import { ApiError } from "../api-error";
 

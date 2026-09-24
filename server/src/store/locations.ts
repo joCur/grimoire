@@ -30,9 +30,9 @@ import { normalizeBody, parseRequest, resolveNewId, revConflict, slugTaken } fro
 // --- rendering a row ----------------------------------------------------------
 
 /**
- * The location of a row. An empty name falls back to the id — the display-name
- * rule of every kind — and a column that holds nothing is a field the
- * location does not carry.
+ * The location of a row. An empty name falls back to the id — the same
+ * display-name rule as everywhere — and a column that holds nothing is a field
+ * the location does not carry.
  */
 export function renderLocation(row: LocationRow): Location {
   return {

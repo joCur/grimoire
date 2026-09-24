@@ -14,8 +14,8 @@
 // else. The types stay widened all the same, because a READER still has to
 // render whatever an older database hands it.
 //
-// A kind with its own resource (ADR #31) has its type from its zod schema in
-// its own module — a location in ./location.ts, re-exported here.
+// An entity with its own resource (ADR #31) has its type from its zod schema
+// in its own module — the location in ./location.ts, re-exported here.
 
 import type { LocationProposal } from "./location";
 

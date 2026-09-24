@@ -1,10 +1,10 @@
 // Rows → the API's entry shapes.
 //
-// The kinds whose fields travel under `properties` are rendered here into an
+// The campaign, chapters, scenes and npcs are rendered here into an
 // `EntryResponse`: an address, a `properties` mapping, a markdown body, and
-// the concurrency token the client sends back. A kind with its own type
-// (ADR #31) renders itself in its domain module (a location: ./locations.ts);
-// its row shape stands below with the others.
+// the concurrency token the client sends back. The location has its own type
+// (ADR #31) and renders itself in its domain module (./locations.ts); its row
+// shape stands below with the others.
 //
 // Three rules hold this together:
 //
