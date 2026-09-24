@@ -597,8 +597,20 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
     "Auftraggeberin, Hafenmeisterin von Salzhafen",
   );
 
+  // An npc always has a status (its column is NOT NULL): the select offers
+  // the four values and no empty choice.
+  const status = dialog.getByLabel("Status");
+  await expect(status).toHaveValue("alive");
+  await expect(status.locator("option")).toHaveText([
+    "Lebendig",
+    "Tot",
+    "Vermisst",
+    "Unbekannt",
+  ]);
+  await expect(status.locator('option[value=""]')).toHaveCount(0);
+
   await dialog.getByLabel("Rolle").fill(role);
-  await dialog.getByLabel("Status").selectOption("missing");
+  await status.selectOption("missing");
   // Quickstats are free key/value rows — jorna has two, this is the third.
   const save = dialog.getByRole("button", { name: "Speichern" });
   await dialog.getByRole("button", { name: "Zeile hinzufügen" }).click();
