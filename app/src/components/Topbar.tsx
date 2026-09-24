@@ -200,6 +200,10 @@ export function Topbar() {
   // chapters entry and hanging the chapter overview's review and generator
   // entries into the row.
   const isScene = campaignOf(sceneMatch) !== undefined && entryPath !== "";
+  // A location's reading view is a reading view like an entry's; its list is not.
+  const isLocationView =
+    campaignOf(locationsMatch) !== undefined && (locationsMatch?.params["*"] ?? "") !== "";
+  const isReadingView = isScene || isLocationView;
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
@@ -385,8 +389,8 @@ export function Topbar() {
             session={live}
             state={sessionChipState({
               session,
-              offersStart: isChapterOverview || isScene,
-              showsError: isChapterOverview || isScene || isLive,
+              offersStart: isChapterOverview || isReadingView,
+              showsError: isChapterOverview || isReadingView || isLive,
             })}
             mode={isLive ? "menu" : "link"}
           />

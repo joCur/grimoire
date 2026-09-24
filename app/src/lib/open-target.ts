@@ -16,6 +16,15 @@ export function locationHref(campaign: string, id: string): string {
   return `/campaigns/${campaign}/locations/${encodeURIComponent(id)}`;
 }
 
+/**
+ * How a location names itself in a list beside the addresses of the other
+ * kinds (a run's review and its written list): its resource segment and id,
+ * `locations/<id>`, the way an npc shows as `npcs/<id>`.
+ */
+export function locationLabel(id: string): string {
+  return `locations/${id}`;
+}
+
 /** The list of a campaign's locations. */
 export function locationsHref(campaign: string): string {
   return `/campaigns/${campaign}/locations`;

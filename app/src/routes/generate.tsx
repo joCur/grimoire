@@ -120,7 +120,7 @@ import {
   type PartState,
 } from "@/lib/generate";
 import { promptKnowledgeCount } from "@/lib/entry-list";
-import { locationHref } from "@/lib/open-target";
+import { locationHref, locationLabel } from "@/lib/open-target";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
@@ -416,7 +416,7 @@ export function GenerateRoute() {
       }
     },
     onSuccess: (data) => {
-      const addresses = [...Object.values(data.written), ...data.locations];
+      const addresses = [...Object.values(data.written), ...data.locations.map(locationLabel)];
       // ONLY the answer decides: a bulk accept whose rest did not settle the
       // run leaves the job there, and marking it dropped up front turned a
       // job that is still open into one that had vanished.
@@ -587,13 +587,13 @@ export function GenerateRoute() {
         key={location.id}
         icon={MapPin}
         name={location.name}
-        label={location.id}
+        label={locationLabel(location.id)}
         {...(cardRef === undefined ? {} : { cardRef })}
         reason={stubReason(scenes, t)}
         decision={reviewState.locations[location.id]}
         state={state}
         writtenHref={state === "written" ? locationHref(campaign, location.id) : undefined}
-        writtenLabel={state === "written" ? location.id : undefined}
+        writtenLabel={state === "written" ? locationLabel(location.id) : undefined}
         busy={apply.isPending}
         onDecide={(decision) =>
           review.decide({ locations: { [location.id]: decision ?? null } })
