@@ -33,7 +33,10 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 | Kapitel | `<kapitel-id>` |
 | Szene | `<kapitel-id>/<orts-id>/<szenen-id>` — ohne Ort: `<kapitel-id>/<szenen-id>` |
 | NPC | `npcs/<id>` |
-| Ort | `locations/<id>` |
+
+Ein **Ort** hat keine Adresse: er ist seine eigene Ressource unter
+`/api/campaigns/<kampagne>/locations/<id>`, in der App
+`/campaigns/<kampagne>/locations/<id>` (ADR #31, siehe „Ort“ unten).
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
@@ -85,14 +88,16 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 ## Eigenschaften
 
-Die Eigenschaften eines Eintrags sind seine strukturierten Felder. Sie
-heißen auf der Leitung `properties`; die App zeigt sie im
-Eigenschaften-Dialog — die Prosa-Felder `motivation` (NPC) und `atmosphere`
-(Ort) stattdessen auf der Bearbeiten-Fläche des Eintrags, neben seinem Text —,
-und `PATCH /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die
-Felder, die der DM angefasst hat. Felder, die ein Eintrag
-mitbringt und die seine Art nicht kennt, bleiben erhalten und lassen sich
-ändern oder löschen; neue legt die API nicht an (400).
+Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
+außer dem Text (`body`). Jede Entität hat ihren eigenen Typ aus genau
+einem zod-Schema (ADR #31). Der **Ort** ist seine eigene Ressource mit seinen
+eigenen Feldern (siehe „Ort“ unten); bei Kampagne, Kapitel, Szene und NPC
+reisen die Felder gesammelt unter `properties`. Die App zeigt sie im
+Eigenschaften-Dialog — das Prosa-Feld `motivation` (NPC) stattdessen auf der
+Bearbeiten-Fläche des Eintrags, neben seinem Text —, und `PATCH
+/api/campaigns/<kampagne>/entries/<adresse>` ändert genau die Felder, die der
+DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die
+Entität nicht kennt, legt die API nicht an (400).
 
 Was eine Ansicht als Daten braucht, ist eine Eigenschaft oder eine Zeile einer
 Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
@@ -195,17 +200,51 @@ im Szenentext oder `#npc`-Notiz im Log.
 
 ### Ort
 
+Ein Ort ist seine eigene Ressource mit seinem eigenen Typ (`Location`, aus
+dem zod-Schema in `shared/src/location.ts`, ADR #31):
+
+| Lesen/Ändern | Anlegen/Liste | App-Route |
+| ------------ | ------------- | --------- |
+| `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>`, Liste `/campaigns/<kampagne>/locations` |
+
+`GET` antwortet mit dem Ort selbst — ohne `kind`, ohne `path`, alle Felder
+nebeneinander:
+
+```json
+{
+  "id": "leuchtturm",
+  "name": "Der Leuchtturm von Salzhafen",
+  "chapter": "01-salzhafen",
+  "roll20Page": "Leuchtturm",
+  "atmosphere": "Verlassen in Eile, nicht im Kampf.",
+  "body": "\n## Beim ersten Betreten\n\n…",
+  "rev": 3
+}
+```
+
 | Feld | Bedeutung |
 | ---- | --------- |
 | `id` | stabil, wird referenziert |
-| `name` | Anzeigename |
-| `chapter` | Kapitel-id |
-| `roll20-page` | Verweis auf die Roll20-Seite, keine Karten-Kopie |
-| `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau |
+| `name` | Anzeigename, Pflicht; ohne eigenen Namen zeigt der Ort seine id |
+| `chapter` | Kapitel-id, optional; muss existieren |
+| `roll20Page` | Verweis auf die Roll20-Seite, keine Karten-Kopie; optional |
+| `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau; optional |
+| `body` | Markdown des Orts |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
-`atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche des Eintrags
-gepflegt, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere` zeigt
-die Ort-Karte die Roll20-Seite.
+Ein optionales Feld ohne Wert fehlt in der Antwort. Geschrieben wird mit
+`PATCH …/locations/<id>` und `{ rev, force?, …Teilmenge von name, chapter,
+roll20Page, atmosphere, body }` — `null` löscht ein optionales Feld, ein Feld,
+das ein Ort nicht hat (etwa `status`), oder ein Wert der falschen Form ist
+eine 400, die das Feld nennt; ein veralteter `rev` ist 409 mit dem aktuellen
+Ort. `POST …/locations` legt einen Ort an und antwortet mit ihm. Fixture und
+Generator-Vorschlag sind der Ort ohne `rev`. Ergänzen hängt am Ort: `POST
+…/locations/<id>/augment` startet den Lauf, `POST …/locations/<id>/augment/apply`
+übernimmt ihn.
+
+`atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche gepflegt, neben
+dem Markdown, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere`
+zeigt die Ort-Karte die Roll20-Seite.
 
 Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
 `[!readaloud]`), `## Wer ist hier` (Figuren am Ort, mit id als `[[id]]`).
@@ -428,15 +467,18 @@ dem Quellmaterial; „Entwürfe prüfen“ zeigt diese Beschreibung, und das
 Kapitels ändert kein Lauf.
 
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
-über die Provider-API **erzwingt**. Ein Eintrags-Aufruf (Szene, NPC, Ort,
-Ergänzung) liefert das Objekt, das den gespeicherten Eintrag spiegelt: die
-Eigenschaften unter `properties` — je Art getypt aus derselben Feldliste, aus
-der der Eigenschaften-Dialog gebaut wird —, den Text als einen String unter
-`body` und die Hinweise für den DM unter `warnings`. Dieses Paar aus
-Eigenschaften und Text ist der **Entwurf** — im Prüfschritt, in den
-Änderungen des DM und beim Übernehmen (ADR #24); ein Entwurf ist nie ein
-Markdown-Text mit Eigenschaften davor. Die Schemata liegen als lesbares JSON
-in `shared/schema/`; Details in `generator/README.md`.
+über die Provider-API **erzwingt**. Ein Orts-Aufruf (Anlegen wie Ergänzen)
+liefert den Ort ohne `rev`, alle Felder nebeneinander, dazu die Hinweise für
+den DM unter `warnings`; der Ort leitet sein Schema selbst aus seinem
+zod-Schema ab (`z.toJSONSchema`, ADR #31), und was das Modell über seine
+Felder wissen muss, steht im Orts-Prompt (`generator/location-system-prompt.md`).
+Ein Job listet die vorgeschlagenen Orte unter `result.locations`. Ein Aufruf für Szene, NPC oder
+eine ihrer Ergänzungen liefert die Eigenschaften von Szene bzw. NPC getypt unter
+`properties`, den Text als einen String unter `body` und `warnings`; dieses
+Paar ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim
+Übernehmen (ADR #24), nie ein Markdown-Text mit Eigenschaften davor. Die
+Schemata von Szene und NPC liegen als lesbares JSON in `shared/schema/`;
+Details in `generator/README.md`.
 
 Die mechanische Prüfung liest Eigenschaften und Text, aber keine
 Überschrift (ADR #29): die Abschnitte eines Entwurfs sind die Empfehlung der
@@ -450,14 +492,18 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
-strukturierten Felder unter `properties` und der Text als ein String unter
-`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert,
+strukturierten Felder und der Text als ein String unter `body`. Ein Ort
+liegt in einer eigenen Datei unter `fixtures/beispiel/locations/<id>.json`,
+genau als das Objekt, das `GET …/locations/<id>` liefert, ohne `rev` (ADR
+#31); Kampagne, Kapitel, Szene und NPC tragen ihre Felder unter
+`properties`. Ideen, Glossar
+und Sessions tragen ihre Listen ebenso strukturiert,
 als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
 `threads`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
 wie ein Faden `{ text, done? }`. Eine Markdown-Zeile steht in keiner davon.
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` und
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/locations/*.json` und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

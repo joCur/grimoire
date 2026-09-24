@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
+import type { OpenTarget } from "@/lib/open-target";
 import { NpcCompact } from "@/components/EntityCompact";
 import { useI18n } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
@@ -43,10 +44,11 @@ export function NpcCard({
   id: string;
   compact?: boolean;
   /**
-   * When given, the card is a BUTTON that hands the npc's campaign-relative
-   * path to the caller instead of navigating (live mode drawer).
+   * When given, the card is a BUTTON that hands the npc — by its
+   * campaign-relative path — to the caller instead of navigating (live mode
+   * drawer).
    */
-  onOpen?: (path: string) => void;
+  onOpen?: (target: OpenTarget) => void;
 }) {
   const { t, tNode } = useI18n();
   const { resolve } = useEntityRefs();
@@ -91,14 +93,14 @@ export function NpcCard({
 
   if (compact) {
     return (
-      <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-3.5">
+      <EntityCardShell campaign={campaign} target={{ kind: "entry", path }} onOpen={onOpen} className="p-3.5">
         <NpcCompact name={name} excerpt={excerpt} />
       </EntityCardShell>
     );
   }
 
   return (
-    <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-4">
+    <EntityCardShell campaign={campaign} target={{ kind: "entry", path }} onOpen={onOpen} className="p-4">
       <div className="mb-[2px] flex items-baseline gap-2">
         <span className="font-serif text-[16px] font-semibold text-foreground">{name}</span>
         <span className="font-mono text-[10.5px] text-faint">{npcId}</span>

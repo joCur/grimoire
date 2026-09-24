@@ -1,10 +1,10 @@
 // The rules of the reading view's edit mode: whether there is something to
-// save, and what one save carries. The write itself is the shared editing session
-// (lib/use-entry-edit.ts), so nothing here talks to the server.
+// save, and what one save carries. The write itself is the kind's editing
+// session, so nothing here talks to the server.
 
 import { describe, expect, test } from "bun:test";
 
-import { bodyEditorWrite, hasBodyChanges } from "./entry-body";
+import { bodyEditorChange, hasBodyChanges, hasBodyEditChange } from "./entry-body";
 
 describe("hasBodyChanges", () => {
   test("identical text is nothing to save", () => {
@@ -21,19 +21,21 @@ describe("hasBodyChanges", () => {
   });
 });
 
-describe("bodyEditorWrite", () => {
+describe("bodyEditorChange", () => {
   test("only the halves that changed travel — an untouched text stays out", () => {
-    expect(bodyEditorWrite("Text.\n", "Text.\n", {})).toEqual({});
-    expect(bodyEditorWrite("Text.\n", "Neu.\n", {})).toEqual({ body: "Neu.\n" });
-    expect(bodyEditorWrite("Text.\n", "Text.\n", { motivation: "Ruhe." })).toEqual({
-      properties: { motivation: "Ruhe." },
+    expect(bodyEditorChange("Text.\n", "Text.\n", {})).toEqual({});
+    expect(bodyEditorChange("Text.\n", "Neu.\n", {})).toEqual({ body: "Neu.\n" });
+    expect(bodyEditorChange("Text.\n", "Text.\n", { motivation: "Ruhe." })).toEqual({
+      fields: { motivation: "Ruhe." },
     });
+    expect(hasBodyEditChange({})).toBe(false);
+    expect(hasBodyEditChange({ body: "" })).toBe(true);
   });
 
   test("text and prose property together are ONE write; `null` clears the field", () => {
-    expect(bodyEditorWrite("Alt.\n", "Neu.\n", { motivation: null })).toEqual({
+    expect(bodyEditorChange("Alt.\n", "Neu.\n", { motivation: null })).toEqual({
       body: "Neu.\n",
-      properties: { motivation: null },
+      fields: { motivation: null },
     });
   });
 });

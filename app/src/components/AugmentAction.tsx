@@ -1,6 +1,12 @@
-// The augment action — the third quiet action in an entry's header, next to
-// the edit and the properties action. Same vocabulary, same size, no new
-// chrome: the topbar does not grow, and the reading view gains one word.
+// The augment action — the third quiet action in a reading view's header,
+// next to the edit and the properties action. Same vocabulary, same size, no
+// new chrome: the topbar does not grow, and the reading view gains one word.
+//
+// Two triggers, one dialog: `AugmentAction` for an npc or a scene (the run
+// names the entry by its address), `LocationAugmentAction` for a location,
+// whose run starts on the location's own resource (ADR #31). Everything below
+// the trigger is shared; what differs per kind is how the run starts, where
+// its proposal sits on the job, and the write that accepts it.
 //
 // The flow is three states in ONE dialog, because it is one errand:
 //
@@ -10,15 +16,15 @@
 //             tab may be closed, navigated away from, or reloaded; a finished
 //             proposal is still here afterwards, and so is a restart.
 //   review    the proposal, on two levels:
-//               properties per FIELD  stored value beside proposed one, take
-//                                     or keep,
-//               body per BLOCK        the block composer's own blocks, with a
-//                                     word diff INSIDE a changed block, plus a
-//                                     raw tab carrying a line/word diff over
-//                                     the whole text.
+//               fields per FIELD   stored value beside proposed one, take or
+//                                  keep,
+//               body per BLOCK     the block composer's own blocks, with a
+//                                  word diff INSIDE a changed block, plus a
+//                                  raw tab carrying a line/word diff over the
+//                                  whole text.
 //
 // DEFAULTS never overwrite silently: what is empty or new is preselected, what
-// is filled is kept. Accepting writes ONE request (properties + text, one
+// is filled is kept. Accepting writes ONE request (fields + text, one
 // transaction, one version guard) and, on a conflict, asks — nothing was
 // written, and continuing from the stored text re-cuts the whole proposal
 // against it.
@@ -29,16 +35,25 @@
 
 import type {
   AugmentPropertyProposal,
-  AugmentResult,
   EntryResponse,
   GenerateJob,
+  GenerateJobStarted,
+  Location,
+  NamingHint,
 } from "@grimoire/shared/types";
 import { isAugmentKind } from "@grimoire/shared/types";
+import { locationChangeSchema } from "@grimoire/shared/location";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { applyAugment, deleteGenerateJob, startAugmentJob } from "@/api";
+import {
+  applyAugment,
+  applyLocationAugment,
+  deleteGenerateJob,
+  startAugmentJob,
+  startLocationAugmentJob,
+} from "@/api";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
@@ -51,6 +66,7 @@ import {
   defaultAccepted,
   formatPropertyValue,
   lineDiff,
+  locationFieldProposals,
   type BlockChange,
   type BlockChangeKind,
   type DiffToken,
@@ -59,8 +75,9 @@ import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
 import { propString } from "@/lib/properties";
 import { reviewOf, runJobArrived } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
-import { useJobReview } from "@/lib/use-job-review";
+import { useJobReview, type JobReviewSync } from "@/lib/use-job-review";
 import { useEntryEdit } from "@/lib/use-entry-edit";
+import { useLocationEdit } from "@/lib/use-location-edit";
 import { cn } from "@/lib/utils";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
@@ -70,7 +87,7 @@ const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-mute
  * a scene's `title`), never the wire address. An address like `npcs/fenn` is
  * how the entry is addressed, not how it is known at the table.
  */
-function entryName(entry: EntryResponse): string {
+function displayName(entry: EntryResponse): string {
   return propString(entry.properties.name) ?? propString(entry.properties.title) ?? entry.path;
 }
 
@@ -95,44 +112,167 @@ function decidedSet(
 /** The two review surfaces — blocks (default) and the raw text diff. */
 type ReviewMode = "blocks" | "markdown";
 
+/** A proposal as the review shows it, whatever the kind. */
+interface ProposalView {
+  /** Only the fields the proposal adds or changes. */
+  fields: AugmentPropertyProposal[];
+  /** The text as the run read it — the BEFORE side of the diff. */
+  currentBody: string;
+  /** The model's proposed text, complete. */
+  proposedBody: string;
+  warnings: string[];
+  namingHints?: NamingHint[] | undefined;
+}
+
+/** One accept: the fields taken, and the text assembled from the accepted blocks. */
+interface AugmentApply {
+  fields?: Record<string, unknown>;
+  body?: string;
+}
+
+/** What the review needs from the kind's accepting write. */
+interface ApplySession {
+  save: (apply: AugmentApply) => void;
+  isSaving: boolean;
+  message?: string | undefined;
+  conflict?: object | undefined;
+  reload: () => void;
+  forceSave?: (() => void) | undefined;
+}
+
+// --- the triggers -------------------------------------------------------------------
+
+/** The augment action of an npc or a scene. Renders nothing for any other entry. */
 export function AugmentAction({ campaign, entry }: { campaign: string; entry: EntryResponse }) {
-  const t = useT();
-  // Open-BY-ENTRY, like the properties dialog: the reading route stays
-  // mounted across a navigation, and a dialog holding entry A while `entry`
-  // already points at B would send A's decisions to B.
-  const entryKey = `${campaign}/${entry.path}`;
-  const [openEntry, setOpenEntry] = useState<string>();
-  useEffect(() => {
-    setOpenEntry(undefined);
-  }, [entryKey]);
   if (!isAugmentKind(entry.kind)) return null;
+  return (
+    <AugmentTrigger openKey={`${campaign}/${entry.path}`}>
+      {(onClose) => (
+        <AugmentDialog
+          campaign={campaign}
+          name={displayName(entry)}
+          isMine={(job) => job.kind === "augment" && job.target === entry.path}
+          start={(input) => startAugmentJob(campaign, { path: entry.path, ...input })}
+          review={(job) =>
+            job.augmentResult === undefined ? undefined : (
+              <EntryAugmentReview
+                campaign={campaign}
+                entry={entry}
+                job={job}
+                path={job.augmentResult.path}
+                proposal={{
+                  fields: job.augmentResult.properties,
+                  currentBody: job.augmentResult.currentBody,
+                  proposedBody: job.augmentResult.proposedBody,
+                  warnings: job.augmentResult.warnings,
+                  namingHints: job.augmentResult.namingHints,
+                }}
+                onDone={onClose}
+              />
+            )
+          }
+          onClose={onClose}
+        />
+      )}
+    </AugmentTrigger>
+  );
+}
+
+/** The augment action of a location — its run starts on the location's own resource. */
+export function LocationAugmentAction({
+  campaign,
+  location,
+}: {
+  campaign: string;
+  location: Location;
+}) {
+  return (
+    <AugmentTrigger openKey={`${campaign}/location/${location.id}`}>
+      {(onClose) => (
+        <AugmentDialog
+          campaign={campaign}
+          name={location.name}
+          isMine={(job) => job.kind === "location-augment" && job.location === location.id}
+          start={(input) => startLocationAugmentJob(campaign, location.id, input)}
+          review={(job) => {
+            const result = job.locationAugmentResult;
+            if (result === undefined) return undefined;
+            return (
+              <LocationAugmentReview
+                campaign={campaign}
+                location={location}
+                job={job}
+                proposal={{
+                  fields: locationFieldProposals(result.current, result.proposed),
+                  currentBody: result.current.body,
+                  proposedBody: result.proposed.body,
+                  warnings: result.warnings,
+                  namingHints: result.namingHints,
+                }}
+                onDone={onClose}
+              />
+            );
+          }}
+          onClose={onClose}
+        />
+      )}
+    </AugmentTrigger>
+  );
+}
+
+/**
+ * The trigger and its open state. Open-BY-ROW, like the properties dialog: the
+ * reading route stays mounted across a navigation, and a dialog holding row A
+ * while the route already shows B would send A's decisions to B.
+ */
+function AugmentTrigger({
+  openKey,
+  children,
+}: {
+  openKey: string;
+  children: (onClose: () => void) => ReactNode;
+}) {
+  const t = useT();
+  const [openFor, setOpenFor] = useState<string>();
+  useEffect(() => {
+    setOpenFor(undefined);
+  }, [openKey]);
   return (
     <>
       <HeaderAction
         icon={Sparkles}
         label={t("augment.action")}
-        onClick={() => setOpenEntry(entryKey)}
+        onClick={() => setOpenFor(openKey)}
         className="hidden md:inline-flex"
       />
-      {openEntry === entryKey && (
-        <AugmentDialog
-          key={entryKey}
-          campaign={campaign}
-          entry={entry}
-          onClose={() => setOpenEntry(undefined)}
-        />
-      )}
+      {openFor === openKey && <Keyed key={openKey}>{children(() => setOpenFor(undefined))}</Keyed>}
     </>
   );
 }
 
+/** A plain wrapper, so the dialog below the trigger can be keyed by its row. */
+function Keyed({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}
+
+// --- the dialog -------------------------------------------------------------------
+
 function AugmentDialog({
   campaign,
-  entry,
+  name,
+  isMine,
+  start: startRun,
+  review,
   onClose,
 }: {
   campaign: string;
-  entry: EntryResponse;
+  /** What the dialog calls the row — its name, never its address. */
+  name: string;
+  /** Is this job the augment run of THIS row? */
+  isMine: (job: GenerateJob) => boolean;
+  start: (input: { sourceText: string; instruction: string }) => Promise<GenerateJobStarted>;
+  /** The review of a finished run of this row, or undefined while there is no proposal. */
+  review: (job: GenerateJob) => ReactNode | undefined;
   onClose: () => void;
 }) {
   const t = useT();
@@ -156,21 +296,22 @@ function AugmentDialog({
   const [message, setMessage] = useState<string>();
 
   // The job belongs to this dialog only when it is an augment run for THIS
-  // entry. Anything else (a scene run someone started on the generator page)
+  // row. Anything else (a scene run someone started on the generator page)
   // is reported as busy rather than silently adopted — one job per campaign
   // is the server's rule and the DM has to know whose job is in the way.
   const current = job.data;
-  const mine = current?.kind === "augment" && current.target === entry.path;
+  const mine = current !== undefined && current !== null && isMine(current);
   // ANY foreign job blocks, not just a running one: a finished generator run
   // whose review nobody has looked at yet would be DELETED by the next start
   // (one job per campaign, and a start replaces a finished row). The DM has
   // to go and deal with it there — so the two cases get their own sentence.
   const foreign = current !== undefined && current !== null && !mine;
   const foreignRunning = foreign && current.status === "running";
-  const proposal = mine ? current?.augmentResult : undefined;
+  const reviewNode = mine && current !== undefined && current !== null ? review(current) : undefined;
+  const hasProposal = reviewNode !== undefined;
 
   const start = useMutation({
-    mutationFn: () => startAugmentJob(campaign, { path: entry.path, sourceText, instruction }),
+    mutationFn: () => startRun({ sourceText, instruction }),
     onMutate: () => {
       setMessage(undefined);
       // From here on this run's job is EXPECTED — see `awaitingJob` above.
@@ -228,9 +369,7 @@ function AugmentDialog({
   // proposal wins over everything (a done job is a review, whatever a
   // pending request says), and the spinner needs either an expected job or a
   // running one — never a mutation's `isPending`.
-  const running =
-    proposal === undefined && (starting || (mine && current?.status === "running"));
-  const name = entryName(entry);
+  const running = !hasProposal && (starting || (mine && current?.status === "running"));
 
   return (
     <Dialog
@@ -242,10 +381,10 @@ function AugmentDialog({
       <DialogContent className="flex max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[820px] flex-col">
         <DialogTitle>{t("augment.title")}</DialogTitle>
         {/* One lead per phase (never the input hint during a run or a
-            review), and it names the ENTRY, not its address. */}
+            review), and it names the row, not its address. */}
         <DialogDescription>
           {t(
-            proposal !== undefined
+            hasProposal
               ? "augment.description.review"
               : running
                 ? "augment.description.running"
@@ -256,7 +395,7 @@ function AugmentDialog({
         {/* ONE live region for the whole dialog: the phases swap their
             subtrees, and a region that unmounts announces nothing. */}
         <p aria-live="polite" className="sr-only">
-          {proposal !== undefined
+          {hasProposal
             ? t("augment.announce.ready")
             : running
               ? t("augment.announce.running")
@@ -264,15 +403,8 @@ function AugmentDialog({
         </p>
 
         <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-y-auto pr-0.5">
-          {proposal !== undefined ? (
-            <AugmentReview
-              campaign={campaign}
-              entry={entry}
-              jobId={current?.id}
-              job={current}
-              proposal={proposal}
-              onDone={onClose}
-            />
+          {hasProposal ? (
+            reviewNode
           ) : running ? (
             <p className="py-10 text-center text-[13.5px] text-muted-foreground">
               {t("augment.running")}
@@ -326,9 +458,9 @@ function AugmentDialog({
             stop: the only honest controls there are discarding the run and
             the close cross.
             The review brings its own footer. */}
-        {proposal === undefined && (
+        {!hasProposal && (
           <div className="flex items-center justify-end gap-2">
-            {mine && current !== null && current !== undefined && (
+            {mine && (
               <Button
                 type="button"
                 variant="outline"
@@ -365,26 +497,138 @@ function AugmentDialog({
   );
 }
 
-// --- the review ---------------------------------------------------------------
+// --- the review, per kind ------------------------------------------------------------
 
-function AugmentReview({
+/** The queries an accepted proposal makes stale: the tree, ⌘K and the job itself. */
+function staleAfterApply(campaign: string) {
+  return [["tree", campaign], ["search", campaign], generateJobKey(campaign)];
+}
+
+/**
+ * The review of an npc or scene proposal. The accept is an ordinary editing
+ * session over the entry — same held version, same conflict answer as every
+ * other editing surface — but it does NOT go through the entry write: the
+ * accept endpoint discards the job in the same transaction, which is the
+ * whole reason it exists. So the session is handed that request instead, and
+ * the force action is not offered, because that endpoint has no force.
+ */
+function EntryAugmentReview({
   campaign,
   entry,
-  jobId,
   job,
+  path,
   proposal,
   onDone,
 }: {
   campaign: string;
   entry: EntryResponse;
-  jobId: string | undefined;
-  /** The job the proposal came from — it carries the DM's decisions. */
-  job: GenerateJob | null | undefined;
-  proposal: AugmentResult;
+  job: GenerateJob;
+  path: string;
+  proposal: ProposalView;
   onDone: () => void;
 }) {
-  const t = useT();
-  const queryClient = useQueryClient();
+  const state = useAugmentReviewState(campaign, job, proposal);
+  const apply = useEntryEdit(campaign, entry.path, entry.rev, {
+    writeEntry: (request) =>
+      applyAugment(campaign, {
+        path,
+        rev: request.rev,
+        ...(request.properties === undefined ? {} : { properties: request.properties }),
+        ...(request.body === undefined ? {} : { body: request.body }),
+        jobId: job.id,
+      }),
+    canForce: false,
+    invalidateOnSuccess: staleAfterApply(campaign),
+    onSaved: onDone,
+    onReload: (stored) => state.recut(stored.body),
+  });
+  return (
+    <AugmentReview
+      campaign={campaign}
+      proposal={proposal}
+      state={state}
+      session={{
+        ...apply,
+        save: (change) =>
+          apply.save({
+            ...(change.fields === undefined ? {} : { properties: change.fields }),
+            ...(change.body === undefined ? {} : { body: change.body }),
+          }),
+      }}
+      onDone={onDone}
+    />
+  );
+}
+
+/**
+ * The review of a location proposal — the same review over the location's
+ * own editing session, handed the accept endpoint of the location's resource
+ * (it discards the job in the same transaction and has no force).
+ */
+function LocationAugmentReview({
+  campaign,
+  location,
+  job,
+  proposal,
+  onDone,
+}: {
+  campaign: string;
+  location: Location;
+  job: GenerateJob;
+  proposal: ProposalView;
+  onDone: () => void;
+}) {
+  const state = useAugmentReviewState(campaign, job, proposal);
+  const apply = useLocationEdit(campaign, location, {
+    write: ({ force: _force, id: _id, ...request }) =>
+      applyLocationAugment(campaign, location.id, { ...request, jobId: job.id }),
+    canForce: false,
+    invalidateOnSuccess: [...staleAfterApply(campaign), ["locations", campaign]],
+    onSaved: onDone,
+    onReload: (stored) => state.recut(stored.body),
+  });
+  return (
+    <AugmentReview
+      campaign={campaign}
+      proposal={proposal}
+      state={state}
+      session={{
+        ...apply,
+        save: (change) =>
+          apply.save(
+            locationChangeSchema.parse({
+              ...change.fields,
+              ...(change.body === undefined ? {} : { body: change.body }),
+            }),
+          ),
+      }}
+      onDone={onDone}
+    />
+  );
+}
+
+// --- the review -----------------------------------------------------------------------
+
+/** The review's state: the decisions on the job and the text the proposal is cut against. */
+interface AugmentReviewState {
+  review: JobReviewSync;
+  /** The text the proposal is diffed AGAINST. */
+  currentBody: string;
+  changes: BlockChange[];
+  acceptedBlocks: Set<string>;
+  acceptedFields: Set<string>;
+  /**
+   * Continue from what is stored: the other writer's text is the truth now,
+   * so the proposal is re-cut against it and the defaults are re-derived.
+   */
+  recut: (storedBody: string) => void;
+}
+
+function useAugmentReviewState(
+  campaign: string,
+  job: GenerateJob,
+  proposal: ProposalView,
+): AugmentReviewState {
   // The per-field and per-block decisions are SERVER state: a closed dialog,
   // a reload or a second tab all come back to the same review. Only the
   // DEFAULTS are computed here — a key the job does not carry has not been
@@ -393,22 +637,59 @@ function AugmentReview({
   const review = useJobReview(campaign, job);
   const stored = reviewOf(job);
   // The text the proposal is diffed AGAINST. It starts as the one the run saw
-  // and moves only when the DM continues from what is stored (`onReload`).
+  // and moves only when the DM continues from what is stored (`recut`).
   const [currentBody, setCurrentBody] = useState(proposal.currentBody);
   const changes = useMemo(
     () => alignBlocks(currentBody, proposal.proposedBody),
     [currentBody, proposal.proposedBody],
   );
-  // Re-derived after a conflict (see `onConflict`): the blocks are cut
-  // against a body that moved, so their ids did too.
+  // Re-derived after a conflict (see `recut`): the blocks are cut against a
+  // body that moved, so their ids did too.
   const [blockDefaults, setBlockDefaults] = useState<Set<string>>(() => defaultAccepted(changes));
-  const acceptedBlocks = decidedSet(blockDefaults, stored.blocks);
-  // Properties default (AK2): take what is new, keep what is filled.
+  // Fields default: take what is new, keep what is filled.
   const fieldDefaults = useMemo(
-    () => new Set(proposal.properties.filter((p) => p.state === "new").map((p) => p.key)),
-    [proposal.properties],
+    () => new Set(proposal.fields.filter((p) => p.state === "new").map((p) => p.key)),
+    [proposal.fields],
   );
-  const acceptedFields = decidedSet(fieldDefaults, stored.fields);
+  return {
+    review,
+    currentBody,
+    changes,
+    acceptedBlocks: decidedSet(blockDefaults, stored.blocks),
+    acceptedFields: decidedSet(fieldDefaults, stored.fields),
+    recut: (storedBody) => {
+      // Keeping decisions that were cut against the stale text would overwrite
+      // that writer on the next attempt, silently. The stored decisions are
+      // keyed by BLOCK ID, and the ids come out of the alignment — re-cutting
+      // renames them. A decision left behind under an old id would either
+      // apply to whatever block inherits that id or sit on the job forever, so
+      // they are cleared FIRST and the defaults are re-derived after.
+      const stale = Object.keys(stored.blocks);
+      if (stale.length > 0) {
+        review.decide({ blocks: Object.fromEntries(stale.map((id) => [id, null])) });
+      }
+      setCurrentBody(storedBody);
+      setBlockDefaults(defaultAccepted(alignBlocks(storedBody, proposal.proposedBody)));
+    },
+  };
+}
+
+function AugmentReview({
+  campaign,
+  proposal,
+  state,
+  session: apply,
+  onDone,
+}: {
+  campaign: string;
+  proposal: ProposalView;
+  state: AugmentReviewState;
+  session: ApplySession;
+  onDone: () => void;
+}) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const { review, currentBody, changes, acceptedBlocks, acceptedFields } = state;
   const [mode, setMode] = useState<ReviewMode>("blocks");
   const [showUnchanged, setShowUnchanged] = useState(false);
   const [rejectMessage, setRejectMessage] = useState<string>();
@@ -424,55 +705,12 @@ function AugmentReview({
   const visible = changes.filter((change) => showUnchanged || change.kind !== "same");
   const body = assembleBody(changes, acceptedBlocks);
   const patch = Object.fromEntries(
-    proposal.properties
+    proposal.fields
       .filter((p) => acceptedFields.has(p.key))
       .map((p) => [p.key, p.proposed] as const),
   );
   const bodyChanged = body !== currentBody;
   const canApply = bodyChanged || Object.keys(patch).length > 0;
-
-  // The accept is an ordinary editing session over the entry — same held
-  // version, same conflict answer as every other editing surface — but it does
-  // NOT go through the entry write: the accept endpoint discards the job in the
-  // same transaction, which is the whole reason it exists. So the session is
-  // handed that request instead, and the force action is not offered, because
-  // that endpoint has no force.
-  const apply = useEntryEdit(campaign, entry.path, entry.rev, {
-    writeEntry: (request) =>
-      applyAugment(campaign, {
-        path: proposal.path,
-        rev: request.rev,
-        ...(request.properties === undefined ? {} : { properties: request.properties }),
-        ...(request.body === undefined ? {} : { body: request.body }),
-        ...(jobId === undefined ? {} : { jobId }),
-      }),
-    canForce: false,
-    // The command palette must not keep the text the proposal replaced.
-    invalidateOnSuccess: [
-      ["tree", campaign],
-      ["search", campaign],
-      generateJobKey(campaign),
-    ],
-    onSaved: onDone,
-    onReload: (storedEntry) => {
-      // Continue from what is stored: the other writer's text is the truth
-      // now, so the proposal is re-cut against it and the defaults are
-      // re-derived — keeping decisions that were cut against the stale text
-      // would overwrite that writer on the next attempt, silently.
-      //
-      // The stored decisions are keyed by BLOCK ID, and the ids come out of
-      // the alignment — re-cutting renames them. A decision left behind under
-      // an old id would either apply to whatever block inherits that id or sit
-      // on the job forever, so they are cleared FIRST and the defaults are
-      // re-derived after.
-      const stale = Object.keys(stored.blocks);
-      if (stale.length > 0) {
-        review.decide({ blocks: Object.fromEntries(stale.map((id) => [id, null])) });
-      }
-      setCurrentBody(storedEntry.body);
-      setBlockDefaults(defaultAccepted(alignBlocks(storedEntry.body, proposal.proposedBody)));
-    },
-  });
 
   const reject = useMutation({
     mutationFn: () => deleteGenerateJob(campaign),
@@ -523,13 +761,13 @@ function AugmentReview({
         </section>
       )}
 
-      {/* --- properties, per field ------------------------------------- */}
+      {/* --- fields, per field ------------------------------------------ */}
       <h3 className={cn(OVERLINE, "mb-2")}>{t("augment.properties.heading")}</h3>
-      {proposal.properties.length === 0 ? (
+      {proposal.fields.length === 0 ? (
         <p className="mb-4 text-[13px] text-muted-foreground">{t("augment.properties.none")}</p>
       ) : (
         <ul className="mb-5 flex flex-col gap-2">
-          {proposal.properties.map((field) => (
+          {proposal.fields.map((field) => (
             <PropertyRow
               key={field.key}
               field={field}
@@ -628,7 +866,7 @@ function AugmentReview({
           disabled={!canApply || apply.isSaving}
           onClick={() =>
             apply.save({
-              ...(Object.keys(patch).length === 0 ? {} : { properties: patch }),
+              ...(Object.keys(patch).length === 0 ? {} : { fields: patch }),
               ...(bodyChanged ? { body } : {}),
             })
           }
@@ -641,7 +879,7 @@ function AugmentReview({
   );
 }
 
-/** The stored value beside the proposed one, for one properties field. */
+/** The stored value beside the proposed one, for one field. */
 function PropertyRow({
   field,
   accepted,

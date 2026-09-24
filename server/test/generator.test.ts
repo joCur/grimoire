@@ -25,7 +25,13 @@
 // below call it directly.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { EntryResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
+import type {
+  EntryResponse,
+  GenerateJob,
+  GenerateResult,
+  GenerateUsage,
+  Location,
+} from "@grimoire/shared";
 import { app } from "../src/server";
 import { eq } from "drizzle-orm";
 import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
@@ -58,6 +64,18 @@ import { entriesUrl } from "./support/urls";
 async function exists(rel: string): Promise<boolean> {
   const res = await app.request(entriesUrl("beispiel", rel));
   return res.status === 200;
+}
+
+/** GET of a location — its own resource (ADR #31); undefined when there is none. */
+async function readLocation(id: string): Promise<Location | undefined> {
+  const res = await app.request(`/api/campaigns/beispiel/locations/${id}`);
+  return res.status === 200 ? ((await res.json()) as Location) : undefined;
+}
+
+/** A proposed location as the apply body carries it: the location without its guard. */
+function locationItem(over: { status?: string } = {}): Record<string, unknown> {
+  const stub = locationStub(over);
+  return { ...stub.properties, body: stub.body };
 }
 
 /** GET /entry of an applied draft. */
@@ -713,11 +731,12 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       expect(entry).toHaveLength(2);
       const correction = entry[1]!.corrections[0]!.correction;
       expect(correction).toContain(`location "${LOCATION_STUB_ID}"`);
-      // The FIELD LIST catches it before the status rule
-      // does: a location has no `status` field at all, so the message names
-      // the fields it does have — which is more to go on, not less.
-      expect(correction).toContain("ist kein Feld dieser Entität");
-      expect(correction).toContain("roll20-page");
+      // The location's reply schema catches it: a location has no `status`
+      // field at all, so the message names the key and the fields it does
+      // have — which is more to go on, not less.
+      expect(correction).toContain('"status"');
+      expect(correction).toContain("erlaubt sind");
+      expect(correction).toContain("roll20Page");
     }
   });
 
@@ -742,9 +761,16 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       "treffen-am-kai",
     ]);
     const result = (await res.json()) as GenerateResult;
-    expect(result.stubs.map((s) => `${s.kind}:${s.id}`)).toEqual([
-      "npc:grella",
-      "location:raeucherkammer",
+    // An npc is a stub, a location is a proposed location of its own list.
+    expect(result.stubs.map((s) => `${s.kind}:${s.id}`)).toEqual(["npc:grella"]);
+    expect(result.locations).toEqual([
+      {
+        id: "raeucherkammer",
+        name: "Die alte Räucherkammer",
+        chapter: "01-salzhafen",
+        atmosphere: "Im Quelltext nur erwähnt — Details fehlen.",
+        body: "## Wer ist hier\n\n- niemand\n",
+      },
     ]);
   });
 
@@ -1214,7 +1240,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(res.status).toBe(200);
     // The review addressed the draft as `<chapter>/<id>`; it is WRITTEN
     // under its location.
-    expect(await res.json()).toEqual({ written: [SCENE_ADDRESS, "npcs/grella"] });
+    expect(await res.json()).toEqual({ written: [SCENE_ADDRESS, "npcs/grella"], locations: [] });
 
     // the drafts are entities now — every field the review showed survived
     // the insert, `status: draft` included (that is what the app filters on)
@@ -1362,33 +1388,35 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
         { kind: "npc", id: "brix", ...npcStub({ ...brix, status: null }) },
         '"status" fehlt',
       ],
-      // a location stub must not carry a status key at all
-      [
-        { kind: "location", id: "raeucherkammer", ...locationStub({ status: "alive" }) },
-        "locations haben keinen status",
-      ],
     ];
     for (const [stub, expected] of cases) {
       const res = await postJson("/api/campaigns/beispiel/generate/apply", { stubs: [stub] });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain(expected);
     }
+    // A location is no stub at all…
+    const asStub = await postJson("/api/campaigns/beispiel/generate/apply", {
+      stubs: [{ kind: "location", id: "raeucherkammer", ...locationStub() }],
+    });
+    expect(asStub.status).toBe(400);
+    // …and a proposed location carries no status: its schema has no such field.
+    const withStatus = await postJson("/api/campaigns/beispiel/generate/apply", {
+      locations: [locationItem({ status: "alive" })],
+    });
+    expect(withStatus.status).toBe(400);
+    expect(((await withStatus.json()) as { error: string }).error).toContain("status");
     expect(await exists("npcs/brix")).toBe(false);
-    expect(await exists("locations/raeucherkammer")).toBe(false);
+    expect(await readLocation("raeucherkammer")).toBeUndefined();
 
     // the prompt-conform forms write fine
     const ok = await postJson("/api/campaigns/beispiel/generate/apply", {
-      stubs: [
-        { kind: "npc", id: "brix", ...npcStub({ ...brix, status: "missing" }) },
-        { kind: "location", id: "raeucherkammer", ...locationStub() },
-      ],
+      stubs: [{ kind: "npc", id: "brix", ...npcStub({ ...brix, status: "missing" }) }],
+      locations: [locationItem()],
     });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({
-      written: ["npcs/brix", "locations/raeucherkammer"],
-    });
-    // The location's prose property came through the accept as a property.
-    expect((await read("locations/raeucherkammer")).properties.atmosphere).toBe(
+    expect(await ok.json()).toEqual({ written: ["npcs/brix"], locations: ["raeucherkammer"] });
+    // The location's atmosphere came through the accept as its own field.
+    expect((await readLocation("raeucherkammer"))?.atmosphere).toBe(
       "Im Quelltext nur erwähnt — Details fehlen.",
     );
   });
@@ -1484,6 +1512,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     // the chapter entry comes first — the drafts live inside it
     expect(await res.json()).toEqual({
       written: [chapterRel, `${chapter}/leuchtturm/erste-szene`],
+      locations: [],
     });
 
     // the chapter row carries the title the app sent, and the `planned`
@@ -1503,7 +1532,10 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
       chapterTitle: "Ein anderer Titel",
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: [`${chapter}/leuchtturm/zweite-szene`] });
+    expect(await res.json()).toEqual({
+      written: [`${chapter}/leuchtturm/zweite-szene`],
+      locations: [],
+    });
     const again = await read(chapterRel);
     expect(again.properties.title).toBe(written.properties.title);
     expect(again.rev).toBe(written.rev); // not even a rev bump
@@ -1833,7 +1865,7 @@ describe("generate jobs", () => {
       jobId: job!.id,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: [withLocation(scenePath)] });
+    expect(await res.json()).toEqual({ written: [withLocation(scenePath)], locations: [] });
     expect(await exists(scenePath)).toBe(true);
     // the drafts are on disk — there is nothing left to restore
     expect(await fetchJob()).toBeNull();
@@ -2017,6 +2049,7 @@ describe("generate jobs", () => {
         result: JSON.stringify({
           scenes: [{ path: legacyScene, ...sceneWithId("legacy-scene") }],
           stubs: [],
+          locations: [],
           warnings: [],
         }),
         npcResult: JSON.stringify({
@@ -2041,7 +2074,7 @@ describe("generate jobs", () => {
       jobId: job.id,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: ["npcs/legacy-npc"] });
+    expect(await res.json()).toEqual({ written: ["npcs/legacy-npc"], locations: [] });
     expect(await exists("npcs/legacy-npc")).toBe(true);
   });
 
@@ -2067,6 +2100,7 @@ describe("generate jobs", () => {
         result: JSON.stringify({
           scenes: [{ path: legacy, ...draft }],
           stubs: [],
+          locations: [],
           warnings: [],
         }),
         draftEdits: JSON.stringify({ [legacy]: { body: draft.body } }),

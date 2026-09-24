@@ -12,6 +12,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
    `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
    normativ.
 2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
+   Ein ADR hält nur Zielentscheidungen fest: keine befristeten ADRs, keine
+   Zwischenstände. Der Zwischenstand eines in Scheiben geschnittenen Umbaus
+   steht allein im Ticket.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
 ## Stack (Kurzfassung, Details in docs/DECISIONS.md #5)
@@ -28,9 +31,12 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Projektstruktur
 
-- `fixtures/` — die Beispielkampagne als JSON-Einträge
-  (`fixtures/beispiel/*.json`), ein Eintrag je Datei in der Form der API
-  (`properties` + `body`; Sessions, Ideen und Glossar strukturiert). Sie ist
+- `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
+  ein Objekt je Datei in der Form der API: ein Ort unter
+  `fixtures/beispiel/locations/<id>.json` als das Objekt, das seine
+  Ressource liefert, ohne `rev`; Kampagne, Kapitel, Szene und NPC
+  `properties` + `body`;
+  Sessions, Ideen und Glossar strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
@@ -39,8 +45,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `shared/` — Entitäts-Typen (`@grimoire/shared`), von Server und App
   gemeinsam genutzt. Autorität über das Format sind
   `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
-  (Adressen), beschrieben in README.md — die drei synchron halten;
-  `shared/src/parse.ts` ist der Entwurfs-Parser des Generators.
+  (Adressen), beschrieben in README.md — die drei synchron halten. Eine
+  Entität mit eigener Ressource hat ihr zod-Schema in
+  `shared/src/<entität>.ts` (ADR #31).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
   Abhaken. `server/src/server.ts` setzt nur die App zusammen. Datenzugriff
@@ -81,9 +88,12 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
 - Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>`,
-  `<kapitel>/<szenen-id>`, `locations/<id>`, `campaign`); das Schema steht in
+  `<kapitel>/<szenen-id>`, `campaign`); das Schema steht in
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
-  Eintrags `properties`, sein Markdown `body`.
+  Eintrags `properties`, sein Markdown `body`. Der Ort ist seine eigene
+  Ressource (ADR #31): `…/locations/<id>` antwortet mit `Location`, alle
+  Felder nebeneinander, ohne `kind` und `path`; die App-Route ist
+  `/campaigns/:id/locations/<id>`.
 - Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
   **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
   ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
@@ -105,16 +115,44 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
 - Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
   kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
-  Übergangscode nur per eigenem ADR und befristet (ADR #28).
-- Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
-  `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
-  zusammengebaut zu werden.
+  Übergangscode gibt es nicht: Ein Umbau wird so geschnitten, dass weder
+  Adapter noch Doppelwege entstehen.
+- Eine Ressource je Entität (ADR #31): Jede Entität der Datenbank hat ihren
+  eigenen Endpunkt, ihren eigenen Typ, ihr eigenes zod-Modul als einzige
+  Quelle und ihre eigene App-Route; einen allgemeinen Endpunkt über mehrere
+  Entitäten gibt es nicht. Jedes Feld ist ein Feld der Entität, `body`
+  eingeschlossen — keine Sammelbegriffe wie „Eigenschaften“ gegenüber „Text“,
+  kein „Eintrag“ oder „Entwurf“ als gemeinsame Form. Wo wirklich gemischt
+  wird (Suche), nennt der Treffer seine Entität ausdrücklich (`kind`).
+- Daten sind Zeilen ihrer Tabelle in der Datenbank, keine Dateien und keine
+  Dokumente — in Prompts, Schema-Namen und -Beschreibungen, Bezeichnern,
+  Kommentaren, Doku und Katalog. Prompts sagen nur, was das Modell tun soll:
+  keine Verbote, keine „nicht mehr“-Hinweise, keine Geschichte.
+- Fixes beschränken sich auf die Ursache: kein zusätzlicher Schutz, keine
+  Tests und keine Betriebsdoku über den Auftrag hinaus. Kommentare
+  beschreiben den Zustand, nie die Geschichte eines Fehlers oder das Setup
+  des PO.
+- Abhängigkeiten statt Eigenbau (ADR #30): Für allgemeine Aufgaben
+  (Validierung, Schemata, Datum und Zeit, …) wird ein etabliertes Paket
+  eingebunden, nicht selbst gebaut. Eintragspflichtig in docs/DECISIONS.md
+  bleiben allein Bun-only-APIs (Node-Portabilität).
+- Ein Schema hat genau eine Quelle; eine abgeleitete Form wird nie von Hand
+  nachgebaut. Das Schema einer Entität ist ihr zod-Schema, und Typ,
+  Patch-, Seed- und Generator-Form werden daraus abgeleitet (ADR #31).
+  Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
+  das Objekt selbst, eine Entität als das Objekt, das ihre Ressource
+  liefert).
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
   `app/src/lib/` bekommen den Translator als Argument. Details: ADR #15.
   `bun run lint` ist das Gate — scharf für migrierte Dateien, `warn` für den
   Rest (Scheibe 2 von #69 arbeitet die Warnungen ab).
+- UI-Texte sind ganze Sätze, die der DM versteht: Ändert sich das Verhalten
+  hinter einem Text, wird der de/en-Satz neu formuliert, nie ein Satzteil
+  ausgetauscht. Keine rohen Leitungswerte (`status: unknown`) im Satz,
+  sondern das UI-Label. Der Lead prüft die Formulierung auf Logik, bevor der
+  PR zum PO geht.
 
 ## Backlog-Prozess
 
@@ -123,7 +161,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Refinement findet IM Issue statt: Rückfragen als Kommentare stellen;
   danach den Issue-Body zum Ticket ausbauen — User Story („Als DM will
   ich … damit …"), Akzeptanzkriterien (nachprüfbar), Scope/Nicht-Ziele,
-  Abhängigkeiten. Erst nach PO-Ok im Thread: Label `idee` → `ready`.
+  Abhängigkeiten. Erst nach PO-Ok im Thread: Label `idee` → `ready`. Ein
+  Ok des PO im Gespräch mit dem Lead gilt genauso; der Lead hält es im
+  Thread fest, bevor er `ready` setzt.
 - Das Team nimmt nur `ready`-Tickets. Übernahme = Label „in Arbeit" +
   Kommentar mit Zuschnitt; fertig = Schließen mit Commit-Verweis.
 - Zu Beginn jeder Arbeitssitzung: offene `idee`-Issues sichten, bevor
@@ -140,6 +180,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Jedes Ticket: eigener Worktree + Feature-Branch (`<nr>-<slug>`),
   Ergebnis als PR. Merge-Voraussetzungen: CI grün (Tests, Typecheck,
   Build, E2E), Lead-Klickpfad, UND PO-Approval auf dem PR.
+- Der Lead implementiert nicht, auch keine Kleinigkeiten. Umgesetzt wird von
+  Engineer-Agents auf Opus (`model: "opus"`, eigener Worktree); Fable nur für
+  den Lead und, auf ausdrücklichen Wunsch des PO, für einen Designer.
+- Der Lead-Klickpfad läuft auf dem FINALEN PR-Stand nach dem letzten Commit,
+  auch nach Review-Fix-Runden. Ungetestet geht kein PR zum PO.
 - main ist per Definition deploybar, veröffentlicht aber nichts: Images
   entstehen nur beim Release (DECISIONS #12). Der PO pullt bewusst einen
   Versions-Tag (nie direkt vor einer Session); Rollback = älterer
@@ -179,9 +224,10 @@ Die Pfade:
    409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei
 2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
    NPC-Karten der Referenzszenen
-3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Eintrags-Arten und die
-   Glossar-Begriffe. Ein Glossar-Treffer nennt seine Zeile mit `kind` + `id`
-   ohne Adresse und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
+3. ⌘K-Suche findet und öffnet: indexiert sind Kampagne, Kapitel, Szenen,
+   NPCs, Orte und die Glossar-Begriffe. Ein Orts-Treffer nennt sich mit `kind` + `id` ohne
+   Adresse und öffnet `/campaigns/:id/locations/<id>`, ein Glossar-Treffer
+   ebenso und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
    nicht indexiert
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →

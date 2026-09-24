@@ -18,13 +18,16 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   die die API spricht (`{ kind, properties, body }`, dazu `log` als **Zeilen**
   `{ at, sceneId?, text, reviewed? }` für eine Session, `entries` für
   Eingang und Glossar und `threads` als Zeilen `{ text, done? }` für die
-  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Ein Test, der Inhalte
+  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Ein Ort
+  ist eine eigene Ressource (ADR #31) und liegt als `locations/<id>.json`:
+  der Ort selbst, alle Felder flach, `body` eines davon, ohne `kind` und ohne
+  `rev`. Ein Test, der Inhalte
   braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } }, without: ["session-2026-01-15"] } })`.
   Die Schlüssel sind **Dateinamen ohne `.json`**: ein Name, den
   `fixtures/beispiel` schon hat, ERSETZT diesen Eintrag, jeder andere legt
-  einen dazu. Die Adresse vergibt der Server
+  einen dazu; ein Ort hat den Namen `locations/<id>`. Die Adresse vergibt der Server
   (`server/src/store/paths.ts`) — sie ist etwas anderes als der Fixture-Name
   (`campaign`, `01-salzhafen`, `01-salzhafen/leuchtturm/…`). Ohne Überschreibung
   wird die geteilte pristine Kopie direkt benutzt (niemand schreibt hinein),
@@ -90,9 +93,10 @@ Zeile. Für die Suite heißt das vier Dinge:
   nennen verschiedene Orte, also lauten die Adressen
   `01-salzhafen/leuchtturm/lighthouse-arrival` und
   `01-salzhafen/bucht/smuggler-captured`; der Fixture-Name spielt dabei keine
-  Rolle. Beide Orte haben einen eigenen Eintrag
-  (`locations/leuchtturm`, `locations/bucht`) — eine Referenz legt nichts an
-  (ADR #19) —, die Kampagne hat also **zwei** Orte.
+  Rolle. Beide Orte gibt es als eigene Ressource
+  (`…/locations/leuchtturm`, `…/locations/bucht`; `api.location(id)`) — eine
+  Referenz legt nichts an (ADR #19) —, die Kampagne hat also **zwei** Orte.
+  Ein Ort hat keine Eintrags-Adresse: `…/entries/locations/<id>` ist ein 404.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -173,6 +177,11 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   `api.patchProperties` sind die zwei bequemen Fälle davon und geben das neue
   Token zurück.
 
+  Ein **Ort** ist eine eigene Ressource (ADR #31) und hat eigene Helfer:
+  `api.location(id)` (der Ort: alle Felder flach, `body`, `rev`),
+  `api.locationExists(id)` und der Schreibweg `api.patchLocation(id,
+  { rev?, force?, …Felder })` — ohne `rev` wieder der „zweite Schreiber".
+
   Für die **Listen** gibt es eigene Helfer, weil sie keine Adresse haben
   (ADR #26): `api.activeSession(includeEnded?)` und `api.sessionId(…)` (die
   laufende bzw. zuletzt gestartete — `undefined`, wenn nichts läuft; der
@@ -198,13 +207,16 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 ## Stub-Fixtures anpassen
 
 `fixtures/replies.ts` enthält die Modellantworten als **Objekte**, genau so,
-wie das erzwungene Schema sie beschreibt: ein Eintrags-Aufruf antwortet
-`{ properties, body, warnings }`, die Gliederung ihr eigenes Format. Ein
+wie das erzwungene Schema sie beschreibt: ein Szenen- oder NPC-Aufruf
+antwortet `{ properties, body, warnings }`, ein Orts-Aufruf mit allen Feldern
+des Orts (`body` eines davon) neben `warnings`, die Gliederung ihr eigenes
+Format. Ein
 String, der kein Objekt ist, reist unverändert — das ist eine Antwort, die ein
 Test absichtlich unlesbar geschrieben hat. Der Stub serialisiert das Objekt als
 JSON in den Message-Content.
 
-Abgedeckt sind: der Szenen-Entwurf mit NPC- und Ort-Stub, der NPC-Eintrag
+Abgedeckt sind: der Szenen-Entwurf mit NPC-Stub und vorgeschlagenem Ort,
+das Ergänzen eines Orts, der NPC-Eintrag
 und je eine bewusst ungültige Variante. Sie erfüllen die aktuelle
 mechanische Validierung aus `server/src/generator.ts`.
 
@@ -227,6 +239,10 @@ mitwandert. Die Specs behaupten die dort definierten Titel und ids.
 Welche Antwort kommt, entscheidet ausschließlich der Prompt — der Stub hält
 keinen Zustand und kann mehrere Worker parallel bedienen:
 
+- ein Abschnitt „## Bestehender Ort" im Prompt → **Ergänzungs-Lauf eines
+  Orts**. Der Ort steht dort als JSON-Block mit allen seinen Feldern — genau
+  das Objekt, in das die Antwort gezwungen wird. Die Antwort spiegelt jedes
+  Feld zurück und hängt genau einen neuen `## If:`-Abschnitt an `body`.
 - ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
   (der Ergänzen-Lauf). Der Eintrag steht dort als JSON-Block
   (`{ properties, body }`, Prompt-Formatierung aus

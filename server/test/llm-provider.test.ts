@@ -35,6 +35,7 @@ import {
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
 import { entryReplySchema, entrySchemaName } from "@grimoire/shared/entry-schema";
+import { locationReplyRequest } from "../src/location-reply";
 
 // --- factory ------------------------------------------------------------------
 
@@ -141,15 +142,23 @@ const OUTLINE_REQ: GenerateRequest = {
   },
 };
 
-/** Every entry request a run can make — kind x mode. */
+/** Every entry request a run can make — kind x mode, a location's included. */
 const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
-  ...(["scene", "npc", "location"] as const).flatMap((kind) =>
+  ...(["scene", "npc"] as const).flatMap((kind) =>
     (["create", "augment"] as const).map((mode) => ({
       label: `${kind}/${mode}`,
       name: entrySchemaName(kind, mode),
       req: { ...REQ, jsonSchema: entryReplySchema(kind, mode) } as GenerateRequest,
     })),
   ),
+  ...(["create", "augment"] as const).map((mode) => {
+    const reply = locationReplyRequest(mode);
+    return {
+      label: `location/${mode}`,
+      name: reply.name,
+      req: { ...REQ, jsonSchema: reply } as GenerateRequest,
+    };
+  }),
 ];
 
 // --- prompt assembly ------------------------------------------------------------

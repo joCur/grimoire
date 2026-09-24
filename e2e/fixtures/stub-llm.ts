@@ -23,6 +23,7 @@
 // the stub stays stateless and can serve several test workers at once:
 //
 //   - a "## Bestehender Eintrag" section in the prompt        -> augment run
+//   - a "## Bestehender Ort" section in the prompt            -> location augment run
 //     (the reply echoes that entry and adds to it)
 //   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
 //     (the reply's scene path uses exactly that chapter)
@@ -79,6 +80,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import {
   EXISTING_ENTRY_HEADING,
+  EXISTING_LOCATION_HEADING,
   FAILING_SCENE_ID,
   LATE_REPLY_MS,
   NEW_CHAPTER_LINE,
@@ -86,6 +88,10 @@ import {
   THREE_SCENES,
   TRIGGER,
   augmentReply,
+  invalidLocationAugmentReply,
+  locationAugmentReply,
+  unknownRefLocationAugmentReply,
+  type ExistingLocation,
   entryPartReply,
   invalidAugmentReply,
   invalidNpcReply,
@@ -204,6 +210,25 @@ function existingEntry(prompt: string): { path: string; entry: ExistingEntry } |
   };
 }
 
+/**
+ * The location a LOCATION augment run works on, out of the fenced JSON below
+ * the „Bestehender Ort" heading — every field of the location, the very
+ * object the reply is forced into (ADR #31). Null for every other prompt.
+ */
+function existingLocation(prompt: string): ExistingLocation | null {
+  const start = prompt.indexOf(EXISTING_LOCATION_HEADING);
+  if (start === -1) return null;
+  const fence = /```json\n([\s\S]*?)```/.exec(prompt.slice(start));
+  if (fence === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(fence[1]!);
+    if (!isRecord(parsed) || typeof parsed.id !== "string") return null;
+    return parsed as unknown as ExistingLocation;
+  } catch {
+    return null;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -253,6 +278,22 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // first call of a run is the one without it.
   const unknownRef =
     source.includes(TRIGGER.unknownRef) && !messages.some((m) => m.role === "assistant");
+
+  // A location augment run carries the location it works on (ADR #31).
+  const location = existingLocation(prompt);
+  if (location !== null) {
+    return {
+      kind: "augment",
+      truncated,
+      delayMs,
+      pauseMs: latePart,
+      reply: invalid
+        ? invalidLocationAugmentReply(location)
+        : unknownRef
+          ? unknownRefLocationAugmentReply(location)
+          : locationAugmentReply(location, knowledge),
+    };
+  }
 
   // An augment run is the one prompt that carries an EXISTING entry. It is
   // checked FIRST — a scene augment also carries a `chapter:` line, and that

@@ -1,26 +1,21 @@
 // An entry, read and written through its address.
 //
-// Five kinds have one — campaign, chapter, scene, npc, location — and they
+// Four kinds are reached this way — campaign, chapter, scene, npc — and they
 // share exactly one read (`readEntry`) and exactly one write (`patchEntry`,
 // ADR #23): fields, text, or both, in ONE transaction against ONE `rev`. The
-// property contract per kind is its own module (./properties.ts), because
-// the seed reads it too. Lists have no address and no case in either switch
-// (ADR #26).
+// property contract per kind is its own module (./properties.ts), because the
+// seed reads it too.
+//
+// A location is its own resource (ADR #31, ./locations.ts): an address that
+// names one answers 404 here. Lists have no address and no case in either
+// switch (ADR #26).
 
 import { and, eq } from "drizzle-orm";
 import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import {
-  campaigns,
-  chapters,
-  generateJobs,
-  locations,
-  npcs,
-  packJson,
-  scenes,
-} from "../db/schema";
+import { campaigns, chapters, generateJobs, npcs, packJson, scenes } from "../db/schema";
 import {
   campaignRow,
   indexCampaign,
@@ -44,10 +39,8 @@ import {
   assertNpcRefs,
   chapterRowOf,
   indexChapter,
-  indexLocation,
   indexNpc,
   indexScene,
-  locationRowOf,
   npcRowOf,
   refNpcs,
   refTags,
@@ -55,13 +48,11 @@ import {
 } from "./entity-rows";
 import { getDb } from "./handle";
 import { NPC_DEFAULT_STATUS, readNpcEntry } from "./npcs";
-import { readLocationEntry } from "./locations";
 import { locatorFromPath, type Locator } from "./paths";
 import {
   applyPatch,
   CAMPAIGN_KEYS,
   CHAPTER_KEYS,
-  LOCATION_KEYS,
   NPC_KEYS,
   rejectIdPatch,
   rejectUnknownKeys,
@@ -70,12 +61,10 @@ import {
 import {
   renderCampaign,
   renderChapter,
-  renderLocation,
   renderNpc,
   renderScene,
   type CampaignRow,
   type ChapterRow,
-  type LocationRow,
   type NpcRow,
   type SceneRow,
 } from "./render";
@@ -87,6 +76,7 @@ import {
   assertChapterStatus,
   assertNpcStatus,
   assertSceneClosedFields,
+  normalizeBody,
   revConflict,
 } from "./shared";
 
@@ -97,9 +87,10 @@ import {
  * the domain module that owns the kind. Each of them answers the same 404
  * when the campaign has no row with that id.
  *
- * Only the five ENTRY kinds reach here. A session, the inbox and the glossary
- * have no address (ADR #26), so `locatorFromPath` already answered 404 for
- * them and this switch has no case to spend on a list.
+ * A session, the inbox and the glossary have no address (ADR #26), so
+ * `locatorFromPath` already answered 404 for them and this switch has no case
+ * to spend on a list. A location is its own resource (ADR #31), so an
+ * address that names one is a 404 too.
  */
 export function readByLocator(
   db: GrimoireDb,
@@ -116,8 +107,6 @@ export function readByLocator(
       return readSceneEntry(db, campaign, locator.id);
     case "npc":
       return readNpcEntry(db, campaign, locator.id);
-    case "location":
-      return readLocationEntry(db, campaign, locator.id);
   }
 }
 
@@ -145,7 +134,9 @@ function guardEntryRev(
   what: string,
 ): void {
   if (current === sent) return;
-  throw revConflict(current, what, readByLocator(tx, requireCampaignRow(tx, campaign), locator));
+  throw revConflict(current, what, {
+    entry: readByLocator(tx, requireCampaignRow(tx, campaign), locator),
+  });
 }
 
 // --- PATCH /api/campaigns/:campaign/entries/<address> -------------------------
@@ -171,6 +162,9 @@ function guardEntryRev(
  * `jobId` discards the generator job the write came from, in the SAME
  * transaction (drafts and job can never disagree after a crash). A stale id
  * matches nothing and is ignored.
+ *
+ * An address that names a location is a 404: a location is written through
+ * its own resource (ADR #31).
  */
 export async function patchEntry(
   campaign: string,
@@ -209,17 +203,6 @@ export async function patchEntry(
     }
     return written;
   });
-}
-
-/**
- * A non-empty body gets its closing newline. The text is handed to a
- * markdown editor and to the generator's prompt, and a body without its
- * final newline made the next appended section run into the last line.
- * EXISTING trailing newlines are left alone, so a read/write roundtrip
- * changes nothing; an empty body stays empty.
- */
-function normalizeBody(markdown: string): string {
-  return markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
 }
 
 /**
@@ -414,38 +397,6 @@ function patchLocator(
       indexNpc(tx, campaign, next);
       return renderNpc(next);
     }
-    case "location": {
-      const row = locationRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
-      rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, LOCATION_KEYS);
-      const props = applyPatch(renderLocation(row).properties, patch);
-      const locationChapter = asOptStr(props.chapter);
-      assertChapterRef(tx, campaign, locationChapter);
-      const next: LocationRow = {
-        ...row,
-        name: asStr(props.name, row.id),
-        chapterId: locationChapter,
-        roll20Page: asOptStr(props["roll20-page"]),
-        atmosphere: asOptStr(props.atmosphere),
-        body: body ?? row.body,
-        rev: row.rev + 1,
-      };
-      tx.update(locations)
-        .set({
-          name: next.name,
-          chapterId: next.chapterId,
-          roll20Page: next.roll20Page,
-          atmosphere: next.atmosphere,
-          body: next.body,
-          rev: next.rev,
-        })
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
-        .run();
-      indexLocation(tx, campaign, next);
-      return renderLocation(next);
-    }
   }
 }
 
@@ -514,19 +465,5 @@ function writeBodyIn(
       indexNpc(tx, campaign, next);
       return renderNpc(next);
     }
-    case "location": {
-      const row = locationRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
-      const next: LocationRow = { ...row, body, rev: row.rev + 1 };
-      tx.update(locations)
-        .set({ body: next.body, rev: next.rev })
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
-        .run();
-      indexLocation(tx, campaign, next);
-      return renderLocation(next);
-    }
-    default:
-      throw new ApiError(404, "entry not found");
   }
 }

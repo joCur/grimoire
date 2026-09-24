@@ -574,9 +574,10 @@ test("location and chapter offer the editor; the list addresses are gone", async
   page,
   api,
 }) => {
-  // The kinds whose prose the DM maintains offer the body editor …
-  for (const rel of ["locations/leuchtturm", "01-salzhafen"]) {
-    await page.goto(`/campaigns/beispiel/entries/${rel}`);
+  // The kinds whose prose the DM maintains offer the body editor — a
+  // location on its own route (ADR #31) …
+  for (const url of ["/campaigns/beispiel/locations/leuchtturm", "/campaigns/beispiel/entries/01-salzhafen"]) {
+    await page.goto(url);
     await openMarkdownEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
     // Clean exit — no dialog, nothing written.
@@ -588,7 +589,10 @@ test("location and chapter offer the editor; the list addresses are gone", async
   // no entry to hide an edit action on, and no `body` left to refuse: the
   // address itself answers 404 like any other the schema does not describe.
   // No redirect and no alias — this is the ONE place the suite asserts it.
-  for (const rel of ["sessions/2026-01-15", "inbox", "glossary"]) {
+  //
+  // A location has no entry address either: it is its own resource
+  // (`…/locations/:id`), and `…/entries/locations/<id>` names nothing.
+  for (const rel of ["sessions/2026-01-15", "inbox", "glossary", "locations/leuchtturm"]) {
     const address = rel.split("/").map(encodeURIComponent).join("/");
     for (const method of ["GET", "PATCH"] as const) {
       const res = await api.fetch(`campaigns/beispiel/entries/${address}`, {
@@ -713,11 +717,10 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
   page,
   api,
 }) => {
-  const LOCATION = "locations/leuchtturm";
-  const before = await split(api, LOCATION);
+  const before = await api.location("leuchtturm");
   const mine = "Kaltes Lampenöl, und der Wind pfeift durch die Wendeltreppe.";
 
-  await page.goto(`/campaigns/beispiel/entries/${LOCATION}`);
+  await page.goto("/campaigns/beispiel/locations/leuchtturm");
   // Not in the dialog: it is edited where the prose is edited.
   await page.getByRole("button", { name: "Eigenschaften" }).click();
   const dialog = page.getByRole("dialog");
@@ -728,12 +731,15 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
 
   await openMarkdownEditor(page);
   const field = page.getByRole("textbox", { name: "Atmosphäre", exact: true });
-  await expect(field).toHaveValue(String(before.properties.atmosphere));
+  await expect(field).toHaveValue(String(before.atmosphere));
   await field.fill(mine);
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(field).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
-  expect((await split(api, LOCATION)).properties.atmosphere).toBe(mine);
+  const after = await api.location("leuchtturm");
+  expect(after.atmosphere).toBe(mine);
+  // The text was not touched, so it was not sent.
+  expect(after.body).toBe(before.body);
 
   // …and the npc's dialog leaves the motivation out the same way.
   await page.goto(`/campaigns/beispiel/entries/${NPC}`);

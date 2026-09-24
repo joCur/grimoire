@@ -6,16 +6,16 @@
 // third module keeps that import graph a tree — the same split db/job-boot.ts
 // exists for.
 
-import type { DraftEdit } from "@grimoire/shared";
+import type { DraftEdit, LocationProposal } from "@grimoire/shared";
 import { ApiError } from "./api-error";
 import {
   draftSceneId,
   getJob,
   markWrittenInTx,
-  openPartPaths,
   outlineSceneNumbers,
 } from "./generate-jobs";
 import {
+  applyLocationItem,
   applyNpcTarget,
   applySceneTarget,
   applyStubTarget,
@@ -24,7 +24,7 @@ import {
   storedDraftProperties,
   type ApplyTarget,
 } from "./generator";
-import { locationPath, npcPath } from "./store/paths";
+import { npcPath } from "./store/paths";
 import { requireCampaign } from "./store/campaigns";
 import { sceneRunPos, takeSceneRunStart, type SceneRunStart } from "./store/chapters";
 import { applyDrafts, type ScenePlacement } from "./store/drafts";
@@ -37,26 +37,21 @@ import { applyDrafts, type ScenePlacement } from "./store/drafts";
  * the same write with a selection in front of it and different job
  * bookkeeping behind it:
  *
- *   selection   scene draft paths and suggested-entry addresses
- *               (`npcs/grella`). Absent is „Alle übernehmen": every scene
- *               that is neither written nor dropped, plus the suggested
- *               entries the DM ACCEPTED — an undecided entry is not written
- *               by a bulk action, exactly as before, and a
- *               rejected one never is. Naming a path explicitly is the one
- *               way an undecided entry gets written („Diesen übernehmen"
- *               on its row is the decision).
- *               A SCENE CARRIES THE ENTRIES IT NAMES. A scene cannot be
- *               written while its `npcs`/`location` name nothing (ADR #19),
- *               so a selected scene pulls in the run's own suggested entries
- *               for those ids — every one that is not REJECTED, accepted or
- *               still undecided. A stub is the minimal entry the scene
- *               needs, so accepting the scene is the decision that it
- *               exists; what the DM threw away stays thrown away, and the
- *               write is then refused and names it. This carrying is an
- *               INTERIM step — it keeps a run from failing on its own
- *               references; the intended review walks the parts in
- *               reference order (locations, then npcs, then scenes), so
- *               nothing is written before its targets exist.
+ *   selection   scene draft paths and npc stub addresses (`npcs/grella`)
+ *               under `paths`, proposed locations by id under `locations`.
+ *               Both absent is "accept all": every scene that is neither
+ *               written nor dropped, plus the npcs and locations the DM
+ *               ACCEPTED — an undecided one is not written by a bulk action,
+ *               and a rejected one never is. Naming one explicitly is the
+ *               one way an undecided npc or location gets written (the
+ *               accept action on its row is the decision).
+ *               A SCENE CARRIES WHAT IT NAMES. A scene cannot be written
+ *               while its `npcs`/`location` name nothing (ADR #19), so a
+ *               selected scene pulls in the run's own npcs and locations for
+ *               those ids — every one that is not REJECTED, accepted or
+ *               still undecided. Accepting the scene is the decision that
+ *               they exist; what the DM threw away stays thrown away, and
+ *               the write is then refused and names it.
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
@@ -92,8 +87,8 @@ export async function acceptJobParts(
   campaign: string,
   jobId: string,
   rev: number,
-  body: { paths?: unknown; chapter?: unknown; chapterTitle?: unknown },
-): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
+  body: { paths?: unknown; locations?: unknown; chapter?: unknown; chapterTitle?: unknown },
+): Promise<{ written: Record<string, string>; locations: string[]; jobDeleted: boolean }> {
   await requireCampaign(campaign);
   const job = await getJob(campaign);
   if (job === undefined || job.id !== jobId) {
@@ -127,7 +122,7 @@ export async function acceptJobParts(
     });
   });
   job.result?.stubs.forEach((stub, index) => {
-    const rel = stub.kind === "npc" ? npcPath(stub.id) : locationPath(stub.id);
+    const rel = npcPath(stub.id);
     const decision = review.entries[rel];
     const open =
       review.written[rel] === undefined && decision !== "rejected" && !dropped.has(rel);
@@ -147,24 +142,43 @@ export async function acceptJobParts(
       bulk: open,
     });
   }
+  /** Every proposed location of this run, by its id. */
+  const locationParts = new Map<
+    string,
+    { location: LocationProposal; open: boolean; bulk: boolean }
+  >();
+  job.result?.locations.forEach((proposal, index) => {
+    const decision = review.locations[proposal.id];
+    const open = !review.writtenLocations.includes(proposal.id) && decision !== "rejected";
+    locationParts.set(proposal.id, {
+      location: applyLocationItem(proposal, index),
+      open,
+      bulk: open && decision === "accepted",
+    });
+  });
 
   /**
-   * The run's own entries a scene REFERENCES and the DM has not rejected —
-   * see the selection rule above. Read off the draft's properties, so an
-   * edit of the scene in the review counts.
+   * The run's own npcs and locations a scene REFERENCES and the DM has not
+   * rejected — see the selection rule above. Read off the draft's
+   * properties, so an edit of the scene in the review counts.
    */
   const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
-  const referencedPartsOf = (rel: string): string[] => {
+  const referencedOf = (rel: string): { paths: string[]; locations: string[] } => {
     const part = parts.get(rel);
-    if (part === undefined || !scenePaths.has(rel)) return [];
+    if (part === undefined || !scenePaths.has(rel)) return { paths: [], locations: [] };
     const { properties } = part.target;
     const npcIds = Array.isArray(properties.npcs) ? properties.npcs : [];
     const location = properties.location;
-    const candidates = [
-      ...npcIds.filter((id): id is string => typeof id === "string").map(npcPath),
-      ...(typeof location === "string" && location !== "" ? [locationPath(location)] : []),
-    ];
-    return candidates.filter((candidate) => parts.get(candidate)?.open === true);
+    return {
+      paths: npcIds
+        .filter((id): id is string => typeof id === "string")
+        .map(npcPath)
+        .filter((candidate) => parts.get(candidate)?.open === true),
+      locations:
+        typeof location === "string" && locationParts.get(location)?.open === true
+          ? [location]
+          : [],
+    };
   };
 
   /**
@@ -172,23 +186,34 @@ export async function acceptJobParts(
    * `parts` below.
    */
   const chosen = new Set<string>();
-  if (body.paths === undefined) {
+  const chosenLocations = new Set<string>();
+  const bulk = body.paths === undefined && body.locations === undefined;
+  if (bulk) {
     for (const [rel, part] of parts) if (part.bulk) chosen.add(rel);
+    for (const [id, part] of locationParts) if (part.bulk) chosenLocations.add(id);
   } else {
-    if (!Array.isArray(body.paths)) throw new ApiError(400, "paths must be an array of strings");
-    for (const rel of body.paths) {
-      if (typeof rel !== "string") throw new ApiError(400, "paths must be an array of strings");
+    // An unknown path or id is a client bug worth seeing; an already WRITTEN
+    // one is not an error but has nothing left to do (a double click, a
+    // second tab) and is simply skipped.
+    for (const rel of stringList(body.paths, "paths")) {
       const part = parts.get(rel);
-      // An unknown path is a client bug worth seeing; an already WRITTEN one
-      // is not an error but has nothing left to do (a double click, a second
-      // tab) and is simply skipped.
       if (part === undefined) throw new ApiError(400, `unknown draft path: ${rel}`);
       if (part.open) chosen.add(rel);
     }
+    for (const id of stringList(body.locations, "locations")) {
+      const part = locationParts.get(id);
+      if (part === undefined) throw new ApiError(400, `unknown location: ${id}`);
+      if (part.open) chosenLocations.add(id);
+    }
   }
   for (const rel of [...chosen]) {
-    for (const referenced of referencedPartsOf(rel)) chosen.add(referenced);
+    const referenced = referencedOf(rel);
+    for (const path of referenced.paths) chosen.add(path);
+    for (const id of referenced.locations) chosenLocations.add(id);
   }
+  const locations = [...locationParts]
+    .filter(([id]) => chosenLocations.has(id))
+    .map(([, part]) => part.location);
   /**
    * The selection in the order of `parts`, which is the run's OUTLINE order —
    * the dramaturgical sequence the outline step decided. A scene draft of a
@@ -210,8 +235,8 @@ export async function acceptJobParts(
   // state, so it gets the honest empty answer.
   // Only a BULK accept with nothing open left stays a 400 — there the caller
   // named nothing and there was nothing, which is a client bug.
-  if (selected.length === 0) {
-    if (body.paths !== undefined) return { written: {}, jobDeleted: false };
+  if (selected.length === 0 && locations.length === 0) {
+    if (!bulk) return { written: {}, locations: [], jobDeleted: false };
     throw new ApiError(400, "nothing to apply");
   }
 
@@ -262,8 +287,10 @@ export async function acceptJobParts(
     return sceneRunPos(tx, campaign, chapter, sceneStart, number);
   };
 
+  const writtenLocations = locations.map((location) => location.id);
   let jobDeleted = false;
   await applyDrafts(campaign, drafts, {
+    locations,
     placeScene,
     onWritten: (tx) => {
       jobDeleted = markWrittenInTx(
@@ -271,11 +298,20 @@ export async function acceptJobParts(
         campaign,
         jobId,
         rev,
-        written,
+        { paths: written, locations: writtenLocations },
         tookStart ? sceneStart : undefined,
       );
     },
   });
-  return { written, jobDeleted };
+  return { written, locations: writtenLocations, jobDeleted };
+}
+
+/** A request list of strings, or none; anything else is a 400 naming it. */
+function stringList(value: unknown, what: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new ApiError(400, `${what} must be an array of strings`);
+  }
+  return value as string[];
 }
 

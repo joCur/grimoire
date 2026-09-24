@@ -30,23 +30,31 @@ import { ENTITY_REF_KINDS, type EntityRefKind } from "@grimoire/shared/refs";
 
 import { fetchTree } from "@/api";
 import { useT, type MessageKey } from "@/i18n";
+import { openTargetHref, type OpenTarget } from "@/lib/open-target";
 
 import { RefPreview, useCanHover, type RefPreviewTrigger } from "./ref-preview";
 
-/** What a slug resolves to: the CURRENT display name plus where it lives. */
-export interface ResolvedEntityRef {
-  kind: EntityRefKind;
-  slug: string;
-  name: string;
-  /** Campaign-relative entry path — the tree's own, never re-derived. */
-  path: string;
+/**
+ * What a slug resolves to: the CURRENT display name plus where it lives — an
+ * npc or a scene by its address (the tree's own, never re-derived), a
+ * location as its own resource by its id (ADR #31).
+ */
+export type ResolvedEntityRef =
+  | { kind: "npc" | "scene"; slug: string; name: string; path: string }
+  | { kind: "location"; slug: string; name: string };
+
+/** What a resolved reference opens. */
+export function refTarget(target: ResolvedEntityRef): OpenTarget {
+  return target.kind === "location"
+    ? { kind: "location", id: target.slug }
+    : { kind: "entry", path: target.path };
 }
 
 interface EntityRefContextValue {
   campaign: string;
   resolve: (slug: string) => ResolvedEntityRef | undefined;
   /** Live view only: open the entity in the drawer instead of navigating. */
-  onOpen?: (path: string) => void;
+  onOpen?: (target: OpenTarget) => void;
 }
 
 const NO_REFS: EntityRefContextValue = { campaign: "", resolve: () => undefined };
@@ -66,19 +74,23 @@ export function entityRefIndex(
   const index = new Map<string, ResolvedEntityRef>();
   if (tree === undefined) return index;
 
-  const put = (kind: EntityRefKind, slug: string, name: string, path: string): void => {
-    if (index.has(slug)) return; // an earlier (higher-priority) kind won
-    index.set(slug, { kind, slug, name: name === "" ? slug : name, path });
+  const put = (ref: ResolvedEntityRef): void => {
+    if (index.has(ref.slug)) return; // an earlier (higher-priority) kind won
+    index.set(ref.slug, { ...ref, name: ref.name === "" ? ref.slug : ref.name });
   };
 
   for (const kind of ENTITY_REF_KINDS) {
     if (kind === "npc") {
-      for (const npc of tree.npcs) put("npc", npc.id, npc.name, npc.path);
+      for (const npc of tree.npcs) put({ kind: "npc", slug: npc.id, name: npc.name, path: npc.path });
     } else if (kind === "location") {
-      for (const location of tree.locations) put("location", location.id, location.name, location.path);
+      for (const location of tree.locations) {
+        put({ kind: "location", slug: location.id, name: location.name });
+      }
     } else {
       for (const chapter of tree.chapters) {
-        for (const scene of chapter.scenes) put("scene", scene.id, scene.title, scene.path);
+        for (const scene of chapter.scenes) {
+          put({ kind: "scene", slug: scene.id, name: scene.title, path: scene.path });
+        }
       }
     }
   }
@@ -97,7 +109,7 @@ export function EntityRefScope({
 }: {
   campaign: string;
   index: Map<string, ResolvedEntityRef>;
-  onOpen?: (path: string) => void;
+  onOpen?: (target: OpenTarget) => void;
   children: ReactNode;
 }) {
   const value = useMemo<EntityRefContextValue>(
@@ -140,7 +152,7 @@ export function EntityRefDrawerTarget({
   onOpen,
   children,
 }: {
-  onOpen: (path: string) => void;
+  onOpen: (target: OpenTarget) => void;
   children: ReactNode;
 }) {
   const outer = useContext(EntityRefContext);
@@ -199,7 +211,7 @@ export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNod
     onOpen !== undefined ? (
       <button
         type="button"
-        onClick={() => onOpen(target.path)}
+        onClick={() => onOpen(refTarget(target))}
         aria-label={label}
         className={REF_CLASS}
         {...trigger}
@@ -209,7 +221,7 @@ export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNod
       </button>
     ) : (
       <Link
-        to={`/campaigns/${campaign}/entries/${target.path}`}
+        to={openTargetHref(campaign, refTarget(target))}
         aria-label={label}
         className={REF_CLASS}
         {...trigger}

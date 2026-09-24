@@ -13,6 +13,19 @@
 // CHECK constraints of their columns and the API answers 400 for anything
 // else. The types stay widened all the same, because a READER still has to
 // render whatever an older database hands it.
+//
+// An entity with its own resource (ADR #31) has its type from its zod schema
+// in its own module — the location in ./location.ts, re-exported here.
+
+import type { LocationProposal } from "./location";
+
+export type {
+  Location,
+  LocationChange,
+  LocationFields,
+  LocationPatch,
+  LocationProposal,
+} from "./location";
 
 /** A scene's lifecycle states. A CHECK constraint holds the column to them. */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
@@ -91,17 +104,6 @@ export interface NpcProperties {
   [key: string]: unknown;
 }
 
-export interface LocationProperties {
-  id: string;
-  name: string;
-  chapter?: string;
-  /** Reference to the Roll20 page — never a map copy. */
-  "roll20-page"?: string;
-  /** What the place feels like — shown on the location card and in the reference preview. */
-  atmosphere?: string;
-  [key: string]: unknown;
-}
-
 /**
  * Properties of a campaign's `campaign` (README, the campaign section). The
  * entry is optional — without it the UI shows the campaign's
@@ -126,18 +128,25 @@ export interface ChapterProperties {
 
 /**
  * The kinds that are ENTRIES: a row with an address, properties and a text
- * (server/src/store/paths.ts). A session, the inbox and the glossary are NOT
- * among them — they are lists with their own endpoints (ADR #26).
+ * (server/src/store/paths.ts). A location is not among them — it is its own
+ * resource with its own type (ADR #31) — and neither are a session, the inbox
+ * and the glossary, which are lists with their own endpoints (ADR #26).
  */
-export type EntryKind = "campaign" | "chapter" | "scene" | "npc" | "location";
+export type EntryKind = "campaign" | "chapter" | "scene" | "npc";
 
 /**
- * Everything the SEARCH INDEX holds: the entry kinds plus the LIST kinds. A
- * hit can be a glossary term, and such a hit names a row of a list — it has
- * no entry address to offer (see SearchResult), so the two sets stay apart.
- * `unknown` is what an address the schema does not describe reads as.
+ * Everything the SEARCH INDEX holds: the entry kinds, the location and the
+ * LIST kinds. A location hit and a glossary hit have no entry address to
+ * offer (see SearchResult) — each names its kind and id. `unknown` is what an
+ * address the schema does not describe reads as.
  */
-export type EntityKind = EntryKind | "session" | "inbox" | "glossary" | "unknown";
+export type EntityKind =
+  | EntryKind
+  | "location"
+  | "session"
+  | "inbox"
+  | "glossary"
+  | "unknown";
 
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
@@ -233,8 +242,11 @@ export interface NpcSummary {
   chapter?: string;
 }
 
+/**
+ * A location in the campaign tree. No address: a location is its own
+ * resource, `…/locations/:id` (ADR #31).
+ */
 export interface LocationSummary {
-  path: string;
   id: string;
   name: string;
   chapter?: string;
@@ -408,7 +420,8 @@ export interface SceneOrderResponse {
  * its kind, its properties, its markdown body and the guard token a PATCH
  * sends back.
  *
- * Only the five ENTRY kinds are answered this way. A session, the inbox and
+ * A location is not answered this way: it has its own resource and type,
+ * `GET …/locations/:id` -> `Location` (ADR #31). A session, the inbox and
  * the glossary have no entry address at all (ADR #26) — they answer
  * `SessionResponse`, `InboxResponse` and `GlossaryResponse` on their own
  * endpoints, and the epoch readings a session needs travel there.
@@ -464,9 +477,11 @@ export interface SearchResult {
   id: string;
   title: string;
   /**
-   * The entry's address — present ONLY for the entry kinds. A glossary,
-   * inbox or session hit names a row of a LIST (ADR #26), and a list row has
-   * no address: such a hit is opened through its list, by `kind` and `id`.
+   * The entry's address — present only for the kinds reached through
+   * `…/entries/<address>`. A location hit carries none: it is opened by
+   * `kind` and `id` as its own resource (ADR #31). A glossary, inbox or
+   * session hit names a row of a LIST (ADR #26) and is opened through its
+   * list, by `kind` and `id`, too.
    */
   path?: string;
   /** Fuse.js score: 0 is a perfect match, values grow toward 1. */
@@ -496,12 +511,13 @@ export interface GeneratedSceneDraft {
 }
 
 /**
- * A stub for an npc/location the source text mentions but the campaign does
- * not know yet. The review UI accepts/rejects stubs individually; the target
- * path on apply is derived as `npcs/<id>` / `locations/<id>`.
+ * A stub for an npc the source text mentions but the campaign does not know
+ * yet. The review UI accepts/rejects stubs individually; the target path on
+ * apply is derived as `npcs/<id>`. A proposed location is no stub: it is a
+ * `LocationProposal` in the result's own `locations` list.
  */
 export interface GeneratedStub {
-  kind: "npc" | "location";
+  kind: "npc";
   id: string;
   name: string;
   /** The stub's properties. */
@@ -533,6 +549,11 @@ export interface GenerateUsage {
 export interface GenerateResult {
   scenes: GeneratedSceneDraft[];
   stubs: GeneratedStub[];
+  /**
+   * The locations the run proposes, each a location without its guard —
+   * accepted or rejected one by one, by id (`review.locations`).
+   */
+  locations: LocationProposal[];
   warnings: string[];
   /**
    * The SERVER's own findings, not the model's: drafts that
@@ -581,11 +602,13 @@ export interface GenerateNpcResult {
 // --- augmenting an EXISTING entry -------------------------------------------
 
 /**
- * The entity kinds AI augmentation works on. Deliberately its own list and
- * not `EntityKind`: a chapter, a session or the campaign entry has no augment
- * prompt, and a kind without one must not even reach the pipeline.
+ * The kinds AI augmentation works on through `POST …/generate/augment { path }`.
+ * Deliberately its own list and not `EntityKind`: a chapter, a session or the
+ * campaign entry has no augment prompt, and a kind without one must not even
+ * reach the pipeline. A location is augmented on its own resource instead,
+ * `POST …/locations/:id/augment` (`LocationAugmentResult`).
  */
-export const AUGMENT_KINDS = ["npc", "location", "scene"] as const;
+export const AUGMENT_KINDS = ["npc", "scene"] as const;
 
 export type AugmentKind = (typeof AUGMENT_KINDS)[number];
 
@@ -637,6 +660,32 @@ export interface AugmentResult {
   currentBody: string;
   /** The model's proposed body, complete (not a patch). */
   proposedBody: string;
+  /** The LLM's own review notes for the DM. */
+  warnings: string[];
+  /** The naming check's findings — see GenerateResult.namingHints. */
+  namingHints?: NamingHint[];
+  /** Token spend of the run; absent when the endpoint reports no usage. */
+  usage?: GenerateUsage;
+}
+
+/**
+ * The result of augmenting a LOCATION (`POST …/locations/:id/augment`): the
+ * location as the run read it and as the model proposes it, both without
+ * their guard. Nothing is written — `POST …/locations/:id/augment/apply` is
+ * the only write, and it carries the fields the DM took.
+ *
+ * The review compares the two field by field; `body` is reviewed block by
+ * block, cut in the app with the Block-Composer's own block model.
+ */
+export interface LocationAugmentResult {
+  /** The location the run is about. */
+  id: string;
+  /** The `rev` the run READ. Informational — the write sends the UI's rev. */
+  rev: number;
+  /** The location as the run read it. */
+  current: LocationProposal;
+  /** The location as the model proposes it, complete. */
+  proposed: LocationProposal;
   /** The LLM's own review notes for the DM. */
   warnings: string[];
   /** The naming check's findings — see GenerateResult.namingHints. */
@@ -710,12 +759,12 @@ export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
 
 /**
  * What a generator job produces: scene drafts for a chapter, one
- * NPC draft, or a PROPOSAL for an entry that already exists
- * (`augment`). There is still exactly ONE job per campaign; the
- * kind only tells the client which result field to read and which mode to
- * restore.
+ * NPC draft, a PROPOSAL for an npc or scene that already exists
+ * (`augment`), or one for an existing location (`location-augment`). There
+ * is still exactly ONE job per campaign; the kind only tells the client which
+ * result field to read and which mode to restore.
  */
-export const GENERATE_JOB_KINDS = ["scene", "npc", "augment"] as const;
+export const GENERATE_JOB_KINDS = ["scene", "npc", "augment", "location-augment"] as const;
 export type GenerateJobKind = (typeof GENERATE_JOB_KINDS)[number];
 
 /**
@@ -780,12 +829,19 @@ export interface GenerateJob {
   npcResult?: GenerateNpcResult;
   /** Present iff status is "done" and kind is "augment". */
   augmentResult?: AugmentResult;
+  /** Present iff status is "done" and kind is "location-augment". */
+  locationAugmentResult?: LocationAugmentResult;
   /**
    * Address of the entry an `augment` run targets. Present for
    * that kind from the moment the job STARTS, so the app can show which entry
    * is being worked on while the run is still going.
    */
   target?: string;
+  /**
+   * The id of the location a `location-augment` run works on — present from
+   * the moment the job STARTS, like `target` for the other augment runs.
+   */
+  location?: string;
   /** Present iff status is "failed". */
   error?: GenerateJobError;
   /**
@@ -852,6 +908,13 @@ export interface GenerateJobReview {
    * rejected.
    */
   written: Record<string, string>;
+  /**
+   * Decision per proposed LOCATION, keyed by its id. Absent is open, as in
+   * `entries`.
+   */
+  locations: Record<string, GenerateReviewDecision>;
+  /** The ids of the proposed locations a partial accept already wrote. */
+  writtenLocations: string[];
 }
 
 /** What the DM decided about one suggested entry. */
@@ -966,17 +1029,22 @@ export interface KnowledgeResponse {
  * "Salt" hits "Salt Harbour" and the word "salt"). So it reports WHERE it
  * looked and lets the DM decide; the sentence around it is built by the app
  * from its own catalog, because the server stays language-free.
+ *
+ * WHAT the hit sits in is named by its kind: a scene or npc draft by its
+ * `path`, a proposed or augmented location by its id under `location`.
  */
-export interface NamingHint {
+export type NamingHint = NamingHintAt &
+  ({ path: string; location?: never } | { location: string; path?: never });
+
+/** Where a naming hint sits and what it found — see `NamingHint`. */
+export interface NamingHintAt {
   /** The convention's `from` — the spelling that was found. */
   from: string;
   /** The convention's `to` — what should stand there instead. */
   to: string;
-  /** Campaign-relative path of the draft the hit sits in. */
-  path: string;
   /**
-   * Where inside the draft: `"body"` together with a 1-based `line`, or the
-   * name of the properties key (`"title"`, `"role"`, …) with `line` absent.
+   * Where inside it: `"body"` together with a 1-based `line`, or the name of
+   * the field (`"title"`, `"role"`, …) with `line` absent.
    */
   field: string;
   /** 1-based line number inside the markdown body; absent for a property. */

@@ -1,7 +1,10 @@
 // Rows → the API's entry shapes.
 //
-// Every read endpoint answers an `EntryResponse`: an address, a `properties`
-// mapping, a markdown body, and the concurrency token the client sends back.
+// The campaign, chapters, scenes and npcs are rendered here into an
+// `EntryResponse`: an address, a `properties` mapping, a markdown body, and
+// the concurrency token the client sends back. The location has its own type
+// (ADR #31) and renders itself in its domain module (./locations.ts); its row
+// shape stands below with the others.
 //
 // Three rules hold this together:
 //
@@ -25,7 +28,6 @@
 // rule 3).
 
 import type {
-  EntryKind,
   EntryResponse,
   InboxEntry,
   InboxResponse,
@@ -36,14 +38,7 @@ import type {
 } from "@grimoire/shared";
 import { localDateTimeToMs } from "./time";
 import { unpackJson, unpackStringArray } from "../db/schema";
-import {
-  CAMPAIGN_PATH,
-  chapterPath,
-  locationPath,
-  npcPath,
-  sceneAddress,
-  scenePath,
-} from "./paths";
+import { CAMPAIGN_PATH, chapterPath, npcPath, sceneAddress } from "./paths";
 
 // --- row shapes (the columns the renderer needs) ----------------------------
 
@@ -175,7 +170,7 @@ function compact(entries: Array<[string, unknown]>): Record<string, unknown> {
 
 function parsed(
   path: string,
-  kind: EntryKind,
+  kind: EntryResponse["kind"],
   properties: Record<string, unknown>,
   body: string,
   rev: number,
@@ -279,20 +274,6 @@ export function npcProperties(row: NpcRow): Record<string, unknown> {
  */
 export function renderNpc(row: NpcRow): EntryResponse {
   return parsed(npcPath(row.id), "npc", npcProperties(row), row.body, row.rev);
-}
-
-export function locationProperties(row: LocationRow): Record<string, unknown> {
-  return compact([
-    ["id", row.id],
-    ["name", row.name === "" ? row.id : row.name],
-    ["chapter", row.chapterId],
-    ["roll20-page", row.roll20Page],
-    ["atmosphere", row.atmosphere],
-  ]);
-}
-
-export function renderLocation(row: LocationRow): EntryResponse {
-  return parsed(locationPath(row.id), "location", locationProperties(row), row.body, row.rev);
 }
 
 // --- sessions ---------------------------------------------------------------

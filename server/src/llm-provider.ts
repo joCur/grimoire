@@ -31,7 +31,7 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
-import type { GeneratedEntryKind } from "@grimoire/shared";
+import type { GeneratedEntryKind, LocationProposal } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
 
 import { toReplyProperties } from "./entry-reply";
@@ -98,6 +98,12 @@ export interface GenerateRequest {
     body: string;
   };
   /**
+   * The location a LOCATION augment run works on, every field of it without
+   * its guard — shown as the very object the reply is forced into. Absent
+   * for every other run.
+   */
+  existingLocation?: LocationProposal;
+  /**
    * The DM's free instruction of an augment run („Führe einen Handlungsstrang
    * um den Schmuggler-Spitzel ein"). Either this or `sourceText` is there —
    * the dialog requires at least one of them.
@@ -116,8 +122,8 @@ export interface GenerateRequest {
 export interface ReplySchema {
   /** Tool name (Claude) / `json_schema.name` (OpenAI). */
   name: string;
-  /** What the tool is for; only the Claude path sends it. */
-  description: string;
+  /** What the tool is for, when the schema says; only the Claude path sends it. */
+  description?: string;
   schema: JsonSchema;
 }
 
@@ -245,6 +251,9 @@ export const KNOWLEDGE_HEADING =
  * asserts on it, and the E2E stub reads the prompt by it.
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
+
+/** The same block of a location augment run. */
+export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
 
 /** Heading of the DM's free instruction of an augment run. */
 export const INSTRUCTION_HEADING = "## Anweisung des DM";
@@ -375,6 +384,14 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
           `${EXISTING_ENTRY_HEADING} (${req.existingEntry.path})`,
           "```json",
           formatExistingEntry(req.existingEntry),
+          "```",
+        ]),
+    ...(req.existingLocation === undefined
+      ? []
+      : [
+          `${EXISTING_LOCATION_HEADING} (${req.existingLocation.id})`,
+          "```json",
+          JSON.stringify(req.existingLocation, null, 2),
           "```",
         ]),
     ...(req.instruction === undefined || req.instruction.trim() === ""
@@ -549,7 +566,7 @@ export function claudeBody(
           tools: [
             {
               name: schema.name,
-              description: schema.description,
+              ...(schema.description === undefined ? {} : { description: schema.description }),
               input_schema: schema.schema,
             },
           ],

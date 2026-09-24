@@ -32,10 +32,10 @@
 //      PER SCENE, so a form error costs that scene and nothing else, and a
 //      finished scene is reviewable while its siblings are still running.
 //
-//   3. ENTRIES — one call per new npc/location of the outline, with the
-//      scenes that reference it as context. Deduped by id.
+//   3. NPCS AND LOCATIONS — one call per new npc/location of the outline,
+//      with the scenes that reference it as context. Deduped by id.
 //
-// The augment run and the NPC run stay single-call runs — one entry each,
+// The augment runs and the NPC run stay single-call runs — one row each,
 // nothing to decompose.
 
 import {
@@ -44,6 +44,7 @@ import {
   type GenerateUsage,
   type GeneratedSceneDraft,
   type GeneratedStub,
+  type LocationProposal,
   type NamingHint,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
@@ -71,14 +72,15 @@ import {
   unknownCallouts,
   unknownRefErrors,
   validateEntry,
+  validateLocationProposal,
   validateSceneEntry,
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
 import { parseEntryReply, parseJsonReply } from "./entry-reply";
+import { locationReplyRequest, parseLocationReply } from "./location-reply";
 import type { LLMProvider } from "./llm-provider";
-import { locationPath, npcPath } from "./store/paths";
 
 /** How many scene/entry calls of one run are in flight at once. */
 export const PART_CONCURRENCY = 3;
@@ -231,10 +233,10 @@ export function validateOutlineReply(
       return;
     }
     // An id the campaign ALREADY has is deliberately not an error here: an
-    // entry may exist and hold nothing, so "locations/bucht exists"
-    // routinely means "a scene mentioned it and nobody has written it yet" —
-    // exactly the entry this run should fill. The apply path is what decides
-    // whether a write collides.
+    // npc or location may exist and hold nothing, so "the location `bucht`
+    // exists" routinely means "a scene mentioned it and nobody has written it
+    // yet" — exactly what this run should fill. The apply path is what
+    // decides whether a write collides.
     seen.add(id);
     entries.push({
       kind,
@@ -526,15 +528,22 @@ export function validateSingleSceneReply(input: {
   return { ok: true, result: { scene: draft, warnings: reply.warnings } };
 }
 
+/** What one npc or location part of a run produced. */
+export type EntryPartResult =
+  | { stub: GeneratedStub; location?: undefined; warnings: string[] }
+  | { location: LocationProposal; stub?: undefined; warnings: string[] };
+
 /**
- * One suggested ENTRY, validated as the entry of a scene run.
+ * One npc or location the outline proposes, validated as a part of a scene
+ * run.
  *
- * Deliberately built on `validateEntry` — the very function that judged the
- * `entries` of the batch reply — plus the body rules every generated entry
- * shares (known callouts, `[[id]]` references that resolve) and, for an npc,
- * quoted quickstats. What it does NOT take from the npc RUN are the rules
- * that are about that run rather than about the entry: an npc run forbids a
- * `chapter` key (it has no target chapter) while a scene run's entry
+ * An npc is built on `validateEntry` — the very function that judged the
+ * `entries` of the batch reply — a location on its own reply schema
+ * (`validateLocationProposal`); both then get the body rules every generated
+ * text shares (known callouts, `[[id]]` references that resolve) and, for an
+ * npc, quoted quickstats. What it does NOT take from the npc RUN are the
+ * rules that are about that run rather than about the npc: an npc run forbids
+ * a `chapter` key (it has no target chapter) while a scene run's npc
  * legitimately belongs to the run's chapter, and its pinned-id rule is
  * replaced by the outline's id.
  *
@@ -546,17 +555,29 @@ export function validateEntryReply(
   raw: string,
   entry: OutlineEntry,
   allowed: AllowedRefs,
-): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
-  const read = parseEntryReply(raw, entry.kind);
-  if (!read.ok) {
-    return { ok: false, errors: read.errors.map((e) => `${entry.kind} "${entry.id}": ${e}`) };
-  }
-  const reply = read.reply;
-  const errors: string[] = [];
-  const stub = validateEntry({ kind: entry.kind, reply }, 0, errors);
-  if (stub === null || errors.length > 0) return { ok: false, errors };
+): { ok: true; result: EntryPartResult } | { ok: false; errors: string[] } {
   const label = `${entry.kind} "${entry.id}"`;
-  if (stub.id !== entry.id) {
+  const errors: string[] = [];
+  let result: EntryPartResult;
+  let body: string;
+  if (entry.kind === "location") {
+    const read = parseLocationReply(raw);
+    if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
+    const location = validateLocationProposal(read.reply, errors);
+    if (location === null || errors.length > 0) return { ok: false, errors };
+    result = { location, warnings: read.reply.warnings };
+    body = location.body;
+  } else {
+    const read = parseEntryReply(raw, entry.kind);
+    if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
+    const stub = validateEntry({ kind: entry.kind, reply: read.reply }, 0, errors);
+    if (stub === null || errors.length > 0) return { ok: false, errors };
+    for (const msg of quickstatsErrors(read.reply.properties)) errors.push(`${label}: ${msg}`);
+    result = { stub, warnings: read.reply.warnings };
+    body = stub.body;
+  }
+  const id = result.location?.id ?? result.stub?.id;
+  if (id !== entry.id) {
     return {
       ok: false,
       errors: [
@@ -565,15 +586,12 @@ export function validateEntryReply(
       ],
     };
   }
-  for (const callout of unknownCallouts(reply.body)) {
+  for (const callout of unknownCallouts(body)) {
     errors.push(`${label}: unknown callout "[!${callout}]"`);
   }
-  for (const msg of unknownRefErrors(reply.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
-  if (entry.kind === "npc") {
-    for (const msg of quickstatsErrors(reply.properties)) errors.push(`${label}: ${msg}`);
-  }
+  for (const msg of unknownRefErrors(body, allowed.refIds)) errors.push(`${label}: ${msg}`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { stub, warnings: reply.warnings } };
+  return { ok: true, result };
 }
 
 // --- the run ------------------------------------------------------------------
@@ -582,6 +600,7 @@ export function validateEntryReply(
 export interface PartOutcome {
   scene?: GeneratedSceneDraft;
   stub?: GeneratedStub;
+  location?: LocationProposal;
   warnings: string[];
   namingHints: NamingHint[];
   /** The excerpt could not be matched, so the part got the WHOLE source. */
@@ -874,7 +893,7 @@ export async function runScenePart(
   };
 }
 
-/** Step 3: one suggested entry, with the scenes that reference it as context. */
+/** Step 3: one proposed npc or location, with the scenes that reference it as context. */
 export async function runEntryPart(
   plan: RunPlan,
   entry: OutlineEntry,
@@ -882,11 +901,7 @@ export async function runEntryPart(
   counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const assets = await loadPromptAssets(entry.kind);
-  const result = await runPipeline<{
-    stub: GeneratedStub;
-    warnings: string[];
-    usage?: GenerateUsage;
-  }>({
+  const result = await runPipeline<EntryPartResult & { usage?: GenerateUsage }>({
     req: {
       systemPrompt: assets.systemPrompt,
       fewShotTarget: assets.fewShotTarget,
@@ -901,14 +916,31 @@ export async function runEntryPart(
       // What this ONE call is about: the entry, and the passages of the
       // scenes that mention it — rather than no context of its own at all.
       sourceText: entryContext(plan, entry),
-      jsonSchema: entryReplySchema(entry.kind, "create"),
+      jsonSchema:
+        entry.kind === "location"
+          ? locationReplyRequest("create")
+          : entryReplySchema(entry.kind, "create"),
     },
     provider,
     validate: (raw) => validateEntryReply(raw, entry, plan.allowed),
     correctionTail:
-      entry.kind === "npc" ? "den vollständigen NPC-Eintrag enthalten" : "den vollständigen Ort-Eintrag enthalten",
+      entry.kind === "npc" ? "den vollständigen NPC-Eintrag enthalten" : "den vollständigen Ort enthalten",
     onCall: counter.onCall,
   });
+  if (result.location !== undefined) {
+    const { body, ...fields } = result.location;
+    return {
+      outcome: {
+        location: result.location,
+        warnings: result.warnings,
+        namingHints: checkDraftsNaming(
+          [{ location: result.location.id, fields, body }],
+          plan.ctx.namingRules,
+        ),
+      },
+      usage: usageOf(result.usage, counter.count()),
+    };
+  }
   return {
     outcome: {
       stub: result.stub,
@@ -1081,9 +1113,4 @@ export async function replanStoredRun(input: {
     outline: input.outline,
     sourceText: input.sourceText,
   });
-}
-
-/** `npcs/<id>` / `locations/<id>` — the address a stub part lands at. */
-export function entryAddress(kind: "npc" | "location", id: string): string {
-  return kind === "npc" ? npcPath(id) : locationPath(id);
 }

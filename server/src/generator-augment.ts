@@ -1,5 +1,6 @@
 // AI augmentation: the generator pipeline pointed at an entry
-// that ALREADY EXISTS — an NPC, a location or a scene.
+// that ALREADY EXISTS — an NPC or a scene. A location is augmented on its own
+// resource, by ./location-augment.ts (ADR #31).
 //
 // It is deliberately the SAME pipeline as the two create runs
 // (./generator.ts): same provider factory, same correction turns, same
@@ -90,7 +91,7 @@ export async function readAugmentTarget(
 ): Promise<{ kind: AugmentKind; stored: EntryResponse }> {
   const stored = await readEntry(campaign, rel); // 400 unsafe, 404 unknown
   if (!isAugmentKind(stored.kind)) {
-    throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc, location or scene only`);
+    throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc or scene only`);
   }
   return { kind: stored.kind, stored };
 }
@@ -114,15 +115,18 @@ const FORMAT_HEADING = "## Eigenschaften und Text des Eintrags";
  *
  * Degrades: a prompt without the heading travels whole rather than empty —
  * a missing section must not silently strip the format contract.
+ *
+ * `heading` names the section for a prompt that calls it differently (the
+ * location's, ./location-augment.ts).
  */
-export function formatContract(doc: string): string {
-  const start = doc.indexOf(FORMAT_HEADING);
+export function formatContract(doc: string, heading = FORMAT_HEADING): string {
+  const start = doc.indexOf(heading);
   if (start === -1) return doc;
-  const rest = doc.slice(start + FORMAT_HEADING.length);
+  const rest = doc.slice(start + heading.length);
   const next = rest.indexOf("\n## ");
   const section = next === -1 ? rest : rest.slice(0, next);
   const title = doc.startsWith("# ") ? `${doc.slice(0, doc.indexOf("\n"))}\n\n` : "";
-  return `${title}${FORMAT_HEADING}${section.trimEnd()}\n`;
+  return `${title}${heading}${section.trimEnd()}\n`;
 }
 
 /**
@@ -168,7 +172,6 @@ function kindErrors(
   current: Record<string, unknown>,
   label: string,
   errors: string[],
-  ignored: readonly string[] = [],
 ): void {
   if (kind === "npc") {
     for (const msg of npcStatusErrors(props, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
@@ -179,16 +182,6 @@ function kindErrors(
     // authored and this run does not touch.
     if (!sameValue(current.quickstats, props.quickstats)) {
       for (const msg of quickstatsErrors(props)) errors.push(`${label}: ${msg}`);
-    }
-    return;
-  }
-  if (kind === "location") {
-    // A location has no `status` — the schema has no such field for it, so a
-    // reply that names one had it DROPPED (`reply.ignored`) rather than
-    // normalized. Still an error, and not a silent one: the key is the data
-    // contract being broken, not a DM's own extra key.
-    if (Object.hasOwn(props, "status") || ignored.includes("status")) {
-      errors.push(`${label}: "status" ist nicht erlaubt — locations haben keinen status`);
     }
     return;
   }
@@ -227,7 +220,7 @@ export function validateAugmentReply(
   // the warnings. The augmentation rule holds throughout: a reply carries the
   // WHOLE entry.
   //
-  // A key the schema does NOT have (a `roll20-page` on an npc, app-managed
+  // A key the schema does NOT have (a `roll20Page` on an npc, app-managed
   // bookkeeping, anything a DM hand-wrote) therefore cannot be proposed at
   // all — and it cannot be lost either: the proposal only patches the keys it
   // lists, so every other key keeps its value, which is exactly what
@@ -265,7 +258,7 @@ export function validateAugmentReply(
   }
   const known = new Set([...refIds, ...bodyEntityRefSlugs(stored.body)]);
   for (const msg of unknownRefErrors(reply.body, known)) errors.push(`${label}: ${msg}`);
-  kindErrors(kind, props, stored.properties, label, errors, reply.ignored ?? []);
+  kindErrors(kind, props, stored.properties, label, errors);
   if (errors.length > 0) return { ok: false, errors };
 
   return {
@@ -299,7 +292,7 @@ export function isEmptyValue(value: unknown): boolean {
 }
 
 /** Structural equality over the JSON-shaped values a properties can hold. */
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (isEmptyValue(a) && isEmptyValue(b)) return true;
   if (a === null || b === null) return false;

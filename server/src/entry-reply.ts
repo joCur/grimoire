@@ -26,6 +26,9 @@
 // travels as a JSON string, which the TRANSPORT escapes: quotation marks,
 // newlines and backslashes survive because nobody hand-wrote them.
 //
+// This is the reply of a scene or an npc. A location has its own resource
+// and replies with its own fields, read by ./location-reply.ts (ADR #31).
+//
 // What this module does NOT do is judge content. It reads the object,
 // type-checks its `properties` against the kind's FIELD LIST
 // (@grimoire/shared/property-fields — the very list the properties dialog is
@@ -66,9 +69,9 @@ export interface EntryReply {
    * The property keys the reply carried that the kind does NOT have — empty
    * except in `augment` mode, which drops them instead of failing the run
    * (see `normalizeProperties`). A validator that has a rule about such a key
-   * — a location must never carry a `status` — reads it here; everything else
-   * ignores it, which is the point. Optional, so a reply built in a test or a
-   * fixture does not have to carry an empty list.
+   * reads it here; everything else ignores it, which is the point. Optional,
+   * so a reply built in a test or a fixture does not have to carry an empty
+   * list.
    */
   ignored?: string[];
 }
@@ -262,7 +265,7 @@ function normalizeProperties(
   // ignored the schema, and naming it is the correction turn's job.
   //
   // In an AUGMENT run it is not: the entry EXISTS, so the key may be one the
-  // DM hand-wrote (`roll20-page` on an npc, app bookkeeping) that the model
+  // DM hand-wrote (a `roll20Page` on an npc, app bookkeeping) that the model
   // simply echoed back from the entry it was shown. The schema cannot let it
   // PROPOSE such a key, and dropping it here loses nothing — the proposal
   // patches only the keys it lists, and every other key keeps its value.
@@ -290,7 +293,7 @@ function normalizeProperties(
     const before = errors.length;
     const read = fieldValue(field, raw[field.key], errors);
     const value = read ?? defaults[field.key];
-    // „Verpflichtend" is checked HERE, after the value was normalized: a
+    // "Required" is checked HERE, after the value was normalized: a
     // required field whose value is whitespace only (`name: "   "`) trims to
     // the empty string, and dropping that silently is how an npc ends up
     // named after its id. A field whose SHAPE was already complained about
@@ -311,7 +314,7 @@ function normalizeProperties(
  *
  * The two fields exist because the schema and the validators disagreed
  * otherwise: strict mode has no optional properties, so a field the prompt
- * declares optional („nicht gegeben → null") is NULLABLE — and the
+ * declares optional ("not given → null") is NULLABLE — and the
  * validators, written against the pre-cutover format where the parser filled
  * these in, reject an absent scene `type` / npc `status` outright. The
  * default is the pre-cutover behaviour, restored where the key is composed.

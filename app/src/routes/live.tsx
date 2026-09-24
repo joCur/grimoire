@@ -31,6 +31,7 @@ import { Link, useParams } from "react-router";
 import { appendLog, endSession, fetchEntry, fetchTree } from "@/api";
 import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
 import { LocationCard } from "@/components/LocationCard";
+import type { OpenTarget } from "@/lib/open-target";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { PcReminders } from "@/components/PcReminders";
@@ -127,10 +128,10 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // The thread of the evening: where the DM reaches after this scene.
   const next = nextSessionScene(scenes, selected?.id);
 
-  // Which entry the drawer shows — undefined = closed. Sitting HERE
+  // What the drawer shows — undefined = closed. Sitting HERE
   // (not inside the aside) is what keeps scene selection and note draft
   // untouched while the drawer opens and closes.
-  const [drawerPath, setDrawerPath] = useState<string>();
+  const [drawerTarget, setDrawerTarget] = useState<OpenTarget>();
 
   const playedIds = session.data?.scenesPlayed ?? [];
 
@@ -219,7 +220,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             // — the selected scene and the half-typed
             // Schnellnotiz survive it.
             <>
-              <EntityRefDrawerTarget onOpen={setDrawerPath}>
+              <EntityRefDrawerTarget onOpen={setDrawerTarget}>
                 {/* Keyed by the scene: a switch REMOUNTS the column instead of
                     reconciling the new text into the old nodes. Without it the
                     `## If:` branches the DM opened in one scene would stay open
@@ -247,14 +248,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                 {t("live.scene.locationHeading")}
               </p>
               {knownLocation !== undefined ? (
-                // The tree knows the REAL path of the entry — the card must not
-                // re-derive `locations/<id>`.
-                <LocationCard
-                  campaign={campaign}
-                  id={knownLocation.id}
-                  path={knownLocation.path}
-                  onOpen={setDrawerPath}
-                />
+                // The tree knows the location: the card reads it from its
+                // own resource by its id (ADR #31).
+                <LocationCard campaign={campaign} id={knownLocation.id} onOpen={setDrawerTarget} />
               ) : (
                 // A free-text location (no entry behind it) is exactly
                 // what the format allows — show it, claim nothing.
@@ -266,7 +262,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             {t("live.scene.npcsHeading")}
           </p>
           {(selected?.npcs ?? []).map((id) => (
-            <NpcCard key={id} campaign={campaign} id={id} compact onOpen={setDrawerPath} />
+            <NpcCard key={id} campaign={campaign} id={id} compact onOpen={setDrawerTarget} />
           ))}
           {(selected?.npcs ?? []).length === 0 && (
             <p className="text-[12.5px] text-muted-foreground">{t("live.scene.noNpcs")}</p>
@@ -277,11 +273,11 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 
       {/* A reference INSIDE the drawer switches the drawer, it does not
           navigate either — same rule, one level deeper. */}
-      <EntityRefDrawerTarget onOpen={setDrawerPath}>
+      <EntityRefDrawerTarget onOpen={setDrawerTarget}>
         <LiveEntityDrawer
           campaign={campaign}
-          path={drawerPath}
-          onClose={() => setDrawerPath(undefined)}
+          target={drawerTarget}
+          onClose={() => setDrawerTarget(undefined)}
         />
       </EntityRefDrawerTarget>
     </div>

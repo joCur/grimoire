@@ -7,7 +7,9 @@
 //      JSON object whose shape the provider forces: the outline
 //      its own small object (shared/outline-schema), an entry call the
 //      object that mirrors the stored row — `properties` per kind, `body`,
-//      `warnings` (shared/entry-schema, read by ./entry-reply). Errors
+//      `warnings` (shared/entry-schema, read by ./entry-reply), a location
+//      call every field of the location plus `warnings`
+//      (shared/location, read by ./location-reply). Errors
 //      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
 //      default 1, max 2), never to the user; exhausted retries
 //      -> 422.
@@ -19,9 +21,10 @@
 //      NOTHING; only POST /generate/apply stores anything, and it
 //      re-validates server-side instead of trusting the client.
 //
-// A DRAFT IS `{ properties, body }` from the reply to the store (ADR #24):
-// nothing here renders an entry into one markdown text and nothing parses
-// one back.
+// A scene or npc DRAFT IS `{ properties, body }` from the reply to the store
+// (ADR #24), and a proposed location is a `LocationProposal` — the location
+// without its guard (ADR #31): nothing here renders one into one markdown
+// text and nothing parses one back.
 //
 // Steps 1-4 run in the BACKGROUND: POST /generate starts a
 // job (./generate-jobs) and answers 202, the result waits in the job store
@@ -51,6 +54,7 @@ import {
   type GenerateUsage,
   type GeneratedSceneDraft,
   type GeneratedStub,
+  type LocationProposal,
   type NamingHint,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
@@ -59,6 +63,7 @@ import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
 import { parseEntryReply, type EntryReply } from "./entry-reply";
+import type { LocationReply } from "./location-reply";
 import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
@@ -67,12 +72,12 @@ import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
 import { applyDrafts, draftTargetExists } from "./store/drafts";
+import { readLocationProposal } from "./store/locations";
 import {
   addressHead,
   addressIdentity,
   addressSegments,
   chapterPath,
-  locationPath,
   npcPath,
   scenePath,
 } from "./store/paths";
@@ -166,12 +171,15 @@ export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
   // Locations have no single-call run of their own: a scene run loads this
-  // pair for every location its outline proposes, and the augment run takes
-  // the format half of the prompt and the few-shot from here.
+  // pair for every location its outline proposes, and the location augment
+  // run takes the field section of the prompt and the few-shot from here.
   location: {
     systemPrompt: "location-system-prompt.md",
     fewShotTarget: "location-example-output.json",
   },
+  // The location augment run's own augmentation rule; the location pair
+  // above brings the fields and the few-shot.
+  locationAugment: { systemPrompt: "location-augment-system-prompt.md" },
   // The OUTLINE step of a pipelined scene run: its own prompt
   // and its own few-shot (a worked example outline, not a target draft).
   outline: {
@@ -193,11 +201,14 @@ export const ASSET_FILES = {
 const promptAssets = new Map<string, PromptAssets>();
 
 /**
- * The kinds that have a prompt PAIR. `augment` and `sceneSingle` do not: the
- * first sends the target kind's example asset, the second is only an output
- * schema spliced into the scene prompt.
+ * The kinds that have a prompt PAIR. `augment`, `locationAugment` and
+ * `sceneSingle` do not: the first two send the target kind's example asset,
+ * the third is only an output schema spliced into the scene prompt.
  */
-type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle">;
+type PromptPairKind = Exclude<
+  keyof typeof ASSET_FILES,
+  "augment" | "locationAugment" | "sceneSingle"
+>;
 
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
@@ -489,30 +500,17 @@ function draftProperties(
 }
 
 /**
- * The `status` rules for stubs, as messages — empty list means
- * fine. `status: draft` belongs to SCENES only: per the data contract
- * (README) an npc knows alive/dead/missing/unknown and a location has no
- * status at all, so a `draft` leaking into a stub becomes an invalid
- * pass-through value in the UI. Any valid NpcStatus is accepted for an npc
- * stub; the prompt asks for `alive` unless the source text says otherwise,
- * which is why a MISSING npc status is an error too.
- *
- * Shared by the reply validation (-> correction turn) and the apply
- * re-validation (-> 400): the same rule, checked on both ways in.
- */
-function stubStatusErrors(kind: "npc" | "location", props: Record<string, unknown>): string[] {
-  if (kind === "location") {
-    return Object.hasOwn(props, "status")
-      ? ['"status" ist nicht erlaubt — locations haben keinen status']
-      : [];
-  }
-  return npcStatusErrors(props, "NPC-Stubs");
-}
-
-/**
  * The npc `status` rule, shared by the stub validation and the NPC generator:
  * present, and one of NPC_STATUSES. `subject` names who the rule
  * is about, so the correction turn reads naturally in both places.
+ *
+ * `status: draft` belongs to SCENES only: per the data contract (README) an
+ * npc knows alive/dead/missing/unknown, so a `draft` leaking into a stub
+ * becomes an invalid pass-through value in the UI. The prompt asks for
+ * `alive` unless the source text says otherwise, which is why a MISSING
+ * status is an error too. Shared by the reply validation (-> correction
+ * turn) and the apply re-validation (-> 400): the same rule, checked on both
+ * ways in.
  */
 export function npcStatusErrors(props: Record<string, unknown>, subject: string): string[] {
   if (!Object.hasOwn(props, "status")) {
@@ -529,14 +527,15 @@ export function npcStatusErrors(props: Record<string, unknown>, subject: string)
 }
 
 /**
- * Validate one SUGGESTED ENTRY of a scene reply: `kind` says
- * what it is, the properties `id` is its key, and the server addresses it as
- * `npcs/<id>` / `locations/<id>`. Returns the GeneratedStub or pushes errors.
+ * Validate one suggested NPC of a scene run: the properties `id` is its key,
+ * and the server addresses it as `npcs/<id>`. Returns the GeneratedStub or
+ * pushes errors. A proposed location is read by its own reply schema
+ * (`validateLocationProposal`).
  */
 export function validateEntry(entry: RawEntry, index: number, errors: string[]): GeneratedStub | null {
   const kind = entry.kind;
-  if (kind !== "npc" && kind !== "location") {
-    errors.push(`entries[${index}]: "kind" must be "npc" or "location"`);
+  if (kind !== "npc") {
+    errors.push(`entries[${index}]: "kind" must be "npc"`);
     return null;
   }
   const preview = `entries[${index}]`;
@@ -558,7 +557,7 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
-  for (const msg of stubStatusErrors(kind, props)) errors.push(`${label}: ${msg}`);
+  for (const msg of npcStatusErrors(props, "NPC-Stubs")) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
@@ -566,6 +565,25 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     properties,
     body: entry.reply.body,
   };
+}
+
+/**
+ * Validate one proposed LOCATION of a scene run, read by the location's
+ * reply schema (./location-reply.ts): its `id` is its key and has to be a
+ * kebab slug. Returns the proposal or pushes errors.
+ */
+export function validateLocationProposal(
+  reply: LocationReply,
+  errors: string[],
+): LocationProposal | null {
+  const { location } = reply;
+  if (!ENTITY_ID_PATTERN.test(location.id)) {
+    errors.push(
+      `location "${location.id}": "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
+    );
+    return null;
+  }
+  return location;
 }
 
 /**
@@ -910,7 +928,7 @@ export function truncationMessage(maxTokens: number | undefined): string {
 
 /** Where a stub would be written — the address the hint has to name. */
 export function stubPath(stub: GeneratedStub): string {
-  return stub.kind === "npc" ? npcPath(stub.id) : locationPath(stub.id);
+  return npcPath(stub.id);
 }
 
 /**
@@ -1155,22 +1173,32 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   assertKnownKeys(item, STUB_ITEM_KEYS, label);
   const kind = item.kind;
   const id = item.id;
-  // Narrowed to the literal union on purpose — the status re-validation
-  // below is kind-specific.
-  if (kind !== "npc" && kind !== "location") {
-    throw new ApiError(400, `${label}.kind must be "npc" or "location"`);
-  }
+  if (kind !== "npc") throw new ApiError(400, `${label}.kind must be "npc"`);
   if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
     throw new ApiError(400, `${label}.id must be a kebab-case slug`);
   }
   const { properties, body } = itemHalves(item, label);
-  const rel = kind === "npc" ? npcPath(id) : locationPath(id);
+  const rel = npcPath(id);
   assertSafeAddress(rel); // defense in depth — the slug check above rules escapes out
   // Re-validation, same as for scenes: a client payload must not sneak a
   // stub status past the reply validation.
-  const statusError = stubStatusErrors(kind, properties)[0];
+  const statusError = npcStatusErrors(properties, "NPC-Stubs")[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, properties, body };
+}
+
+/**
+ * Deep-validate one proposed location of the apply body: a location without
+ * its guard, checked against the location's schema — a key a location does
+ * not have (a `status`, a `kind`) is a 400 that names it — and a kebab id.
+ */
+export function applyLocationItem(item: unknown, index: number): LocationProposal {
+  const label = `locations[${index}]`;
+  const location = readLocationProposal(item, label);
+  if (!ENTITY_ID_PATTERN.test(location.id)) {
+    throw new ApiError(400, `${label}.id must be a kebab-case slug`);
+  }
+  return location;
 }
 
 /**
@@ -1277,12 +1305,13 @@ export async function applyGenerated(
   body: {
     scenes?: unknown;
     stubs?: unknown;
+    locations?: unknown;
     npc?: unknown;
     chapter?: unknown;
     chapterTitle?: unknown;
   },
   jobId?: string,
-): Promise<{ written: string[] }> {
+): Promise<{ written: string[]; locations: string[] }> {
   await requireCampaign(campaign);
   const { scenes, stubs, npc, chapter, chapterTitle } = body;
 
@@ -1292,12 +1321,18 @@ export async function applyGenerated(
   if (stubs !== undefined && !Array.isArray(stubs)) {
     throw new ApiError(400, "stubs must be an array");
   }
+  if (body.locations !== undefined && !Array.isArray(body.locations)) {
+    throw new ApiError(400, "locations must be an array");
+  }
   const targets: ApplyTarget[] = [
     ...((scenes as unknown[] | undefined) ?? []).map(applySceneTarget),
     ...((stubs as unknown[] | undefined) ?? []).map(applyStubTarget),
     ...(npc === undefined || npc === null ? [] : [applyNpcTarget(npc)]),
   ];
-  if (targets.length === 0) throw new ApiError(400, "nothing to apply");
+  const locations = ((body.locations as unknown[] | undefined) ?? []).map(applyLocationItem);
+  if (targets.length === 0 && locations.length === 0) {
+    throw new ApiError(400, "nothing to apply");
+  }
 
   // The chapter entry comes first — the drafts live inside it.
   const chapterEntry = await newChapterTarget(campaign, chapter, chapterTitle);
@@ -1338,8 +1373,11 @@ export async function applyGenerated(
   // collides with an existing entity is caught even when the model chose a
   // different last segment for it; the conflict is REPORTED under the path
   // the client sent, which is the draft it has to fix.
-  await applyDrafts(campaign, drafts, { jobId });
-  return { written: drafts.map((draft) => draft.address) };
+  await applyDrafts(campaign, drafts, { locations, jobId });
+  return {
+    written: drafts.map((draft) => draft.address),
+    locations: locations.map((location) => location.id),
+  };
 }
 
 /**

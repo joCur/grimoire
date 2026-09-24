@@ -46,6 +46,7 @@ export interface SeedOverrides {
 /** The identity two entries are the same by: kind plus id. */
 function identity(entry: SeedEntry): string {
   if (entry.kind === "inbox" || entry.kind === "glossary") return entry.kind;
+  if (entry.kind === "location") return `location/${entry.location.id}`;
   const id = entry.properties.id;
   return `${entry.kind}/${typeof id === "string" ? id : ""}`;
 }

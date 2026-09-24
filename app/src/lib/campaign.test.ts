@@ -109,7 +109,7 @@ const tree: CampaignTree = {
   ],
   npcs: [],
   locations: [
-    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+    { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
   ],
   sessions: [],
 };

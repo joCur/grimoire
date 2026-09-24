@@ -14,9 +14,8 @@ describe("entityHeaderKind", () => {
     expect(entityHeaderKind("scene")).toBe("scene");
   });
 
-  test("npc and location get their own headers", () => {
+  test("npc gets its own header", () => {
     expect(entityHeaderKind("npc")).toBe("npc");
-    expect(entityHeaderKind("location")).toBe("location");
   });
 
   test("everything else is a plain titled header — never the scene overline", () => {

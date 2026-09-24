@@ -1,16 +1,19 @@
-// Taking over the generator's drafts.
+// Taking over what a generator run produced.
 //
-// A draft is a pair of `properties` and `body` with a target address, and
-// this is the write behind `POST /generate/apply`: one transaction for the
-// whole batch, the documented `409 { conflicts }` decided INSIDE it, and the
-// job row discarded in the same commit. A partial accept records what it
-// wrote instead. Nothing here is a second write path for an entry — an entry
-// that already holds content is a conflict, not something to overwrite.
+// A scene, npc or chapter draft is a pair of `properties` and `body` with a
+// target address; a proposed location is a `LocationProposal`, the location
+// itself without its guard (ADR #31). This is the write behind `POST
+// /generate/apply` and the accept: one transaction for the whole batch, the
+// documented `409 { conflicts, locations }` decided INSIDE it, and the job
+// row discarded in the same commit. A partial accept records what it wrote
+// instead. Nothing here is a second write path — a row that already holds
+// content is a conflict, not something to overwrite.
 
 import { and, desc, eq } from "drizzle-orm";
+import type { LocationProposal } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { chapters, generateJobs, locations, npcs, packJson, scenes } from "../db/schema";
+import { chapters, generateJobs, npcs, packJson, scenes } from "../db/schema";
 import { campaignRow, mutate } from "./campaigns";
 import { ensureChapterRow, nextScenePos, replaceSceneRefs, sceneLocation } from "./chapters";
 import {
@@ -19,21 +22,20 @@ import {
   assertNpcRefs,
   chapterRowOf,
   indexChapter,
-  indexLocation,
   indexNpc,
   indexScene,
-  locationRowOf,
   npcRowOf,
   sceneRowOf,
 } from "./entity-rows";
 import { getDb } from "./handle";
-import { isEmptyLocationRow } from "./locations";
+import { insertLocationProposal, locationTaken } from "./locations";
 import { isEmptyNpcRow, NPC_DEFAULT_STATUS } from "./npcs";
 import { addressIdentity, locatorFromPath, type Locator } from "./paths";
 import { asMap, asOptStr, asStr, asStrArray, assertNpcStatus, assertSceneClosedFields } from "./shared";
 
 // --- the generator's apply step ------------------------------------------------
 
+/** One scene, npc or chapter draft ready to be written, with where it goes. */
 export interface EntityDraft {
   /** Campaign-relative target path (the generator's own addressing). */
   rel: string;
@@ -56,9 +58,9 @@ export interface EntityDraft {
 export type ScenePlacement = (tx: GrimoireDb, rel: string, chapter: string) => number | undefined;
 
 /**
- * Insert one generated entity (scene, npc, location stub or a new chapter's
- * metadata) — the database half of `POST /generate/apply`. The caller has
- * already validated everything and checked for conflicts; this is the write.
+ * Insert one generated scene, npc or new chapter — the database half of
+ * `POST /generate/apply`. The caller has already validated everything and
+ * checked for conflicts; this is the write.
  */
 export function insertDraft(
   tx: GrimoireDb,
@@ -148,33 +150,6 @@ export function insertDraft(
       if (row !== undefined) indexNpc(tx, campaign, row);
       return;
     }
-    case "location": {
-      const id = asStr(props.id, locator.id);
-      const locationChapter = asOptStr(props.chapter);
-      assertChapterRef(tx, campaign, locationChapter);
-      const values = {
-        name: asStr(props.name, id),
-        chapterId: locationChapter,
-        roll20Page: asOptStr(props["roll20-page"]),
-        atmosphere: asOptStr(props.atmosphere),
-        body: draft.body,
-      };
-      // Fill an empty entry rather than collide with it — see the npc case.
-      const existing = locationRowOf(tx, campaign, id);
-      if (existing !== undefined) {
-        tx.update(locations)
-          .set({ ...values, rev: existing.rev + 1 })
-          .where(and(eq(locations.campaignId, campaign), eq(locations.id, id)))
-          .run();
-      } else {
-        tx.insert(locations)
-          .values({ campaignId: campaign, id, ...values })
-          .run();
-      }
-      const row = locationRowOf(tx, campaign, id);
-      if (row !== undefined) indexLocation(tx, campaign, row);
-      return;
-    }
     case "chapter": {
       const pos =
         (tx
@@ -221,11 +196,16 @@ export function insertDraft(
  * disappears exactly when the drafts appear, or neither does. A stale id (a
  * newer run started meanwhile) matches nothing and is ignored, which is the
  * documented behaviour.
+ *
+ * `locations` are the proposed locations of the batch, written in the same
+ * transaction under the same rules: a location that already holds content is
+ * a conflict (reported by id under `locations`), an empty one is filled.
  */
 export async function applyDrafts(
   campaign: string,
   drafts: EntityDraft[],
   options: {
+    locations?: LocationProposal[];
     jobId?: string;
     /**
      * A PARTIAL accept does not discard the job — it records what
@@ -239,27 +219,45 @@ export async function applyDrafts(
     placeScene?: ScenePlacement;
   } = {},
 ): Promise<void> {
-  const { jobId, onWritten, placeScene } = options;
+  const { locations = [], jobId, onWritten, placeScene } = options;
   try {
     await mutate(campaign, (tx) => {
-      // TWO drafts for ONE address are a conflict too. An empty entry is no
+      // TWO drafts for ONE row are a conflict too. An empty row is no
       // conflict, so the second draft does not hit the primary key: unchecked
-      // it would FILL the entry the first had just written, last write wins,
+      // it would FILL the row the first had just written, last write wins,
       // and the review would report a clean apply for content it had silently
       // dropped. The batch is the model's output — one hallucinated duplicate
       // id is exactly the case — so the answer is the documented one, and it
       // names both offenders.
       const duplicates = duplicateDraftRels(drafts);
-      if (duplicates.length > 0) {
-        throw new ApiError(409, "two drafts for the same target", { conflicts: duplicates });
+      const duplicateLocations = duplicateIds(locations.map((location) => location.id));
+      if (duplicates.length > 0 || duplicateLocations.length > 0) {
+        throw new ApiError(409, "two drafts for the same target", {
+          conflicts: duplicates,
+          locations: duplicateLocations,
+        });
       }
       const conflicts = drafts
         .filter((draft) => draftTargetExistsIn(tx, campaign, draft.address))
         .map((draft) => draft.rel);
-      if (conflicts.length > 0) {
-        throw new ApiError(409, "target entries already exist", { conflicts });
+      const takenLocations = locations
+        .filter((location) => locationTaken(tx, campaign, location.id))
+        .map((location) => location.id);
+      if (conflicts.length > 0 || takenLocations.length > 0) {
+        throw new ApiError(409, "target entries already exist", {
+          conflicts,
+          locations: takenLocations,
+        });
       }
-      for (const draft of inReferenceOrder(drafts)) insertDraft(tx, campaign, draft, placeScene);
+      // A chapter goes in before everything that names it, and a location
+      // before the scene that is set there (see REFERENCE_ORDER).
+      const ordered = inReferenceOrder(drafts);
+      const early = ordered.filter((draft) => draftRank(draft) < REFERENCE_ORDER.npc!);
+      for (const draft of early) insertDraft(tx, campaign, draft, placeScene);
+      for (const location of locations) insertLocationProposal(tx, campaign, location);
+      for (const draft of ordered.filter((d) => !early.includes(d))) {
+        insertDraft(tx, campaign, draft, placeScene);
+      }
       if (onWritten !== undefined) {
         onWritten(tx);
       } else if (jobId !== undefined) {
@@ -273,6 +271,7 @@ export async function applyDrafts(
     if (isConstraintViolation(error)) {
       throw new ApiError(409, "target entries already exist", {
         conflicts: drafts.map((draft) => draft.rel),
+        locations: locations.map((location) => location.id),
       });
     }
     throw error;
@@ -280,36 +279,45 @@ export async function applyDrafts(
 }
 
 /**
- * How the kinds of a batch are inserted: a chapter before the entries that
- * name it, an npc and a location before the scene that lists them. The
- * constraints are checked per statement, so a batch that brings the stub
- * along has to write the stub first — and the caller's order is the review's,
- * which is about reading, not about references. Nothing else about the apply
- * depends on it: the conflict check is one pass over the whole batch before
- * any insert, and what a partial accept records is keyed by address.
+ * How the kinds of a batch are inserted: a chapter before the rows that name
+ * it, an npc and a location before the scene that lists them. The
+ * constraints are checked per statement, so a batch that brings the npc or
+ * location along has to write it first — and the caller's order is the
+ * review's, which is about reading, not about references. Nothing else about
+ * the apply depends on it: the conflict check is one pass over the whole
+ * batch before any insert, and what a partial accept records is keyed by
+ * address or id.
  */
 const REFERENCE_ORDER: Record<string, number> = {
   campaign: 0,
   chapter: 1,
   npc: 2,
-  location: 2,
   scene: 3,
 };
 
+/** Where a draft stands in that order. */
+function draftRank(draft: EntityDraft): number {
+  try {
+    return REFERENCE_ORDER[locatorFromPath(draft.rel).kind] ?? 4;
+  } catch {
+    // An address nothing can parse: `insertDraft` answers for it, last.
+    return 4;
+  }
+}
+
 /** The batch in that order, stable within a kind. */
 function inReferenceOrder(drafts: EntityDraft[]): EntityDraft[] {
-  const rank = (draft: EntityDraft): number => {
-    try {
-      return REFERENCE_ORDER[locatorFromPath(draft.rel).kind] ?? 4;
-    } catch {
-      // An address nothing can parse: `insertDraft` answers for it, last.
-      return 4;
-    }
-  };
   return drafts
     .map((draft, index) => ({ draft, index }))
-    .sort((a, b) => rank(a.draft) - rank(b.draft) || a.index - b.index)
+    .sort((a, b) => draftRank(a.draft) - draftRank(b.draft) || a.index - b.index)
     .map((entry) => entry.draft);
+}
+
+/** Every id that occurs more than once, sorted. */
+function duplicateIds(ids: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  for (const id of ids) seen.set(id, (seen.get(id) ?? 0) + 1);
+  return [...seen].filter(([, count]) => count > 1).map(([id]) => id).sort();
 }
 
 /**
@@ -370,16 +378,12 @@ function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boo
   switch (locator.kind) {
     case "scene":
       return sceneRowOf(db, campaign, locator.id) !== undefined;
-    // An EMPTY npc/location entry is not a conflict: the DM created the id
-    // and typed nothing, and the generated entity is exactly what fills it.
-    // An entry with content still answers 409.
+    // An EMPTY npc is not a conflict: the DM created the id and typed
+    // nothing, and the generated npc is exactly what fills it. An npc with
+    // content still answers 409. (A location asks `locationTaken`.)
     case "npc": {
       const row = npcRowOf(db, campaign, locator.id);
       return row !== undefined && !isEmptyNpcRow(row);
-    }
-    case "location": {
-      const row = locationRowOf(db, campaign, locator.id);
-      return row !== undefined && !isEmptyLocationRow(row);
     }
     case "chapter":
       return chapterRowOf(db, campaign, locator.id) !== undefined;

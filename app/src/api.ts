@@ -15,6 +15,8 @@ import type {
   InstanceSettings,
   KnowledgeEntry,
   KnowledgeResponse,
+  Location,
+  LocationPatch,
   SceneOrderResponse,
   SearchResponse,
   SessionResponse,
@@ -374,6 +376,72 @@ function isEntryResponse(value: unknown): value is EntryResponse {
   );
 }
 
+// --- a location: its own resource (ADR #31) -----------------------------------
+
+/** The request path of a campaign's locations, or of one of them. */
+function locationsUrl(campaign: string, id?: string): string {
+  const base = `/campaigns/${encodeURIComponent(campaign)}/locations`;
+  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+}
+
+/** One location — every field flat, `body` among them, beside its `rev`. */
+export function fetchLocation(campaign: string, id: string): Promise<Location> {
+  return getJson<Location>(locationsUrl(campaign, id));
+}
+
+/** Every location of the campaign, sorted by name. */
+export function fetchLocations(campaign: string): Promise<Location[]> {
+  return getJson<Location[]>(locationsUrl(campaign));
+}
+
+/**
+ * The one write of a location: any subset of its fields — `body` is one of
+ * them, `null` clears an optional one — against the `rev` the editing
+ * session started from. A stale `rev` is 409 with the current location
+ * (`locationConflict`); `force` writes the given fields on top of it.
+ */
+export function patchLocation(
+  campaign: string,
+  id: string,
+  request: LocationPatch,
+): Promise<Location> {
+  return sendJson<Location>("PATCH", locationsUrl(campaign, id), request);
+}
+
+/** The server's location at the moment it refused a write. */
+export interface LocationConflict {
+  /** The location's current version — what a retry would have to carry. */
+  rev: number;
+  /** The current location; undefined when the 409 body did not carry one. */
+  location?: Location;
+}
+
+/**
+ * Read a location write conflict out of a rejection: the 409 of the location
+ * PATCH (and of accepting an augment proposal), with the version and the
+ * location the server answered with. `undefined` for anything else. A 409
+ * whose body is shaped differently still counts as a conflict, just without
+ * the details.
+ */
+export function locationConflict(error: unknown): LocationConflict | undefined {
+  if (!(error instanceof ApiError) || error.status !== 409) return undefined;
+  const { rev, location } = error.details;
+  return {
+    rev: typeof rev === "number" ? rev : Number.NaN,
+    ...(isLocation(location) ? { location } : {}),
+  };
+}
+
+function isLocation(value: unknown): value is Location {
+  if (value === null || typeof value !== "object") return false;
+  const candidate = value as Partial<Location>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.body === "string" &&
+    typeof candidate.rev === "number"
+  );
+}
+
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method: "POST",
@@ -621,12 +689,12 @@ export function createNpc(
   });
 }
 
-/** A new location entry, same rules as the NPC one. */
+/** A new location, same rules as the NPC one — answered as the location itself. */
 export function createLocation(
   campaign: string,
   input: { name: string; id?: string },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/locations`, {
+): Promise<Location> {
+  return postJson<Location>(locationsUrl(campaign), {
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
   });
@@ -783,6 +851,54 @@ export function applyAugment(
 }
 
 /**
+ * Start an augment run on a LOCATION, on the location's own resource — the
+ * same job model as every other run: 202 { jobId }, the proposal is fetched
+ * via fetchGenerateJob (`kind: "location-augment"`,
+ * `locationAugmentResult`), and a 409 carrying a jobId is ADOPTED.
+ */
+export async function startLocationAugmentJob(
+  campaign: string,
+  id: string,
+  input: { sourceText?: string; instruction?: string },
+): Promise<GenerateJobStarted> {
+  const path = `${locationsUrl(campaign, id)}/augment`;
+  const response = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...(input.sourceText === undefined || input.sourceText === ""
+        ? {}
+        : { sourceText: input.sourceText }),
+      ...(input.instruction === undefined || input.instruction === ""
+        ? {}
+        : { instruction: input.instruction }),
+    }),
+  });
+  if (!response.ok) {
+    const error = await failure(`POST /api${path}`, response);
+    if (error.status === 409 && typeof error.details.jobId === "string") {
+      return { jobId: error.details.jobId };
+    }
+    throw error;
+  }
+  return (await response.json()) as GenerateJobStarted;
+}
+
+/**
+ * Accept a reviewed location proposal: the fields the DM took and the body
+ * assembled from the accepted blocks — the location's PATCH without `force`
+ * — written in ONE transaction against `rev`; `jobId` discards the job in
+ * the same transaction. A 409 is the location conflict (`locationConflict`).
+ */
+export function applyLocationAugment(
+  campaign: string,
+  id: string,
+  input: Omit<LocationPatch, "force" | "id"> & { jobId?: string },
+): Promise<Location> {
+  return postJson<Location>(`${locationsUrl(campaign, id)}/augment/apply`, input);
+}
+
+/**
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:
@@ -824,6 +940,7 @@ export async function patchJobReview(
   patch: {
     edits?: Record<string, DraftEdit>;
     entries?: Record<string, "accepted" | "rejected" | null>;
+    locations?: Record<string, "accepted" | "rejected" | null>;
     dropped?: string[];
     fields?: Record<string, boolean | null>;
     blocks?: Record<string, boolean | null>;
@@ -840,25 +957,35 @@ export async function patchJobReview(
 }
 
 /**
- * Accept PART of a finished run: one scene or one suggested entry, or all of
- * them when nothing is selected.
- * Answers what it wrote (draft path -> the address it landed at) and
- * whether the job is gone because nothing is open any more. `rev` is the
+ * Accept PART of a finished run: one scene, one npc stub (`paths`) or one
+ * proposed location (`locations`, by id), or all of them when nothing is
+ * selected.
+ * Answers what it wrote (draft path -> the address it landed at, and the
+ * ids of the written locations) and whether the job is gone because nothing
+ * is open any more. `rev` is the
  * review rev as the caller read it: a 409 `rev_conflict` means another tab
  * decided in between and nothing was written. A 409 with
  * `details.conflicts` is the ordinary write conflict, as for the whole-run
  * apply.
  */
+/** What one accept wrote — see acceptJobParts. */
+export interface AcceptedParts {
+  written: Record<string, string>;
+  locations: string[];
+  jobDeleted: boolean;
+}
+
 export function acceptJobParts(
   campaign: string,
   jobId: string,
   rev: number,
-  input: { paths?: string[]; chapter?: string; chapterTitle?: string } = {},
-): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
+  input: { paths?: string[]; locations?: string[]; chapter?: string; chapterTitle?: string } = {},
+): Promise<AcceptedParts> {
   const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
-  return postJson<{ written: Record<string, string>; jobDeleted: boolean }>(path, {
+  return postJson<AcceptedParts>(path, {
     rev,
     ...(input.paths === undefined ? {} : { paths: input.paths }),
+    ...(input.locations === undefined ? {} : { locations: input.locations }),
     ...(input.chapter === undefined || input.chapterTitle === undefined
       ? {}
       : { chapter: input.chapter, chapterTitle: input.chapterTitle }),

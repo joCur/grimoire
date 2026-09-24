@@ -816,7 +816,7 @@ describe("apply an npc draft", () => {
   test("writes npcs/<id> and discards the job", async () => {
     const res = await runAndApply("apply-happy");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: ["npcs/apply-happy"] });
+    expect(await res.json()).toEqual({ written: ["npcs/apply-happy"], locations: [] });
     // the draft is stored — nothing left to restore
     expect(await fetchJob()).toBeNull();
 
@@ -862,6 +862,7 @@ describe("apply an npc draft", () => {
     expect(await res.json()).toEqual({
       error: "target entries already exist",
       conflicts: ["npcs/apply-happy"],
+      locations: [],
     });
     const after = await read("npcs/apply-happy");
     expect(after.properties).toEqual(before.properties);

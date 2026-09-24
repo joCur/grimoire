@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { navSection } from "./topbar-nav";
 
-/** Only one of the three view shapes is ever set at a time (route match). */
+/** Only one of the view shapes is ever set at a time (route match). */
 const chapterOverview = { isChapterOverview: true };
+const locations = { isChapterOverview: false, isLocations: true };
 const list = (listKind: string) => ({ isChapterOverview: false, listKind });
 const entry = (entryPath: string) => ({ isChapterOverview: false, entryPath });
 
@@ -14,7 +15,6 @@ describe("navSection", () => {
 
   test("each browse list marks its own entry; the scene list is Kapitel", () => {
     expect(navSection(list("npcs"))).toBe("npcs");
-    expect(navSection(list("locations"))).toBe("locations");
     expect(navSection(list("scenes"))).toBe("chapters");
   });
 
@@ -24,9 +24,14 @@ describe("navSection", () => {
     expect(navSection(entry("01-salzhafen"))).toBe("chapters");
   });
 
-  test("an NPC entry is NPCs and a location entry is Orte, whatever mentions them", () => {
+  test("an NPC entry is NPCs, whatever mentions it", () => {
     expect(navSection(entry("npcs/fenn"))).toBe("npcs");
-    expect(navSection(entry("locations/leuchtturm"))).toBe("locations");
+  });
+
+  test("a location's own routes — its list and its reading view — are Orte", () => {
+    expect(navSection(locations)).toBe("locations");
+    // The address schema has no location: an entry path naming one marks nothing.
+    expect(navSection(entry("locations/leuchtturm"))).toBeUndefined();
   });
 
   test("views that belong to no section are marked nowhere", () => {

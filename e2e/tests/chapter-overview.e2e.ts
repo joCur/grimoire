@@ -284,7 +284,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   ).toHaveText(["NPCs", "Orte", "Glossar", "Kampagnenwissen"]);
 
   await nav.getByRole("link", { name: "Orte" }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/locations$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
   // Both example Orte sit in the same chapter and each row names that chapter
   // under the Ort, so the name is anchored: the row STARTS with the Ort's own
@@ -1402,4 +1402,21 @@ test.describe("the scene order of a chapter", () => {
     // …and the chapter write left the order where the other writer put it.
     expect(await storedOrder(api)).toEqual(again);
   });
+});
+
+test("a location's reading view offers the session start like every reading view", async ({
+  page,
+}) => {
+  const start = page.getByRole("banner").getByRole("button", { name: "Session starten" });
+
+  // The location's own route is a reading view: with no session running the
+  // chip offers the start, exactly as it does on a scene.
+  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await expect(start).toBeVisible();
+
+  // The location list is a list, not a reading view — no start offered there.
+  await page.goto("/campaigns/beispiel/locations");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
+  await expect(start).toHaveCount(0);
 });

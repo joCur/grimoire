@@ -3,9 +3,11 @@
 //
 // The list lives here, and not in the app's „Eigenschaften" dialog, because
 // the GENERATOR needs the very same list: an entry reply is a JSON object
-// whose `properties` half is schema-enforced per kind (../schema), and a
-// schema that allowed a key the dialog does not know — or forgot one it
-// offers — would be a model writing fields the DM can never see or edit.
+// whose fields are schema-enforced per kind, and a schema that allowed a key
+// the dialog does not know — or forgot one it offers — would be a model
+// writing fields the DM can never see or edit. The location keeps its list
+// beside its zod schema, typed against it (ADR #31, ./location.ts), and the
+// table below refers to it.
 //
 // This is the one place server and app both import, and the definitions carry
 // only what both need: the key, the shape of its value, and the known value
@@ -13,11 +15,12 @@
 // German labels, hints, placeholders, which tree list a reference field
 // offers to pick from — stays in the app, where the translator lives.
 //
-// The order is the order the dialog shows (and the order the rendered
-// properties block is written in): a contract of its own, not an accident.
+// The order is the order the dialog shows (and the order an entry's fields
+// are answered in): a contract of its own, not an accident.
 // A field edited beside the text (`surface: "text"`) stands at the end of its
 // kind's list and is left out of the dialog.
 
+import { LOCATION_FIELDS } from "./location";
 import { CHAPTER_STATUSES, NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
 
 /** The kinds whose properties are described field by field (README entities). */
@@ -67,7 +70,7 @@ export type FieldSurface = "dialog" | "text";
 
 /** One field of one kind — the shape, never the copy. */
 export interface PropertyFieldDef {
-  /** The properties key, verbatim (`roll20-page` included). */
+  /** The field key, verbatim. */
   key: string;
   control: FieldControl;
   /** `select` only: the known value set. An entry may still say more. */
@@ -109,12 +112,7 @@ export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]
     { key: "appearance", control: "textarea" },
     { key: "motivation", control: "textarea", surface: "text" },
   ],
-  location: [
-    { key: "name", control: "text", required: true },
-    { key: "chapter", control: "reference", source: "chapters" },
-    { key: "roll20-page", control: "text" },
-    { key: "atmosphere", control: "textarea", surface: "text" },
-  ],
+  location: LOCATION_FIELDS,
   chapter: [
     { key: "title", control: "text", required: true },
     // A KNOWN SET, unlike the other free-text fields: the API accepts only

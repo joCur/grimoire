@@ -149,7 +149,15 @@ afterEach(async () => {
 test("a fresh job carries an empty review state and rev 0", async () => {
   const job = await runJob();
   expect(job.rev).toBe(0);
-  expect(job.review).toEqual({ entries: {}, dropped: [], fields: {}, blocks: {}, written: {} });
+  expect(job.review).toEqual({
+    entries: {},
+    dropped: [],
+    fields: {},
+    blocks: {},
+    written: {},
+    locations: {},
+    writtenLocations: [],
+  });
 });
 
 test("the patch merges text, decisions and drops — and bumps the rev", async () => {
@@ -289,7 +297,7 @@ test("accepting the same part twice answers 200 with nothing written", async () 
   const again = (await fetchJob()) as GenerateJob;
   const res = await accept(again, { paths: [SCENE_A] });
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ written: {}, jobDeleted: false });
+  expect(await res.json()).toEqual({ written: {}, locations: [], jobDeleted: false });
   // Nothing moved: the rest is still reviewable and the job is still there.
   expect((await fetchJob())?.review?.written).toEqual({ [SCENE_A]: ADDRESS_A });
 });
@@ -418,7 +426,8 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
   expect(() =>
     db.transaction((handle) =>
       markWrittenInTx(handle as never, "beispiel", "a-job-that-is-gone", job.rev ?? 0, {
-        [SCENE_A]: ADDRESS_A,
+        paths: { [SCENE_A]: ADDRESS_A },
+        locations: [],
       }),
     ),
   ).toThrow();

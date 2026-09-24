@@ -6,6 +6,8 @@
 //   an entry call   `{ properties, body, warnings }` — the properties of
 //                     the entry, its whole text as one string, and the
 //                     notes the review shows the DM
+//   a location call   every field of the location — `body` among them —
+//                     beside `warnings` (ADR #31)
 //   the outline call  the run's scene and entry list
 //
 // The fixtures write those objects DIRECTLY. A reply that is a plain STRING
@@ -45,6 +47,31 @@ export interface EntryReply {
   properties: Record<string, unknown>;
   body: string;
   warnings: string[];
+}
+
+/**
+ * A location reply: every field of the location, `body` among them, beside
+ * the notes (ADR #31). A field the source does not give is `null`, as the
+ * schema asks.
+ */
+export interface LocationReply {
+  id: string;
+  name: string;
+  chapter: string | null;
+  roll20Page: string | null;
+  atmosphere: string | null;
+  body: string;
+  warnings: string[];
+}
+
+/** A location as the augment prompt shows it — its fields, without its guard. */
+export interface ExistingLocation {
+  id: string;
+  name: string;
+  chapter?: string;
+  roll20Page?: string;
+  atmosphere?: string;
+  body: string;
 }
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
@@ -309,13 +336,13 @@ const npcStub: EntryReply = {
 /** The atmosphere of the location stub a scene run proposes. */
 export const LOCATION_STUB_ATMOSPHERE = "Salz in der Luft, Möwen über dem Schlick, kein Mensch zu sehen.";
 
-/** The location stub a scene run's entry call answers with. */
-const locationStub: EntryReply = {
-  properties: {
-    id: LOCATION_STUB_ID,
-    name: LOCATION_STUB_NAME,
-    atmosphere: LOCATION_STUB_ATMOSPHERE,
-  },
+/** The location a scene run's location call answers with. */
+const locationStub: LocationReply = {
+  id: LOCATION_STUB_ID,
+  name: LOCATION_STUB_NAME,
+  chapter: null,
+  roll20Page: null,
+  atmosphere: LOCATION_STUB_ATMOSPHERE,
   // `[[grella]]` is the npc the SAME run proposes: a reference to it is
   // valid before either entry is written.
   body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
@@ -413,6 +440,9 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
  */
 export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
 
+/** The same heading of a location augment run — EXISTING_LOCATION_HEADING there. */
+export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
+
 /** The `## If:` section a scene augment run adds — asserted in the spec. */
 export const AUGMENT_THREAD_CONDITION = "die Gruppe fragt nach dem Spitzel";
 
@@ -509,6 +539,37 @@ export function unknownRefAugmentReply(path: string, entry: ExistingEntry): Entr
  */
 export function invalidAugmentReply(_path: string): EntryReply {
   return { properties: { id: "not-the-entry" }, body: "", warnings: [] };
+}
+
+// --- augmenting a location ---------------------------------------------------
+
+/**
+ * The reply of a location augment run (ADR #31): the location as it was
+ * shown, every field echoed, plus one NEW `## If:` section at the end of its
+ * text — every existing block comes back unchanged.
+ */
+export function locationAugmentReply(location: ExistingLocation, knowledge = ""): LocationReply {
+  const kept = location.body.replace(/^\n+/, "").replace(/\n*$/, "\n");
+  return {
+    id: location.id,
+    name: location.name,
+    chapter: location.chapter ?? null,
+    roll20Page: location.roll20Page ?? null,
+    atmosphere: location.atmosphere ?? null,
+    body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
+    warnings: contextEchoWarnings(knowledge),
+  };
+}
+
+/** A location augment reply that FAILS validation: it changes the id. */
+export function invalidLocationAugmentReply(location: ExistingLocation): LocationReply {
+  return { ...locationAugmentReply(location), id: "not-the-location" };
+}
+
+/** The first reply of a TRIGGER.unknownRef location augment run — a correction turn. */
+export function unknownRefLocationAugmentReply(location: ExistingLocation): LocationReply {
+  const good = locationAugmentReply(location);
+  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 // --- the pipelined scene run -------------------------------------------------
@@ -731,7 +792,7 @@ function plainSceneDraft(chapter: string, id: string, title: string): EntryReply
   };
 }
 
-/** One suggested entry — the entry itself. */
-export function entryPartReply(kind: "npc" | "location"): EntryReply {
+/** One proposed npc or location — the npc stub, or the location itself. */
+export function entryPartReply(kind: "npc" | "location"): EntryReply | LocationReply {
   return kind === "location" ? locationStub : npcStub;
 }

@@ -6,6 +6,8 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
+import type { Location } from "@grimoire/shared/types";
+
 import { locationExcerpt, npcExcerpt, sceneExcerpt, type ExcerptSource } from "./entity-excerpt";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
@@ -13,6 +15,19 @@ const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel")
 /** A fixture entry of the example campaign, as the API answers it. */
 function fixture(stem: string): ExcerptSource {
   return JSON.parse(readFileSync(path.join(FIXTURES, `${stem}.json`), "utf8")) as ExcerptSource;
+}
+
+/** A location fixture — the location as its resource answers it (ADR #31). */
+function locationFixture(id: string): Location {
+  const stored = JSON.parse(
+    readFileSync(path.join(FIXTURES, "locations", `${id}.json`), "utf8"),
+  ) as Omit<Location, "rev">;
+  return { ...stored, rev: 1 };
+}
+
+/** A location of nothing but what a case names. */
+function location(fields: Partial<Location>): Location {
+  return { id: "ort", name: "Ort", body: "", rev: 1, ...fields };
 }
 
 const NAMES: Record<string, string> = {
@@ -71,23 +86,23 @@ describe("npcExcerpt", () => {
 });
 
 describe("locationExcerpt", () => {
-  test("the `atmosphere` property and the Roll20 page", () => {
-    expect(locationExcerpt(fixture("location-bucht"), nameOf)).toEqual({
+  test("the `atmosphere` field and the Roll20 page", () => {
+    expect(locationExcerpt(locationFixture("bucht"), nameOf)).toEqual({
       mood: "Arbeit, keine Romantik: Kisten unter Planen, ausgetretene Pfade, niemand redet laut.",
       page: "Nordbucht",
     });
   });
 
   test("a reference in the atmosphere reads as the current name", () => {
-    const entry = { properties: { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." } };
+    const entry = location({ atmosphere: "Hier riecht es nach [[fenn]]s Tabak." });
     expect(locationExcerpt(entry, nameOf).mood).toBe("Hier riecht es nach Fenns Tabak.");
   });
 
-  test("a `## Atmosphäre` section in the body is not read — only the property is", () => {
-    const entry = {
-      properties: { "roll20-page": "Bucht" },
+  test("a `## Atmosphäre` section in the body is not read — only the field is", () => {
+    const entry = location({
+      roll20Page: "Bucht",
       body: "## Atmosphäre\n\nDas steht im Text und bleibt Text.\n",
-    };
+    });
     expect(locationExcerpt(entry, nameOf)).toEqual({ mood: undefined, page: "Bucht" });
   });
 });

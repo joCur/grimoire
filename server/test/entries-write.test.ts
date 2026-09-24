@@ -509,24 +509,19 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
   });
 });
 
-describe("the prose properties an npc and a location keep beside their text", () => {
-  // `motivation` and `atmosphere` are properties like any other field of
-  // their kind — one row, one guard (ADR #23) — and the entry's edit surface
-  // writes them together with the text.
+describe("the prose property an npc keeps beside its text", () => {
+  // `motivation` is a property like any other field of its kind — one row,
+  // one guard (ADR #23) — and the npc's edit surface writes it together with
+  // the text. (A location's `atmosphere` is a field of the location's own
+  // resource: test/locations.test.ts.)
   const NPC = "npcs/jorna";
-  const LOCATION = "locations/leuchtturm";
 
-  test("the seeded entries carry them as properties, not as body sections", async () => {
+  test("the seeded npc carries it as a property, not as a body section", async () => {
     const jorna = await getEntry(NPC);
     expect(jorna.properties.motivation).toBe(
       "Das Leuchtfeuer muss wieder brennen, bevor die Herbstkonvois kommen — ihr Amt hängt daran.",
     );
     expect(jorna.body).not.toContain("## Will");
-    const tower = await getEntry(LOCATION);
-    expect(tower.properties.atmosphere).toBe(
-      "Verlassen in Eile, nicht im Kampf: nichts ist umgeworfen, aber alles stehen gelassen.",
-    );
-    expect(tower.body).not.toContain("## Atmosphäre");
   });
 
   test("set with text in one write, and `null` deletes the key", async () => {
@@ -543,10 +538,6 @@ describe("the prose properties an npc and a location keep beside their text", ()
     const cleared = await patchOk(NPC, { rev: written.rev, properties: { motivation: null } });
     expect(Object.hasOwn(cleared.properties, "motivation")).toBe(false);
     expect(cleared.body).toBe(written.body);
-
-    const place = await getEntry(LOCATION);
-    const noAtmosphere = await patchOk(LOCATION, { rev: place.rev, properties: { atmosphere: null } });
-    expect(Object.hasOwn(noAtmosphere.properties, "atmosphere")).toBe(false);
   });
 
   test("each field belongs to its kind — `atmosphere` on an npc is a 400", async () => {

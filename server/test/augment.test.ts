@@ -8,7 +8,8 @@
 // with the reply:
 //   * prompt assembly PER KIND — the existing entry travels complete, the
 //     campaign knowledge and the glossary travel with it, and each kind gets
-//     its own format contract, the location one included,
+//     its own format contract (a location's on its own resource:
+//     test/location-augment.test.ts),
 //   * the proposal — properties per field with new|changed, body whole,
 //   * accepting — ONE transaction with a `rev` guard, and the job gone.
 
@@ -33,6 +34,7 @@ import {
   validateAugmentReply,
 } from "../src/generator-augment";
 import { sceneSystemPrompt } from "../src/generate-pipeline";
+import { locationAugmentSystemPrompt } from "../src/location-augment";
 import { entryReply, type ScriptedEntry } from "./support/pipeline-fake";
 import { parseEntryReply } from "../src/entry-reply";
 import { propertyFieldsFor } from "@grimoire/shared";
@@ -51,7 +53,6 @@ import { entriesUrl } from "./support/urls";
 
 const CAMPAIGN = "beispiel";
 const NPC = "npcs/jorna";
-const LOCATION = "locations/leuchtturm";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 /** The ids a `[[id]]` may name: the seeded campaign's npcs, locations and scenes. */
@@ -257,9 +258,8 @@ describe("prompt assembly", () => {
 
   test("every kind gets the augmentation rule plus its own format contract", async () => {
     const npc = await augmentSystemPrompt("npc");
-    const location = await augmentSystemPrompt("location");
     const scene = await augmentSystemPrompt("scene");
-    for (const prompt of [npc, location, scene]) {
+    for (const prompt of [npc, scene]) {
       expect(prompt).toContain("Die Ergänzungsregel");
       expect(prompt).toContain("Vorhandenes bleibt Wort für Wort stehen");
       // The output format is the reply OBJECT, and the
@@ -268,15 +268,12 @@ describe("prompt assembly", () => {
       expect(prompt).toContain("immer den **ganzen** Eintrag");
     }
     expect(npc).toContain("System-Prompt: NPC-Generator");
-    // Each kind has its own prompt, locations included.
-    expect(location).toContain("System-Prompt: Ort-Generator");
-    expect(location).toContain("`status` gehört zu Szene und Figur");
     expect(scene).toContain("System-Prompt: Szenen-Generator");
     expect(scene).toContain("## If:");
   });
 
   test("only ONE output schema travels — the create runs' is sliced off", async () => {
-    for (const kind of ["npc", "location", "scene"] as const) {
+    for (const kind of ["npc", "scene"] as const) {
       const prompt = await augmentSystemPrompt(kind);
       // The augment output format…
       expect(prompt).toContain("immer den **ganzen** Eintrag");
@@ -301,9 +298,7 @@ describe("prompt assembly", () => {
     const assembled: Array<[string, string]> = [
       ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
-      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
       ["augment/npc", await augmentSystemPrompt("npc")],
-      ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
       // The two further prompt kinds: the outline step, and the
       // scene prompt in „genau eine Szene aus der Gliederung" mode. The
@@ -318,7 +313,9 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("ä, ö, ü und ß stehen als genau diese Zeichen");
       expect(prompt, kind).toContain("`id`-Werte und Adressen/Pfade");
     }
-    // …and it is the SAME sentence everywhere: one rule, four prompts.
+    // …and it is the SAME sentence everywhere: one rule, every prompt. (A
+    // location's prompts name the location's own fields in it:
+    // test/location-augment.test.ts.)
     const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, ORTHOGRAPHY_RULE)));
     expect(wordings.size).toBe(1);
   });
@@ -327,7 +324,7 @@ describe("prompt assembly", () => {
     // The few-shots are REPLY OBJECTS, so the check reads
     // them as such: the properties mapping and the body string, each in real
     // German spelling — the model imitates what it reads.
-    for (const kind of ["scene", "npc", "location"] as const) {
+    for (const kind of ["scene", "npc"] as const) {
       const reply = JSON.parse(await loadAsset(ASSET_FILES[kind].fewShotTarget)) as {
         properties: Record<string, unknown>;
         body: string;
@@ -347,7 +344,7 @@ describe("prompt assembly", () => {
     // few-shot that simply omits a key teaches the opposite of the schema,
     // and the model imitates what it reads — so the examples show
     // the convention, `null` included.
-    for (const kind of ["scene", "npc", "location"] as const) {
+    for (const kind of ["scene", "npc"] as const) {
       const raw = await loadAsset(ASSET_FILES[kind].fewShotTarget);
       const reply = JSON.parse(raw) as { properties: Record<string, unknown> };
       for (const field of propertyFieldsFor(kind) ?? []) {
@@ -370,7 +367,7 @@ describe("prompt assembly", () => {
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
       ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
       ["augment/npc", await augmentSystemPrompt("npc")],
-      ["augment/location", await augmentSystemPrompt("location")],
+      ["augment/location", await locationAugmentSystemPrompt()],
       ["augment/scene", await augmentSystemPrompt("scene")],
       // The scene prompt in „genau eine Szene aus der Gliederung" mode
       // — an output-schema SWAP, not a second prompt file, so
@@ -412,9 +409,7 @@ describe("prompt assembly", () => {
     const assembled: Array<[string, string]> = [
       ["scene/single", await sceneSystemPrompt()],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
-      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
       ["augment/npc", await augmentSystemPrompt("npc")],
-      ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
     ];
     for (const [kind, prompt] of assembled) {
@@ -472,19 +467,28 @@ describe("prompt assembly", () => {
   });
 
   test("the run sends the kind's own system prompt and few-shot", async () => {
-    const stored = await read(LOCATION);
+    const stored = await read(NPC);
     const content = proposal(stored, {
-      body: `${stored.body}\n## Wer ist hier\n\n- niemand\n`,
+      body: `${stored.body}\n## Weiß\n\n- nichts Neues\n`,
     });
-    const fake = useFake([augmentReply(LOCATION, content)]);
-    await runAugmentJob({ path: LOCATION, instruction: "Ergänze, wer hier ist" });
+    const fake = useFake([augmentReply(NPC, content)]);
+    await runAugmentJob({ path: NPC, instruction: "Ergänze, was sie weiß" });
     const req = fake.calls[0]!.req;
-    expect(req.systemPrompt).toContain("System-Prompt: Ort-Generator");
-    expect(req.fewShotTarget).toContain('"id": "leuchtturm"');
-    expect(req.existingEntry?.path).toBe(LOCATION);
-    expect(req.existingEntry?.properties["roll20-page"]).toBeString();
-    // A location run has no target chapter in the context…
+    expect(req.systemPrompt).toContain("System-Prompt: NPC-Generator");
+    expect(req.fewShotTarget).toContain('"properties"');
+    expect(req.existingEntry?.path).toBe(NPC);
+    expect(req.existingEntry?.properties.status).toBeString();
+    // An npc run has no target chapter in the context…
     expect(req.context.chapter).toBeUndefined();
+  });
+
+  test("an address that names a location is no augment target — 404", async () => {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "locations/leuchtturm", instruction: "x" }),
+    });
+    expect(res.status).toBe(404);
   });
 
   test("a scene run carries its chapter in the context", async () => {
@@ -664,17 +668,6 @@ describe("proposal", () => {
       expect(outcome.result.properties.some((p) => p.key === "roll20-page")).toBe(false);
     }
   });
-
-  test("a location may not carry a status", async () => {
-    const stored = await read(LOCATION);
-    const outcome = validateAugmentReply(
-      augmentReply(LOCATION, proposal(stored, { properties: { status: "alive" } })),
-      { kind: "location", stored },
-      await refIds(),
-    );
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("status");
-  });
 });
 
 // --- the run and its job ------------------------------------------------------
@@ -803,7 +796,7 @@ describe("one job per campaign, whatever its kind", () => {
     const again = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: LOCATION, instruction: "x" }),
+      body: JSON.stringify({ path: SCENE, instruction: "x" }),
     });
     expect(again.status).toBe(409);
   });
@@ -968,26 +961,26 @@ describe("accept", () => {
   }
 
   test("properties and body land in ONE write, and the job is gone", async () => {
-    const before = await read(LOCATION);
-    useFake([augmentReply(LOCATION, proposal(before))]);
-    const job = await runAugmentJob({ path: LOCATION, instruction: "x" });
+    const before = await read(NPC);
+    useFake([augmentReply(NPC, proposal(before))]);
+    const job = await runAugmentJob({ path: NPC, instruction: "x" });
 
-    const body = `${before.body}\n## Wer ist hier\n\n- niemand\n`;
+    const body = `${before.body}\n## Weiß\n\n- mehr als sie sagt\n`;
     const res = await apply({
-      path: LOCATION,
+      path: NPC,
       rev: before.rev,
-      properties: { "roll20-page": "Leuchtturm (neu)" },
+      properties: { voice: "Knapp, mit Hafenakzent (neu)" },
       body,
       jobId: job.id,
     });
     expect(res.status).toBe(200);
     const written = (await res.json()) as EntryResponse;
-    expect(written.properties["roll20-page"]).toBe("Leuchtturm (neu)");
-    expect(written.body).toContain("## Wer ist hier");
+    expect(written.properties.voice).toBe("Knapp, mit Hafenakzent (neu)");
+    expect(written.body).toContain("- mehr als sie sagt");
     // One transaction, two halves — both are on the stored row.
-    const reread = await read(LOCATION);
-    expect(reread.properties["roll20-page"]).toBe("Leuchtturm (neu)");
-    expect(reread.body).toContain("## Wer ist hier");
+    const reread = await read(NPC);
+    expect(reread.properties.voice).toBe("Knapp, mit Hafenakzent (neu)");
+    expect(reread.body).toContain("- mehr als sie sagt");
     expect(reread.rev).toBeGreaterThan(before.rev);
     // …and the job the proposal came from is discarded with it.
     expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);

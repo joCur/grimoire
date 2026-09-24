@@ -47,11 +47,12 @@ import { createCampaign, createChapter, createLocation, createNpc, createScene }
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
 import { useT } from "@/i18n";
+import { locationHref } from "@/lib/open-target";
 import { Button } from "@/components/ui/button";
 
 /** Queries that go stale when anything is created. */
 function invalidationKeys(campaign: string) {
-  return [["tree", campaign], ["campaigns"], ["search", campaign]];
+  return [["tree", campaign], ["campaigns"], ["search", campaign], ["locations", campaign]];
 }
 
 function useAfterCreate(campaign: string) {
@@ -316,7 +317,8 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
             });
             await afterCreate();
             setOpen(false);
-            await navigate(`/campaigns/${campaign}/entries/${created.path}`);
+            // A location is its own resource: its reading view is its own route.
+            await navigate(locationHref(campaign, created.id));
           }}
           onClose={() => setOpen(false)}
         />

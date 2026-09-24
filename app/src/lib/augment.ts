@@ -1,6 +1,6 @@
-// „Mit KI ergänzen" — the review's arithmetic (issue #36).
+// The augment review's arithmetic.
 //
-// Two levels, and the ticket (AK2) is explicit about which is which:
+// Two levels, and which is which matters:
 //
 //   DECISION UNIT = the BLOCK. The proposal arrives as two whole bodies
 //   (current + proposed) and is cut here into the Block-Composer's own blocks
@@ -16,13 +16,15 @@
 // machinery one level up: lines aligned, and inside a changed line the same
 // word diff again.
 //
-// DEFAULTS (AK2, „nie stilles Überschreiben"): a block the proposal ADDS is
-// preselected, a block it CHANGES is not. Same rule for the properties, one
-// level up in the component: `new` accepted, `changed` kept.
+// DEFAULTS never overwrite silently: a block the proposal ADDS is
+// preselected, a block it CHANGES is not. Same rule for the fields, one level
+// up in the component: `new` accepted, `changed` kept.
 //
 // Pure library: no react, no query, no API. The serialization back into a
 // body goes through `serializeBlocks`, so an accepted-nothing review produces
 // the byte-identical original (blocks.ts' round-trip invariant).
+
+import type { AugmentPropertyProposal, LocationProposal } from "@grimoire/shared/types";
 
 import {
   blockTreeMarkdown,
@@ -40,7 +42,7 @@ export interface DiffToken {
 
 /**
  * Beyond this many tokens on either side the quadratic LCS is not worth its
- * cost — and nothing at that size reads as a „word diff" anyway. The block
+ * cost — and nothing at that size reads as a "word diff" anyway. The block
  * then shows as one removed and one added run, which is exactly what a
  * complete rewrite is.
  */
@@ -146,7 +148,7 @@ export interface DiffLine {
 /**
  * How similar two units have to be to count as ONE changed unit — a rewritten
  * line in the raw diff, a rewritten block in the review. Below it they are an
- * honest remove plus an honest add, and the add keeps its „übernehmen"
+ * honest remove plus an honest add, and the add keeps its "take"
  * default.
  */
 const PAIR_SIMILARITY = 0.4;
@@ -194,7 +196,7 @@ export function similarity(a: string, b: string): number {
 
 /**
  * A line diff over the whole body, with a word diff inside every line that
- * merely CHANGED — the raw editor's view of the proposal (AK2, second half).
+ * merely CHANGED — the raw editor's view of the proposal.
  *
  * A removed line and an added line that face each other and are similar
  * enough are folded into one `changed` line; everything else stays an honest
@@ -248,7 +250,7 @@ export type BlockChangeKind =
   | "changed"
   /**
    * Only in the CURRENT body: the proposal dropped it. The augmentation rule
-   * forbids that, so it is shown as a decision whose default is „behalten" —
+   * forbids that, so it is shown as a decision whose default is "keep" —
    * accepting it is what deletes the block, and that never happens by itself.
    */
   | "removed";
@@ -266,8 +268,8 @@ export interface BlockChange {
 }
 
 /**
- * Cut the two bodies into blocks and align them (AK2, „Entscheidungseinheit =
- * Block"). The alignment is an LCS over the blocks' verbatim markdown, so
+ * Cut the two bodies into blocks and align them — the block is the unit of
+ * decision. The alignment is an LCS over the blocks' verbatim markdown, so
  * everything the model left untouched — which the augmentation rule says is
  * most of it — matches exactly and is not a decision at all.
  *
@@ -282,7 +284,7 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
   // An `## If:` section is compared and shown as a WHOLE (heading + body):
   // `blockMarkdown` answers for the heading line alone, which made a NEW
   // section show as a bare heading in the review, and a section whose body
-  // alone changed align as `same` (issue #36).
+  // alone changed align as `same`.
   const a = current.map(blockTreeMarkdown);
   const b = proposed.map(blockTreeMarkdown);
   const pairs = lcsPairs(a, b);
@@ -296,8 +298,8 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
     const shared = Math.min(removed.length, added.length);
     // Facing each other is not enough to be the SAME block rewritten — the
     // gate is the one the line diff uses. Without it a dropped callout and an
-    // unrelated new paragraph became one „geändert" row, which both hid the
-    // deletion and cost the addition its „übernehmen" default.
+    // unrelated new paragraph became one "changed" row, which both hid the
+    // deletion and cost the addition its "take" default.
     let paired = 0;
     while (
       paired < shared &&
@@ -335,7 +337,7 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
 }
 
 /**
- * The default decision per block (AK2): take what is NEW, keep what is
+ * The default decision per block: take what is NEW, keep what is
  * filled. A `changed` block is therefore NOT preselected — accepting it is
  * the DM's explicit act — and a `removed` one never is, because accepting
  * that deletes text.
@@ -355,7 +357,7 @@ export function isDecision(change: BlockChange): boolean {
  *
  * With nothing accepted this is the current body again, byte for byte —
  * blocks.ts' round-trip invariant is what makes that true, and it is the
- * reason an „alles behalten" review can be sent without special-casing.
+ * reason a keep-everything review can be sent without special-casing.
  */
 export function assembleBody(
   changes: readonly BlockChange[],
@@ -383,11 +385,11 @@ export function assembleBody(
   return serializeBlocks(blocks);
 }
 
-// --- the properties half ---------------------------------------------------------
+// --- the fields half --------------------------------------------------------------
 
 /**
- * A rendered properties value — the review shows „Vorhanden | Vorschlag" as
- * text, and a list or a mapping has to read as one line rather than as
+ * A rendered field value — the review shows the stored and the proposed value
+ * as text, and a list or a mapping has to read as one line rather than as
  * `[object Object]`.
  */
 export function formatPropertyValue(value: unknown): string {
@@ -399,4 +401,35 @@ export function formatPropertyValue(value: unknown): string {
       .join(", ");
   }
   return String(value);
+}
+
+/** "No value here" — an absent field or blank text. */
+function isEmptyText(value: string | undefined): boolean {
+  return value === undefined || value.trim() === "";
+}
+
+/**
+ * A location proposal, field by field (ADR #31): what the model changes
+ * against the location as the run read it. Only a field that CHANGES is
+ * listed — a field repeated verbatim is no decision, and a field the proposal
+ * leaves empty is no deletion either (the augmentation rule deletes nothing).
+ * The `id` never changes, and `body` is reviewed block by block.
+ */
+export function locationFieldProposals(
+  current: LocationProposal,
+  proposed: LocationProposal,
+): AugmentPropertyProposal[] {
+  const { id: _id, body: _body, ...fields } = proposed;
+  const out: AugmentPropertyProposal[] = [];
+  for (const [key, value] of Object.entries(fields) as Array<[keyof typeof fields, string | undefined]>) {
+    const before = current[key];
+    if (isEmptyText(value) || (before ?? "").trim() === (value ?? "").trim()) continue;
+    out.push({
+      key,
+      ...(before === undefined ? {} : { current: before }),
+      proposed: value,
+      state: isEmptyText(before) ? "new" : "changed",
+    });
+  }
+  return out;
 }

@@ -7,8 +7,8 @@
 //      whole chrome, in the switcher; repeating it here reads as noise ("Der
 //      Leuchtturm von Salzhafen / Kapitel 1: Der Leuchtturm von Salzhafen /
 //      Fenn").
-//   2. The context is the path the DM actually took, so an npc/location view
-//      points at ITS list — not at some chapter that happens to mention it,
+//   2. The context is the path the DM actually took, so an npc or a location
+//      view points at ITS list — not at some chapter that happens to mention it,
 //      which is misleading for an NPC opened from the NPC list.
 //
 // The scene's chapter comes from the ADDRESS, not from `chapter` properties:
@@ -21,6 +21,7 @@ import { kindFromAddress } from "@grimoire/shared/kind";
 import type { Translate } from "@/i18n";
 import { addressSegments } from "@/lib/address";
 import { locationName } from "@/lib/campaign";
+import { locationsHref } from "@/lib/open-target";
 
 /** One step of the context line; without `to` it is plain text. */
 export interface ContextCrumb {
@@ -36,13 +37,14 @@ export interface ContextCrumb {
  *
  * Scene: `<chapter title> › <location>`, the chapter linking to the chapter
  * overview. The location part is the scene's middle segment resolved to a
- * display name (the location's name when `locations/<slug>` exists, otherwise
- * the slug as written — never prettified), and is absent for a scene
- * addressed directly under its chapter.
+ * display name (the location's name when the location exists, otherwise the
+ * slug as written — never prettified), and is absent for a scene addressed
+ * directly under its chapter.
  * Chapter entry: just the chapter, unlinked — it IS the chapter.
- * NPC / location: their list.
+ * NPC: its list. (A location's reading view has its own route and crumbs:
+ * `locationPageCrumbs`.)
  *
- * The two list labels come from the CATALOG via `t` — the crumb
+ * The list labels come from the CATALOG via `t` — the crumb
  * says exactly what the list page it points at is titled, and this helper
  * stays language-free like every other one in lib/.
  */
@@ -58,8 +60,6 @@ export function pageContextCrumbs(
   switch (kindFromAddress(path)) {
     case "npc":
       return [{ label: t("browse.title.npcs"), to: `/campaigns/${campaign}/list/npcs` }];
-    case "location":
-      return [{ label: t("browse.title.locations"), to: `/campaigns/${campaign}/list/locations` }];
     case "scene":
     case "chapter": {
       const chapterId = segments[0] ?? "";
@@ -77,4 +77,10 @@ export function pageContextCrumbs(
     default:
       return [];
   }
+}
+
+/** The context of a location's reading view: its list (ADR #31). */
+export function locationPageCrumbs(campaign: string, t: Translate): ContextCrumb[] {
+  if (campaign === "") return [];
+  return [{ label: t("browse.title.locations"), to: locationsHref(campaign) }];
 }

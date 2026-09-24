@@ -351,14 +351,22 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 // --- the review state on the job -------------------------------------------
 //
 // Everything the DM does in the review — the edited text, the decision per
-// suggested entry, the dropped scenes, the per field/block decisions of an
-// augment run — lives on the JOB, not in this browser. These are the pure
+// npc stub and per proposed location, the dropped scenes, the per field/block
+// decisions of an augment run — lives on the JOB, not in this browser. These are the pure
 // halves of that: what the state IS, what a patch does to it, and what is
 // still open. No fetching; the hook (lib/use-job-review.ts) does that.
 
 /** A review state with nothing decided — also the fallback for an older payload. */
 export function emptyReview(): GenerateJobReview {
-  return { entries: {}, dropped: [], fields: {}, blocks: {}, written: {} };
+  return {
+    entries: {},
+    dropped: [],
+    fields: {},
+    blocks: {},
+    written: {},
+    locations: {},
+    writtenLocations: [],
+  };
 }
 
 /** The job's review state, degrading to "nothing decided" when it has none. */
@@ -371,6 +379,8 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
     fields: review.fields ?? {},
     blocks: review.blocks ?? {},
     written: review.written ?? {},
+    locations: review.locations ?? {},
+    writtenLocations: review.writtenLocations ?? [],
   };
 }
 
@@ -378,6 +388,8 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
 export interface ReviewPatch {
   edits?: Record<string, DraftEdit>;
   entries?: Record<string, GenerateReviewDecision | null>;
+  /** The decision per proposed location, by its id. */
+  locations?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
   fields?: Record<string, boolean | null>;
   blocks?: Record<string, boolean | null>;
@@ -388,8 +400,8 @@ export interface ReviewPatch {
  * shows while the request is in flight. It must merge exactly the way the
  * server does (generate-jobs.ts `applyReviewPatch`), including the one
  * asymmetry: `dropped` is a set sent whole, everything else merges per key,
- * and a `null` value — in `entries`, `fields` and `blocks` alike — means
- * that the decision is open again, which deletes the key.
+ * and a `null` value — in `entries`, `locations`, `fields` and `blocks`
+ * alike — means that the decision is open again, which deletes the key.
  */
 /**
  * What the review shows for one draft: the generated properties and body with
@@ -442,22 +454,32 @@ function mergeFlags(
   return out;
 }
 
+/** Merge decisions; `null` deletes the key (the server does this). */
+function mergeDecisions(
+  into: Record<string, GenerateReviewDecision>,
+  patch?: Record<string, GenerateReviewDecision | null>,
+): Record<string, GenerateReviewDecision> {
+  const out = { ...into };
+  for (const [key, decision] of Object.entries(patch ?? {})) {
+    if (decision === null) delete out[key];
+    else out[key] = decision;
+  }
+  return out;
+}
+
 export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): GenerateJob {
   const review = reviewOf(job);
-  const entries = { ...review.entries };
-  for (const [key, decision] of Object.entries(patch.entries ?? {})) {
-    if (decision === null) delete entries[key];
-    else entries[key] = decision;
-  }
   return {
     ...job,
     draftEdits: mergeDraftEdits(job.draftEdits, patch.edits),
     review: {
-      entries,
+      entries: mergeDecisions(review.entries, patch.entries),
       dropped: patch.dropped === undefined ? review.dropped : [...new Set(patch.dropped)],
       fields: mergeFlags(review.fields, patch.fields),
       blocks: mergeFlags(review.blocks, patch.blocks),
       written: review.written,
+      locations: mergeDecisions(review.locations, patch.locations),
+      writtenLocations: review.writtenLocations,
     },
   };
 }
@@ -479,13 +501,32 @@ export function partState(job: GenerateJob | null | undefined, path: string): Pa
   return "open";
 }
 
-/** Every part of a run, by the path the review addresses it with. */
+/**
+ * The state of one proposed location, by its id — the same four states, read
+ * off the location's own decisions and written list.
+ */
+export function locationState(job: GenerateJob | null | undefined, id: string): PartState {
+  const review = reviewOf(job);
+  if (review.writtenLocations.includes(id)) return "written";
+  if (review.locations[id] === "rejected") return "rejected";
+  return "open";
+}
+
+/**
+ * Every scene and npc part of a run, by the path the review addresses it
+ * with. The proposed locations are addressed by id (`jobLocations`).
+ */
 export function jobParts(job: GenerateJob | null | undefined): string[] {
   const parts = (job?.result?.scenes ?? []).map((scene) => scene.path);
-  for (const stub of job?.result?.stubs ?? []) parts.push(`${stub.kind}s/${stub.id}`);
+  for (const stub of job?.result?.stubs ?? []) parts.push(`npcs/${stub.id}`);
   const npc = job?.npcResult?.npc.path;
   if (npc !== undefined) parts.push(npc);
   return parts;
+}
+
+/** The ids of the locations a run proposes. */
+export function jobLocations(job: GenerateJob | null | undefined): string[] {
+  return (job?.result?.locations ?? []).map((location) => location.id);
 }
 
 /**
@@ -499,10 +540,13 @@ export function jobProgress(job: GenerateJob | null | undefined): {
   total: number;
 } {
   const parts = jobParts(job);
+  const locations = jobLocations(job);
   const review = reviewOf(job);
   return {
-    written: parts.filter((path) => review.written[path] !== undefined).length,
-    total: parts.length,
+    written:
+      parts.filter((path) => review.written[path] !== undefined).length +
+      locations.filter((id) => review.writtenLocations.includes(id)).length,
+    total: parts.length + locations.length,
   };
 }
 
@@ -531,9 +575,14 @@ export function acceptProgress(job: GenerateJob | null | undefined): {
   return { written: progress.written, total: Math.max(parts.length, progress.total) };
 }
 
-/** The parts a bulk accept would write: everything still open. */
+/** The scene and npc parts still open, by path. */
 export function openParts(job: GenerateJob | null | undefined): string[] {
   return jobParts(job).filter((path) => partState(job, path) === "open");
+}
+
+/** The proposed locations still open, by id. */
+export function openLocations(job: GenerateJob | null | undefined): string[] {
+  return jobLocations(job).filter((id) => locationState(job, id) === "open");
 }
 
 // --- the pipeline of a scene run -------------------------------------------
@@ -558,27 +607,6 @@ export function partsStillRunning(job: GenerateJob | null | undefined): boolean 
   return jobPipelineParts(job).some(
     (part) => part.status === "pending" || part.status === "running",
   );
-}
-
-/**
- * The part that produced a given draft path, or undefined. The review
- * addresses a scene as `<chapter>/<id>` and an entry as `npcs/<id>`; a part
- * knows its bare id and its kind, so the mapping is one place and not three.
- */
-export function partForPath(
-  job: GenerateJob | null | undefined,
-  path: string,
-): GenerateJobPart | undefined {
-  const id = path.slice(path.lastIndexOf("/") + 1);
-  const kind = path.startsWith("npcs/") ? "npc" : path.startsWith("locations/") ? "location" : "scene";
-  return jobPipelineParts(job).find((part) => part.kind === kind && part.id === id);
-}
-
-/** The address the review uses for a part — the key an accept names. */
-export function partPath(job: GenerateJob | null | undefined, part: GenerateJobPart): string {
-  if (part.kind === "npc") return `npcs/${part.id}`;
-  if (part.kind === "location") return `locations/${part.id}`;
-  return `${job?.chapter ?? ""}/${part.id}`;
 }
 
 /**

@@ -57,10 +57,11 @@ test("reading view: references render as the current name, unknown ones stay tex
   // The suffix stays outside the reference — "Jornas Boot" reads as German.
   await expect(page.locator(".md-body")).toContainText(`${JORNA}s Boot`);
 
-  // The location resolves too (kind: location).
-  await expect(
-    page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first(),
-  ).toBeVisible();
+  // The location resolves too (kind: location) — and links to the location's
+  // own route (ADR #31).
+  const locationRef = page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first();
+  await expect(locationRef).toBeVisible();
+  await expect(locationRef).toHaveAttribute("href", "/campaigns/beispiel/locations/leuchtturm");
 
   // Degradation: nothing owns `niemand`, so the source stays visible — no
   // error, no warning colour, and it becomes a link the moment it exists.
@@ -284,13 +285,13 @@ test("a reference inside an excerpt reads as the name — in the preview and on 
   await expect(tooltip.getByRole("link")).toHaveCount(0);
 });
 
-test("a location's atmosphere is the property: a `## Atmosphäre` section does not change it", async ({
+test("a location's atmosphere is its field: a `## Atmosphäre` section does not change it", async ({
   page,
   api,
 }) => {
-  const { body } = await api.entry("locations/leuchtturm");
-  await api.patchEntry("locations/leuchtturm", {
-    properties: { atmosphere: "Kalt, still — [[jorna]] war zuletzt hier." },
+  const { body } = await api.location("leuchtturm");
+  await api.patchLocation("leuchtturm", {
+    atmosphere: "Kalt, still — [[jorna]] war zuletzt hier.",
     body: `\n## Atmosphäre\n\nNur im Text, nie in der Vorschau.\n${body}`,
   });
   await page.goto(SCENE_URL);
@@ -302,7 +303,7 @@ test("a location's atmosphere is the property: a `## Atmosphäre` section does n
 
   // Emptied, the preview falls back to the Roll20 page — the section in the
   // body still does not stand in.
-  await api.patchProperties("locations/leuchtturm", { atmosphere: null });
+  await api.patchLocation("leuchtturm", { atmosphere: null });
   await page.reload();
   await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().hover();
   await expect(tooltip).toContainText("Roll20-Seite: Leuchtturm");

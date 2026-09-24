@@ -29,6 +29,13 @@
       "when": 1790191271361,
       "tag": "0003_open_threads",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790266799035,
+      "tag": "0004_drop_location_jobs",
+      "breakpoints": true
     }
   ]
 }

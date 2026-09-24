@@ -1,8 +1,8 @@
-// The short forms of an entry — what the aside cards and the hover preview of
-// a `[[slug]]` reference show of an NPC, a location or a scene.
+// The short forms of an npc, a location or a scene — what the aside cards and
+// the hover preview of a `[[slug]]` reference show of them.
 //
 // One reading for all of them, so a card and a preview never disagree: the
-// same PROPERTIES — an npc's `motivation`, a location's `atmosphere`, never a
+// same FIELDS — an npc's `motivation`, a location's `atmosphere`, never a
 // section of the body found by its heading (ADR #29) — and the same rule for
 // references INSIDE an excerpt: they read as the current display name, plain
 // text (an excerpt is no place for a second link). An unresolved slug keeps
@@ -13,15 +13,15 @@
 // a query or a DOM.
 
 import { expandBodyEntityRefs } from "@grimoire/shared/refs";
-import type { NpcStatus, SceneStatus } from "@grimoire/shared/types";
+import type { Location, NpcStatus, SceneStatus } from "@grimoire/shared/types";
 
 import { npcStatusOf } from "@/lib/entity";
 import { propQuickstats, propString } from "@/lib/properties";
 import { sceneStatusOf } from "@/lib/scene-status";
 
 /**
- * What an entry is, as far as its short form cares: its properties. The body
- * is not read — nothing a card shows is derived from the text.
+ * What an npc or a scene is, as far as its short form cares: its properties.
+ * The body is not read — nothing a card shows is derived from the text.
  */
 export interface ExcerptSource {
   properties: Record<string, unknown>;
@@ -54,7 +54,7 @@ export interface SceneExcerpt {
   status: SceneStatus;
 }
 
-/** A prose property as the card shows it: its references resolved to names. */
+/** A prose field as the card shows it: its references resolved to names. */
 function proseExcerpt(value: unknown, nameOf: NameOf): string | undefined {
   const text = propString(value);
   return text === undefined ? undefined : expandBodyEntityRefs(text, nameOf);
@@ -71,10 +71,11 @@ export function npcExcerpt(entry: ExcerptSource, nameOf: NameOf): NpcExcerpt {
   };
 }
 
-export function locationExcerpt(entry: ExcerptSource, nameOf: NameOf): LocationExcerpt {
+/** A location's short form, read off its own fields (ADR #31). */
+export function locationExcerpt(location: Location, nameOf: NameOf): LocationExcerpt {
   return {
-    mood: proseExcerpt(entry.properties.atmosphere, nameOf),
-    page: propString(entry.properties["roll20-page"]),
+    mood: proseExcerpt(location.atmosphere, nameOf),
+    page: propString(location.roll20Page),
   };
 }
 

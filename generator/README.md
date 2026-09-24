@@ -19,11 +19,11 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
   fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
   abzuschalten.
 
-**Eintrags-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
-(NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem Objekt, das den
-gespeicherten Eintrag **spiegelt**: die Eigenschaften unter `properties`,
-den ganzen Text als **ein** String unter `body`, die Hinweise für den DM
-unter `warnings`.
+**Eintrags-Antworten — der Normalfall.** Szenen-Teil, NPC-Teil, NPC-Lauf
+und das Ergänzen von Szene und NPC antworten mit dem Objekt, das den
+gespeicherten Eintrag **spiegelt**: die Eigenschaften unter `properties`, den
+ganzen Text als **ein** String unter `body`, die Hinweise für den DM unter
+`warnings`. Der Ort antwortet als er selbst, siehe unten.
 
 ```json
 {
@@ -38,42 +38,74 @@ unter `warnings`.
 }
 ```
 
-`properties` ist **je Art** getypt, und zwar aus **derselben** Feldliste, aus
-der der Eigenschaften-Dialog gebaut wird (`shared/src/property-fields.ts`) —
-ein Modell kann also genau die Felder schreiben, die der DM auch bearbeiten
-kann, und keins mehr. Der **Entwurf bleibt dieses Paar** — `properties` und
-`body` — von der Antwort bis in die Zeile (ADR #24): nichts setzt daraus einen
-Markdown-Text zusammen und nichts liest einen zurück, also kann auf diesem Weg
-auch nichts an einem Wert verloren gehen.
+**Orts-Antworten.** Ein Ort ist seine eigene Ressource mit eigenem Typ
+(ADR #31). Orts-Teil und Orts-Ergänzung antworten mit dem Ort selbst ohne
+`rev` — alle Felder nebeneinander, `body` eines davon — und daneben
+`warnings`:
 
-Die Schemata liegen als **lesbares JSON** in `shared/schema/`, eines je Art
-und Lauf: `scene.schema.json`, `npc.schema.json`, `location.schema.json`,
-dazu `augmented-scene.schema.json`, `augmented-npc.schema.json` und
-`augmented-location.schema.json` für den Ergänzen-Lauf sowie
-`outline.schema.json`. Der Code lädt sie nur und gibt sie an den Provider
-weiter; `shared/test/entry-schema.test.ts` prüft ihre Schlüssel und
-Wertelisten gegen die Feldliste und die Konstanten, die die Validierung
-liest, damit die beiden nicht auseinanderlaufen können. Der
-Unterschied zwischen den Läufen steht in den Schemata selbst: eine bestehende
-Szene behält den Status, den der DM ihr gegeben hat, während eine **neue**
-Szene nur `draft` sein kann.
+```json
+{
+  "id": "alte-mole",
+  "name": "Die alte Mole",
+  "chapter": null,
+  "roll20Page": "Mole",
+  "atmosphere": "Salz in der Luft, Möwen über dem Schlick.",
+  "body": "## Beim ersten Betreten\n\n> [!readaloud] …\n",
+  "warnings": []
+}
+```
 
-**Die Prompts zeigen genau dieses Objekt.** Der Abschnitt „## Eigenschaften
-und Text des Eintrags“ jedes Create-Prompts führt ein ```json-Beispiel des
-Antwort-Objekts: `properties` mit denselben Feldern in derselben Reihenfolge
-wie das Schema der Art (ein Feld ohne Quelle als `null`), `body` als **ein**
-String — dessen Aufbau, `## Flow`, `## If:`, die sechs Callouts und
-`[[id]]`-Verweise, steht als Beschreibung dieses Strings darunter — und
-`warnings` als Liste von Strings. Prompt, Schema und Few-Shot zeigen damit
-Feld für Feld dieselbe Form.
+Die Felder sind **je Entität** getypt — ein Modell kann genau die Felder
+schreiben, die der DM auch bearbeiten kann, und keins mehr. Nichts setzt aus
+einer Antwort einen Markdown-Text zusammen und nichts liest einen zurück,
+also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Bei Szene
+und NPC bleibt der **Entwurf** das Paar aus Eigenschaften und `body` von der
+Antwort bis in die Zeile (ADR #24). Ein vorgeschlagener Ort ist der Ort ohne
+`rev` (`LocationProposal`); ein Job listet diese Orte unter
+`result.locations`, getrennt von Szenen und NPCs, und Prüfen, Entscheiden und
+Übernehmen laufen für sie über ihre `id`.
+
+Das Antwort-Schema des Orts hat **genau eine Quelle**: sein zod-Schema
+(`shared/src/location.ts`). Daraus leitet der Ort seine Generator-Form
+selbst ab, mit der API von zod (`locationReplySchema`: der Ort ohne `rev`,
+die optionalen Felder `null`-fähig statt optional, dazu `warnings`, nichts
+Zusätzliches erlaubt), und `locationReplyRequest` in
+`server/src/location-reply.ts` gibt sie per `z.toJSONSchema` an den Provider
+— je Lauf unter eigenem Namen (`location`, `augmented_location`). Das Schema
+trägt keine `description`: was das Modell über die Felder wissen muss (die
+id-Regel, welche Kapitel-id `chapter` nennen darf, was `atmosphere` ist, die
+Form von `body` und `warnings`), steht in `location-system-prompt.md` unter
+„## Die Felder des Orts“, und der Ergänzen-Lauf bekommt genau diesen
+Abschnitt mit. Szene und NPC laden ihre Schemata als **lesbares
+JSON** aus `shared/schema/`, eines je Entität
+und Lauf (`scene.schema.json`, `npc.schema.json`,
+`augmented-scene.schema.json`, `augmented-npc.schema.json`), dazu
+`outline.schema.json`; `shared/test/entry-schema.test.ts` prüft deren
+Schlüssel und Wertelisten gegen die Feldliste
+(`shared/src/property-fields.ts`) und für **jedes** Schema, abgeleitet oder
+geladen, die Regeln des strict mode. Der Unterschied zwischen den Läufen
+steht in den Schemata selbst: eine bestehende Szene behält den Status, den
+der DM ihr gegeben hat, während eine **neue** Szene nur `draft` sein kann.
+
+**Die Prompts zeigen genau dieses Objekt.** Der Formatabschnitt jedes
+Create-Prompts — „## Eigenschaften und Text des Eintrags“ bei Szene und NPC,
+„## Die Felder des Orts“ beim Ort — führt ein ```json-Beispiel des
+Antwort-Objekts: die Felder in derselben Reihenfolge wie das Schema der Entität
+(ein Feld ohne Quelle als `null`) — bei Szene und NPC unter `properties`,
+beim Ort nebeneinander —, `body` als **ein** String — dessen
+Aufbau, `## Flow`, `## If:`, die sechs Callouts und `[[id]]`-Verweise, steht
+als Beschreibung dieses Strings darunter — und `warnings` als Liste von
+Strings. Prompt, Schema und Few-Shot zeigen damit Feld für Feld dieselbe
+Form.
 
 Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
 und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
 Prozess):
 
 * kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
-  nicht sagen kann, steht in einer `description` und wird dort geprüft, wo es
-  immer geprüft wurde (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
+  nicht sagen kann, steht in einer `description` (bei Szene und NPC) bzw. im
+  Orts-Prompt (beim Ort) und wird dort geprüft, wo es immer geprüft wurde
+  (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
 * **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
   stattdessen `null`-fähig, und der Server liest `null` als „nicht
   angegeben“ und lässt den Schlüssel weg,
@@ -209,10 +241,12 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
    „Antwortformate“ oben.
 4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
    Inhalt):
-   - `properties` nur bekannte Felder, kebab-`id`? `type`/`status` gültig?
+   - nur bekannte Eigenschaften, kebab-`id`? `type`/`status` gültig?
      `status == draft`?
-     Stubs: NPC-Status gültig (Normalfall `alive`), Orte ohne status-Key.
-   - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
+     Stubs: NPC-Status gültig (Normalfall `alive`); ein Ort hat kein
+     `status`-Feld, sein Schema kennt keins.
+   - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Vorschlag
+     desselben Laufs bei?
    - jedes `[[id]]` im Text nennt einen NPC, Ort oder eine Szene der
      Kampagne oder einen Vorschlag desselben Laufs (Gliederung, im NPC-Lauf
      der NPC selbst)? Im Ergänzen-Lauf zählen nur Verweise, die der
@@ -228,8 +262,9 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
 5. Server prüft den fertigen Draft gegen die **Namenskonventionen** des
    Kampagnenwissens (Wortgrenzen, Groß/Klein-unabhängig, keine Heuristik)
    und legt Treffer als `namingHints` ins Job-Ergebnis.
-6. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
-   annehmen/ablehnen, Namens-Hinweise dezent daneben (kein Blocker).
+6. App zeigt Review-Vorschau: Szenen editierbar, vorgeschlagene NPCs und
+   Orte einzeln annehmen/ablehnen, Namens-Hinweise dezent daneben (kein
+   Blocker).
    Erst „Übernehmen“ schreibt in die Datenbank.
 
 ## Kampagnenwissen
@@ -253,8 +288,9 @@ der Prompt sieht dann genauso aus wie vorher.
 ## Deutsche Orthografie
 
 Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
-`location-system-prompt.md`, `augment-system-prompt.md` und
-`outline-system-prompt.md`) tragen **dieselbe**
+`location-system-prompt.md`, `augment-system-prompt.md`,
+`location-augment-system-prompt.md` und `outline-system-prompt.md`) tragen
+**dieselbe**
 Regel „Deutsche Orthografie“: jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
 Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
@@ -277,8 +313,10 @@ Few-Shots und `examples/`.
 Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
 zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
-nur „## Eigenschaften und Text des Eintrags“ einschneidet (`formatContract` in
-`server/src/generator-augment.ts`). Der Server korrigiert nichts nach: es
+nur den Formatabschnitt einschneidet (`formatContract` in
+`server/src/generator-augment.ts`; beim Ort „## Die Felder des Orts“ aus
+`location-system-prompt.md` unter den Ort-Ergänzen-Prompt
+`location-augment-system-prompt.md`, `server/src/location-augment.ts`). Der Server korrigiert nichts nach: es
 gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
 Prompt.
 
@@ -291,8 +329,8 @@ Gliederungs-Prompt trägt sie nicht, weil er allein die Gliederung ausgibt
 `warnings` Text sind) — in den drei Create-Prompts unter
 „## Regeln“, im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
 in jedem zusammengesetzten Prompt (`formatContract` in
-`server/src/generator-augment.ts` schneidet aus den Create-Prompts nur
-„## Eigenschaften und Text des Eintrags“ heraus).
+`server/src/generator-augment.ts` schneidet aus den Create-Prompts nur den
+Formatabschnitt heraus).
 
 Inhalt der Regel: Tabellen aus dem Quellmaterial — Zufallstabellen,
 Begegnungs- und Würfellisten — werden als gültige GFM-Pipe-Tabelle
@@ -345,11 +383,16 @@ Das Modell liefert **Einträge**, und der Server bildet die Adresse:
   den Eigenschaften. Die **Gruppe** kommt aus `location`, also lautet die
   gespeicherte Adresse `<kapitel>/<location>/<id>` (ohne `location`:
   Kapitelebene).
-* Vorgeschlagene Einträge: ein gemeinsames Array `entries` mit
-  `kind: "npc" | "location"`; die `id` steht in den Eigenschaften des Eintrags,
-  adressiert wird als `npcs/<id>` bzw. `locations/<id>`.
+* Vorgeschlagene NPCs: im Job-Ergebnis unter `stubs`, die `id` in den
+  Eigenschaften, adressiert als `npcs/<id>`.
+* Vorgeschlagene Orte haben keine Adresse: sie stehen als Orte ohne `rev`
+  unter `result.locations` und werden über ihre `id` geprüft, entschieden
+  und übernommen (`accept { locations: [<id>] }`; die Antwort nennt die
+  geschriebenen Orte unter `locations`).
 * NPC-Lauf und Ergänzen-Lauf: ein Objekt ohne `path`; beim Ergänzen steht
-  die Zieladresse ohnehin serverseitig fest.
+  das Ziel ohnehin serverseitig fest — beim Ort ist es die Ressource, an der
+  der Lauf hängt (`POST …/locations/<id>/augment`, übernommen mit `POST
+  …/locations/<id>/augment/apply`).
 
 Der Prüfschritt adressiert die Teile eines Laufs weiterhin über die vom
 Server gebildete Adresse (`GenerateResult.scenes[].path` = `<kapitel>/<id>`);

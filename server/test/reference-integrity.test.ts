@@ -14,7 +14,7 @@
 //     is neither: it stays visible text, with no entry and no error.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, EntryResponse, SessionResponse } from "@grimoire/shared";
+import type { CampaignTree, EntryResponse, Location, SessionResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { applyDrafts } from "../src/store/drafts";
 import { dropStore, seedStore } from "./support/store";
@@ -126,7 +126,7 @@ describe("a reference that names nothing is refused", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "location_unknown", value: "alte-mole" });
     expect((await getEntry(SCENE)).properties.location).toBe(before.properties.location);
-    expect(await entryStatus("locations/alte-mole")).toBe(404);
+    expect((await app.request("/api/campaigns/beispiel/locations/alte-mole")).status).toBe(404);
   });
 
   test("free text in location stays the 400 that names the id to use", async () => {
@@ -142,8 +142,10 @@ describe("a reference that names nothing is refused", () => {
     expect((await tree()).locations.some((l) => l.id === "der-alte-hafen")).toBe(false);
   });
 
-  test("an unknown chapter: 400 chapter_unknown for a scene, an npc and an ort", async () => {
-    for (const rel of [SCENE, NPC, "locations/leuchtturm"]) {
+  test("an unknown chapter: 400 chapter_unknown for a scene and an npc", async () => {
+    // (A location refuses it the same way on its own resource:
+    // test/locations.test.ts.)
+    for (const rel of [SCENE, NPC]) {
       const before = await getEntry(rel);
       const res = await patchRes(rel, { chapter: "99-nirgendwo" });
       expect(res.status).toBe(400);
@@ -310,17 +312,16 @@ describe("the generator's apply step", () => {
         properties: { id: "holm", name: "Holm", status: "alive" },
         body: "\n## Will\n\nSeine Netze zurück.\n",
       },
-      {
-        rel: "locations/alte-mole",
-        address: "locations/alte-mole",
-        properties: { id: "alte-mole", name: "Alte Mole" },
-        body: "\n## Beim ersten Betreten\n\nMorsch.\n",
-      },
-    ]);
+    ], {
+      locations: [
+        { id: "alte-mole", name: "Alte Mole", body: "\n## Beim ersten Betreten\n\nMorsch.\n" },
+      ],
+    });
     const npc = await getEntry("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
     expect(npc.properties.status).toBe("alive");
-    expect((await getEntry("locations/alte-mole")).properties.name).toBe("Alte Mole");
+    const res = await app.request("/api/campaigns/beispiel/locations/alte-mole");
+    expect(((await res.json()) as Location).name).toBe("Alte Mole");
     const scene = await getEntry("01-salzhafen/alte-mole/neue-szene");
     expect(scene.properties.npcs).toEqual(["holm"]);
   });

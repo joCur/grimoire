@@ -1,9 +1,8 @@
 // Entity-kind helpers for the entry reading view.
 //
-// GET /entry answers with the entity `kind` (path-derived, see
-// shared/src/parse.ts). The reading view picks its header from that kind —
-// the scene header (type overline, chip row) must never sit above an NPC or
-// a location. Everything here is pure so it can be unit-tested without a DOM.
+// GET /entries/<address> answers with the entry's `kind`. The reading view
+// picks its header from that kind — the scene header (type overline, chip
+// row) must never sit above an NPC. Everything here is pure so it can be unit-tested without a DOM.
 
 import type { EntityKind, NpcStatus } from "@grimoire/shared/types";
 
@@ -11,14 +10,16 @@ import type { MessageKey, Translate } from "@/i18n";
 import { propString } from "@/lib/properties";
 
 /**
- * Which header the reading view renders for a kind:
+ * Which header the entry reading view renders for a kind:
  *
  *   scene              -> the scene article (type overline, trigger, chips)
- *   npc / location     -> their own entity headers
+ *   npc                -> its own entity header
  *   everything else    -> title + body (chapter, campaign, unknown) — quiet
  *                         and generic, never the scene overline.
+ *
+ * A location is read on its own route (ADR #31), not through this switch.
  */
-export type EntityHeaderKind = "scene" | "npc" | "location" | "titled";
+export type EntityHeaderKind = "scene" | "npc" | "titled";
 
 export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
   switch (kind) {
@@ -26,8 +27,6 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
       return "scene";
     case "npc":
       return "npc";
-    case "location":
-      return "location";
     default:
       return "titled";
   }

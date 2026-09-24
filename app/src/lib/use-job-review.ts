@@ -72,6 +72,7 @@ function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
     ...patch,
     edits: mergeDraftEdits(into.edits ?? {}, patch.edits),
     entries: { ...into.entries, ...patch.entries },
+    locations: { ...into.locations, ...patch.locations },
     fields: { ...into.fields, ...patch.fields },
     blocks: { ...into.blocks, ...patch.blocks },
   };
@@ -82,6 +83,7 @@ function prune(patch: ReviewPatch): ReviewPatch {
   const out: ReviewPatch = {};
   if (Object.keys(patch.edits ?? {}).length > 0) out.edits = patch.edits;
   if (Object.keys(patch.entries ?? {}).length > 0) out.entries = patch.entries;
+  if (Object.keys(patch.locations ?? {}).length > 0) out.locations = patch.locations;
   if (Object.keys(patch.fields ?? {}).length > 0) out.fields = patch.fields;
   if (Object.keys(patch.blocks ?? {}).length > 0) out.blocks = patch.blocks;
   if (patch.dropped !== undefined) out.dropped = patch.dropped;

@@ -152,6 +152,24 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
     await row.getByRole("button", { name: "Annehmen" }).click();
   };
   await expect(page.getByText("Vorgeschlagene Einträge — einzeln entscheiden")).toBeVisible();
+  // The run's proposed location is its own typed list (ADR #31): the
+  // location itself, no kind, no path — and no stub.
+  const run = await api.get<{
+    result: { stubs: Array<{ kind: string; id: string }>; locations: Array<Record<string, unknown>> };
+  }>("campaigns/beispiel/generate/job");
+  expect(run.result.stubs.map((stub) => `${stub.kind}:${stub.id}`)).toEqual([`npc:${NPC_STUB_ID}`]);
+  expect(run.result.locations).toEqual([
+    expect.objectContaining({ id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME }),
+  ]);
+  for (const key of ["kind", "path", "properties", "rev"]) {
+    expect(Object.keys(run.result.locations[0]!)).not.toContain(key);
+  }
+  // A proposal is the location without its guard: an optional field the
+  // model left out is absent, never `null`, and `warnings` travel apart.
+  for (const location of run.result.locations) {
+    expect(Object.keys(location).sort()).toEqual(["atmosphere", "body", "id", "name"]);
+    expect(Object.values(location)).not.toContain(null);
+  }
   await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
   await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
@@ -161,7 +179,14 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // Done state lists exactly what was written — the ADDRESSES, so the DM sees
   // where the scene actually landed and not the id the model proposed.
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  await expect(page.getByText(SCENE_PATH)).toBeVisible();
+  const writtenList = page.getByRole("listitem");
+  await expect(writtenList.getByText(SCENE_PATH, { exact: true })).toBeVisible();
+  await expect(writtenList.getByText(`npcs/${NPC_STUB_ID}`, { exact: true })).toBeVisible();
+  // The location has no address; it names itself by its resource segment,
+  // the same way the npc beside it does.
+  await expect(
+    writtenList.getByText(`locations/${LOCATION_STUB_ID}`, { exact: true }),
+  ).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.
   const scene = await api.entry(SCENE_PATH);
@@ -169,14 +194,13 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   expect(scene.properties.title).toBe(SCENE_TITLE);
   expect(scene.body).toContain("> [!loot]");
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).status).toBe("alive");
-  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).status).toBeUndefined();
-  // The prose properties the model proposed rode along with each entry.
+  const writtenLocation = await api.location(LOCATION_STUB_ID);
+  expect(Object.keys(writtenLocation)).not.toContain("status");
+  // The prose fields the model proposed rode along with the npc and the location.
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).motivation).toBe(NPC_STUB_MOTIVATION);
-  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).atmosphere).toBe(
-    LOCATION_STUB_ATMOSPHERE,
-  );
+  expect(writtenLocation.atmosphere).toBe(LOCATION_STUB_ATMOSPHERE);
   // The co-proposed npc's reference arrived as written, and now resolves.
-  expect(await api.body(`locations/${LOCATION_STUB_ID}`)).toContain(`[[${NPC_STUB_ID}]]`);
+  expect(writtenLocation.body).toContain(`[[${NPC_STUB_ID}]]`);
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (ADR #17).
@@ -497,7 +521,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect(written.properties.location).toBe(LOCATION_STUB_ID);
   // Both entries carry their NAME, so they were written as proposed.
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
-  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
+  expect((await api.location(LOCATION_STUB_ID)).name).toBe(LOCATION_STUB_NAME);
   // Nothing is left open, so the job is gone.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
@@ -640,7 +664,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   // never landed.
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect(await api.exists(SCENE_PATH)).toBe(false);
-  expect(await api.exists(`locations/${LOCATION_STUB_ID}`)).toBe(false);
+  expect(await api.locationExists(LOCATION_STUB_ID)).toBe(false);
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 

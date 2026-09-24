@@ -252,14 +252,24 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   );
 
   // --- create the location --------------------------------------------------
-  await page.goto(`/campaigns/${CAMPAIGN_ID}/list/locations`);
+  // The location list is the location's own route (ADR #31).
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/locations`);
   await page.getByRole("button", { name: "Ort anlegen" }).click();
   const locationName = page.getByLabel("Name");
   await expect(locationName).toHaveAttribute("placeholder", "Name des Orts");
   await locationName.fill("Hafenviertel");
   await page.getByRole("button", { name: "Anlegen" }).click();
-  await expect(page).toHaveURL(/\/locations\/hafenviertel$/);
-  expect((await api.entry("locations/hafenviertel")).properties.name).toBe("Hafenviertel");
+  // The create answers the location itself, and its reading view is the
+  // location's own route.
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/locations/hafenviertel$`));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenviertel");
+  expect((await api.location("hafenviertel")).name).toBe("Hafenviertel");
+  // …and it lists on that route.
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/locations`);
+  await expect(page.getByRole("link", { name: /Hafenviertel/ })).toHaveAttribute(
+    "href",
+    `/campaigns/${CAMPAIGN_ID}/locations/hafenviertel`,
+  );
 });
 
 test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, server }) => {

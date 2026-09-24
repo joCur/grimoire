@@ -89,11 +89,12 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 }
 
 /**
- * Route for a picked result. An entry opens as an entry view
- * (/campaigns/:campaign/entries/<path>); the kinds that are no longer entries
- * open the page that HOLDS them — a session its reading page, an idea the
- * wrap-up it is waiting in, a term the glossary page — and the campaign
- * itself opens the chapter overview.
+ * Route for a picked result. A location opens its own reading view by its id
+ * (/campaigns/:campaign/locations/<id>, ADR #31); an entry opens as an entry
+ * view (/campaigns/:campaign/entries/<path>); the lists open the page that
+ * HOLDS the row — a session its reading page, an idea the wrap-up it is
+ * waiting in, a term the glossary page — and the campaign itself opens the
+ * chapter overview.
  *
  * A result without a `path` can only be one of those kinds, so an unknown one
  * falls back to the chapter overview rather than building an entry address out
@@ -107,6 +108,8 @@ export function resultHref(
   switch (result.kind) {
     case "campaign":
       return scope;
+    case "location":
+      return `${scope}/locations/${encodeURIComponent(result.id)}`;
     case "session":
       return `${scope}/sessions/${encodeURIComponent(result.id)}`;
     case "inbox":

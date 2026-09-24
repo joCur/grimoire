@@ -1,21 +1,23 @@
-// Whether there is anything to save — the rule the edit mode of the reading
-// view needs before any write is involved.
+// What the edit mode of a reading view saves — the rules it needs before any
+// write is involved.
 //
-// Every entry has an editable text: the lists that had none — a session's log,
-// the inbox, the glossary — are not entries any more, they have their own
-// endpoints and their own views.
-//
-// The write itself is the shared editing session (lib/use-entry-edit.ts): one
-// PATCH per interaction, carrying what this surface changed — the text, and
-// the prose properties an npc or a location edits beside it (`motivation`,
-// `atmosphere`; @grimoire/shared `FieldSurface`). Every other property is
-// deliberately not part of this surface: the status control and the
-// properties dialog own those fields, and a request that does not name them
-// leaves them untouched — a forced save included (ADR #23).
+// The surface edits a text and, beside it, the PROSE fields of its kind —
+// an npc's `motivation`, a location's `atmosphere` (@grimoire/shared
+// `FieldSurface`). One save carries what changed, and the kind's editing
+// session turns it into its own write: an entry's PATCH puts the fields under
+// `properties` (lib/use-entry-edit.ts), a location's PATCH carries them beside
+// `body` (lib/use-location-edit.ts). Every other field is deliberately not
+// part of this surface: the status control and the dialog own those, and a
+// request that does not name them leaves them untouched — a forced save
+// included (ADR #23).
 //
 // Everything in this module is pure, so the rules are unit-testable.
 
-import type { EntryWrite } from "@/lib/entry-edit";
+/** One save of the edit surface: the text, and the patch of the prose fields that moved. */
+export interface BodyEditChange {
+  body?: string;
+  fields?: Record<string, unknown>;
+}
 
 /**
  * Is there anything to save? Compared verbatim — the body is the payload, and
@@ -30,22 +32,27 @@ export function hasBodyChanges(original: string, draft: string): boolean {
 }
 
 /**
- * The one write of the edit surface: each half only when it CHANGED. The text
- * travels when it differs from the baseline, the prose properties as the
- * patch of the fields that moved (lib/properties-form.ts `propertiesPatch`).
- * An empty write means there is nothing to save.
+ * The one save of the edit surface: each half only when it CHANGED. The text
+ * travels when it differs from the baseline, the prose fields as the patch of
+ * the ones that moved (lib/properties-form.ts `propertiesPatch`). An empty
+ * change means there is nothing to save.
  *
- * Only-what-changed is what keeps a forced save honest: it resends this write
+ * Only-what-changed is what keeps a forced save honest: it resends this change
  * on top of the stored row, so a half the DM did not touch must not be in it
  * — a text write must not reset a `motivation` somebody else just wrote.
  */
-export function bodyEditorWrite(
+export function bodyEditorChange(
   baseline: string,
   body: string,
   fieldsPatch: Record<string, unknown>,
-): EntryWrite {
+): BodyEditChange {
   return {
     ...(hasBodyChanges(baseline, body) ? { body } : {}),
-    ...(Object.keys(fieldsPatch).length > 0 ? { properties: fieldsPatch } : {}),
+    ...(Object.keys(fieldsPatch).length > 0 ? { fields: fieldsPatch } : {}),
   };
+}
+
+/** Does a change carry anything? */
+export function hasBodyEditChange(change: BodyEditChange): boolean {
+  return change.body !== undefined || change.fields !== undefined;
 }

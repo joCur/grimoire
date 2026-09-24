@@ -1,16 +1,21 @@
-// Seeding a campaign from JSON entries.
+// Seeding a campaign from JSON fixtures.
 //
-// One entry per fixture file, in the shape the API speaks: `properties` and `body`,
-// exactly as `GET /entry` returns them. The seed is therefore not a second
-// data format — it is the API's own shape written down, which is what makes
-// it readable next to a response and reviewable in a diff.
+// One object per fixture file, in the shape the API speaks. A kind with its
+// own resource (ADR #31) has a directory of its own, and each fixture file
+// there is exactly what the resource answers, without the guard: a location is
+// `locations/<id>.json`, `{ id, name, …, body }`. The other kinds sit in the
+// campaign directory as `{ kind, properties, body }`, the shape `GET
+// /entry` answers. The seed is therefore not a second data format — it is the
+// API's own shape written down, which is what makes it readable next to a
+// response and reviewable in a diff.
 //
 // THREE RULES hold this together:
 //
 //   1. THE STORE LAYER DOES THE WRITING wherever it has a path for it:
-//      chapter, scene, npc and location go through `insertDraft`
-//      (store/drafts.ts), so references, tags, handouts and the search index
-//      are maintained by the same code a create endpoint runs. What has no
+//      chapter, scene and npc go through `insertDraft` (store/drafts.ts), a
+//      location through `insertLocationProposal` (store/locations.ts), so
+//      references, tags, handouts and the search index are maintained by the
+//      same code a create endpoint runs. What has no
 //      endpoint because it is historic data — the campaign row, sessions with
 //      their pauses and log lines, the inbox list, the glossary, a chapter's
 //      open threads — is written as rows here and indexed the way the store
@@ -42,13 +47,15 @@ import {
   sessionScenesPlayed,
   sessions,
 } from "./schema";
+import { isEntityId, type LocationProposal } from "@grimoire/shared";
 import { campaignRow, indexCampaign } from "../store/campaigns";
 import { indexGlossaryTerm } from "../store/glossary";
 import { insertThreadRows } from "../store/threads";
 import { PROPERTY_CONTRACT } from "../store/properties";
 import { insertDraft } from "../store/drafts";
+import { insertLocationProposal, readLocationProposal } from "../store/locations";
 import { logLineId } from "../store/body-parse";
-import { chapterPath, locationPath, npcPath, sceneAddress } from "../store/paths";
+import { chapterPath, npcPath, sceneAddress } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";
 
 /** An entry's properties as the API speaks them. */
@@ -90,21 +97,23 @@ export interface SeedGlossaryEntry {
 }
 
 /**
- * One seeded entry. `kind` is what decides the shape — the same discriminator
- * the API uses for an entry.
+ * One seeded object. `kind` is what decides the shape — the discriminator a
+ * fixture file of the campaign directory carries, and for a location the
+ * directory it was read from (that fixture file carries no kind: it is the
+ * location as its resource answers it, without the guard).
  */
 export type SeedEntry =
   | { kind: "campaign"; properties: Properties; body?: string }
   | { kind: "chapter"; properties: Properties; body?: string; threads?: SeedThread[] }
   | { kind: "scene"; properties: Properties; body?: string }
   | { kind: "npc"; properties: Properties; body?: string }
-  | { kind: "location"; properties: Properties; body?: string }
+  | { kind: "location"; location: LocationProposal }
   | { kind: "session"; properties: Properties; body?: string; log?: SeedLogLine[] }
   | { kind: "inbox"; entries: SeedInboxEntry[] }
   | { kind: "glossary"; intro?: string; entries: SeedGlossaryEntry[] };
 
 /** The kinds that carry `properties` and a `body`. */
-const ENTRY_KINDS = ["campaign", "chapter", "scene", "npc", "location", "session"] as const;
+const ENTRY_KINDS = ["campaign", "chapter", "scene", "npc", "session"] as const;
 
 /**
  * The order the kinds are written in — the foreign keys decide it, so this is
@@ -222,10 +231,25 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
     };
   }
   return {
-    kind: kind as "campaign" | "scene" | "npc" | "location",
+    kind: kind as "campaign" | "scene" | "npc",
     properties,
     body: typeof body === "string" ? body : "",
   };
+}
+
+/**
+ * One location fixture: the location as its resource answers it, without the
+ * guard — or the seed error that names what is wrong.
+ */
+export function asSeedLocation(where: string, value: unknown): SeedEntry {
+  let location: LocationProposal;
+  try {
+    location = readLocationProposal(value, "location");
+  } catch (error) {
+    fail(where, error instanceof Error ? error.message : String(error));
+  }
+  if (!isEntityId(location.id)) fail(where, "`id` must be a kebab-case slug");
+  return { kind: "location", location };
 }
 
 function asThread(where: string, value: unknown): SeedThread {
@@ -250,23 +274,42 @@ export async function readFixtureCampaign(dir: string): Promise<SeedEntry[]> {
   return (await readFixtureSources(dir)).map((source) => source.entry);
 }
 
-/** `readFixtureCampaign`, with the fixture file stem each entry came from. */
+/**
+ * `readFixtureCampaign`, with the fixture file stem each entry came from. The
+ * stem of a fixture file in a kind's own directory carries the directory
+ * (`locations/leuchtturm`).
+ */
 export async function readFixtureSources(dir: string): Promise<SeedSource[]> {
-  const names = (await readdir(dir))
-    .filter((name) => name.endsWith(".json"))
-    .sort((a, b) => a.localeCompare(b, "en"));
   const sources: SeedSource[] = [];
-  for (const name of names) {
-    const jsonPath = path.join(dir, name);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(await readFile(jsonPath, "utf8"));
-    } catch (error) {
-      fail(name, `not readable as JSON — ${error instanceof Error ? error.message : error}`);
-    }
-    sources.push({ stem: name.slice(0, -".json".length), entry: asSeedEntry(name, parsed) });
+  for (const name of await jsonFiles(dir)) {
+    const stem = name.slice(0, -".json".length);
+    sources.push({ stem, entry: asSeedEntry(name, await readJson(dir, name)) });
+  }
+  const locationDir = path.join(dir, "locations");
+  for (const name of await jsonFiles(locationDir)) {
+    const stem = `locations/${name.slice(0, -".json".length)}`;
+    sources.push({ stem, entry: asSeedLocation(`${stem}.json`, await readJson(locationDir, name)) });
   }
   return sources;
+}
+
+/** The `.json` fixture file names of a directory, sorted; none when it does not exist. */
+async function jsonFiles(dir: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return [];
+  }
+  return names.filter((name) => name.endsWith(".json")).sort((a, b) => a.localeCompare(b, "en"));
+}
+
+async function readJson(dir: string, name: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(path.join(dir, name), "utf8"));
+  } catch (error) {
+    fail(name, `not readable as JSON — ${error instanceof Error ? error.message : error}`);
+  }
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -293,8 +336,6 @@ function addressOf(entry: SeedEntry & { properties: Properties }): string {
       return chapterPath(id);
     case "npc":
       return npcPath(id);
-    case "location":
-      return locationPath(id);
     default:
       return sceneAddress({
         chapterId: asOptString(entry.properties.chapter),
@@ -348,10 +389,11 @@ function writeEntry(tx: GrimoireDb, campaignId: string, entry: SeedEntry): void 
   switch (entry.kind) {
     case "campaign":
       return writeCampaignRow(tx, campaignId, entry.properties, entry.body ?? "");
+    case "location":
+      return insertLocationProposal(tx, campaignId, entry.location);
     case "chapter":
     case "scene":
-    case "npc":
-    case "location": {
+    case "npc": {
       const address = addressOf(entry);
       insertDraft(tx, campaignId, {
         rel: address,

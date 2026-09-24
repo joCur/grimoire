@@ -190,13 +190,19 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     // batch, because a scene cannot name an entry that does not exist
     // (ADR #19). The payload is the run's drafts with the stored edits folded
     // in, which is what the review screen sends.
-    const result = after.result as { scenes: SceneDraft[]; stubs: unknown[] };
-    const written = await api.send<{ written: string[] }>("POST", "campaigns/beispiel/generate/apply", {
-      scenes: result.scenes.map((scene) => ({ ...scene, ...edit })),
-      stubs: result.stubs,
-      jobId: after.id,
-    });
+    const result = after.result as { scenes: SceneDraft[]; stubs: unknown[]; locations: unknown[] };
+    const written = await api.send<{ written: string[]; locations: string[] }>(
+      "POST",
+      "campaigns/beispiel/generate/apply",
+      {
+        scenes: result.scenes.map((scene) => ({ ...scene, ...edit })),
+        stubs: result.stubs,
+        locations: result.locations,
+        jobId: after.id,
+      },
+    );
     expect(written.written).toContain(SCENE_PATH);
+    expect(written.locations).toEqual([LOCATION_STUB_ID]);
     const stored = await api.entry(SCENE_PATH);
     // Both halves as the DM left them before the restart.
     expect(stored.properties.title).toBe(EDITED_TITLE);

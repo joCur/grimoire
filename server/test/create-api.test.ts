@@ -20,7 +20,7 @@
 //     filling one of those is the DM's own decision about that id.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignSummary, EntryResponse } from "@grimoire/shared";
+import type { CampaignSummary, EntryResponse, Location } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
@@ -289,9 +289,10 @@ describe("the per-campaign creates", () => {
   });
 
   test("an ort is created from the name alone and collides the same way", async () => {
-    const location = await created<EntryResponse>("/campaigns/nordwind/locations", { name: "Hafen" });
-    expect(location.path).toBe("locations/hafen");
-    expect(location.properties.name).toBe("Hafen");
+    const location = await created<Location>("/campaigns/nordwind/locations", { name: "Hafen" });
+    expect(location.id).toBe("hafen");
+    expect(location.name).toBe("Hafen");
+    expect(Object.hasOwn(location, "path")).toBe(false);
     expect((await post("/campaigns/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
@@ -318,8 +319,8 @@ describe("the per-campaign creates", () => {
     const npc = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(npc.path).toBe("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
-    const location = await created<EntryResponse>("/campaigns/nordwind/locations", { name: "Bucht" });
-    expect(location.properties.name).toBe("Bucht");
+    const location = await created<Location>("/campaigns/nordwind/locations", { name: "Bucht" });
+    expect(location.name).toBe("Bucht");
   });
 
   test("an unknown campaign is a 404 for every per-campaign create", async () => {

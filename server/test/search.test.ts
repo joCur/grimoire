@@ -148,11 +148,13 @@ describe("reference queries", () => {
       title: "Kapitel 1: Der Leuchtturm von Salzhafen",
       path: "01-salzhafen",
     });
+    // A location is its own resource (ADR #31): its hit names its kind and id
+    // and carries no address.
     expect(byKind.get("location")).toMatchObject({
       id: "leuchtturm",
       title: "Der Leuchtturm von Salzhafen",
-      path: "locations/leuchtturm",
     });
+    expect(Object.hasOwn(byKind.get("location")!, "path")).toBe(false);
     expect(byKind.get("campaign")).toMatchObject({
       id: "beispiel",
       title: "Der Leuchtturm von Salzhafen",

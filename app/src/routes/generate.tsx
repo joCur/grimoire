@@ -8,8 +8,8 @@
 //   review  the drafts of a finished job: rendered through the SAME markdown
 //           pipeline as a real scene, editable as properties plus body in the
 //           forms and on the surfaces the entry itself is edited with
-//           (DraftEditor), stubs accepted/rejected one by one. NOTHING is
-//           written yet.
+//           (DraftEditor), npc stubs and proposed locations accepted/rejected
+//           one by one. NOTHING is written yet.
 //   done    the addresses the accept wrote — all as drafts
 //
 // The route has TWO modes, picked by the quiet chip row above
@@ -36,10 +36,8 @@
 //
 // Local state is only what the server cannot know: the current edit buffers
 // (mirrored into the job, debounced, so they survive too), which cards are
-// in edit mode, the stub decisions, and the addresses a finished accept
-// wrote.
-// Stub decisions are deliberately NOT persisted — re-deciding two rows is
-// cheap, and nothing written is lost.
+// in edit mode, and what a finished accept wrote. The decisions live on the
+// job (review.entries, review.locations).
 
 import { kindFromAddress } from "@grimoire/shared/kind";
 import type {
@@ -49,6 +47,7 @@ import type {
   GenerateJobPart,
   GenerateResult,
   GeneratedStub,
+  LocationProposal,
   NamingHint,
 } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -62,6 +61,7 @@ import {
   SpellCheck,
   StickyNote,
   User,
+  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -102,8 +102,10 @@ import {
   jobPipelineParts,
   jobProgress,
   draftOf,
+  locationState,
   newChapterId,
   npcIdError,
+  openLocations,
   openParts,
   partState,
   partsStillRunning,
@@ -118,6 +120,7 @@ import {
   type PartState,
 } from "@/lib/generate";
 import { promptKnowledgeCount } from "@/lib/entry-list";
+import { locationHref, locationLabel } from "@/lib/open-target";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
@@ -142,11 +145,12 @@ const CHIP_OFF =
   "border-border bg-card text-body-secondary hover:border-border-hover hover:text-foreground";
 
 /**
- * A suggested entry is addressed by the path it would be WRITTEN to
+ * An npc stub is addressed by the path it would be WRITTEN to
  * (`npcs/grella`) — that is the key the job's review state uses and the one
- * a partial accept selects with, so the UI must not invent a second one.
+ * a partial accept selects with, so the UI must not invent a second one. A
+ * proposed location is addressed by its id.
  */
-const stubKey = (stub: GeneratedStub) => `${stub.kind}s/${stub.id}`;
+const stubKey = (stub: GeneratedStub) => `npcs/${stub.id}`;
 
 export function GenerateRoute() {
   const t = useT();
@@ -297,6 +301,12 @@ export function GenerateRoute() {
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
   const acceptedStubs = stubs.filter((s) => decisions[stubKey(s)] === "accepted");
+  // The proposed locations are their own list (ADR #31), decided and accepted
+  // by id.
+  const proposedLocations = result?.locations ?? [];
+  const acceptedLocations = proposedLocations.filter(
+    (location) => reviewState.locations[location.id] === "accepted",
+  );
   /**
    * One draft as the review shows it: what the run produced, with the job's
    * stored edit and then the local buffer laid over it.
@@ -313,6 +323,10 @@ export function GenerateRoute() {
   const progress = jobProgress(job);
   const openScenes = scenes.filter((scene) => partState(job, scene.path) === "open");
   const openAcceptedStubs = acceptedStubs.filter((s) => partState(job, stubKey(s)) === "open");
+  const openAcceptedLocations = acceptedLocations.filter(
+    (location) => locationState(job, location.id) === "open",
+  );
+  const restLocations = openLocations(job);
 
   const start = useMutation({
     mutationFn: () =>
@@ -359,7 +373,7 @@ export function GenerateRoute() {
    * which is what ends the review.
    */
   const apply = useMutation({
-    mutationFn: async (paths?: string[]) => {
+    mutationFn: async (selection?: { paths?: string[]; locations?: string[] }) => {
       // Text the DM is still typing must be part of what gets written — and
       // AWAITED, not merely started: the server reads `draftEdits` when the
       // accept arrives, so a patch still in flight would land after the read
@@ -369,7 +383,8 @@ export function GenerateRoute() {
       // current now, not the one this render closed over.
       const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
       return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
-        ...(paths === undefined ? {} : { paths }),
+        ...(selection?.paths === undefined ? {} : { paths: selection.paths }),
+        ...(selection?.locations === undefined ? {} : { locations: selection.locations }),
         // The new chapter's entry is created in the same batch — but the JOB
         // decides it, and this pair is only the compatibility override. It
         // therefore travels ONLY when the form on screen is still the form
@@ -401,7 +416,7 @@ export function GenerateRoute() {
       }
     },
     onSuccess: (data) => {
-      const addresses = Object.values(data.written);
+      const addresses = [...Object.values(data.written), ...data.locations.map(locationLabel)];
       // ONLY the answer decides: a bulk accept whose rest did not settle the
       // run leaves the job there, and marking it dropped up front turned a
       // job that is still open into one that had vanished.
@@ -526,11 +541,67 @@ export function GenerateRoute() {
   const sceneOfPart = (part: GenerateJobPart) =>
     scenes.find((scene) => scene.path === `${job?.chapter ?? ""}/${part.id}`);
   const stubOfPart = (part: GenerateJobPart) =>
-    stubs.find((stub) => stub.kind === part.kind && stub.id === part.id);
-  /** Stubs in the result that no entry PART accounts for (see the list below). */
+    part.kind === "npc" ? stubs.find((stub) => stub.id === part.id) : undefined;
+  const locationOfPart = (part: GenerateJobPart) =>
+    part.kind === "location"
+      ? proposedLocations.find((location) => location.id === part.id)
+      : undefined;
+  /** Stubs and locations in the result that no PART accounts for (see the list below). */
   const unclaimedStubs = stubs.filter(
-    (stub) => !entryParts.some((part) => part.kind === stub.kind && part.id === stub.id),
+    (stub) => !entryParts.some((part) => part.kind === "npc" && part.id === stub.id),
   );
+  const unclaimedLocations = proposedLocations.filter(
+    (location) => !entryParts.some((part) => part.kind === "location" && part.id === location.id),
+  );
+
+  /** One npc stub of the run, decided and accepted by the address it would be written to. */
+  const stubRow = (stub: GeneratedStub, cardRef?: (el: HTMLElement | null) => void) => (
+    <ProposalRow
+      key={stubKey(stub)}
+      icon={User}
+      name={stub.name}
+      label={stubKey(stub)}
+      {...(cardRef === undefined ? {} : { cardRef })}
+      reason={stubReason(scenes, t)}
+      decision={decisions[stubKey(stub)]}
+      state={partState(job, stubKey(stub))}
+      writtenHref={
+        reviewState.written[stubKey(stub)] === undefined
+          ? undefined
+          : `/campaigns/${campaign}/entries/${reviewState.written[stubKey(stub)]}`
+      }
+      writtenLabel={reviewState.written[stubKey(stub)]}
+      busy={apply.isPending}
+      onDecide={(decision) => review.decide({ entries: { [stubKey(stub)]: decision ?? null } })}
+      onAccept={() => apply.mutate({ paths: [stubKey(stub)] })}
+    />
+  );
+  /** One proposed location of the run, decided and accepted by its id (ADR #31). */
+  const locationRow = (
+    location: LocationProposal,
+    cardRef?: (el: HTMLElement | null) => void,
+  ) => {
+    const state = locationState(job, location.id);
+    return (
+      <ProposalRow
+        key={location.id}
+        icon={MapPin}
+        name={location.name}
+        label={locationLabel(location.id)}
+        {...(cardRef === undefined ? {} : { cardRef })}
+        reason={stubReason(scenes, t)}
+        decision={reviewState.locations[location.id]}
+        state={state}
+        writtenHref={state === "written" ? locationHref(campaign, location.id) : undefined}
+        writtenLabel={state === "written" ? locationLabel(location.id) : undefined}
+        busy={apply.isPending}
+        onDecide={(decision) =>
+          review.decide({ locations: { [location.id]: decision ?? null } })
+        }
+        onAccept={() => apply.mutate({ locations: [location.id] })}
+      />
+    );
+  };
 
   const applied = written !== undefined;
   // The window between the click and this run's job being readable is the
@@ -954,7 +1025,11 @@ export function GenerateRoute() {
                 {runProgress ??
                   (progress.written === 0
                     ? t("generate.review.pending", {
-                        summary: applySummary(scenes.length, stubs.length, t),
+                        summary: applySummary(
+                          scenes.length,
+                          stubs.length + proposedLocations.length,
+                          t,
+                        ),
                       })
                     : t("generate.review.progress", progress))}
               </span>
@@ -1039,7 +1114,7 @@ export function GenerateRoute() {
                   onPropertiesChange={(properties) => editDraft(scene.path, { properties })}
                   onBodyChange={(body) => editDraft(scene.path, { body })}
                   onFlush={review.flush}
-                  onAccept={() => apply.mutate([scene.path])}
+                  onAccept={() => apply.mutate({ paths: [scene.path] })}
                   onDrop={() =>
                     review.decide({
                       dropped: reviewState.dropped.includes(scene.path)
@@ -1071,7 +1146,7 @@ export function GenerateRoute() {
                 onBodyChange={(body) => editDraft(scene.path, { body })}
                 // Leaving a field is the last cheap moment to be sure.
                 onFlush={review.flush}
-                onAccept={() => apply.mutate([scene.path])}
+                onAccept={() => apply.mutate({ paths: [scene.path] })}
                 onDrop={() =>
                   review.decide({
                     dropped: reviewState.dropped.includes(scene.path)
@@ -1082,62 +1157,32 @@ export function GenerateRoute() {
               />
             ))}
 
-            {(stubs.length > 0 || entryParts.length > 0) && (
+            {(stubs.length > 0 || proposedLocations.length > 0 || entryParts.length > 0) && (
               <>
                 <div className={cn(OVERLINE, "mb-2.5")}>{t("generate.review.stubsHeading")}</div>
                 {entryParts.map((part) => {
                   const stub = part.status === "done" ? stubOfPart(part) : undefined;
-                  if (stub === undefined) {
-                    return (
-                      <PartCard
-                        key={part.key}
-                        part={part}
-                        mismatch={part.status === "done"}
-                        busy={retryBusy(part.key)}
-                        error={retryError(part.key)}
-                        cardRef={(el) => partCards.current.set(part.key, el)}
-                        onRetry={() => retry.mutate(part.key)}
-                      />
-                    );
-                  }
+                  const location = part.status === "done" ? locationOfPart(part) : undefined;
+                  const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                  if (stub !== undefined) return stubRow(stub, cardRef);
+                  if (location !== undefined) return locationRow(location, cardRef);
                   return (
-                    <StubRow
-                      key={stubKey(stub)}
-                      cardRef={(el) => partCards.current.set(part.key, el)}
-                      campaign={campaign}
-                      stub={stub}
-                      reason={stubReason(scenes, t)}
-                      decision={decisions[stubKey(stub)]}
-                      state={partState(job, stubKey(stub))}
-                      writtenAt={reviewState.written[stubKey(stub)]}
-                      busy={apply.isPending}
-                      onDecide={(decision) =>
-                        review.decide({ entries: { [stubKey(stub)]: decision ?? null } })
-                      }
-                      onAccept={() => apply.mutate([stubKey(stub)])}
+                    <PartCard
+                      key={part.key}
+                      part={part}
+                      mismatch={part.status === "done"}
+                      busy={retryBusy(part.key)}
+                      error={retryError(part.key)}
+                      cardRef={cardRef}
+                      onRetry={() => retry.mutate(part.key)}
                     />
                   );
                 })}
-                {/* Stubs no entry part claims: a run whose outline proposed
-                    nothing but whose SCENE replies carried stubs (the earlier
-                    shape, and any older job), and a stub whose part id
-                    drifted. */}
-                {unclaimedStubs.map((stub) => (
-                  <StubRow
-                    key={stubKey(stub)}
-                    campaign={campaign}
-                    stub={stub}
-                    reason={stubReason(scenes, t)}
-                    decision={decisions[stubKey(stub)]}
-                    state={partState(job, stubKey(stub))}
-                    writtenAt={reviewState.written[stubKey(stub)]}
-                    busy={apply.isPending}
-                    onDecide={(decision) =>
-                      review.decide({ entries: { [stubKey(stub)]: decision ?? null } })
-                    }
-                    onAccept={() => apply.mutate([stubKey(stub)])}
-                  />
-                ))}
+                {/* Stubs and locations no part claims: a run whose outline
+                    proposed nothing but whose SCENE replies carried them, and
+                    one whose part id drifted. */}
+                {unclaimedStubs.map((stub) => stubRow(stub))}
+                {unclaimedLocations.map((location) => locationRow(location))}
               </>
             )}
 
@@ -1176,12 +1221,19 @@ export function GenerateRoute() {
                   again. */}
               <Button
                 type="button"
-                disabled={apply.isPending || openScenes.length + openAcceptedStubs.length === 0}
+                disabled={
+                  apply.isPending ||
+                  openScenes.length + openAcceptedStubs.length + openAcceptedLocations.length === 0
+                }
                 onClick={() => apply.mutate(undefined)}
                 className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
               >
                 {t(progress.written === 0 ? "generate.review.apply" : "generate.review.applyRest", {
-                  count: applySummary(openScenes.length, openAcceptedStubs.length, t),
+                  count: applySummary(
+                    openScenes.length,
+                    openAcceptedStubs.length + openAcceptedLocations.length,
+                    t,
+                  ),
                 })}
               </Button>
               <Button
@@ -1193,7 +1245,7 @@ export function GenerateRoute() {
               >
                 {t(progress.written === 0 ? "common.discard" : "generate.review.discardRest")}
               </Button>
-              {rest.length === 0 && progress.written > 0 && (
+              {rest.length + restLocations.length === 0 && progress.written > 0 && (
                 <p className="text-[12.5px] text-muted-foreground">
                   {t("generate.review.allDecided")}
                 </p>
@@ -1421,30 +1473,32 @@ function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Transla
         </h2>
       </div>
       <ul className="flex flex-col gap-2">
-        {hints.map((hint, index) => (
-          // The key needs every coordinate: one rule can hit the same path
-          // twice (a property and a body line), and two rules can hit the
-          // same line. The index closes the remaining tie.
-          <li key={`${hint.path}:${hint.field}:${hint.line ?? 0}:${hint.from}:${index}`}>
-            <p className="text-[13px] leading-[1.5] text-soft">
-              {t("generate.review.namingHint", { from: hint.from, to: hint.to })}
-            </p>
-            <p className="mt-0.5 font-mono text-[11.5px] text-faint">
-              {hint.line === undefined
-                ? t("generate.review.namingWhereField", {
-                    path: hint.path,
-                    field: hint.field,
-                  })
-                : t("generate.review.namingWhereBody", { path: hint.path, line: hint.line })}
-            </p>
-            {/* The line itself, so the DM can judge the hit without opening
-                the draft — the check's whole claim is that the draft says
-                this. */}
-            <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
-              {hint.excerpt}
-            </p>
-          </li>
-        ))}
+        {hints.map((hint, index) => {
+          // WHAT the hit sits in: a draft by its address, a proposed location
+          // by its id (ADR #31).
+          const where = hint.path ?? hint.location;
+          // The key needs every coordinate: one rule can hit the same draft
+          // twice (a field and a body line), and two rules can hit the same
+          // line. The index closes the remaining tie.
+          return (
+            <li key={`${where}:${hint.field}:${hint.line ?? 0}:${hint.from}:${index}`}>
+              <p className="text-[13px] leading-[1.5] text-soft">
+                {t("generate.review.namingHint", { from: hint.from, to: hint.to })}
+              </p>
+              <p className="mt-0.5 font-mono text-[11.5px] text-faint">
+                {hint.line === undefined
+                  ? t("generate.review.namingWhereField", { path: where, field: hint.field })
+                  : t("generate.review.namingWhereBody", { path: where, line: hint.line })}
+              </p>
+              {/* The line itself, so the DM can judge the hit without opening
+                  the draft — the check's whole claim is that the draft says
+                  this. */}
+              <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
+                {hint.excerpt}
+              </p>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -1946,25 +2000,34 @@ function NpcDraftCard({
   );
 }
 
-/** One stub row: marker, name, mono target path, italic reason, decision. */
-function StubRow({
-  campaign,
-  stub,
+/**
+ * One proposal row — an npc stub or a proposed location: marker, name, mono
+ * key, italic reason, decision.
+ */
+function ProposalRow({
+  icon: Icon,
+  name,
+  label,
   reason,
   decision,
   state,
-  writtenAt,
+  writtenHref,
+  writtenLabel,
   busy,
   cardRef,
   onDecide,
   onAccept,
 }: {
-  campaign: string;
-  stub: GeneratedStub;
+  icon: LucideIcon;
+  name: string;
+  /** What the row is keyed by: an npc's address, a location's id. */
+  label: string;
   reason: string;
   decision: StubDecision | undefined;
   state: PartState;
-  writtenAt: string | undefined;
+  /** Where the written row lives, once it is written. */
+  writtenHref: string | undefined;
+  writtenLabel: string | undefined;
   busy: boolean;
   /** Same as SceneCard's: the retry's focus follows the part here too. */
   cardRef?: (el: HTMLElement | null) => void;
@@ -1972,7 +2035,6 @@ function StubRow({
   onAccept: () => void;
 }) {
   const t = useT();
-  const path = `${stub.kind}s/${stub.id}`;
   return (
     <div
       ref={cardRef}
@@ -1982,15 +2044,11 @@ function StubRow({
         (decision === "rejected" || state === "rejected") && "opacity-55",
       )}
     >
-      {stub.kind === "npc" ? (
-        <User aria-hidden size={16} className="flex-none text-muted-foreground" />
-      ) : (
-        <MapPin aria-hidden size={16} className="flex-none text-muted-foreground" />
-      )}
+      <Icon aria-hidden size={16} className="flex-none text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-[14px] text-foreground">{stub.name}</span>
-          <span className="font-mono text-[11px] text-faint">{path}</span>
+          <span className="text-[14px] text-foreground">{name}</span>
+          <span className="font-mono text-[11px] text-faint">{label}</span>
         </div>
         <p className="mt-0.5 text-[12.5px] text-muted-foreground italic">{reason}</p>
       </div>
@@ -1998,12 +2056,12 @@ function StubRow({
         <p className="flex flex-none items-center gap-2 text-[12.5px] text-muted-foreground">
           <Check aria-hidden size={14} className="flex-none text-success-text" />
           {t("generate.review.partWritten")}
-          {writtenAt !== undefined && (
+          {writtenHref !== undefined && (
             <Link
-              to={`/campaigns/${campaign}/entries/${writtenAt}`}
+              to={writtenHref}
               className="rounded font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
-              {writtenAt}
+              {writtenLabel}
             </Link>
           )}
         </p>

@@ -70,7 +70,7 @@ function sceneObject(over: Record<string, unknown> = {}): string {
 
 function read(
   raw: string,
-  kind: "scene" | "npc" | "location" = "scene",
+  kind: "scene" | "npc" = "scene",
   mode: "create" | "augment" = "create",
 ): EntryReply {
   const outcome = parseEntryReply(raw, kind, mode);
@@ -80,7 +80,7 @@ function read(
 
 function errors(
   raw: string,
-  kind: "scene" | "npc" | "location" = "scene",
+  kind: "scene" | "npc" = "scene",
   mode: "create" | "augment" = "create",
 ): string[] {
   const outcome = parseEntryReply(raw, kind, mode);
@@ -241,12 +241,6 @@ describe("parseEntryReply", () => {
       warnings: [],
     });
     expect(errors(npc, "npc").join(" ")).toContain('"properties.name" fehlt');
-    const location = JSON.stringify({
-      properties: { id: "bucht", name: "" },
-      body: "## Atmosphäre\n",
-      warnings: [],
-    });
-    expect(errors(location, "location").join(" ")).toContain('"properties.name" fehlt');
     // …and a field whose SHAPE was wrong is not reported twice.
     expect(errors(sceneObject({ title: 7 }))).toHaveLength(1);
   });

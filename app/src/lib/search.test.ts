@@ -135,4 +135,10 @@ describe("resultHref", () => {
   test("an entry hit without a path falls back to the chapter overview", () => {
     expect(resultHref("beispiel", { kind: "npc", id: "fenn" })).toBe("/campaigns/beispiel");
   });
+
+  test("a location hit opens the location's own route by its id — no address needed", () => {
+    expect(resultHref("beispiel", { kind: "location", id: "leuchtturm" })).toBe(
+      "/campaigns/beispiel/locations/leuchtturm",
+    );
+  });
 });

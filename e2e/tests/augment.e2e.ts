@@ -15,7 +15,10 @@
 //   d) an entry that moves while the review is open answers 409 and nothing
 //      is written (ADR #4) — the review recovers on the re-read,
 //   e) a proposal that names an entry nobody has (`[[…]]`) costs one
-//      correction turn, and the DM reviews the corrected one.
+//      correction turn, and the DM reviews the corrected one,
+//   f) a LOCATION is augmented on its own resource (ADR #31): its run starts
+//      on `…/locations/:id/augment`, its proposal is the location as read
+//      beside the location as proposed, and the accept writes the location.
 //
 // Two of them carry the default rule with them, because it is the rule the
 // whole feature turns on: by default only empty and new units are accepted,
@@ -399,7 +402,7 @@ test("the entry point: npc, location and scene — and nothing else", async ({
 
   await page.goto("/campaigns/beispiel/entries/npcs/jorna");
   await expect(action).toBeVisible();
-  await page.goto("/campaigns/beispiel/entries/locations/leuchtturm");
+  await page.goto("/campaigns/beispiel/locations/leuchtturm");
   await expect(action).toBeVisible();
   await page.goto(SCENE_URL);
   await expect(action).toBeVisible();
@@ -409,6 +412,59 @@ test("the entry point: npc, location and scene — and nothing else", async ({
   await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(action).toHaveCount(0);
+});
+
+test("a location is augmented on its own resource: the proposal, then one write", async ({
+  page,
+  api,
+}) => {
+  const before = await api.location("leuchtturm");
+  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  await startAugment(page);
+  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // The job is the location's own run: kind, id and a typed proposal — the
+  // location as read beside the location as proposed, no address anywhere.
+  const job = await api.get<Record<string, unknown>>("campaigns/beispiel/generate/job");
+  expect(job.kind).toBe("location-augment");
+  expect(job.location).toBe("leuchtturm");
+  expect(job.target).toBeUndefined();
+  expect(job.augmentResult).toBeUndefined();
+  const proposal = job.locationAugmentResult as {
+    id: string;
+    current: Record<string, unknown>;
+    proposed: Record<string, unknown>;
+  };
+  expect(proposal.id).toBe("leuchtturm");
+  const { rev: _rev, ...current } = before;
+  expect(proposal.current).toEqual(current);
+  expect(proposal.proposed.roll20Page).toBe("Leuchtturm");
+  for (const side of [proposal.current, proposal.proposed]) {
+    expect(Object.keys(side)).not.toContain("path");
+    expect(Object.keys(side)).not.toContain("kind");
+    expect(Object.keys(side)).not.toContain("properties");
+  }
+
+  // The new plot thread is an addition — preselected; nothing is written yet.
+  const thread = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
+  await expect(thread.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect((await api.location("leuchtturm")).body).toBe(before.body);
+
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  const after = await api.location("leuchtturm");
+  expect(after.body).toContain(AUGMENT_THREAD_TEXT);
+  expect(after.body.trimStart().startsWith(before.body.trim())).toBe(true);
+  expect(after.atmosphere).toBe(before.atmosphere);
+  expect(after.rev).toBe(before.rev + 1);
+  // The job went with the write, and the reading view shows the new text.
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  await expect(page.getByRole("article")).toContainText(AUGMENT_THREAD_CONDITION);
 });
 
 test.describe("at 390px (critical path 8)", () => {

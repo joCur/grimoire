@@ -15,6 +15,9 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 
+import type { Location } from "@grimoire/shared/types";
+
+import { locationKey } from "@/lib/use-location-edit";
 import { EntityRefScope, type ResolvedEntityRef } from "@/markdown/entity-refs";
 
 import { LocationCard } from "./LocationCard";
@@ -47,7 +50,7 @@ describe("aside cards — a reference inside the excerpt", () => {
   // The tree's answer for the two slugs the entries below mention.
   const index = new Map<string, ResolvedEntityRef>([
     ["fenn", { kind: "npc", slug: "fenn", name: "Fenn", path: "npcs/fenn" }],
-    ["bucht", { kind: "location", slug: "bucht", name: "Die Nordbucht", path: "locations/bucht" }],
+    ["bucht", { kind: "location", slug: "bucht", name: "Die Nordbucht" }],
   ]);
 
   function renderCached(
@@ -59,11 +62,23 @@ describe("aside cards — a reference inside the excerpt", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["entry", "beispiel", path], {
       path,
-      kind: path.startsWith("npcs/") ? "npc" : "location",
+      kind: "npc",
       properties,
       body,
       rev: 1,
     });
+    return renderWith(client, card);
+  }
+
+  /** A location card over a cached location — the location's own resource (ADR #31). */
+  function renderLocation(fields: Partial<Location>, card: ReactNode): string {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const location: Location = { id: "kai", name: "Der Kai", body: "", rev: 1, ...fields };
+    client.setQueryData(locationKey("beispiel", "kai"), location);
+    return renderWith(client, card);
+  }
+
+  function renderWith(client: QueryClient, card: ReactNode): string {
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>
@@ -105,10 +120,8 @@ describe("aside cards — a reference inside the excerpt", () => {
   });
 
   test("location card: the atmosphere reads with names", () => {
-    const html = renderCached(
-      "locations/kai",
+    const html = renderLocation(
       { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." },
-      "",
       <LocationCard campaign="beispiel" id="kai" />,
     );
     expect(html).toContain("Hier riecht es nach Fenns Tabak.");
@@ -116,10 +129,8 @@ describe("aside cards — a reference inside the excerpt", () => {
   });
 
   test("location card: a `## Atmosphäre` section is not read — the Roll20 page stands in", () => {
-    const html = renderCached(
-      "locations/kai",
-      { "roll20-page": "Kai" },
-      "## Atmosphäre\n\nNur im Text, nie auf der Karte.\n",
+    const html = renderLocation(
+      { roll20Page: "Kai", body: "## Atmosphäre\n\nNur im Text, nie auf der Karte.\n" },
       <LocationCard campaign="beispiel" id="kai" />,
     );
     expect(html).not.toContain("Nur im Text");

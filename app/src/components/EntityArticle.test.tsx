@@ -1,6 +1,7 @@
-// Render tests for the entity reading view (react-dom/server — no DOM):
-// the NPC/location/titled headers and the one rule behind them —
-// the scene type overline never appears above a non-scene.
+// Render tests for the entry reading view (react-dom/server — no DOM):
+// the NPC and titled headers and the one rule behind them — the scene type
+// overline never appears above a non-scene. (A location has its own article:
+// ./LocationArticle.test.tsx.)
 
 import type { EntryKind, EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
@@ -101,28 +102,7 @@ describe("EntityArticle — npc", () => {
   });
 });
 
-describe("EntityArticle — location and titled entities", () => {
-  test("location shows the roll20 page as a reference line", () => {
-    const html = render(
-      entry(
-        "location",
-        { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen", "roll20-page": "Leuchtturm" },
-        "## Atmosphäre\n\nVerlassen in Eile.\n",
-      ),
-    );
-    expect(html).toContain("Der Leuchtturm von Salzhafen");
-    expect(html).toContain("Roll20-Seite: Leuchtturm");
-    expect(html).toContain("Verlassen in Eile.");
-    expect(html).not.toContain("Geplante Szene");
-  });
-
-  test("the atmosphere property stands in the header", () => {
-    const html = render(
-      entry("location", { id: "kai", name: "Der Kai", atmosphere: "Nebel, Möwen, nasses Holz." }),
-    );
-    expect(html).toContain("Nebel, Möwen, nasses Holz.");
-  });
-
+describe("EntityArticle — titled entities", () => {
   test("chapter renders title plus body", () => {
     const html = render(
       entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }, "## Ziel\n\nLicht an.\n"),
@@ -148,7 +128,6 @@ describe("EntityArticle — location and titled entities", () => {
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
     const variants = [
       jorna, // npc header
-      entry("location", { id: "leuchtturm", name: "Leuchtturm" }),
       entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }),
     ];
     for (const e of variants) {
