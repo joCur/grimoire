@@ -165,7 +165,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
     expect(Object.keys(run.result.locations[0]!)).not.toContain(key);
   }
   await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
-  await acceptStub(LOCATION_STUB_ID, LOCATION_STUB_NAME);
+  await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
 
   await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene Einträge\)$/ }).click();
@@ -173,7 +173,14 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // Done state lists exactly what was written — the ADDRESSES, so the DM sees
   // where the scene actually landed and not the id the model proposed.
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  await expect(page.getByText(SCENE_PATH)).toBeVisible();
+  const writtenList = page.getByRole("listitem");
+  await expect(writtenList.getByText(SCENE_PATH, { exact: true })).toBeVisible();
+  await expect(writtenList.getByText(`npcs/${NPC_STUB_ID}`, { exact: true })).toBeVisible();
+  // The location has no address; it names itself by its resource segment,
+  // the same way the npc beside it does.
+  await expect(
+    writtenList.getByText(`locations/${LOCATION_STUB_ID}`, { exact: true }),
+  ).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.
   const scene = await api.entry(SCENE_PATH);
@@ -482,7 +489,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   // (3) The second suggested entry, decided as well: the scene NAMES both of
   // them, and a scene cannot be written while a reference names nothing
   // (ADR #19) — accepting is that decision, the write comes below.
-  await stubRow(LOCATION_STUB_ID).getByRole("button", { name: "Annehmen" }).click();
+  await stubRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
   // Accepted is a decision, not a write.
   expect(await api.exists(`npcs/${NPC_STUB_ID}`)).toBe(false);
@@ -607,7 +614,7 @@ async function storedDraftEdit(api: Api): Promise<DraftEdit> {
  * nothing (ADR #19), so they have to be decided first.
  */
 async function acceptWholeRun(page: Page): Promise<void> {
-  for (const targetPath of [`npcs/${NPC_STUB_ID}`, LOCATION_STUB_ID]) {
+  for (const targetPath of [`npcs/${NPC_STUB_ID}`, `locations/${LOCATION_STUB_ID}`]) {
     await page
       .locator("div")
       .filter({ hasText: targetPath })

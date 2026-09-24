@@ -1403,3 +1403,20 @@ test.describe("the scene order of a chapter", () => {
     expect(await storedOrder(api)).toEqual(again);
   });
 });
+
+test("a location's reading view offers the session start like every reading view", async ({
+  page,
+}) => {
+  const start = page.getByRole("banner").getByRole("button", { name: "Session starten" });
+
+  // The location's own route is a reading view: with no session running the
+  // chip offers the start, exactly as it does on a scene.
+  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await expect(start).toBeVisible();
+
+  // The location list is a list, not a reading view — no start offered there.
+  await page.goto("/campaigns/beispiel/locations");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
+  await expect(start).toHaveCount(0);
+});
