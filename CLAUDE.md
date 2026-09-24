@@ -49,10 +49,13 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Entität mit eigener Ressource hat ihr zod-Schema in
   `shared/src/<entität>.ts` (ADR #31).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
-  `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
-  Abhaken. `server/src/server.ts` setzt nur die App zusammen. Datenzugriff
-  ausschließlich über `server/src/store/<domäne>.ts` (Queries), nie direkt SQL
-  aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
+  ein Routen-Modul je Ressource, `server/src/routes/<ressource>.ts`, ein
+  Kommentar je Route — keine Liste zum Abhaken. `server/src/routes/api.ts`
+  setzt die Module zusammen und beschreibt, was für alle Routen gilt
+  (Fehlerkörper samt `code`); gemeinsame HTTP-Helfer liegen in
+  `server/src/routes/http.ts`. `server/src/server.ts` setzt nur die App
+  zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
+  (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
   — `campaigns`, `chapters` (mit den Szenen), `npcs`, `locations`, `entries`
   (der eine Schreibweg, ADR #23), `sessions`, `inbox`, `glossary`,
   `knowledge`, `threads` (die offenen Fäden), `drafts` — und jedes trägt die

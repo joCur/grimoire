@@ -425,8 +425,9 @@ Nachbereitung zeigt sie zusammen mit dem Log.
 
 ## Schreibregeln
 
-- Geschrieben wird ausschließlich über die API (jeder Endpoint ist in
-  `server/src/routes/api.ts` an seiner Route dokumentiert): Log, Ideen,
+- Geschrieben wird ausschließlich über die API (jeder Endpoint ist an seiner
+  Route dokumentiert, im Modul seiner Ressource
+  `server/src/routes/<ressource>.ts`): Log, Ideen,
   Nachbereitung, Generator-Entwürfe — und für einen Eintrag der eine
   Schreibweg `PATCH /api/campaigns/<kampagne>/entries/<adresse>`, der
   Eigenschaften, Text oder beides in einem Zug schreibt (ADR #23).
