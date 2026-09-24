@@ -33,7 +33,10 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 | Kapitel | `<kapitel-id>` |
 | Szene | `<kapitel-id>/<orts-id>/<szenen-id>` — ohne Ort: `<kapitel-id>/<szenen-id>` |
 | NPC | `npcs/<id>` |
-| Ort | `locations/<id>` |
+
+Ein **Ort** hat keine Adresse: er ist seine eigene Ressource unter
+`/api/campaigns/<kampagne>/locations/<id>`, in der App
+`/campaigns/<kampagne>/locations/<id>` (ADR #31, siehe „Ort“ unten).
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
@@ -87,14 +90,14 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
 außer dem Text (`body`). Jede Art hat ihren eigenen Typ aus genau einem
-zod-Schema (ADR #31). Beim **Ort** stehen die Felder auf der Leitung flach
-neben `kind`, `id`, `path`, `body` und `rev`; bei Kampagne, Kapitel, Szene und
-NPC reisen sie gesammelt unter `properties`. Die App zeigt sie im
-Eigenschaften-Dialog — die Prosa-Felder `motivation` (NPC) und `atmosphere`
-(Ort) stattdessen auf der Bearbeiten-Fläche des Eintrags, neben seinem Text —,
-und `PATCH /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die
-Felder, die der DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld,
-das die Art nicht kennt, legt die API nicht an (400).
+zod-Schema (ADR #31). Der **Ort** ist seine eigene Ressource mit seinen
+eigenen Feldern (siehe „Ort“ unten); bei Kampagne, Kapitel, Szene und NPC
+reisen die Felder gesammelt unter `properties`. Die App zeigt sie im
+Eigenschaften-Dialog — das Prosa-Feld `motivation` (NPC) stattdessen auf der
+Bearbeiten-Fläche des Eintrags, neben seinem Text —, und `PATCH
+/api/campaigns/<kampagne>/entries/<adresse>` ändert genau die Felder, die der
+DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die Art
+nicht kennt, legt die API nicht an (400).
 
 Was eine Ansicht als Daten braucht, ist eine Eigenschaft oder eine Zeile einer
 Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
@@ -197,17 +200,22 @@ im Szenentext oder `#npc`-Notiz im Log.
 
 ### Ort
 
-Ein Ort ist ein eigener Typ (`Location`, `shared/src/location.ts`): seine
-Felder stehen flach neben den Schlüsseln, die jeder Eintrag hat.
+Ein Ort ist seine eigene Ressource mit seinem eigenen Typ (`Location`, aus
+dem zod-Schema in `shared/src/location.ts`, ADR #31):
+
+| Lesen/Ändern | Anlegen/Liste | App-Route |
+| ------------ | ------------- | --------- |
+| `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>`, Liste `/campaigns/<kampagne>/locations` |
+
+`GET` antwortet mit dem Ort selbst — ohne `kind`, ohne `path`, alle Felder
+nebeneinander:
 
 ```json
 {
-  "kind": "location",
   "id": "leuchtturm",
-  "path": "locations/leuchtturm",
   "name": "Der Leuchtturm von Salzhafen",
   "chapter": "01-salzhafen",
-  "roll20-page": "Leuchtturm",
+  "roll20Page": "Leuchtturm",
   "atmosphere": "Verlassen in Eile, nicht im Kampf.",
   "body": "\n## Beim ersten Betreten\n\n…",
   "rev": 3
@@ -219,18 +227,24 @@ Felder stehen flach neben den Schlüsseln, die jeder Eintrag hat.
 | `id` | stabil, wird referenziert |
 | `name` | Anzeigename, Pflicht; ohne eigenen Namen zeigt der Ort seine id |
 | `chapter` | Kapitel-id, optional; muss existieren |
-| `roll20-page` | Verweis auf die Roll20-Seite, keine Karten-Kopie; optional |
+| `roll20Page` | Verweis auf die Roll20-Seite, keine Karten-Kopie; optional |
 | `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau; optional |
+| `body` | Markdown des Orts |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
 Ein optionales Feld ohne Wert fehlt in der Antwort. Geschrieben wird mit
-`PATCH …/entries/locations/<id>` und `{ rev, force?, body?, name?, chapter?,
-"roll20-page"?, atmosphere? }` — `null` löscht ein optionales Feld, ein Feld,
-das ein Ort nicht hat (etwa `status`), ist eine 400. Ein Entwurf — Fixture,
-Generator-Vorschlag — ist derselbe Ort ohne `path` und `rev`.
+`PATCH …/locations/<id>` und `{ rev, force?, …Teilmenge von name, chapter,
+roll20Page, atmosphere, body }` — `null` löscht ein optionales Feld, ein Feld,
+das ein Ort nicht hat (etwa `status`), oder ein Wert der falschen Form ist
+eine 400, die das Feld nennt; ein veralteter `rev` ist 409 mit dem aktuellen
+Ort. `POST …/locations` legt einen Ort an und antwortet mit ihm. Fixture und
+Generator-Vorschlag sind der Ort ohne `rev`. Ergänzen hängt am Ort: `POST
+…/locations/<id>/augment` startet den Lauf, `POST …/locations/<id>/augment/apply`
+übernimmt ihn.
 
-`atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche des Eintrags
-gepflegt, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere` zeigt
-die Ort-Karte die Roll20-Seite.
+`atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche gepflegt, neben
+dem Markdown, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere`
+zeigt die Ort-Karte die Roll20-Seite.
 
 Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
 `[!readaloud]`), `## Wer ist hier` (Figuren am Ort, mit id als `[[id]]`).
@@ -453,16 +467,17 @@ dem Quellmaterial; „Entwürfe prüfen“ zeigt diese Beschreibung, und das
 Kapitels ändert kein Lauf.
 
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
-über die Provider-API **erzwingt**. Ein Eintrags-Aufruf (Szene, NPC, Ort,
-Ergänzung) liefert das Objekt, das den gespeicherten Eintrag spiegelt: die
-Eigenschaften je Art getypt — beim Ort flach als eigene Schlüssel, bei Szene
-und NPC unter `properties` —, den Text als einen String unter `body` und die
-Hinweise für den DM unter `warnings`. Dieses Paar aus Eigenschaften und Text
-ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim
-Übernehmen (ADR #24); ein Entwurf ist nie ein Markdown-Text mit
-Eigenschaften davor. Das Antwort-Schema des Orts wird aus seinem zod-Schema
-abgeleitet (`z.toJSONSchema`, ADR #31), die von Szene und NPC liegen als
-lesbares JSON in `shared/schema/`; Details in `generator/README.md`.
+über die Provider-API **erzwingt**. Ein Orts-Aufruf (Anlegen wie Ergänzen)
+liefert den Ort ohne `rev`, alle Felder nebeneinander, dazu die Hinweise für
+den DM unter `warnings`; sein Schema wird aus dem zod-Schema des Orts
+abgeleitet (`z.toJSONSchema`, ADR #31), und ein Job listet die
+vorgeschlagenen Orte unter `result.locations`. Ein Aufruf für Szene, NPC oder
+eine ihrer Ergänzungen liefert die Eigenschaften je Art getypt unter
+`properties`, den Text als einen String unter `body` und `warnings`; dieses
+Paar ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim
+Übernehmen (ADR #24), nie ein Markdown-Text mit Eigenschaften davor. Die
+Schemata von Szene und NPC liegen als lesbares JSON in `shared/schema/`;
+Details in `generator/README.md`.
 
 Die mechanische Prüfung liest Eigenschaften und Text, aber keine
 Überschrift (ADR #29): die Abschnitte eines Entwurfs sind die Empfehlung der
@@ -476,8 +491,9 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
-strukturierten Felder und der Text als ein String unter `body`. Ein Ort steht
-als sein Entwurf da, `{ kind, id, name, …, body }` mit den Feldern flach (ADR
+strukturierten Felder und der Text als ein String unter `body`. Ein Ort
+liegt in einer eigenen Datei unter `fixtures/beispiel/locations/<id>.json`,
+genau als das Objekt, das `GET …/locations/<id>` liefert, ohne `rev` (ADR
 #31); die übrigen Arten tragen ihre Felder unter `properties`. Ideen, Glossar
 und Sessions tragen ihre Listen ebenso strukturiert,
 als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
@@ -486,6 +502,6 @@ wie ein Faden `{ text, done? }`. Eine Markdown-Zeile steht in keiner davon.
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` und
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/locations/*.json` und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

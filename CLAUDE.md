@@ -31,10 +31,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Projektstruktur
 
-- `fixtures/` — die Beispielkampagne als JSON-Einträge
-  (`fixtures/beispiel/*.json`), ein Eintrag je Datei in der Form der API
-  (ein Ort als sein Entwurf mit flachen Feldern, die übrigen Arten
-  `properties` + `body`; Sessions, Ideen und Glossar strukturiert). Sie ist
+- `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
+  ein Objekt je Datei in der Form der API: ein Ort unter
+  `fixtures/beispiel/locations/<id>.json` als das Objekt, das seine
+  Ressource liefert, ohne `rev`; die übrigen Arten `properties` + `body`;
+  Sessions, Ideen und Glossar strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
@@ -44,7 +45,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   gemeinsam genutzt. Autorität über das Format sind
   `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
   (Adressen), beschrieben in README.md — die drei synchron halten. Eine
-  Eintragsart mit eigenem Typ hat ihr zod-Schema in `shared/src/<art>.ts`
+  Art mit eigener Ressource hat ihr zod-Schema in `shared/src/<art>.ts`
   (ADR #31).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
@@ -86,11 +87,12 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
 - Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>`,
-  `<kapitel>/<szenen-id>`, `locations/<id>`, `campaign`); das Schema steht in
-  `server/src/store/paths.ts`. Jede Art hat ihren eigenen Typ (ADR #31):
-  beim Ort stehen die Felder auf der Leitung flach neben `kind`, `id`,
-  `path`, `body` und `rev`, bei den übrigen Arten unter `properties`; das
-  Markdown heißt immer `body`.
+  `<kapitel>/<szenen-id>`, `campaign`); das Schema steht in
+  `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
+  Eintrags `properties`, sein Markdown `body`. Der Ort ist seine eigene
+  Ressource (ADR #31): `…/locations/<id>` antwortet mit `Location`, alle
+  Felder nebeneinander, ohne `kind` und `path`; die App-Route ist
+  `/campaigns/:id/locations/<id>`.
 - Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
   **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
   ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
@@ -133,7 +135,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   eingebunden, nicht selbst gebaut. Eintragspflichtig in docs/DECISIONS.md
   bleiben allein Bun-only-APIs (Node-Portabilität).
 - Ein Schema hat genau eine Quelle; eine abgeleitete Form wird nie von Hand
-  nachgebaut. Das Schema einer Eintragsart ist ihr zod-Schema, und Typ,
+  nachgebaut. Das Schema einer Art ist ihr zod-Schema, und Typ,
   Patch-, Seed- und Generator-Form werden daraus abgeleitet (ADR #31).
   Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
   das Objekt, ein Eintrag als sein JSON).
@@ -219,9 +221,10 @@ Die Pfade:
    409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei
 2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
    NPC-Karten der Referenzszenen
-3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Eintrags-Arten und die
-   Glossar-Begriffe. Ein Glossar-Treffer nennt seine Zeile mit `kind` + `id`
-   ohne Adresse und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
+3. ⌘K-Suche findet und öffnet: indexiert sind die fünf Arten und die
+   Glossar-Begriffe. Ein Orts-Treffer nennt sich mit `kind` + `id` ohne
+   Adresse und öffnet `/campaigns/:id/locations/<id>`, ein Glossar-Treffer
+   ebenso und öffnet `/campaigns/:id/glossary`; Sessions und Ideen sind
    nicht indexiert
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →

@@ -80,8 +80,12 @@ Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 
 > **Teilweise überholt (ADR #30, ADR #31):** Abhängigkeiten für allgemeine
 > Aufgaben sind erwünscht (ADR #30); eintragspflichtig bleiben Bun-only-APIs.
-> Das Antwort-Schema einer Eintragsart wird aus ihrem zod-Schema abgeleitet,
-> und die Felder stehen flach neben `body` und `warnings` (ADR #31).
+> ADR #31 ersetzt die Form der Antwort: sie ist der Typ der Art ohne `rev`,
+> alle Felder flach nebeneinander, `body` eines davon, dazu `warnings` — keine
+> Abbildung `properties` und keine Trennung in Eigenschaften und Text. Ihr
+> Schema wird aus dem zod-Schema der Art abgeleitet, statt als JSON in
+> `shared/schema/` zu liegen. Was GILT: jede Modell-Antwort ist ein per Schema
+> erzwungenes JSON-Objekt, und `jsonrepair` repariert sie vor der Validierung.
 
 **Icons:** Lucide für UI-Chrome (konsistent mit shadcn);
 game-icons.net (CC BY) für thematische Marker (Entitäts- und
@@ -824,9 +828,11 @@ Schreibweg gelten unverändert.
 
 ## 20. Fixtures sind JSON-Einträge, es gibt keinen Import
 
-> **Teilweise überholt (ADR #31):** Ein Fixture ist der Entwurf seiner Art —
-> die Felder flach neben `kind`, `id` und `body`, keine `properties`. Was
-> GILT: ein Fixture-Format, und es ist die Form der API; kein Importer.
+> **Teilweise überholt (ADR #31):** ADR #31 ersetzt die Form und die Ablage
+> der Fixtures: eine Datei je Art und id unter `<kampagne>/<art>/<id>.json`,
+> jede das Objekt, das die Ressource der Art liefert, ohne `rev` — kein `kind`
+> und keine Abbildung `properties`. Was GILT: ein Fixture-Format, und es ist
+> die Form der API; kein Importer; Sessions, Ideen und Glossar strukturiert.
 
 **Entscheidung:** Die Beispielkampagne liegt unter `fixtures/` als Einträge in
 der Form, die die API spricht — eine JSON-Datei je Eintrag mit `kind`, den
@@ -875,6 +881,15 @@ aktuellen Anzeigenamen auf, also stimmt der Text ohnehin überall.
 
 ## 22. Ein URL-Schema: alles Kampagnenabhängige unter `/campaigns/:id`
 
+> **Teilweise überholt (ADR #31):** ADR #31 ersetzt die Adresse als
+> allgemeines Schema und mit ihr `…/entries/<adresse>` in API und App: jede
+> Art hat ihre eigene Ressource und ihre eigene App-Route
+> (`/campaigns/:c/locations/:id` usw.), und `PUT …/entries/<adresse>` aus den
+> Folgen unten gibt es nicht. Was GILT: alles Kampagnenabhängige hängt unter
+> `/api/campaigns/:id/…` bzw. `/campaigns/:id/…`, die Mehrzahl `campaigns` ist
+> gesetzt, kampagnenlos bleiben `/api/campaigns`, `/api/settings` und
+> `/settings`, und es gibt weder Alt-Schema noch Umleitungsschicht.
+
 **Entscheidung:** Jeder kampagnenabhängige Pfad hängt unter der Kampagne — in
 der API `/api/campaigns/:id/…`, in der App `/campaigns/:id/…`. Die Mehrzahl
 `campaigns` ist gesetzt, auch für den einzelnen Eintrag
@@ -907,10 +922,14 @@ kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
 
 ## 23. Ein Schreibweg je Eintrag
 
-> **Teilweise überholt (ADR #31):** Der Rumpf trägt die Felder der Art flach,
-> `{ rev, force?, body?, …Felder }`, statt unter `properties`. Was GILT: ein
-> Schreibweg, eine Transaktion, ein `rev`, die 409 mit dem aktuellen Eintrag,
-> `force` und `nothing_to_write`.
+> **Teilweise überholt (ADR #31):** ADR #31 ersetzt den Endpunkt
+> `PATCH …/entries/<adresse>` und die Form `{ rev, properties?, body?, force? }`:
+> jede Art wird über `PATCH` auf ihrer eigenen Ressource geschrieben, mit
+> `{ rev, force?, …Teilmenge der Felder der Art }`, `body` eines dieser Felder
+> — keine Trennung in Eigenschaften und Text. Was GILT: ein Schreibweg je
+> Ressource, eine Transaktion, ein `rev`, die 409 mit dem aktuellen Stand,
+> `force` schreibt nur die mitgeschickten Felder, und eine Anfrage ohne Feld
+> ist 400 `nothing_to_write`.
 
 **Kontext:** Ein Eintrag wurde über zwei Endpoints geschrieben: `PATCH
 /properties` für die Felder und `PUT /entries/<adresse>` für den Text, jeder
@@ -968,11 +987,15 @@ Spalten geparst wurde.
 
 ## 24. Der Generator kennt kein Markdown-Zwischenformat
 
-> **Teilweise überholt (ADR #31):** Ein Entwurf ist der Typ seiner Art ohne
-> Adresse und Wächter, die Felder flach neben `body`; das Antwort-Schema wird
-> aus dem zod-Schema der Art abgeleitet. Was GILT: kein Markdown-Zwischenformat,
-> Eigenschaften und Text getrennt von der Antwort bis in die Zeile, Änderungen
-> je Hälfte.
+> **Teilweise überholt (ADR #31):** ADR #31 ersetzt das Paar aus
+> `properties` und `body`, die Adresse `path` und die Änderungen „je Hälfte“:
+> ein Vorschlag des Generators ist der Typ seiner Art ohne `rev`, alle Felder
+> flach, `body` eines davon, und ein Job-Ergebnis listet `scenes`, `npcs` und
+> `locations` getrennt; das Antwort-Schema wird aus dem zod-Schema der Art
+> abgeleitet. Was GILT: kein Markdown-Zwischenformat — der Server setzt nirgends
+> einen Text mit vorangestellten Feldern zusammen und liest keinen zurück —,
+> und der bestehende Stand, den ein Ergänzen-Lauf dem Modell zeigt, ist
+> Prompt-Formatierung in `server/src/llm-provider.ts`.
 
 **Entscheidung:** Ein Entwurf des Generators ist von der Antwort des Modells
 bis in die Zeile ein Paar aus `properties` und `body`. Der Server setzt daraus
@@ -1710,74 +1733,96 @@ kleiner als die eines eigenen Nachbaus.
 - Der Satz „Weitere Abhängigkeiten braucht es nicht“ in ADR #5 ist damit keine
   Regel mehr, sondern die Feststellung, dass der Generator damals keine
   brauchte.
-- Anwendungen: `date-fns` für Datum und Zeit, `zod` für die Schemata der
-  Einträge (ADR #31).
+- Anwendungen: `date-fns` für Datum und Zeit, `zod` für das Schema jeder Art
+  (ADR #31).
 
-## 31. Typisierte Einträge je Art
+## 31. Eine Ressource und ein Typ je Art
 
-**Kontext:** Ein Eintrag war auf der Leitung und im Server ein Objekt für fünf
-Arten: `{ kind, path, properties, body, rev }`, mit `properties` als
-untypisierter Abbildung. Die zulässigen Schlüssel standen in einer eigenen
-Kontrakt-Liste, ihre Formen in einer eigenen Feld-Beschreibung, und die
-Antwort-Schemata des Generators lagen als JSON daneben und wurden per Test
-gegen beide synchron gehalten. Ein neues Feld kostete damit fünf Stellen, und
-der Store verzweigte an jeder Stelle über `kind`, weil ein Objekt fünf Arten
-vertrat. Die Datenbank ist dagegen längst typisiert: eine Tabelle je Art, mit
-eigenen Spalten.
+**Kontext:** Die Datenbank hält jede Art in ihrer eigenen Tabelle mit eigenen
+Spalten. Ein gemeinsamer Endpunkt über alle Arten mit einer untypisierten
+Abbildung der Felder verliert diese Typisierung auf dem Weg zur Leitung: die
+zulässigen Schlüssel brauchen dann eine eigene Liste, ihre Formen eine eigene
+Beschreibung, die Generator-Schemata eine dritte Fassung, und Store wie App
+verzweigen an jeder Stelle über die Art. Ein neues Feld kostet so fünf Stellen
+statt einer.
 
-**Entscheidung:** Jede Art — Kampagne, Kapitel, Szene, NPC, Ort — hat ihren
-eigenen Typ.
+**Entscheidung:** Jede Art — Kampagne, Kapitel, Szene, NPC, Ort — ist eine
+eigene Ressource mit eigenem Typ. Einen allgemeinen Endpunkt über mehrere Arten
+gibt es weder in der API noch in der App.
 
-- **Eine Quelle je Art: ein zod-Schema.** Es beschreibt den Eintrag, wie
-  `GET …/entries/<adresse>` ihn beantwortet, und aus ihm kommt alles andere:
-  der TypeScript-Typ (`z.infer`), die Validierung eingehender Patches und
-  Seeds und das Antwort-Schema des Generators. Keine dieser Formen wird von
-  Hand nachgebaut; sie werden abgeleitet (`shared/src/entry-form.ts`).
-- **Leitung:** Jeder Eintrag trägt `kind`, `id`, `path`, `body` und `rev`
-  (`EntryBase`) und daneben **flach** die Felder seiner Art — der Name eines
-  Orts ist `entry.name`. Eine Abbildung `properties` gibt es nicht. `Entry`
-  ist die Vereinigung der Arten, unterschieden über `kind`.
-- **Schreiben:** `PATCH …/entries/<adresse>` nimmt `{ rev, force?, body?,
-  …Teilmenge der Felder }` und prüft sie gegen das Schema der Art. `null`
-  löscht ein optionales Feld; ein Feld, das die Art nicht hat, oder ein Wert
-  der falschen Form ist eine 400, die das Feld nennt. Die `id` darf
-  mitgeschickt, nie geändert werden (ADR #21). Wächter, Konflikt und `force`
-  gelten unverändert (ADR #23).
-- **Entwurf:** Ein Eintrag, der noch nicht gespeichert ist, ist derselbe Typ
-  ohne Adresse und Wächter — `Omit<Eintrag, "path" | "rev">`. So steht er in
-  den Fixtures, so schlägt ihn der Generator vor, und so schreibt ihn die
-  Übernahme.
-- **Generator:** Das Antwort-Schema einer Art ist ihr Entwurf in der strengen
-  Form der Provider, abgeleitet und mit `z.toJSONSchema` übergeben:
-  null-fähig statt optional, `additionalProperties: false`, jedes Feld in
-  `required`, kein `pattern`, kein `format`, keine Grenzen. Was das Schema
-  nicht sagen kann, steht in einer `description` und wird in der Validierung
-  geprüft. Ein Test prüft allein diese Regeln an den abgeleiteten Schemata.
-- **Server:** Das Domänenmodul einer Art rendert, liest, schreibt und
-  übernimmt sie selbst, getypt (`store/<art>.ts`); nichts setzt eine
-  Abbildung aus Spalten zusammen.
-- **App:** Lesecode greift typisiert zu. Eigenschaften-Dialog und
-  Prüfschritt werden aus der **Feld-Beschreibung je Art** gebaut; sie steht
-  neben dem zod-Schema der Art und ist gegen dessen Felder getypt, sodass ein
-  Feld ohne Beschreibung nicht übersetzt.
-- **„Eigenschaften“** bleibt der Sammelbegriff für alle Felder eines Eintrags
-  außer `body`.
+| Art | Lesen/Ändern | Anlegen/Liste | App-Route |
+|---|---|---|---|
+| Kampagne | `GET/PATCH /campaigns/:c` | `POST /campaigns` | `/campaigns/:c` |
+| Kapitel | `GET/PATCH /campaigns/:c/chapters/:id` | `GET/POST /campaigns/:c/chapters` | `/campaigns/:c/chapters/:id` |
+| Szene | `GET/PATCH /campaigns/:c/scenes/:id` | `GET/POST /campaigns/:c/scenes` | `/campaigns/:c/scenes/:id` |
+| NPC | `GET/PATCH /campaigns/:c/npcs/:id` | `GET/POST /campaigns/:c/npcs` | `/campaigns/:c/npcs/:id` |
+| Ort | `GET/PATCH /campaigns/:c/locations/:id` | `GET/POST /campaigns/:c/locations` | `/campaigns/:c/locations/:id` |
+
+Die API-Pfade stehen unter `/api` (ADR #22).
+
+- **Leitung:** Jede Ressource antwortet mit ihrem eigenen Typ, etwa
+  `Location { id, name, chapter?, roll20Page?, atmosphere?, body, rev }`. Es
+  gibt kein `kind`, kein `path`, keinen gemeinsamen Basistyp und keine
+  Vereinigung aller Arten; welche Art gemeint ist, steht in der URL.
+  Feldnamen sind gewöhnliche Bezeichner (`roll20Page`).
+- **Szenen liegen flach** unter `…/scenes/:id`: Szenen-ids sind je Kampagne
+  eindeutig, und das Kapitel ist ein Feld der Szene, das sich ändern kann.
+- **Keine Sammelbegriffe.** Jedes Feld ist ein Feld seiner Art, `body`
+  eingeschlossen. Typen, Code und Doku beschreiben jede Art mit ihren eigenen
+  Feldern; es gibt keine Hälften einer Art und keine gemeinsame Form, die
+  mehrere Arten vertritt.
+- **Schreiben:** `PATCH` nimmt `{ rev, force?, …Teilmenge der Felder der Art }`
+  und prüft sie gegen das Schema der Art. `null` löscht ein optionales Feld;
+  ein Feld, das die Art nicht hat, oder ein Wert der falschen Form ist eine
+  400, die das Feld nennt. Die `id` wird nie geändert (ADR #21). Ein
+  veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource; `force` und
+  `nothing_to_write` gelten wie in ADR #23. Anlegen antwortet mit dem Typ der
+  Art.
+- **Eine Quelle je Art: ein zod-Schema** in `shared/src/<art>.ts`. Aus ihm
+  kommen der TypeScript-Typ (`z.infer`), die Prüfung von `PATCH`, `POST` und
+  Seed und das Antwort-Schema des Generators. Keine dieser Formen wird von Hand
+  nachgebaut; die gemeinsamen Ableitungen stehen in
+  `shared/src/schema-forms.ts`.
+- **Generator-Schema:** Das Antwort-Schema einer Art ist ihr Typ ohne `rev` in
+  der strengen Form der Provider, abgeleitet mit `z.toJSONSchema`: null-fähig
+  statt optional, `additionalProperties: false`, jedes Feld in `required`,
+  kein `pattern`, kein `format`, keine Grenzen. Was das Schema nicht sagen
+  kann, steht in einer `description` und wird in der Validierung geprüft. Ein
+  Test prüft genau diese Regeln an den abgeleiteten Schemata.
+- **Wo gemischt wird, nennt der Treffer seine Art.** Ein Suchtreffer ist
+  `{ kind, id, title }`: die Suche ist wirklich gemischt, deshalb trägt der
+  Treffer `kind`, und die App öffnet daraus die Route der Art. `[[id]]`-
+  Verweise lösen gegen die Ressourcen auf.
+- **Ergänzen hängt an der Ressource:** `POST …/<art>/:id/augment` startet den
+  Lauf, `POST …/<art>/:id/augment/apply` übernimmt ihn. Der Vorschlag ist der
+  gelesene Stand neben dem vorgeschlagenen, beide im Typ der Art ohne `rev`.
+- **Generator-Ergebnis:** Ein Job listet in seinem Ergebnis `scenes`, `npcs`
+  und `locations` als eigene getypte Listen, jede im Typ ihrer Art ohne `rev`.
+  Prüfen, Entscheiden und Übernehmen laufen je Art.
+- **Server:** Das Domänenmodul einer Art (`server/src/store/<art>.ts`)
+  rendert, liest, schreibt und übernimmt sie getypt.
+- **App:** Die Formularfelder einer Art stehen neben ihrem Schema und sind
+  gegen dessen Felder getypt, sodass ein Feld ohne Beschreibung nicht
+  übersetzt.
 
 **Warum zod:** Validierung und Schemata sind eine allgemeine Aufgabe (ADR #30).
 zod liefert Typ, Prüfung und JSON-Schema aus einer Beschreibung, in der
-Sprache, in der der übrige Code geschrieben ist — die drei Formen können
-nicht auseinanderlaufen, weil es nur eine gibt.
+Sprache, in der der übrige Code geschrieben ist — die Formen können nicht
+auseinanderlaufen, weil es nur eine gibt.
 
 **Folgen:**
 
-- Ein neues Feld ist eine Zeile im Schema seiner Art und eine in ihrer
-  Feld-Beschreibung, dazu seine Spalte samt Migration. Typ, Prüfung und
+- Ein neues Feld ist eine Zeile im Schema seiner Art und eine in ihren
+  Formularfeldern, dazu seine Spalte samt Migration. Typ, Prüfung und
   Generator-Schema folgen.
-- Die Fixtures stehen in der Form des Entwurfs: `{ kind, id, …Felder, body }`.
-  Die Bodies bleiben Zeichen für Zeichen, wie sie sind.
-- Gespeicherte Generator-Jobs, deren Nutzlast Entwürfe in der früheren Form
+- Die Fixtures liegen je Art: `fixtures/<kampagne>/<art>/<id>.json`, etwa
+  `fixtures/beispiel/locations/leuchtturm.json`. Jede Datei ist das Objekt,
+  das die Ressource liefert, ohne `rev`. Die Bodies bleiben Zeichen für
+  Zeichen, wie sie sind.
+- Gespeicherte Generator-Jobs, deren Nutzlast eine Art in einer früheren Form
   trägt, werden nicht überführt: die Migration löscht sie per SQL (ADR #28,
-  Regel 2). Ein Lauf kostet ein paar Token, ein halb überführter Entwurf einen
-  falschen Eintrag in der Kampagne.
-- Datenbankschema, Sessions, Ideen, Glossar, Kampagnenwissen und offene Fäden
-  bleiben, wie sie sind; Listen sind keine Einträge (ADR #26).
+  Regel 2). Ein Lauf kostet ein paar Token, ein halb überführter Vorschlag
+  eine falsche Zeile in der Kampagne.
+- Die Tabellen der Arten, Sessions, Ideen, Glossar, Kampagnenwissen und offene
+  Fäden bleiben, wie sie sind; Listen haben ihre eigenen Endpunkte
+  (ADR #26).
