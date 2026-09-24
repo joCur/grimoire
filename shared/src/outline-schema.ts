@@ -27,8 +27,9 @@ import { ENTITY_SLUG } from "./slug";
 import outlineSchema from "../schema/outline.schema.json";
 
 /**
- * The most parts ONE outline may produce — 12 scenes, 12 new npcs and 12 new
- * locations, each list counted on its own.
+ * The most parts ONE outline may produce — 12 scenes, and 12 proposals: the
+ * new npcs and the new locations counted together, because every one of them
+ * is a provider call of the run.
  *
  * Without the bound the outline decides how many provider calls a run makes,
  * and a source text that is a whole adventure turns one „Entwürfe
@@ -37,8 +38,7 @@ import outlineSchema from "../schema/outline.schema.json";
  * mode) and the validation enforces it, and both read the same number.
  */
 export const MAX_OUTLINE_SCENES = 12;
-export const MAX_OUTLINE_NPCS = 12;
-export const MAX_OUTLINE_LOCATIONS = 12;
+export const MAX_OUTLINE_PROPOSALS = 12;
 
 /**
  * The id rule as PROSE for the model, as the schema modules spell it out. It is

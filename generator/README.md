@@ -211,9 +211,8 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    kein Lauf. Eine fehlende Beschreibung kostet keinen Korrektur-Turn — das
    Kapitel beginnt dann mit leerem Text.
 
-   **Obergrenze:** höchstens 12 Szenen, 12 neue NPCs und 12 neue Orte je
-   Lauf, jede Liste für sich gezählt (`MAX_OUTLINE_SCENES`,
-   `MAX_OUTLINE_NPCS`, `MAX_OUTLINE_LOCATIONS`). Jeder Teil ist ein
+   **Obergrenze:** höchstens 12 Szenen und zusammen 12 neue NPCs und Orte je
+   Lauf (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Jeder Teil ist ein
    Provider-Aufruf, also entscheidet die Gliederung, was ein Lauf kostet;
    darüber ist die Antwort ein Validierungsfehler und damit ein
    Korrektur-Turn, der um Zusammenfassen bittet — kein fehlgeschlagener Lauf.

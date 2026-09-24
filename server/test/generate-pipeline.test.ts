@@ -19,8 +19,7 @@ import {
   assignmentBlock,
   cutExcerpt,
   locationContext,
-  MAX_OUTLINE_LOCATIONS,
-  MAX_OUTLINE_NPCS,
+  MAX_OUTLINE_PROPOSALS,
   MAX_OUTLINE_SCENES,
   npcContext,
   outlineBlock,
@@ -299,27 +298,29 @@ test("an outline over the part bound is a correction turn, not a run", () => {
   // Exactly at the bound is fine — the bound is a bound, not a target.
   expect(validateOutlineReply(outlineReply({ scenes: many.slice(1) }), CTX).ok).toBe(true);
 
-  // The npcs and the locations are bounded list by list.
-  const npcs = Array.from({ length: MAX_OUTLINE_NPCS + 1 }, (_, i) => ({
+  // The new npcs and the new locations share ONE bound: each is a provider
+  // call, so 13 together is too many although each list stays below 12.
+  const npcs = Array.from({ length: 7 }, (_, i) => ({
     id: `figur-${i}`,
     name: `Figur ${i}`,
     summary: "aus dem Quelltext",
   }));
-  const tooManyNpcs = validateOutlineReply(outlineReply({ npcs }), CTX);
-  expect(tooManyNpcs.ok).toBe(false);
-  expect((tooManyNpcs as { errors: string[] }).errors.join("\n")).toContain(
-    `"npcs": ${MAX_OUTLINE_NPCS + 1} neue Figuren`,
-  );
-  expect(validateOutlineReply(outlineReply({ npcs: npcs.slice(1) }), CTX).ok).toBe(true);
-  const locations = Array.from({ length: MAX_OUTLINE_LOCATIONS + 1 }, (_, i) => ({
+  const locations = Array.from({ length: MAX_OUTLINE_PROPOSALS + 1 - npcs.length }, (_, i) => ({
     id: `ort-${i}`,
     name: `Ort ${i}`,
     summary: "aus dem Quelltext",
   }));
-  const tooManyLocations = validateOutlineReply(outlineReply({ locations }), CTX);
-  expect((tooManyLocations as { errors: string[] }).errors.join("\n")).toContain(
-    `"locations": ${MAX_OUTLINE_LOCATIONS + 1} neue Orte`,
+  expect(npcs.length).toBeLessThan(MAX_OUTLINE_PROPOSALS);
+  expect(locations.length).toBeLessThan(MAX_OUTLINE_PROPOSALS);
+  const tooManyProposals = validateOutlineReply(outlineReply({ npcs, locations }), CTX);
+  expect(tooManyProposals.ok).toBe(false);
+  expect((tooManyProposals as { errors: string[] }).errors.join("\n")).toContain(
+    `${MAX_OUTLINE_PROPOSALS + 1} neue Figuren und Orte`,
   );
+  // Exactly at the bound is fine.
+  expect(
+    validateOutlineReply(outlineReply({ npcs, locations: locations.slice(1) }), CTX).ok,
+  ).toBe(true);
 });
 
 // --- cutting the source passage ------------------------------------------------

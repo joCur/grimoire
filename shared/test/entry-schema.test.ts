@@ -38,8 +38,7 @@ import {
   type PropertiesKind,
 } from "../src/property-fields";
 import {
-  MAX_OUTLINE_LOCATIONS,
-  MAX_OUTLINE_NPCS,
+  MAX_OUTLINE_PROPOSALS,
   MAX_OUTLINE_SCENES,
   OUTLINE_ID_DESCRIPTION,
   outlineJsonSchema,
@@ -208,8 +207,9 @@ describe("the outline schema", () => {
     expect(sceneProps().id).toEqual({ type: "string", description: OUTLINE_ID_DESCRIPTION });
     expect(OUTLINE_ID_DESCRIPTION).toContain(ENTITY_SLUG.source);
     expect(scenes().description).toContain(String(MAX_OUTLINE_SCENES));
-    expect(npcs().description).toContain(String(MAX_OUTLINE_NPCS));
-    expect(locations().description).toContain(String(MAX_OUTLINE_LOCATIONS));
+    // The proposals are bounded together — both lists say so.
+    expect(npcs().description).toContain(String(MAX_OUTLINE_PROPOSALS));
+    expect(locations().description).toContain(String(MAX_OUTLINE_PROPOSALS));
     // The new npcs and the new locations are two lists of their own: an item
     // names neither a kind nor anything beside its id, name and summary.
     for (const list of [npcs(), locations()]) {

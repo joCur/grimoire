@@ -50,8 +50,7 @@ import {
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import {
-  MAX_OUTLINE_LOCATIONS,
-  MAX_OUTLINE_NPCS,
+  MAX_OUTLINE_PROPOSALS,
   MAX_OUTLINE_SCENES,
   OUTLINE_SCHEMA_DESCRIPTION,
   OUTLINE_SCHEMA_NAME,
@@ -86,8 +85,8 @@ import type { LLMProvider } from "./llm-provider";
 export const PART_CONCURRENCY = 3;
 
 /**
- * The most parts ONE outline may produce — 12 scenes, 12 new npcs and 12 new
- * locations, each list counted on its own.
+ * The most parts ONE outline may produce — 12 scenes, and 12 new npcs and
+ * locations counted together.
  *
  * Without it the outline decides how many provider calls a run makes, and a
  * source text that is a whole adventure (or a model that splits every
@@ -102,11 +101,7 @@ export const PART_CONCURRENCY = 3;
  * them to the provider, the validation below enforces them) and are
  * re-exported here, where every caller already reads them.
  */
-export {
-  MAX_OUTLINE_LOCATIONS,
-  MAX_OUTLINE_NPCS,
-  MAX_OUTLINE_SCENES,
-} from "@grimoire/shared/outline-schema";
+export { MAX_OUTLINE_PROPOSALS, MAX_OUTLINE_SCENES } from "@grimoire/shared/outline-schema";
 
 // --- the outline --------------------------------------------------------------
 
@@ -341,16 +336,14 @@ export function validateOutlineReply(
         "(Verzweigungen derselben Situation gehören in EINE Szene)",
     );
   }
-  if (npcs.length > MAX_OUTLINE_NPCS) {
+  // Every new npc and every new location is a provider call of its own, so
+  // the two lists share one bound.
+  const proposals = npcs.length + locations.length;
+  if (proposals > MAX_OUTLINE_PROPOSALS) {
     errors.push(
-      `"npcs": ${npcs.length} neue Figuren sind zu viele für einen Durchlauf — ` +
-        `nenne höchstens ${MAX_OUTLINE_NPCS}, die das Kapitel wirklich braucht`,
-    );
-  }
-  if (locations.length > MAX_OUTLINE_LOCATIONS) {
-    errors.push(
-      `"locations": ${locations.length} neue Orte sind zu viele für einen Durchlauf — ` +
-        `nenne höchstens ${MAX_OUTLINE_LOCATIONS}, die das Kapitel wirklich braucht`,
+      `"npcs" und "locations": ${proposals} neue Figuren und Orte sind zu viele für einen ` +
+        `Durchlauf — nenne zusammen höchstens ${MAX_OUTLINE_PROPOSALS}, die das Kapitel ` +
+        "wirklich braucht",
     );
   }
 

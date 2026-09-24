@@ -80,7 +80,7 @@
     },
     "npcs": {
       "type": "array",
-      "description": "Höchstens 12 neue Figuren.",
+      "description": "Neue Figuren; zusammen mit locations höchstens 12.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -105,7 +105,7 @@
     },
     "locations": {
       "type": "array",
-      "description": "Höchstens 12 neue Orte.",
+      "description": "Neue Orte; zusammen mit npcs höchstens 12.",
       "items": {
         "type": "object",
         "additionalProperties": false,
