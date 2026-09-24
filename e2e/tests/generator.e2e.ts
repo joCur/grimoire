@@ -164,6 +164,12 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   for (const key of ["kind", "path", "properties", "rev"]) {
     expect(Object.keys(run.result.locations[0]!)).not.toContain(key);
   }
+  // A proposal is the location without its guard: an optional field the
+  // model left out is absent, never `null`, and `warnings` travel apart.
+  for (const location of run.result.locations) {
+    expect(Object.keys(location).sort()).toEqual(["atmosphere", "body", "id", "name"]);
+    expect(Object.values(location)).not.toContain(null);
+  }
   await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
   await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
