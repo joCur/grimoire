@@ -27,13 +27,13 @@ Das Referenz-Beispiel unten ist genau diese Form.
 
 ```json
 {
-  "id": "<kebab-case ASCII, kurz und stabil — nur die id; der Anzeigename steht in name>",
+  "id": "<kebab-case aus Kleinbuchstaben a–z, Ziffern und Bindestrichen, kurz und stabil — nur die id; der Anzeigename steht in name>",
   "name": "<Anzeigename>",
-  "chapter": "<Kapitel-id aus dem Kontext; nur wenn eindeutig, sonst null>",
+  "chapter": "<Kapitel-id aus der Kontextliste oder der Gliederung; nur wenn eindeutig, sonst null>",
   "roll20Page": "<Page-Name als Verweis auf die Roll20-Seite; sonst null>",
   "atmosphere": "<was der Ort über sich verrät, 1-3 Sätze>",
-  "body": "<der Fließtext des Orts, ein String mit echten Zeilenumbrüchen>",
-  "warnings": ["<kurzer deutscher Hinweis für den DM>"]
+  "body": "<der Fließtext des Orts, ein String mit echten Zeilenumbrüchen: Überschriften, Callouts, ## If:-Abschnitte>",
+  "warnings": ["<kurzer deutscher Hinweis für den DM; eine leere Liste, wenn es nichts zu melden gibt>"]
 }
 ```
 
@@ -41,7 +41,8 @@ Ein Ort trägt genau diese Felder. Jedes Feld, das der Quelltext nicht
 hergibt, trägt `null`.
 
 `atmosphere` hält in 1-3 Sätzen, was der Ort über sich verrät: Zustand,
-Geräusche, Gerüche, was auffällt. Die Ort-Karte zeigt sie am Tisch.
+Geräusche, Gerüche, was auffällt. Figuren und Orte mit id aus der
+Kontextliste stehen darin als `[[id]]`. Die Ort-Karte zeigt sie am Tisch.
 
 Die Abschnitte im Feld `body` sind frei; empfohlen und in dieser Reihenfolge:
 
@@ -66,8 +67,8 @@ gehört in eine `warning`.
    der Fließtext bleiben deutsch geschrieben (siehe Regel 10).
 2. **Genau diese Felder**: Der Ort trägt die Felder aus dem Abschnitt oben und
    sonst keine.
-3. **`chapter`**: eine id aus der Kontextliste, wenn der Ort eindeutig
-   dorthin gehört. Sonst trägt das Feld `null` — der DM setzt es später.
+3. **`chapter`**: eine Kapitel-id aus der Kontextliste oder der Gliederung,
+   wenn der Ort eindeutig dorthin gehört. Sonst trägt das Feld `null` — der DM setzt es später.
 4. **`roll20Page`**: setze es, wenn der Quelltext eine Page/Karte nennt;
    sonst trägt das Feld `null`, und die Lücke gehört in `warnings`.
 5. **Quelltreu bleiben**: Räume, Bewohner, Geheimnisse und Schätze stammen

@@ -53,7 +53,8 @@ import {
   PAIR_VALUE,
   type EntryMode,
 } from "../src/entry-schema";
-import { locationReplyRequest } from "../src/location";
+import { z } from "zod";
+import { locationReplySchema } from "../src/location";
 
 /** The keywords OpenAI's strict mode refuses — see point 3 above. */
 const UNSUPPORTED = [
@@ -183,13 +184,11 @@ describe("the entry schemas", () => {
   test("the schema name says kind and run, and nothing else does", () => {
     expect(entrySchemaName("scene", "create")).toBe("scene");
     expect(entrySchemaName("npc", "create")).toBe("npc");
-    expect(locationReplyRequest("create").name).toBe("location");
     // The augment run prefixes the same kind: the correction turn names the
     // schema, so the name the model was handed says kind AND run.
     for (const kind of GENERATED_ENTRY_KINDS) {
       expect(entrySchemaName(kind, "augment")).toBe(`augmented_${kind}`);
     }
-    expect(locationReplyRequest("augment").name).toBe("augmented_location");
   });
 
   test("a copy every call — both transports serialize it into a body", () => {
@@ -233,12 +232,17 @@ describe("the outline schema", () => {
 });
 
 describe("every schema", () => {
-  const all = [
+  const written = [
     ...GENERATED_ENTRY_KINDS.flatMap((kind) =>
       MODES.map((mode) => [`${kind}/${mode}`, entryJsonSchema(kind, mode)] as const),
     ),
-    ...MODES.map((mode) => [`location/${mode}`, locationReplyRequest(mode).schema] as const),
     ["outline", outlineJsonSchema()] as const,
+  ];
+  // The location's reply is derived from its zod schema, so the check runs
+  // on exactly what `z.toJSONSchema` makes of it.
+  const all = [
+    ...written,
+    ["location", z.toJSONSchema(locationReplySchema) as Record<string, unknown>] as const,
   ];
 
   test("is strict-mode shaped: every key required, nothing extra allowed", () => {
@@ -257,8 +261,8 @@ describe("every schema", () => {
     ]);
   });
 
-  test("carries the name and the description the provider request sends", () => {
-    for (const [label, schema] of all) {
+  test("a written schema carries the name and the description the provider request sends", () => {
+    for (const [label, schema] of written) {
       expect(typeof schema.title, label).toBe("string");
       expect(typeof schema.description, label).toBe("string");
     }

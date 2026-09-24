@@ -1,7 +1,9 @@
 // The reply of a LOCATION call: one JSON object with the location's fields,
 // `body` among them, and the model's `warnings` beside them. It is read by
 // the location's reply schema (@grimoire/shared/location) — the very schema
-// the provider enforced — so what the transport guarantees is what parses.
+// the provider enforced, handed to it as JSON schema by `locationReplyRequest`
+// — so what the transport guarantees is what parses. What the model is told
+// about each field stands in the location prompts (generator/).
 //
 // What this module does not do is judge content: a kebab `id`, references
 // that resolve and known callouts stay with the runs that know what they may
@@ -10,11 +12,30 @@
 import { z } from "zod";
 import {
   locationProposalSchema,
-  locationReplySchemas,
+  locationReplySchema,
   type EntryMode,
   type LocationProposal,
 } from "@grimoire/shared";
+import type { JsonSchema } from "@grimoire/shared/outline-schema";
 import { parseJsonReply, REPAIRED_ENTRY_WARNING } from "./entry-reply";
+import type { ReplySchema } from "./llm-provider";
+
+/** The tool (Claude) or `json_schema` (OpenAI) name a location call travels under, per run. */
+const LOCATION_REPLY_NAMES: Record<EntryMode, string> = {
+  create: "location",
+  augment: "augmented_location",
+};
+
+/**
+ * The schema a location call is forced into: the location's reply schema as
+ * JSON schema, under the name of its run. The `$schema` dialect line is
+ * dropped — a request carries the schema as data. Built on every call, so no
+ * request can reach into the next one's payload.
+ */
+export function locationReplyRequest(mode: EntryMode): ReplySchema {
+  const { $schema: _dialect, ...schema } = z.toJSONSchema(locationReplySchema) as JsonSchema;
+  return { name: LOCATION_REPLY_NAMES[mode], schema };
+}
 
 /** One location reply, read: the location the run proposes plus the notes. */
 export interface LocationReply {
@@ -68,7 +89,7 @@ export function parseLocationReply(
   if (parsed === null || !isRecord(parsed.value)) {
     return { ok: false, errors: [NOT_A_LOCATION_ERROR] };
   }
-  const schema = locationReplySchemas[mode];
+  const schema = locationReplySchema;
   const shape: Record<string, z.ZodType> = schema.shape;
   const ignored: string[] = [];
   const input: Record<string, unknown> = {};

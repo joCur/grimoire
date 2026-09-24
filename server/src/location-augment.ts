@@ -22,7 +22,6 @@
 import {
   CALLOUT_KINDS,
   locationPatchSchema,
-  locationReplyRequest,
   type Location,
   type LocationAugmentResult,
   type LocationProposal,
@@ -41,7 +40,7 @@ import {
   withNamingHints,
 } from "./generator";
 import { formatContract, sameValue } from "./generator-augment";
-import { parseLocationReply } from "./location-reply";
+import { locationReplyRequest, parseLocationReply } from "./location-reply";
 import type { LLMProvider } from "./llm-provider";
 import { parseRequest } from "./store/shared";
 import { patchLocation, readLocation } from "./store/locations";

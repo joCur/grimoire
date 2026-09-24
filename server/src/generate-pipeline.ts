@@ -57,7 +57,6 @@ import {
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
-import { locationReplyRequest } from "@grimoire/shared/location";
 import { ApiError } from "./api-error";
 import { checkDraftsNaming } from "./naming-check";
 import {
@@ -80,7 +79,7 @@ import {
 } from "./generator";
 export type { SceneContext } from "./generator";
 import { parseEntryReply, parseJsonReply } from "./entry-reply";
-import { parseLocationReply } from "./location-reply";
+import { locationReplyRequest, parseLocationReply } from "./location-reply";
 import type { LLMProvider } from "./llm-provider";
 
 /** How many scene/entry calls of one run are in flight at once. */

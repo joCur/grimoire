@@ -122,8 +122,8 @@ export interface GenerateRequest {
 export interface ReplySchema {
   /** Tool name (Claude) / `json_schema.name` (OpenAI). */
   name: string;
-  /** What the tool is for; only the Claude path sends it. */
-  description: string;
+  /** What the tool is for, when the schema says; only the Claude path sends it. */
+  description?: string;
   schema: JsonSchema;
 }
 
@@ -566,7 +566,7 @@ export function claudeBody(
           tools: [
             {
               name: schema.name,
-              description: schema.description,
+              ...(schema.description === undefined ? {} : { description: schema.description }),
               input_schema: schema.schema,
             },
           ],

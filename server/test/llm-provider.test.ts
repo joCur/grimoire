@@ -35,7 +35,7 @@ import {
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
 import { entryReplySchema, entrySchemaName } from "@grimoire/shared/entry-schema";
-import { locationReplyRequest } from "@grimoire/shared/location";
+import { locationReplyRequest } from "../src/location-reply";
 
 // --- factory ------------------------------------------------------------------
 

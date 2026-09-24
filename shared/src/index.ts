@@ -8,5 +8,4 @@ export * from "./error-codes";
 export * from "./outline-schema";
 export * from "./property-fields";
 export * from "./entry-schema";
-export * from "./schema-forms";
 export * from "./location";
