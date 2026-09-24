@@ -535,6 +535,8 @@ export const de = {
   "review.action.resolve": "Erledigt",
   "review.action.failed": "Aktion nicht gespeichert — Server prüfen.",
   "review.npc.failed": "NPC nicht angelegt — Server prüfen.",
+  "review.npc.exists":
+    "Den NPC „{id}“ gibt es schon, deshalb wurde die Notiz nicht übernommen. Wähle eine andere Kennung, zum Beispiel „{suggestion}“.",
 
   // The done row: the action of THIS sitting, or the neutral fallback after a
   // reload (the server only stores done/not-done).
@@ -563,9 +565,9 @@ export const de = {
   "review.threads.new": "neu",
   "review.finish": "Fertig — zurück zu den Kapiteln",
 
-  // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
+  // --- NPC create dialog of the review (components/NpcCreateDialog.tsx) -----
   "npcCreate.description":
-    "Legt einen neuen NPC mit dem Status „Unbekannt“ an und übernimmt diese Notiz in seinen Text. Gibt es die Kennung schon, wird nur auf diesen NPC verwiesen – die Notiz wird dann nicht übernommen.",
+    "Legt einen neuen NPC mit dem Status „Unbekannt“ an und übernimmt diese Notiz als seinen Text. Ist unter der Kennung schon ein leerer NPC angelegt, bekommt er die Notiz. Hat ein NPC mit dieser Kennung schon Inhalt, wird nichts geschrieben, und die Notiz bleibt offen.",
   "npcCreate.idLabel": "Kennung (steht in der Adresse)",
   "npcCreate.idPlaceholder": "id-des-npcs",
   "npcCreate.idInvalid": "Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
@@ -820,7 +822,7 @@ export const de = {
   "generate.pipeline.stillRunning":
     "Der Lauf ist noch nicht fertig — was hier steht, kannst du schon übernehmen.",
 
-  // --- generator: stub rows (routes/generate.tsx) -------------------------
+  // --- generator: proposal rows (routes/generate.tsx) ---------------------
   "generate.stub.reason.run": "aus diesem Lauf",
   "generate.stub.reason.scene": "aus {title}",
   "generate.stub.reason.scenes": "aus {title} u. a.",

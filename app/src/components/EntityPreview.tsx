@@ -5,10 +5,11 @@
 //
 // Kind and name are known before anything loads — the tree that resolved the
 // reference has them — so the card opens labelled, never empty. The rest
-// comes with the entry — for a location its own resource (ADR #31) — under
-// the SAME query key the aside cards and the drawer use, so an entry one of them already read is not asked for again
-// (`staleTime: Infinity`: only the version poll's invalidation makes it
-// stale). While it loads, static placeholder bars stand in; if it fails, the
+// comes with the row — an npc and a location from their own resources
+// (ADR #31), a scene from its entry — under the SAME query key the aside
+// cards and the drawer use, so a row one of them already read is not asked
+// for again (`staleTime: Infinity`: only the version poll's invalidation
+// makes it stale). While it loads, static placeholder bars stand in; if it fails, the
 // card simply keeps kind and name — mid-sentence an error line is noise.
 //
 // Passive by contract: nothing in here is a link or a control, and names
@@ -20,7 +21,7 @@ import type { ReactNode } from "react";
 
 import type { NpcStatus, SceneStatus } from "@grimoire/shared/types";
 
-import { fetchEntry, fetchLocation, fetchTree } from "@/api";
+import { fetchEntry, fetchLocation, fetchNpc, fetchTree } from "@/api";
 import { CompactName, LocationCompact, NpcCompact } from "@/components/EntityCompact";
 import { useT, type Translate } from "@/i18n";
 import { npcStatusLabel } from "@/lib/entity";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/entity-excerpt";
 import { sceneStatusMeta } from "@/lib/scene-status";
 import { locationKey } from "@/lib/use-location-edit";
+import { npcKey } from "@/lib/use-npc-edit";
 import { cn } from "@/lib/utils";
 import type { ResolvedEntityRef } from "@/markdown/entity-refs";
 
@@ -71,14 +73,22 @@ export function EntityPreview({
   nameOf: NameOf;
 }) {
   const t = useT();
-  const entryPath = target.kind === "location" ? "" : target.path;
+  const entryPath = target.kind === "scene" ? target.path : "";
   const entry = useQuery({
     queryKey: ["entry", campaign, entryPath],
     queryFn: () => fetchEntry(campaign, entryPath),
     retry: false,
     retryOnMount: false,
     staleTime: Infinity,
-    enabled: target.kind !== "location",
+    enabled: target.kind === "scene",
+  });
+  const npc = useQuery({
+    queryKey: npcKey(campaign, target.slug),
+    queryFn: () => fetchNpc(campaign, target.slug),
+    retry: false,
+    retryOnMount: false,
+    staleTime: Infinity,
+    enabled: target.kind === "npc",
   });
   const location = useQuery({
     queryKey: locationKey(campaign, target.slug),
@@ -104,8 +114,8 @@ export function EntityPreview({
 
   if (target.kind === "npc") {
     kind = t("kind.npc");
-    if (data !== undefined) {
-      const excerpt = npcExcerpt(data, nameOf);
+    if (npc.data !== undefined) {
+      const excerpt = npcExcerpt(npc.data, nameOf);
       if (excerpt.status !== undefined) status = npcStatusLine(excerpt.status, t);
       rows = <NpcCompact name={target.name} excerpt={excerpt} clamp />;
     }
@@ -152,9 +162,11 @@ export function EntityPreview({
       {rows ?? (
         <>
           <CompactName name={target.name} />
-          {(target.kind === "location" ? location.isPending : entry.isPending) && (
-            <Placeholder kind={target.kind} />
-          )}
+          {(target.kind === "npc"
+            ? npc.isPending
+            : target.kind === "location"
+              ? location.isPending
+              : entry.isPending) && <Placeholder kind={target.kind} />}
         </>
       )}
     </>

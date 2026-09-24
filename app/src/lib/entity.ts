@@ -1,35 +1,28 @@
-// Entity-kind helpers for the entry reading view.
+// Entity-kind helpers for the reading views.
 //
-// GET /entries/<address> answers with the entry's `kind`. The reading view
-// picks its header from that kind — the scene header (type overline, chip
-// row) must never sit above an NPC. Everything here is pure so it can be unit-tested without a DOM.
+// GET /entries/<address> answers with the entry's `kind`. The entry reading
+// view picks its header from that kind — the scene header (type overline,
+// chip row) must never sit above a chapter. Everything here is pure so it can
+// be unit-tested without a DOM.
 
 import type { EntityKind, NpcStatus } from "@grimoire/shared/types";
 
 import type { MessageKey, Translate } from "@/i18n";
-import { propString } from "@/lib/properties";
 
 /**
  * Which header the entry reading view renders for a kind:
  *
  *   scene              -> the scene article (type overline, trigger, chips)
- *   npc                -> its own entity header
  *   everything else    -> title + body (chapter, campaign, unknown) — quiet
  *                         and generic, never the scene overline.
  *
- * A location is read on its own route (ADR #31), not through this switch.
+ * An npc and a location are each read on their own route (ADR #31), not
+ * through this switch.
  */
-export type EntityHeaderKind = "scene" | "npc" | "titled";
+export type EntityHeaderKind = "scene" | "titled";
 
 export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
-  switch (kind) {
-    case "scene":
-      return "scene";
-    case "npc":
-      return "npc";
-    default:
-      return "titled";
-  }
+  return kind === "scene" ? "scene" : "titled";
 }
 
 /**
@@ -63,18 +56,9 @@ export function npcStatusLabel(status: NpcStatus, t: Translate): string {
 }
 
 /**
- * The status of an npc entry, read out of its untyped `properties` bag —
- * undefined when the entry carries none, which is what leaves the pill off.
- */
-export function npcStatusOf(properties: Record<string, unknown>): NpcStatus | undefined {
-  return propString(properties.status) as NpcStatus | undefined;
-}
-
-/**
- * Title of a browse list page ("/campaigns/:campaign/list/:kind"), or undefined for a
- * kind that has no list. Shared by the list page itself and the topbar
- * breadcrumb — on the desktop those pages are reached from the chapter overview, so they
- * need a way back.
+ * Title of a browse list page — the scene list (`/campaigns/:campaign/list/scenes`)
+ * and the npc and location lists on their own routes — or undefined for a
+ * kind that has no list.
  */
 const BROWSE_LIST_TITLE_KEYS: Record<string, MessageKey> = {
   scenes: "browse.title.scenes",

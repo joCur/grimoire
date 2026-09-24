@@ -1,10 +1,9 @@
-// The aside cards (NPC, location): what they show of an entry.
+// The aside cards (NPC, location): what they show of an npc or a location.
 //
-// `npcs:` holds ids. A non-slug entry is no id and therefore no entry — the
-// server refuses one. Asking for `npcs/Alte Fischerin` answers 404, which
-// the card used to report as "not loadable, check the server": it blamed the
-// server for data it had been handed. The card does not ask at all now and
-// says what is actually the case.
+// `npcs:` holds ids. A non-slug value is no id and therefore no npc — the
+// server refuses one. Asking for `Alte Fischerin` would answer 404 and blame
+// the server for data it had been handed, so the card does not ask at all
+// and says what is actually the case.
 //
 // And a `[[slug]]` inside the excerpt a card shows reads as the current
 // name, the way the rendered text shows it.
@@ -15,9 +14,10 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 
-import type { Location } from "@grimoire/shared/types";
+import type { Location, Npc } from "@grimoire/shared/types";
 
 import { locationKey } from "@/lib/use-location-edit";
+import { npcKey } from "@/lib/use-npc-edit";
 import { EntityRefScope, type ResolvedEntityRef } from "@/markdown/entity-refs";
 
 import { LocationCard } from "./LocationCard";
@@ -47,26 +47,17 @@ describe("NpcCard — a reference that is no id", () => {
 });
 
 describe("aside cards — a reference inside the excerpt", () => {
-  // The tree's answer for the two slugs the entries below mention.
+  // The tree's answer for the two slugs the rows below mention.
   const index = new Map<string, ResolvedEntityRef>([
-    ["fenn", { kind: "npc", slug: "fenn", name: "Fenn", path: "npcs/fenn" }],
+    ["fenn", { kind: "npc", slug: "fenn", name: "Fenn" }],
     ["bucht", { kind: "location", slug: "bucht", name: "Die Nordbucht" }],
   ]);
 
-  function renderCached(
-    path: string,
-    properties: Record<string, unknown>,
-    body: string,
-    card: ReactNode,
-  ): string {
+  /** An npc card over a cached npc — the npc's own resource (ADR #31). */
+  function renderNpc(fields: Partial<Npc>, card: ReactNode): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(["entry", "beispiel", path], {
-      path,
-      kind: "npc",
-      properties,
-      body,
-      rev: 1,
-    });
+    const npc: Npc = { id: "grella", name: "Grella", status: "unknown", body: "", rev: 1, ...fields };
+    client.setQueryData(npcKey("beispiel", "grella"), npc);
     return renderWith(client, card);
   }
 
@@ -92,27 +83,24 @@ describe("aside cards — a reference inside the excerpt", () => {
 
   const MOTIVATION = "Will [[fenn]] aus [[bucht]] vertreiben, bevor [[niemand]] fragt.";
 
-  test("NPC card, both densities: the name, not the brackets", () => {
+  test("NPC card, both densities: the name, not the brackets, and a link to the npc", () => {
     for (const compact of [false, true]) {
-      const html = renderCached(
-        "npcs/grella",
+      const html = renderNpc(
         { motivation: MOTIVATION },
-        "",
         <NpcCard campaign="beispiel" id="grella" compact={compact} />,
       );
       expect(html).toContain("Will Fenn aus Die Nordbucht vertreiben");
       expect(html).not.toContain("[[fenn]]");
       // Unresolved stays as written, exactly as the text shows it.
       expect(html).toContain("[[niemand]]");
+      expect(html).toContain('href="/campaigns/beispiel/npcs/grella"');
     }
   });
 
   test("NPC card: a `## Will` section in the body shows nowhere on the card", () => {
     for (const compact of [false, true]) {
-      const html = renderCached(
-        "npcs/grella",
-        {},
-        "## Will\n\nNur im Text, nie auf der Karte.\n",
+      const html = renderNpc(
+        { body: "## Will\n\nNur im Text, nie auf der Karte.\n" },
         <NpcCard campaign="beispiel" id="grella" compact={compact} />,
       );
       expect(html).not.toContain("Nur im Text");

@@ -44,7 +44,7 @@ function fixtureBody(name: string): string {
 const FIXTURES = [
   "scene-lighthouse-arrival.json",
   "scene-smuggler-captured.json",
-  "npc-fenn.json",
+  "npcs/fenn.json",
 ];
 
 describe("Markdown pipeline rendering", () => {

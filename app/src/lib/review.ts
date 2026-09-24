@@ -1,5 +1,5 @@
 // Pure helpers of the review view: hashtag handling, the grouping of
-// player-character notes and the NPC-slug derivation for the stub dialog. No
+// player-character notes and the npc slug derivation for the create dialog. No
 // react, no query imports.
 //
 // Log rows, inbox rows and the chapter's open threads arrive as ROWS from the
@@ -36,7 +36,7 @@ export function tagAllowsNpc(tag: string): boolean {
 /**
  * The player-character tag (README): `#pc` marks a note ABOUT a player
  * character. It is deliberately not part of REVIEW_TAGS — a `#pc` row is no
- * harvest (no thread, no NPC stub), it is a reminder for the table. Where both
+ * harvest (no thread, no npc), it is a reminder for the table. Where both
  * appear (`#pc #thread`), `#pc` wins.
  */
 export const PC_TAG = "pc";
@@ -165,7 +165,7 @@ export function npcNameFromText(text: string): string | undefined {
  */
 export { toSlug };
 
-/** Slug proposal for the NPC-stub dialog (editable there); "" when the text
+/** Slug proposal for the npc create dialog (editable there); "" when the text
  *  carries no recognizable name. */
 export function deriveNpcSlug(text: string): string {
   const name = npcNameFromText(text);

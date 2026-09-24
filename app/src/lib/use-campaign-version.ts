@@ -48,8 +48,8 @@ export function useCampaignVersion(campaign: string): void {
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
     // Something changed on the server — refetch everything read from this campaign.
-    // "location"/"locations" are the location resource (ADR #31), read beside
-    // the entries. "active-session" rides along: a session ended in another
+    // "npc"/"npcs" and "location"/"locations" are the npc and location
+    // resources (ADR #31), read beside the entries. "active-session" rides along: a session ended in another
     // tab, a hand-edited `ended`, or simply midnight passing must reach the
     // global live indicator without a reload.
     // "last-session" is the review's session (ended or not) — same reasoning,
@@ -66,6 +66,8 @@ export function useCampaignVersion(campaign: string): void {
     for (const key of [
       "tree",
       "entry",
+      "npc",
+      "npcs",
       "location",
       "locations",
       "search",

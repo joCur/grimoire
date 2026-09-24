@@ -47,12 +47,18 @@ import { createCampaign, createChapter, createLocation, createNpc, createScene }
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
 import { useT } from "@/i18n";
-import { locationHref } from "@/lib/open-target";
+import { locationHref, npcHref } from "@/lib/open-target";
 import { Button } from "@/components/ui/button";
 
 /** Queries that go stale when anything is created. */
 function invalidationKeys(campaign: string) {
-  return [["tree", campaign], ["campaigns"], ["search", campaign], ["locations", campaign]];
+  return [
+    ["tree", campaign],
+    ["campaigns"],
+    ["search", campaign],
+    ["npcs", campaign],
+    ["locations", campaign],
+  ];
 }
 
 function useAfterCreate(campaign: string) {
@@ -280,7 +286,8 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
             });
             await afterCreate();
             setOpen(false);
-            await navigate(`/campaigns/${campaign}/entries/${created.path}`);
+            // An npc is its own resource: its reading view is its own route.
+            await navigate(npcHref(campaign, created.id));
           }}
           onClose={() => setOpen(false)}
         />

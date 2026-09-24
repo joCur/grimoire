@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NPC_STATUSES, type NpcStatus } from "@grimoire/shared/types";
+import { NPC_STATUSES, type NpcStatus } from "@grimoire/shared/npc";
 
 import { translator } from "@/i18n/format";
 import { browseListTitle, entityHeaderKind, npcStatusLabel } from "./entity";
@@ -12,10 +12,6 @@ const tEn = translator("en");
 describe("entityHeaderKind", () => {
   test("scene keeps the scene article", () => {
     expect(entityHeaderKind("scene")).toBe("scene");
-  });
-
-  test("npc gets its own header", () => {
-    expect(entityHeaderKind("npc")).toBe("npc");
   });
 
   test("everything else is a plain titled header — never the scene overline", () => {

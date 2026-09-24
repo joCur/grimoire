@@ -6,20 +6,20 @@
 // the body (the column layout already stacks under lg).
 //
 // Every other entry renders through EntityArticle, chosen by the
-// `kind` the server sends: NPC, or a plain titled header for
-// chapter/campaign/anything else. A location is read on its own route
-// (routes/location.tsx, ADR #31). The scene's type overline belongs to scenes
-// only — a scene status above an NPC would name the wrong thing.
+// `kind` the server sends: a plain titled header for chapter/campaign/anything
+// else. An npc and a location are each read on their own route
+// (routes/npc.tsx, routes/location.tsx, ADR #31). The scene's type overline
+// belongs to scenes only — a scene status above a chapter would name the
+// wrong thing.
 //
 // Above the article sits the context line: the topbar carries no
-// breadcrumb, so chapter and group for a scene, and the list name for an
-// npc, live here, right above the title they belong to.
+// breadcrumb, so chapter and group for a scene live here, right above the
+// title they belong to.
 //
 // The edit action in the header turns the body into the editor — header,
-// chips and status control keep standing; of the properties it carries only
-// the prose an npc keeps beside its text (`motivation`). The route owns only
-// the "which path is being edited" bit; the write, the 409 and the discard
-// guard live in EntryBodyEditor.
+// chips and status control keep standing. The route owns only the "which
+// path is being edited" bit; the write, the 409 and the discard guard live in
+// EntryBodyEditor.
 //
 // The augment action is the third one: source text and/or an
 // instruction go to a server job, and its proposal comes back as a review —
@@ -162,13 +162,13 @@ export function SceneRoute() {
     />
   ) : undefined;
   // The properties action — the properties form of the kinds that have typed
-  // fields (scene, npc, chapter); it renders nothing for the rest.
+  // fields (scene, chapter); it renders nothing for the rest.
   // The tree feeds its reference fields (npc/location/chapter ids).
   const propertiesAction = (
     <PropertiesAction campaign={campaign} entry={data} tree={tree.data} />
   );
-  // The augment action — the third quiet action, for the kinds
-  // that have an augment prompt here (npc, scene); it renders nothing
+  // The augment action — the third quiet action, for the kind
+  // that has an augment prompt here (scene); it renders nothing
   // for the rest, and it is desktop-only (mobile is the reading surface).
   // While the body editor runs it stays out of the way for the same reason
   // the edit action does: two writers on one body is not a review.
@@ -194,8 +194,8 @@ export function SceneRoute() {
       <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
           {/* Where this entry sits — the context the topbar does not carry:
-              chapter › group for a scene, the list for an
-              npc, nothing for the rest. */}
+              chapter › group for a scene, the chapter for a chapter, nothing
+              for the rest. */}
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
           {isScene ? (
             <SceneArticle

@@ -4,6 +4,7 @@ import { navSection } from "./topbar-nav";
 
 /** Only one of the view shapes is ever set at a time (route match). */
 const chapterOverview = { isChapterOverview: true };
+const npcs = { isChapterOverview: false, isNpcs: true };
 const locations = { isChapterOverview: false, isLocations: true };
 const list = (listKind: string) => ({ isChapterOverview: false, listKind });
 const entry = (entryPath: string) => ({ isChapterOverview: false, entryPath });
@@ -13,8 +14,7 @@ describe("navSection", () => {
     expect(navSection(chapterOverview)).toBe("chapters");
   });
 
-  test("each browse list marks its own entry; the scene list is Kapitel", () => {
-    expect(navSection(list("npcs"))).toBe("npcs");
+  test("the scene list is Kapitel", () => {
     expect(navSection(list("scenes"))).toBe("chapters");
   });
 
@@ -24,8 +24,10 @@ describe("navSection", () => {
     expect(navSection(entry("01-salzhafen"))).toBe("chapters");
   });
 
-  test("an NPC entry is NPCs, whatever mentions it", () => {
-    expect(navSection(entry("npcs/fenn"))).toBe("npcs");
+  test("an npc's own routes — its list and its reading view — are NPCs", () => {
+    expect(navSection(npcs)).toBe("npcs");
+    // The address schema has no npc: an entry path naming one marks nothing.
+    expect(navSection(entry("npcs/fenn"))).toBeUndefined();
   });
 
   test("a location's own routes — its list and its reading view — are Orte", () => {
@@ -44,6 +46,8 @@ describe("navSection", () => {
 
   test("degrades: an unknown list kind or an unusable path marks nothing", () => {
     expect(navSection(list("dragons"))).toBeUndefined();
+    // The npc list lives at its own route, not under `list/`.
+    expect(navSection(list("npcs"))).toBeUndefined();
     expect(navSection(entry(""))).toBeUndefined();
     expect(navSection(entry("npcs"))).toBeUndefined();
   });

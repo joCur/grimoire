@@ -24,12 +24,8 @@
 // CHECK constraints of their columns (ADR #25), so a select over them needs no
 // room for a value from outside the list.
 
-import {
-  NPC_STATUSES,
-  type CampaignTree,
-  type EntityKind,
-  type LocationFields,
-} from "@grimoire/shared/types";
+import { NPC_STATUSES } from "@grimoire/shared/npc";
+import type { CampaignTree, EntityKind, LocationFields, NpcFields } from "@grimoire/shared/types";
 import {
   PROPERTY_FIELDS,
   fieldSurface,
@@ -146,6 +142,27 @@ const LOCATION_COPY: { [K in Exclude<keyof LocationFields, "id" | "body">]-?: Fi
 };
 
 /**
+ * The copy of an npc's fields, typed against the npc's schema
+ * (@grimoire/shared/npc): a field without copy — or copy for a field the npc
+ * does not have — does not compile. `id` and `body` have no form field.
+ */
+const NPC_COPY: { [K in Exclude<keyof NpcFields, "id" | "body">]-?: FieldCopy } = {
+  name: { label: "properties.npc.name.label" },
+  role: { label: "properties.npc.role.label", hint: "properties.npc.role.hint" },
+  chapter: { label: "properties.npc.chapter.label", hint: "properties.npc.chapter.hint" },
+  status: { label: "properties.npc.status.label" },
+  statblock: {
+    label: "properties.npc.statblock.label",
+    hint: "properties.npc.statblock.hint",
+    placeholder: "properties.npc.statblock.placeholder",
+  },
+  quickstats: { label: "properties.npc.quickstats.label", hint: "properties.npc.quickstats.hint" },
+  voice: { label: "properties.npc.voice.label", hint: "properties.npc.voice.hint" },
+  appearance: { label: "properties.npc.appearance.label", hint: "properties.npc.appearance.hint" },
+  motivation: { label: "properties.npc.motivation.label", hint: "properties.npc.motivation.hint" },
+};
+
+/**
  * The COPY of every field, by kind and key. This is the whole app-side half
  * of the tables: the field LIST, its order, its controls and its known value
  * sets live in @grimoire/shared/property-fields, and what is left here is
@@ -168,21 +185,7 @@ const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
     tags: { label: "properties.scene.tags.label", hint: "properties.scene.tags.hint" },
     status: { label: "properties.scene.status.label" },
   },
-  npc: {
-    name: { label: "properties.npc.name.label" },
-    role: { label: "properties.npc.role.label", hint: "properties.npc.role.hint" },
-    chapter: { label: "properties.npc.chapter.label", hint: "properties.npc.chapter.hint" },
-    status: { label: "properties.npc.status.label" },
-    statblock: {
-      label: "properties.npc.statblock.label",
-      hint: "properties.npc.statblock.hint",
-      placeholder: "properties.npc.statblock.placeholder",
-    },
-    quickstats: { label: "properties.npc.quickstats.label", hint: "properties.npc.quickstats.hint" },
-    voice: { label: "properties.npc.voice.label", hint: "properties.npc.voice.hint" },
-    appearance: { label: "properties.npc.appearance.label", hint: "properties.npc.appearance.hint" },
-    motivation: { label: "properties.npc.motivation.label", hint: "properties.npc.motivation.hint" },
-  },
+  npc: NPC_COPY,
   location: LOCATION_COPY,
   chapter: {
     title: { label: "properties.chapter.title.label" },

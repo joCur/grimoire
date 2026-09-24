@@ -4,7 +4,8 @@
 // reload or a second tab threw it away. Now the JOB is the state and this
 // module is the one place that writes to it:
 //
-//   draft edits debounced (~600 ms) while the DM types, and FLUSHED before
+//   edits       of a scene draft or a proposed npc, debounced (~600 ms)
+//               while the DM types, and FLUSHED before
 //               anything can lose it — on blur, on unmount (which covers a
 //               route change, because the review unmounts with the route)
 //               and on a page hide. No `useBlocker`: a blocker asks the DM
@@ -29,10 +30,15 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DraftEdit, GenerateJob } from "@grimoire/shared/types";
+import type { DraftEdit, GenerateJob, NpcChange } from "@grimoire/shared/types";
 
 import { ApiError, patchJobReview } from "@/api";
-import { mergeDraftEdits, mergeReviewPatch, type ReviewPatch } from "@/lib/generate";
+import {
+  mergeDraftEdits,
+  mergeNpcEdits,
+  mergeReviewPatch,
+  type ReviewPatch,
+} from "@/lib/generate";
 import { generateJobKey } from "@/lib/use-generate-job";
 
 /** Debounce before a review edit is pushed into the job. */
@@ -44,16 +50,18 @@ export type ReviewSaveStatus = "idle" | "saving" | "saved" | "conflict" | "error
 export interface JobReviewSync {
   status: ReviewSaveStatus;
   /**
-   * An edit of one draft — one or both halves, debounced; the caller keeps
-   * its own buffer so the field does not lag behind the keystroke.
+   * An edit of one scene draft — one or both halves, debounced; the caller
+   * keeps its own buffer so the field does not lag behind the keystroke.
    */
   edit: (path: string, edit: DraftEdit) => void;
+  /** A change of one proposed npc, by its id — debounced the same way. */
+  editNpc: (id: string, change: NpcChange) => void;
   /** A decision — sent right away. */
   decide: (patch: ReviewPatch) => void;
   /**
    * Send whatever is still pending now (blur, unmount, page hide) and
    * RESOLVE when it has landed. The accept action awaits this: the server
-   * reads `draftEdits` when the accept arrives, so a debounced edit still in
+   * reads `draftEdits` and `npcEdits` when the accept arrives, so a debounced edit still in
    * flight would be read one request too late and then deleted together with
    * the job.
    */
@@ -71,7 +79,8 @@ function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
     ...into,
     ...patch,
     edits: mergeDraftEdits(into.edits ?? {}, patch.edits),
-    entries: { ...into.entries, ...patch.entries },
+    npcEdits: mergeNpcEdits(into.npcEdits ?? {}, patch.npcEdits),
+    npcs: { ...into.npcs, ...patch.npcs },
     locations: { ...into.locations, ...patch.locations },
     fields: { ...into.fields, ...patch.fields },
     blocks: { ...into.blocks, ...patch.blocks },
@@ -82,7 +91,8 @@ function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
 function prune(patch: ReviewPatch): ReviewPatch {
   const out: ReviewPatch = {};
   if (Object.keys(patch.edits ?? {}).length > 0) out.edits = patch.edits;
-  if (Object.keys(patch.entries ?? {}).length > 0) out.entries = patch.entries;
+  if (Object.keys(patch.npcEdits ?? {}).length > 0) out.npcEdits = patch.npcEdits;
+  if (Object.keys(patch.npcs ?? {}).length > 0) out.npcs = patch.npcs;
   if (Object.keys(patch.locations ?? {}).length > 0) out.locations = patch.locations;
   if (Object.keys(patch.fields ?? {}).length > 0) out.fields = patch.fields;
   if (Object.keys(patch.blocks ?? {}).length > 0) out.blocks = patch.blocks;
@@ -108,6 +118,7 @@ export interface ReviewQueueIo {
 
 export interface ReviewQueue {
   edit: (path: string, edit: DraftEdit) => void;
+  editNpc: (id: string, change: NpcChange) => void;
   decide: (patch: ReviewPatch) => void;
   flush: () => Promise<void>;
 }
@@ -166,13 +177,17 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
     return chain;
   };
 
+  /** A typed change: merged into the next patch, sent after the debounce. */
+  const debounce = (patch: ReviewPatch): void => {
+    pending = mergePatch(pending, patch);
+    io.status("saving");
+    cancelTimer();
+    timer = setTimeout(() => void send(), delayMs);
+  };
+
   return {
-    edit: (path, edit) => {
-      pending = mergePatch(pending, { edits: { [path]: edit } });
-      io.status("saving");
-      cancelTimer();
-      timer = setTimeout(() => void send(), delayMs);
-    },
+    edit: (path, edit) => debounce({ edits: { [path]: edit } }),
+    editNpc: (id, change) => debounce({ npcEdits: { [id]: change } }),
     decide: (patch) => {
       pending = mergePatch(pending, patch);
       void send();
@@ -233,7 +248,7 @@ export function useJobReview(
     [queryClient, delayMs],
   );
 
-  // Leaving is exactly the case the ticket is about: flush on unmount (a
+  // Leaving is exactly the case this module is for: flush on unmount (a
   // route change unmounts the review) and when the page is hidden (a closed
   // tab never unmounts anything).
   useEffect(() => {
@@ -255,6 +270,7 @@ export function useJobReview(
   return {
     status,
     edit: queue.edit,
+    editNpc: queue.editNpc,
     decide: queue.decide,
     flush: queue.flush,
     signalConflict,

@@ -1,5 +1,6 @@
-// NPC card fed from npcs/<id> — voice, the motivation (the `motivation`
-// property, labelled "Will") and quickstats, exactly those three per UI-BRIEF.
+// NPC card fed from the npc's own resource (ADR #31) — voice, the motivation
+// (the `motivation` field, labelled "Will") and quickstats, exactly those
+// three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
 // badge and labeled rows) and the live aside ("compact", the label inline —
 // the same rows the hover preview of a reference shows,
@@ -10,29 +11,24 @@
 // away from the running session, it opens the detail drawer instead. Same
 // card, same hover, only the element differs (link vs. button).
 //
-// Degradation: an npc a scene lists always HAS an entry — the
-// reference is a foreign key, and a write that names nothing is refused. The
-// entry may be empty, and then this card is simply thin: the name (the id,
-// until somebody types one) and nothing else. What is left is the honest
+// Degradation: an npc a scene lists always EXISTS — the reference is a
+// foreign key, and a write that names nothing is refused. The npc may be
+// empty, and then this card is simply thin: the name (the id, until somebody
+// types one) and nothing else. What is left is the honest
 // failure line for a server that cannot answer, and silence while the query
 // runs.
 
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchEntry } from "@/api";
+import { fetchNpc } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import type { OpenTarget } from "@/lib/open-target";
 import { NpcCompact } from "@/components/EntityCompact";
 import { useI18n } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
 import { npcExcerpt } from "@/lib/entity-excerpt";
-import { propString } from "@/lib/properties";
+import { npcKey } from "@/lib/use-npc-edit";
 import { useEntityRefs } from "@/markdown/entity-refs";
-
-/** Campaign-relative path of an NPC entry — the reference key is the id. */
-function npcPath(id: string): string {
-  return `npcs/${id}`;
-}
 
 export function NpcCard({
   campaign,
@@ -44,23 +40,21 @@ export function NpcCard({
   id: string;
   compact?: boolean;
   /**
-   * When given, the card is a BUTTON that hands the npc — by its
-   * campaign-relative path — to the caller instead of navigating (live mode
-   * drawer).
+   * When given, the card is a BUTTON that hands the npc — by its id — to the
+   * caller instead of navigating (live mode drawer).
    */
   onOpen?: (target: OpenTarget) => void;
 }) {
   const { t, tNode } = useI18n();
   const { resolve } = useEntityRefs();
-  const path = npcPath(id);
-  // A NON-SLUG value is no id and therefore no entry: `npcs:` holds ids and
-  // the server refuses anything else. Asking for `npcs/Alte Fischerin` would
+  // A NON-SLUG value is no id and therefore no npc: `npcs:` holds ids and
+  // the server refuses anything else. Asking for `Alte Fischerin` would
   // answer 404 and blame the server for data it was handed — so it is not
   // asked at all, and the line says what is actually the case.
   const isId = isEntityId(id);
   const { data, isPending, isError } = useQuery({
-    queryKey: ["entry", campaign, path],
-    queryFn: () => fetchEntry(campaign, path),
+    queryKey: npcKey(campaign, id),
+    queryFn: () => fetchNpc(campaign, id),
     retry: false,
     enabled: isId,
   });
@@ -85,25 +79,23 @@ export function NpcCard({
   }
   if (data === undefined) return null;
 
-  const properties = data.properties;
-  const name = propString(properties.name) ?? id;
-  const npcId = propString(properties.id) ?? id;
+  const name = data.name === "" ? data.id : data.name;
   const excerpt = npcExcerpt(data, (slug) => resolve(slug)?.name);
   const { role, voice, will, quickstats } = excerpt;
 
   if (compact) {
     return (
-      <EntityCardShell campaign={campaign} target={{ kind: "entry", path }} onOpen={onOpen} className="p-3.5">
+      <EntityCardShell campaign={campaign} target={{ kind: "npc", id }} onOpen={onOpen} className="p-3.5">
         <NpcCompact name={name} excerpt={excerpt} />
       </EntityCardShell>
     );
   }
 
   return (
-    <EntityCardShell campaign={campaign} target={{ kind: "entry", path }} onOpen={onOpen} className="p-4">
+    <EntityCardShell campaign={campaign} target={{ kind: "npc", id }} onOpen={onOpen} className="p-4">
       <div className="mb-[2px] flex items-baseline gap-2">
         <span className="font-serif text-[16px] font-semibold text-foreground">{name}</span>
-        <span className="font-mono text-[10.5px] text-faint">{npcId}</span>
+        <span className="font-mono text-[10.5px] text-faint">{data.id}</span>
       </div>
       {role !== undefined && <p className="mb-3 text-[12.5px] text-muted-foreground">{role}</p>}
       {voice !== undefined && (

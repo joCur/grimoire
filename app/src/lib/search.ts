@@ -89,8 +89,9 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 }
 
 /**
- * Route for a picked result. A location opens its own reading view by its id
- * (/campaigns/:campaign/locations/<id>, ADR #31); an entry opens as an entry
+ * Route for a picked result. An npc and a location open their own reading
+ * views by their id (/campaigns/:campaign/npcs/<id>,
+ * /campaigns/:campaign/locations/<id>, ADR #31); an entry opens as an entry
  * view (/campaigns/:campaign/entries/<path>); the lists open the page that
  * HOLDS the row — a session its reading page, an idea the wrap-up it is
  * waiting in, a term the glossary page — and the campaign itself opens the
@@ -108,6 +109,8 @@ export function resultHref(
   switch (result.kind) {
     case "campaign":
       return scope;
+    case "npc":
+      return `${scope}/npcs/${encodeURIComponent(result.id)}`;
     case "location":
       return `${scope}/locations/${encodeURIComponent(result.id)}`;
     case "session":

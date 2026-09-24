@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
-import type { Location } from "@grimoire/shared/types";
+import type { Location, Npc } from "@grimoire/shared/types";
 
 import { locationExcerpt, npcExcerpt, sceneExcerpt, type ExcerptSource } from "./entity-excerpt";
 
@@ -15,6 +15,19 @@ const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel")
 /** A fixture entry of the example campaign, as the API answers it. */
 function fixture(stem: string): ExcerptSource {
   return JSON.parse(readFileSync(path.join(FIXTURES, `${stem}.json`), "utf8")) as ExcerptSource;
+}
+
+/** An npc fixture — the npc as its resource answers it (ADR #31). */
+function npcFixture(id: string): Npc {
+  const stored = JSON.parse(
+    readFileSync(path.join(FIXTURES, "npcs", `${id}.json`), "utf8"),
+  ) as Omit<Npc, "rev">;
+  return { ...stored, rev: 1 };
+}
+
+/** An npc of nothing but what a case names. */
+function npc(fields: Partial<Npc>): Npc {
+  return { id: "grella", name: "Grella", status: "unknown", body: "", rev: 1, ...fields };
 }
 
 /** A location fixture — the location as its resource answers it (ADR #31). */
@@ -39,7 +52,7 @@ const nameOf = (slug: string): string | undefined => NAMES[slug];
 
 describe("npcExcerpt", () => {
   test("role, voice, the `motivation` property, quick stats and status", () => {
-    const excerpt = npcExcerpt(fixture("npc-fenn"), nameOf);
+    const excerpt = npcExcerpt(npcFixture("fenn"), nameOf);
     expect(excerpt.role).toBe("Anführer der Schmuggler in der Nordbucht");
     expect(excerpt.voice).toBe("leise, höflich — wird stiller, je gefährlicher es wird");
     expect(excerpt.will).toBe(
@@ -54,33 +67,27 @@ describe("npcExcerpt", () => {
   });
 
   test("a reference in the motivation reads as the current name — no brackets", () => {
-    const entry = {
-      properties: { id: "grella", name: "Grella", motivation: "[[fenn]] loswerden, bevor [[niemand]] fragt." },
-    };
-    expect(npcExcerpt(entry, nameOf).will).toBe("Fenn loswerden, bevor [[niemand]] fragt.");
+    const grella = npc({ motivation: "[[fenn]] loswerden, bevor [[niemand]] fragt." });
+    expect(npcExcerpt(grella, nameOf).will).toBe("Fenn loswerden, bevor [[niemand]] fragt.");
   });
 
   test("…but a reference quoted as code stays code", () => {
-    const entry = { properties: { motivation: "Schreibt `[[fenn]]` an jede Wand." } };
-    expect(npcExcerpt(entry, nameOf).will).toBe("Schreibt `[[fenn]]` an jede Wand.");
+    const grella = npc({ motivation: "Schreibt `[[fenn]]` an jede Wand." });
+    expect(npcExcerpt(grella, nameOf).will).toBe("Schreibt `[[fenn]]` an jede Wand.");
   });
 
-  test("a `## Will` section in the body is not read — only the property is", () => {
-    const entry = {
-      properties: { id: "grella" },
-      body: "## Will\n\nDas steht im Text und bleibt Text.\n",
-    };
-    expect(npcExcerpt(entry, nameOf).will).toBeUndefined();
+  test("a `## Will` section in the body is not read — only the field is", () => {
+    const grella = npc({ body: "## Will\n\nDas steht im Text und bleibt Text.\n" });
+    expect(npcExcerpt(grella, nameOf).will).toBeUndefined();
   });
 
-  test("an empty entry has nothing to show — every field is simply absent", () => {
-    const excerpt = npcExcerpt({ properties: { id: "leer" } }, nameOf);
-    expect(excerpt).toEqual({
+  test("an empty npc has nothing to show but its status", () => {
+    expect(npcExcerpt(npc({}), nameOf)).toEqual({
       role: undefined,
       voice: undefined,
       will: undefined,
       quickstats: [],
-      status: undefined,
+      status: "unknown",
     });
   });
 });

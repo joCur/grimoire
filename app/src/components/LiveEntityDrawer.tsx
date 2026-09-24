@@ -5,8 +5,9 @@
 // reading route, losing the selected scene and whatever was half-typed in
 // the quick note. The drawer keeps the live route mounted
 // (so both survive) and renders the very same article pipeline the reading
-// view uses (EntityArticle, or LocationArticle for a location → Markdown →
-// callouts), so what the DM reads here is what the row says. The link to the
+// view uses (NpcArticle for an npc, LocationArticle for a location, the
+// EntityArticle for the rest → Markdown → callouts), so what the DM reads
+// here is what the row says. The link to the
 // reading view is the deliberate way OUT, for when the drawer is not enough.
 //
 // No animation (ui/sheet.tsx): the quality floor asks for reduced-motion
@@ -17,14 +18,16 @@ import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { fetchEntry, fetchLocation } from "@/api";
+import { fetchEntry, fetchLocation, fetchNpc } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { LocationArticle } from "@/components/LocationArticle";
+import { NpcArticle } from "@/components/NpcArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/i18n";
 import { openTargetHref, type OpenTarget } from "@/lib/open-target";
 import { propString } from "@/lib/properties";
 import { locationKey } from "@/lib/use-location-edit";
+import { npcKey } from "@/lib/use-npc-edit";
 import { PREVIEW_BOUNDARY_ATTR } from "@/markdown/ref-preview";
 
 export function LiveEntityDrawer({
@@ -50,7 +53,9 @@ export function LiveEntityDrawer({
           // inside the text column of the article in it.
           {...{ [PREVIEW_BOUNDARY_ATTR]: "" }}
         >
-          {target.kind === "location" ? (
+          {target.kind === "npc" ? (
+            <NpcDrawerBody campaign={campaign} id={target.id} />
+          ) : target.kind === "location" ? (
             <LocationDrawerBody campaign={campaign} id={target.id} />
           ) : (
             <EntryDrawerBody campaign={campaign} path={target.path} />
@@ -80,6 +85,25 @@ function EntryDrawerBody({ campaign, path }: { campaign: string; path: string })
       isError={isError}
     >
       {data !== undefined && <EntityArticle entry={data} />}
+    </DrawerFrame>
+  );
+}
+
+function NpcDrawerBody({ campaign, id }: { campaign: string; id: string }) {
+  const { data, isPending, isError } = useQuery({
+    queryKey: npcKey(campaign, id),
+    queryFn: () => fetchNpc(campaign, id),
+    retry: false,
+  });
+  return (
+    <DrawerFrame
+      campaign={campaign}
+      target={{ kind: "npc", id }}
+      name={data === undefined || data.name === "" ? id : data.name}
+      isPending={isPending}
+      isError={isError}
+    >
+      {data !== undefined && <NpcArticle npc={data} />}
     </DrawerFrame>
   );
 }
@@ -120,7 +144,7 @@ function DrawerFrame({
   children: ReactNode;
 }) {
   const { t, tNode } = useI18n();
-  const shown = target.kind === "location" ? target.id : target.path;
+  const shown = target.kind === "entry" ? target.path : target.id;
   return (
     <>
       <SheetTitle className="sr-only">{name}</SheetTitle>

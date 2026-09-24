@@ -2,11 +2,11 @@
 // next to the edit and the properties action. Same vocabulary, same size, no
 // new chrome: the topbar does not grow, and the reading view gains one word.
 //
-// Two triggers, one dialog: `AugmentAction` for an npc or a scene (the run
-// names the entry by its address), `LocationAugmentAction` for a location,
-// whose run starts on the location's own resource (ADR #31). Everything below
-// the trigger is shared; what differs per kind is how the run starts, where
-// its proposal sits on the job, and the write that accepts it.
+// Three triggers, one dialog: `AugmentAction` for a scene (the run names the
+// scene by its address), `NpcAugmentAction` and `LocationAugmentAction` for an
+// npc and a location, whose runs start on their own resources (ADR #31).
+// Everything below the trigger is shared; what differs per kind is how the run
+// starts, where its proposal sits on the job, and the write that accepts it.
 //
 // The flow is three states in ONE dialog, because it is one errand:
 //
@@ -40,9 +40,11 @@ import type {
   GenerateJobStarted,
   Location,
   NamingHint,
+  Npc,
 } from "@grimoire/shared/types";
 import { isAugmentKind } from "@grimoire/shared/types";
 import { locationChangeSchema } from "@grimoire/shared/location";
+import { npcChangeSchema } from "@grimoire/shared/npc";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -50,9 +52,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   applyAugment,
   applyLocationAugment,
+  applyNpcAugment,
   deleteGenerateJob,
   startAugmentJob,
   startLocationAugmentJob,
+  startNpcAugmentJob,
 } from "@/api";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
@@ -67,6 +71,7 @@ import {
   formatPropertyValue,
   lineDiff,
   locationFieldProposals,
+  npcFieldProposals,
   type BlockChange,
   type BlockChangeKind,
   type DiffToken,
@@ -78,14 +83,15 @@ import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview, type JobReviewSync } from "@/lib/use-job-review";
 import { useEntryEdit } from "@/lib/use-entry-edit";
 import { useLocationEdit } from "@/lib/use-location-edit";
+import { useNpcEdit } from "@/lib/use-npc-edit";
 import { cn } from "@/lib/utils";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
 
 /**
- * What the dialog CALLS the entry: the name the DM gave it (an npc's `name`,
- * a scene's `title`), never the wire address. An address like `npcs/fenn` is
- * how the entry is addressed, not how it is known at the table.
+ * What the dialog CALLS the scene: the title the DM gave it, never the wire
+ * address. An address like `01-salzhafen/ankunft` is how the scene is
+ * addressed, not how it is known at the table.
  */
 function displayName(entry: EntryResponse): string {
   return propString(entry.properties.name) ?? propString(entry.properties.title) ?? entry.path;
@@ -142,7 +148,7 @@ interface ApplySession {
 
 // --- the triggers -------------------------------------------------------------------
 
-/** The augment action of an npc or a scene. Renders nothing for any other entry. */
+/** The augment action of a scene. Renders nothing for any other entry. */
 export function AugmentAction({ campaign, entry }: { campaign: string; entry: EntryResponse }) {
   if (!isAugmentKind(entry.kind)) return null;
   return (
@@ -171,6 +177,42 @@ export function AugmentAction({ campaign, entry }: { campaign: string; entry: En
               />
             )
           }
+          onClose={onClose}
+        />
+      )}
+    </AugmentTrigger>
+  );
+}
+
+/** The augment action of an npc — its run starts on the npc's own resource. */
+export function NpcAugmentAction({ campaign, npc }: { campaign: string; npc: Npc }) {
+  return (
+    <AugmentTrigger openKey={`${campaign}/npc/${npc.id}`}>
+      {(onClose) => (
+        <AugmentDialog
+          campaign={campaign}
+          name={npc.name}
+          isMine={(job) => job.kind === "npc-augment" && job.npc === npc.id}
+          start={(input) => startNpcAugmentJob(campaign, npc.id, input)}
+          review={(job) => {
+            const result = job.npcAugmentResult;
+            if (result === undefined) return undefined;
+            return (
+              <NpcAugmentReview
+                campaign={campaign}
+                npc={npc}
+                job={job}
+                proposal={{
+                  fields: npcFieldProposals(result.current, result.proposed),
+                  currentBody: result.current.body,
+                  proposedBody: result.proposed.body,
+                  warnings: result.warnings,
+                  namingHints: result.namingHints,
+                }}
+                onDone={onClose}
+              />
+            );
+          }}
           onClose={onClose}
         />
       )}
@@ -505,7 +547,7 @@ function staleAfterApply(campaign: string) {
 }
 
 /**
- * The review of an npc or scene proposal. The accept is an ordinary editing
+ * The review of a scene proposal. The accept is an ordinary editing
  * session over the entry — same held version, same conflict answer as every
  * other editing surface — but it does NOT go through the entry write: the
  * accept endpoint discards the job in the same transaction, which is the
@@ -554,6 +596,53 @@ function EntryAugmentReview({
             ...(change.fields === undefined ? {} : { properties: change.fields }),
             ...(change.body === undefined ? {} : { body: change.body }),
           }),
+      }}
+      onDone={onDone}
+    />
+  );
+}
+
+/**
+ * The review of an npc proposal — the same review over the npc's own editing
+ * session, handed the accept endpoint of the npc's resource (it discards the
+ * job in the same transaction and has no force).
+ */
+function NpcAugmentReview({
+  campaign,
+  npc,
+  job,
+  proposal,
+  onDone,
+}: {
+  campaign: string;
+  npc: Npc;
+  job: GenerateJob;
+  proposal: ProposalView;
+  onDone: () => void;
+}) {
+  const state = useAugmentReviewState(campaign, job, proposal);
+  const apply = useNpcEdit(campaign, npc, {
+    write: ({ force: _force, id: _id, ...request }) =>
+      applyNpcAugment(campaign, npc.id, { ...request, jobId: job.id }),
+    canForce: false,
+    invalidateOnSuccess: [...staleAfterApply(campaign), ["npcs", campaign]],
+    onSaved: onDone,
+    onReload: (stored) => state.recut(stored.body),
+  });
+  return (
+    <AugmentReview
+      campaign={campaign}
+      proposal={proposal}
+      state={state}
+      session={{
+        ...apply,
+        save: (change) =>
+          apply.save(
+            npcChangeSchema.parse({
+              ...change.fields,
+              ...(change.body === undefined ? {} : { body: change.body }),
+            }),
+          ),
       }}
       onDone={onDone}
     />

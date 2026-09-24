@@ -20,7 +20,7 @@ export function EntityCardShell({
   children,
 }: {
   campaign: string;
-  /** What the card opens — an npc by its address, a location by its id. */
+  /** What the card opens — an npc or a location by its id. */
   target: OpenTarget;
   className?: string;
   onOpen?: (target: OpenTarget) => void;

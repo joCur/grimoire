@@ -213,7 +213,7 @@ export function useReviewEntries(
       // A `#pc` row is a reminder for the table, an untagged one is a note
       // the DM decides about — both keep their own section. Everything else
       // is the tagged harvest, where a harvest tag anywhere in the row wins
-      // over the first tag, so `#idee #npc` still offers the stub.
+      // over the first tag, so `#idee #npc` still offers the npc action.
       const tag = pc ? PC_TAG : (tags.find(isReviewTag) ?? tags[0] ?? "");
       const section: ReviewEntry["section"] = pc ? "pc" : tags.length === 0 ? "notes" : "harvest";
       const item: ReviewEntry = {

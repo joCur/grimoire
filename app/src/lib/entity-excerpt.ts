@@ -13,15 +13,14 @@
 // a query or a DOM.
 
 import { expandBodyEntityRefs } from "@grimoire/shared/refs";
-import type { Location, NpcStatus, SceneStatus } from "@grimoire/shared/types";
+import type { Location, NpcProposal, NpcStatus, SceneStatus } from "@grimoire/shared/types";
 
-import { npcStatusOf } from "@/lib/entity";
 import { propQuickstats, propString } from "@/lib/properties";
 import { sceneStatusOf } from "@/lib/scene-status";
 
 /**
- * What an npc or a scene is, as far as its short form cares: its properties.
- * The body is not read — nothing a card shows is derived from the text.
+ * What a scene is, as far as its short form cares: its properties. The body
+ * is not read — nothing a card shows is derived from the text.
  */
 export interface ExcerptSource {
   properties: Record<string, unknown>;
@@ -60,14 +59,20 @@ function proseExcerpt(value: unknown, nameOf: NameOf): string | undefined {
   return text === undefined ? undefined : expandBodyEntityRefs(text, nameOf);
 }
 
-export function npcExcerpt(entry: ExcerptSource, nameOf: NameOf): NpcExcerpt {
-  const { properties } = entry;
+/**
+ * An npc's short form, read off its own fields (ADR #31) — a stored npc and a
+ * proposed one alike, so the generator's card reads it the same way.
+ */
+export function npcExcerpt(
+  npc: Pick<NpcProposal, "role" | "voice" | "motivation" | "quickstats" | "status">,
+  nameOf: NameOf,
+): NpcExcerpt {
   return {
-    role: propString(properties.role),
-    voice: propString(properties.voice),
-    will: proseExcerpt(properties.motivation, nameOf),
-    quickstats: propQuickstats(properties.quickstats),
-    status: npcStatusOf(properties),
+    role: propString(npc.role),
+    voice: propString(npc.voice),
+    will: proseExcerpt(npc.motivation, nameOf),
+    quickstats: propQuickstats(npc.quickstats),
+    status: npc.status,
   };
 }
 

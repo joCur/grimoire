@@ -1,8 +1,9 @@
 // Edit mode of the reading view: the edit action in the header of a
-// scene/npc/chapter — and of a location, on its own route — swaps the rendered
-// text for the editor. `BodyEditor` is the surface, the same for every kind;
-// `EntryBodyEditor` hands it an entry's editing session, and the location's
-// reading view hands it the location's (components/LocationActions.tsx).
+// scene/chapter/campaign — and of an npc and a location, on their own routes —
+// swaps the rendered text for the editor. `BodyEditor` is the surface, the
+// same for every kind; `EntryBodyEditor` hands it an entry's editing session,
+// and the npc's and the location's reading views hand it theirs
+// (components/NpcActions.tsx, components/LocationActions.tsx).
 //
 // That editor has TWO surfaces over ONE draft:
 //

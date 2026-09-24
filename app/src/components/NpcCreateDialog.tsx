@@ -1,13 +1,13 @@
-// "NPC anlegen": the entry needs an id the DM
-// chooses — a log line is prose, and ids are the stable reference keys of the
-// format (README) — so the review proposes a kebab-case slug derived from the
-// text and lets it be edited. Optional display name; the line's text becomes
-// the entry's whole text, with no heading around it.
+// "NPC anlegen" in the session review: the npc needs an id the DM chooses —
+// a log line is prose, and ids are the stable reference keys of the format
+// (README) — so the review proposes a kebab-case slug derived from the text
+// and lets it be edited. Optional display name; the line's text becomes the
+// npc's whole text, with no heading around it.
 //
-// The id that ALREADY has an entry is not an error: the call is
-// idempotent, so the review links to what is there instead of making the DM
-// correct an id that was right. Only a server that cannot answer is shown
-// inline.
+// An id whose npc is still empty is filled with the note. An id whose npc
+// already holds something is refused by the server and nothing is written:
+// the dialog stays open, says so with a free proposal, and the row stays
+// open in the review until the DM picks another id or closes the dialog.
 
 import { useState } from "react";
 
@@ -26,7 +26,7 @@ import type { ReviewEntry } from "@/lib/use-review";
 interface NpcCreateDialogProps {
   entry: ReviewEntry;
   pending: boolean;
-  /** Inline error (a server that did not answer). */
+  /** Inline error: the id is taken, or the server refused or did not answer. */
   error?: string | undefined;
   onClose: () => void;
   onSubmit: (values: { id: string; name?: string }) => void;

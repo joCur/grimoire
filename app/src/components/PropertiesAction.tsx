@@ -1,10 +1,9 @@
-// The properties action of the reading view: the DM
-// edits EVERY properties field of a scene, npc or chapter in a
-// form — never
-// raw YAML, never a text editor detour. `PropertiesDialog` is the dialog
-// itself, the same for every kind; a location's reading view opens it over
-// the location's fields and writes through the location's own session
-// (components/LocationActions.tsx).
+// The properties action of the reading view: the DM edits EVERY field of a
+// scene or chapter in a form — never raw YAML, never a text editor detour.
+// `PropertiesDialog` is the dialog itself, the same for every kind; an npc's
+// and a location's reading views open it over their own fields and write
+// through their own sessions (components/NpcActions.tsx,
+// components/LocationActions.tsx).
 //
 // The dialog follows the house pattern: mounted only while open,
 // one aria-live error line, a cancel and a save button. What it adds is the diff —
@@ -90,7 +89,7 @@ export function PropertiesAction({
   const t = useT();
   // Open-BY-ENTRY, not a boolean: navigating away closes the dialog instead of
   // leaving it standing over another entry's reading view. Campaign AND path,
-  // because two campaigns can hold the same relative path (`npcs/jorna`).
+  // because two campaigns can hold the same relative path (`01-salzhafen`).
   const entryKey = `${campaign}/${entry.path}`;
   const [openEntry, setOpenEntry] = useState<string>();
   const open = openEntry === entryKey;

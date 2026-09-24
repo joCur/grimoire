@@ -673,8 +673,8 @@ describe("reference and select options", () => {
       { id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm", scenes: [] },
     ],
     npcs: [
-      { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
-      { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+      { id: "fenn", name: "Fenn", status: "alive" },
+      { id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
     ],
     locations: [
       { id: "leuchtturm", name: "Der Leuchtturm" },

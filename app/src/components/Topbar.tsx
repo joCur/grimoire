@@ -115,7 +115,7 @@ import {
   settingsCampaign,
 } from "@/lib/campaign";
 import { sessionElapsedLabel, sessionIsEmpty, sessionIsPaused } from "@/lib/session";
-import { locationsHref } from "@/lib/open-target";
+import { locationsHref, npcsHref } from "@/lib/open-target";
 import { navSection } from "@/lib/topbar-nav";
 import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
@@ -170,7 +170,9 @@ export function Topbar() {
   const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
   const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
   const listMatch = matchPath("/campaigns/:campaign/list/*", pathname);
-  // A location's own routes — its list and its reading view (ADR #31).
+  // An npc's and a location's own routes — each its list and its reading
+  // view (ADR #31).
+  const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
   const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
   // The two campaign-content pages. They are NOT in the nav trio
   // and must not be — but the bar above them is still
@@ -187,6 +189,7 @@ export function Topbar() {
     campaignOf(reviewMatch) ??
     campaignOf(generateMatch) ??
     campaignOf(listMatch) ??
+    campaignOf(npcsMatch) ??
     campaignOf(locationsMatch) ??
     campaignOf(knowledgeMatch) ??
     campaignOf(glossaryMatch) ??
@@ -200,10 +203,12 @@ export function Topbar() {
   // chapters entry and hanging the chapter overview's review and generator
   // entries into the row.
   const isScene = campaignOf(sceneMatch) !== undefined && entryPath !== "";
-  // A location's reading view is a reading view like an entry's; its list is not.
+  // An npc's and a location's reading views are reading views like an
+  // entry's; their lists are not.
+  const isNpcView = campaignOf(npcsMatch) !== undefined && (npcsMatch?.params["*"] ?? "") !== "";
   const isLocationView =
     campaignOf(locationsMatch) !== undefined && (locationsMatch?.params["*"] ?? "") !== "";
-  const isReadingView = isScene || isLocationView;
+  const isReadingView = isScene || isNpcView || isLocationView;
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
@@ -213,8 +218,9 @@ export function Topbar() {
 
   // Which nav entry is the current view — the ONE thing that differs between
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
+  const isNpcs = campaignOf(npcsMatch) !== undefined;
   const isLocations = campaignOf(locationsMatch) !== undefined;
-  const section = navSection({ isChapterOverview, listKind, entryPath, isLocations });
+  const section = navSection({ isChapterOverview, listKind, entryPath, isNpcs, isLocations });
 
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.
@@ -229,7 +235,7 @@ export function Topbar() {
         <MobileSessionRow campaign={campaign} session={live} />
       )}
       {/* Below md the campaign-scoped views carry their own mobile chrome
-          (start-surface wordmark, "‹ Kapitel" back rows); the topbar
+          (start-surface wordmark, back rows to the chapters); the topbar
           is desktop chrome there. Without a campaign in the URL ("/" with no
           campaign at all) it stays visible on every width, so the empty state
           is not a bare page. */}
@@ -273,13 +279,13 @@ export function Topbar() {
             points, reachable without scrolling, from every campaign view. The
             design prototype does not cover this navigation — these links fill
             the gap per PO decision (design/README.md).
-            "Kapitel" is the chapter overview — and the way BACK from everywhere: the
+            The chapters link is the chapter overview — and the way BACK from everywhere: the
             campaign label next to it is the switcher trigger, not a link, and
             the wordmark is a detour via "/".
             Not in the live mode: that view belongs to the running session
             (design/README.md). Below lg the row is already carrying switcher,
             session chip and search, so the links step aside there — mobile has
-            the start surface's "Nachschlagen" list, and ⌘K finds both lists at
+            the start surface's lookup list, and ⌘K finds both lists at
             any width. */}
         {campaign !== "" && !isLive && (
           <nav
@@ -301,7 +307,7 @@ export function Topbar() {
               active={section === "chapters"}
             />
             <TopbarNavLink
-              to={`/campaigns/${campaign}/list/npcs`}
+              to={npcsHref(campaign)}
               label={t("topbar.nav.npcs")}
               active={section === "npcs"}
             />
@@ -1106,13 +1112,13 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
       >
         {/* Truncates with an ellipsis rather than pushing the row over,
             and one step harder per tightening of the row: below
-            xl it also carries the "Kapitel · NPCs · Orte" trio, and below lg
+            xl it also carries the chapters · npcs · locations trio, and below lg
             the search chip has already reached its floor, so the name is the
             last thing that can still give way there. The full name is one
             click away in the menu below.
             The xl cap is 160px, not 280: at exactly
             1280 the FULLEST row — switcher, nav trio, search, the review
-            link, generator, gear and the "Session starten" chip with its
+            link, generator, gear and the start-session chip with its
             reserved 8.5rem — has only the search chip's ~50px of shrink left,
             and CI's wider Linux font metrics eat more than that. A static cap
             keeps the chrome identical on every route (that is why the trigger

@@ -14,7 +14,7 @@ import { DraftEditor } from "./DraftEditor";
 const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [],
-  npcs: [{ path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" }],
+  npcs: [{ id: "fenn", name: "Fenn", status: "alive" }],
   locations: [{ id: "leuchtturm", name: "Der Leuchtturm" }],
   sessions: [],
 };

@@ -44,11 +44,12 @@ import {
   type ReactNode,
 } from "react";
 
-import { fetchEntry, fetchLocation } from "@/api";
+import { fetchEntry, fetchLocation, fetchNpc } from "@/api";
 import { EntityPreview } from "@/components/EntityPreview";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { NameOf } from "@/lib/entity-excerpt";
 import { locationKey } from "@/lib/use-location-edit";
+import { npcKey } from "@/lib/use-npc-edit";
 
 import type { ResolvedEntityRef } from "./entity-refs";
 
@@ -205,17 +206,24 @@ export function RefPreview({
   };
   const show = (): void => {
     clearTimers();
-    // The SAME query the card reads — the location's own for a location
-    // (ADR #31), the entry's for the rest; `staleTime: Infinity` leaves what
-    // is already cached alone.
-    if (target.kind === "location") {
+    // The SAME query the card reads — the npc's and the location's own for
+    // them (ADR #31), the scene's entry for a scene; `staleTime: Infinity`
+    // leaves what is already cached alone.
+    if (target.kind === "npc") {
+      void queryClient.prefetchQuery({
+        queryKey: npcKey(campaign, target.slug),
+        queryFn: () => fetchNpc(campaign, target.slug),
+        retry: false,
+        staleTime: Infinity,
+      });
+    } else if (target.kind === "location") {
       void queryClient.prefetchQuery({
         queryKey: locationKey(campaign, target.slug),
         queryFn: () => fetchLocation(campaign, target.slug),
         retry: false,
         staleTime: Infinity,
       });
-    } else {
+    } else if (target.kind === "scene") {
       void queryClient.prefetchQuery({
         queryKey: ["entry", campaign, target.path],
         queryFn: () => fetchEntry(campaign, target.path),
