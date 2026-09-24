@@ -469,9 +469,10 @@ Kapitels ändert kein Lauf.
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
 über die Provider-API **erzwingt**. Ein Orts-Aufruf (Anlegen wie Ergänzen)
 liefert den Ort ohne `rev`, alle Felder nebeneinander, dazu die Hinweise für
-den DM unter `warnings`; sein Schema wird aus dem zod-Schema des Orts
-abgeleitet (`z.toJSONSchema`, ADR #31), und ein Job listet die
-vorgeschlagenen Orte unter `result.locations`. Ein Aufruf für Szene, NPC oder
+den DM unter `warnings`; der Ort leitet sein Schema selbst aus seinem
+zod-Schema ab (`z.toJSONSchema`, ADR #31), und was das Modell über seine
+Felder wissen muss, steht im Orts-Prompt (`generator/location-system-prompt.md`).
+Ein Job listet die vorgeschlagenen Orte unter `result.locations`. Ein Aufruf für Szene, NPC oder
 eine ihrer Ergänzungen liefert die Eigenschaften je Art getypt unter
 `properties`, den Text als einen String unter `body` und `warnings`; dieses
 Paar ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim

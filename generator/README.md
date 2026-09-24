@@ -66,12 +66,17 @@ Antwort bis in die Zeile (ADR #24). Ein vorgeschlagener Ort ist der Ort ohne
 Übernehmen laufen für sie über ihre `id`.
 
 Das Antwort-Schema des Orts hat **genau eine Quelle**: sein zod-Schema
-(`shared/src/location.ts`). Daraus wird die Generator-Form abgeleitet
-(`replyForm` in `shared/src/schema-forms.ts`: `null`-fähig statt optional,
-nichts Zusätzliches erlaubt, alles in `required`, die Hinweise für das Modell
-als `description`) und mit `z.toJSONSchema` an den Provider gegeben — je Lauf
-unter eigenem Namen (`location`, `augmented_location`,
-`locationReplyRequest`). Szene und NPC laden ihre Schemata als **lesbares
+(`shared/src/location.ts`). Daraus leitet der Ort seine Generator-Form
+selbst ab, mit der API von zod (`locationReplySchema`: der Ort ohne `rev`,
+die optionalen Felder `null`-fähig statt optional, dazu `warnings`, nichts
+Zusätzliches erlaubt), und `locationReplyRequest` in
+`server/src/location-reply.ts` gibt sie per `z.toJSONSchema` an den Provider
+— je Lauf unter eigenem Namen (`location`, `augmented_location`). Das Schema
+trägt keine `description`: was das Modell über die Felder wissen muss (die
+id-Regel, welche Kapitel-id `chapter` nennen darf, was `atmosphere` ist, die
+Form von `body` und `warnings`), steht in `location-system-prompt.md` unter
+„## Die Felder des Orts“, und der Ergänzen-Lauf bekommt genau diesen
+Abschnitt mit. Szene und NPC laden ihre Schemata als **lesbares
 JSON** aus `shared/schema/`, eines je Art
 und Lauf (`scene.schema.json`, `npc.schema.json`,
 `augmented-scene.schema.json`, `augmented-npc.schema.json`), dazu
@@ -98,8 +103,9 @@ und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
 Prozess):
 
 * kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
-  nicht sagen kann, steht in einer `description` und wird dort geprüft, wo es
-  immer geprüft wurde (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
+  nicht sagen kann, steht in einer `description` (bei Szene und NPC) bzw. im
+  Prompt der Art (beim Ort) und wird dort geprüft, wo es immer geprüft wurde
+  (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
 * **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
   stattdessen `null`-fähig, und der Server liest `null` als „nicht
   angegeben“ und lässt den Schlüssel weg,

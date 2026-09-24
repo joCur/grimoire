@@ -1781,14 +1781,18 @@ Die API-Pfade stehen unter `/api` (ADR #22).
 - **Eine Quelle je Art: ein zod-Schema** in `shared/src/<art>.ts`. Aus ihm
   kommen der TypeScript-Typ (`z.infer`), die Prüfung von `PATCH`, `POST` und
   Seed und das Antwort-Schema des Generators. Keine dieser Formen wird von Hand
-  nachgebaut; die gemeinsamen Ableitungen stehen in
-  `shared/src/schema-forms.ts`.
+  nachgebaut: jede Art leitet ihre Formen selbst und ausdrücklich mit der API
+  von zod ab (`omit`, `extend`, `partial`, `nullable`, `z.toJSONSchema`) — ein
+  gemeinsames Modul, das über die Felder beliebiger Arten läuft, gibt es
+  nicht.
 - **Generator-Schema:** Das Antwort-Schema einer Art ist ihr Typ ohne `rev` in
   der strengen Form der Provider, abgeleitet mit `z.toJSONSchema`: null-fähig
   statt optional, `additionalProperties: false`, jedes Feld in `required`,
-  kein `pattern`, kein `format`, keine Grenzen. Was das Schema nicht sagen
-  kann, steht in einer `description` und wird in der Validierung geprüft. Ein
-  Test prüft genau diese Regeln an den abgeleiteten Schemata.
+  kein `pattern`, kein `format`, keine Grenzen. Das Schema trägt allein die
+  Form, keine `description`; was das Modell über die Felder wissen muss und
+  das Schema nicht sagen kann, steht im Prompt seiner Art unter `generator/`
+  und wird in der Validierung geprüft. Ein Test prüft genau die Regeln des
+  strict mode an den abgeleiteten Schemata.
 - **Wo gemischt wird, nennt der Treffer seine Art.** Ein Suchtreffer ist
   `{ kind, id, title }`: die Suche ist wirklich gemischt, deshalb trägt der
   Treffer `kind`, und die App öffnet daraus die Route der Art. `[[id]]`-
