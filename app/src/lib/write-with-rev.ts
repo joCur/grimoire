@@ -1,6 +1,6 @@
 // The conflict protocol of ADR #4, in one place.
 //
-// Every write the app does carries the guard token of the Entry the DM
+// Every write the app does carries the guard token of the EntryResponse the DM
 // was looking at, so a competing write answers 409 instead of being
 // overwritten silently. The 409 is not an error the user has to fix: nothing
 // was written, so the entry is re-read once and the NEXT attempt carries the
@@ -14,7 +14,7 @@
 // itself; the conflict handling is this module. Pure, no react, no query
 // imports.
 
-import type { Entry } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 
 import { ApiError } from "@/api";
 import type { MessageKey } from "@/i18n";
@@ -43,13 +43,13 @@ export const WRITE_FAILED_MESSAGE: MessageKey = "write.failed";
 
 export type RevWriteResult =
   /** Written: the server's fresh entry, ready to seed into the query cache. */
-  | { ok: true; entry: Entry }
+  | { ok: true; entry: EntryResponse }
   /**
    * NOT written — the entry changed on the server (or appeared while a dialog
    * was open). `entry` is the re-read entry when the reload succeeded (its rev
    * makes the next attempt work); undefined when even the reload failed.
    */
-  | { ok: false; entry?: Entry };
+  | { ok: false; entry?: EntryResponse };
 
 /**
  * Run one rev-checked write. `write` is the API call including the rev;
@@ -58,8 +58,8 @@ export type RevWriteResult =
  * line belongs to those.
  */
 export async function writeWithRev(
-  write: () => Promise<Entry>,
-  reread: () => Promise<Entry>,
+  write: () => Promise<EntryResponse>,
+  reread: () => Promise<EntryResponse>,
 ): Promise<RevWriteResult> {
   try {
     return { ok: true, entry: await write() };

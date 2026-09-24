@@ -19,7 +19,7 @@
 // not move it either — the retry is either an adopt or an explicit force, and
 // both say so.
 
-import type { Entry } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 
 import type { PatchEntryRequest, RevConflict } from "@/api";
 
@@ -47,11 +47,11 @@ export interface EntryEditState {
 
 export type EntryEditEvent =
   /** A write came back written — the returned entry is the new truth. */
-  | { type: "saved"; entry: Entry }
+  | { type: "saved"; entry: EntryResponse }
   /** A write was refused: nothing was written, the row had moved. */
   | { type: "refused"; write: EntryWrite; conflict: RevConflict }
   /** The DM dropped the draft: this entry is now what the session edits. */
-  | { type: "adopted"; entry: Entry }
+  | { type: "adopted"; entry: EntryResponse }
   /** A write started, or the surface left the conflict behind. */
   | { type: "cleared" };
 

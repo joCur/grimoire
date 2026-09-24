@@ -3,7 +3,7 @@ import type { CampaignTree } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n";
 
-import { pageContextCrumbs } from "./page-context";
+import { locationPageCrumbs, pageContextCrumbs } from "./page-context";
 
 const de = translator("de");
 const en = translator("en");
@@ -13,7 +13,7 @@ const tree: CampaignTree = {
   chapters: [{ id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm von Salzhafen", scenes: [] }],
   npcs: [],
   locations: [
-    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+    { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
   ],
   sessions: [],
 };
@@ -48,17 +48,18 @@ describe("pageContextCrumbs", () => {
     expect(pageContextCrumbs("beispiel", "npcs/fenn", tree, de)).toEqual([
       { label: "NPCs", to: "/campaigns/beispiel/list/npcs" },
     ]);
-    expect(pageContextCrumbs("beispiel", "locations/leuchtturm", tree, de)).toEqual([
-      { label: "Orte", to: "/campaigns/beispiel/list/locations" },
+    // A location's reading view is its own route, and so is its list.
+    expect(locationPageCrumbs("beispiel", de)).toEqual([
+      { label: "Orte", to: "/campaigns/beispiel/locations" },
     ]);
   });
 
-  test("the list labels follow the UI language (issue #69)", () => {
+  test("the list labels follow the UI language", () => {
     expect(pageContextCrumbs("beispiel", "npcs/fenn", tree, en)).toEqual([
       { label: "NPCs", to: "/campaigns/beispiel/list/npcs" },
     ]);
-    expect(pageContextCrumbs("beispiel", "locations/leuchtturm", tree, en)).toEqual([
-      { label: "Locations", to: "/campaigns/beispiel/list/locations" },
+    expect(locationPageCrumbs("beispiel", en)).toEqual([
+      { label: "Locations", to: "/campaigns/beispiel/locations" },
     ]);
   });
 

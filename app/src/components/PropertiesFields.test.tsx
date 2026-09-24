@@ -25,7 +25,7 @@ const tree: CampaignTree = {
     { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
     { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
   ],
-  locations: [{ path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" }],
+  locations: [{ id: "leuchtturm", name: "Der Leuchtturm" }],
   sessions: [],
 };
 

@@ -5,20 +5,21 @@
 // md: a back row to the chapter overview on top and the NPC cards stacked below
 // the body (the column layout already stacks under lg).
 //
-// Every other entity renders through EntityArticle, chosen by the
-// `kind` the server sends: NPC, location, or a plain titled header for
-// chapter/campaign/anything else. The scene's type overline belongs to scenes
+// Every other entry renders through EntityArticle, chosen by the
+// `kind` the server sends: NPC, or a plain titled header for
+// chapter/campaign/anything else. A location is read on its own route
+// (routes/location.tsx, ADR #31). The scene's type overline belongs to scenes
 // only — a scene status above an NPC would name the wrong thing.
 //
 // Above the article sits the context line: the topbar carries no
 // breadcrumb, so chapter and group for a scene, and the list name for an
-// npc/location, live here, right above the title they belong to.
+// npc, live here, right above the title they belong to.
 //
 // The edit action in the header turns the body into the editor — header,
 // chips and status control keep standing; of the properties it carries only
-// the prose an npc or a location keeps beside its text (`motivation`,
-// `atmosphere`). The route owns only the "which path is being edited" bit;
-// the write, the 409 and the discard guard live in EntryBodyEditor.
+// the prose an npc keeps beside its text (`motivation`). The route owns only
+// the "which path is being edited" bit; the write, the 409 and the discard
+// guard live in EntryBodyEditor.
 //
 // The augment action is the third one: source text and/or an
 // instruction go to a server job, and its proposal comes back as a review —
@@ -46,9 +47,9 @@ import { PageContext } from "@/components/PageContext";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
-import { entityHeaderKind, entryId } from "@/lib/entity";
+import { entityHeaderKind } from "@/lib/entity";
 import { encodeAddress } from "@/lib/address";
-import { propStringArray } from "@/lib/properties";
+import { propString, propStringArray } from "@/lib/properties";
 import { sceneStatusOf } from "@/lib/scene-status";
 import { pageContextCrumbs } from "@/lib/page-context";
 
@@ -85,7 +86,7 @@ export function SceneRoute() {
   // properties `id`, which the format declares immutable, with
   // the canonical address as the fallback for an entry whose properties
   // carries none.
-  const docId = data === undefined ? undefined : entryId(data);
+  const docId = data === undefined ? undefined : (propString(data.properties.id) ?? data.path);
   const editing = data !== undefined && editingId !== undefined && editingId === docId;
   // Edit mode ENDS at a navigation. Leaving the entry drops the draft, so
   // coming back must not re-open the editor
@@ -143,11 +144,9 @@ export function SceneRoute() {
     );
   }
 
-  // The scene, when the entry is one — the article, the status control and
-  // the npc aside are about a scene only.
-  const scene = data.kind !== "location" && entityHeaderKind(data.kind) === "scene" ? data : undefined;
+  const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in properties.
-  const npcs = scene === undefined ? [] : propStringArray(scene.properties.npcs);
+  const npcs = isScene ? propStringArray(data.properties.npcs) : [];
   // The edit action — the body editor. While it runs the trigger is gone: the
   // editor's own toggle owns the mode from then on.
   const editAction = editing ? null : <EntryBodyEditAction onEdit={() => setEditingId(docId)} />;
@@ -163,13 +162,13 @@ export function SceneRoute() {
     />
   ) : undefined;
   // The properties action — the properties form of the kinds that have typed
-  // fields (scene, npc, location, chapter); it renders nothing for the rest.
+  // fields (scene, npc, chapter); it renders nothing for the rest.
   // The tree feeds its reference fields (npc/location/chapter ids).
   const propertiesAction = (
     <PropertiesAction campaign={campaign} entry={data} tree={tree.data} />
   );
   // The augment action — the third quiet action, for the kinds
-  // that have an augment prompt (npc, location, scene); it renders nothing
+  // that have an augment prompt here (npc, scene); it renders nothing
   // for the rest, and it is desktop-only (mobile is the reading surface).
   // While the body editor runs it stays out of the way for the same reason
   // the edit action does: two writers on one body is not a review.
@@ -196,24 +195,24 @@ export function SceneRoute() {
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
           {/* Where this entry sits — the context the topbar does not carry:
               chapter › group for a scene, the list for an
-              npc/location, nothing for the rest. */}
+              npc, nothing for the rest. */}
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
-          {scene !== undefined ? (
+          {isScene ? (
             <SceneArticle
-              entry={scene}
+              entry={data}
               tree={tree.data}
               variant="scene"
               actions={articleActions}
               body={bodyEditor}
               // The status display IS the control here. The rev
-              // comes from the entry on screen, so the patch carries
+              // comes from the EntryResponse on screen, so the patch carries
               // exactly the version the DM was looking at.
               statusControl={
                 <SceneStatusControl
                   campaign={campaign}
-                  path={scene.path}
-                  status={sceneStatusOf(scene.properties)}
-                  rev={scene.rev}
+                  path={data.path}
+                  status={sceneStatusOf(data.properties)}
+                  rev={data.rev}
                   variant="pill"
                 />
               }

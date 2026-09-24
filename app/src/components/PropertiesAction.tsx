@@ -1,7 +1,10 @@
 // The properties action of the reading view: the DM
-// edits EVERY properties field of a scene, npc, location or chapter in a
+// edits EVERY properties field of a scene, npc or chapter in a
 // form — never
-// raw YAML, never a text editor detour.
+// raw YAML, never a text editor detour. `PropertiesDialog` is the dialog
+// itself, the same for every kind; a location's reading view opens it over
+// the location's fields and writes through the location's own session
+// (components/LocationActions.tsx).
 //
 // The dialog follows the house pattern: mounted only while open,
 // one aria-live error line, a cancel and a save button. What it adds is the diff —
@@ -27,7 +30,7 @@
 // points at B would patch A's diff into B. So the open state IS the entry
 // (campaign + path), and the content is keyed by it.
 
-import type { CampaignTree, Entry } from "@grimoire/shared/types";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -43,7 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n, useT } from "@/i18n";
-import { entryFieldValues, entryId } from "@/lib/entity";
+import { propString } from "@/lib/properties";
 import {
   canSubmitProperties,
   commitPendingText,
@@ -70,7 +73,7 @@ export function PropertiesAction({
   triggerLabel,
 }: {
   campaign: string;
-  entry: Entry;
+  entry: EntryResponse;
   /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
   /**
@@ -108,7 +111,7 @@ export function PropertiesAction({
         onClick={() => setOpenEntry(entryKey)}
       />
       {open && (
-        <PropertiesDialog
+        <EntryPropertiesDialog
           // Belt and braces next to the open-by-entry rule: a path change
           // remounts the dialog, so no held value can outlive its entry.
           key={entryKey}
@@ -124,7 +127,7 @@ export function PropertiesAction({
   );
 }
 
-function PropertiesDialog({
+function EntryPropertiesDialog({
   campaign,
   entry,
   tree,
@@ -133,37 +136,18 @@ function PropertiesDialog({
   onClose,
 }: {
   campaign: string;
-  entry: Entry;
+  entry: EntryResponse;
   tree: CampaignTree | undefined;
   fields: readonly PropertiesField[];
   kindLabel: string;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
-  // `initial` is what the diff is measured against, taken when the dialog
-  // opened — NOT the entry behind it, or a write landing in the cache would
-  // silently swallow the DM's change. It moves only when the DM adopts the
-  // stored entry after a conflict, together with the session's version.
-  const [initial, setInitial] = useState<FormValues>(() =>
-    propertiesFormValues(fields, entryFieldValues(entry)),
-  );
-  const [values, setValues] = useState<FormValues>(initial);
-  // Text still standing in a chip input, per field key. It lives here so a
-  // save can fold it into its list instead of dropping it.
-  const [pending, setPending] = useState<Record<string, string>>({});
-  // Is a discard confirmation standing over the form?
-  const [discardPending, setDiscardPending] = useState(false);
-
+  const form = usePropertiesForm(propertiesFormValues(fields, entry.properties));
   const save = useEntryEdit(campaign, entry.path, entry.rev, {
     onSaved: onClose,
-    onReload: (stored) => {
-      // Continue from what is stored: the form is refilled from that entry, so
-      // the next diff is measured against it and nothing is pending.
-      const refilled = propertiesFormValues(fields, entryFieldValues(stored));
-      setInitial(refilled);
-      setValues(refilled);
-      setPending({});
-    },
+    // Continue from what is stored: the form is refilled from that entry, so
+    // the next diff is measured against it and nothing is pending.
+    onReload: (stored) => form.reseed(propertiesFormValues(fields, stored.properties)),
     // A properties patch can move almost everything the tree carries —
     // title/name, status, type, location, npcs, tags, the chapter an entry
     // hangs under — and the search index is built from the same values.
@@ -179,6 +163,94 @@ function PropertiesDialog({
     ],
     errorMessage: "write.properties.failed",
   });
+  return (
+    <PropertiesDialog
+      idLabel={propString(entry.properties.id) ?? entry.path}
+      tree={tree}
+      fields={fields}
+      kindLabel={kindLabel}
+      form={form}
+      session={{ ...save, save: (patch) => save.save({ properties: patch }) }}
+      onClose={onClose}
+    />
+  );
+}
+
+/** The form's state: the values the dialog opened with, the typed ones, the pending chip text. */
+export interface PropertiesForm {
+  /**
+   * What the diff is measured against, taken when the dialog opened — NOT the
+   * row behind it, or a write landing in the cache would silently swallow the
+   * DM's change. It moves only when the DM adopts the stored row after a
+   * conflict, together with the session's version.
+   */
+  initial: FormValues;
+  values: FormValues;
+  setValues: (update: (previous: FormValues) => FormValues) => void;
+  /** Text still standing in a chip input, per field key — a save folds it into its list. */
+  pending: Record<string, string>;
+  setPending: (update: (previous: Record<string, string>) => Record<string, string>) => void;
+  /** Refill the form from a stored row: nothing typed, nothing pending. */
+  reseed: (values: FormValues) => void;
+}
+
+export function usePropertiesForm(seed: FormValues): PropertiesForm {
+  const [initial, setInitial] = useState<FormValues>(seed);
+  const [values, setValues] = useState<FormValues>(initial);
+  const [pending, setPending] = useState<Record<string, string>>({});
+  return {
+    initial,
+    values,
+    setValues,
+    pending,
+    setPending,
+    reseed: (refilled) => {
+      setInitial(refilled);
+      setValues(refilled);
+      setPending({});
+    },
+  };
+}
+
+/** What the dialog needs from the editing session of its kind. */
+export interface PropertiesSession {
+  /** Write the patch of the fields that changed. */
+  save: (patch: Record<string, unknown>) => void;
+  isSaving: boolean;
+  message?: string | undefined;
+  /** Present while a write stands refused — the conflict line shows. */
+  conflict?: object | undefined;
+  reload: () => void;
+  forceSave?: (() => void) | undefined;
+}
+
+/**
+ * The dialog itself, the same for every kind: the fields as a form, the diff
+ * of what changed, the conflict line and the discard guard. The kind's
+ * editing session writes the diff.
+ */
+export function PropertiesDialog({
+  idLabel,
+  tree,
+  fields,
+  kindLabel,
+  form,
+  session: save,
+  onClose,
+}: {
+  /** The id shown as read-only context — fixed at creation (ADR #21). */
+  idLabel: string;
+  tree: CampaignTree | undefined;
+  fields: readonly PropertiesField[];
+  kindLabel: string;
+  form: PropertiesForm;
+  session: PropertiesSession;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const { initial, values, setValues, pending, setPending } = form;
+  // Is a discard confirmation standing over the form?
+  const [discardPending, setDiscardPending] = useState(false);
 
   // What a save would send: the values plus the pending chip text.
   const effective = commitPendingText(fields, values, pending);
@@ -195,7 +267,6 @@ function PropertiesDialog({
     Object.keys(patch).length > 0 &&
     !save.isSaving;
 
-  const id = entryId(entry);
   // Esc, the overlay, the cancel button and the X all come through here: with
   // something typed they ask first (house pattern of EntryBodyEditor), an
   // untouched form just closes.
@@ -223,7 +294,7 @@ function PropertiesDialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            save.save({ properties: patch });
+            save.save(patch);
           }}
           className="mt-4 flex min-h-0 flex-1 flex-col"
         >
@@ -231,7 +302,7 @@ function PropertiesDialog({
             {/* The two values the form does not own — shown, not editable. */}
             <p className="text-[12px] text-body-secondary">
               {t("properties.id")}{" "}
-              <span className="font-mono text-[12px] text-soft">{id}</span>
+              <span className="font-mono text-[12px] text-soft">{idLabel}</span>
             </p>
             {fields.map((field) => {
               const value = values[field.key];

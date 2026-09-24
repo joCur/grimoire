@@ -1,53 +1,25 @@
 // Entity-kind helpers for the entry reading view.
 //
-// GET /entry answers with the entity `kind` (path-derived, see
-// server/src/store/paths.ts). The reading view picks its header from that
-// kind — the scene header (type overline, chip row) must never sit above an
-// NPC or a location. Everything here is pure so it can be unit-tested without
-// a DOM.
-//
-// An entry's fields travel in the shape of its kind (ADR #31): a location
-// carries them flat (`entry.name`), the other kinds under `properties`. The
-// three readers below are what a view reads when it takes ANY entry — its id,
-// its display name, its fields by name — so a view that is about one kind
-// reads that kind's own fields instead.
+// GET /entries/<address> answers with the entry's `kind`. The reading view
+// picks its header from that kind — the scene header (type overline, chip
+// row) must never sit above an NPC. Everything here is pure so it can be unit-tested without a DOM.
 
-import type { Entry, EntityKind, NpcStatus } from "@grimoire/shared/types";
+import type { EntityKind, NpcStatus } from "@grimoire/shared/types";
 
 import type { MessageKey, Translate } from "@/i18n";
 import { propString } from "@/lib/properties";
 
-/** The id of an entry — the address stands in for one that names none. */
-export function entryId(entry: Entry): string {
-  if (entry.kind === "location") return entry.id;
-  return propString(entry.properties.id) ?? entry.path;
-}
-
-/** The display name of an entry — its name or title; undefined when it has neither. */
-export function entryName(entry: Entry): string | undefined {
-  if (entry.kind === "location") return propString(entry.name);
-  return propString(entry.properties.name) ?? propString(entry.properties.title);
-}
-
 /**
- * The properties of an entry by field name, its id included — the values a
- * properties form starts from, whatever the kind.
- */
-export function entryFieldValues(entry: Entry): Record<string, unknown> {
-  if (entry.kind !== "location") return entry.properties;
-  const { kind: _kind, path: _path, body: _body, rev: _rev, ...fields } = entry;
-  return fields;
-}
-
-/**
- * Which header the reading view renders for a kind:
+ * Which header the entry reading view renders for a kind:
  *
  *   scene              -> the scene article (type overline, trigger, chips)
- *   npc / location     -> their own entity headers
+ *   npc                -> its own entity header
  *   everything else    -> title + body (chapter, campaign, unknown) — quiet
  *                         and generic, never the scene overline.
+ *
+ * A location is read on its own route (ADR #31), not through this switch.
  */
-export type EntityHeaderKind = "scene" | "npc" | "location" | "titled";
+export type EntityHeaderKind = "scene" | "npc" | "titled";
 
 export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
   switch (kind) {
@@ -55,8 +27,6 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
       return "scene";
     case "npc":
       return "npc";
-    case "location":
-      return "location";
     default:
       return "titled";
   }

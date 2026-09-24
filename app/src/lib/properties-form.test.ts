@@ -93,7 +93,7 @@ describe("propertiesFieldsFor", () => {
       "voice",
       "appearance",
     ]);
-    expect(keys("location")).toEqual(["name", "chapter", "roll20-page"]);
+    expect(keys("location")).toEqual(["name", "chapter", "roll20Page"]);
     expect(keys("chapter")).toEqual(["title", "status"]);
   });
 
@@ -190,10 +190,10 @@ describe("propertiesFormValues", () => {
     const values = propertiesFormValues(fields("location"), {
       id: "leuchtturm",
       name: "Leuchtturm",
-      "roll20-page": 12,
+      roll20Page: 12,
       chapter: { nested: true },
     });
-    expect(values["roll20-page"]).toEqual({ kind: "text", text: "12" });
+    expect(values.roll20Page).toEqual({ kind: "text", text: "12" });
     expect(values.chapter).toEqual({ kind: "text", text: "" });
   });
 });
@@ -677,7 +677,7 @@ describe("reference and select options", () => {
       { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
     ],
     locations: [
-      { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" },
+      { id: "leuchtturm", name: "Der Leuchtturm" },
     ],
     sessions: [],
   };

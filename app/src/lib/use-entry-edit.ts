@@ -21,7 +21,7 @@
 // is the whole point: the 5s version poll refetches while an editor stands,
 // and inheriting its version would replace the 409 with a silent overwrite.
 
-import type { Entry } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useReducer, useRef, useState } from "react";
 
@@ -50,7 +50,7 @@ export interface EntryEdit {
    * now (undefined when the 409 carried none), which is what the conflict
    * line's actions work on.
    */
-  conflict?: { entry: Entry | undefined } | undefined;
+  conflict?: { entry: EntryResponse | undefined } | undefined;
   /**
    * Drop the draft and continue from the stored entry: the session takes its
    * version and the surface reseeds itself through `onReload`. Without an
@@ -75,7 +75,7 @@ export interface EntryEditOptions {
    * Runs when the DM adopted the stored entry, so the surface can reseed its
    * draft and its "nothing changed" baseline from it.
    */
-  onReload?: (entry: Entry) => void;
+  onReload?: (entry: EntryResponse) => void;
   /**
    * Invalidated after a SUCCESSFUL write only, in order. Each path has its own
    * set — a text write feeds the tree and the search index, a chapter's
@@ -95,7 +95,7 @@ export interface EntryEditOptions {
    * it can discard the job in the same transaction. Its `force` is ignored,
    * hence `canForce`.
    */
-  writeEntry?: (request: PatchEntryRequest) => Promise<Entry>;
+  writeEntry?: (request: PatchEntryRequest) => Promise<EntryResponse>;
   /**
    * False for a write path that has no force — the conflict line then offers
    * reloading only.

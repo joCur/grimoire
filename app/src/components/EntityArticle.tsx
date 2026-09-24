@@ -1,21 +1,22 @@
-// The reading view of everything that is NOT a scene: NPC, location and the
-// plain titled entities (chapter, campaign, and whatever else the entry route
-// is pointed at). Same column and same markdown pipeline as the scene
-// article — only the header differs, and the scene's type overline never
-// appears here.
+// The reading view of every entry that is NOT a scene: NPC and the plain
+// titled entities (chapter, campaign, and whatever else the entry route is
+// pointed at). Same column and same markdown pipeline as the scene article —
+// only the header differs, and the scene's type overline never appears here.
+// A location has its own article on its own route (./LocationArticle.tsx),
+// built from the title and action group exported here.
 //
-// Reference lines (statblock, roll20-page) stay PLAIN TEXT on purpose: the
-// format references Roll20 by name, it never links or copies it (README).
+// Reference lines (statblock) stay PLAIN TEXT on purpose: the format
+// references Roll20 by name, it never links or copies it (README).
 //
-// The prose properties — an npc's `motivation`, a location's `atmosphere` —
-// stand in the header, read exactly as the cards read them
-// (lib/entity-excerpt.ts): a `[[slug]]` inside reads as the current name.
+// The npc's prose property `motivation` stands in the header, read exactly as
+// the cards read it (lib/entity-excerpt.ts): a `[[slug]]` inside reads as the
+// current name.
 
-import type { Entry, EntryResponse, Location } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
-import { entityHeaderKind, entryName, npcStatusLabel, npcStatusOf } from "@/lib/entity";
-import { locationExcerpt, npcExcerpt } from "@/lib/entity-excerpt";
+import { entityHeaderKind, npcStatusLabel, npcStatusOf } from "@/lib/entity";
+import { npcExcerpt } from "@/lib/entity-excerpt";
 import { propQuickstats, propString } from "@/lib/properties";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ import { useEntityRefs } from "@/markdown/entity-refs";
 import { Markdown } from "@/markdown/Markdown";
 
 /** Reading-view title, identical to the scene article's h1. */
-function Title({ children, className }: { children: string; className?: string }) {
+export function Title({ children, className }: { children: string; className?: string }) {
   return (
     <h1
       className={cn(
@@ -46,7 +47,7 @@ function Title({ children, className }: { children: string; className?: string }
  * It WRAPS because labels plus a long title do not fit a 390px line, and a
  * clipped action is worse than a second row.
  */
-function ActionGroup({ children }: { children?: ReactNode }) {
+export function ActionGroup({ children }: { children?: ReactNode }) {
   if (children === undefined) return null;
   return (
     <span className="flex flex-wrap items-center justify-end gap-2">{children}</span>
@@ -63,7 +64,7 @@ export function EntityArticle({
   actions,
   body,
 }: {
-  entry: Entry;
+  entry: EntryResponse;
   actions?: ReactNode;
   /**
    * Replaces the rendered body — edit mode puts its markdown
@@ -72,19 +73,20 @@ export function EntityArticle({
   body?: ReactNode;
 }) {
   const header = entityHeaderKind(entry.kind);
-  // npc/location entries carry `name`, chapter/campaign entries `title` — either
+  const properties = entry.properties;
+  // npc entries carry `name`, chapter/campaign entries `title` — either
   // may be missing (degrade), then the address is the honest fallback.
-  const name = entryName(entry) ?? entry.path;
+  const fallback = entry.path;
+  const name = propString(properties.name) ?? propString(properties.title) ?? fallback;
+  const title = propString(properties.title) ?? propString(properties.name) ?? fallback;
 
   return (
     <article className="w-full min-w-0">
-      {entry.kind === "location" ? (
-        <LocationHeader location={entry} name={name} actions={actions} />
-      ) : header === "npc" ? (
+      {header === "npc" ? (
         <NpcHeader entry={entry} name={name} actions={actions} />
       ) : (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <Title>{name}</Title>
+          <Title>{title}</Title>
           <ActionGroup>{actions}</ActionGroup>
         </div>
       )}
@@ -155,36 +157,6 @@ function NpcHeader({
       {statblock !== undefined && (
         <p className="mt-3 text-[12.5px] text-muted-foreground">
           {t("entity.npc.statblock", { value: statblock })}
-        </p>
-      )}
-    </header>
-  );
-}
-
-function LocationHeader({
-  location,
-  name,
-  actions,
-}: {
-  location: Location;
-  name: string;
-  actions?: ReactNode;
-}) {
-  const t = useT();
-  const { resolve } = useEntityRefs();
-  const { mood, page } = locationExcerpt(location, (slug) => resolve(slug)?.name);
-  return (
-    <header className="mb-7 border-b border-border pb-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <Title>{name}</Title>
-        <ActionGroup>{actions}</ActionGroup>
-      </div>
-      {mood !== undefined && (
-        <p className="mt-2 text-[14px] leading-[1.6] text-body-secondary">{mood}</p>
-      )}
-      {page !== undefined && (
-        <p className="mt-2 text-[12.5px] text-muted-foreground">
-          {t("entity.location.roll20", { value: page })}
         </p>
       )}
     </header>

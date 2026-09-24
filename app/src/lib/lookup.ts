@@ -16,6 +16,7 @@ import { BookA, Bookmark, Lightbulb, MapPin, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { MessageKey } from "@/i18n";
+import { locationsHref } from "@/lib/open-target";
 
 export interface LookupTarget {
   /** Stable key — also what a test or the palette identifies a row by. */
@@ -40,7 +41,7 @@ export const LOOKUP_TARGETS: readonly LookupTarget[] = [
   { id: "npcs", href: (c) => `/campaigns/${c}/list/npcs`, icon: User, label: "browse.title.npcs" },
   {
     id: "locations",
-    href: (c) => `/campaigns/${c}/list/locations`,
+    href: locationsHref,
     icon: MapPin,
     label: "browse.title.locations",
   },

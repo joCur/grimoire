@@ -1,30 +1,23 @@
-// Render tests for the entity reading view (react-dom/server — no DOM):
-// the NPC/location/titled headers and the one rule behind them —
-// the scene type overline never appears above a non-scene.
+// Render tests for the entry reading view (react-dom/server — no DOM):
+// the NPC and titled headers and the one rule behind them — the scene type
+// overline never appears above a non-scene. (A location has its own article:
+// ./LocationArticle.test.tsx.)
 
-import type { Entry, EntryResponse, Location } from "@grimoire/shared/types";
+import type { EntryKind, EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { EntityArticle } from "./EntityArticle";
 
 function entry(
-  kind: EntryResponse["kind"],
+  kind: EntryKind,
   properties: Record<string, unknown>,
   body = "",
 ): EntryResponse {
   return { path: `npcs/x`, kind, properties, body, rev: 1 };
 }
 
-/** A location is its own typed entry, its fields flat (ADR #31). */
-function location(
-  fields: { id: string; name: string } & Partial<Location>,
-  body = "",
-): Location {
-  return { kind: "location", path: `locations/${fields.id}`, body, rev: 1, ...fields };
-}
-
-function render(e: Entry): string {
+function render(e: EntryResponse): string {
   return renderToStaticMarkup(<EntityArticle entry={e} />);
 }
 
@@ -109,27 +102,7 @@ describe("EntityArticle — npc", () => {
   });
 });
 
-describe("EntityArticle — location and titled entities", () => {
-  test("location shows the roll20 page as a reference line", () => {
-    const html = render(
-      location(
-        { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen", "roll20-page": "Leuchtturm" },
-        "## Atmosphäre\n\nVerlassen in Eile.\n",
-      ),
-    );
-    expect(html).toContain("Der Leuchtturm von Salzhafen");
-    expect(html).toContain("Roll20-Seite: Leuchtturm");
-    expect(html).toContain("Verlassen in Eile.");
-    expect(html).not.toContain("Geplante Szene");
-  });
-
-  test("the atmosphere property stands in the header", () => {
-    const html = render(
-      location({ id: "kai", name: "Der Kai", atmosphere: "Nebel, Möwen, nasses Holz." }),
-    );
-    expect(html).toContain("Nebel, Möwen, nasses Holz.");
-  });
-
+describe("EntityArticle — titled entities", () => {
   test("chapter renders title plus body", () => {
     const html = render(
       entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }, "## Ziel\n\nLicht an.\n"),
@@ -153,9 +126,8 @@ describe("EntityArticle — location and titled entities", () => {
     );
     const grouped =
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
-    const variants: Entry[] = [
+    const variants = [
       jorna, // npc header
-      location({ id: "leuchtturm", name: "Leuchtturm" }),
       entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }),
     ];
     for (const e of variants) {

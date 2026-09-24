@@ -12,6 +12,7 @@ import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/routes/knowledge";
 import { LiveRoute } from "@/routes/live";
+import { LocationRoute } from "@/routes/location";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
@@ -80,6 +81,10 @@ export function App() {
               "Nachschlagen" rows and from the topbar's quiet NPCs/Orte links
               on the desktop. */}
           <Route path="list/:kind" element={<BrowseRoute />} />
+          {/* A location is its own resource (ADR #31): its list and its
+              reading view live at its own routes. */}
+          <Route path="locations" element={<BrowseRoute kind="locations" />} />
+          <Route path="locations/:id" element={<LocationRoute />} />
           {/* Campaign knowledge and glossary — campaign CONTENT, so they are
               list pages next to the npc/location ones and not sections of
               /settings. Reached from the chapter overview's „Nachschlagen" line, the

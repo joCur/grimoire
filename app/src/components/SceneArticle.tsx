@@ -48,7 +48,7 @@ export function SceneArticle({
   const t = useT();
   const live = variant === "live";
   const properties = entry.properties;
-  // npc/location entries opened as an entry view carry `name` instead of `title`.
+  // npc entries opened as an entry view carry `name` instead of `title`.
   const title = propString(properties.title) ?? propString(properties.name) ?? entry.path;
   // Everything that is not explicitly a contingency reads as a planned
   // scene (degrade — "planned" is the unmarked case).

@@ -19,7 +19,13 @@
 
 import type { LocationProposal } from "./location";
 
-export type { Location, LocationFields, LocationPatch, LocationProposal } from "./location";
+export type {
+  Location,
+  LocationChange,
+  LocationFields,
+  LocationPatch,
+  LocationProposal,
+} from "./location";
 
 /** A scene's lifecycle states. A CHECK constraint holds the column to them. */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
@@ -122,18 +128,25 @@ export interface ChapterProperties {
 
 /**
  * The kinds that are ENTRIES: a row with an address, properties and a text
- * (server/src/store/paths.ts). A session, the inbox and the glossary are NOT
- * among them — they are lists with their own endpoints (ADR #26).
+ * (server/src/store/paths.ts). A location is not among them — it is its own
+ * resource with its own type (ADR #31) — and neither are a session, the inbox
+ * and the glossary, which are lists with their own endpoints (ADR #26).
  */
-export type EntryKind = "campaign" | "chapter" | "scene" | "npc" | "location";
+export type EntryKind = "campaign" | "chapter" | "scene" | "npc";
 
 /**
- * Everything the SEARCH INDEX holds: the entry kinds plus the LIST kinds. A
- * hit can be a glossary term, and such a hit names a row of a list — it has
- * no entry address to offer (see SearchResult), so the two sets stay apart.
- * `unknown` is what an address the schema does not describe reads as.
+ * Everything the SEARCH INDEX holds: the entry kinds, the location and the
+ * LIST kinds. A location hit and a glossary hit have no entry address to
+ * offer (see SearchResult) — each names its kind and id. `unknown` is what an
+ * address the schema does not describe reads as.
  */
-export type EntityKind = EntryKind | "session" | "inbox" | "glossary" | "unknown";
+export type EntityKind =
+  | EntryKind
+  | "location"
+  | "session"
+  | "inbox"
+  | "glossary"
+  | "unknown";
 
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
@@ -416,7 +429,7 @@ export interface SceneOrderResponse {
 export interface EntryResponse {
   /** The entry's address within the campaign (server/src/store/paths.ts). */
   path: string;
-  kind: Exclude<EntryKind, "location">;
+  kind: EntryKind;
   properties: Record<string, unknown>;
   /** The entry's markdown text. */
   body: string;

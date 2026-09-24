@@ -21,6 +21,8 @@ import {
   jobParts,
   acceptProgress,
   jobProgress,
+  locationState,
+  openLocations,
   mergeReviewPatch,
   openParts,
   partState,
@@ -40,8 +42,6 @@ import {
   slugify,
   stringField,
   stringList,
-  partForPath,
-  partPath,
   partsStillRunning,
   pipelineCostLabel,
   pipelineProgress,
@@ -539,6 +539,7 @@ describe("review state mapping", () => {
           { path: "01-x/b", properties: {}, body: "b" },
         ],
         stubs: [{ kind: "npc", id: "grella", name: "Grella", properties: {}, body: "s" }],
+        locations: [],
         warnings: [],
       },
       ...over,
@@ -551,6 +552,8 @@ describe("review state mapping", () => {
       fields: {},
       blocks: {},
       written: {},
+      locations: {},
+      writtenLocations: [],
     });
     expect(reviewOf(null)).toEqual(reviewOf(undefined));
   });
@@ -598,6 +601,8 @@ describe("review state mapping", () => {
         fields: {},
         blocks: {},
         written: { "01-x/a": "01-x/a" },
+        locations: {},
+        writtenLocations: [],
       },
     });
     expect(partState(decided, "01-x/a")).toBe("written");
@@ -628,10 +633,37 @@ describe("review state mapping", () => {
         fields: {},
         blocks: {},
         written: { "01-x/a": "01-x/a", "npcs/grella": "npcs/grella" },
+        locations: {},
+        writtenLocations: [],
       },
     });
     expect(jobProgress(partly)).toEqual({ written: 2, total: 3 });
     expect(openParts(partly)).toEqual(["01-x/b"]);
+  });
+
+  test("a proposed location is decided, written and counted by its id", () => {
+    const withLocation = job({
+      result: {
+        scenes: [{ path: "01-x/a", properties: {}, body: "a" }],
+        stubs: [],
+        locations: [{ id: "alte-mole", name: "Alte Mole", body: "m" }],
+        warnings: [],
+      },
+    });
+    expect(locationState(withLocation, "alte-mole")).toBe("open");
+    expect(openLocations(withLocation)).toEqual(["alte-mole"]);
+    expect(jobProgress(withLocation)).toEqual({ written: 0, total: 2 });
+    const rejected = mergeReviewPatch(withLocation, { locations: { "alte-mole": "rejected" } });
+    expect(locationState(rejected, "alte-mole")).toBe("rejected");
+    expect(openLocations(rejected)).toEqual([]);
+    const reopened = mergeReviewPatch(rejected, { locations: { "alte-mole": null } });
+    expect(reopened.review?.locations).toEqual({});
+    const written = job({
+      ...withLocation,
+      review: { ...reviewOf(withLocation), writtenLocations: ["alte-mole"] },
+    });
+    expect(locationState(written, "alte-mole")).toBe("written");
+    expect(jobProgress(written)).toEqual({ written: 1, total: 2 });
   });
 
   test("a dropped or rejected part is not part of the rest", () => {
@@ -642,6 +674,8 @@ describe("review state mapping", () => {
         fields: {},
         blocks: {},
         written: {},
+        locations: {},
+        writtenLocations: [],
       },
     });
     expect(openParts(decided)).toEqual(["01-x/a"]);
@@ -759,6 +793,7 @@ describe("the run's parts", () => {
           { path: "01-salzhafen/s1", properties: {}, body: "b" },
         ],
         stubs: [],
+        locations: [],
         warnings: [],
       },
       review: {
@@ -767,6 +802,8 @@ describe("the run's parts", () => {
         fields: {},
         blocks: {},
         written: { "01-salzhafen/s0": "01-salzhafen/s0" },
+        locations: {},
+        writtenLocations: [],
       },
     });
     // What the run PRODUCED — and why that number confused the chip.
@@ -783,6 +820,7 @@ describe("the run's parts", () => {
       result: {
         scenes: [{ path: "01-salzhafen/s0", properties: {}, body: "a" }],
         stubs: [{ kind: "npc", id: "grella", name: "Grella", properties: {}, body: "s" }],
+        locations: [],
         warnings: [],
       },
       review: {
@@ -791,6 +829,8 @@ describe("the run's parts", () => {
         fields: {},
         blocks: {},
         written: { "01-salzhafen/s0": "01-salzhafen/s0", "npcs/grella": "npcs/grella" },
+        locations: {},
+        writtenLocations: [],
       },
     });
     expect(acceptProgress(withStub)).toEqual({ written: 2, total: 2 });
@@ -807,27 +847,5 @@ describe("the run's parts", () => {
     quiet.pipeline!.totals = { inputTokens: 0, outputTokens: 0, calls: 0 };
     expect(pipelineCostLabel(quiet, t)).toBeUndefined();
     expect(pipelineCostLabel(null, t)).toBeUndefined();
-  });
-
-  test("a part and the address the review uses for it map both ways", () => {
-    const scenes = job(["done", "done", "done"]);
-    expect(partPath(scenes, scenes.pipeline!.parts[1]!)).toBe("01-salzhafen/s1");
-    expect(partForPath(scenes, "01-salzhafen/s1")?.key).toBe("scene:s1");
-    // An entry is addressed by its kind's directory.
-    const withEntry = job(["done"], {
-      pipeline: {
-        parts: [
-          { key: "npc:grella", kind: "npc", id: "grella", title: "Grella", status: "done" },
-          { key: "location:bucht", kind: "location", id: "bucht", title: "Bucht", status: "done" },
-        ],
-        totals: { inputTokens: 0, outputTokens: 0, calls: 3 },
-      },
-    });
-    expect(partPath(withEntry, withEntry.pipeline!.parts[0]!)).toBe("npcs/grella");
-    expect(partPath(withEntry, withEntry.pipeline!.parts[1]!)).toBe("locations/bucht");
-    expect(partForPath(withEntry, "npcs/grella")?.key).toBe("npc:grella");
-    expect(partForPath(withEntry, "locations/bucht")?.key).toBe("location:bucht");
-    // A path no part produced simply has none.
-    expect(partForPath(scenes, "npcs/fenn")).toBeUndefined();
   });
 });

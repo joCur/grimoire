@@ -24,7 +24,12 @@
 // CHECK constraints of their columns (ADR #25), so a select over them needs no
 // room for a value from outside the list.
 
-import { NPC_STATUSES, type CampaignTree, type EntityKind } from "@grimoire/shared/types";
+import {
+  NPC_STATUSES,
+  type CampaignTree,
+  type EntityKind,
+  type LocationFields,
+} from "@grimoire/shared/types";
 import {
   PROPERTY_FIELDS,
   fieldSurface,
@@ -70,7 +75,7 @@ export interface FieldOption {
 }
 
 export interface PropertiesField {
-  /** The properties key, verbatim (`roll20-page` included). */
+  /** The field key, verbatim. */
   key: string;
   /** The translated label above the control. */
   label: string;
@@ -106,7 +111,7 @@ export interface PropertiesField {
 //
 // Three kinds of string, three different owners:
 //
-//   field KEYS      `title`, `npcs`, `roll20-page` — wire names. They travel
+//   field KEYS      `title`, `npcs`, `roll20Page` — wire names. They travel
 //                   to the server and back and are never translated.
 //   option VALUES   `active`, `planned`, `insight +2` — data. Not copy.
 //   LABELS          the only translated half: every one of them is a catalog
@@ -125,12 +130,28 @@ interface FieldCopy {
 }
 
 /**
+ * The copy of a location's fields, typed against the location's schema
+ * (@grimoire/shared/location): a field without copy — or copy for a field the
+ * location does not have — does not compile. `id` and `body` have no form
+ * field.
+ */
+const LOCATION_COPY: { [K in Exclude<keyof LocationFields, "id" | "body">]-?: FieldCopy } = {
+  name: { label: "properties.location.name.label" },
+  chapter: { label: "properties.location.chapter.label" },
+  roll20Page: { label: "properties.location.roll20.label", hint: "properties.location.roll20.hint" },
+  atmosphere: {
+    label: "properties.location.atmosphere.label",
+    hint: "properties.location.atmosphere.hint",
+  },
+};
+
+/**
  * The COPY of every field, by kind and key. This is the whole app-side half
  * of the tables: the field LIST, its order, its controls and its known value
  * sets live in @grimoire/shared/property-fields, and what is left here is
  * what a translator owns.
  *
- * The field KEYS (`title`, `npcs`, `roll20-page`) are wire names and stay
+ * The field KEYS (`title`, `npcs`, `roll20Page`) are wire names and stay
  * untranslated, and so do the option VALUES — `active`, `planned`,
  * `insight +2` are data. Only the LABELS are translated, and every one of
  * them is a catalog key here.
@@ -162,15 +183,7 @@ const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
     appearance: { label: "properties.npc.appearance.label", hint: "properties.npc.appearance.hint" },
     motivation: { label: "properties.npc.motivation.label", hint: "properties.npc.motivation.hint" },
   },
-  location: {
-    name: { label: "properties.location.name.label" },
-    chapter: { label: "properties.location.chapter.label" },
-    "roll20-page": { label: "properties.location.roll20.label", hint: "properties.location.roll20.hint" },
-    atmosphere: {
-      label: "properties.location.atmosphere.label",
-      hint: "properties.location.atmosphere.hint",
-    },
-  },
+  location: LOCATION_COPY,
   chapter: {
     title: { label: "properties.chapter.title.label" },
     // No placeholder: a select has no empty text box to hint at.
@@ -338,7 +351,7 @@ export function fieldValueKind(control: FieldControl): FieldValue["kind"] {
 
 /**
  * A scalar properties value as editable text. Numbers and booleans are shown
- * verbatim instead of being dropped (degrade — a hand-edited `roll20-page: 12`
+ * verbatim instead of being dropped (degrade — a hand-edited `statblock: 12`
  * is text to the DM); anything structural becomes an empty field, and since an
  * untouched field is never patched, nothing is lost by that.
  */

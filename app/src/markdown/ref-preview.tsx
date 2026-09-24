@@ -44,10 +44,11 @@ import {
   type ReactNode,
 } from "react";
 
-import { fetchEntry } from "@/api";
+import { fetchEntry, fetchLocation } from "@/api";
 import { EntityPreview } from "@/components/EntityPreview";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { NameOf } from "@/lib/entity-excerpt";
+import { locationKey } from "@/lib/use-location-edit";
 
 import type { ResolvedEntityRef } from "./entity-refs";
 
@@ -204,14 +205,24 @@ export function RefPreview({
   };
   const show = (): void => {
     clearTimers();
-    // The SAME entry query the card reads; `staleTime: Infinity` leaves an
-    // entry that is already cached alone.
-    void queryClient.prefetchQuery({
-      queryKey: ["entry", campaign, target.path],
-      queryFn: () => fetchEntry(campaign, target.path),
-      retry: false,
-      staleTime: Infinity,
-    });
+    // The SAME query the card reads — the location's own for a location
+    // (ADR #31), the entry's for the rest; `staleTime: Infinity` leaves what
+    // is already cached alone.
+    if (target.kind === "location") {
+      void queryClient.prefetchQuery({
+        queryKey: locationKey(campaign, target.slug),
+        queryFn: () => fetchLocation(campaign, target.slug),
+        retry: false,
+        staleTime: Infinity,
+      });
+    } else {
+      void queryClient.prefetchQuery({
+        queryKey: ["entry", campaign, target.path],
+        queryFn: () => fetchEntry(campaign, target.path),
+        retry: false,
+        staleTime: Infinity,
+      });
+    }
     if (openKey === key) return;
     if (opensAtOnce()) openNow();
     else openTimer.current = window.setTimeout(openNow, OPEN_DELAY_MS);

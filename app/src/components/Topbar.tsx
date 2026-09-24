@@ -115,6 +115,7 @@ import {
   settingsCampaign,
 } from "@/lib/campaign";
 import { sessionElapsedLabel, sessionIsEmpty, sessionIsPaused } from "@/lib/session";
+import { locationsHref } from "@/lib/open-target";
 import { navSection } from "@/lib/topbar-nav";
 import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
@@ -169,6 +170,8 @@ export function Topbar() {
   const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
   const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
   const listMatch = matchPath("/campaigns/:campaign/list/*", pathname);
+  // A location's own routes — its list and its reading view (ADR #31).
+  const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
   // The two campaign-content pages. They are NOT in the nav trio
   // and must not be — but the bar above them is still
   // this campaign's bar, so the campaign has to be derived here too. Without
@@ -184,6 +187,7 @@ export function Topbar() {
     campaignOf(reviewMatch) ??
     campaignOf(generateMatch) ??
     campaignOf(listMatch) ??
+    campaignOf(locationsMatch) ??
     campaignOf(knowledgeMatch) ??
     campaignOf(glossaryMatch) ??
     campaignOf(chapterOverviewMatch) ??
@@ -205,7 +209,8 @@ export function Topbar() {
 
   // Which nav entry is the current view — the ONE thing that differs between
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
-  const section = navSection({ isChapterOverview, listKind, entryPath });
+  const isLocations = campaignOf(locationsMatch) !== undefined;
+  const section = navSection({ isChapterOverview, listKind, entryPath, isLocations });
 
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.
@@ -297,7 +302,7 @@ export function Topbar() {
               active={section === "npcs"}
             />
             <TopbarNavLink
-              to={`/campaigns/${campaign}/list/locations`}
+              to={locationsHref(campaign)}
               label={t("topbar.nav.locations")}
               active={section === "locations"}
             />

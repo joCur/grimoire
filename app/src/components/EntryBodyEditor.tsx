@@ -1,5 +1,8 @@
 // Edit mode of the reading view: the edit action in the header of a
-// scene/npc/location/chapter swaps the rendered text of the entry for the editor.
+// scene/npc/chapter — and of a location, on its own route — swaps the rendered
+// text for the editor. `BodyEditor` is the surface, the same for every kind;
+// `EntryBodyEditor` hands it an entry's editing session, and the location's
+// reading view hands it the location's (components/LocationActions.tsx).
 //
 // That editor has TWO surfaces over ONE draft:
 //
@@ -17,12 +20,12 @@
 //
 // What the DM sees stays the same page: the header (title, chips, status
 // control) keeps standing, only the body below it becomes editable. Beside
-// the text the surface carries the kind's PROSE PROPERTIES — an npc's
+// the text the surface carries the kind's PROSE FIELDS — an npc's
 // `motivation`, a location's `atmosphere` (@grimoire/shared `FieldSurface`):
-// prose the cards show, written where prose is written. They share the
-// entry's one guard (ADR #23), so a save is ONE patch of whatever changed, and
-// a forced save resends exactly that. Every other property stays with the
-// status control and the properties dialog.
+// prose the cards show, written where prose is written. They share the row's
+// one guard (ADR #23), so a save is ONE patch of whatever changed, and a
+// forced save resends exactly that. Every other field stays with the status
+// control and the dialog.
 //
 // Losing work is the one real risk here, so:
 //   * a conflict (409) keeps the draft and puts the shared conflict line under
@@ -35,7 +38,7 @@
 //     parse) blocks the save until the DM decides — composerIssues, the same
 //     seam the properties dialog uses for an unfinished quickstat row.
 
-import type { Entry } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -65,15 +68,15 @@ import {
   withDraftBlocks,
   withDraftMode,
   withDraftText,
+  type ComposerDraft,
 } from "@/lib/composer";
-import { bodyEditorWrite } from "@/lib/entry-body";
-import { entryFieldValues } from "@/lib/entity";
-import { hasEntryWrite } from "@/lib/entry-edit";
+import { bodyEditorChange, hasBodyEditChange, type BodyEditChange } from "@/lib/entry-body";
 import {
   propertiesFieldsFor,
   propertiesFormValues,
   propertiesPatch,
   type FormValues,
+  type PropertiesField,
 } from "@/lib/properties-form";
 import { useEntryEdit } from "@/lib/use-entry-edit";
 
@@ -90,14 +93,83 @@ export function EntryBodyEditAction({ onEdit }: { onEdit: () => void }) {
 const EMPTY_ISSUES: Record<string, string> = {};
 
 /**
- * A DOM id that survives any path (same rule as the generator cards) — the
+ * A DOM id that survives any key (same rule as the generator cards) — the
  * textarea's id on the raw surface and the prefix of the block forms' ids on
  * the block one.
  */
-function textareaIdFor(path: string): string {
-  return `entry-body-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+function textareaIdFor(key: string): string {
+  return `entry-body-${key.replace(/[^a-zA-Z0-9-]/g, "-")}`;
 }
 
+// --- the draft ------------------------------------------------------------------
+
+/** What the surface is seeded with: the text and the prose fields' form values. */
+export interface BodyEditSeed {
+  body: string;
+  values: FormValues;
+}
+
+/** The draft of one edit, and the baseline "is there anything to save?" is measured against. */
+export interface BodyDraft {
+  draft: ComposerDraft;
+  setDraft: (next: ComposerDraft | ((current: ComposerDraft) => ComposerDraft)) => void;
+  fieldValues: FormValues;
+  setFieldValues: (next: FormValues) => void;
+  /** The change a save would send — each half only when it changed. */
+  change: BodyEditChange;
+  /** Continue from a stored state: the draft and its baseline are replaced by it. */
+  reseed: (seed: BodyEditSeed) => void;
+}
+
+/**
+ * The draft of the edit surface. The baseline belongs to the version the
+ * session writes against, so it moves only when that version does, i.e. when
+ * the DM adopts the stored row after a conflict (`reseed`).
+ */
+export function useBodyDraft(seed: BodyEditSeed, fields: readonly PropertiesField[]): BodyDraft {
+  // The block composer is the default surface (a PO decision): the DM
+  // maintains prose in forms, the textarea is the fallback.
+  const [draft, setDraft] = useState(() => composerDraft(seed.body));
+  const [baseline, setBaseline] = useState(seed.body);
+  const [fieldBaseline, setFieldBaseline] = useState<FormValues>(seed.values);
+  const [fieldValues, setFieldValues] = useState<FormValues>(fieldBaseline);
+  const body = useMemo(() => draftBody(draft), [draft]);
+  return {
+    draft,
+    setDraft,
+    fieldValues,
+    setFieldValues,
+    change: bodyEditorChange(baseline, body, propertiesPatch(fields, fieldBaseline, fieldValues)),
+    reseed: (stored) => {
+      // The DM chose the stored text: the draft is replaced by it and there is
+      // nothing left to save. The SURFACE stays as it is — reseeding is an
+      // answer to a conflict, not a reason to move someone off the textarea
+      // they were writing in.
+      setDraft((current) => composerDraftIn(stored.body, current.mode));
+      setBaseline(stored.body);
+      setFieldBaseline(stored.values);
+      setFieldValues(stored.values);
+    },
+  };
+}
+
+/** What the surface needs from the editing session of its kind. */
+export interface BodyEditSession {
+  save: (change: BodyEditChange) => void;
+  isSaving: boolean;
+  message?: string | undefined;
+  /** Present while a write stands refused — the conflict line shows. */
+  conflict?: object | undefined;
+  reload: () => void;
+  forceSave?: (() => void) | undefined;
+}
+
+// --- an entry's editor -------------------------------------------------------------
+
+/**
+ * The editor of an entry: its text, and beside it the prose properties of its
+ * kind, written through the entry's editing session.
+ */
 export function EntryBodyEditor({
   campaign,
   entry,
@@ -109,44 +181,21 @@ export function EntryBodyEditor({
    * its version is what the write is checked against. Mount this component per
    * path (`key`) so a navigation starts a new editing session.
    */
-  entry: Entry;
+  entry: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();
-  // The block composer is the default surface (a PO decision): the DM
-  // maintains prose in forms, the textarea is the fallback.
-  const [draft, setDraft] = useState(() => composerDraft(entry.body));
-  // The text the draft was seeded from — what "is there anything to save?" is
-  // measured against. It belongs to the version the session writes against, so
-  // it moves only when that version does, i.e. when the DM adopts the stored
-  // entry after a conflict.
-  const [baseline, setBaseline] = useState(entry.body);
   // The prose properties edited beside the text — none for a scene, a chapter
-  // or the campaign. Their baseline moves with the text's, for the same
-  // reason: it belongs to the version the session writes against.
+  // or the campaign.
   const fields = useMemo(() => propertiesFieldsFor(entry.kind, t, "text") ?? [], [entry.kind, t]);
-  const [fieldBaseline, setFieldBaseline] = useState<FormValues>(() =>
-    propertiesFormValues(fields, entryFieldValues(entry)),
+  const draft = useBodyDraft(
+    { body: entry.body, values: propertiesFormValues(fields, entry.properties) },
+    fields,
   );
-  const [fieldValues, setFieldValues] = useState<FormValues>(fieldBaseline);
-  // Textarea (true) or rendered preview (false) — the markdown surface's own
-  // toggle, unchanged. The block surface has no preview of its own: every card
-  // already shows its content.
-  const [editing, setEditing] = useState(true);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const edit = useEntryEdit(campaign, entry.path, entry.rev, {
     onSaved: onClose,
-    onReload: (stored) => {
-      // The DM chose the stored text: the draft is replaced by it and there is
-      // nothing left to save. The SURFACE stays as it is — reseeding is an
-      // answer to a conflict, not a reason to move someone off the textarea
-      // they were writing in.
-      setDraft((current) => composerDraftIn(stored.body, current.mode));
-      setBaseline(stored.body);
-      const storedFields = propertiesFormValues(fields, entryFieldValues(stored));
-      setFieldBaseline(storedFields);
-      setFieldValues(storedFields);
-    },
+    onReload: (stored) =>
+      draft.reseed({ body: stored.body, values: propertiesFormValues(fields, stored.properties) }),
     // The text feeds the tree's counts/titles and the search index, so neither
     // the campaign's lists nor the command palette may keep the old text.
     invalidateOnSuccess: [
@@ -154,17 +203,63 @@ export function EntryBodyEditor({
       ["search", campaign],
     ],
   });
-  const { isSaving, message } = edit;
+  const session: BodyEditSession = {
+    ...edit,
+    save: (change) =>
+      edit.save({
+        ...(change.body === undefined ? {} : { body: change.body }),
+        ...(change.fields === undefined ? {} : { properties: change.fields }),
+      }),
+  };
+  return (
+    <BodyEditor
+      editorKey={entry.path}
+      label={entry.path}
+      fields={fields}
+      draft={draft}
+      session={session}
+      onClose={onClose}
+    />
+  );
+}
 
-  // The one payload of this editor, whichever surface produced it: the text,
-  // plus the prose properties that moved — each half only when it changed.
-  const body = useMemo(() => draftBody(draft), [draft]);
-  const write = bodyEditorWrite(baseline, body, propertiesPatch(fields, fieldBaseline, fieldValues));
-  const dirty = hasEntryWrite(write);
+// --- the surface --------------------------------------------------------------------
+
+/**
+ * The editing surface itself, the same for every kind: the text on two
+ * surfaces over one draft, the prose fields beside it, the conflict line and
+ * the discard guard.
+ */
+export function BodyEditor({
+  editorKey,
+  label,
+  fields,
+  draft: state,
+  session: edit,
+  onClose,
+}: {
+  /** What the DOM ids are built from — unique per edited row. */
+  editorKey: string;
+  /** How the surface is named for assistive technology. */
+  label: string;
+  fields: readonly PropertiesField[];
+  draft: BodyDraft;
+  session: BodyEditSession;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const { draft, setDraft, fieldValues, setFieldValues, change: write } = state;
+  // Textarea (true) or rendered preview (false) — the markdown surface's own
+  // toggle, unchanged. The block surface has no preview of its own: every card
+  // already shows its content.
+  const [editing, setEditing] = useState(true);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const { isSaving, message } = edit;
+  const dirty = hasBodyEditChange(write);
   // What the block list would break if it were written now, per block — the
   // same seam the properties dialog uses (PropertiesAction): the card
   // says it, the button waits. The raw surface has no such state: its text IS
-  // the entry.
+  // the row's.
   const issues = useMemo(
     () => (draft.mode === "blocks" ? composerIssues(draft.blocks, t) : EMPTY_ISSUES),
     [draft, t],
@@ -174,7 +269,7 @@ export function EntryBodyEditor({
     if (dirty) setConfirmDiscard(true);
     else onClose();
   };
-  const textareaId = textareaIdFor(entry.path);
+  const textareaId = textareaIdFor(editorKey);
 
   return (
     <div>
@@ -241,7 +336,7 @@ export function EntryBodyEditor({
             blocks={draft.blocks}
             onChange={(blocks) => setDraft(withDraftBlocks(blocks))}
             idPrefix={textareaId}
-            label={entry.path}
+            label={label}
             issues={issues}
           />
         ) : (
@@ -250,7 +345,7 @@ export function EntryBodyEditor({
             onChange={(text) => setDraft(withDraftText(text))}
             editing={editing}
             id={textareaId}
-            label={t("bodyEditor.markdown.aria", { path: entry.path })}
+            label={t("bodyEditor.markdown.aria", { path: label })}
           />
         )}
       </EditorShell>

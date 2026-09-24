@@ -18,6 +18,7 @@ import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { useT, type MessageKey } from "@/i18n";
+import { locationsHref } from "@/lib/open-target";
 import { useCampaignMeta } from "@/lib/use-campaign";
 import { inboxKey } from "@/lib/use-review";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
           meta={countLabel(tree?.npcs.length, "mobileStart.count.npcs")}
         />
         <BrowseRow
-          to={`/campaigns/${campaign}/list/locations`}
+          to={locationsHref(campaign)}
           icon={MapPin}
           label={t("browse.title.locations")}
           meta={countLabel(tree?.locations.length, "mobileStart.count.locations")}

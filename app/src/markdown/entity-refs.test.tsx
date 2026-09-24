@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 
 import { I18nProvider } from "@/i18n";
+import type { OpenTarget } from "@/lib/open-target";
 
 import { Markdown } from "./Markdown";
 import { EntityRefScope, entityRefIndex } from "./entity-refs";
@@ -48,9 +49,9 @@ const TREE: CampaignTree = {
     { path: "npcs/namenlos", id: "namenlos", name: "", status: "alive" },
   ],
   locations: [
-    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" },
+    { id: "leuchtturm", name: "Der Leuchtturm" },
     // Collides with the scene id above; the location must win over a scene.
-    { path: "locations/lighthouse-arrival", id: "lighthouse-arrival", name: "Ort-Dublette" },
+    { id: "lighthouse-arrival", name: "Ort-Dublette" },
   ],
   sessions: [],
 };
@@ -58,12 +59,11 @@ const TREE: CampaignTree = {
 describe("entityRefIndex", () => {
   const index = entityRefIndex(TREE);
 
-  test("resolves all three kinds with the tree's own paths", () => {
+  test("a location resolves by its id — its own resource, no address (ADR #31)", () => {
     expect(index.get("leuchtturm")).toEqual({
       kind: "location",
       slug: "leuchtturm",
       name: "Der Leuchtturm",
-      path: "locations/leuchtturm",
     });
   });
 
@@ -93,7 +93,7 @@ describe("entityRefIndex", () => {
 });
 
 describe("rendered references", () => {
-  const render = (markdown: string, onOpen?: (path: string) => void) =>
+  const render = (markdown: string, onOpen?: (target: OpenTarget) => void) =>
     renderToStaticMarkup(
       <MemoryRouter>
         <EntityRefScope campaign="beispiel" index={entityRefIndex(TREE)} onOpen={onOpen}>
@@ -109,6 +109,10 @@ describe("rendered references", () => {
     // The suffix stays outside the reference.
     expect(html).toContain("s Boot.");
     expect(html).not.toContain("[[jorna]]");
+  });
+
+  test("a location reference links to the location's own route", () => {
+    expect(render("[[leuchtturm]]")).toContain('href="/campaigns/beispiel/locations/leuchtturm"');
   });
 
   test("live mode: a button, so nothing navigates away", () => {

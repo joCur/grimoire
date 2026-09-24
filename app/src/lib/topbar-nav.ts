@@ -25,6 +25,8 @@ export interface NavView {
   listKind?: string;
   /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not an entry view. */
   entryPath?: string;
+  /** A location's own routes: "/campaigns/:campaign/locations" and "…/locations/:id". */
+  isLocations?: boolean;
 }
 
 /**
@@ -32,18 +34,18 @@ export interface NavView {
  *
  * The chapter overview and the scene list are Chapters; an entry's section comes from its
  * kind (the shared path table — the format contract in code exactly once):
- * scenes and chapters are Chapters, npc/location entries their own lists.
+ * scenes and chapters are Chapters, npc entries their list. A location's list
+ * and reading view are Locations — their own routes (ADR #31).
  */
 export function navSection(view: NavView): NavSection | undefined {
   if (view.isChapterOverview) return "chapters";
+  if (view.isLocations === true) return "locations";
 
   switch (view.listKind) {
     case "scenes":
       return "chapters";
     case "npcs":
       return "npcs";
-    case "locations":
-      return "locations";
   }
 
   const path = view.entryPath ?? "";
@@ -54,8 +56,6 @@ export function navSection(view: NavView): NavSection | undefined {
       return "chapters";
     case "npc":
       return "npcs";
-    case "location":
-      return "locations";
     default:
       // The campaign entry and anything unknown — no section.
       return undefined;

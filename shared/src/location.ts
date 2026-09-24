@@ -70,6 +70,11 @@ export const locationPatchSchema = patchForm(locationFields);
 
 export type LocationPatch = z.infer<typeof locationPatchSchema>;
 
+/** The fields of one location write, guard and `force` aside — what an editing surface builds. */
+export const locationChangeSchema = locationPatchSchema.omit({ rev: true, force: true });
+
+export type LocationChange = z.infer<typeof locationChangeSchema>;
+
 // --- the form fields ------------------------------------------------------------
 
 /**
