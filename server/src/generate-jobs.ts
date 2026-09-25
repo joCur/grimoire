@@ -13,8 +13,9 @@
 //   - a finished job KEEPS its result until it is applied, discarded or
 //     replaced by the next run, so navigation/reload/restart of the tab
 //     costs nothing.
-//   - review edits live in the job too (draftEdits), one per draft and one
-//     half per edited half, so an edited draft survives the same way.
+//   - review edits live in the job too — `draftEdits` for the scene drafts,
+//     one half per edited half, and `npcEdits` for the proposed npcs, one
+//     change per npc — so an edited draft survives the same way.
 //
 // THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
 // With the database as the single truth (ADR #13) the row is the obvious
@@ -42,7 +43,7 @@
 
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { GENERATE_JOB_KINDS } from "@grimoire/shared";
+import { GENERATE_JOB_KINDS, npcChangeSchema } from "@grimoire/shared";
 import type {
   AugmentResult,
   DraftEdit,
@@ -56,12 +57,15 @@ import type {
   GenerateNpcResult,
   GenerateResult,
   LocationAugmentResult,
+  NpcAugmentResult,
+  NpcChange,
 } from "@grimoire/shared";
 import { ApiError } from "./api-error";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";
 import { runAugment } from "./generator-augment";
 import { runLocationAugment } from "./location-augment";
+import { runNpcAugment } from "./npc-augment";
 import { capRawReply, runGenerateNpc } from "./generator";
 import {
   replanStoredRun,
@@ -75,7 +79,8 @@ import {
 import type { LLMProvider } from "./llm-provider";
 import type { SceneRunStart } from "./store/chapters";
 import { getDb } from "./store/handle";
-import { addressSegments, npcPath, RESERVED_SEGMENTS } from "./store/paths";
+import { addressSegments, RESERVED_SEGMENTS } from "./store/paths";
+import { parseRequest } from "./store/shared";
 
 /** Server-side job record; `draftEdits` is a Map here, an object on the wire. */
 interface Job {
@@ -85,19 +90,24 @@ interface Job {
   kind: GenerateJobKind;
   /** Target chapter; only a scene run has one. */
   chapter?: string;
-  /** Address of the npc or scene an AUGMENT run works on. */
+  /** Address of the scene an AUGMENT run works on. */
   target?: string;
+  /** Id of the npc an NPC AUGMENT run works on. */
+  npc?: string;
   /** Id of the location a LOCATION AUGMENT run works on. */
   location?: string;
   status: "running" | "done" | "failed";
   result?: GenerateResult;
   npcResult?: GenerateNpcResult;
   augmentResult?: AugmentResult;
+  npcAugmentResult?: NpcAugmentResult;
   locationAugmentResult?: LocationAugmentResult;
   error?: GenerateJobError;
   startedAt: string;
   finishedAt?: string;
   draftEdits: Map<string, DraftEdit>;
+  /** The DM's changes to the proposed npcs, by npc id. */
+  npcEdits: Record<string, NpcChange>;
   /** The DM's review state — decisions, drops, written parts. */
   review: GenerateJobReview;
   /** Optimistic-concurrency token of that review state. */
@@ -213,6 +223,7 @@ export function serializeJob(job: Job): GenerateJob {
     kind: job.kind,
     ...(job.chapter === undefined ? {} : { chapter: job.chapter }),
     ...(job.target === undefined ? {} : { target: job.target }),
+    ...(job.npc === undefined ? {} : { npc: job.npc }),
     ...(job.location === undefined ? {} : { location: job.location }),
     status: job.status,
     startedAt: job.startedAt,
@@ -220,11 +231,13 @@ export function serializeJob(job: Job): GenerateJob {
     ...(job.result === undefined ? {} : { result: job.result }),
     ...(job.npcResult === undefined ? {} : { npcResult: job.npcResult }),
     ...(job.augmentResult === undefined ? {} : { augmentResult: job.augmentResult }),
+    ...(job.npcAugmentResult === undefined ? {} : { npcAugmentResult: job.npcAugmentResult }),
     ...(job.locationAugmentResult === undefined
       ? {}
       : { locationAugmentResult: job.locationAugmentResult }),
     ...(job.error === undefined ? {} : { error: job.error }),
     draftEdits: Object.fromEntries(job.draftEdits),
+    npcEdits: job.npcEdits,
     review: job.review,
     rev: job.rev,
     ...(job.pipeline === undefined ? {} : { pipeline: serializePipeline(job.pipeline) }),
@@ -291,14 +304,38 @@ function readDraftEdit(value: unknown): DraftEdit | undefined {
   return edit.properties === undefined && edit.body === undefined ? undefined : edit;
 }
 
+/**
+ * What a review edit may change about a proposed npc: any of its fields but
+ * the id, which is what the edit is keyed by (ADR #21).
+ */
+const npcEditSchema = npcChangeSchema.omit({ id: true });
+
+/**
+ * Parse the npc-edits column: one `NpcChange` per npc id, each checked
+ * against the npc's schema. Like every other payload here it DEGRADES — a
+ * value that is not a change is dropped rather than making the job
+ * unreachable.
+ */
+function unpackNpcEdits(value: string): Record<string, NpcChange> {
+  const edits: Record<string, NpcChange> = {};
+  const parsed = unpackPayload<Record<string, unknown>>(value);
+  if (parsed === undefined || parsed === null || typeof parsed !== "object") return edits;
+  for (const [id, raw] of Object.entries(parsed)) {
+    const change = npcEditSchema.safeParse(raw);
+    if (change.success) edits[id] = change.data;
+  }
+  return edits;
+}
+
 /** The review state of a job that has not been touched yet. */
 export function emptyReview(): GenerateJobReview {
   return {
-    entries: {},
     dropped: [],
     fields: {},
     blocks: {},
     written: {},
+    npcs: {},
+    writtenNpcs: [],
     locations: {},
     writtenLocations: [],
   };
@@ -324,9 +361,6 @@ function unpackReview(value: string): GenerateJobReview {
   const parsed = unpackPayload<Record<string, unknown>>(value);
   if (parsed === undefined) return emptyReview();
   return {
-    entries: stringRecord(parsed.entries, (v) =>
-      v === "accepted" || v === "rejected" ? v : undefined,
-    ),
     dropped: Array.isArray(parsed.dropped)
       ? parsed.dropped.filter((v): v is string => typeof v === "string").map(draftAddress)
       : [],
@@ -339,6 +373,10 @@ function unpackReview(value: string): GenerateJobReview {
     written: normalizeKeys(
       stringRecord(parsed.written, (v) => (typeof v === "string" ? v : undefined)),
     ),
+    npcs: stringRecord(parsed.npcs, (v) => (v === "accepted" || v === "rejected" ? v : undefined)),
+    writtenNpcs: Array.isArray(parsed.writtenNpcs)
+      ? parsed.writtenNpcs.filter((v): v is string => typeof v === "string")
+      : [],
     locations: stringRecord(parsed.locations, (v) =>
       v === "accepted" || v === "rejected" ? v : undefined,
     ),
@@ -354,8 +392,7 @@ function unpackReview(value: string): GenerateJobReview {
  * schemes, and neither is a legal target:
  *
  *   * an ADDRESS carries no extension, and a `.md`
- *     path is rejected outright by the NPC apply pattern (400 on the
- *     accept) or would insert a scene row whose id nothing can address.
+ *     path would insert a scene row whose id nothing can address.
  *   * a scene draft's path is `<chapter>/<id>`: the group
  *     segment IS the `location`, and the SERVER derives it on the way in.
  *     A three-segment scene path is a client naming a group of its own,
@@ -373,8 +410,7 @@ function unpackReview(value: string): GenerateJobReview {
 function draftAddress(path: string): string {
   const stripped = path.endsWith(".md") ? path.slice(0, -3) : path;
   const segments = addressSegments(stripped);
-  // Only a SCENE path collapses: `npcs/<id>`/`locations/<id>` have two
-  // segments anyway, and a chapter is not a draft path.
+  // Only a SCENE path collapses: a chapter is not a draft path.
   if (segments.length !== 3) return stripped;
   if (RESERVED_SEGMENTS.has(segments[0]!)) return stripped;
   return `${segments[0]!}/${segments[2]!}`;
@@ -388,16 +424,12 @@ function normalizeKeys<T>(record: Record<string, T>): Record<string, T> {
 }
 
 /** Rewrite the draft paths of a persisted payload in place (see draftAddress). */
-function normalizeDraftPaths(result?: GenerateResult, npcResult?: GenerateNpcResult): void {
+function normalizeDraftPaths(result?: GenerateResult): void {
   const scenes = result?.scenes;
   if (Array.isArray(scenes)) {
     for (const scene of scenes) {
       if (typeof scene?.path === "string") scene.path = draftAddress(scene.path);
     }
-  }
-  const npc = npcResult?.npc;
-  if (npc !== undefined && npc !== null && typeof npc.path === "string") {
-    npc.path = draftAddress(npc.path);
   }
 }
 
@@ -425,10 +457,12 @@ function toJob(row: JobRow): Job {
   // One column holds the proposal of either augment run; the kind says which.
   const proposal = unpackPayload<unknown>(row.augmentResult);
   const augmentResult = kind === "augment" ? (proposal as AugmentResult | undefined) : undefined;
+  const npcAugmentResult =
+    kind === "npc-augment" ? (proposal as NpcAugmentResult | undefined) : undefined;
   const locationAugmentResult =
     kind === "location-augment" ? (proposal as LocationAugmentResult | undefined) : undefined;
   let error = unpackPayload<GenerateJobError>(row.error);
-  normalizeDraftPaths(result, npcResult);
+  normalizeDraftPaths(result);
   const pipeline = unpackPipeline(row.pipeline);
 
   // A finished job with nothing readable to show is degraded to `failed` with
@@ -440,6 +474,7 @@ function toJob(row: JobRow): Job {
     result === undefined &&
     npcResult === undefined &&
     augmentResult === undefined &&
+    npcAugmentResult === undefined &&
     locationAugmentResult === undefined;
   if ((status === "done" && nothingToShow) || (status === "failed" && error === undefined)) {
     status = "failed";
@@ -452,6 +487,7 @@ function toJob(row: JobRow): Job {
     kind,
     ...(row.chapter === null ? {} : { chapter: row.chapter }),
     ...(row.targetPath === null ? {} : { target: row.targetPath }),
+    ...(row.npcId === null ? {} : { npc: row.npcId }),
     ...(row.locationId === null ? {} : { location: row.locationId }),
     status,
     startedAt: row.startedAt,
@@ -459,9 +495,11 @@ function toJob(row: JobRow): Job {
     ...(result === undefined ? {} : { result }),
     ...(npcResult === undefined ? {} : { npcResult }),
     ...(augmentResult === undefined ? {} : { augmentResult }),
+    ...(npcAugmentResult === undefined ? {} : { npcAugmentResult }),
     ...(locationAugmentResult === undefined ? {} : { locationAugmentResult }),
     ...(error === undefined ? {} : { error }),
     draftEdits: unpackEdits(row.draftEdits),
+    npcEdits: unpackNpcEdits(row.npcEdits),
     review: unpackReview(row.review),
     rev: row.rev,
     ...(pipeline === undefined ? {} : { pipeline }),
@@ -567,10 +605,12 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
       newChapterTitle?: string;
     }
   | { kind: "npc"; sourceText: string; npcId?: string }
-  // An augment run targets an entry that EXISTS. At least one of
+  // An augment run targets a scene that EXISTS. At least one of
   // sourceText/instruction is there — the route enforces that before a job
   // is created, and runAugment asserts it again.
   | { kind: "augment"; target: string; sourceText: string; instruction: string }
+  // An npc augment run names the npc by its id, under the same rule.
+  | { kind: "npc-augment"; npc: string; sourceText: string; instruction: string }
   // A location augment run names the location by its id, under the same rule.
   | { kind: "location-augment"; location: string; sourceText: string; instruction: string }
 );
@@ -597,10 +637,12 @@ export async function startJob(input: JobInput): Promise<Job> {
     kind: input.kind,
     ...(input.kind === "scene" ? { chapter: input.chapter } : {}),
     ...(input.kind === "augment" ? { target: input.target } : {}),
+    ...(input.kind === "npc-augment" ? { npc: input.npc } : {}),
     ...(input.kind === "location-augment" ? { location: input.location } : {}),
     status: "running",
     startedAt: timestamp(),
     draftEdits: new Map(),
+    npcEdits: {},
     review: emptyReview(),
     rev: 0,
     ...(input.kind === "scene"
@@ -631,10 +673,12 @@ export async function startJob(input: JobInput): Promise<Job> {
         kind: job.kind,
         chapter: job.chapter ?? null,
         targetPath: job.target ?? null,
+        npcId: job.npc ?? null,
         locationId: job.location ?? null,
         status: "running",
         startedAt: job.startedAt,
         draftEdits: "{}",
+        npcEdits: "{}",
         review: "{}",
         rev: 0,
         pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
@@ -659,6 +703,16 @@ export async function startJob(input: JobInput): Promise<Job> {
         await finish(job, { status: "done", augmentResult: JSON.stringify(augmentResult) });
         return;
       }
+      if (input.kind === "npc-augment") {
+        const proposal = await runNpcAugment(
+          input.campaign,
+          input.npc,
+          { sourceText: input.sourceText, instruction: input.instruction },
+          () => input.provider,
+        );
+        await finish(job, { status: "done", augmentResult: JSON.stringify(proposal) });
+        return;
+      }
       if (input.kind === "location-augment") {
         const proposal = await runLocationAugment(
           input.campaign,
@@ -680,7 +734,8 @@ export async function startJob(input: JobInput): Promise<Job> {
         return;
       }
       // A scene run is a PIPELINE: the outline call, then
-      // one call per scene and per suggested entry, three at a time. The sink
+      // one call per scene, per new npc and per new location, three at a
+      // time. The sink
       // writes every step onto this job's row — which is what makes a
       // finished part reviewable while its siblings are still running, and
       // what makes it survive a restart.
@@ -783,7 +838,7 @@ function ownRow(db: GrimoireDb, campaign: string, jobId: string): JobRow | undef
 /** Merge a part's outcome into the job's result payload. */
 function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateResult {
   const scenes = [...result.scenes];
-  const stubs = [...result.stubs];
+  const npcs = [...result.npcs];
   const locations = [...result.locations];
   if (outcome.scene !== undefined) {
     const at = scenes.findIndex((s) => s.path === outcome.scene?.path);
@@ -792,11 +847,11 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
   }
   // Deduped by id: a retried part replaces its own npc or location rather
   // than proposing it twice.
-  if (outcome.stub !== undefined) {
-    const stub = outcome.stub;
-    const at = stubs.findIndex((s) => s.id === stub.id);
-    if (at === -1) stubs.push(stub);
-    else stubs[at] = stub;
+  if (outcome.npc !== undefined) {
+    const npc = outcome.npc;
+    const at = npcs.findIndex((n) => n.id === npc.id);
+    if (at === -1) npcs.push(npc);
+    else npcs[at] = npc;
   }
   if (outcome.location !== undefined) {
     const location = outcome.location;
@@ -809,7 +864,7 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
   const namingHints = [...(result.namingHints ?? []), ...outcome.namingHints];
   return {
     scenes,
-    stubs,
+    npcs,
     locations,
     warnings,
     ...(namingHints.length === 0 ? {} : { namingHints }),
@@ -838,8 +893,9 @@ export function draftSceneId(path: string): string {
  */
 function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): GenerateResult {
   const sceneRank = outlineSceneNumbers(parts);
-  const entryRank = new Map(
-    parts.filter((p) => p.kind !== "scene").map((p, i) => [`${p.kind}:${p.id}`, i]),
+  const npcRank = new Map(parts.filter((p) => p.kind === "npc").map((p, i) => [p.id, i]));
+  const locationRank = new Map(
+    parts.filter((p) => p.kind === "location").map((p, i) => [p.id, i]),
   );
   const rank = (map: Map<string, number>, key: string): number => map.get(key) ?? Number.MAX_SAFE_INTEGER;
   return {
@@ -847,11 +903,9 @@ function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): Gene
     scenes: [...result.scenes].sort(
       (a, b) => rank(sceneRank, draftSceneId(a.path)) - rank(sceneRank, draftSceneId(b.path)),
     ),
-    stubs: [...result.stubs].sort(
-      (a, b) => rank(entryRank, `npc:${a.id}`) - rank(entryRank, `npc:${b.id}`),
-    ),
+    npcs: [...result.npcs].sort((a, b) => rank(npcRank, a.id) - rank(npcRank, b.id)),
     locations: [...result.locations].sort(
-      (a, b) => rank(entryRank, `location:${a.id}`) - rank(entryRank, `location:${b.id}`),
+      (a, b) => rank(locationRank, a.id) - rank(locationRank, b.id),
     ),
   };
 }
@@ -915,7 +969,7 @@ async function updatePipeline(
     if (row === undefined) return;
     const pipeline = unpackPipeline(row.pipeline) ?? emptyPipeline();
     const stored = unpackPayload<GenerateResult>(row.result);
-    const base: GenerateResult = stored ?? { scenes: [], stubs: [], locations: [], warnings: [] };
+    const base: GenerateResult = stored ?? { scenes: [], npcs: [], locations: [], warnings: [] };
     const outcome = change(pipeline, base);
     const result = inPartOrder(outcome.result ?? base, pipeline.parts);
     const settled = partsSettled(pipeline);
@@ -1181,17 +1235,22 @@ export async function deleteJob(campaign: string): Promise<boolean> {
  * An `edits` entry merges the same way, half by half: it carries the half
  * that changed (`properties` or `body`, see DraftEdit) and the other half of
  * a stored edit survives — the fields card and the text editor of one draft
- * save through the same endpoint.
+ * save through the same endpoint. An `npcEdits` entry merges field by field
+ * onto the stored change of that npc, so a text edit keeps an earlier field
+ * edit; `null` in it clears the field on the npc (see `withNpcChange`).
  *
  * `dropped` is the one exception: a set, sent whole, because "no longer
- * dropped" has to be expressible too. In `entries`, `locations`, `fields` and
+ * dropped" has to be expressible too. In `npcs`, `locations`, `fields` and
  * `blocks` a `null` value DELETES the key — back to undecided, and the only
  * way to clear decisions whose keys no longer exist (an augment re-alignment
  * cuts new block ids).
  */
 export interface ReviewPatch {
   edits?: Record<string, DraftEdit>;
-  entries?: Record<string, GenerateReviewDecision | null>;
+  /** The DM's changes to a proposed npc, by its id. */
+  npcEdits?: Record<string, unknown>;
+  /** The decision per proposed npc, by its id. */
+  npcs?: Record<string, GenerateReviewDecision | null>;
   /** The decision per proposed location, by its id. */
   locations?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
@@ -1233,6 +1292,7 @@ export async function patchJobReview(
     tx.update(generateJobs)
       .set({
         draftEdits: JSON.stringify(Object.fromEntries(job.draftEdits)),
+        npcEdits: JSON.stringify(job.npcEdits),
         review: JSON.stringify(job.review),
         rev: row.rev + 1,
       })
@@ -1242,19 +1302,29 @@ export async function patchJobReview(
   }) as Job;
 }
 
+/** The ids of the npcs a run proposes — a scene run's list, or the NPC run's one npc. */
+function proposedNpcIds(job: Job): Set<string> {
+  return new Set([
+    ...(job.result?.npcs ?? []).map((npc) => npc.id),
+    ...(job.npcResult === undefined ? [] : [job.npcResult.npc.id]),
+  ]);
+}
+
 /**
- * A draft path the run never produced is a client bug, not state to store.
- * `PUT …/job/drafts` always checked this;
- * the review patch that replaced it did not, so a typo grew a `draftEdits`
- * key nothing would ever read again.
+ * A draft path, npc id or location id the run never produced is a client
+ * bug, not state to store: a typo would grow a key nothing would ever read
+ * again.
  */
 function assertKnownDraftPaths(job: Job, patch: ReviewPatch): void {
   for (const path of Object.keys(patch.edits ?? {})) {
     const rel = draftAddress(path);
-    const known =
-      job.result?.scenes.some((scene) => scene.path === rel) === true ||
-      job.npcResult?.npc.path === rel;
-    if (!known) throw new ApiError(400, `unknown draft path: ${path}`);
+    if (job.result?.scenes.some((scene) => scene.path === rel) !== true) {
+      throw new ApiError(400, `unknown draft path: ${path}`);
+    }
+  }
+  const npcIds = proposedNpcIds(job);
+  for (const id of [...Object.keys(patch.npcEdits ?? {}), ...Object.keys(patch.npcs ?? {})]) {
+    if (!npcIds.has(id)) throw new ApiError(400, `unknown npc: ${id}`);
   }
   for (const id of Object.keys(patch.locations ?? {})) {
     if (job.result?.locations.some((location) => location.id === id) !== true) {
@@ -1271,11 +1341,17 @@ function applyReviewPatch(job: Job, patch: ReviewPatch): void {
     // only the body keeps an earlier properties edit (see ReviewPatch).
     job.draftEdits.set(rel, { ...job.draftEdits.get(rel), ...edit });
   }
-  for (const [key, decision] of Object.entries(patch.entries ?? {})) {
+  for (const [id, raw] of Object.entries(patch.npcEdits ?? {})) {
+    // Checked against the npc's schema: a field an npc does not have, a
+    // value of the wrong shape or an `id` is a 400 that names it.
+    const change = parseRequest(npcEditSchema, raw, `npc edit "${id}"`);
+    job.npcEdits[id] = { ...job.npcEdits[id], ...change };
+  }
+  for (const [id, decision] of Object.entries(patch.npcs ?? {})) {
     // `null` is undecided — the review's third state, which is why an
     // undo has to be expressible and is not just a missing key.
-    if (decision === null) delete job.review.entries[key];
-    else job.review.entries[key] = decision;
+    if (decision === null) delete job.review.npcs[id];
+    else job.review.npcs[id] = decision;
   }
   for (const [id, decision] of Object.entries(patch.locations ?? {})) {
     if (decision === null) delete job.review.locations[id];
@@ -1319,7 +1395,7 @@ export function markWrittenInTx(
   campaign: string,
   jobId: string,
   rev: number,
-  written: { paths: Record<string, string>; locations: readonly string[] },
+  written: { paths: Record<string, string>; npcs: readonly string[]; locations: readonly string[] },
   sceneStart?: SceneRunStart,
 ): boolean {
   const row = jobRow(tx, campaign);
@@ -1337,9 +1413,11 @@ export function markWrittenInTx(
   // the caller's pre-read: a part that was dropped or rejected in between
   // must not be assigned `written`.
   const open = openPartPaths(job);
+  const openNpcs = openNpcIds(job);
   const openLocations = openLocationIds(job);
   const stale =
     Object.keys(written.paths).some((rel) => !open.has(rel)) ||
+    written.npcs.some((id) => !openNpcs.has(id)) ||
     written.locations.some((id) => !openLocations.has(id));
   if (stale) {
     throw new ApiError(409, "the review state changed — reload before accepting", {
@@ -1348,6 +1426,7 @@ export function markWrittenInTx(
     });
   }
   Object.assign(job.review.written, written.paths);
+  job.review.writtenNpcs.push(...written.npcs);
   job.review.writtenLocations.push(...written.locations);
   if (jobIsSettled(job)) {
     tx.delete(generateJobs).where(eq(generateJobs.id, row.id)).run();
@@ -1374,10 +1453,10 @@ export function markWrittenInTx(
 }
 
 /**
- * Which parts of a finished run are still OPEN, addressed the way the review
- * addresses them. The one place that question is answered — the accept reads
- * it INSIDE its transaction so a decision made between the pre-read and the
- * commit cannot be written over.
+ * Which scene drafts of a finished run are still OPEN, by the path the review
+ * addresses them with. The one place that question is answered — the accept
+ * reads it INSIDE its transaction so a decision made between the pre-read and
+ * the commit cannot be written over.
  */
 export function openPartPaths(job: Job): Set<string> {
   const written = job.review.written;
@@ -1386,19 +1465,16 @@ export function openPartPaths(job: Job): Set<string> {
   for (const scene of job.result?.scenes ?? []) {
     if (written[scene.path] === undefined && !dropped.has(scene.path)) open.add(scene.path);
   }
-  for (const stub of job.result?.stubs ?? []) {
-    const path = npcPath(stub.id);
-    if (
-      written[path] === undefined &&
-      !dropped.has(path) &&
-      job.review.entries[path] !== "rejected"
-    ) {
-      open.add(path);
-    }
-  }
-  const npc = job.npcResult?.npc.path;
-  if (npc !== undefined && written[npc] === undefined) open.add(npc);
   return open;
+}
+
+/** Which proposed npcs of a finished run are still OPEN, by id — the same question. */
+export function openNpcIds(job: Job): Set<string> {
+  return new Set(
+    [...proposedNpcIds(job)].filter(
+      (id) => !job.review.writtenNpcs.includes(id) && job.review.npcs[id] !== "rejected",
+    ),
+  );
 }
 
 /** Which proposed locations of a finished run are still OPEN, by id. */
@@ -1414,10 +1490,10 @@ export function openLocationIds(job: Job): Set<string> {
 }
 
 /**
- * Is there anything left to decide? Every scene is written or dropped, every
- * npc stub and proposed location is written or rejected, and an NPC run's one
- * draft is written. That question is what makes the job DISAPPEAR on its own
- * instead of leaving an empty review behind.
+ * Is there anything left to decide? Every scene is written or dropped, and
+ * every proposed npc and location — an NPC run's one npc among them — is
+ * written or rejected. That question is what makes the job DISAPPEAR on its
+ * own instead of leaving an empty review behind.
  */
 export function jobIsSettled(job: Job): boolean {
   // A pipelined run with parts still pending, running or failed is NOT
@@ -1432,13 +1508,8 @@ export function jobIsSettled(job: Job): boolean {
   for (const scene of scenes) {
     if (written[scene.path] === undefined && !dropped.has(scene.path)) return false;
   }
-  for (const stub of job.result?.stubs ?? []) {
-    const path = npcPath(stub.id);
-    if (written[path] === undefined && job.review.entries[path] !== "rejected") return false;
-  }
+  if (openNpcIds(job).size > 0) return false;
   if (openLocationIds(job).size > 0) return false;
-  const npc = job.npcResult?.npc.path;
-  if (npc !== undefined && written[npc] === undefined) return false;
   return true;
 }
 

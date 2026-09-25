@@ -3,10 +3,9 @@ import type { CampaignTree } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n";
 
-import { locationPageCrumbs, pageContextCrumbs } from "./page-context";
+import { pageContextCrumbs } from "./page-context";
 
 const de = translator("de");
-const en = translator("en");
 
 const tree: CampaignTree = {
   campaign: "beispiel",
@@ -44,35 +43,15 @@ describe("pageContextCrumbs", () => {
     ]);
   });
 
-  test("npc and location views point at THEIR list, never at a chapter", () => {
-    expect(pageContextCrumbs("beispiel", "npcs/fenn", tree, de)).toEqual([
-      { label: "NPCs", to: "/campaigns/beispiel/list/npcs" },
-    ]);
-    // A location's reading view is its own route, and so is its list.
-    expect(locationPageCrumbs("beispiel", de)).toEqual([
-      { label: "Orte", to: "/campaigns/beispiel/locations" },
-    ]);
-  });
-
-  test("the list labels follow the UI language", () => {
-    expect(pageContextCrumbs("beispiel", "npcs/fenn", tree, en)).toEqual([
-      { label: "NPCs", to: "/campaigns/beispiel/list/npcs" },
-    ]);
-    expect(locationPageCrumbs("beispiel", en)).toEqual([
-      { label: "Locations", to: "/campaigns/beispiel/locations" },
-    ]);
-  });
-
   test("the campaign name never appears in the context line", () => {
-    const labels = [
-      ...pageContextCrumbs("beispiel", "npcs/fenn", tree, de),
-      ...pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de),
-    ].map((c) => c.label);
+    const labels = pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de).map(
+      (c) => c.label,
+    );
     expect(labels).not.toContain("beispiel");
   });
 
   test("entries outside the hierarchy get no context line", () => {
-    for (const path of ["campaign", "sessions/2026-01-15", "inbox", "glossary"]) {
+    for (const path of ["campaign", "npcs/fenn", "sessions/2026-01-15", "inbox", "glossary"]) {
       expect(pageContextCrumbs("beispiel", path, tree, de)).toEqual([]);
     }
   });
@@ -88,7 +67,7 @@ describe("pageContextCrumbs", () => {
   });
 
   test("no campaign or no path yields nothing", () => {
-    expect(pageContextCrumbs("", "npcs/fenn", tree, de)).toEqual([]);
+    expect(pageContextCrumbs("", "01-salzhafen/prolog", tree, de)).toEqual([]);
     expect(pageContextCrumbs("beispiel", "", tree, de)).toEqual([]);
   });
 });

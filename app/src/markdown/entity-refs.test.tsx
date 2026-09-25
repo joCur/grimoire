@@ -44,9 +44,9 @@ const TREE: CampaignTree = {
     },
   ],
   npcs: [
-    { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+    { id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
     // No display name at all — the id is the honest fallback.
-    { path: "npcs/namenlos", id: "namenlos", name: "", status: "alive" },
+    { id: "namenlos", name: "", status: "alive" },
   ],
   locations: [
     { id: "leuchtturm", name: "Der Leuchtturm" },
@@ -64,6 +64,14 @@ describe("entityRefIndex", () => {
       kind: "location",
       slug: "leuchtturm",
       name: "Der Leuchtturm",
+    });
+  });
+
+  test("an npc resolves by its id — its own resource, no address (ADR #31)", () => {
+    expect(index.get("jorna")).toEqual({
+      kind: "npc",
+      slug: "jorna",
+      name: "Hafenmeisterin Jorna",
     });
   });
 
@@ -102,9 +110,9 @@ describe("rendered references", () => {
       </MemoryRouter>,
     );
 
-  test("resolved: the current name as a link into the entity view", () => {
+  test("resolved: the current name as a link into the npc's own route", () => {
     const html = render("Am Kai wartet [[jorna]]s Boot.");
-    expect(html).toContain('href="/campaigns/beispiel/entries/npcs/jorna"');
+    expect(html).toContain('href="/campaigns/beispiel/npcs/jorna"');
     expect(html).toContain("Hafenmeisterin Jorna");
     // The suffix stays outside the reference.
     expect(html).toContain("s Boot.");
@@ -134,7 +142,7 @@ describe("rendered references", () => {
     expect(render("[[jorna]]")).toContain('aria-label="NPC: Hafenmeisterin Jorna"');
   });
 
-  test("…in the UI language (issue #69), from the shared `kind.*` labels", () => {
+  test("…in the UI language, from the shared `kind.*` labels", () => {
     // Outside a provider `useT` degrades to German, which is what every other
     // assertion here reads; with an instance set to English the SAME labels
     // the ⌘K rows and the properties dialog use have to come out.
@@ -163,7 +171,7 @@ describe("rendered references", () => {
     expect(summary).not.toContain("<a ");
     expect(summary).not.toContain("<button");
     // The section BODY still gets the interactive reference.
-    expect(html).toContain('href="/campaigns/beispiel/entries/npcs/jorna"');
+    expect(html).toContain('href="/campaigns/beispiel/npcs/jorna"');
   });
 
   test("a reference in inline code is neither resolved nor linked", () => {

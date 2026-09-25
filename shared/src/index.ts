@@ -9,3 +9,4 @@ export * from "./outline-schema";
 export * from "./property-fields";
 export * from "./entry-schema";
 export * from "./location";
+export * from "./npc";

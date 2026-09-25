@@ -243,10 +243,11 @@ test("session start, quick note, pause, end — log and session row follow", asy
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
-  // The full entry, not the card excerpt — and the way out into the full view.
+  // The whole npc, not the card excerpt — and the way out into the npc's
+  // own route (ADR #31).
   await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
-    "/campaigns/beispiel/entries/npcs/jorna",
+    "/campaigns/beispiel/npcs/jorna",
   );
   // Still in the live mode, session still running.
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);

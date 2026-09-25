@@ -7,8 +7,8 @@
 // no waiting, no flicker between "unmarked" and "marked".
 //
 // Sections are the three campaign-wide entry points, not entity kinds: a scene
-// entry belongs under Chapters because that is where the DM finds it, an NPC
-// entry under NPCs no matter which chapter mentions it. Views that are not
+// belongs under Chapters because that is where the DM finds it, an npc under
+// NPCs no matter which chapter mentions it. Views that are not
 // part of any section (generator, review, the campaign entry, a session, the
 // glossary) are marked nowhere — an arbitrary highlight would be a lie.
 
@@ -25,6 +25,8 @@ export interface NavView {
   listKind?: string;
   /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not an entry view. */
   entryPath?: string;
+  /** An npc's own routes: "/campaigns/:campaign/npcs" and "…/npcs/:id". */
+  isNpcs?: boolean;
   /** A location's own routes: "/campaigns/:campaign/locations" and "…/locations/:id". */
   isLocations?: boolean;
 }
@@ -32,21 +34,17 @@ export interface NavView {
 /**
  * The section to mark, or undefined for the views that belong to none.
  *
- * The chapter overview and the scene list are Chapters; an entry's section comes from its
- * kind (the shared path table — the format contract in code exactly once):
- * scenes and chapters are Chapters, npc entries their list. A location's list
- * and reading view are Locations — their own routes (ADR #31).
+ * The chapter overview and the scene list are Chapters; an entry's section
+ * comes from its kind (the shared path table — the format contract in code
+ * exactly once): scenes and chapters are Chapters. An npc's and a location's
+ * list and reading view are NPCs and Locations — their own routes (ADR #31).
  */
 export function navSection(view: NavView): NavSection | undefined {
   if (view.isChapterOverview) return "chapters";
+  if (view.isNpcs === true) return "npcs";
   if (view.isLocations === true) return "locations";
 
-  switch (view.listKind) {
-    case "scenes":
-      return "chapters";
-    case "npcs":
-      return "npcs";
-  }
+  if (view.listKind === "scenes") return "chapters";
 
   const path = view.entryPath ?? "";
   if (path === "") return undefined;
@@ -54,8 +52,6 @@ export function navSection(view: NavView): NavSection | undefined {
     case "scene":
     case "chapter":
       return "chapters";
-    case "npc":
-      return "npcs";
     default:
       // The campaign entry and anything unknown — no section.
       return undefined;

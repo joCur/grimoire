@@ -22,17 +22,18 @@
 // Which reply comes back is decided by the PROMPT, never by hidden state, so
 // the stub stays stateless and can serve several test workers at once:
 //
-//   - a "## Bestehender Eintrag" section in the prompt        -> augment run
+//   - a "## Bestehender Eintrag" section in the prompt        -> scene augment run
+//   - a "## Bestehender NPC" section in the prompt            -> npc augment run
 //   - a "## Bestehender Ort" section in the prompt            -> location augment run
-//     (the reply echoes that entry and adds to it)
+//     (the reply echoes that scene, npc or location and adds to it)
 //   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
 //     (the reply's scene path uses exactly that chapter)
 //   - no chapter line                                            -> npc run
-//     (a `vorgegebene id: <id>` line pins the id of the entry)
+//     (a `vorgegebene id: <id>` line pins the id of the npc)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
 //   - TRIGGER.unknownRef in the source text -> an npc or augment run's first
-//     reply names an entry nobody has; the correction turn (the call that
+//     reply names an id nobody has; the correction turn (the call that
 //     carries an assistant turn) gets the good reply
 //   - TRIGGER.truncated in the source text -> finish_reason "length"
 //   - TRIGGER.slow in the source text      -> the reply is HELD (SLOW_REPLY_MS)
@@ -44,9 +45,9 @@
 //   - the system prompt is the OUTLINE prompt                 -> outline call
 //   - the prompt carries the outline and a `chapter:` line    -> a SCENE part
 //     (the assigned scene is the one the outline block marks)
-//   - the prompt carries the outline and a `vorgegebene id`   -> an ENTRY part
-//     (npc or location, by which prompt the system message is)
-//   - TRIGGER.threeScenes  -> the outline has three scenes and no entries
+//   - the prompt carries the outline and a `vorgegebene id`   -> an NPC or a
+//     LOCATION part (by which prompt the system message is)
+//   - TRIGGER.threeScenes  -> the outline has three scenes, no npc, no location
 //   - TRIGGER.partFail:<nonce> -> the middle scene fails its whole FIRST
 //     ROUND for that nonce — the initial call AND the correction turn the
 //     server spends on it — and succeeds from the second round on. That is
@@ -66,10 +67,10 @@
 //     have to arrive verbatim.
 //
 // REPLY SHAPE: every reply is an OBJECT and is serialized as
-// JSON into the message content — the outline its own, an entry call
-// `{ properties, body, warnings }` (replies.ts assembles both). A reply that
-// is a plain STRING is one a spec wrote to be unreadable, and it travels
-// verbatim.
+// JSON into the message content — the outline its own, a scene call
+// `{ properties, body, warnings }`, an npc or a location call its fields flat
+// beside `warnings` (replies.ts assembles them). A reply that is a plain
+// STRING is one a spec wrote to be unreadable, and it travels verbatim.
 //
 // The stub is an OpenAI-compatible endpoint and simply IGNORES the
 // `response_format` the server sends, which is exactly what the tolerant
@@ -81,6 +82,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import {
   EXISTING_ENTRY_HEADING,
   EXISTING_LOCATION_HEADING,
+  EXISTING_NPC_HEADING,
   FAILING_SCENE_ID,
   LATE_REPLY_MS,
   NEW_CHAPTER_LINE,
@@ -88,22 +90,26 @@ import {
   THREE_SCENES,
   TRIGGER,
   augmentReply,
-  invalidLocationAugmentReply,
-  locationAugmentReply,
-  unknownRefLocationAugmentReply,
-  type ExistingLocation,
-  entryPartReply,
   invalidAugmentReply,
+  invalidLocationAugmentReply,
+  invalidNpcAugmentReply,
   invalidNpcReply,
   invalidRunOutline,
   invalidScenePartReply,
+  locationAugmentReply,
+  npcAugmentReply,
   npcReply,
   outlineReply,
   partFailNonce,
+  proposalPartReply,
   scenePartReply,
   unknownRefAugmentReply,
+  unknownRefLocationAugmentReply,
+  unknownRefNpcAugmentReply,
   unknownRefNpcReply,
-  type ExistingEntry,
+  type ExistingLocation,
+  type ExistingScene,
+  type NpcFields,
 } from "./replies";
 
 /** Fake token counts — the UI shows them, so they must look plausible. */
@@ -177,37 +183,52 @@ const ASSIGNED_SCENE = /## Diese Szene schreibst du jetzt\n+([a-z0-9-]+) /;
 const partCalls = new Map<string, number>();
 
 /**
- * The augment run's target: the address out of the „Bestehender Eintrag"
- * heading, and the entry itself out of the fenced JSON block right below it —
- * the `{ properties, body }` pair, which is the very shape the reply is forced
- * into (ADR #24). Returns null when the prompt has no such section — which is
- * every create run, and then nothing about the stub changes.
+ * The scene a SCENE augment run works on, out of the fenced JSON block right
+ * below the „Bestehender Eintrag" heading — the `{ properties, body }` pair,
+ * which is the very shape the reply is forced into (ADR #24). Returns null
+ * when the prompt has no such section — which is every create run, and then
+ * nothing about the stub changes.
  */
-function existingEntry(prompt: string): { path: string; entry: ExistingEntry } | null {
+function existingScene(prompt: string): ExistingScene | null {
   const start = prompt.indexOf(EXISTING_ENTRY_HEADING);
   if (start === -1) return null;
-  const rest = prompt.slice(start + EXISTING_ENTRY_HEADING.length);
-  const address = /^[ \t]*\(([^)]+)\)/.exec(rest);
-  const fence = /```json\n([\s\S]*?)```/.exec(rest);
-  if (address === null || fence === null) return null;
+  const fence = /```json\n([\s\S]*?)```/.exec(prompt.slice(start));
+  if (fence === null) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(fence[1]!);
   } catch {
-    // Not readable as an entry, so not an augment prompt as far as the stub
+    // Not readable as a scene, so not an augment prompt as far as the stub
     // is concerned: it falls through to the create branches, which fails a
     // spec visibly instead of answering half an augment.
     return null;
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const { properties, body } = parsed as Record<string, unknown>;
+  if (!isRecord(parsed)) return null;
+  const { properties, body } = parsed;
   return {
-    path: address[1]!.trim(),
-    entry: {
-      properties: isRecord(properties) ? properties : {},
-      body: typeof body === "string" ? body : "",
-    },
+    properties: isRecord(properties) ? properties : {},
+    body: typeof body === "string" ? body : "",
   };
+}
+
+/**
+ * The npc an NPC augment run works on, out of the fenced JSON below the
+ * „Bestehender NPC" heading — every field of the npc in its reply form
+ * (`quickstats` as pairs, an absent field `null`), the very object the reply
+ * is forced into (ADR #31). Null for every other prompt.
+ */
+function existingNpc(prompt: string): NpcFields | null {
+  const start = prompt.indexOf(EXISTING_NPC_HEADING);
+  if (start === -1) return null;
+  const fence = /```json\n([\s\S]*?)```/.exec(prompt.slice(start));
+  if (fence === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(fence[1]!);
+    if (!isRecord(parsed) || typeof parsed.id !== "string") return null;
+    return parsed as unknown as NpcFields;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -242,7 +263,7 @@ export interface StubDecision {
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
-  kind: "outline" | "scene" | "entry" | "npc" | "augment";
+  kind: "outline" | "scene" | "proposal" | "npc" | "augment";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
   /**
@@ -295,10 +316,26 @@ export function decide(messages: ChatMessage[]): StubDecision {
     };
   }
 
-  // An augment run is the one prompt that carries an EXISTING entry. It is
-  // checked FIRST — a scene augment also carries a `chapter:` line, and that
-  // line is what tells a create run apart from an npc one.
-  const existing = existingEntry(prompt);
+  // An npc augment run carries the npc it works on (ADR #31).
+  const npc = existingNpc(prompt);
+  if (npc !== null) {
+    return {
+      kind: "augment",
+      truncated,
+      delayMs,
+      pauseMs: latePart,
+      reply: invalid
+        ? invalidNpcAugmentReply(npc)
+        : unknownRef
+          ? unknownRefNpcAugmentReply(npc)
+          : npcAugmentReply(npc, knowledge),
+    };
+  }
+
+  // A scene augment run carries the EXISTING scene. It is checked before the
+  // create runs — it also carries a `chapter:` line, and that line is what
+  // tells a create run apart from an npc one.
+  const existing = existingScene(prompt);
   if (existing !== null) {
     return {
       kind: "augment",
@@ -310,10 +347,10 @@ export function decide(messages: ChatMessage[]): StubDecision {
       // a polled update.
       pauseMs: latePart,
       reply: invalid
-        ? invalidAugmentReply(existing.path)
+        ? invalidAugmentReply()
         : unknownRef
-          ? unknownRefAugmentReply(existing.path, existing.entry)
-          : augmentReply(existing.path, existing.entry, knowledge),
+          ? unknownRefAugmentReply(existing)
+          : augmentReply(existing, knowledge),
     };
   }
 
@@ -342,8 +379,8 @@ export function decide(messages: ChatMessage[]): StubDecision {
   }
 
   // A per-PART call carries the run's outline. Which part it is: a scene when
-  // the outline marks one, an entry otherwise (the entry prompts carry no
-  // chapter and name their target id).
+  // the outline marks one, a proposed npc or location otherwise (their prompts
+  // carry no chapter and name their target id).
   if (prompt.includes(OUTLINE_HEADING)) {
     const assigned = ASSIGNED_SCENE.exec(prompt)?.[1];
     if (assigned !== undefined && chapter !== undefined) {
@@ -380,11 +417,11 @@ export function decide(messages: ChatMessage[]): StubDecision {
       };
     }
     const kind = system.includes("System-Prompt: Ort-Generator") ? "location" : "npc";
-    return { kind: "entry", truncated, delayMs, reply: entryPartReply(kind) };
+    return { kind: "proposal", truncated, delayMs, reply: proposalPartReply(kind) };
   }
 
   // Everything left is the single-call NPC run: no chapter, and a
-  // `vorgegebene id` line when the DM pinned the id of the entry.
+  // `vorgegebene id` line when the DM pinned the id of the npc.
   const pinned = matchLine(prompt, "vorgegebene id");
   return {
     kind: "npc",

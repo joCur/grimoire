@@ -25,9 +25,10 @@
 // The keys are FIXTURE FILE STEMS, not addresses: a stem that already exists
 // in `fixtures/beispiel` REPLACES that entry, any other stem adds one. The
 // address an entry gets is the server's decision (`server/src/store/paths.ts`
-// — a scene's segments are its chapter, its location and its id). A location
-// is its own resource (ADR #31): its stem is `locations/<id>` and its fixture
-// is the location itself, every field flat, without a guard.
+// — a scene's segments are its chapter, its location and its id). An npc and
+// a location are each their own resource (ADR #31): their stems are
+// `npcs/<id>` and `locations/<id>`, and the fixture is the npc or the
+// location itself, every field flat, without a guard.
 //
 // Without overrides the pristine copy from the global setup is used directly
 // (it is never written to), so most tests copy nothing at all.
@@ -98,7 +99,7 @@ export interface ServerHandle {
  */
 export type SeedEntry =
   | {
-      kind: "campaign" | "scene" | "npc";
+      kind: "campaign" | "scene";
       properties: Record<string, unknown>;
       body?: string;
     }
@@ -139,13 +140,31 @@ export interface SeedLocation {
   body: string;
 }
 
+/**
+ * One npc as its fixture holds it (`npcs/<id>.json`) — every field flat,
+ * `body` among them, no guard (ADR #31).
+ */
+export interface SeedNpc {
+  id: string;
+  name: string;
+  role?: string;
+  chapter?: string;
+  status: "alive" | "dead" | "missing" | "unknown";
+  statblock?: string;
+  quickstats?: Record<string, string | number>;
+  voice?: string;
+  appearance?: string;
+  motivation?: string;
+  body: string;
+}
+
 /** What a test changes about the fixtures its database is seeded from. */
 export interface Seed {
   /**
    * fixture file stem -> entry; a stem that exists in fixtures/beispiel
-   * REPLACES it. A location's stem is `locations/<id>`.
+   * REPLACES it. An npc's stem is `npcs/<id>`, a location's `locations/<id>`.
    */
-  entries?: Record<string, SeedEntry | SeedLocation>;
+  entries?: Record<string, SeedEntry | SeedNpc | SeedLocation>;
   /** fixture file stems to leave out, e.g. "session-2026-01-15" */
   without?: string[];
   /**
@@ -185,6 +204,25 @@ export interface ApiLocation {
   chapter?: string;
   roll20Page?: string;
   atmosphere?: string;
+  body: string;
+  rev: number;
+}
+
+/**
+ * One npc as GET /api/campaigns/:campaign/npcs/:id answers it — its own
+ * resource (ADR #31): every field flat, `body` among them, beside its guard.
+ */
+export interface ApiNpc {
+  id: string;
+  name: string;
+  role?: string;
+  chapter?: string;
+  status: string;
+  statblock?: string;
+  quickstats?: Record<string, string | number>;
+  voice?: string;
+  appearance?: string;
+  motivation?: string;
   body: string;
   rev: number;
 }
@@ -262,6 +300,26 @@ export interface Api {
   properties(rel: string): Promise<Record<string, unknown>>;
   /** Whether the address names an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
+  /** GET one npc from its own resource; throws when it is unknown. */
+  npc(id: string): Promise<ApiNpc>;
+  /** Whether the campaign has an npc with that id (404 = no). */
+  npcExists(id: string): Promise<boolean>;
+  /** The request path of an npc (or, without an id, of the npc list). */
+  npcPath(id?: string): string;
+  /**
+   * Create an npc: POST the list with `{ name, id?, body? }`; throws on a
+   * non-2xx answer (a taken id is a 409 — `api.fetch` asserts that one).
+   */
+  createNpc(request: { name: string; id?: string; body?: string }): Promise<ApiNpc>;
+  /**
+   * The ONE write of an npc: PATCH its resource with `rev` and any subset of
+   * its fields, `body` among them. Omitted, `rev` is read first — the helper
+   * then plays the second writer.
+   */
+  patchNpc(
+    id: string,
+    change: { rev?: number; force?: boolean } & Record<string, unknown>,
+  ): Promise<ApiNpc>;
   /** GET one location from its own resource; throws when it is unknown. */
   location(id: string): Promise<ApiLocation>;
   /** Whether the campaign has a location with that id (404 = no). */
@@ -495,6 +553,26 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
       return true;
     },
+    npc(id) {
+      return api.get<ApiNpc>(api.npcPath(id));
+    },
+    async npcExists(id) {
+      const response = await fetchApi(api.npcPath(id));
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error(`GET npc ${id}: HTTP ${response.status}`);
+      return true;
+    },
+    npcPath(id) {
+      const base = `campaigns/${encodeURIComponent(campaign)}/npcs`;
+      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+    },
+    createNpc(request) {
+      return api.send<ApiNpc>("POST", api.npcPath(), request);
+    },
+    async patchNpc(id, change) {
+      const rev = change.rev ?? (await api.npc(id)).rev;
+      return api.send<ApiNpc>("PATCH", api.npcPath(id), { ...change, rev });
+    },
     location(id) {
       return api.get<ApiLocation>(api.locationPath(id));
     },
@@ -604,7 +682,7 @@ export const test = base.extend<Fixtures>({
       await rm(path.join(campaignDir, `${stem}.json`), { force: true });
     }
     for (const [stem, entry] of Object.entries(entries)) {
-      // A stem may name a kind's own directory (`locations/<id>`).
+      // A stem may name a resource's own directory (`npcs/<id>`, `locations/<id>`).
       await mkdir(path.dirname(path.join(campaignDir, `${stem}.json`)), { recursive: true });
       await writeFile(
         path.join(campaignDir, `${stem}.json`),

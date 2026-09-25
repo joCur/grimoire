@@ -9,10 +9,10 @@ import { addressSegments } from "./address";
 import type { EntryKind } from "./types";
 
 /**
- * The first segments that are not a chapter id: the npc prefix, `locations`
- * (a location is its own resource, ADR #31) and the three LIST segments. They
- * are reserved so no chapter can claim one (server/src/store/paths.ts holds
- * the full set and the reason).
+ * The first segments that are not a chapter id: `npcs` and `locations` (an
+ * npc and a location are each their own resource, ADR #31) and the three LIST
+ * segments. They are reserved so no chapter can claim one
+ * (server/src/store/paths.ts holds the full set and the reason).
  */
 const RESERVED_HEADS: ReadonlySet<string> = new Set([
   "npcs",
@@ -27,11 +27,11 @@ const RESERVED_HEADS: ReadonlySet<string> = new Set([
  * server/src/store/paths.ts without the 404s: an address the schema does not
  * describe is `unknown`.
  *
- * The campaign, its chapters, scenes and npcs have an address. `locations`,
- * `inbox`, `glossary` and `sessions` are reserved segments and nothing
- * else — a location is its own resource (ADR #31), the others are lists with
- * their own endpoints (ADR #26) — so an address reaching for one of them
- * names nothing and reads as `unknown`.
+ * The campaign, its chapters and scenes have an address. `npcs`,
+ * `locations`, `inbox`, `glossary` and `sessions` are reserved segments and
+ * nothing else — an npc and a location are each their own resource
+ * (ADR #31), the others are lists with their own endpoints (ADR #26) — so an
+ * address reaching for one of them names nothing and reads as `unknown`.
  */
 export function kindFromAddress(address: string): EntryKind | "unknown" {
   const segments = addressSegments(address).filter((segment) => segment.length > 0);
@@ -40,9 +40,6 @@ export function kindFromAddress(address: string): EntryKind | "unknown" {
     if (first === "campaign") return "campaign";
     if (RESERVED_HEADS.has(first)) return "unknown";
     return "chapter";
-  }
-  if (segments.length === 2) {
-    if (first === "npcs") return "npc";
   }
   if (first === "campaign" || RESERVED_HEADS.has(first)) return "unknown";
   if (segments.length === 2 || segments.length === 3) return "scene";

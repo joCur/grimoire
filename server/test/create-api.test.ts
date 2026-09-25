@@ -11,7 +11,7 @@
 //   * a COLLISION writes nothing and answers `slug_taken` WITH a free
 //     `suggestion` (the app's one-click "take it"), and the explicit `id` that
 //     click sends is honoured verbatim;
-//   * an EMPTY npc/ort entry — one the DM created and did not fill in — is
+//   * an EMPTY npc or location — one the DM created and did not fill in — is
 //     FILLED, not collided with;
 //   * a scene needs an EXISTING chapter (ADR #19);
 //   * an id the ADDRESS SCHEMA reserves (`npcs`/`locations`/`sessions`) is not
@@ -20,7 +20,7 @@
 //     filling one of those is the DM's own decision about that id.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignSummary, EntryResponse, Location } from "@grimoire/shared";
+import type { CampaignSummary, EntryResponse, Location, Npc } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
@@ -203,17 +203,17 @@ describe("the per-campaign creates", () => {
     expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 
-  test("a proposal never lands on an existing empty entry", async () => {
-    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
-    // An entry whose name IS its id holds nothing — the DM created it and
+  test("a proposal never lands on an existing empty npc", async () => {
+    await created<Npc>("/campaigns/nordwind/npcs", { name: "Holm" });
+    // An npc whose name IS its id holds nothing — the DM created it and
     // typed nothing else.
-    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "holm-2" });
+    await created<Npc>("/campaigns/nordwind/npcs", { name: "holm-2" });
     await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
     const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
-    // A scene may reference it — the entry exists.
+    // A scene may reference it — the npc exists.
     expect(
       (
         await app.request(entriesUrl("nordwind", scene.path), {
@@ -230,10 +230,10 @@ describe("the per-campaign creates", () => {
     expect(res.status).toBe(409);
     expect((await errorBody(res)).suggestion).toBe("holm-3");
 
-    // Filling that entry stays possible — for the DM who types exactly its id.
-    const filled = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm 2" });
-    expect(filled.path).toBe("npcs/holm-2");
-    expect(filled.properties.name).toBe("Holm 2");
+    // Filling that npc stays possible — for the DM who types exactly its id.
+    const filled = await created<Npc>("/campaigns/nordwind/npcs", { name: "Holm 2" });
+    expect(filled.id).toBe("holm-2");
+    expect(filled.name).toBe("Holm 2");
   });
 
   test("a scene lands in its chapter as a draft with an empty body", async () => {
@@ -270,22 +270,25 @@ describe("the per-campaign creates", () => {
   });
 
   test("an npc is created from the name alone", async () => {
-    const npc = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Alte Fischerin" });
-    expect(npc.path).toBe("npcs/alte-fischerin");
-    expect(npc.properties.name).toBe("Alte Fischerin");
+    const npc = await created<Npc>("/campaigns/nordwind/npcs", { name: "Alte Fischerin" });
+    expect(npc.id).toBe("alte-fischerin");
+    expect(npc.name).toBe("Alte Fischerin");
     // Nothing is claimed beyond the name — the properties dialog carries the rest.
-    expect(npc.properties.status).toBe("unknown");
-    expect(npc.properties.role).toBeUndefined();
+    expect(npc.status).toBe("unknown");
+    expect(npc.role).toBeUndefined();
     expect(npc.body).toBe("");
+    expect(Object.hasOwn(npc, "path")).toBe(false);
   });
 
   test("a filled npc collides; the suggestion skips it", async () => {
-    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
+    await created<Npc>("/campaigns/nordwind/npcs", { name: "Holm" });
     const res = await post("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
     expect(body.suggestion).toBe("holm-2");
-    expect(body.path).toBe("npcs/holm");
+    expect(body).toMatchObject({ kind: "npc", id: "holm" });
+    // An npc is its own resource (ADR #31): the 409 names it by kind and id.
+    expect(Object.hasOwn(body, "path")).toBe(false);
   });
 
   test("an ort is created from the name alone and collides the same way", async () => {
@@ -296,14 +299,14 @@ describe("the per-campaign creates", () => {
     expect((await post("/campaigns/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
-  test("an EMPTY entry is filled, not collided with", async () => {
+  test("an EMPTY npc or location is filled, not collided with", async () => {
     await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
     const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
-    // Two entries created and left empty — their name is their own id.
-    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "holm" });
+    // An npc and a location created and left empty — their name is their own id.
+    await created<Npc>("/campaigns/nordwind/npcs", { name: "holm" });
     await created<EntryResponse>("/campaigns/nordwind/locations", { name: "bucht" });
     const patched = await app.request(entriesUrl("nordwind", scene.path), {
       method: "PATCH",
@@ -315,10 +318,10 @@ describe("the per-campaign creates", () => {
     });
     expect(patched.status).toBe(200);
 
-    // Creating an npc for exactly that id FILLS the entry.
-    const npc = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
-    expect(npc.path).toBe("npcs/holm");
-    expect(npc.properties.name).toBe("Holm");
+    // Creating an npc for exactly that id FILLS it.
+    const npc = await created<Npc>("/campaigns/nordwind/npcs", { name: "Holm" });
+    expect(npc.id).toBe("holm");
+    expect(npc.name).toBe("Holm");
     const location = await created<Location>("/campaigns/nordwind/locations", { name: "Bucht" });
     expect(location.name).toBe("Bucht");
   });
@@ -329,15 +332,17 @@ describe("the per-campaign creates", () => {
     expect((await post("/campaigns/gibt-es-nicht/locations", { name: "X" })).status).toBe(404);
   });
 
-  test("an unknown body key is refused (the shared body guard)", async () => {
-    expect((await post("/campaigns/nordwind/npcs", { name: "X", role: "Wirt" })).status).toBe(400);
+  test("an unknown body key is refused, and names the key", async () => {
+    const res = await post("/campaigns/nordwind/npcs", { name: "X", role: "Wirt" });
+    expect(res.status).toBe(400);
+    expect(String((await errorBody(res)).error)).toContain("role");
   });
 
   test("every create bumps the campaign version, so the app refetches", async () => {
     const before = (await (await app.request("/api/campaigns/nordwind/version")).json()) as {
       version: number;
     };
-    await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
+    await created<Npc>("/campaigns/nordwind/npcs", { name: "Holm" });
     const after = (await (await app.request("/api/campaigns/nordwind/version")).json()) as {
       version: number;
     };
@@ -361,11 +366,13 @@ describe("creating next to imported stock", () => {
   });
 
   test("the search index knows a freshly created npc", async () => {
-    await created<EntryResponse>("/campaigns/beispiel/npcs", { name: "Brunhild Wellenbrecher" });
+    await created<Npc>("/campaigns/beispiel/npcs", { name: "Brunhild Wellenbrecher" });
     const found = (await (
       await app.request("/api/campaigns/beispiel/search?q=Wellenbrecher")
-    ).json()) as { results: Array<{ path: string }> };
-    expect(found.results.map((r) => r.path)).toContain("npcs/brunhild-wellenbrecher");
+    ).json()) as { results: Array<{ kind: string; id: string }> };
+    expect(found.results).toContainEqual(
+      expect.objectContaining({ kind: "npc", id: "brunhild-wellenbrecher" }),
+    );
   });
 });
 

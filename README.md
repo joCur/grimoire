@@ -32,11 +32,12 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 | Kampagne | `campaign` |
 | Kapitel | `<kapitel-id>` |
 | Szene | `<kapitel-id>/<orts-id>/<szenen-id>` — ohne Ort: `<kapitel-id>/<szenen-id>` |
-| NPC | `npcs/<id>` |
 
-Ein **Ort** hat keine Adresse: er ist seine eigene Ressource unter
+Ein **NPC** und ein **Ort** haben keine Adresse: jeder ist seine eigene
+Ressource unter `/api/campaigns/<kampagne>/npcs/<id>` bzw.
 `/api/campaigns/<kampagne>/locations/<id>`, in der App
-`/campaigns/<kampagne>/locations/<id>` (ADR #31, siehe „Ort“ unten).
+`/campaigns/<kampagne>/npcs/<id>` bzw. `/campaigns/<kampagne>/locations/<id>`
+(ADR #31, siehe „NPC“ und „Ort“ unten).
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
@@ -90,11 +91,10 @@ Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
 außer dem Text (`body`). Jede Entität hat ihren eigenen Typ aus genau
-einem zod-Schema (ADR #31). Der **Ort** ist seine eigene Ressource mit seinen
-eigenen Feldern (siehe „Ort“ unten); bei Kampagne, Kapitel, Szene und NPC
-reisen die Felder gesammelt unter `properties`. Die App zeigt sie im
-Eigenschaften-Dialog — das Prosa-Feld `motivation` (NPC) stattdessen auf der
-Bearbeiten-Fläche des Eintrags, neben seinem Text —, und `PATCH
+einem zod-Schema (ADR #31). **NPC** und **Ort** sind jeweils ihre eigene
+Ressource mit ihren eigenen Feldern (siehe „NPC“ und „Ort“ unten); bei
+Kampagne, Kapitel und Szene reisen die Felder gesammelt unter `properties`.
+Die App zeigt sie im Eigenschaften-Dialog, und `PATCH
 /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die Felder, die der
 DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die
 Entität nicht kennt, legt die API nicht an (400).
@@ -174,28 +174,73 @@ die Liste nicht.
 
 ### NPC
 
+Ein NPC ist seine eigene Ressource mit seinem eigenen Typ (`Npc`, aus dem
+zod-Schema in `shared/src/npc.ts`, ADR #31):
+
+| Lesen/Ändern | Anlegen/Liste | App-Route |
+| ------------ | ------------- | --------- |
+| `GET/PATCH /api/campaigns/<kampagne>/npcs/<id>` | `GET/POST /api/campaigns/<kampagne>/npcs` | `/campaigns/<kampagne>/npcs/<id>` |
+
+`GET` antwortet mit dem NPC selbst — ohne `kind`, ohne `path`, alle Felder
+nebeneinander:
+
+```json
+{
+  "id": "jorna",
+  "name": "Hafenmeisterin Jorna",
+  "role": "Auftraggeberin, Hafenmeisterin von Salzhafen",
+  "chapter": "01-salzhafen",
+  "status": "alive",
+  "statblock": "Roll20: Jorna",
+  "quickstats": { "insight": 2, "passive-perception": 12 },
+  "voice": "knapp, wetterrau, duzt jeden",
+  "appearance": "Ölmantel, graue Flechte, fehlender kleiner Finger links",
+  "motivation": "Das Leuchtfeuer muss wieder brennen, …",
+  "body": "\n## Weiß\n\n…",
+  "rev": 4
+}
+```
+
 | Feld | Bedeutung |
 | ---- | --------- |
 | `id` | stabil, wird referenziert |
-| `name` | Anzeigename |
-| `role` | Einzeiler |
-| `chapter` | Kapitel-id, wo eingeführt |
-| `status` | `alive`, `dead`, `missing`, `unknown` |
-| `statblock` | Verweis auf das Roll20-Sheet (`"Roll20: <Sheet-Name>"`), keine Kopie |
-| `quickstats` | Kurzwerte, frei — nur was am Tisch sozial gebraucht wird (`{ wis: +2, insight: +2 }`) |
-| `voice` | wie klingt er/sie |
-| `appearance` | ein bis zwei Merkmale |
-| `motivation` | was die Figur will, ein bis drei Sätze — zeigen NPC-Karte und Vorschau (Beschriftung „Will“) |
+| `name` | Anzeigename, Pflicht; ohne eigenen Namen zeigt der NPC seine id |
+| `role` | Einzeiler; optional |
+| `chapter` | Kapitel-id, wo eingeführt; optional, muss existieren |
+| `status` | `alive`, `dead`, `missing` oder `unknown`; immer gesetzt |
+| `statblock` | Verweis auf das Roll20-Sheet (`"Roll20: <Sheet-Name>"`), keine Kopie; optional |
+| `quickstats` | Kurzwerte, frei — nur was am Tisch sozial gebraucht wird (`{ "insight": "+2" }`); optional |
+| `voice` | wie klingt er/sie; optional |
+| `appearance` | ein bis zwei Merkmale; optional |
+| `motivation` | was die Figur will, ein bis drei Sätze — zeigen NPC-Karte und Vorschau (Beschriftung „Will“); optional |
+| `body` | Markdown des NPC |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
-`motivation` wird auf der Bearbeiten-Fläche des Eintrags gepflegt, nicht im
-Eigenschaften-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige als
-aktueller Name, wie im Text — eine Anzeige, keine Referenz.
+Ein optionales Feld ohne Wert fehlt in der Antwort. Geschrieben wird mit
+`PATCH …/npcs/<id>` und `{ rev, force?, …Teilmenge der Felder }` — `null`
+löscht ein optionales Feld, ein Feld, das ein NPC nicht hat (etwa
+`atmosphere`), oder ein Wert der falschen Form ist eine 400, die das Feld
+nennt, ein `status` außerhalb der vier eine 400 `status_not_allowed`; ein
+veralteter `rev` ist 409 mit dem aktuellen NPC.
+
+`POST …/npcs { name, id?, body? }` legt einen NPC an und antwortet mit ihm:
+die `id` entsteht aus dem Namen, wenn die Anfrage keine setzt, `body` ist
+sein Text, und `status` ist `unknown`. Ein NPC, der unter der `id` schon
+besteht und nichts hält als seine id, wird mit Name und Text gefüllt; einer
+mit Inhalt ist eine 409 `slug_taken` mit Vorschlag, und nichts wird
+geschrieben. Fixture und Generator-Vorschlag sind der NPC ohne `rev`.
+Ergänzen hängt am NPC: `POST …/npcs/<id>/augment` startet den Lauf, `POST
+…/npcs/<id>/augment/apply` übernimmt ihn.
+
+`motivation` wird auf der Bearbeiten-Fläche gepflegt, neben dem Markdown,
+nicht im Eigenschaften-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige
+als aktueller Name, wie im Text — eine Anzeige, keine Referenz.
 
 Text-Abschnitte frei; empfohlen: `## Weiß` (`[!secret]`-Callouts),
 `## Beziehungen` (je Gegenpart eine Zeile; einen Gegenpart verlinkt `[[id]]`
 wie überall im Text). Keine Überschrift hat für die App eine Bedeutung.
 
-Kleinst-NPCs bekommen keinen Eintrag, bis sie wiederkehren. Bis dahin: Zeile
+Kleinst-NPCs bekommen keinen NPC, bis sie wiederkehren. Bis dahin: Zeile
 im Szenentext oder `#npc`-Notiz im Log.
 
 ### Ort
@@ -242,8 +287,8 @@ Generator-Vorschlag sind der Ort ohne `rev`. Ergänzen hängt am Ort: `POST
 …/locations/<id>/augment` startet den Lauf, `POST …/locations/<id>/augment/apply`
 übernimmt ihn.
 
-`atmosphere` wird wie `motivation` auf der Bearbeiten-Fläche gepflegt, neben
-dem Markdown, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere`
+`atmosphere` wird wie `motivation` beim NPC auf der Bearbeiten-Fläche
+gepflegt, neben dem Markdown, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere`
 zeigt die Ort-Karte die Roll20-Seite.
 
 Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
@@ -413,12 +458,12 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   aktiven Kapitels an (`POST …/chapters/<kapitel>/threads`); Text und `rev`
   des Kapitels bleiben unberührt. Gepflegt wird die Liste in der
   Kapitelübersicht: abhaken, umformulieren, löschen, von Hand ergänzen.
-- „NPC anlegen" erzeugt den NPC `npcs/<id>` mit `status: unknown` (die
-  Log-Zeile sagt nichts über seinen Zustand); sein Text ist genau der
-  Log-Text, ohne Überschrift. Ohne Text bleibt er leer, und ein NPC ohne Name
-  und Text gilt weiter als leer — ein späteres Anlegen derselben id füllt
-  ihn. Hat die id schon einen Eintrag mit Inhalt, verweist die App auf ihn
-  und ändert nichts; ein leerer Eintrag wird gefüllt.
+- „NPC anlegen" legt den NPC über `POST …/npcs { name, id, body }` an, mit
+  `status: unknown` (die Log-Zeile sagt nichts über seinen Zustand); sein
+  Text ist genau der Log-Text, ohne Überschrift. Ein NPC, der unter der id
+  nichts hält als seine id, wird gefüllt. Hält er schon etwas, ist das eine
+  409 mit Vorschlag: nichts wird geschrieben, die Nachbereitung zeigt den
+  Konflikt, und die Log-Zeile bleibt offen.
 - „Idee abhaken" setzt `done` auf der genannten Zeile (`POST
   …/review/inbox-done { id }`) — die eine Ausnahme vom Append-only der Ideen,
   damit sie nicht in jeder künftigen Nachbereitung wieder auftauchen.
@@ -468,18 +513,21 @@ dem Quellmaterial; „Entwürfe prüfen“ zeigt diese Beschreibung, und das
 Kapitels ändert kein Lauf.
 
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
-über die Provider-API **erzwingt**. Ein Orts-Aufruf (Anlegen wie Ergänzen)
-liefert den Ort ohne `rev`, alle Felder nebeneinander, dazu die Hinweise für
-den DM unter `warnings`; der Ort leitet sein Schema selbst aus seinem
-zod-Schema ab (`z.toJSONSchema`, ADR #31), und was das Modell über seine
-Felder wissen muss, steht im Orts-Prompt (`generator/location-system-prompt.md`).
-Ein Job listet die vorgeschlagenen Orte unter `result.locations`. Ein Aufruf für Szene, NPC oder
-eine ihrer Ergänzungen liefert die Eigenschaften von Szene bzw. NPC getypt unter
-`properties`, den Text als einen String unter `body` und `warnings`; dieses
-Paar ist der **Entwurf** — im Prüfschritt, in den Änderungen des DM und beim
-Übernehmen (ADR #24), nie ein Markdown-Text mit Eigenschaften davor. Die
-Schemata von Szene und NPC liegen als lesbares JSON in `shared/schema/`;
-Details in `generator/README.md`.
+über die Provider-API **erzwingt**. Ein NPC- oder Orts-Aufruf (Anlegen wie
+Ergänzen) liefert den NPC bzw. den Ort ohne `rev`, alle Felder
+nebeneinander, dazu die Hinweise für den DM unter `warnings`; `quickstats`
+reist dabei als Liste von Paaren `{ key, value }`. NPC und Ort leiten ihr
+Schema selbst aus ihrem zod-Schema ab (`z.toJSONSchema`, ADR #31), und was
+das Modell über ihre Felder wissen muss, steht in ihrem Prompt
+(`generator/npc-system-prompt.md`, `generator/location-system-prompt.md`).
+Ein Job listet die vorgeschlagenen NPCs unter `result.npcs` und die Orte
+unter `result.locations`; ein NPC-Lauf trägt seinen einen NPC unter
+`npcResult.npc`. Ein Aufruf für eine Szene oder ihre Ergänzung liefert die
+Eigenschaften der Szene getypt unter `properties`, den Text als einen String
+unter `body` und `warnings`; dieses Paar ist der **Entwurf** — im
+Prüfschritt, in den Änderungen des DM und beim Übernehmen (ADR #24), nie ein
+Markdown-Text mit Eigenschaften davor. Die Schemata der Szene liegen als
+lesbares JSON in `shared/schema/`; Details in `generator/README.md`.
 
 Die mechanische Prüfung liest Eigenschaften und Text, aber keine
 Überschrift (ADR #29): die Abschnitte eines Entwurfs sind die Empfehlung der
@@ -493,11 +541,11 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
-strukturierten Felder und der Text als ein String unter `body`. Ein Ort
-liegt in einer eigenen Datei unter `fixtures/beispiel/locations/<id>.json`,
-genau als das Objekt, das `GET …/locations/<id>` liefert, ohne `rev` (ADR
-#31); Kampagne, Kapitel, Szene und NPC tragen ihre Felder unter
-`properties`. Ideen, Glossar
+strukturierten Felder und der Text als ein String unter `body`. Ein NPC und
+ein Ort liegen in eigenen Dateien unter `fixtures/beispiel/npcs/<id>.json`
+bzw. `fixtures/beispiel/locations/<id>.json`, genau als das Objekt, das
+`GET …/npcs/<id>` bzw. `GET …/locations/<id>` liefert, ohne `rev` (ADR #31);
+Kampagne, Kapitel und Szene tragen ihre Felder unter `properties`. Ideen, Glossar
 und Sessions tragen ihre Listen ebenso strukturiert,
 als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
 `threads`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
@@ -505,6 +553,6 @@ wie ein Faden `{ text, done? }`. Eine Markdown-Zeile steht in keiner davon.
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/locations/*.json` und
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/npcs/*.json` und `<dir>/<kampagne>/locations/*.json` und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

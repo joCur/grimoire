@@ -9,7 +9,6 @@
 //   <chapter>                        a chapter row
 //   <chapter>/<scene-id>             a scene without a `location`
 //   <chapter>/<location>/<scene-id>  a scene whose `location` names that location
-//   npcs/<id>                        an npc row
 //
 // Two things to know about the segments:
 //
@@ -26,8 +25,9 @@
 //     inbox, the glossary and a session are LISTS with their own endpoints
 //     (ADR #26), so none of them has an address here. They stay reserved
 //     because a chapter that claimed one of those ids would collide with the
-//     API path of its list. `locations` is the same: a location is its own
-//     resource (ADR #31, `…/locations/:id`) and has no address either.
+//     API path of its list. `npcs` and `locations` are the same: an npc and a
+//     location are each their own resource (ADR #31, `…/npcs/:id`,
+//     `…/locations/:id`) and have no address either.
 //
 // An address the schema does not describe names nothing and answers 404.
 
@@ -44,17 +44,16 @@ export { addressHead, addressSegments };
 export type Locator =
   | { kind: "campaign" }
   | { kind: "chapter"; id: string }
-  | { kind: "scene"; id: string; chapterId: string; groupSlug: string }
-  | { kind: "npc"; id: string };
+  | { kind: "scene"; id: string; chapterId: string; groupSlug: string };
 
 /** The one campaign-level entry. */
 export const CAMPAIGN_PATH = "campaign";
 
 /**
  * Reserved first segments that are not chapters — the ONE source for this set
- * (`locatorFromPath` routes them to their kinds, so a chapter that claimed
- * one of them would produce an address nothing can read). Imported by
- * ./write.ts (create) rather than re-declared there.
+ * (`locatorFromPath` answers 404 for every address under one of them, so a
+ * chapter that claimed one would be a row nothing can read). Imported by the
+ * chapter create (./chapters.ts) rather than re-declared there.
  */
 export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
   CAMPAIGN_PATH,
@@ -87,10 +86,6 @@ export function sceneAddress(row: {
   id: string;
 }): string {
   return scenePath(row.chapterId ?? "", row.location ?? "", row.id);
-}
-
-export function npcPath(id: string): string {
-  return `npcs/${id}`;
 }
 
 /**
@@ -132,14 +127,10 @@ export function locatorFromPath(rel: string): Locator {
   }
 
   const first = addressHead(rel);
-  if (RESERVED.has(first)) {
-    if (segments.length !== 2 || last === "") throw new ApiError(404, "entry not found");
-    if (first === "npcs") return { kind: "npc", id: last };
-    // `locations/<id>` and the list segments fall through: a location is its
-    // own resource (ADR #31) and a list has none at all (ADR #26), so these
-    // name nothing here.
-    throw new ApiError(404, "entry not found");
-  }
+  // `npcs/<id>`, `locations/<id>` and the list segments name nothing here:
+  // an npc and a location are each their own resource (ADR #31) and a list
+  // has none at all (ADR #26).
+  if (RESERVED.has(first)) throw new ApiError(404, "entry not found");
 
   if (last === "") throw new ApiError(404, "entry not found");
   if (segments.length === 2) {

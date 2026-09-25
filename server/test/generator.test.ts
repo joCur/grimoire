@@ -31,6 +31,7 @@ import type {
   GenerateResult,
   GenerateUsage,
   Location,
+  Npc,
 } from "@grimoire/shared";
 import { app } from "../src/server";
 import { eq } from "drizzle-orm";
@@ -76,6 +77,17 @@ async function readLocation(id: string): Promise<Location | undefined> {
 function locationItem(over: { status?: string } = {}): Record<string, unknown> {
   const stub = locationStub(over);
   return { ...stub.properties, body: stub.body };
+}
+
+/** GET of an npc — its own resource (ADR #31); undefined when there is none. */
+async function readNpc(id: string): Promise<Npc | undefined> {
+  const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  return res.status === 200 ? ((await res.json()) as Npc) : undefined;
+}
+
+/** A proposed npc as the job and the apply body carry it: the npc without its guard. */
+function npcItem(entry: ScriptedEntry = PROPOSED_NPC): Record<string, unknown> {
+  return { ...entry.properties, body: entry.body };
 }
 
 /** GET /entry of an applied draft. */
@@ -218,10 +230,10 @@ function sceneWithId(id: string): ScriptedEntry {
 }
 
 /**
- * An npc stub. `status` defaults to what the prompt asks for (`alive`);
- * `null` drops the key entirely — both are validated.
+ * An npc the run proposes. `status` defaults to what the prompt asks for
+ * (`alive`); `null` drops the key entirely.
  */
-function npcStub(over: { id?: string; name?: string; status?: string | null } = {}): ScriptedEntry {
+function proposedNpc(over: { id?: string; name?: string; status?: string | null } = {}): ScriptedEntry {
   const status = over.status === undefined ? "alive" : over.status;
   return {
     properties: {
@@ -236,7 +248,7 @@ function npcStub(over: { id?: string; name?: string; status?: string | null } = 
   };
 }
 
-const NPC_STUB = npcStub();
+const PROPOSED_NPC = proposedNpc();
 
 const LOCATION_STUB_ID = "raeucherkammer";
 
@@ -264,7 +276,7 @@ interface ReplyOver {
 function replyJson(over: ReplyOver = {}): string {
   const body = {
     scenes: over.scenes ?? [{ content: sceneDraft() }],
-    entries: over.entries ?? [{ kind: "npc", content: NPC_STUB }],
+    entries: over.entries ?? [{ kind: "npc", content: PROPOSED_NPC }],
     warnings: over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"],
   };
   return JSON.stringify(body, null, 2);
@@ -473,15 +485,14 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     expect(result.scenes[0]!.body).toBe(sceneDraft().body);
     expect(result.scenes[0]!.properties.status).toBe("draft");
     expect(result.scenes[0]!.properties.npcs).toEqual(["fenn", "grella"]);
-    expect(result.stubs).toEqual([
-      { kind: "npc", id: "grella", name: "Grella", ...NPC_STUB },
-    ]);
+    // A proposed npc is an npc of its own list — the npc without its guard.
+    expect(result.npcs as unknown).toEqual([npcItem()]);
     expect(result.warnings).toEqual(["Quelltext nennt keinen DC — DC 12 gesetzt"]);
     // this provider reports no usage — then the field stays absent
     expect(result.usage).toBeUndefined();
 
     // Three provider calls — the outline, the one scene and
-    // the one suggested entry — and not a correction turn among them.
+    // the one proposed npc — and not a correction turn among them.
     // Sorted: the parts run three at a time (PART_CONCURRENCY), so which of
     // them reaches the provider first is not a promise — only that the
     // outline came first and that each part cost exactly one call.
@@ -518,7 +529,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
 
     // review preview only — NOTHING on disk
     expect(await exists(SCENE_PATH)).toBe(false);
-    expect(await exists("npcs/grella")).toBe(false);
+    expect(await readNpc("grella")).toBeUndefined();
   });
 
   test("unknown npc without stub triggers a correction turn, then succeeds", async () => {
@@ -590,8 +601,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       body: "## Wer ist hier\n\n- [[grella]], wenn die Ladung kommt\n",
     };
     const npc: ScriptedEntry = {
-      ...NPC_STUB,
-      body: `${NPC_STUB.body}\n## Beziehungen\n\n- [[fenn]]: Rivale\n- Versteck in der [[${LOCATION_STUB_ID}]]\n`,
+      ...PROPOSED_NPC,
+      body: `${PROPOSED_NPC.body}\n## Beziehungen\n\n- [[fenn]]: Rivale\n- Versteck in der [[${LOCATION_STUB_ID}]]\n`,
     };
     const fake = useFake([
       reply({
@@ -613,10 +624,10 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       body: "## Wer ist hier\n\n- [[der-wirt]] hinter dem Tresen\n",
     };
     const fake = useFake([
-      reply({ entries: [{ kind: "npc", content: NPC_STUB }, { kind: "location", content: bad }] }),
+      reply({ entries: [{ kind: "npc", content: PROPOSED_NPC }, { kind: "location", content: bad }] }),
       reply({
         entries: [
-          { kind: "npc", content: NPC_STUB },
+          { kind: "npc", content: PROPOSED_NPC },
           { kind: "location", content: locationStub() },
         ],
       }),
@@ -634,10 +645,9 @@ describe("POST /api/campaigns/:campaign/generate", () => {
 
   // --- the id is the model's ONE addressing decision ------------------------
   //
-  // The shared parser degrades a missing `id` to the address's last segment,
-  // so a reply parsed under its own preview label would silently inherit that
-  // label as its id — an NPC reply with no `id` would be written to
-  // `npcs/npc`. A missing id has to be the error it is.
+  // A reply parsed under its own preview label would silently inherit that
+  // label as its id if a missing `id` degraded to anything. A missing id has
+  // to be the error it is.
 
   test("a scene without an id triggers a correction turn that says the id is missing", async () => {
     const bad = reply({
@@ -657,64 +667,48 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     expect(correction).not.toContain("treffen-am-kai/");
   });
 
-  test("a suggested entry without an id triggers a correction turn", async () => {
+  test("a proposed npc without an id triggers a correction turn", async () => {
     const bad = reply({
-      entries: [{ kind: "npc", content: without(npcStub(), ["id"]) }],
+      entries: [{ kind: "npc", content: without(proposedNpc(), ["id"]) }],
       scenes: [{ content: sceneDraft({ npcs: ["fenn"] }) }],
     });
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
     const correction = fake.callsFor("grella")[1]!.corrections[0]!.correction;
-    expect(correction).toContain('"id" fehlt');
+    expect(correction).toContain('npc "grella"');
+    expect(correction).toContain('"id"');
   });
 
-  // --- stub status rules ----------------------------------------------------
+  // --- status rules ------------------------------------------------------------
 
-  test("npc stub with the SCENE status draft triggers a correction turn, then succeeds", async () => {
+  test("a proposed npc with the SCENE status draft triggers a correction turn, then succeeds", async () => {
     const bad = reply({
-      entries: [{ kind: "npc", content: npcStub({ status: "draft" }) }],
+      entries: [{ kind: "npc", content: proposedNpc({ status: "draft" }) }],
     });
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
 
-    // The ENTRY part corrected itself — the scene part was right first time.
+    // The npc part corrected itself — the scene part was right first time.
     const entry = fake.callsFor("grella");
     expect(entry).toHaveLength(2);
     expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
-    // The replayed assistant turn is the ENTRY's own reply — the per-part
+    // The replayed assistant turn is the npc's own reply — the per-part
     // call is what failed, so that is what goes back.
     expect(entry[1]!.corrections[0]!.assistant).toContain('"status":"draft"');
     const correction = entry[1]!.corrections[0]!.correction;
-    expect(correction).toContain('npc entry "grella"');
-    expect(correction).toContain("alive, dead, missing, unknown");
-    expect(correction).toContain('"alive"');
-    // the draft status is the ONLY error — the stub still resolves the
-    // scene's npc reference instead of cascading into "npc does not exist"
+    expect(correction).toContain('npc "grella"');
+    expect(correction).toContain('"alive"|"dead"|"missing"|"unknown"');
+    // the draft status is the ONLY error — the npc's own reply schema names
+    // it, and the scene part is not touched
     expect(correction.match(/^- /gm)).toHaveLength(1);
 
     // the corrected second reply is the one that got through
     const result = (await res.json()) as GenerateResult;
-    expect(result.stubs).toEqual([
-      { kind: "npc", id: "grella", name: "Grella", ...NPC_STUB },
-    ]);
-    expect(await exists("npcs/grella")).toBe(false);
-  });
-
-  test("an npc entry without a status is read as \"unknown\", not corrected", async () => {
-    // The schema types an npc `status` as NULLABLE (the prompt maps a
-    // missing value to null), so "no status" is a legal reply — and it means what
-    // the shared parser has always made of a status-less npc entry:
-    // `unknown`. Never `alive`, which would be the run asserting something
-    // the source text is silent about.
-    const fake = useFake([reply({ entries: [{ kind: "npc", content: npcStub({ status: null }) }] })]);
-    const res = await generate(generateBody);
-    expect(res.status).toBe(200);
-    expect(fake.callsFor("grella")).toHaveLength(1);
-    // …and the draft the review shows carries the default, not a gap.
-    const result = (await res.json()) as GenerateResult;
-    expect(result.stubs[0]!.properties.status).toBe("unknown");
+    // A proposed npc is an npc of its own list — the npc without its guard.
+    expect(result.npcs as unknown).toEqual([npcItem()]);
+    expect(await readNpc("grella")).toBeUndefined();
   });
 
   test("location stub with ANY status triggers a correction turn", async () => {
@@ -740,11 +734,11 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     }
   });
 
-  test("prompt-conform stubs pass in ONE call: npc dead/alive, location without status", async () => {
+  test("prompt-conform proposals pass in ONE call: npc dead/alive, location without status", async () => {
     const fake = useFake([
       reply({
         entries: [
-          { kind: "npc", content: npcStub({ status: "dead" }) },
+          { kind: "npc", content: proposedNpc({ status: "dead" }) },
           { kind: "location", content: locationStub() },
         ],
       }),
@@ -761,8 +755,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       "treffen-am-kai",
     ]);
     const result = (await res.json()) as GenerateResult;
-    // An npc is a stub, a location is a proposed location of its own list.
-    expect(result.stubs.map((s) => `${s.kind}:${s.id}`)).toEqual(["npc:grella"]);
+    // An npc and a location are each a proposal of its own list.
+    expect(result.npcs.map((npc) => `${npc.id}:${npc.status}`)).toEqual(["grella:dead"]);
     expect(result.locations).toEqual([
       {
         id: "raeucherkammer",
@@ -945,9 +939,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     expect(result.scenes[0]!.path).toBe(SCENE_PATH);
     expect(result.scenes[0]!.properties).toEqual(sceneDraft().properties);
     expect(result.scenes[0]!.body).toBe(sceneDraft().body);
-    expect(result.stubs).toEqual([
-      { kind: "npc", id: "grella", name: "Grella", ...NPC_STUB },
-    ]);
+    // A proposed npc is an npc of its own list — the npc without its guard.
+    expect(result.npcs as unknown).toEqual([npcItem()]);
     // no correction turn on any part — that is the whole point of the fix
     expect(fake.calls).toHaveLength(3);
     for (const call of fake.calls) expect(call.corrections).toEqual([]);
@@ -1235,12 +1228,16 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
 
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: result.scenes,
-      stubs: result.stubs,
+      npcs: result.npcs,
     });
     expect(res.status).toBe(200);
     // The review addressed the draft as `<chapter>/<id>`; it is WRITTEN
-    // under its location.
-    expect(await res.json()).toEqual({ written: [SCENE_ADDRESS, "npcs/grella"], locations: [] });
+    // under its location. The npc is named by its id.
+    expect(await res.json()).toEqual({
+      written: [SCENE_ADDRESS],
+      npcs: ["grella"],
+      locations: [],
+    });
 
     // the drafts are entities now — every field the review showed survived
     // the insert, `status: draft` included (that is what the app filters on)
@@ -1254,13 +1251,12 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(scene.body).toContain("> [!readaloud] Nebel liegt über dem Kai");
     expect(scene.body).toContain("> [!check] Wisdom (Perception) DC 12");
 
-    const stub = await read("npcs/grella");
-    expect(stub.kind).toBe("npc");
-    expect(stub.properties.name).toBe("Grella");
-    expect(stub.properties.status).toBe("alive");
-    // The prose property rode along with the proposal and was written.
-    expect(stub.properties.motivation).toBe("Im Quelltext nur erwähnt — Details fehlen.");
-    expect(stub.body).toContain("## Weiß");
+    const npc = await readNpc("grella");
+    expect(npc?.name).toBe("Grella");
+    expect(npc?.status).toBe("alive");
+    // The prose field rode along with the proposal and was written.
+    expect(npc?.motivation).toBe("Im Quelltext nur erwähnt — Details fehlen.");
+    expect(npc?.body).toContain("## Weiß");
   });
 
   test("409 lists all conflicting paths and writes nothing", async () => {
@@ -1280,11 +1276,12 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
         { path: fresh, ...freshDraft },
         { path: SCENE_PATH, ...sceneDraft() }, // written by the previous test
       ],
-      stubs: [{ kind: "npc", id: "grella", ...NPC_STUB }], // also exists now
+      npcs: [npcItem()], // also exists now
     });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; conflicts: string[] };
-    expect(body.conflicts).toEqual([existing, SCENE_PATH, "npcs/grella"]);
+    const body = (await res.json()) as { error: string; conflicts: string[]; npcs: string[] };
+    expect(body.conflicts).toEqual([existing, SCENE_PATH]);
+    expect(body.npcs).toEqual(["grella"]);
     // nothing written, nothing overwritten
     expect(await exists("01-salzhafen/leuchtturm/ganz-neu")).toBe(false);
     const after = await read("01-salzhafen/leuchtturm/lighthouse-arrival");
@@ -1340,8 +1337,8 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
       // group is the draft's `location`, so a three-segment target is a
       // client naming a grouping of its own.
       { scenes: [{ path: "01-salzhafen/hafen/gruppe-selbst-gewaehlt", ...md }] },
-      { stubs: [{ kind: "npc", id: "../evil", ...NPC_STUB }] },
-      { stubs: [{ kind: "monster", id: "grim", ...NPC_STUB }] },
+      { npcs: [{ ...npcItem(), id: "../evil" }] },
+      { npcs: [{ ...npcItem(), kind: "monster", id: "grim" }] },
     ];
     for (const b of bad) {
       expect((await postJson("/api/campaigns/beispiel/generate/apply", b)).status).toBe(400);
@@ -1375,46 +1372,39 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(await exists(rel)).toBe(false);
   });
 
-  test("400 re-validation: the stub status rules — nothing written", async () => {
+  test("400 re-validation: the status rules of npc and location — nothing written", async () => {
     const brix = { id: "brix", name: "Brix" };
-    const cases: Array<[unknown, string]> = [
-      // the scene status sneaked into an npc stub after the review
-      [
-        { kind: "npc", id: "brix", ...npcStub({ ...brix, status: "draft" }) },
-        "alive, dead, missing, unknown",
-      ],
-      // npc stub without any status
-      [
-        { kind: "npc", id: "brix", ...npcStub({ ...brix, status: null }) },
-        '"status" fehlt',
-      ],
-    ];
-    for (const [stub, expected] of cases) {
-      const res = await postJson("/api/campaigns/beispiel/generate/apply", { stubs: [stub] });
+    for (const npc of [
+      // the scene status sneaked into an npc after the review
+      npcItem(proposedNpc({ ...brix, status: "draft" })),
+      // an npc without any status
+      npcItem(proposedNpc({ ...brix, status: null })),
+    ]) {
+      const res = await postJson("/api/campaigns/beispiel/generate/apply", { npcs: [npc] });
       expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toContain(expected);
+      expect(((await res.json()) as { error: string }).error).toContain("status");
     }
-    // A location is no stub at all…
-    const asStub = await postJson("/api/campaigns/beispiel/generate/apply", {
-      stubs: [{ kind: "location", id: "raeucherkammer", ...locationStub() }],
+    // A location is no npc at all…
+    const asNpc = await postJson("/api/campaigns/beispiel/generate/apply", {
+      npcs: [locationItem()],
     });
-    expect(asStub.status).toBe(400);
+    expect(asNpc.status).toBe(400);
     // …and a proposed location carries no status: its schema has no such field.
     const withStatus = await postJson("/api/campaigns/beispiel/generate/apply", {
       locations: [locationItem({ status: "alive" })],
     });
     expect(withStatus.status).toBe(400);
     expect(((await withStatus.json()) as { error: string }).error).toContain("status");
-    expect(await exists("npcs/brix")).toBe(false);
+    expect(await readNpc("brix")).toBeUndefined();
     expect(await readLocation("raeucherkammer")).toBeUndefined();
 
     // the prompt-conform forms write fine
     const ok = await postJson("/api/campaigns/beispiel/generate/apply", {
-      stubs: [{ kind: "npc", id: "brix", ...npcStub({ ...brix, status: "missing" }) }],
+      npcs: [npcItem(proposedNpc({ ...brix, status: "missing" }))],
       locations: [locationItem()],
     });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ written: ["npcs/brix"], locations: ["raeucherkammer"] });
+    expect(await ok.json()).toEqual({ written: [], npcs: ["brix"], locations: ["raeucherkammer"] });
     // The location's atmosphere came through the accept as its own field.
     expect((await readLocation("raeucherkammer"))?.atmosphere).toBe(
       "Im Quelltext nur erwähnt — Details fehlen.",
@@ -1424,14 +1414,14 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
   test("400 on malformed bodies", async () => {
     const bad = [
       {}, // nothing to apply
-      { scenes: [], stubs: [] }, // still nothing to apply
+      { scenes: [], npcs: [] }, // still nothing to apply
       { scenes: "x" }, // not an array
       { scenes: [{ properties: {}, body: "" }] }, // missing path
       { scenes: [{ path: SCENE_PATH, body: "" }] }, // missing properties
       { scenes: [{ path: SCENE_PATH, properties: {} }] }, // missing body
       { scenes: [{ path: SCENE_PATH, ...sceneDraft(), raw: "x" }] }, // unknown item key
-      { stubs: [{ kind: "npc", ...NPC_STUB }] }, // missing id
-      { scenes: [], stubs: [], extra: 1 }, // unknown top-level key
+      { npcs: [{ ...npcItem(), id: undefined }] }, // missing id
+      { scenes: [], npcs: [], extra: 1 }, // unknown top-level key
       {
         // duplicate targets
         scenes: [
@@ -1512,6 +1502,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     // the chapter entry comes first — the drafts live inside it
     expect(await res.json()).toEqual({
       written: [chapterRel, `${chapter}/leuchtturm/erste-szene`],
+      npcs: [],
       locations: [],
     });
 
@@ -1534,6 +1525,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       written: [`${chapter}/leuchtturm/zweite-szene`],
+      npcs: [],
       locations: [],
     });
     const again = await read(chapterRel);
@@ -1593,7 +1585,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
 // --- background jobs --------------------------------------------------------
 
 describe("generate jobs", () => {
-  /** A reply into a fresh path, without stubs (npcs/grella exists by now). */
+  /** A reply into a fresh path, without a proposed npc (grella exists by now). */
   function jobReply(scenePath: string): string {
     return reply({
       scenes: [
@@ -1861,11 +1853,11 @@ describe("generate jobs", () => {
 
     res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: job!.result!.scenes,
-      stubs: [],
+      npcs: [],
       jobId: job!.id,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: [withLocation(scenePath)], locations: [] });
+    expect(await res.json()).toEqual({ written: [withLocation(scenePath)], npcs: [], locations: [] });
     expect(await exists(scenePath)).toBe(true);
     // the drafts are on disk — there is nothing left to restore
     expect(await fetchJob()).toBeNull();
@@ -1879,7 +1871,7 @@ describe("generate jobs", () => {
 
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: job!.result!.scenes,
-      stubs: [],
+      npcs: [],
       jobId: job!.id,
     });
     expect(res.status).toBe(409);
@@ -1938,7 +1930,7 @@ describe("generate jobs", () => {
     // …and it can still be applied, which is the whole point of keeping it.
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: after.result!.scenes,
-      stubs: [],
+      npcs: [],
       jobId: after.id,
     });
     expect(res.status).toBe(200);
@@ -2028,54 +2020,47 @@ describe("generate jobs", () => {
   // --- a persisted row with `.md` draft paths -------------------------------
 
   test("a persisted job with legacy .md draft paths is normalized on the way out", async () => {
-    // A persisted job whose paths carry the `.md` suffix, in the result AND
-    // as the draftEdits key. The row is written directly, because the API
-    // itself never produces that shape.
+    // A persisted job whose scene path carries the `.md` suffix, in the
+    // result AND as the draftEdits key. The row is written directly, because
+    // the API itself never produces that shape.
     const legacyScene = "01-salzhafen/legacy-scene.md";
-    const legacyNpc = "npcs/legacy-npc.md";
-    const npcDraft: ScriptedEntry = {
-      properties: { id: "legacy-npc", name: "Legacy Npc", status: "alive" },
-      body: "## Notizen\n\n",
-    };
+    const draft = sceneWithId("legacy-scene");
     const db = await getDb();
     db.insert(generateJobs)
       .values({
         id: "legacy-row",
         campaignId: "beispiel",
-        kind: "npc",
+        kind: "scene",
+        chapter: "01-salzhafen",
         status: "done",
         startedAt: new Date().toISOString(),
         finishedAt: new Date().toISOString(),
         result: JSON.stringify({
-          scenes: [{ path: legacyScene, ...sceneWithId("legacy-scene") }],
-          stubs: [],
+          scenes: [{ path: legacyScene, ...draft }],
+          npcs: [],
           locations: [],
           warnings: [],
         }),
-        npcResult: JSON.stringify({
-          npc: { path: legacyNpc, ...npcDraft },
-          warnings: [],
-        }),
-        draftEdits: JSON.stringify({ [legacyNpc]: { body: npcDraft.body } }),
+        draftEdits: JSON.stringify({ [legacyScene]: { body: draft.body } }),
       })
       .run();
 
     const job = (await fetchJob())!;
-    expect(job.npcResult!.npc.path).toBe("npcs/legacy-npc");
     expect(job.result!.scenes[0]!.path).toBe("01-salzhafen/legacy-scene");
-    expect(Object.keys(job.draftEdits)).toEqual(["npcs/legacy-npc"]);
+    expect(Object.keys(job.draftEdits)).toEqual(["01-salzhafen/legacy-scene"]);
 
     // …and the edit store accepts the normalized path.
-    expect((await putDraftEdit("beispiel", "npcs/legacy-npc", npcDraft.body)).status).toBe(200);
+    expect((await putDraftEdit("beispiel", "01-salzhafen/legacy-scene", draft.body)).status).toBe(
+      200,
+    );
 
     // The point of all of it: the accept works, under the new address.
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      npc: job.npcResult!.npc,
+      scenes: job.result!.scenes,
       jobId: job.id,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: ["npcs/legacy-npc"], locations: [] });
-    expect(await exists("npcs/legacy-npc")).toBe(true);
+    expect(await exists("01-salzhafen/leuchtturm/legacy-scene")).toBe(true);
   });
 
   // --- a persisted row with a three-segment scene path ----------------------
@@ -2099,13 +2084,12 @@ describe("generate jobs", () => {
         finishedAt: new Date().toISOString(),
         result: JSON.stringify({
           scenes: [{ path: legacy, ...draft }],
-          stubs: [],
+          npcs: [],
           locations: [],
           warnings: [],
         }),
         draftEdits: JSON.stringify({ [legacy]: { body: draft.body } }),
         review: JSON.stringify({
-          entries: {},
           dropped: ["01-salzhafen/hafen/legacy-dropped"],
           fields: {},
           blocks: {},
@@ -2123,13 +2107,11 @@ describe("generate jobs", () => {
     expect(job.review!.written).toEqual({
       "01-salzhafen/legacy-written": "01-salzhafen/hafen/legacy-written",
     });
-    // An npc draft path keeps its two segments — only scenes collapse.
-    expect(Object.keys(job.draftEdits).every((k) => !k.startsWith("npcs/"))).toBe(true);
 
     // The point of all of it: the accept works again.
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: job.result!.scenes,
-      stubs: [],
+      npcs: [],
       jobId: job.id,
     });
     expect(res.status).toBe(200);
@@ -2168,7 +2150,7 @@ describe("generate jobs", () => {
 
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: job.result!.scenes,
-      stubs: [],
+      npcs: [],
       jobId: job.id,
     });
     expect(res.status).toBe(200);
@@ -2200,7 +2182,7 @@ describe("generate jobs", () => {
 
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: job.result!.scenes,
-      stubs: [],
+      npcs: [],
       jobId: job.id,
     });
     expect(res.status).toBe(409);
@@ -2289,17 +2271,16 @@ describe("LLM_CORRECTION_TURNS", () => {
 
 describe("campaign knowledge", () => {
   /**
-   * A reply whose suggested entry is one the campaign does NOT have yet. The
+   * A reply whose proposed npc is one the campaign does NOT have yet. The
    * database is shared by this file and the apply cases above already
-   * wrote `npcs/grella`; the OUTLINE step refuses an entry
-   * that exists (proposing it again would mean a second entry for the same
-   * reference key), so these cases bring their own.
+   * wrote the npc `grella`, and a proposal for an npc that holds content
+   * cannot be accepted, so these cases bring their own.
    */
   const FRESH_NPC = "grella-vom-kai";
   function freshReply(over: { scenes?: Array<{ content: ScriptedEntry }> } = {}): string {
     return reply({
       ...over,
-      entries: [{ kind: "npc", content: npcStub({ id: FRESH_NPC, name: "Grella" }) }],
+      entries: [{ kind: "npc", content: proposedNpc({ id: FRESH_NPC, name: "Grella" }) }],
     });
   }
 
@@ -2371,12 +2352,12 @@ describe("campaign knowledge", () => {
     expect(hint.line).toBeGreaterThan(0);
   });
 
-  test("stubs are checked too — a stub is an entry the run creates", async () => {
+  test("a proposed npc is checked too, and its hint names it by id", async () => {
     await setKnowledge([{ kind: "naming", from: "Grella", to: "Grellwyn", text: "" }]);
     useFake([freshReply({ scenes: [{ content: sceneWithId("kai-zwei") }] })]);
     const result = (await (await generate(generateBody)).json()) as GenerateResult;
-    const paths = (result.namingHints ?? []).map((h) => h.path);
-    expect(paths).toContain(`npcs/${FRESH_NPC}`);
+    const npcs = (result.namingHints ?? []).map((h) => h.npc);
+    expect(npcs).toContain(FRESH_NPC);
   });
 
   test("a draft that FOLLOWS the convention produces no hint at all", async () => {

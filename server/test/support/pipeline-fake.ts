@@ -1,13 +1,14 @@
 // The scripted provider of the generator tests, pipeline-aware.
 //
-// A scene run is the outline call plus one call per scene and per suggested
-// entry, but what a test WANTS to say is still "the first answer is wrong,
+// A scene run is the outline call plus one call per scene, per new npc and
+// per new location, but what a test WANTS to say is still "the first answer is wrong,
 // the second is right" — so the fake keeps one script per attempt and routes
 // it over the run's calls:
 //
 //   outline call   a SYNTHETIC outline derived from the scripted batch reply
-//                  (its scene ids/titles/types/locations, its entries and its
-//                  `chapterDescription`).
+//                  (its scene ids/titles/types/locations, its npcs and
+//                  locations — the script's `entries` by their `kind` — and
+//                  its `chapterDescription`).
 //                  Deriving it means a test does not have to hand-write an
 //                  outline to say something about a scene — and a batch reply
 //                  whose ids are unusable still fails the run, now at the
@@ -17,23 +18,23 @@
 //                  before it has parts, which is what those tests are about.
 //   scene part     the scripted reply's scene entry, as the REPLY OBJECT:
 //                  `properties`, `body`, and the batch reply's `warnings`.
-//   entry part     the scripted reply's matching `entries` item, likewise.
+//   npc/location   the scripted reply's matching `entries` item, in the
+//   part           npc's or the location's own reply form.
 //   single call    the npc/augment run's scripted entry, likewise — a
 //                  reply that does NOT parse as a batch / `{ npc }` /
 //                  `{ entry }` object travels verbatim, which is what the
 //                  garbage and the truncation cases are about.
 //
-// A scripted entry is the PAIR an entry is (`{ properties, body }`, ADR #24),
-// so a script says in one literal exactly what the run is about and the fake
-// only has to add what a schema-forced provider adds: the `warnings` and, for
-// a key/value field, the list form the schema asks for. Nothing here renders
-// or parses an entry as one markdown text.
+// A script writes every entry as `{ properties, body }`, so it says in one
+// literal exactly what the run is about, and the fake adds what a
+// schema-forced provider adds: the `warnings`, and for an npc or a location
+// its own flat reply form (every field beside `body`, `null` for an optional
+// field the script leaves out, an npc's `quickstats` as its list of pairs).
+// Nothing here renders or parses an entry as one markdown text.
 //
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part.
 
-import type { GeneratedEntryKind } from "@grimoire/shared";
-import { toReplyProperties } from "../../src/entry-reply";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -125,24 +126,45 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
 }
 
 /**
- * The REPLY OBJECT of a scripted entry: its two halves plus the script's
- * warnings — what a schema-forced provider delivers.
+ * The REPLY OBJECT of a scripted entry plus the script's warnings — what a
+ * schema-forced provider delivers.
  *
- * `quickstats` (and any other key/value field) is turned into the `{ key,
- * value }` LIST the schema asks for — a free mapping cannot be expressed in
- * strict mode (shared/entry-schema.ts). The conversion is the server's own
- * (`toReplyProperties`), the same one an augment prompt shows the model, so a
- * script cannot write a shape no provider could deliver.
- *
- * A location replies with its own fields (ADR #31): the script's fields stand
- * beside `body` and `warnings`, and an optional field the script leaves out
- * is `null` — "not given", exactly as a strict provider delivers it.
+ * A scene replies with its two halves. An npc and a location reply with
+ * their own fields (ADR #31): the script's fields stand beside `body` and
+ * `warnings`, and an optional field the script leaves out is `null` — "not
+ * given", exactly as a strict provider delivers it. An npc's status is one
+ * of its four values in every reply the provider lets through, so a script
+ * that names none answers `unknown`, and its `quickstats` set travels as the
+ * list of pairs the schema asks for.
  */
 export function entryReply(
   entry: ScriptedEntry,
   warnings: readonly string[] = [],
-  kind: GeneratedEntryKind | "location" = "scene",
+  kind: "scene" | "npc" | "location" = "scene",
 ): string {
+  if (kind === "npc") {
+    const { quickstats, ...fields } = entry.properties;
+    const pairs =
+      quickstats !== null && typeof quickstats === "object" && !Array.isArray(quickstats)
+        ? Object.entries(quickstats as Record<string, unknown>).map(([key, value]) => ({
+            key,
+            value: String(value),
+          }))
+        : (quickstats ?? null);
+    return JSON.stringify({
+      role: null,
+      chapter: null,
+      status: "unknown",
+      statblock: null,
+      voice: null,
+      appearance: null,
+      motivation: null,
+      ...fields,
+      quickstats: pairs,
+      body: entry.body,
+      warnings: [...warnings],
+    });
+  }
   if (kind === "location") {
     return JSON.stringify({
       chapter: null,
@@ -154,7 +176,7 @@ export function entryReply(
     });
   }
   return JSON.stringify({
-    properties: toReplyProperties(kind, entry.properties),
+    properties: entry.properties,
     body: entry.body,
     warnings: [...warnings],
   });
@@ -235,12 +257,20 @@ function outlineOf(batch: BatchReply, sourceText: string): string {
           refs: [],
         };
       }),
-      entries: batch.entries.map((entry) => ({
-        kind: entry.kind,
-        id: property(entry.content, "id") ?? "",
-        name: property(entry.content, "name") ?? "",
-        summary: "aus dem Quelltext erwähnt",
-      })),
+      npcs: batch.entries
+        .filter((entry) => entry.kind !== "location")
+        .map((entry) => ({
+          id: property(entry.content, "id") ?? "",
+          name: property(entry.content, "name") ?? "",
+          summary: "aus dem Quelltext erwähnt",
+        })),
+      locations: batch.entries
+        .filter((entry) => entry.kind === "location")
+        .map((entry) => ({
+          id: property(entry.content, "id") ?? "",
+          name: property(entry.content, "name") ?? "",
+          summary: "aus dem Quelltext erwähnt",
+        })),
       // Whatever the script says, for every run kind: dropping it for a run
       // into an existing chapter is the server's job, not the fake's.
       chapterDescription: batch.chapterDescription,
@@ -317,15 +347,17 @@ export class PipelineFake implements LLMProvider {
       if (entry === null) return completionOf(scripted);
       return {
         ...completionOf(scripted),
-        // A location augment run carries the location it works on, and a
-        // location replies with its own fields. Otherwise the npc run and an
-        // npc augment are the ones with key/value fields, so npc is the
-        // honest default here (a scene entry simply has no `pairs` field to
-        // convert).
+        // A scene augment run carries the scene it works on and a location
+        // augment run the location; the npc run and the npc augment run
+        // answer in the npc's own form.
         text: entryReply(
           entry.content,
           entry.warnings,
-          req.existingLocation === undefined ? "npc" : "location",
+          req.existingEntry !== undefined
+            ? "scene"
+            : req.existingLocation !== undefined
+              ? "location"
+              : "npc",
         ),
       };
     }

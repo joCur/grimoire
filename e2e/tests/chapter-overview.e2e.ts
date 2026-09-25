@@ -12,7 +12,7 @@
 // (ADR #27), and both halves of that promise are checked below.
 //
 // The campaign chrome lives on this path as well: a scene row resolves its
-// location to the location's NAME, the topbar carries the NPCs/Orte navigation
+// location to the location's NAME, the topbar carries the npc and location navigation
 // (the chapter overview's own footer line is gone), and the campaign's
 // name/description are editable from the header.
 
@@ -286,9 +286,10 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await nav.getByRole("link", { name: "Orte" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
-  // Both example Orte sit in the same chapter and each row names that chapter
-  // under the Ort, so the name is anchored: the row STARTS with the Ort's own
-  // name, where the other one only mentions it as its chapter.
+  // Both example locations sit in the same chapter and each row names that
+  // chapter under the location, so the name is anchored: the row STARTS with
+  // the location's own name, where the other one only mentions it as its
+  // chapter.
   await expect(
     page.getByRole("main").getByRole("link", { name: /^Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
@@ -300,8 +301,9 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("banner").getByText("Orte", { exact: true }),
   ).toHaveCount(1);
 
+  // The npc list is the npc's own route (ADR #31).
   await nav.getByRole("link", { name: "NPCs" }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/npcs$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
   await expect(current).toHaveText("NPCs");
   await assertChromeIsStable(onChapterOverview);
@@ -319,7 +321,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // An NPC belongs to NPCs — whichever chapter happens to mention it. A
   // breadcrumb claiming a chapter path here would be plain misleading for an
   // NPC opened from the NPC list.
-  await page.goto("/campaigns/beispiel/entries/npcs/fenn");
+  await page.goto("/campaigns/beispiel/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   await expect(current).toHaveText("NPCs");
   await assertChromeIsStable(onChapterOverview);
@@ -328,7 +330,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page
       .getByRole("navigation", { name: "Kontext" })
       .getByRole("link", { name: "NPCs" }),
-  ).toBeVisible();
+  ).toHaveAttribute("href", "/campaigns/beispiel/npcs");
 
   // Views that belong to no section mark nothing at all.
   await page.goto("/campaigns/beispiel/generate");
@@ -408,7 +410,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
       gearBox: await gear.boundingBox(),
     });
 
-    await page.goto("/campaigns/beispiel/list/npcs");
+    await page.goto("/campaigns/beispiel/npcs");
     await expect(label).toHaveAccessibleName(
       "Kampagne: Der Leuchtturm von Salzhafen",
     );
@@ -1404,18 +1406,24 @@ test.describe("the scene order of a chapter", () => {
   });
 });
 
-test("a location's reading view offers the session start like every reading view", async ({
+test("the npc's and the location's reading views offer the session start like every reading view", async ({
   page,
 }) => {
   const start = page.getByRole("banner").getByRole("button", { name: "Session starten" });
 
-  // The location's own route is a reading view: with no session running the
-  // chip offers the start, exactly as it does on a scene.
+  // The npc's and the location's own routes are reading views: with no
+  // session running the chip offers the start, exactly as it does on a scene.
+  await page.goto("/campaigns/beispiel/npcs/jorna");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  await expect(start).toBeVisible();
   await page.goto("/campaigns/beispiel/locations/leuchtturm");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
   await expect(start).toBeVisible();
 
-  // The location list is a list, not a reading view — no start offered there.
+  // The lists are lists, not reading views — no start offered there.
+  await page.goto("/campaigns/beispiel/npcs");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
+  await expect(start).toHaveCount(0);
   await page.goto("/campaigns/beispiel/locations");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
   await expect(start).toHaveCount(0);

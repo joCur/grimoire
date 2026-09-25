@@ -1,6 +1,5 @@
-// Pure helpers of the review view: hashtag handling, the grouping of
-// player-character notes and the NPC-slug derivation for the stub dialog. No
-// react, no query imports.
+// Pure helpers of the review view: hashtag handling and the grouping of
+// player-character notes. No react, no query imports.
 //
 // Log rows, inbox rows and the chapter's open threads arrive as ROWS from the
 // server and are named by their id, so nothing here parses a list out of text.
@@ -8,9 +7,6 @@
 // Everything degrades (README): unparsable input yields empty results or
 // passes through unchanged, never an error.
 
-import { toSlug } from "@grimoire/shared/slug";
-
-import { isEntityId } from "@/lib/entity";
 
 /**
  * The log/inbox hashtags the review harvests (README). `#date` is deliberately
@@ -36,7 +32,7 @@ export function tagAllowsNpc(tag: string): boolean {
 /**
  * The player-character tag (README): `#pc` marks a note ABOUT a player
  * character. It is deliberately not part of REVIEW_TAGS — a `#pc` row is no
- * harvest (no thread, no NPC stub), it is a reminder for the table. Where both
+ * harvest (no thread, no npc), it is a reminder for the table. Where both
  * appear (`#pc #thread`), `#pc` wins.
  */
 export const PC_TAG = "pc";
@@ -124,50 +120,4 @@ export function groupByPcTag<T>(
   const groups: PcGroup<T>[] = [...named].map(([tag, items]) => ({ tag, entries: items }));
   if (general.length > 0) groups.push({ tag: undefined, entries: general });
   return groups;
-}
-
-// --- npc slug ----------------------------------------------------------------
-
-/** An npc id is an entity id — one slug rule for the whole app (lib/entity). */
-export function isNpcSlug(id: string): boolean {
-  return isEntityId(id);
-}
-
-const QUOTED = /["“„»'‚]([^"“”„«»'‚‘]{2,40})["”“«'‘]/u;
-const CAPITALIZED = /\p{Lu}[\p{L}'-]*(?:\s+\p{Lu}[\p{L}'-]*){0,2}/gu;
-
-/**
- * The name a log row probably introduces: a quoted name wins
- * (`Improvisiert: Fischerin "Old Metta" am Steg` → `Old Metta`), otherwise
- * the first run of capitalized words that is not a label ending in `:`.
- * Undefined when nothing looks like a name — the dialog then starts empty.
- */
-export function npcNameFromText(text: string): string | undefined {
-  const quoted = QUOTED.exec(text);
-  const inQuotes = quoted?.[1]?.trim();
-  if (inQuotes !== undefined && inQuotes !== "") return inQuotes;
-
-  for (const match of text.matchAll(CAPITALIZED)) {
-    const name = match[0].trim();
-    const after = text.charAt((match.index ?? 0) + match[0].length);
-    if (after === ":") continue; // "Improvisiert:", "Neuer NPC:" — a label
-    if (name !== "") return name;
-  }
-  return undefined;
-}
-
-/**
- * Kebab-case slug of a display name (German transliteration, diacritics
- * folded); an empty string when nothing usable is left. The rule lives in
- * `@grimoire/shared/slug` — the create dialogs derive ids the same way and the
- * SERVER has to agree with them — and is re-exported here for the callers that
- * already read it from this module.
- */
-export { toSlug };
-
-/** Slug proposal for the NPC-stub dialog (editable there); "" when the text
- *  carries no recognizable name. */
-export function deriveNpcSlug(text: string): string {
-  const name = npcNameFromText(text);
-  return name === undefined ? "" : toSlug(name);
 }

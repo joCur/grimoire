@@ -82,7 +82,7 @@ test("the gear is the way in, and the campaign menu is not", async ({
   // slot, because the chrome is global and stable (design/README.md).
   for (const route of [
     "/campaigns/beispiel",
-    "/campaigns/beispiel/list/npcs",
+    "/campaigns/beispiel/npcs",
     "/campaigns/beispiel/generate",
   ]) {
     await page.goto(route);
@@ -350,7 +350,7 @@ test("a server error is read in the selected language", async ({
   const taken = "Jorna";
 
   // --- German (the default) -------------------------------------------------
-  await page.goto("/campaigns/beispiel/list/npcs");
+  await page.goto("/campaigns/beispiel/npcs");
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill(taken);
   await page.getByRole("button", { name: "Anlegen" }).click();
@@ -360,12 +360,12 @@ test("a server error is read in the selected language", async ({
     page.getByText('NPC „jorna“ existiert schon — Vorschlag: „jorna-2“'),
   ).toBeVisible();
   // …and the 409 wrote nothing.
-  expect(await api.exists("npcs/jorna-2")).toBe(false);
+  expect(await api.npcExists("jorna-2")).toBe(false);
   await page.getByRole("button", { name: "Abbrechen" }).click();
 
   // --- the same collision in English ----------------------------------------
   await api.send("PUT", "settings", { locale: "en" });
-  await page.goto("/campaigns/beispiel/list/npcs");
+  await page.goto("/campaigns/beispiel/npcs");
   await page.getByRole("button", { name: "Create NPC" }).click();
   await page.getByLabel("Name").fill(taken);
   await page.getByRole("button", { name: "Create" }).click();
@@ -377,7 +377,7 @@ test("a server error is read in the selected language", async ({
   await expect(page.getByText("existiert schon", { exact: false })).toHaveCount(
     0,
   );
-  expect(await api.exists("npcs/jorna-2")).toBe(false);
+  expect(await api.npcExists("jorna-2")).toBe(false);
 
   // Back to German for the rest of the suite.
   await api.send("PUT", "settings", { locale: null });
@@ -391,7 +391,7 @@ test("the gear carries the campaign it was opened FROM, and has a way back", asy
   // The gear is campaign-independent as a ROUTE but not as a moment: the
   // page has to be about the campaign the DM was just looking at, not about
   // whichever one the "/" heuristic would guess.
-  await page.goto("/campaigns/beispiel/list/npcs");
+  await page.goto("/campaigns/beispiel/npcs");
   await gear(page, "Einstellungen").click();
   await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(

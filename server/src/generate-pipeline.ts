@@ -1,7 +1,7 @@
 // The scene generator as a PIPELINE.
 //
-// A single provider call returning every scene, every suggested entry and
-// every warning at once is the most expensive way to be wrong: one unknown
+// A single provider call returning every scene, every proposed npc and
+// location and every warning at once is the most expensive way to be wrong: one unknown
 // callout in the third scene fails the whole reply, the correction turn
 // resends the entire prompt plus the entire reply, and a run that hits the
 // output cap produces nothing at all.
@@ -10,10 +10,10 @@
 //
 //   1. OUTLINE — one small call. Which scenes exist, what they are called,
 //      which location they belong to, which other scenes they reference, and
-//      which npcs/locations the campaign does not know yet. Every id in the
-//      whole run is decided HERE, which is what makes the cross references of
-//      step 2 consistent. The outline has its own validation and its
-//      own correction turns.
+//      which npcs and which locations the campaign does not know yet — two
+//      lists of their own. Every id in the whole run is decided HERE, which
+//      is what makes the cross references of step 2 consistent. The outline
+//      has its own validation and its own correction turns.
 //
 //      Each outline scene also names the FIRST and LAST sentence of its
 //      source passage, verbatim. The server cuts the passage out of the
@@ -32,8 +32,9 @@
 //      PER SCENE, so a form error costs that scene and nothing else, and a
 //      finished scene is reviewable while its siblings are still running.
 //
-//   3. NPCS AND LOCATIONS — one call per new npc/location of the outline,
-//      with the scenes that reference it as context. Deduped by id.
+//   3. NPCS AND LOCATIONS — one call per new npc and per new location of the
+//      outline, each with the scenes that reference it as context and each
+//      answered in its entity's own reply form. Deduped by id.
 //
 // The augment runs and the NPC run stay single-call runs — one row each,
 // nothing to decompose.
@@ -43,15 +44,14 @@ import {
   type GenerateJobPart,
   type GenerateUsage,
   type GeneratedSceneDraft,
-  type GeneratedStub,
   type LocationProposal,
   type NamingHint,
+  type NpcProposal,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import {
-  MAX_OUTLINE_ENTRIES,
+  MAX_OUTLINE_PROPOSALS,
   MAX_OUTLINE_SCENES,
-  OUTLINE_ENTRY_KINDS,
   OUTLINE_SCHEMA_DESCRIPTION,
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
@@ -67,12 +67,10 @@ import {
   loadPromptAssets,
   obtainProvider,
   runPipeline,
-  quickstatsErrors,
-  stubPath,
   unknownCallouts,
   unknownRefErrors,
-  validateEntry,
   validateLocationProposal,
+  validateNpcProposal,
   validateSceneEntry,
   type AllowedRefs,
   type SceneContext,
@@ -80,14 +78,15 @@ import {
 export type { SceneContext } from "./generator";
 import { parseEntryReply, parseJsonReply } from "./entry-reply";
 import { locationReplyRequest, parseLocationReply } from "./location-reply";
+import { npcReplyRequest, parseNpcReply } from "./npc-reply";
 import type { LLMProvider } from "./llm-provider";
 
-/** How many scene/entry calls of one run are in flight at once. */
+/** How many scene, npc and location calls of one run are in flight at once. */
 export const PART_CONCURRENCY = 3;
 
 /**
- * The most parts ONE outline may produce — 12 scenes and 12 suggested
- * entries, counted separately.
+ * The most parts ONE outline may produce — 12 scenes, and 12 new npcs and
+ * locations counted together.
  *
  * Without it the outline decides how many provider calls a run makes, and a
  * source text that is a whole adventure (or a model that splits every
@@ -102,7 +101,7 @@ export const PART_CONCURRENCY = 3;
  * them to the provider, the validation below enforces them) and are
  * re-exported here, where every caller already reads them.
  */
-export { MAX_OUTLINE_ENTRIES, MAX_OUTLINE_SCENES } from "@grimoire/shared/outline-schema";
+export { MAX_OUTLINE_PROPOSALS, MAX_OUTLINE_SCENES } from "@grimoire/shared/outline-schema";
 
 // --- the outline --------------------------------------------------------------
 
@@ -118,17 +117,31 @@ export interface OutlineScene {
   refs: string[];
 }
 
-/** One npc/location the outline says the campaign does not know yet. */
-export interface OutlineEntry {
-  kind: "npc" | "location";
+/** One npc the outline says the campaign does not know yet. */
+export interface OutlineNpc {
   id: string;
   name: string;
+  /** One sentence on what the npc is in the adventure. */
   summary: string;
 }
 
+/** One location the outline says the campaign does not know yet. */
+export interface OutlineLocation {
+  id: string;
+  name: string;
+  /** One sentence on what the location is in the adventure. */
+  summary: string;
+}
+
+/**
+ * The outline of a run: its scenes, and the npcs and the locations it
+ * introduces as two lists of their own — the same split the job's result has
+ * (`result.npcs`, `result.locations`).
+ */
 export interface RunOutline {
   scenes: OutlineScene[];
-  entries: OutlineEntry[];
+  npcs: OutlineNpc[];
+  locations: OutlineLocation[];
   warnings: string[];
   /**
    * What the chapter a new-chapter run creates is about, from the source
@@ -169,11 +182,6 @@ export function parseOutlineJson(raw: string): { value: unknown; repaired: boole
   return parseJsonReply(raw);
 }
 
-/** One of the schema's entry kinds — the list is the schema's own. */
-function isOutlineEntryKind(v: unknown): v is (typeof OUTLINE_ENTRY_KINDS)[number] {
-  return typeof v === "string" && (OUTLINE_ENTRY_KINDS as readonly string[]).includes(v);
-}
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
@@ -186,8 +194,9 @@ function stringField(obj: Record<string, unknown>, key: string): string | undefi
 /**
  * Mechanical validation of the outline reply. The rules are the ones the
  * batch reply always had, moved one level up: kebab ids, no duplicate id in
- * the whole run, a known scene `type`, a `location` that resolves against the
- * campaign OR the outline's own entries, and `refs` that name outline scenes.
+ * the whole run — across scenes, npcs and locations —, a known scene `type`,
+ * a `location` that resolves against the campaign OR the outline's own
+ * locations, and `refs` that name outline scenes.
  *
  * The chapter is NOT the model's: a scene that names one has to
  * name the run's, and anything else is a correction turn rather than a
@@ -205,48 +214,51 @@ export function validateOutlineReply(
 
   const rawScenes = obj.scenes ?? [];
   if (!Array.isArray(rawScenes)) return { ok: false, errors: ['"scenes" must be an array'] };
-  const rawEntries = obj.entries ?? [];
-  if (!Array.isArray(rawEntries)) return { ok: false, errors: ['"entries" must be an array'] };
+  const rawNpcs = obj.npcs ?? [];
+  if (!Array.isArray(rawNpcs)) return { ok: false, errors: ['"npcs" must be an array'] };
+  const rawLocations = obj.locations ?? [];
+  if (!Array.isArray(rawLocations)) return { ok: false, errors: ['"locations" must be an array'] };
 
   const seen = new Set<string>();
-  const entries: OutlineEntry[] = [];
-  rawEntries.forEach((item, index) => {
-    const label = `entries[${index}]`;
+  /**
+   * One new npc or location of the outline: its id a kebab slug that the
+   * whole run uses only once, its name (the id when none), its one-liner.
+   * The two lists share the rule, not the result: each keeps its own items.
+   */
+  const readNew = (item: unknown, label: string): OutlineNpc | OutlineLocation | null => {
     if (!isRecord(item)) {
       errors.push(`${label}: must be an object`);
-      return;
-    }
-    const kind = item.kind;
-    // The schema's own list: the shape the provider is forced into and
-    // the shape the validation accepts read the same constant.
-    if (!isOutlineEntryKind(kind)) {
-      errors.push(`${label}: "kind" must be ${OUTLINE_ENTRY_KINDS.join(" or ")}`);
-      return;
+      return null;
     }
     const id = stringField(item, "id");
     if (id === undefined || !ENTITY_SLUG.test(id)) {
       errors.push(`${label}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
-      return;
+      return null;
     }
     if (seen.has(id)) {
       errors.push(`${label}: duplicate id "${id}" — jede id kommt im Durchlauf nur einmal vor`);
-      return;
+      return null;
     }
     // An id the campaign ALREADY has is deliberately not an error here: an
     // npc or location may exist and hold nothing, so "the location `bucht`
     // exists" routinely means "a scene mentioned it and nobody has written it
-    // yet" — exactly what this run should fill. The apply path is what
-    // decides whether a write collides.
+    // yet" — exactly what this run should fill. The accept is what decides
+    // whether a write collides.
     seen.add(id);
-    entries.push({
-      kind,
-      id,
-      name: stringField(item, "name") ?? id,
-      summary: stringField(item, "summary") ?? "",
-    });
+    return { id, name: stringField(item, "name") ?? id, summary: stringField(item, "summary") ?? "" };
+  };
+  const npcs: OutlineNpc[] = [];
+  rawNpcs.forEach((item, index) => {
+    const npc = readNew(item, `npcs[${index}]`);
+    if (npc !== null) npcs.push(npc);
+  });
+  const locations: OutlineLocation[] = [];
+  rawLocations.forEach((item, index) => {
+    const location = readNew(item, `locations[${index}]`);
+    if (location !== null) locations.push(location);
   });
 
-  const entryLocationIds = new Set(entries.filter((e) => e.kind === "location").map((e) => e.id));
+  const outlineLocationIds = new Set(locations.map((location) => location.id));
   const scenes: OutlineScene[] = [];
   rawScenes.forEach((item, index) => {
     const label = `scenes[${index}]`;
@@ -276,10 +288,10 @@ export function validateOutlineReply(
       );
     }
     const location = stringField(item, "location");
-    if (location !== undefined && !ctx.locationIds.has(location) && !entryLocationIds.has(location)) {
+    if (location !== undefined && !ctx.locationIds.has(location) && !outlineLocationIds.has(location)) {
       errors.push(
         `scene "${id}": location "${location}" does not exist in the campaign and ` +
-          `no suggested entry provides it`,
+          `"locations" of this outline does not propose it`,
       );
     }
     const rawRefs = item.refs ?? [];
@@ -324,10 +336,14 @@ export function validateOutlineReply(
         "(Verzweigungen derselben Situation gehören in EINE Szene)",
     );
   }
-  if (entries.length > MAX_OUTLINE_ENTRIES) {
+  // Every new npc and every new location is a provider call of its own, so
+  // the two lists share one bound.
+  const proposals = npcs.length + locations.length;
+  if (proposals > MAX_OUTLINE_PROPOSALS) {
     errors.push(
-      `"entries": ${entries.length} neue Figuren und Orte sind zu viele für einen ` +
-        `Durchlauf — nenne höchstens ${MAX_OUTLINE_ENTRIES}, die das Kapitel wirklich braucht`,
+      `"npcs" und "locations": ${proposals} neue Figuren und Orte sind zu viele für einen ` +
+        `Durchlauf — nenne zusammen höchstens ${MAX_OUTLINE_PROPOSALS}, die das Kapitel ` +
+        "wirklich braucht",
     );
   }
 
@@ -360,7 +376,8 @@ export function validateOutlineReply(
     ok: true,
     result: {
       scenes,
-      entries,
+      npcs,
+      locations,
       // The repair is recorded as a run warning, not swallowed.
       warnings: parsedReply.repaired ? [...warnings, REPAIRED_REPLY_WARNING] : warnings,
       ...(chapterDescription === undefined ? {} : { chapterDescription }),
@@ -482,11 +499,16 @@ export function outlineBlock(outline: RunOutline): string {
     const refs = scene.refs.length === 0 ? "" : ` → verweist auf: ${scene.refs.join(", ")}`;
     lines.push(`${bits.join("")}${refs}`);
   }
-  if (outline.entries.length > 0) {
+  if (outline.npcs.length > 0) {
     lines.push("");
-    lines.push("Neue Figuren und Orte dieses Durchlaufs (ids nutzbar wie bestehende):");
-    for (const entry of outline.entries) {
-      lines.push(`- ${entry.kind}: ${entry.id} (${entry.name}) — ${entry.summary}`);
+    lines.push("Neue Figuren dieses Durchlaufs (ids nutzbar wie bestehende):");
+    for (const npc of outline.npcs) lines.push(`- ${npc.id} (${npc.name}) — ${npc.summary}`);
+  }
+  if (outline.locations.length > 0) {
+    lines.push("");
+    lines.push("Neue Orte dieses Durchlaufs (ids nutzbar wie bestehende):");
+    for (const location of outline.locations) {
+      lines.push(`- ${location.id} (${location.name}) — ${location.summary}`);
     }
   }
   return lines.join("\n");
@@ -528,70 +550,76 @@ export function validateSingleSceneReply(input: {
   return { ok: true, result: { scene: draft, warnings: reply.warnings } };
 }
 
-/** What one npc or location part of a run produced. */
-export type EntryPartResult =
-  | { stub: GeneratedStub; location?: undefined; warnings: string[] }
-  | { location: LocationProposal; stub?: undefined; warnings: string[] };
+/**
+ * The body rules every proposed npc and location of a run shares: known
+ * callouts and `[[id]]` references that name something of the campaign or of
+ * the outline (`allowed.refIds`), and the id the outline gave it.
+ */
+function proposalErrors(
+  label: string,
+  id: string,
+  expectedId: string,
+  body: string,
+  allowed: AllowedRefs,
+): string[] {
+  if (id !== expectedId) {
+    return [
+      `${label}: die id muss "${expectedId}" bleiben — sie kommt aus der Gliederung und ` +
+        "die Szenen dieses Durchlaufs verweisen darauf",
+    ];
+  }
+  const errors: string[] = [];
+  for (const callout of unknownCallouts(body)) errors.push(`${label}: unknown callout "[!${callout}]"`);
+  for (const msg of unknownRefErrors(body, allowed.refIds)) errors.push(`${label}: ${msg}`);
+  return errors;
+}
 
 /**
- * One npc or location the outline proposes, validated as a part of a scene
- * run.
- *
- * An npc is built on `validateEntry` — the very function that judged the
- * `entries` of the batch reply — a location on its own reply schema
- * (`validateLocationProposal`); both then get the body rules every generated
- * text shares (known callouts, `[[id]]` references that resolve) and, for an
- * npc, quoted quickstats. What it does NOT take from the npc RUN are the
- * rules that are about that run rather than about the npc: an npc run forbids
- * a `chapter` key (it has no target chapter) while a scene run's npc
+ * One npc the outline proposes, validated as a part of a scene run: read by
+ * the npc's own reply schema (./npc-reply.ts), a kebab id, and the body rules
+ * every generated text shares. What it does NOT take from the NPC RUN are
+ * the rules that are about that run rather than about the npc: an NPC run
+ * forbids a `chapter` (it has no target chapter) while a scene run's npc
  * legitimately belongs to the run's chapter, and its pinned-id rule is
  * replaced by the outline's id.
- *
- * A reference may name anything the run's outline decided — another proposed
- * npc or location, a scene of the run — next to what the campaign has
- * (`allowed.refIds`).
  */
-export function validateEntryReply(
+export function validateNpcPartReply(
   raw: string,
-  entry: OutlineEntry,
+  outlineNpc: OutlineNpc,
   allowed: AllowedRefs,
-): { ok: true; result: EntryPartResult } | { ok: false; errors: string[] } {
-  const label = `${entry.kind} "${entry.id}"`;
+): { ok: true; result: { npc: NpcProposal; warnings: string[] } } | { ok: false; errors: string[] } {
+  const label = `npc "${outlineNpc.id}"`;
+  const read = parseNpcReply(raw);
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
   const errors: string[] = [];
-  let result: EntryPartResult;
-  let body: string;
-  if (entry.kind === "location") {
-    const read = parseLocationReply(raw);
-    if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
-    const location = validateLocationProposal(read.reply, errors);
-    if (location === null || errors.length > 0) return { ok: false, errors };
-    result = { location, warnings: read.reply.warnings };
-    body = location.body;
-  } else {
-    const read = parseEntryReply(raw, entry.kind);
-    if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
-    const stub = validateEntry({ kind: entry.kind, reply: read.reply }, 0, errors);
-    if (stub === null || errors.length > 0) return { ok: false, errors };
-    for (const msg of quickstatsErrors(read.reply.properties)) errors.push(`${label}: ${msg}`);
-    result = { stub, warnings: read.reply.warnings };
-    body = stub.body;
-  }
-  const id = result.location?.id ?? result.stub?.id;
-  if (id !== entry.id) {
-    return {
-      ok: false,
-      errors: [
-        `${label}: die id muss "${entry.id}" bleiben — sie kommt aus der Gliederung und ` +
-          "die Szenen dieses Durchlaufs verweisen darauf",
-      ],
-    };
-  }
-  for (const callout of unknownCallouts(body)) {
-    errors.push(`${label}: unknown callout "[!${callout}]"`);
-  }
-  for (const msg of unknownRefErrors(body, allowed.refIds)) errors.push(`${label}: ${msg}`);
+  const npc = validateNpcProposal(read.reply, errors);
+  if (npc === null || errors.length > 0) return { ok: false, errors };
+  errors.push(...proposalErrors(label, npc.id, outlineNpc.id, npc.body, allowed));
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result };
+  return { ok: true, result: { npc, warnings: read.reply.warnings } };
+}
+
+/**
+ * One location the outline proposes, validated as a part of a scene run:
+ * read by the location's own reply schema (./location-reply.ts), a kebab id,
+ * and the body rules every generated text shares.
+ */
+export function validateLocationPartReply(
+  raw: string,
+  outlineLocation: OutlineLocation,
+  allowed: AllowedRefs,
+):
+  | { ok: true; result: { location: LocationProposal; warnings: string[] } }
+  | { ok: false; errors: string[] } {
+  const label = `location "${outlineLocation.id}"`;
+  const read = parseLocationReply(raw);
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
+  const errors: string[] = [];
+  const location = validateLocationProposal(read.reply, errors);
+  if (location === null || errors.length > 0) return { ok: false, errors };
+  errors.push(...proposalErrors(label, location.id, outlineLocation.id, location.body, allowed));
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, result: { location, warnings: read.reply.warnings } };
 }
 
 // --- the run ------------------------------------------------------------------
@@ -599,7 +627,7 @@ export function validateEntryReply(
 /** What one finished part contributes to the job's result. */
 export interface PartOutcome {
   scene?: GeneratedSceneDraft;
-  stub?: GeneratedStub;
+  npc?: NpcProposal;
   location?: LocationProposal;
   warnings: string[];
   namingHints: NamingHint[];
@@ -643,8 +671,12 @@ export function scenePartKey(id: string): string {
   return `scene:${id}`;
 }
 
-export function entryPartKey(kind: "npc" | "location", id: string): string {
-  return `${kind}:${id}`;
+export function npcPartKey(id: string): string {
+  return `npc:${id}`;
+}
+
+export function locationPartKey(id: string): string {
+  return `location:${id}`;
 }
 
 /** The parts an outline produces, in the order the review shows them. */
@@ -659,12 +691,21 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
         status: "pending",
       }),
     ),
-    ...outline.entries.map(
-      (entry): GenerateJobPart => ({
-        key: entryPartKey(entry.kind, entry.id),
-        kind: entry.kind,
-        id: entry.id,
-        title: entry.name,
+    ...outline.npcs.map(
+      (npc): GenerateJobPart => ({
+        key: npcPartKey(npc.id),
+        kind: "npc",
+        id: npc.id,
+        title: npc.name,
+        status: "pending",
+      }),
+    ),
+    ...outline.locations.map(
+      (location): GenerateJobPart => ({
+        key: locationPartKey(location.id),
+        kind: "location",
+        id: location.id,
+        title: location.name,
         status: "pending",
       }),
     ),
@@ -748,18 +789,19 @@ export interface RunPlan {
   allowed: AllowedRefs;
   /**
    * The cut source passage per scene id, computed once for the whole run.
-   * `entryContext` needs every scene's passage for every entry it builds, and
-   * the cut normalizes the WHOLE source text per call — so an outline with
-   * ten scenes and ten entries would otherwise normalize it a hundred times.
+   * `npcContext` and `locationContext` need every scene's passage for every
+   * npc and location they build, and the cut normalizes the WHOLE source text
+   * per call — so an outline with ten scenes and ten npcs would otherwise
+   * normalize it a hundred times.
    */
   excerpts: Map<string, { text: string; matched: boolean }>;
 }
 
 /**
  * The plan of a run: the campaign context plus the outline, and the id sets
- * its parts may reference (the campaign's plus the outline's own entries and
- * scenes: every id of the run comes from the outline, so the validation
- * checks against outline + context and nothing else).
+ * its parts may reference (the campaign's plus the outline's own npcs,
+ * locations and scenes: every id of the run comes from the outline, so the
+ * validation checks against outline + context and nothing else).
  */
 export function planOf(input: {
   campaign: string;
@@ -777,17 +819,15 @@ export function planOf(input: {
       ]),
     ),
     allowed: {
-      npcIds: new Set([
-        ...ctx.npcIds,
-        ...outline.entries.filter((e) => e.kind === "npc").map((e) => e.id),
-      ]),
+      npcIds: new Set([...ctx.npcIds, ...outline.npcs.map((npc) => npc.id)]),
       locationIds: new Set([
         ...ctx.locationIds,
-        ...outline.entries.filter((e) => e.kind === "location").map((e) => e.id),
+        ...outline.locations.map((location) => location.id),
       ]),
       refIds: new Set([
         ...campaignRefIds(ctx),
-        ...outline.entries.map((e) => e.id),
+        ...outline.npcs.map((npc) => npc.id),
+        ...outline.locations.map((location) => location.id),
         ...outline.scenes.map((scene) => scene.id),
       ]),
     },
@@ -893,15 +933,56 @@ export async function runScenePart(
   };
 }
 
-/** Step 3: one proposed npc or location, with the scenes that reference it as context. */
-export async function runEntryPart(
+/** Step 3: one proposed npc, with the scenes that mention it as context. */
+export async function runNpcPart(
   plan: RunPlan,
-  entry: OutlineEntry,
+  outlineNpc: OutlineNpc,
   provider: LLMProvider,
   counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
-  const assets = await loadPromptAssets(entry.kind);
-  const result = await runPipeline<EntryPartResult & { usage?: GenerateUsage }>({
+  const assets = await loadPromptAssets("npc");
+  const result = await runPipeline<{ npc: NpcProposal; warnings: string[]; usage?: GenerateUsage }>({
+    req: {
+      systemPrompt: assets.systemPrompt,
+      fewShotTarget: assets.fewShotTarget,
+      knowledge: plan.ctx.knowledge,
+      glossary: plan.ctx.glossary,
+      context: { npcs: plan.ctx.npcs, locations: plan.ctx.locations, targetId: outlineNpc.id },
+      outline: outlineBlock(plan.outline),
+      // What this ONE call is about: the npc, and the passages of the scenes
+      // that mention it — rather than no context of its own at all.
+      sourceText: npcContext(plan, outlineNpc),
+      jsonSchema: npcReplyRequest("create"),
+    },
+    provider,
+    validate: (raw) => validateNpcPartReply(raw, outlineNpc, plan.allowed),
+    correctionTail: "den vollständigen NPC enthalten",
+    onCall: counter.onCall,
+  });
+  const { body, ...fields } = result.npc;
+  return {
+    outcome: {
+      npc: result.npc,
+      warnings: result.warnings,
+      namingHints: checkDraftsNaming([{ npc: result.npc.id, fields, body }], plan.ctx.namingRules),
+    },
+    usage: usageOf(result.usage, counter.count()),
+  };
+}
+
+/** Step 3: one proposed location, with the scenes set there as context. */
+export async function runLocationPart(
+  plan: RunPlan,
+  outlineLocation: OutlineLocation,
+  provider: LLMProvider,
+  counter: CallCounter = callCounter(),
+): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
+  const assets = await loadPromptAssets("location");
+  const result = await runPipeline<{
+    location: LocationProposal;
+    warnings: string[];
+    usage?: GenerateUsage;
+  }>({
     req: {
       systemPrompt: assets.systemPrompt,
       fewShotTarget: assets.fewShotTarget,
@@ -910,49 +991,24 @@ export async function runEntryPart(
       context: {
         npcs: plan.ctx.npcs,
         locations: plan.ctx.locations,
-        targetId: entry.id,
+        targetId: outlineLocation.id,
       },
       outline: outlineBlock(plan.outline),
-      // What this ONE call is about: the entry, and the passages of the
-      // scenes that mention it — rather than no context of its own at all.
-      sourceText: entryContext(plan, entry),
-      jsonSchema:
-        entry.kind === "location"
-          ? locationReplyRequest("create")
-          : entryReplySchema(entry.kind, "create"),
+      sourceText: locationContext(plan, outlineLocation),
+      jsonSchema: locationReplyRequest("create"),
     },
     provider,
-    validate: (raw) => validateEntryReply(raw, entry, plan.allowed),
-    correctionTail:
-      entry.kind === "npc" ? "den vollständigen NPC-Eintrag enthalten" : "den vollständigen Ort enthalten",
+    validate: (raw) => validateLocationPartReply(raw, outlineLocation, plan.allowed),
+    correctionTail: "den vollständigen Ort enthalten",
     onCall: counter.onCall,
   });
-  if (result.location !== undefined) {
-    const { body, ...fields } = result.location;
-    return {
-      outcome: {
-        location: result.location,
-        warnings: result.warnings,
-        namingHints: checkDraftsNaming(
-          [{ location: result.location.id, fields, body }],
-          plan.ctx.namingRules,
-        ),
-      },
-      usage: usageOf(result.usage, counter.count()),
-    };
-  }
+  const { body, ...fields } = result.location;
   return {
     outcome: {
-      stub: result.stub,
+      location: result.location,
       warnings: result.warnings,
       namingHints: checkDraftsNaming(
-        [
-          {
-            path: stubPath(result.stub),
-            properties: result.stub.properties,
-            body: result.stub.body,
-          },
-        ],
+        [{ location: result.location.id, fields, body }],
         plan.ctx.namingRules,
       ),
     },
@@ -961,34 +1017,52 @@ export async function runEntryPart(
 }
 
 /**
- * The source material of an entry call: the one-liner from the outline plus
- * the source passages of every scene that references the entry. A location is
- * referenced by the scenes whose `location` it is; an npc by the scenes whose
- * passage mentions its id or its name — the outline does not list npcs per
- * scene, and a text search over the passages is both cheap and honest.
+ * The source material of an npc call: the one-liner from the outline plus the
+ * source passages of every scene that mentions the npc — by its name or its
+ * id. The outline does not list npcs per scene, and a text search over the
+ * passages is both cheap and honest.
  */
-export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
-  const blocks: string[] = [`${entry.name} (${entry.id}): ${entry.summary}`];
-  const needle = entry.name.toLowerCase();
+export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc): string {
+  const needle = outlineNpc.name.toLowerCase();
   // The id is kebab-case ENGLISH while the name is German ("harbour-master" /
   // "Hafenmeisterin"), so the whole id rarely appears in an English source
   // text but its WORDS do. Each word is required, in any order — matching on
-  // one word alone would pull "old" or "the" into every entry's context.
-  const idWords = entry.id.split("-").filter((word) => word.length > 2);
+  // one word alone would pull "old" or "the" into every npc's context.
+  const idWords = outlineNpc.id.split("-").filter((word) => word.length > 2);
+  return contextOf(plan, outlineNpc, (_scene, passage) => {
+    const lower = passage.toLowerCase();
+    return (
+      lower.includes(needle) ||
+      passage.includes(outlineNpc.id) ||
+      (idWords.length > 0 && idWords.every((word) => lower.includes(word)))
+    );
+  });
+}
+
+/**
+ * The source material of a location call: the one-liner from the outline
+ * plus the source passages of every scene whose `location` it is.
+ */
+export function locationContext(plan: RunPlan, outlineLocation: OutlineLocation): string {
+  return contextOf(plan, outlineLocation, (scene) => scene.location === outlineLocation.id);
+}
+
+/**
+ * The one-liner plus the passage of every scene `mentions` picks. Nothing
+ * matched: the whole source text is the honest fallback — the same rule the
+ * excerpt cut follows.
+ */
+function contextOf(
+  plan: RunPlan,
+  item: { id: string; name: string; summary: string },
+  mentions: (scene: OutlineScene, passage: string) => boolean,
+): string {
+  const blocks: string[] = [`${item.name} (${item.id}): ${item.summary}`];
   for (const scene of plan.outline.scenes) {
     const passage = excerptOf(plan, scene).text;
-    const lower = passage.toLowerCase();
-    const mentions =
-      entry.kind === "location"
-        ? scene.location === entry.id
-        : lower.includes(needle) ||
-          passage.includes(entry.id) ||
-          (idWords.length > 0 && idWords.every((word) => lower.includes(word)));
-    if (!mentions) continue;
+    if (!mentions(scene, passage)) continue;
     blocks.push(`### Szene „${scene.title}“ (${scene.id})\n\n${passage}`);
   }
-  // Nothing matched: the whole source text is the honest fallback — the same
-  // rule the excerpt cut follows.
   if (blocks.length === 1) blocks.push(plan.sourceText);
   return blocks.join("\n\n");
 }
@@ -1015,7 +1089,9 @@ export async function runPart(
     const run =
       part.kind === "scene"
         ? await runScenePart(plan, sceneOf(plan.outline, part.id), provider, counter)
-        : await runEntryPart(plan, entryOf(plan.outline, part.kind, part.id), provider, counter);
+        : part.kind === "npc"
+          ? await runNpcPart(plan, npcOf(plan.outline, part.id), provider, counter)
+          : await runLocationPart(plan, locationOf(plan.outline, part.id), provider, counter);
     if (sink.cancelled()) return;
     await sink.partDone(part.key, run.outcome, run.usage);
   } catch (err) {
@@ -1041,14 +1117,16 @@ export function sceneOf(outline: RunOutline, id: string): OutlineScene {
   return scene;
 }
 
-export function entryOf(
-  outline: RunOutline,
-  kind: "npc" | "location",
-  id: string,
-): OutlineEntry {
-  const entry = outline.entries.find((e) => e.kind === kind && e.id === id);
-  if (entry === undefined) throw new ApiError(404, `unknown outline entry: ${kind}/${id}`);
-  return entry;
+export function npcOf(outline: RunOutline, id: string): OutlineNpc {
+  const npc = outline.npcs.find((n) => n.id === id);
+  if (npc === undefined) throw new ApiError(404, `unknown outline npc: ${id}`);
+  return npc;
+}
+
+export function locationOf(outline: RunOutline, id: string): OutlineLocation {
+  const location = outline.locations.find((l) => l.id === id);
+  if (location === undefined) throw new ApiError(404, `unknown outline location: ${id}`);
+  return location;
 }
 
 /** Run `parts` with at most PART_CONCURRENCY in flight; failures never stop siblings. */

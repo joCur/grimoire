@@ -1,8 +1,7 @@
-// Render tests for the properties controls (react-dom/server —
-// no DOM). What must hold is the degrade contract of the reference and select
-// fields: the existing ids are OFFERED (a <datalist>, never a closed list), an
-// id without an entry stays typeable and visible, and a status value nobody knows
-// is an option of its own instead of being corrected away.
+// Render tests for the properties controls of a scene and a chapter
+// (react-dom/server — no DOM). What must hold is the degrade contract of the
+// reference and select fields: the existing ids are OFFERED (a <datalist>,
+// never a closed list), an id without a row stays typeable and visible.
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
@@ -22,20 +21,18 @@ const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [],
   npcs: [
-    { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
-    { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+    { id: "fenn", name: "Fenn", status: "alive" },
+    { id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
   ],
   locations: [{ id: "leuchtturm", name: "Der Leuchtturm" }],
   sessions: [],
 };
 
-function fieldOf(kind: "scene" | "npc", key: string): PropertiesField {
-  const field = (propertiesFieldsFor(kind, t) ?? []).find((f) => f.key === key);
-  if (field === undefined) throw new Error(`no ${kind} field ${key}`);
+function sceneField(key: string): PropertiesField {
+  const field = (propertiesFieldsFor("scene", t) ?? []).find((f) => f.key === key);
+  if (field === undefined) throw new Error(`no scene field ${key}`);
   return field;
 }
-
-const sceneField = (key: string) => fieldOf("scene", key);
 
 function render(
   field: PropertiesField,
@@ -134,7 +131,7 @@ describe("chips and selects", () => {
   });
 
   test("a hand-edited list keeps its duplicates, each removable on its own", () => {
-    // `tags: [social, social]` is what the entry carries: it has to show
+    // `tags: [social, social]` is what the scene carries: it has to show
     // up as two chips, and clicking one X may not take both (index keys).
     const html = render(sceneField("tags"), { kind: "list", items: ["social", "social"] });
     expect(count(html, "<li")).toBe(2);
@@ -149,31 +146,5 @@ describe("chips and selects", () => {
     expect(html).toContain("Bereit");
     expect(html).toContain("— nicht gesetzt —");
     expect(count(html, "<option")).toBe(5);
-  });
-});
-
-describe("quickstats", () => {
-  test("every row is two labelled inputs plus its own remove button", () => {
-    const html = render(fieldOf("npc", "quickstats"), {
-      kind: "pairs",
-      entries: [{ key: "insight", value: "+2" }],
-    });
-    expect(html).toContain('aria-label="Kurzwerte, Zeile 1: Name"');
-    expect(html).toContain('aria-label="Kurzwerte, Zeile 1: Wert"');
-    expect(html).toContain('aria-label="insight entfernen"');
-    expect(html).toContain("Zeile hinzufügen");
-  });
-
-  test("what blocks the save is said under the field, not swallowed", () => {
-    const html = render(
-      fieldOf("npc", "quickstats"),
-      { kind: "pairs", entries: [{ key: "", value: "+2" }] },
-      "",
-      { issue: "Zeile ohne Namen — Name ergänzen oder Zeile entfernen." },
-    );
-    expect(html).toContain("Zeile ohne Namen — Name ergänzen oder Zeile entfernen.");
-    expect(html).toContain("text-destructive");
-    // The field's own hint keeps standing next to it.
-    expect(html).toContain("nur was sozial gebraucht wird");
   });
 });

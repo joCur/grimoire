@@ -1,6 +1,7 @@
 // The generator: the background runs (scenes, one npc, the augment of an
-// existing npc or scene), the job with its review state, and the writes that
-// accept what a run proposed.
+// existing scene), the job with its review state, and the writes that accept
+// what a run proposed. An npc and a location are augmented on their own
+// resources (./npcs.ts, ./locations.ts).
 
 import { Hono } from "hono";
 import type { DraftEdit } from "@grimoire/shared";
@@ -22,7 +23,7 @@ import {
   obtainProvider,
 } from "../generator";
 import { applyAugment, readAugmentTarget } from "../generator-augment";
-import { jsonBody, optionalText, requireRev } from "./http";
+import { isPlainObject, jsonBody, optionalText, requireRev } from "./http";
 
 export const generateRoutes = new Hono();
 
@@ -78,14 +79,15 @@ generateRoutes.post("/campaigns/:campaign/generate", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/npc { sourceText, id? } -> 202 { jobId }
-// One NPC entry from source material — the same background job
-// model as the scene run: ONE generator job per campaign, so a start while
-// ANY run (scene or npc) is going answers 409 { jobId }. Writes NOTHING.
+// One npc from source material — the same background job model as the scene
+// run: ONE generator job per campaign, so a start while ANY run (scene or
+// npc) is going answers 409 { jobId }. Writes NOTHING; the proposed npc waits
+// in the job as `npcResult.npc`, the npc without its guard.
 //
 // Synchronous, before a job exists: 400 for a malformed body or an id that is
-// not a kebab slug, 404 for an unknown campaign, 409 { path } when the pinned
-// id's entry already exists (never overwrite — enriching an existing NPC
-// entry is an explicit non-goal), 503 without a configured provider.
+// not a kebab slug, 404 for an unknown campaign, 409 { id } when the pinned
+// id's npc already holds something (never overwrite — an existing npc is
+// augmented on its own resource), 503 without a configured provider.
 // `id` is optional: without it the model picks the id, and a collision with
 // an existing npc becomes a correction turn.
 generateRoutes.post("/campaigns/:campaign/generate/npc", async (c) => {
@@ -115,16 +117,16 @@ generateRoutes.post("/campaigns/:campaign/generate/npc", async (c) => {
 
 // POST /api/campaigns/:campaign/generate/augment { path, sourceText?, instruction? }
 // -> 202 { jobId } — the AI augment run: the same background job
-// model as the two create runs, pointed at an npc or scene that already
-// EXISTS. ONE generator job per campaign, so a start while ANY run is going
-// answers 409 { jobId }. Writes NOTHING; the proposal waits in the job.
+// model as the two create runs, pointed at a scene that already EXISTS. ONE
+// generator job per campaign, so a start while ANY run is going answers
+// 409 { jobId }. Writes NOTHING; the proposal waits in the job.
 //
 // Synchronous, before a job exists: 400 for a malformed body, for an unsafe
-// address, for a kind that has no augment prompt here (only npc/scene), and
+// address, for a kind that has no augment prompt here (a scene only), and
 // when NEITHER sourceText nor instruction carries text — the dialog requires
-// at least one of them; 404 for an unknown campaign/entry, and for an address
-// that names a location (a location is augmented on its own resource,
-// ./locations.ts); 503 without a configured provider.
+// at least one of them; 404 for an unknown campaign/scene, and for an address
+// that names an npc or a location (each is augmented on its own resource,
+// ./npcs.ts, ./locations.ts); 503 without a configured provider.
 generateRoutes.post("/campaigns/:campaign/generate/augment", async (c) => {
   const body = await jsonBody(c, ["path", "sourceText", "instruction"]);
   const campaign = c.req.param("campaign");
@@ -205,21 +207,25 @@ const isDraftEdit = (v: unknown): v is DraftEdit => {
   if (raw.body !== undefined && typeof raw.body !== "string") return false;
   return properties !== undefined || raw.body !== undefined;
 };
+/** One npc edit of a review patch — its fields are checked against the npc's schema in the store. */
+const isNpcEdit = (v: unknown): v is Record<string, unknown> => isPlainObject(v);
 /** A field/block decision, or `null` for no decision any more. */
 const isDecidedFlag = (v: unknown): v is boolean | null => v === null || typeof v === "boolean";
 /** `null` is undecided again — the review's third state. */
 const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
   v === null || v === "accepted" || v === "rejected";
 
-// PATCH /api/campaigns/:campaign/generate/job/:id/review { rev, edits?, entries?,
-// locations?, dropped?, fields?, blocks? } -> the job.
-// The review state of a run lives ON THE JOB: the edited halves per draft
-// (`{ "<path>": { properties?, body? } }`), the decision per npc stub
-// (`entries`, by address) and per proposed location (`locations`, by id),
-// the dropped scenes and (for an augment run) the decision per field/block.
-// Everything merges, so the app sends the ONE thing that just changed — text
-// debounced, decisions immediately. A path or location id the run did not
-// produce is a 400.
+// PATCH /api/campaigns/:campaign/generate/job/:id/review { rev, edits?,
+// npcEdits?, npcs?, locations?, dropped?, fields?, blocks? } -> the job.
+// The review state of a run lives ON THE JOB: the edited halves per scene
+// draft (`{ "<path>": { properties?, body? } }`), the DM's changes per
+// proposed npc (`npcEdits`, by id: any subset of the npc's fields, `null`
+// clearing an optional one), the decision per proposed npc (`npcs`, by id)
+// and per proposed location (`locations`, by id), the dropped scenes and (for
+// an augment run) the decision per field/block. Everything merges, so the
+// app sends the ONE thing that just changed — text debounced, decisions
+// immediately. A path, npc id or location id the run did not produce is a
+// 400, and so is an npc edit with a field an npc does not have.
 //
 // `rev` is the job's review rev as the client read it: a second tab that
 // decided first makes this a 409 { code: "rev_conflict", rev } and nothing
@@ -230,7 +236,8 @@ generateRoutes.patch("/campaigns/:campaign/generate/job/:id/review", async (c) =
   const body = await jsonBody(c, [
     "rev",
     "edits",
-    "entries",
+    "npcEdits",
+    "npcs",
     "locations",
     "dropped",
     "fields",
@@ -242,9 +249,10 @@ generateRoutes.patch("/campaigns/:campaign/generate/job/:id/review", async (c) =
   }
   const patch: ReviewPatch = {};
   if (body.edits !== undefined) patch.edits = reviewRecord(body.edits, "edits", isDraftEdit);
-  if (body.entries !== undefined) {
-    patch.entries = reviewRecord(body.entries, "entries", isDecision);
+  if (body.npcEdits !== undefined) {
+    patch.npcEdits = reviewRecord(body.npcEdits, "npcEdits", isNpcEdit);
   }
+  if (body.npcs !== undefined) patch.npcs = reviewRecord(body.npcs, "npcs", isDecision);
   if (body.locations !== undefined) {
     patch.locations = reviewRecord(body.locations, "locations", isDecision);
   }
@@ -261,26 +269,28 @@ generateRoutes.patch("/campaigns/:campaign/generate/job/:id/review", async (c) =
 });
 
 // POST /api/campaigns/:campaign/generate/job/:id/accept
-// { rev, paths?, locations?, chapter?, chapterTitle? }
-//   -> { written, locations, jobDeleted }
-// The single-accept action per scene / npc stub / proposed location, and the
-// accept-all action for the rest. `paths` selects scene draft paths and npc
-// stub addresses (`npcs/grella`), `locations` proposed locations by id; with
-// neither, EVERY scene still open is written plus every npc and location the
-// DM accepted — a dropped scene and a rejected npc or location are not open,
-// so the bulk action never resurrects a "no". A selected scene carries the
-// run's own npcs and location it names. `written` maps each written draft
-// path to the address it landed at, `locations` lists the written location
-// ids.
+// { rev, paths?, npcs?, locations?, chapter?, chapterTitle? }
+//   -> { written, npcs, locations, jobDeleted }
+// The single-accept action per scene / proposed npc / proposed location, and
+// the accept-all action for the rest. `paths` selects scene draft paths,
+// `npcs` proposed npcs by id — the NPC run's one npc among them —,
+// `locations` proposed locations by id; with none of them, EVERY scene still
+// open is written plus every npc and location the DM accepted, and the NPC
+// run's npc unless it was rejected — a dropped scene and a rejected npc or
+// location are not open, so the bulk action never resurrects a "no". A
+// selected scene carries the run's own npcs and location it names. An npc is
+// written with the DM's changes (`npcEdits`) on top of the model's. `written`
+// maps each written draft path to the address it landed at, `npcs` and
+// `locations` list the written ids.
 //
 // One transaction with the ordinary draft write: the conflict check lives
-// inside it (409 { conflicts, locations }), FTS and reference rows follow,
+// inside it (409 { conflicts, npcs, locations }), FTS and reference rows follow,
 // and the job records what was written in that same commit. The job row
 // disappears the moment nothing is left open (`jobDeleted`). `rev` is the
 // review rev the client read and is re-checked inside that transaction: a
 // decision made in between is a 409 `rev_conflict` and nothing is written.
 // 404 without a job or for a stale :id, 409 for a job that has no result,
-// 400 for an unknown path or location id and for a BULK accept with nothing
+// 400 for an unknown path, npc id or location id and for a BULK accept with nothing
 // left to do. A named selection that is already written is not an error — a
 // double click gets 200 with an empty `written`.
 //
@@ -289,7 +299,7 @@ generateRoutes.patch("/campaigns/:campaign/generate/job/:id/review", async (c) =
 // and therefore acceptable before its siblings are. The 409 "no result" is
 // kept for a failed run, and for a run that has not finished a single part.
 generateRoutes.post("/campaigns/:campaign/generate/job/:id/accept", async (c) => {
-  const body = await jsonBody(c, ["rev", "paths", "locations", "chapter", "chapterTitle"]);
+  const body = await jsonBody(c, ["rev", "paths", "npcs", "locations", "chapter", "chapterTitle"]);
   const rev = requireRev(body.rev);
   return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), rev, body));
 });
@@ -320,19 +330,21 @@ generateRoutes.post("/campaigns/:campaign/generate/job/:id/parts/:key/retry", as
 
 // GET /api/campaigns/:campaign/generate/job -> GenerateJob (404 when there is none).
 // The job carries its status (running/done/failed) with `kind`,
-// result/npcResult/augmentResult/locationAugmentResult, the error body and
-// the review edits; an `augment` job also carries `target` — the npc's or
-// scene's address — and a `location-augment` job `location` — the
-// location's id — from the moment it STARTS. A scene run's `result` lists
-// its scene drafts under `scenes`, its npc stubs under `stubs` and its
-// proposed locations under `locations` (each a location without its guard).
-// A finished result may carry `namingHints`: the SERVER's own findings that
-// a draft still spells something a naming convention replaces — hints for
-// the review, never a reason to fail or block. And it carries the REVIEW
-// STATE with that state's `rev`: the decision per npc stub and per proposed
-// location, the dropped scenes, the per field/block decisions of an augment
-// run and the parts a partial accept already wrote (`review.written`, draft
-// path -> the address it landed at; `review.writtenLocations`, location ids).
+// result/npcResult/augmentResult/npcAugmentResult/locationAugmentResult, the
+// error body and the review edits (`draftEdits`, `npcEdits`); an `augment`
+// job also carries `target` — the scene's address —, an `npc-augment` job
+// `npc` and a `location-augment` job `location` — the id — from the moment
+// it STARTS. A scene run's `result` lists its scene drafts under `scenes`,
+// its proposed npcs under `npcs` and its proposed locations under
+// `locations` (each the entity without its guard); an NPC run's `npcResult`
+// carries its one npc the same way. A finished result may carry
+// `namingHints`: the SERVER's own findings that a draft still spells
+// something a naming convention replaces — hints for the review, never a
+// reason to fail or block. And it carries the REVIEW STATE with that state's
+// `rev`: the decision per proposed npc and location, the dropped scenes, the
+// per field/block decisions of an augment run and the parts a partial accept
+// already wrote (`review.written`, draft path -> the address it landed at;
+// `review.writtenNpcs` and `review.writtenLocations`, ids).
 // The campaign is NOT re-validated here: the job store is the authority for
 // this endpoint, and "no job" is the honest answer for an unknown campaign
 // too. Polled by the generator route while a job runs (~3s) and once per
@@ -354,15 +366,15 @@ generateRoutes.delete("/campaigns/:campaign/generate/job", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/apply
-// { scenes?, stubs?, locations?, npc?, chapter?, chapterTitle?, jobId? }
-//   -> { written, locations }
-// Writes the reviewed drafts — synchronous on purpose: this is a short
-// write, and the DM waits for its result. Every draft is
-// `{ path, properties, body }` (an npc stub `{ kind, id, name, properties,
-// body }`) and is re-validated server-side (status draft, safe paths, the id
-// matching the address); a proposed location is a location without its
-// guard, checked against the location's schema. 409 { conflicts, locations }
-// when any target exists — then nothing is written at all. chapter +
+// { scenes?, npcs?, locations?, chapter?, chapterTitle?, jobId? }
+//   -> { written, npcs, locations }
+// Writes the reviewed run — synchronous on purpose: this is a short write,
+// and the DM waits for its result. Every scene draft is
+// `{ path, properties, body }` and is re-validated server-side (status
+// draft, safe paths); a proposed npc or location is the entity without its
+// guard, checked against its schema — a scene run's npcs and the NPC run's
+// one npc alike. 409 { conflicts, npcs, locations } when any target holds
+// something — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create the chapter entry
 // when it is missing, in the same all-or-nothing batch (the app's
 // new-chapter flow).
@@ -372,15 +384,11 @@ generateRoutes.delete("/campaigns/:campaign/generate/job", async (c) => {
 // ignored rather than dropping the wrong job. That discard is
 // part of the write TRANSACTION (store/drafts.ts applyDrafts), so drafts and
 // job can never disagree after a crash.
-// `npc` is the NPC generator's one draft — deliberately the SAME
-// endpoint: it needs exactly the same all-or-nothing write, the same 409 and
-// the same job cleanup, and re-validates server-side just like a scene.
 generateRoutes.post("/campaigns/:campaign/generate/apply", async (c) => {
   const body = await jsonBody(c, [
     "scenes",
-    "stubs",
+    "npcs",
     "locations",
-    "npc",
     "chapter",
     "chapterTitle",
     "jobId",

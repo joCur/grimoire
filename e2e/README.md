@@ -18,22 +18,24 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   die die API spricht (`{ kind, properties, body }`, dazu `log` als **Zeilen**
   `{ at, sceneId?, text, reviewed? }` für eine Session, `entries` für
   Eingang und Glossar und `threads` als Zeilen `{ text, done? }` für die
-  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Ein Ort
-  ist eine eigene Ressource (ADR #31) und liegt als `locations/<id>.json`:
-  der Ort selbst, alle Felder flach, `body` eines davon, ohne `kind` und ohne
-  `rev`. Ein Test, der Inhalte
+  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Ein NPC
+  und ein Ort sind je eine eigene Ressource (ADR #31) und liegen als
+  `npcs/<id>.json` bzw. `locations/<id>.json`: der NPC bzw. Ort selbst, alle
+  Felder flach, `body` eines davon, ohne `kind` und ohne `rev`. Ein Test, der
+  Inhalte
   braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } }, without: ["session-2026-01-15"] } })`.
   Die Schlüssel sind **Dateinamen ohne `.json`**: ein Name, den
   `fixtures/beispiel` schon hat, ERSETZT diesen Eintrag, jeder andere legt
-  einen dazu; ein Ort hat den Namen `locations/<id>`. Die Adresse vergibt der Server
+  einen dazu; ein NPC hat den Namen `npcs/<id>`, ein Ort `locations/<id>`.
+  Die Adresse vergibt der Server
   (`server/src/store/paths.ts`) — sie ist etwas anderes als der Fixture-Name
   (`campaign`, `01-salzhafen`, `01-salzhafen/leuchtturm/…`). Ohne Überschreibung
   wird die geteilte pristine Kopie direkt benutzt (niemand schreibt hinein),
   die meisten Tests kopieren also gar nichts.
-- **Eine Referenz zeigt auf einen Eintrag, der existiert.** Eine Szene, die
-  einen Ort oder NPC ohne eigenen Eintrag nennt, lässt den Seed-Lauf
+- **Eine Referenz zeigt auf etwas, das existiert.** Eine Szene, die einen
+  Ort oder NPC nennt, den es nicht gibt, lässt den Seed-Lauf
   scheitern (ADR #19) — das ist ein Fehler im Fixture, keine Degradierung.
 - **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
   Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
@@ -97,6 +99,8 @@ Zeile. Für die Suite heißt das vier Dinge:
   (`…/locations/leuchtturm`, `…/locations/bucht`; `api.location(id)`) — eine
   Referenz legt nichts an (ADR #19) —, die Kampagne hat also **zwei** Orte.
   Ein Ort hat keine Eintrags-Adresse: `…/entries/locations/<id>` ist ein 404.
+  Ebenso hat ein NPC keine: seine Eintrags-Adresse ist ein 404, der NPC
+  antwortet unter `…/npcs/<id>` (`api.npc(id)`).
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -177,10 +181,13 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   `api.patchProperties` sind die zwei bequemen Fälle davon und geben das neue
   Token zurück.
 
-  Ein **Ort** ist eine eigene Ressource (ADR #31) und hat eigene Helfer:
-  `api.location(id)` (der Ort: alle Felder flach, `body`, `rev`),
-  `api.locationExists(id)` und der Schreibweg `api.patchLocation(id,
-  { rev?, force?, …Felder })` — ohne `rev` wieder der „zweite Schreiber".
+  Ein **NPC** und ein **Ort** sind je eine eigene Ressource (ADR #31) und
+  haben eigene Helfer: `api.npc(id)` bzw. `api.location(id)` (alle Felder
+  flach, `body`, `rev`), `api.npcExists(id)`/`api.locationExists(id)`,
+  `api.npcPath(id?)`/`api.locationPath(id?)` für rohe Aufrufe, der Schreibweg
+  `api.patchNpc(id, …)`/`api.patchLocation(id, { rev?, force?, …Felder })`
+  — ohne `rev` wieder der „zweite Schreiber" — und `api.createNpc({ name,
+  id?, body? })`, das `POST …/npcs`.
 
   Für die **Listen** gibt es eigene Helfer, weil sie keine Adresse haben
   (ADR #26): `api.activeSession(includeEnded?)` und `api.sessionId(…)` (die
@@ -207,17 +214,20 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 ## Stub-Fixtures anpassen
 
 `fixtures/replies.ts` enthält die Modellantworten als **Objekte**, genau so,
-wie das erzwungene Schema sie beschreibt: ein Szenen- oder NPC-Aufruf
-antwortet `{ properties, body, warnings }`, ein Orts-Aufruf mit allen Feldern
-des Orts (`body` eines davon) neben `warnings`, die Gliederung ihr eigenes
-Format. Ein
+wie das erzwungene Schema sie beschreibt: ein Szenen-Aufruf antwortet
+`{ properties, body, warnings }`; ein NPC-Aufruf mit allen Feldern des NPC
+(`body` eines davon, ein fehlendes Feld als `null`, `quickstats` als Liste
+von `{ key, value }`-Paaren mit String-Werten) neben `warnings`; ein
+Orts-Aufruf mit allen Feldern des Orts neben `warnings`; die Gliederung ihr
+eigenes Format mit den neuen NPCs und den neuen Orten als zwei eigenen
+Listen (`npcs`, `locations`). Ein
 String, der kein Objekt ist, reist unverändert — das ist eine Antwort, die ein
 Test absichtlich unlesbar geschrieben hat. Der Stub serialisiert das Objekt als
 JSON in den Message-Content.
 
-Abgedeckt sind: der Szenen-Entwurf mit NPC-Stub und vorgeschlagenem Ort,
-das Ergänzen eines Orts, der NPC-Eintrag
-und je eine bewusst ungültige Variante. Sie erfüllen die aktuelle
+Abgedeckt sind: der Szenen-Entwurf mit vorgeschlagenem NPC und Ort, das
+Ergänzen einer Szene, eines NPC und eines Orts, der NPC-Lauf und je eine
+bewusst ungültige Variante. Sie erfüllen die aktuelle
 mechanische Validierung aus `server/src/generator.ts`.
 
 Der Stub ist ein OpenAI-kompatibler Endpoint und **ignoriert**
@@ -225,13 +235,13 @@ Der Stub ist ein OpenAI-kompatibler Endpoint und **ignoriert**
 dort funktionieren, wo das Schema nicht wirklich erzwungen wird — dafür ist
 der tolerante Leser im Server (`parseJsonReply`) das Netz.
 
-Keine Antwort enthält eine Adresse: die `id` in `properties` ist alles, was das
-Modell über die Adressierung entscheidet. Die inhaltlichen Regeln bleiben
-(Szene: `status: draft`, nur bekannte Callouts, `location` ist eine id,
-Referenzen existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
-Ort-Eintrag *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
+Keine Antwort enthält eine Adresse: die `id` ist alles, was das Modell über
+die Adressierung entscheidet. Die inhaltlichen Regeln bleiben (Szene:
+`status: draft`, nur bekannte Callouts, `location` ist eine id, Referenzen
+existieren oder werden im selben Lauf vorgeschlagen; ein NPC *mit* Status,
+ein Ort *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
 `{ key, value }`-Liste mit String-Werten; in jedem Text nennt jedes `[[id]]`
-einen Eintrag der Kampagne oder einen Vorschlag desselben Laufs).
+etwas aus der Kampagne oder einen Vorschlag desselben Laufs).
 
 Wenn sich eine Validierungsregel ändert, ist diese Datei die Stelle, die
 mitwandert. Die Specs behaupten die dort definierten Titel und ids.
@@ -243,29 +253,35 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   Orts**. Der Ort steht dort als JSON-Block mit allen seinen Feldern — genau
   das Objekt, in das die Antwort gezwungen wird. Die Antwort spiegelt jedes
   Feld zurück und hängt genau einen neuen `## If:`-Abschnitt an `body`.
-- ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
-  (der Ergänzen-Lauf). Der Eintrag steht dort als JSON-Block
-  (`{ properties, body }`, Prompt-Formatierung aus
-  `server/src/llm-provider.ts`) — genau die Form, in die die Antwort gezwungen
-  wird; der Stub liest ihn mit `JSON.parse` und nicht aus einem Text.
-  Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
-  bei einem LEEREN NPC (angelegt und nicht gefüllt) werden
-  `role`/`voice` gefüllt und ein Körper geschrieben, bei allem anderen kommt
-  genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
-  unverändert. Diese Verzweigung wird ZUERST geprüft: ein Szenen-Ergänzungs-
-  Lauf trägt auch eine `chapter:`-Zeile.
+- ein Abschnitt „## Bestehender NPC" im Prompt → **Ergänzungs-Lauf eines
+  NPC**. Der NPC steht dort als JSON-Block in seiner Antwortform (alle
+  Felder, ein fehlendes als `null`, `quickstats` als Paare) — genau das
+  Objekt, in das die Antwort gezwungen wird. Bei einem LEEREN NPC (angelegt
+  und nicht gefüllt) werden `role`/`voice`/`motivation` gefüllt, `name` und
+  `status` anders vorgeschlagen und ein Text geschrieben; bei einem gefüllten
+  spiegelt die Antwort jedes Feld zurück und hängt genau einen neuen
+  `## If:`-Abschnitt an `body`.
+- ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf einer
+  Szene**. Die Szene steht dort als JSON-Block (`{ properties, body }`,
+  Prompt-Formatierung aus `server/src/llm-provider.ts`) — genau die Form, in
+  die die Antwort gezwungen wird; der Stub liest sie mit `JSON.parse` und
+  nicht aus einem Text. Die Antwort spiegelt die Szene zurück und hängt genau
+  einen neuen `## If:`-Abschnitt an — jeder bestehende Block unverändert.
+  Diese Verzweigungen werden vor den Anlege-Läufen geprüft: ein
+  Szenen-Ergänzungs-Lauf trägt auch eine `chapter:`-Zeile.
 - der System-Prompt ist der **Gliederungs-Prompt** („System-Prompt:
   Gliederung") → der Gliederungs-Aufruf eines Szenen-Laufs. Die Antwort
-  ist die Szenenliste; jede Szene zitiert den ersten und letzten Satz des
+  ist die Szenenliste samt den Listen `npcs` und `locations`; jede Szene
+  zitiert den ersten und letzten Satz des
   Quelltextes **wörtlich**, damit der Ausschnitt-Schnitt des Servers wirklich
   greift (eine Fehlzuordnung wäre eine Warnung in jedem Spec).
 - der Prompt trägt eine **„## Gliederung des Durchlaufs"** und eine
   `chapter:`-Zeile → ein **Szenen-Teil**; welche Szene, sagt die Markierung
   „← DIESE Szene" im Gliederungsblock
-- der Prompt trägt die Gliederung, aber kein `chapter` → ein **Eintrags-Teil**
-  (NPC oder Ort, je nach System-Prompt)
+- der Prompt trägt die Gliederung, aber kein `chapter` → ein **NPC- oder
+  Orts-Teil** (je nach System-Prompt), jeder in seiner eigenen Antwortform
 - kein `chapter` und keine Gliederung → NPC-Lauf (ein Aufruf),
-  `vorgegebene id: <id>` fixiert die id des Eintrags
+  `vorgegebene id: <id>` fixiert die id des NPC
 - `E2E_SLOW` im Quelltext → der Stub antwortet **nie** (die Verbindung stirbt
   mit dem Server-Prozess, der gefragt hat). Das ist die einzige Möglichkeit,
   einen Job anzusehen, während er wirklich `running` ist — der Neustart-Fall
@@ -274,7 +290,7 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   Korrektur-Turn, der Lauf endet also in einem 422)
 - `E2E_TRUNCATED` im Quelltext → `finish_reason: "length"`
 - `E2E_UNKNOWN_REF` im Quelltext → die **erste** Antwort eines NPC- oder
-  Ergänzen-Laufs nennt `[[der-fremde]]`, einen Eintrag, den es nicht gibt;
+  Ergänzen-Laufs nennt `[[der-fremde]]`, eine id, die es nicht gibt;
   der Korrektur-Turn (der Aufruf mit der vorigen Antwort als
   Assistant-Turn) bekommt die gute Antwort. Der Lauf kostet also genau eine
   Korrekturrunde und endet ohne diesen Verweis.
@@ -340,10 +356,11 @@ mehrere Schreibwege auf ihm liegen:
 Die Pfade 3, 4, 5 und 8 arbeiten auf den **Listen-Endpoints** (ADR #26) und
 lesen darum Zeilen statt Texte:
 
-- **Pfad 3** (`search.e2e.ts`): indexiert sind die fünf Eintrags-Arten und die
-  Glossar-Begriffe. Ein Glossar-Treffer trägt `kind` + `id` und **kein**
-  `path` — der Spec prüft das auf der Leitung und klickt ihn danach in der
-  Palette auf `/campaigns/beispiel/glossary`. Sessions und Ideen sind nicht
+- **Pfad 3** (`search.e2e.ts`): indexiert sind Kampagne, Kapitel, Szenen,
+  NPCs, Orte und die Glossar-Begriffe. Ein NPC-, Orts- und Glossar-Treffer
+  trägt `kind` + `id` und **kein** `path` — der Spec prüft das auf der Leitung
+  und klickt ihn danach in der Palette auf `/campaigns/beispiel/npcs/<id>`,
+  `/campaigns/beispiel/locations/<id>` bzw. `/campaigns/beispiel/glossary`. Sessions und Ideen sind nicht
   indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
   erwartet keinen Treffer.
 - **Pfad 4** (`session-cycle.e2e.ts`): die Schnellnotiz wird eine Log-**Zeile**
@@ -364,6 +381,11 @@ lesen darum Zeilen statt Texte:
   die Liste in der Kapitelübersicht — anlegen, abhaken, umformulieren,
   löschen, die Konfliktzeile mit „Neu laden" — und zeigt, dass ein
   Fäden-Write einen offenen Kapitel-Editor nicht in einen Konflikt treibt.
+  „NPC anlegen" auf einer `#npc`-Zeile ist `POST …/npcs { name, id, body }`:
+  ein neuer NPC bekommt die Notiz als Text, ein leerer unter der Kennung wird
+  gefüllt, und bei einem NPC mit Inhalt bleibt der Dialog mit dem
+  Konflikt-Satz offen — nichts geschrieben, die Log-Zeile bleibt
+  `reviewed: false`.
 - **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Zeile, angehängt;
   der Spec vergleicht die ganze `InboxResponse` samt `rev`, womit
   Append-only und „nichts abgehakt" in einer Zusicherung stehen.
@@ -415,8 +437,11 @@ bleibt als Eintrag stehen. `tests/augment.e2e.ts` prüft dieselbe Persistenz
 auf Block-Ebene — eine Block-Entscheidung überlebt den Reload.
 
 `tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
-ergänzen"): derselbe Lauf auf einen Eintrag, den es schon gibt.
-Der Spec belegt: ein leerer NPC-Eintrag → ergänzen → Löcher gefüllt, während
+ergänzen"): derselbe Lauf auf eine Szene, einen NPC oder einen Ort, den es
+schon gibt — NPC und Ort auf ihrer eigenen Ressource (Job-Art `npc-augment`
+bzw. `location-augment`, der Vorschlag als der NPC wie gelesen neben dem NPC
+wie vorgeschlagen).
+Der Spec belegt: ein leerer NPC → ergänzen → Löcher gefüllt, während
 `name` und `status` (beide gefüllt) per Default NICHT ersetzt werden;
 vorbereitete Szene → ein neuer Handlungsstrang als zusätzlicher Block,
 jeder bestehende Block Zeichen für Zeichen gleich, `status: ready` bleibt;
@@ -503,9 +528,11 @@ Datenverzeichnis, das Seed-Werkzeug läuft nie — genau das, was eine frische
 Installation ist. Der Spec legt darum alles selbst an (Kampagne →
 Kapitel → Szene → Text → Session) und baut seinen `api`-Helfer mit
 `apiFor(server.url, id)`, weil die Kampagnen-id erst zur Laufzeit existiert.
-Dazu die beiden Listen-Einstiege („NPC/Ort anlegen") mit der
+Dazu die beiden Listen-Einstiege („NPC/Ort anlegen", die Listen auf
+`/campaigns/:id/npcs` und `/campaigns/:id/locations`) mit der
 Slug-Kollision — 409 mit Vorschlag, nichts geschrieben, der Vorschlag als ein
-Klick —, die selbst gesetzte Kennung am Stift der Vorschauzeile (ADR #21: der
+Klick; für den NPC auch auf der Leitung samt dem 400 für ein unbekanntes
+Feld —, die selbst gesetzte Kennung am Stift der Vorschauzeile (ADR #21: der
 Anlege-Dialog ist der einzige Ort dafür — ungültige Kennung blockiert
 „Anlegen", leeres Feld leitet wieder aus dem Namen ab) und dieselben Listen
 bei 390px, womit der Spec auch auf Pfad 8 liegt.

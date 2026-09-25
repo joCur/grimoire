@@ -93,9 +93,6 @@ describe("contingencyPaths", () => {
 
 describe("resultHref", () => {
   test("routes every entry kind to the reading view", () => {
-    expect(resultHref("beispiel", { kind: "npc", id: "fenn", path: "npcs/fenn" })).toBe(
-      "/campaigns/beispiel/entries/npcs/fenn",
-    );
     expect(
       resultHref("beispiel", { kind: "chapter", id: "01-salzhafen", path: "01-salzhafen" }),
     ).toBe("/campaigns/beispiel/entries/01-salzhafen");
@@ -133,7 +130,13 @@ describe("resultHref", () => {
   });
 
   test("an entry hit without a path falls back to the chapter overview", () => {
-    expect(resultHref("beispiel", { kind: "npc", id: "fenn" })).toBe("/campaigns/beispiel");
+    expect(resultHref("beispiel", { kind: "scene", id: "ankunft" })).toBe("/campaigns/beispiel");
+  });
+
+  test("an npc hit opens the npc's own route by its id — no address needed", () => {
+    expect(resultHref("beispiel", { kind: "npc", id: "fenn" })).toBe(
+      "/campaigns/beispiel/npcs/fenn",
+    );
   });
 
   test("a location hit opens the location's own route by its id — no address needed", () => {

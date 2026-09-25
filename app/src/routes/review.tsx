@@ -6,8 +6,11 @@
 //
 // The server is the truth: every action writes through its endpoint, and what
 // comes back — the chapter's thread list a thread was appended to, the npc
-// entry that was written, plus the session or the inbox the row was ticked
-// off in — is seeded into the caches. Adopting a thread appends a ROW to the
+// that was created, plus the session or the inbox the row was ticked off in —
+// is seeded into the caches. An npc is created on its own resource
+// (`POST …/npcs`) with the note as its text; when the id already names an npc
+// with content, nothing is written, the dialog says so, and the row stays
+// open. Adopting a thread appends a ROW to the
 // active chapter's thread list; the chapter's text and its `rev` stay as they
 // are (ADR #29). The ONLY client state is cosmetic: which action a card got in
 // this sitting (the server stores done/not-done, not which action) and which
@@ -15,8 +18,8 @@
 // Mobile: the desk task stays usable — one column, stacked cards.
 
 import type {
-  EntryResponse,
   InboxResponse,
+  Npc,
   SessionResponse,
   ThreadsResponse,
 } from "@grimoire/shared/types";
@@ -25,12 +28,13 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { appendThread, ensureNpc, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
+import { appendThread, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
-import { NpcCreateDialog } from "@/components/NpcCreateDialog";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
 import { useT } from "@/i18n";
+import { serverErrorMessage } from "@/i18n/server-errors";
+import { createConflict } from "@/lib/create";
 import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
@@ -38,6 +42,9 @@ import type { ReviewEntry } from "@/lib/use-review";
 import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
 import { seedSession } from "@/lib/use-session";
 import { threadsKey, useThreads } from "@/lib/use-threads";
+import { NpcFromNoteDialog } from "@/npc/NpcFromNoteDialog";
+import { createNpc } from "@/npc/npc-api";
+import { npcKey, npcsKey } from "@/npc/npc-query";
 
 type ActionKind = ReviewActionKind;
 
@@ -49,11 +56,21 @@ interface ActVars {
 
 /** What one card action wrote: what it created plus the ticked source. */
 interface ActResult {
-  written: EntryResponse[];
+  /** The npc the action created, or filled when it was empty. */
+  npc?: Npc;
   /** The chapter's thread list after an adoption, and the row it appended. */
   threads?: { chapter: string; list: ThreadsResponse; adoptedId?: string };
   session?: SessionResponse;
   inbox?: InboxResponse;
+}
+
+/** Why creating an npc from a note wrote nothing, as the sentence the dialog shows. */
+function npcFailure(error: unknown, t: Translate): string {
+  const conflict = createConflict(error);
+  if (conflict !== undefined) {
+    return t("review.npc.exists", { id: conflict.id, suggestion: conflict.suggestion });
+  }
+  return serverErrorMessage(error, t, "review.npc.failed");
 }
 
 function doneLabel(
@@ -114,7 +131,7 @@ export function ReviewRoute() {
 
   const act = useMutation({
     mutationFn: async ({ entry, action, npc }: ActVars): Promise<ActResult> => {
-      const written: EntryResponse[] = [];
+      let created: Npc | undefined;
       let threads: ActResult["threads"];
       if (action === "thread") {
         if (chapter === undefined) throw new Error("no chapter to adopt into");
@@ -125,24 +142,32 @@ export function ReviewRoute() {
         threads = { chapter: chapter.id, list, ...(adoptedId === undefined ? {} : { adoptedId }) };
       } else if (action === "npc") {
         if (npc === undefined) throw new Error("no npc id");
-        written.push(await ensureNpc(campaign, npc.id, npc.name, entry.text));
+        // The note becomes the npc's text. An id whose npc already holds
+        // something is a 409 that wrote nothing — it throws here, so the row
+        // below is NOT marked, and the dialog says what happened.
+        created = await createNpc(campaign, {
+          // An npc without a name of its own shows its id (README).
+          name: npc.name ?? npc.id,
+          id: npc.id,
+          body: entry.text,
+        });
       }
+      const npcPart = created === undefined ? {} : { npc: created };
       // Only after the harvest succeeded is the source marked done.
       if (entry.source === "log") {
         // The session comes from the server (the last started one — which may
         // be yesterday's). Without it there is nothing to mark.
         if (model.sessionId === "") throw new Error("no session to mark in");
         const session = await markLogLineSeen(campaign, model.sessionId, entry.id);
-        return { written, session, ...(threads === undefined ? {} : { threads }) };
+        return { ...npcPart, session, ...(threads === undefined ? {} : { threads }) };
       }
       const inbox = await markInboxLineDone(campaign, entry.id);
-      return { written, inbox, ...(threads === undefined ? {} : { threads }) };
+      return { ...npcPart, inbox, ...(threads === undefined ? {} : { threads }) };
     },
     onSuccess: (result, vars) => {
-      // Every endpoint returns what it wrote: seed, then invalidate on top.
-      for (const entry of result.written) {
-        queryClient.setQueryData(["entry", campaign, entry.path], entry);
-        void queryClient.invalidateQueries({ queryKey: ["entry", campaign, entry.path] });
+      // Every endpoint returns what it wrote: seed the npc's own query.
+      if (result.npc !== undefined) {
+        queryClient.setQueryData(npcKey(campaign, result.npc.id), result.npc);
       }
       // A log row's done-state lives in the session, an idea's in the inbox —
       // the live aside and the topbar read both, so they see the fresh answer
@@ -155,9 +180,11 @@ export function ReviewRoute() {
       if (result.threads !== undefined) {
         queryClient.setQueryData(threadsKey(campaign, result.threads.chapter), result.threads.list);
       }
-      // A new NPC entry changes the tree.
+      // A new npc changes the tree, the npc list and ⌘K.
       if (vars.action === "npc") {
         void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
+        void queryClient.invalidateQueries({ queryKey: npcsKey(campaign) });
+        void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
       }
       remember(campaign, vars.entry.key, vars.action, result.threads?.adoptedId);
       if (vars.action === "npc") setNpcEntry(undefined);
@@ -165,11 +192,11 @@ export function ReviewRoute() {
   });
 
   const busyKey = act.isPending ? act.variables?.entry.key : undefined;
-  // No 409 case any more: an id that already has an entry is
-  // LINKED, not refused, so the only thing left to report is a server that
-  // did not answer.
+  // The dialog's own line: the id names an npc with content (nothing was
+  // written, the note stays in the row), or any other refusal in the
+  // server's words, or a server that did not answer.
   const npcError =
-    act.isError && act.variables?.action === "npc" ? t("review.npc.failed") : undefined;
+    act.isError && act.variables?.action === "npc" ? npcFailure(act.error, t) : undefined;
   const cardError = (entry: ReviewEntry) =>
     act.isError && act.variables?.action !== "npc" && act.variables?.entry.key === entry.key
       ? t("review.action.failed")
@@ -337,9 +364,9 @@ export function ReviewRoute() {
       </div>
 
       {npcEntry !== undefined && (
-        <NpcCreateDialog
+        <NpcFromNoteDialog
           key={npcEntry.key}
-          entry={npcEntry}
+          text={npcEntry.text}
           pending={act.isPending}
           error={npcError}
           onClose={() => {

@@ -34,15 +34,15 @@
       "refs": ["night-watch-quay"]
     }
   ],
-  "entries": [
+  "npcs": [
     {
-      "kind": "npc",
       "id": "grella",
       "name": "Grella",
       "summary": "Schmugglerin, bringt die Ladung ins Dorf und will ihren Anteil."
-    },
+    }
+  ],
+  "locations": [
     {
-      "kind": "location",
       "id": "bucht",
       "name": "Nordbucht",
       "summary": "Die flache Bucht nördlich des Hafens, bei Ebbe zu Fuß erreichbar."

@@ -14,7 +14,14 @@
 //     is neither: it stays visible text, with no entry and no error.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, EntryResponse, Location, SessionResponse } from "@grimoire/shared";
+import type {
+  CampaignTree,
+  EntryResponse,
+  Location,
+  Npc,
+  NpcProposal,
+  SessionResponse,
+} from "@grimoire/shared";
 import { app } from "../src/server";
 import { applyDrafts } from "../src/store/drafts";
 import { dropStore, seedStore } from "./support/store";
@@ -22,7 +29,7 @@ import { entriesUrl } from "./support/urls";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_B = "01-salzhafen/bucht/smuggler-captured";
-const NPC = "npcs/fenn";
+const NPCS = "/api/campaigns/beispiel/npcs";
 
 async function getEntry(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(entriesUrl(campaign, rel));
@@ -70,11 +77,43 @@ async function post(rel: string, body: unknown): Promise<Response> {
   });
 }
 
-/** An entry created and left empty — the only way an empty one exists. */
+/** An npc, read from its own resource (ADR #31). */
+async function getNpc(id: string): Promise<Npc> {
+  const res = await app.request(`${NPCS}/${id}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as Npc;
+}
+
+async function npcStatus(id: string): Promise<number> {
+  return (await app.request(`${NPCS}/${id}`)).status;
+}
+
+/** The raw answer of an npc write — its fields flat, `body` among them. */
+async function patchNpcRes(id: string, fields: Record<string, unknown>): Promise<Response> {
+  const before = await getNpc(id);
+  return app.request(`${NPCS}/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: before.rev, ...fields }),
+  });
+}
+
+async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Npc> {
+  const res = await patchNpcRes(id, fields);
+  expect(res.status).toBe(200);
+  return (await res.json()) as Npc;
+}
+
+/** An npc created and left empty — the only way an empty one exists. */
 async function createEmptyNpc(id: string): Promise<void> {
   const res = await post("/npcs", { name: id });
   expect(res.status).toBe(201);
-  expect((await getEntry(`npcs/${id}`)).properties.name).toBe(id);
+  expect((await getNpc(id)).name).toBe(id);
+}
+
+/** A proposed npc as a run hands it to the accept — the npc without its guard. */
+function holm(body: string, fields: Partial<NpcProposal> = {}): NpcProposal {
+  return { id: "holm", name: "Holm", status: "alive", body, ...fields };
 }
 
 async function tree(): Promise<CampaignTree> {
@@ -145,20 +184,21 @@ describe("a reference that names nothing is refused", () => {
   test("an unknown chapter: 400 chapter_unknown for a scene and an npc", async () => {
     // (A location refuses it the same way on its own resource:
     // test/locations.test.ts.)
-    for (const rel of [SCENE, NPC]) {
-      const before = await getEntry(rel);
-      const res = await patchRes(rel, { chapter: "99-nirgendwo" });
+    const scene = await getEntry(SCENE);
+    const sceneRes = await patchRes(SCENE, { chapter: "99-nirgendwo" });
+    const npc = await getNpc("fenn");
+    const npcRes = await patchNpcRes("fenn", { chapter: "99-nirgendwo" });
+    for (const res of [sceneRes, npcRes]) {
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         code: "chapter_unknown",
         value: "99-nirgendwo",
       });
-      expect((await getEntry(rel)).properties.chapter).toBe(before.properties.chapter);
     }
+    expect((await getEntry(SCENE)).properties.chapter).toBe(scene.properties.chapter);
+    expect((await getNpc("fenn")).chapter).toBe(npc.chapter);
     // An existing chapter is stored as before.
-    expect((await patchFm(NPC, { chapter: "01-salzhafen" })).properties.chapter).toBe(
-      "01-salzhafen",
-    );
+    expect((await patchNpc("fenn", { chapter: "01-salzhafen" })).chapter).toBe("01-salzhafen");
   });
 
   test("a scene's chapter cannot be removed at all — 400 chapter_required", async () => {
@@ -267,30 +307,29 @@ describe("a reference that names an entry is stored", () => {
 
 describe("a mention in text is not a reference", () => {
   test("a `## Beziehungen` line names an unknown npc: no entry, no error", async () => {
-    const npc = await getEntry(NPC);
+    const npc = await getNpc("fenn");
     const seeded = "- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus";
     expect(npc.body).toContain(seeded);
-    const written = await patchBody(
-      NPC,
-      npc.body.replace(seeded, `${seeded}\n- holm: schuldet ihm Geld`),
-    );
+    const written = await patchNpc("fenn", {
+      body: npc.body.replace(seeded, `${seeded}\n- holm: schuldet ihm Geld`),
+    });
     // The line is prose and comes back exactly as written.
     expect(written.body).toContain("- holm: schuldet ihm Geld");
-    expect((await getEntry(NPC)).body).toContain("- holm: schuldet ihm Geld");
-    expect(await entryStatus("npcs/holm")).toBe(404);
+    expect((await getNpc("fenn")).body).toContain("- holm: schuldet ihm Geld");
+    expect(await npcStatus("holm")).toBe(404);
   });
 
   test("an unknown `[[slug]]` in prose stays visible text", async () => {
     const scene = await getEntry(SCENE);
     const written = await patchBody(SCENE, `${scene.body}\nWer ist [[niemand]]?\n`);
     expect(written.body).toContain("Wer ist [[niemand]]?");
-    expect(await entryStatus("npcs/niemand")).toBe(404);
+    expect(await npcStatus("niemand")).toBe(404);
     expect((await tree()).npcs.some((n) => n.id === "niemand")).toBe(false);
   });
 });
 
 describe("the generator's apply step", () => {
-  test("a scene draft and the stub it needs land in one batch, in any order", async () => {
+  test("a scene draft and the npc it needs land in one batch", async () => {
     // The batch is inserted in REFERENCE order, not in the order the review
     // lists it: the npc and the location the scene names go in first.
     await applyDrafts("beispiel", [
@@ -306,20 +345,15 @@ describe("the generator's apply step", () => {
         },
         body: "\n## Was passiert\n\nEtwas.\n",
       },
-      {
-        rel: "npcs/holm",
-        address: "npcs/holm",
-        properties: { id: "holm", name: "Holm", status: "alive" },
-        body: "\n## Will\n\nSeine Netze zurück.\n",
-      },
     ], {
+      npcs: [holm("\nSeine Netze zurück.\n")],
       locations: [
         { id: "alte-mole", name: "Alte Mole", body: "\n## Beim ersten Betreten\n\nMorsch.\n" },
       ],
     });
-    const npc = await getEntry("npcs/holm");
-    expect(npc.properties.name).toBe("Holm");
-    expect(npc.properties.status).toBe("alive");
+    const npc = await getNpc("holm");
+    expect(npc.name).toBe("Holm");
+    expect(npc.status).toBe("alive");
     const res = await app.request("/api/campaigns/beispiel/locations/alte-mole");
     expect(((await res.json()) as Location).name).toBe("Alte Mole");
     const scene = await getEntry("01-salzhafen/alte-mole/neue-szene");
@@ -339,58 +373,39 @@ describe("the generator's apply step", () => {
     ).rejects.toThrow(/unknown npc/);
     // Nothing of the batch was written.
     expect(await entryStatus("01-salzhafen/hafen/neue-szene")).toBe(404);
-    expect(await entryStatus("npcs/holm")).toBe(404);
+    expect(await npcStatus("holm")).toBe(404);
   });
 
-  test("an EMPTY entry is filled by the draft for its id", async () => {
+  test("an EMPTY npc is filled by the proposal for its id", async () => {
     await createEmptyNpc("holm");
-    await applyDrafts("beispiel", [
-      {
-        rel: "npcs/holm",
-        address: "npcs/holm",
-        properties: { id: "holm", name: "Holm", status: "alive" },
-        body: "\n## Will\n\nSeine Netze zurück.\n",
-      },
-    ]);
-    const npc = await getEntry("npcs/holm");
-    expect(npc.properties.name).toBe("Holm");
+    await applyDrafts("beispiel", [], { npcs: [holm("\nSeine Netze zurück.\n")] });
+    const npc = await getNpc("holm");
+    expect(npc.name).toBe("Holm");
     expect(npc.body).toContain("Seine Netze zurück.");
   });
 
-  test("an entry that holds CONTENT is still a 409 conflict", async () => {
-    const before = await getEntry(NPC);
+  test("an npc that holds CONTENT is still a 409 conflict, named by its id", async () => {
+    const before = await getNpc("fenn");
     await expect(
-      applyDrafts("beispiel", [
-        {
-          rel: "npcs/fenn",
-          address: "npcs/fenn",
-          properties: { id: "fenn", name: "Anders" },
-          body: "\n## Will\n\nAnderes.\n",
-        },
-      ]),
-    ).rejects.toThrow(/already exist/);
-    expect(await getEntry(NPC)).toEqual(before);
+      applyDrafts("beispiel", [], {
+        npcs: [{ id: "fenn", name: "Anders", status: "alive", body: "\nAnderes.\n" }],
+      }),
+    ).rejects.toMatchObject({ status: 409, extra: { npcs: ["fenn"] } });
+    expect(await getNpc("fenn")).toEqual(before);
   });
 
-  test("a STATUS the DM set makes an empty entry non-empty (409 on apply)", async () => {
+  test("a STATUS the DM set makes an empty npc non-empty (409 on apply)", async () => {
     // `dead` is the one thing the live view acts on, and an apply that
-    // overwrites it silently loses the only statement the entry ever made.
+    // overwrites it silently loses the only statement the npc ever made.
     await createEmptyNpc("holm");
-    await patchFm("npcs/holm", { status: "dead" });
+    await patchNpc("holm", { status: "dead" });
 
     await expect(
-      applyDrafts("beispiel", [
-        {
-          rel: "npcs/holm",
-          address: "npcs/holm",
-          properties: { id: "holm", name: "Holm", status: "alive" },
-          body: "\n## Will\n\nEtwas.\n",
-        },
-      ]),
+      applyDrafts("beispiel", [], { npcs: [holm("\nEtwas.\n")] }),
     ).rejects.toThrow(/already exist/);
-    const untouched = await getEntry("npcs/holm");
-    expect(untouched.properties.status).toBe("dead");
-    expect(untouched.properties.name).toBe("holm");
+    const untouched = await getNpc("holm");
+    expect(untouched.status).toBe("dead");
+    expect(untouched.name).toBe("holm");
   });
 
   test("a PRIMARY KEY collision is still the documented 409", async () => {

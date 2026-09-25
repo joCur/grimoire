@@ -63,16 +63,16 @@ describe("the call sites", () => {
   });
 
   test("Eigenschaften is the shared trigger with its own glyph", () => {
-    const npc: EntryResponse = {
-      path: "npcs/jorna",
-      kind: "npc",
-      properties: { id: "jorna", name: "Jorna" },
+    const chapter: EntryResponse = {
+      path: "01-salzhafen",
+      kind: "chapter",
+      properties: { id: "01-salzhafen", title: "Salzhafen" },
       body: "",
       rev: 1,
     };
     expect(
       renderToStaticMarkup(
-        <PropertiesAction campaign="beispiel" entry={npc} tree={undefined} />,
+        <PropertiesAction campaign="beispiel" entry={chapter} tree={undefined} />,
       ),
     ).toBe(
       renderToStaticMarkup(

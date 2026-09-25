@@ -1,7 +1,9 @@
 // Typed client for the Grimoire server API (every endpoint is documented at
 // its route, in its resource's module server/src/routes/<resource>.ts). All
 // response shapes come from @grimoire/shared — the format contract exists
-// exactly once.
+// exactly once. An entity with a slice of its own keeps its client there
+// (npc/npc-api.ts, location/location-api.ts), built from the HTTP helpers
+// exported here.
 
 import type {
   CampaignSummary,
@@ -16,8 +18,7 @@ import type {
   InstanceSettings,
   KnowledgeEntry,
   KnowledgeResponse,
-  Location,
-  LocationPatch,
+  NpcChange,
   SceneOrderResponse,
   SearchResponse,
   SessionResponse,
@@ -61,7 +62,8 @@ async function failure(what: string, response: Response): Promise<ApiError> {
   return new ApiError(response.status, `${what} → ${response.status}${message === undefined ? "" : `: ${message}`}`, details);
 }
 
-async function getJson<T>(path: string): Promise<T> {
+/** GET a JSON answer; a non-2xx becomes an ApiError. */
+export async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`/api${path}`);
   if (!response.ok) throw await failure(`GET /api${path}`, response);
   return (await response.json()) as T;
@@ -73,7 +75,7 @@ async function putJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 /** Send a JSON body with any write verb; a non-2xx becomes an ApiError. */
-async function sendJson<T>(
+export async function sendJson<T>(
   method: "PUT" | "PATCH" | "DELETE",
   path: string,
   body: unknown,
@@ -377,73 +379,8 @@ function isEntryResponse(value: unknown): value is EntryResponse {
   );
 }
 
-// --- a location: its own resource (ADR #31) -----------------------------------
-
-/** The request path of a campaign's locations, or of one of them. */
-function locationsUrl(campaign: string, id?: string): string {
-  const base = `/campaigns/${encodeURIComponent(campaign)}/locations`;
-  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-}
-
-/** One location — every field flat, `body` among them, beside its `rev`. */
-export function fetchLocation(campaign: string, id: string): Promise<Location> {
-  return getJson<Location>(locationsUrl(campaign, id));
-}
-
-/** Every location of the campaign, sorted by name. */
-export function fetchLocations(campaign: string): Promise<Location[]> {
-  return getJson<Location[]>(locationsUrl(campaign));
-}
-
-/**
- * The one write of a location: any subset of its fields — `body` is one of
- * them, `null` clears an optional one — against the `rev` the editing
- * session started from. A stale `rev` is 409 with the current location
- * (`locationConflict`); `force` writes the given fields on top of it.
- */
-export function patchLocation(
-  campaign: string,
-  id: string,
-  request: LocationPatch,
-): Promise<Location> {
-  return sendJson<Location>("PATCH", locationsUrl(campaign, id), request);
-}
-
-/** The server's location at the moment it refused a write. */
-export interface LocationConflict {
-  /** The location's current version — what a retry would have to carry. */
-  rev: number;
-  /** The current location; undefined when the 409 body did not carry one. */
-  location?: Location;
-}
-
-/**
- * Read a location write conflict out of a rejection: the 409 of the location
- * PATCH (and of accepting an augment proposal), with the version and the
- * location the server answered with. `undefined` for anything else. A 409
- * whose body is shaped differently still counts as a conflict, just without
- * the details.
- */
-export function locationConflict(error: unknown): LocationConflict | undefined {
-  if (!(error instanceof ApiError) || error.status !== 409) return undefined;
-  const { rev, location } = error.details;
-  return {
-    rev: typeof rev === "number" ? rev : Number.NaN,
-    ...(isLocation(location) ? { location } : {}),
-  };
-}
-
-function isLocation(value: unknown): value is Location {
-  if (value === null || typeof value !== "object") return false;
-  const candidate = value as Partial<Location>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.body === "string" &&
-    typeof candidate.rev === "number"
-  );
-}
-
-async function postJson<T>(path: string, body?: unknown): Promise<T> {
+/** POST an optional JSON body and parse the JSON answer; a non-2xx becomes an ApiError. */
+export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method: "POST",
     ...(body === undefined
@@ -452,6 +389,45 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
   });
   if (!response.ok) throw await failure(`POST /api${path}`, response);
   return (await response.json()) as T;
+}
+
+/**
+ * Start a generator run — a BACKGROUND job: the server answers 202 with the
+ * job id and the result is fetched via fetchGenerateJob. A 409 carrying a
+ * jobId is NOT an error: a job for this campaign is already running, and its
+ * id is the answer to "start a run" — the caller adopts it. Everything else
+ * throws as usual.
+ */
+export async function startJob(path: string, body: unknown): Promise<GenerateJobStarted> {
+  try {
+    return await postJson<GenerateJobStarted>(path, body);
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 409 &&
+      typeof error.details.jobId === "string"
+    ) {
+      return { jobId: error.details.jobId };
+    }
+    throw error;
+  }
+}
+
+/** The part of a run request both of its optional texts share: only what carries text. */
+export function runTexts(input: { sourceText?: string; instruction?: string }) {
+  return {
+    ...(input.sourceText === undefined || input.sourceText === ""
+      ? {}
+      : { sourceText: input.sourceText }),
+    ...(input.instruction === undefined || input.instruction === ""
+      ? {}
+      : { instruction: input.instruction }),
+  };
+}
+
+/** The request path of one campaign — every resource hangs under it. */
+export function campaignPath(campaign: string): string {
+  return `/campaigns/${encodeURIComponent(campaign)}`;
 }
 
 /**
@@ -589,25 +565,6 @@ export function markLogLineSeen(
   });
 }
 
-/**
- * Create the npc entry for `id` (status: unknown, the note as its whole text)
- * — or answer with the entry the id already has. Idempotent: the
- * goal is "this id has an entry", so an existing one is LINKED, never
- * overwritten, and an empty one — created and never filled in — is filled in.
- */
-export function ensureNpc(
-  campaign: string,
-  id: string,
-  name?: string,
-  note?: string,
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/npc-stub`, {
-    id,
-    ...(name === undefined ? {} : { name }),
-    ...(note === undefined ? {} : { note }),
-  });
-}
-
 /** Tick ONE inbox row off by its id (idempotent). Returns the inbox. */
 export function markInboxLineDone(campaign: string, id: string): Promise<InboxResponse> {
   return postJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/inbox-done`, {
@@ -617,13 +574,14 @@ export function markInboxLineDone(campaign: string, id: string): Promise<InboxRe
 
 // --- creating content --------------------------------------------------------
 //
-// Five POSTs with one shape: the DM types a NAME, the server derives the id
-// (the shared slug rule, `@grimoire/shared/slug`) and answers with the created
-// DOCUMENT — so the caller can navigate straight into it. `id` is optional and
+// The create POSTs share one shape (the npc's and the location's included,
+// in their slices): the DM types a NAME, the server derives the id
+// (the shared slug rule, `@grimoire/shared/slug`) and answers with what it
+// created — so the caller can navigate straight into it. `id` is optional and
 // exists for exactly one flow: taking the `slug_taken` 409's `suggestion` in
 // one click. Errors arrive as ApiError; a 409 carries
-// `{ code: "slug_taken", id, suggestion, path }` in `details` (lib/create.ts
-// turns that into the German sentence the dialogs show).
+// `{ code: "slug_taken", id, suggestion }` in `details` (lib/create.ts turns
+// that into the sentence the dialogs show).
 
 /** The campaign the cold start creates — `id` is what the app navigates to. */
 export function createCampaign(input: {
@@ -679,40 +637,13 @@ export function createScene(
   });
 }
 
-/** A new NPC entry — an EMPTY one that was never filled in is filled. */
-export function createNpc(
-  campaign: string,
-  input: { name: string; id?: string },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/npcs`, {
-    name: input.name,
-    ...(input.id === undefined ? {} : { id: input.id }),
-  });
-}
-
-/** A new location, same rules as the NPC one — answered as the location itself. */
-export function createLocation(
-  campaign: string,
-  input: { name: string; id?: string },
-): Promise<Location> {
-  return postJson<Location>(locationsUrl(campaign), {
-    name: input.name,
-    ...(input.id === undefined ? {} : { id: input.id }),
-  });
-}
-
 // --- generator ---------------------------------------------------------------
 
 /**
- * Start a generator run for one chapter — a BACKGROUND job:
- * the server answers 202 with the job id and the result is fetched via
- * fetchGenerateJob. Nothing is written (generator/README.md); `newChapter`
- * allows a chapter that does not exist yet (the accept creates it).
- *
- * A 409 is NOT an error here: it means a job for this campaign is already
- * running, and its id is the answer to "start a run" — the view adopts the
- * running job instead of showing a failure. Everything else throws as
- * usual; worth handling are 503 (no provider configured — no API key), 404
+ * Start a generator run for one chapter (`startJob`: 202 with the job id, a
+ * running job's 409 adopted). Nothing is written (generator/README.md);
+ * `newChapter` allows a chapter that does not exist yet (the accept creates
+ * it). Worth handling are 503 (no provider configured — no API key), 404
  * (unknown chapter) and 400.
  *
  * The run's own failure (the 422 with `rawReply`, `usage`
@@ -724,109 +655,42 @@ export function createLocation(
  * persistent, so the accept regularly happens in a tab that never saw this
  * form.
  */
-export async function startGenerateJob(
+export function startGenerateJob(
   campaign: string,
   input: { chapter: string; sourceText: string; newChapter?: boolean; chapterTitle?: string },
 ): Promise<GenerateJobStarted> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate`;
-  const response = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chapter: input.chapter,
-      sourceText: input.sourceText,
-      ...(input.newChapter === true ? { newChapter: true } : {}),
-      ...(input.newChapter === true && input.chapterTitle !== undefined
-        ? { chapterTitle: input.chapterTitle }
-        : {}),
-    }),
+  return startJob(`${campaignPath(campaign)}/generate`, {
+    chapter: input.chapter,
+    sourceText: input.sourceText,
+    ...(input.newChapter === true ? { newChapter: true } : {}),
+    ...(input.newChapter === true && input.chapterTitle !== undefined
+      ? { chapterTitle: input.chapterTitle }
+      : {}),
   });
-  if (!response.ok) {
-    const error = await failure(`POST /api${path}`, response);
-    if (error.status === 409 && typeof error.details.jobId === "string") {
-      return { jobId: error.details.jobId };
-    }
-    throw error;
-  }
-  return (await response.json()) as GenerateJobStarted;
 }
 
 /**
- * Start an NPC run: source material in, ONE NPC draft out.
- * Same job model as the scene run — 202 { jobId }, the result is fetched via
- * fetchGenerateJob (`kind: "npc"`, `npcResult`), and a 409 that carries a
- * jobId means "a generator job is already running for this campaign" and is
- * adopted instead of shown as an error.
- *
- * `id` is optional: empty means the model picks the id. A 409 WITHOUT a jobId
- * is the other collision — the pinned id's entry already exists (never
- * overwritten); its `details.path` names the entry.
- */
-export async function startGenerateNpcJob(
-  campaign: string,
-  input: { sourceText: string; id?: string },
-): Promise<GenerateJobStarted> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/npc`;
-  const response = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      sourceText: input.sourceText,
-      ...(input.id === undefined || input.id === "" ? {} : { id: input.id }),
-    }),
-  });
-  if (!response.ok) {
-    const error = await failure(`POST /api${path}`, response);
-    if (error.status === 409 && typeof error.details.jobId === "string") {
-      return { jobId: error.details.jobId };
-    }
-    throw error;
-  }
-  return (await response.json()) as GenerateJobStarted;
-}
-
-/**
- * Start an augment run from an entry's augment action: an entry that already
+ * Start an augment run from a scene's augment action: a scene that already
  * exists plus source material and/or an instruction, and the model proposes
- * the filled-in version. Same job model as the create runs — 202 { jobId },
- * the proposal is fetched via fetchGenerateJob (`kind: "augment"`,
- * `augmentResult`), and a 409 carrying a jobId means "a generator job is
- * already running for this campaign" and is ADOPTED instead of shown as an
- * error (the review then simply belongs to that job).
+ * the filled-in version. Same job model as the create runs (`startJob`), the
+ * proposal is fetched via fetchGenerateJob (`kind: "augment"`,
+ * `augmentResult`); an adopted running job simply owns the review.
  *
  * At least one of sourceText/instruction has to carry text; the dialog
  * enforces it and the server answers 400 for the rest.
  */
-export async function startAugmentJob(
+export function startAugmentJob(
   campaign: string,
   input: { path: string; sourceText?: string; instruction?: string },
 ): Promise<GenerateJobStarted> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/augment`;
-  const response = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      path: input.path,
-      ...(input.sourceText === undefined || input.sourceText === ""
-        ? {}
-        : { sourceText: input.sourceText }),
-      ...(input.instruction === undefined || input.instruction === ""
-        ? {}
-        : { instruction: input.instruction }),
-    }),
+  return startJob(`${campaignPath(campaign)}/generate/augment`, {
+    path: input.path,
+    ...runTexts(input),
   });
-  if (!response.ok) {
-    const error = await failure(`POST /api${path}`, response);
-    if (error.status === 409 && typeof error.details.jobId === "string") {
-      return { jobId: error.details.jobId };
-    }
-    throw error;
-  }
-  return (await response.json()) as GenerateJobStarted;
 }
 
 /**
- * Accept a reviewed augment proposal: the properties fields the
+ * Accept a reviewed scene proposal: the properties fields the
  * DM took and the body they assembled from the accepted blocks, written in
  * ONE transaction against `rev`. A 409 is the ordinary conflict protocol
  * (ADR #4) and arrives as ApiError — the caller re-reads and tries again.
@@ -849,54 +713,6 @@ export function applyAugment(
     ...(input.body === undefined ? {} : { body: input.body }),
     ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
   });
-}
-
-/**
- * Start an augment run on a LOCATION, on the location's own resource — the
- * same job model as every other run: 202 { jobId }, the proposal is fetched
- * via fetchGenerateJob (`kind: "location-augment"`,
- * `locationAugmentResult`), and a 409 carrying a jobId is ADOPTED.
- */
-export async function startLocationAugmentJob(
-  campaign: string,
-  id: string,
-  input: { sourceText?: string; instruction?: string },
-): Promise<GenerateJobStarted> {
-  const path = `${locationsUrl(campaign, id)}/augment`;
-  const response = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ...(input.sourceText === undefined || input.sourceText === ""
-        ? {}
-        : { sourceText: input.sourceText }),
-      ...(input.instruction === undefined || input.instruction === ""
-        ? {}
-        : { instruction: input.instruction }),
-    }),
-  });
-  if (!response.ok) {
-    const error = await failure(`POST /api${path}`, response);
-    if (error.status === 409 && typeof error.details.jobId === "string") {
-      return { jobId: error.details.jobId };
-    }
-    throw error;
-  }
-  return (await response.json()) as GenerateJobStarted;
-}
-
-/**
- * Accept a reviewed location proposal: the fields the DM took and the body
- * assembled from the accepted blocks — the location's PATCH without `force`
- * — written in ONE transaction against `rev`; `jobId` discards the job in
- * the same transaction. A 409 is the location conflict (`locationConflict`).
- */
-export function applyLocationAugment(
-  campaign: string,
-  id: string,
-  input: Omit<LocationPatch, "force" | "id"> & { jobId?: string },
-): Promise<Location> {
-  return postJson<Location>(`${locationsUrl(campaign, id)}/augment/apply`, input);
 }
 
 /**
@@ -927,8 +743,9 @@ export async function deleteGenerateJob(campaign: string): Promise<void> {
 
 /**
  * Store part of the REVIEW STATE on the job. Everything merges,
- * so this sends only what changed: the text of the draft being typed in
- * (debounced by the caller), the decision that was just made, the drops.
+ * so this sends only what changed: the text of the scene draft or the fields
+ * of the proposed npc being typed in (debounced by the caller), the decision
+ * that was just made, the drops.
  *
  * `rev` is the job's review rev as the caller read it — a 409
  * `rev_conflict` (with the current rev in `ApiError.details`) means a second
@@ -940,7 +757,8 @@ export async function patchJobReview(
   rev: number,
   patch: {
     edits?: Record<string, DraftEdit>;
-    entries?: Record<string, "accepted" | "rejected" | null>;
+    npcEdits?: Record<string, NpcChange>;
+    npcs?: Record<string, "accepted" | "rejected" | null>;
     locations?: Record<string, "accepted" | "rejected" | null>;
     dropped?: string[];
     fields?: Record<string, boolean | null>;
@@ -958,20 +776,18 @@ export async function patchJobReview(
 }
 
 /**
- * Accept PART of a finished run: one scene, one npc stub (`paths`) or one
- * proposed location (`locations`, by id), or all of them when nothing is
- * selected.
- * Answers what it wrote (draft path -> the address it landed at, and the
- * ids of the written locations) and whether the job is gone because nothing
- * is open any more. `rev` is the
- * review rev as the caller read it: a 409 `rev_conflict` means another tab
- * decided in between and nothing was written. A 409 with
- * `details.conflicts` is the ordinary write conflict, as for the whole-run
- * apply.
+ * Accept PART of a finished run: one scene (`paths`), one proposed npc
+ * (`npcs`, by id — the NPC run's one npc among them) or one proposed location
+ * (`locations`, by id), or all of them when nothing is selected.
+ * Answers what it wrote (draft path -> the address it landed at, and the ids
+ * of the written npcs and locations) and whether the job is gone because
+ * nothing is open any more. `rev` is the review rev as the caller read it: a
+ * 409 `rev_conflict` means another tab decided in between and nothing was
+ * written. A 409 with `details.conflicts` is the ordinary write conflict.
  */
-/** What one accept wrote — see acceptJobParts. */
 export interface AcceptedParts {
   written: Record<string, string>;
+  npcs: string[];
   locations: string[];
   jobDeleted: boolean;
 }
@@ -980,12 +796,19 @@ export function acceptJobParts(
   campaign: string,
   jobId: string,
   rev: number,
-  input: { paths?: string[]; locations?: string[]; chapter?: string; chapterTitle?: string } = {},
+  input: {
+    paths?: string[];
+    npcs?: string[];
+    locations?: string[];
+    chapter?: string;
+    chapterTitle?: string;
+  } = {},
 ): Promise<AcceptedParts> {
   const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
   return postJson<AcceptedParts>(path, {
     rev,
     ...(input.paths === undefined ? {} : { paths: input.paths }),
+    ...(input.npcs === undefined ? {} : { npcs: input.npcs }),
     ...(input.locations === undefined ? {} : { locations: input.locations }),
     ...(input.chapter === undefined || input.chapterTitle === undefined
       ? {}

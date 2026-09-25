@@ -1,4 +1,4 @@
-// The reply schema of an ENTRY call — one plain schema per kind and run.
+// The reply schema of a SCENE call — one plain schema per run.
 //
 // Every generator call answers a JSON object, and every one of them is FORCED
 // into its schema by the provider: the Claude path sends the schema as a tool
@@ -6,17 +6,17 @@
 // `response_format: json_schema` (server/src/llm-provider.ts). A shape the
 // API guarantees is a shape no correction turn has to buy.
 //
-// The shape mirrors the stored row of a scene or an npc: the kind's fields
-// under `properties`, beside them the text and the notes for the DM,
+// The shape mirrors the stored row of a scene: its fields under
+// `properties`, beside them the text and the notes for the DM,
 //
 //     { "properties": { "id": "night-watch-quay", … }, "body": "## Ablauf\n…",
 //       "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."] }
 //
-// and the schemas live in ../schema, one per kind and run; `shared/test/
+// and the schemas live in ../schema, one per run; `shared/test/
 // entry-schema.test.ts` asserts that their keys and enums still match the
-// field definitions the dialog is built from (./property-fields). The
-// location derives its reply schema from its zod schema instead (ADR #31,
-// ./location.ts `locationReplySchema`).
+// field definitions the dialog is built from (./property-fields). The npc and
+// the location derive their reply schemas from their zod schemas instead
+// (ADR #31, ./npc.ts `npcReplySchema`, ./location.ts `locationReplySchema`).
 //
 // `body` is the whole text as one string and `warnings` what the
 // DM reads in the review. The body travels verbatim: a forced object cannot
@@ -33,31 +33,27 @@
 //   * `additionalProperties: false` everywhere,
 //   * every property in `required` — a genuinely optional field is NULLABLE
 //     instead, and the server reads `null` as „not given" (it drops the key
-//     before the row is written),
-//   * a free key/value map (`quickstats`) cannot be expressed at all, so it
-//     travels as a LIST of `{ key, value }` pairs and the server folds it
-//     back into the mapping the format contract asks for.
+//     before the row is written).
 
 import type { JsonSchema } from "./outline-schema";
-import augmentedNpcEntry from "../schema/augmented-npc.schema.json";
 import augmentedSceneEntry from "../schema/augmented-scene.schema.json";
-import npcEntry from "../schema/npc.schema.json";
 import sceneEntry from "../schema/scene.schema.json";
 
 /**
- * The kinds whose generator reply carries `properties` — a scene and an npc.
- * A chapter comes out of the run itself (ADR #18), the campaign is nobody's
- * proposal, and a location has its own reply form (./location.ts).
+ * The kinds whose generator reply carries `properties` — a scene. A chapter
+ * comes out of the run itself (ADR #18), the campaign is nobody's proposal,
+ * and an npc and a location have their own reply forms (./npc.ts,
+ * ./location.ts).
  */
-export const GENERATED_ENTRY_KINDS = ["scene", "npc"] as const;
+export const GENERATED_ENTRY_KINDS = ["scene"] as const;
 export type GeneratedEntryKind = (typeof GENERATED_ENTRY_KINDS)[number];
 
 /**
  * Which run the schema is for:
  *
- *   create    a scene part, an entry part, the NPC run — the entry is NEW,
- *             so a scene's `status` can only be `draft`,
- *   augment   the „Mit KI ergänzen" run — the entry EXISTS, so its status
+ *   create    a scene part — the scene is NEW, so its `status` can only be
+ *             `draft`,
+ *   augment   the „Mit KI ergänzen" run — the scene EXISTS, so its status
  *             is whatever the DM made it and the schema must not narrow it.
  *
  * Each run has its own schema; the narrowing is written down in the create
@@ -65,19 +61,13 @@ export type GeneratedEntryKind = (typeof GENERATED_ENTRY_KINDS)[number];
  */
 export type EntryMode = "create" | "augment";
 
-/** The key of the `quickstats` pair list — see the strict-mode note above. */
-export const PAIR_KEY = "key";
-export const PAIR_VALUE = "value";
-
 /** Every entry schema, by kind and run — loaded once, at start. */
 const ENTRY_SCHEMAS: Record<EntryMode, Record<GeneratedEntryKind, JsonSchema>> = {
   create: {
     scene: sceneEntry,
-    npc: npcEntry,
   },
   augment: {
     scene: augmentedSceneEntry,
-    npc: augmentedNpcEntry,
   },
 };
 

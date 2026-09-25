@@ -1,7 +1,7 @@
-// The rules of the properties form: the field list per kind, the diff that
-// decides what is patched at all, and the representation a cleared field is
-// written in. All pure — the write itself is the shared editing session
-// (lib/use-entry-edit.ts).
+// The rules of the properties form of a scene and a chapter: the field list
+// per kind, the diff that decides what is patched at all, and the
+// representation a cleared field is written in. All pure — the write itself
+// is the shared editing session (lib/use-entry-edit.ts).
 
 import { describe, expect, test } from "bun:test";
 import type { CampaignTree, EntityKind } from "@grimoire/shared/types";
@@ -18,12 +18,11 @@ import {
   propertiesKindLabel,
   propertiesPatch,
   hasPropertiesChanges,
-  referenceLabel,
   referenceOptions,
-  type FieldOption,
   type FormValues,
   type PropertiesField,
 } from "./properties-form";
+import type { FieldOption } from "@/components/fields/SelectField";
 import { translator } from "@/i18n/format";
 
 // The language the assertions below are written in: the helpers
@@ -54,19 +53,6 @@ const SCENE_PROPERTIES: Record<string, unknown> = {
   status: "ready",
 };
 
-/** The properties of the fixture NPC „Fenn" — quickstats arrive as numbers. */
-const NPC_PROPERTIES: Record<string, unknown> = {
-  id: "fenn",
-  name: "Fenn",
-  role: "Anführer der Schmuggler in der Nordbucht",
-  chapter: "01-salzhafen",
-  status: "alive",
-  statblock: "Roll20: Fenn",
-  quickstats: { wis: 2, insight: 2, "passive-perception": 13 },
-  voice: "leise, höflich",
-  appearance: "salzverkrustete Lederjacke",
-};
-
 describe("propertiesFieldsFor", () => {
   test("the scene fields are SceneProperties without the id", () => {
     expect(keys("scene")).toEqual([
@@ -82,35 +68,8 @@ describe("propertiesFieldsFor", () => {
     ]);
   });
 
-  test("npc, location and chapter carry their own type's fields", () => {
-    expect(keys("npc")).toEqual([
-      "name",
-      "role",
-      "chapter",
-      "status",
-      "statblock",
-      "quickstats",
-      "voice",
-      "appearance",
-    ]);
-    expect(keys("location")).toEqual(["name", "chapter", "roll20Page"]);
+  test("the chapter carries its own fields", () => {
     expect(keys("chapter")).toEqual(["title", "status"]);
-  });
-
-  // The prose properties the cards show are edited beside the text, on the
-  // entry's own edit surface — the dialog leaves them out.
-  test("the text surface carries motivation and atmosphere, and the dialog does not", () => {
-    const onText = (kind: EntityKind) =>
-      (propertiesFieldsFor(kind, t, "text") ?? []).map((field) => field.key);
-    expect(onText("npc")).toEqual(["motivation"]);
-    expect(onText("location")).toEqual(["atmosphere"]);
-    expect(onText("scene")).toEqual([]);
-    expect(onText("chapter")).toEqual([]);
-    expect(keys("npc")).not.toContain("motivation");
-    expect(keys("location")).not.toContain("atmosphere");
-    const [motivation] = propertiesFieldsFor("npc", t, "text") ?? [];
-    expect(motivation?.label).toBe("Will");
-    expect(motivation?.control).toBe("textarea");
   });
 
   // The chapter status is not free text: the API enforces the trio (400
@@ -126,7 +85,7 @@ describe("propertiesFieldsFor", () => {
   });
 
   test("neither the id nor the kind is ever a field (the id is fixed at creation)", () => {
-    for (const kind of ["scene", "npc", "location", "chapter"] as const) {
+    for (const kind of ["scene", "chapter"] as const) {
       expect(keys(kind)).not.toContain("id");
       expect(keys(kind)).not.toContain("kind");
     }
@@ -174,27 +133,16 @@ describe("propertiesFormValues", () => {
     });
   });
 
-  test("quickstats become editable key/value rows, numbers as their text", () => {
-    const values = propertiesFormValues(fields("npc"), NPC_PROPERTIES);
-    expect(values.quickstats).toEqual({
-      kind: "pairs",
-      entries: [
-        { key: "wis", value: "2" },
-        { key: "insight", value: "2" },
-        { key: "passive-perception", value: "13" },
-      ],
-    });
-  });
-
   test("missing keys are empty fields, odd values degrade instead of throwing", () => {
-    const values = propertiesFormValues(fields("location"), {
-      id: "leuchtturm",
-      name: "Leuchtturm",
-      roll20Page: 12,
-      chapter: { nested: true },
+    const values = propertiesFormValues(fields("scene"), {
+      id: "ankunft",
+      title: "Ankunft",
+      trigger: 12,
+      location: { nested: true },
     });
-    expect(values.roll20Page).toEqual({ kind: "text", text: "12" });
-    expect(values.chapter).toEqual({ kind: "text", text: "" });
+    expect(values.trigger).toEqual({ kind: "text", text: "12" });
+    expect(values.location).toEqual({ kind: "text", text: "" });
+    expect(values.tags).toEqual({ kind: "list", items: [] });
   });
 });
 
@@ -230,9 +178,8 @@ describe("applyPropertiesPatch", () => {
 
 describe("propertiesPatch", () => {
   const sceneFields = fields("scene");
-  const npcFields = fields("npc");
 
-  /** The values of an entry, with single fields overridden. */
+  /** The values of a scene, with single fields overridden. */
   function edited(
     fieldList: readonly PropertiesField[],
     properties: Record<string, unknown>,
@@ -274,7 +221,7 @@ describe("propertiesPatch", () => {
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
   });
 
-  test("clearing a field DELETES the key — text, list and pairs alike", () => {
+  test("clearing a field DELETES the key — text and list alike", () => {
     const scene = edited(sceneFields, SCENE_PROPERTIES, {
       trigger: { kind: "text", text: "   " },
       tags: { kind: "list", items: [] },
@@ -283,8 +230,6 @@ describe("propertiesPatch", () => {
       trigger: null,
       tags: null,
     });
-    const npc = edited(npcFields, NPC_PROPERTIES, { quickstats: { kind: "pairs", entries: [] } });
-    expect(propertiesPatch(npcFields, npc.initial, npc.current)).toEqual({ quickstats: null });
   });
 
   test("a list keeps its order and drops blank entries", () => {
@@ -305,55 +250,6 @@ describe("propertiesPatch", () => {
     });
   });
 
-  test("quickstats keep their YAML types: numbers stay numbers, a typed +2 stays text", () => {
-    const { initial, current } = edited(npcFields, NPC_PROPERTIES, {
-      quickstats: {
-        kind: "pairs",
-        entries: [
-          { key: "wis", value: "3" },
-          { key: "insight", value: "+2" },
-          // A row that cannot be written (no name). It is not IN the patch —
-          // and it never gets there, because propertiesFormIssues blocks the
-          // save while it stands (see „unfinished quickstat rows“ below).
-          { key: "", value: "wird nicht geschrieben" },
-        ],
-      },
-    });
-    expect(propertiesPatch(npcFields, initial, current)).toEqual({
-      quickstats: { wis: 3, insight: "+2" },
-    });
-  });
-
-  test("a quickstat whose VALUE was cleared loses its key — never `key: ''`", () => {
-    const { initial, current } = edited(npcFields, NPC_PROPERTIES, {
-      quickstats: {
-        kind: "pairs",
-        entries: [
-          { key: "wis", value: "2" },
-          { key: "insight", value: "  " },
-          { key: "passive-perception", value: "13" },
-        ],
-      },
-    });
-    expect(propertiesPatch(npcFields, initial, current)).toEqual({
-      quickstats: { wis: 2, "passive-perception": 13 },
-    });
-  });
-
-  test("clearing every quickstat value deletes the whole key", () => {
-    const { initial, current } = edited(npcFields, NPC_PROPERTIES, {
-      quickstats: {
-        kind: "pairs",
-        entries: [
-          { key: "wis", value: "" },
-          { key: "insight", value: "" },
-          { key: "passive-perception", value: "" },
-        ],
-      },
-    });
-    expect(propertiesPatch(npcFields, initial, current)).toEqual({ quickstats: null });
-  });
-
   test("a field nobody touched is not in the patch at all", () => {
     // The status is part of the form and stands unchanged, so the write must
     // not carry it — a no-op that would still bump the rev.
@@ -365,76 +261,22 @@ describe("propertiesPatch", () => {
 });
 
 describe("canSubmitProperties", () => {
-  test("a blank title/name is not a save", () => {
+  test("a blank title is not a save", () => {
     const sceneFields = fields("scene");
     const values = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
     expect(canSubmitProperties(sceneFields, values)).toBe(true);
     expect(
       canSubmitProperties(sceneFields, { ...values, title: { kind: "text", text: "  " } }),
     ).toBe(false);
-    const npcFields = fields("npc");
-    expect(
-      canSubmitProperties(npcFields, {
-        ...propertiesFormValues(npcFields, NPC_PROPERTIES),
-        name: { kind: "text", text: "" },
-      }),
-    ).toBe(false);
   });
 });
 
-describe("unfinished quickstat rows block the save", () => {
-  const npcFields = fields("npc");
-  const values = propertiesFormValues(npcFields, NPC_PROPERTIES);
-  const withStats = (entries: { key: string; value: string }[]): FormValues => ({
-    ...values,
-    quickstats: { kind: "pairs", entries },
-  });
-
-  test("an entry's own rows are fine — nothing to complain about", () => {
-    expect(propertiesFormIssues(npcFields, values, undefined, t)).toEqual({});
-    // An empty row (the „Zeile hinzufügen“ state) and a name whose value was
-    // cleared (= delete this key) are both legitimate.
-    expect(
-      propertiesFormIssues(
-        npcFields,
-        withStats([
-          { key: "insight", value: "2" },
-          { key: "wis", value: "" },
-          { key: "", value: "" },
-        ]), undefined, t,
-      ),
-    ).toEqual({});
-  });
-
-  test("a value without a name is named out loud instead of being dropped", () => {
-    const issues = propertiesFormIssues(
-      npcFields,
-      withStats([
-        { key: "insight", value: "2" },
-        { key: "  ", value: "+3" },
-      ]), undefined, t,
-    );
-    expect(issues.quickstats).toBe("Zeile ohne Namen — Name ergänzen oder Zeile entfernen.");
-  });
-
-  test("the same name twice is refused — YAML would swallow the first value", () => {
-    const issues = propertiesFormIssues(
-      npcFields,
-      withStats([
-        { key: "insight", value: "2" },
-        { key: "insight", value: "3" },
-      ]), undefined, t,
-    );
-    expect(issues.quickstats).toBe(
-      'Name „insight“ doppelt — jeder Name darf nur einmal vorkommen.',
-    );
-  });
-
-  test("a scene's own properties is fine as it stands", () => {
+describe("a scene as it stands", () => {
+  test("its own properties are fine — nothing to complain about", () => {
     const sceneFields = fields("scene");
-    expect(propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_PROPERTIES), undefined, t)).toEqual(
-      {},
-    );
+    expect(
+      propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_PROPERTIES), undefined, t),
+    ).toEqual({});
   });
 });
 
@@ -461,19 +303,6 @@ describe("a scene's Kapitel cannot be cleared", () => {
 
   test("an unfinished Kapitel counts as unsaved work, so Esc asks first", () => {
     expect(hasPropertiesChanges(sceneFields, initial, withChapter(""), t)).toBe(true);
-  });
-
-  test("an npc and an Ort may sit outside every chapter", () => {
-    // Only a SCENE's chapter is part of its address, so only a scene loses
-    // the ability to clear the field.
-    for (const kind of ["npc", "location"] as const) {
-      const kindFields = fields(kind);
-      const values = propertiesFormValues(kindFields, { id: "x", name: "X", chapter: "01-salzhafen" });
-      expect(
-        propertiesFormIssues(kindFields, { ...values, chapter: { kind: "text", text: "" } }, values, t),
-        kind,
-      ).toEqual({});
-    }
   });
 });
 
@@ -611,7 +440,6 @@ describe("the Ort field: free text in, an id out", () => {
 
 describe("hasPropertiesChanges", () => {
   const sceneFields = fields("scene");
-  const npcFields = fields("npc");
   const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
 
   test("an untouched form has nothing to discard", () => {
@@ -625,24 +453,13 @@ describe("hasPropertiesChanges", () => {
     ).toBe(false);
   });
 
-  test("a changed field is work — and so is an unfinished quickstat row", () => {
+  test("a changed field is work", () => {
     expect(
       hasPropertiesChanges(sceneFields, initial, {
         ...initial,
         status: { kind: "text", text: "played" },
       }, t),
     ).toBe(true);
-    // The invalid row produces no patch at all, so the guard has to ask the
-    // issues as well — otherwise Esc would throw it away silently.
-    const npcInitial = propertiesFormValues(npcFields, NPC_PROPERTIES);
-    const stats = npcInitial.quickstats;
-    if (stats?.kind !== "pairs") throw new Error("quickstats is not a pairs field");
-    const nameless: FormValues = {
-      ...npcInitial,
-      quickstats: { kind: "pairs", entries: [...stats.entries, { key: "", value: "+1" }] },
-    };
-    expect(propertiesPatch(npcFields, npcInitial, nameless)).toEqual({});
-    expect(hasPropertiesChanges(npcFields, npcInitial, nameless, t)).toBe(true);
   });
 });
 
@@ -673,8 +490,8 @@ describe("reference and select options", () => {
       { id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm", scenes: [] },
     ],
     npcs: [
-      { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
-      { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+      { id: "fenn", name: "Fenn", status: "alive" },
+      { id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
     ],
     locations: [
       { id: "leuchtturm", name: "Der Leuchtturm" },
@@ -695,12 +512,6 @@ describe("reference and select options", () => {
     ]);
     // No tree yet (query still running): no suggestions, still a usable field.
     expect(referenceOptions(undefined, "npcs")).toEqual([]);
-  });
-
-  test("referenceLabel names a known id and stays quiet otherwise", () => {
-    const options = referenceOptions(tree, "npcs");
-    expect(referenceLabel(options, "jorna")).toBe("Hafenmeisterin Jorna");
-    expect(referenceLabel(options, "kapitaen-torv")).toBe(undefined);
   });
 
 });

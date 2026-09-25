@@ -8,14 +8,15 @@
 // it was.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { EntryResponse } from "@grimoire/shared";
+import type { EntryResponse, Npc } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const NPC = "npcs/jorna";
 const CHAPTER = "01-salzhafen";
+/** An npc is its own resource (ADR #31): its fields travel flat. */
+const NPC_URL = "/api/campaigns/beispiel/npcs/jorna";
 
 async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(entriesUrl("beispiel", rel));
@@ -75,7 +76,15 @@ describe("a foreign status or type is a 400", () => {
   });
 
   test("an npc status outside the four positions", async () => {
-    const body = await refusal(NPC, { status: "tot" });
+    const before = (await (await app.request(NPC_URL)).json()) as Npc;
+    const res = await app.request(NPC_URL, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rev: before.rev, status: "tot" }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await (await app.request(NPC_URL)).json()) as Npc).rev).toBe(before.rev);
+    const body = (await res.json()) as Refusal;
     expect(body.code).toBe("status_not_allowed");
     expect(body.kind).toBe("npc");
     expect(body.allowed).toEqual(["alive", "dead", "missing", "unknown"]);

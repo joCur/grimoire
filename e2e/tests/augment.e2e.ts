@@ -1,21 +1,21 @@
-// Critical path 6, the second half: augmenting an entry with the model.
+// Critical path 6, the second half: augmenting with the model.
 //
 // The create runs of that path live in `generator.e2e.ts`; this spec is the
-// same pipeline pointed at an entry that ALREADY EXISTS, and it asserts
-// four things:
+// same pipeline pointed at a scene, an npc or a location that ALREADY EXISTS,
+// and it asserts these things:
 //
-//   a) an EMPTY npc — an entry created and not filled in — is augmented and
-//      its holes are filled,
+//   a) an EMPTY npc — one created and not filled in — is augmented on its own
+//      resource (ADR #31) and its holes are filled,
 //   b) a PREPARED scene gains a new plot thread as ADDITIONAL blocks while
 //      every existing block comes back byte for byte,
-//   b2) a FILLED npc — the one entry whose stored shape differs from the
-//      reply shape (`quickstats` as a mapping vs. a `{ key, value }` list) —
-//      is augmented and keeps its stats as the mapping they are,
+//   b2) a FILLED npc — whose stored shape differs from the reply shape
+//      (`quickstats` as a mapping vs. a `{ key, value }` list) — is
+//      augmented and keeps its stats as the mapping they are,
 //   c) rejecting the proposal writes nothing and takes the job with it,
-//   d) an entry that moves while the review is open answers 409 and nothing
+//   d) a scene that moves while the review is open answers 409 and nothing
 //      is written (ADR #4) — the review recovers on the re-read,
-//   e) a proposal that names an entry nobody has (`[[…]]`) costs one
-//      correction turn, and the DM reviews the corrected one,
+//   e) a proposal that names an id nobody has (`[[…]]`) costs one correction
+//      turn, and the DM reviews the corrected one,
 //   f) a LOCATION is augmented on its own resource (ADR #31): its run starts
 //      on `…/locations/:id/augment`, its proposal is the location as read
 //      beside the location as proposed, and the accept writes the location.
@@ -23,9 +23,9 @@
 // Two of them carry the default rule with them, because it is the rule the
 // whole feature turns on: by default only empty and new units are accepted,
 // and a filled one is never silently replaced. The npc reply therefore
-// proposes a mix — three fields the entry has nothing in (the motivation
-// among them, a property like any other), two it already has — and the spec
-// checks the PRESELECTION, not just the outcome.
+// proposes a mix — three fields the npc has nothing in (the motivation among
+// them, a field like any other), two it already has — and the spec checks
+// the PRESELECTION, not just the outcome.
 //
 // Nothing is mocked but the model (fixtures/stub-llm.ts): a real job on a
 // real server, the real OpenAICompatProvider, the real write path with its
@@ -56,29 +56,29 @@ const SCENE = "01-salzhafen/bucht/smuggler-captured";
 const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 
 /** The example campaign's filled npc — the one that carries `quickstats`. */
-const FILLED_NPC = "npcs/jorna";
+const FILLED_NPC = "jorna";
+const FILLED_NPC_URL = `/campaigns/beispiel/npcs/${FILLED_NPC}`;
 
 /** The empty npc — created, never filled in. */
 const EMPTY_NPC = "spitzel";
-const NPC_PATH = `npcs/${EMPTY_NPC}`;
-const NPC_URL = `/campaigns/beispiel/entries/${NPC_PATH}`;
+const NPC_URL = `/campaigns/beispiel/npcs/${EMPTY_NPC}`;
 
 const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
 
 /**
- * Create an npc with nothing but the id — how a DM ends up with an entry
- * that exists and says nothing. The scene then references it, which is only
+ * Create an npc with nothing but the id — how a DM ends up with an npc that
+ * exists and says nothing. The scene then references it, which is only
  * possible BECAUSE it exists (ADR #19).
  */
 async function createEmptyNpc(api: Api): Promise<void> {
-  await api.send("POST", "campaigns/beispiel/npcs", { name: EMPTY_NPC });
+  await api.createNpc({ name: EMPTY_NPC });
   await api.patchProperties(SCENE, { npcs: ["fenn", EMPTY_NPC] });
-  const npc = await api.entry(NPC_PATH);
-  expect(npc.properties.name).toBe(EMPTY_NPC);
+  const npc = await api.npc(EMPTY_NPC);
+  expect(npc.name).toBe(EMPTY_NPC);
   expect(npc.body).toBe("");
 }
 
-/** Open the dialog on the entry the page shows and start a run. */
+/** Open the dialog on what the page shows and start a run. */
 async function startAugment(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
   await page.getByLabel("Anweisung (optional)").fill(INSTRUCTION);
@@ -94,8 +94,8 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await page.goto(NPC_URL);
   await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toBeVisible();
-  // The dialog names the entry it is about by its DISPLAY NAME — the wire
-  // address is how it is stored, not how the DM knows it.
+  // The dialog names the npc it is about by its DISPLAY NAME — the resource
+  // segment is how it is stored, not how the DM knows it.
   const lead = page.getByText("die KI ergänzt", { exact: false });
   await expect(lead).toBeVisible();
   await expect(lead).toContainText(EMPTY_NPC);
@@ -133,28 +133,52 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
     "true",
   );
 
+  // The job is the npc's own run (ADR #31): kind, id and a typed proposal —
+  // the npc as read beside the npc as proposed, no address anywhere.
+  const job = await api.get<Record<string, unknown>>("campaigns/beispiel/generate/job");
+  expect(job.kind).toBe("npc-augment");
+  expect(job.npc).toBe(EMPTY_NPC);
+  expect(job.target).toBeUndefined();
+  expect(job.augmentResult).toBeUndefined();
+  const proposal = job.npcAugmentResult as {
+    id: string;
+    current: Record<string, unknown>;
+    proposed: Record<string, unknown>;
+  };
+  expect(proposal.id).toBe(EMPTY_NPC);
+  const { rev: _rev, ...current } = await api.npc(EMPTY_NPC);
+  expect(proposal.current).toEqual(current);
+  expect(proposal.proposed.role).toBe(AUGMENT_NPC_ROLE);
+  for (const side of [proposal.current, proposal.proposed]) {
+    expect(Object.keys(side)).not.toContain("path");
+    expect(Object.keys(side)).not.toContain("kind");
+    expect(Object.keys(side)).not.toContain("properties");
+    // A field the npc does not carry is absent, never `null`.
+    expect(Object.values(side)).not.toContain(null);
+  }
+
   // Nothing is written before the accept.
-  expect((await api.properties(NPC_PATH)).role).not.toBe(AUGMENT_NPC_ROLE);
+  expect((await api.npc(EMPTY_NPC)).role).toBeUndefined();
 
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
   // One transaction. The holes are filled …
-  const npc = await api.entry(NPC_PATH);
-  expect(npc.properties.role).toBe(AUGMENT_NPC_ROLE);
-  expect(npc.properties.voice).toBe(AUGMENT_NPC_VOICE);
-  expect(npc.properties.motivation).toBe(AUGMENT_NPC_MOTIVATION);
+  const npc = await api.npc(EMPTY_NPC);
+  expect(npc.role).toBe(AUGMENT_NPC_ROLE);
+  expect(npc.voice).toBe(AUGMENT_NPC_VOICE);
+  expect(npc.motivation).toBe(AUGMENT_NPC_MOTIVATION);
   expect(npc.body).not.toContain("## Will");
   expect(npc.body).toContain("> [!secret]");
-  // … and what the entry already carried was NOT silently replaced.
-  expect(npc.properties.name).toBe(EMPTY_NPC);
-  expect(npc.properties.name).not.toBe(AUGMENT_NPC_NAME);
-  expect(npc.properties.status).toBe("unknown");
-  expect(npc.properties.status).not.toBe(AUGMENT_NPC_STATUS);
+  // … and what the npc already carried was NOT silently replaced.
+  expect(npc.name).toBe(EMPTY_NPC);
+  expect(npc.name).not.toBe(AUGMENT_NPC_NAME);
+  expect(npc.status).toBe("unknown");
+  expect(npc.status).not.toBe(AUGMENT_NPC_STATUS);
   // The job is gone with the same transaction.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 
-  // Path 2: the reading view shows the filled entry at once — the motivation
+  // Path 2: the reading view shows the filled npc at once — the motivation
   // in the header, the callout as a callout with the `[[fenn]]` inside it
   // resolved.
   await expect(page.getByText(AUGMENT_NPC_MOTIVATION)).toBeVisible();
@@ -226,14 +250,14 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
   page,
   api,
 }) => {
-  // Jorna is the entry whose STORED shape differs from the reply shape:
+  // Jorna is the npc whose STORED shape differs from the reply shape:
   // `quickstats` is a mapping in the store and a `{ key, value }` list in a
-  // reply. The stub echoes the properties the prompt showed it — so a prompt
-  // that shows the wrong one ends this run in a 422 instead of a review.
-  const before = await api.entry(FILLED_NPC);
-  expect(before.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+  // reply. The stub echoes the fields the prompt showed it — so a prompt that
+  // shows the wrong one ends this run in a 422 instead of a review.
+  const before = await api.npc(FILLED_NPC);
+  expect(before.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
 
-  await page.goto(`/campaigns/beispiel/entries/${FILLED_NPC}`);
+  await page.goto(FILLED_NPC_URL);
   await startAugment(page);
 
   await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
@@ -244,17 +268,18 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
 
   // The body grew, and the stats the DM authored are still the mapping they
   // were — values included, bare numbers and all.
-  const after = await api.entry(FILLED_NPC);
+  const after = await api.npc(FILLED_NPC);
   expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
-  expect(after.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
-  expect(after.properties.name).toBe(before.properties.name);
+  expect(after.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
+  expect(after.name).toBe(before.name);
+  expect(after.rev).toBe(before.rev + 1);
 });
 
 test("an unknown [[id]] in the proposal costs one correction turn", async ({ page, api }) => {
   // The stub's first reply adds a sentence naming `[[der-fremde]]`; the
   // correction turn answers the good proposal. What the review shows — and
   // what the accept writes — is the corrected one.
-  await page.goto(`/campaigns/beispiel/entries/${FILLED_NPC}`);
+  await page.goto(FILLED_NPC_URL);
   await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
   await page
     .getByLabel("Quelltext", { exact: false })
@@ -264,16 +289,16 @@ test("an unknown [[id]] in the proposal costs one correction turn", async ({ pag
   await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
     timeout: 30_000,
   });
-  const job = (await (await api.fetch("campaigns/beispiel/generate/job")).json()) as {
-    augmentResult: { proposedBody: string; usage?: { attempts: number } };
-  };
-  expect(job.augmentResult.usage?.attempts).toBe(2);
-  expect(job.augmentResult.proposedBody).not.toContain(UNKNOWN_REF_ID);
+  const job = await api.get<{
+    npcAugmentResult: { proposed: { body: string }; usage?: { attempts: number } };
+  }>("campaigns/beispiel/generate/job");
+  expect(job.npcAugmentResult.usage?.attempts).toBe(2);
+  expect(job.npcAugmentResult.proposed.body).not.toContain(UNKNOWN_REF_ID);
   await expect(page.getByRole("dialog")).not.toContainText(UNKNOWN_REF_ID);
 
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  const after = await api.body(FILLED_NPC);
+  const after = (await api.npc(FILLED_NPC)).body;
   expect(after).toContain(AUGMENT_THREAD_TEXT);
   expect(after).not.toContain(UNKNOWN_REF_ID);
 });
@@ -353,7 +378,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
   await expect(page.getByText(AUGMENT_THREAD_TEXT)).toHaveCount(0);
 });
 
-test("409: the entry moves while the review is open — nothing is written", async ({
+test("409: the scene moves while the review is open — nothing is written", async ({
   page,
   api,
 }) => {
@@ -363,7 +388,7 @@ test("409: the entry moves while the review is open — nothing is written", asy
     timeout: 30_000,
   });
 
-  // A second writer through the same API is the only way an entry changes
+  // A second writer through the same API is the only way a scene changes
   // under an open review: the review writes against the version it was cut
   // from, so this invalidates it.
   await api.writeBody(SCENE, "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n");
@@ -400,7 +425,7 @@ test("the entry point: npc, location and scene — and nothing else", async ({
 }) => {
   const action = page.getByRole("button", { name: "Mit KI ergänzen" });
 
-  await page.goto("/campaigns/beispiel/entries/npcs/jorna");
+  await page.goto(FILLED_NPC_URL);
   await expect(action).toBeVisible();
   await page.goto("/campaigns/beispiel/locations/leuchtturm");
   await expect(action).toBeVisible();
@@ -477,8 +502,8 @@ test.describe("at 390px (critical path 8)", () => {
     await createEmptyNpc(api);
     // What a desktop augment run leaves behind, written through the ordinary
     // API — the phone's job is to READ the result, not to review a diff.
-    await api.patchEntry(NPC_PATH, {
-      properties: { motivation: AUGMENT_NPC_MOTIVATION },
+    await api.patchNpc(EMPTY_NPC, {
+      motivation: AUGMENT_NPC_MOTIVATION,
       body: `\n## Weiß\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
     });
 

@@ -110,9 +110,9 @@ export function refTags(tx: GrimoireDb, campaign: string, sceneId: string): stri
 // something else into one readable sentence instead of a constraint error.
 //
 // Nothing here creates an entry as a side effect. The paths that DO create
-// one are countable: the create endpoints of the domain modules,
-// `createNpcStub` (a `#npc` line the DM turns into an npc with a click,
-// ./npcs.ts), and accepting a generator proposal — including
+// one are countable: the create endpoints of the domain modules — a `#npc`
+// line the DM turns into an npc with a click goes through the npc's own
+// (./npcs.ts `createNpc`) —, and accepting a generator proposal — including
 // `ensureChapterRow` inside that accept (./chapters.ts), which writes the
 // chapter the run itself decided on (ADR #18). Nowhere else.
 //

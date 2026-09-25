@@ -34,9 +34,9 @@ const BEISPIEL = path.join(FIXTURES, "beispiel");
 
 export interface SeedOverrides {
   /**
-   * Entries to add. One whose kind and `properties.id` match a fixture entry
-   * REPLACES it — that is how a case says "the same campaign, but this npc
-   * looks like so" without restating the rest.
+   * Entries to add. One whose kind and id match a fixture entry REPLACES it
+   * — that is how a case says "the same campaign, but this npc looks like
+   * so" without restating the rest.
    */
   entries?: SeedEntry[];
   /** Fixture file stems to leave out, e.g. `"session-2026-01-15"`. */
@@ -47,6 +47,7 @@ export interface SeedOverrides {
 function identity(entry: SeedEntry): string {
   if (entry.kind === "inbox" || entry.kind === "glossary") return entry.kind;
   if (entry.kind === "location") return `location/${entry.location.id}`;
+  if (entry.kind === "npc") return `npc/${entry.npc.id}`;
   const id = entry.properties.id;
   return `${entry.kind}/${typeof id === "string" ? id : ""}`;
 }

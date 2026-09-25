@@ -12,7 +12,8 @@ import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/routes/knowledge";
 import { LiveRoute } from "@/routes/live";
-import { LocationRoute } from "@/routes/location";
+import { LocationRoute } from "@/location/LocationRoute";
+import { NpcRoute } from "@/npc/NpcRoute";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
@@ -77,17 +78,20 @@ export function App() {
             collide with one (ADR #22). */}
         <Route path="campaigns/:campaign" element={<CampaignScope />}>
           <Route index element={<ChapterOverviewRoute />} />
-          {/* The browse list pages — reached from the mobile start surface's
-              "Nachschlagen" rows and from the topbar's quiet NPCs/Orte links
-              on the desktop. */}
+          {/* The scene list — reached from the mobile start surface's
+              lookup rows. */}
           <Route path="list/:kind" element={<BrowseRoute />} />
-          {/* A location is its own resource (ADR #31): its list and its
-              reading view live at its own routes. */}
+          {/* An npc and a location are each their own resource (ADR #31):
+              their lists and their reading views live at their own routes,
+              reached from the topbar's quiet npc and location links and the
+              mobile lookup rows. */}
+          <Route path="npcs" element={<BrowseRoute kind="npcs" />} />
+          <Route path="npcs/:id" element={<NpcRoute />} />
           <Route path="locations" element={<BrowseRoute kind="locations" />} />
           <Route path="locations/:id" element={<LocationRoute />} />
           {/* Campaign knowledge and glossary — campaign CONTENT, so they are
               list pages next to the npc/location ones and not sections of
-              /settings. Reached from the chapter overview's „Nachschlagen" line, the
+              /settings. Reached from the chapter overview's lookup line, the
               mobile start surface, ⌘K and the generator's context line —
               deliberately not from the topbar. */}
           <Route path="knowledge" element={<KnowledgeRoute />} />
@@ -95,8 +99,8 @@ export function App() {
           <Route path="live" element={<LiveRoute />} />
           {/* Generator — entered from the chapter overview's "Generator". */}
           <Route path="generate" element={<GenerateRoute />} />
-          {/* Review — the "Session-Nachbereitung", entered after
-              "Session beenden" and from the chapter overview affordance. */}
+          {/* Review — the session review, entered after ending a session
+              and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
           {/* One evening, read-only: a session is rows, not an entry, so it
               has its own address instead of an entry one. Reached from ⌘K. */}

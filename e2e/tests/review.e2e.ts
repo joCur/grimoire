@@ -2,7 +2,8 @@
 // and identifier names only. See CLAUDE.md.
 //
 // Adopt a thread → a row of the chapter's thread list, tick off an inbox
-// line, create an NPC stub, and the progress counter. The thread list itself
+// line, create an NPC from a note — on the npc's own resource, `POST …/npcs`
+// (ADR #31) — and the progress counter. The thread list itself
 // — its rows, its guard and the chapter overview that keeps it — is
 // threads.e2e.ts.
 //
@@ -20,7 +21,14 @@
 // The source chip of a log row names the SCENE by its title (resolved via
 // the tree), not by the row's `sceneId`.
 
-import { expect, test, todaySessionId, type ApiThreads, type SeedEntry } from "../support/test";
+import {
+  expect,
+  test,
+  todaySessionId,
+  type Api,
+  type ApiThreads,
+  type SeedEntry,
+} from "../support/test";
 
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
@@ -278,7 +286,19 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
-test("creating an NPC entry from a #npc log row", async ({ page, api }) => {
+/** The description the review's „NPC anlegen" dialog opens with. */
+const NPC_DIALOG_DESCRIPTION =
+  "Legt einen neuen NPC mit dem Status „Unbekannt“ an und übernimmt diese Notiz als seinen Text. " +
+  "Ist unter der Kennung schon ein leerer NPC angelegt, bekommt er die Notiz. " +
+  "Hat ein NPC mit dieser Kennung schon Inhalt, wird nichts geschrieben, und die Notiz bleibt offen.";
+
+/** The `reviewed` flag of today's `#npc` log row, read from the session. */
+async function npcRowReviewed(api: Api): Promise<boolean | undefined> {
+  const { log } = await api.session(todaySessionId());
+  return log.find((row) => row.text === `${NPC_TEXT} #npc`)?.reviewed;
+}
+
+test("creating an NPC from a #npc log row", async ({ page, api }) => {
   await page.goto("/campaigns/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
@@ -288,46 +308,100 @@ test("creating an NPC entry from a #npc log row", async ({ page, api }) => {
   await expect(npcCard.getByText("lighthouse-arrival")).toHaveCount(0);
   await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
 
-  // The dialog proposes id and name from the log text.
+  // The dialog proposes id and name from the log text, and says what it
+  // writes.
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("NPC anlegen");
+  await expect(dialog).toContainText(NPC_DIALOG_DESCRIPTION);
   await expect(dialog.getByRole("textbox").first()).toHaveValue("old-metta");
   await expect(dialog.getByRole("textbox").nth(1)).toHaveValue("Old Metta");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  const stub = await api.entry("npcs/old-metta");
-  expect(stub.properties.id).toBe("old-metta");
-  expect(stub.properties.name).toBe("Old Metta");
-  // The log row said nothing about the NPC's state, so the entry claims
+  // The npc's own resource answers it — flat, no kind, no path, no
+  // properties map (ADR #31).
+  const npc = await api.npc("old-metta");
+  expect(npc.id).toBe("old-metta");
+  expect(npc.name).toBe("Old Metta");
+  for (const key of ["kind", "path", "properties"]) {
+    expect(Object.keys(npc)).not.toContain(key);
+  }
+  // The log row said nothing about the NPC's state, so the npc claims
   // nothing either.
-  expect(stub.properties.status).toBe("unknown");
+  expect(npc.status).toBe("unknown");
   // The text IS the log line (its hashtags stripped) — no heading around it.
-  expect(stub.body).toBe(NPC_TEXT);
+  expect(npc.body).toBe(`${NPC_TEXT}\n`);
+  // …and the row is reviewed.
+  await expect.poll(() => npcRowReviewed(api)).toBe(true);
 
-  // The new NPC is in the tree right away (list page, search index).
-  await page.goto("/campaigns/beispiel/list/npcs");
-  await expect(page.getByRole("link", { name: /Old Metta/ })).toBeVisible();
+  // The new NPC is in the list right away, linking to its own route.
+  await page.goto("/campaigns/beispiel/npcs");
+  await expect(page.getByRole("link", { name: /Old Metta/ })).toHaveAttribute(
+    "href",
+    "/campaigns/beispiel/npcs/old-metta",
+  );
 });
 
-test("an id that already has an entry is linked, not refused", async ({ page, api }) => {
-  // The call is idempotent: the entry stands, untouched.
-  const before = await api.entry("npcs/fenn");
+test("an EMPTY npc under the id gets the note", async ({ page, api }) => {
+  // An npc created with nothing but its id — the DM prepared the name and
+  // left it at that. The note fills it instead of colliding.
+  const empty = await api.createNpc({ name: "old-metta" });
+  expect(empty.body).toBe("");
   await page.goto("/campaigns/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
   await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
   const dialog = page.getByRole("dialog");
-  const idField = dialog.getByRole("textbox").first();
-  await idField.fill("fenn");
+  await expect(dialog.getByRole("textbox").first()).toHaveValue("old-metta");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
-  // The action counts as done and nothing was overwritten.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  const after = await api.entry("npcs/fenn");
-  expect(after.properties).toEqual(before.properties);
-  expect(after.body).toBe(before.body);
+  const filled = await api.npc("old-metta");
+  expect(filled.name).toBe("Old Metta");
+  expect(filled.body).toBe(`${NPC_TEXT}\n`);
+  expect(filled.rev).toBe(empty.rev + 1);
+  await expect.poll(() => npcRowReviewed(api)).toBe(true);
+});
+
+test("an id whose npc has content is refused — nothing written, the note stays open", async ({
+  page,
+  api,
+}) => {
+  const before = await api.npc("fenn");
+  await page.goto("/campaigns/beispiel/review");
+  const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
+  await expect(progress).toHaveText("0 von 4 gesichtet");
+
+  const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
+  await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox").first().fill("fenn");
+  await dialog.getByRole("button", { name: "Anlegen" }).click();
+
+  // The dialog stays open and says why, with the free id as a proposal.
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(
+    "Den NPC „fenn“ gibt es schon, deshalb wurde die Notiz nicht übernommen. " +
+      "Wähle eine andere Kennung, zum Beispiel „fenn-2“.",
+  );
+
+  // The server wrote nothing: the npc stands exactly as it was, and no
+  // other npc appeared.
+  const after = await api.npc("fenn");
+  expect(after).toEqual(before);
+  expect(await api.npcExists("fenn-2")).toBe(false);
+  // …and the note is still OPEN: the row is not reviewed.
+  expect(await npcRowReviewed(api)).toBe(false);
+
+  // Closed without a second try (the modal hides the page behind it), the
+  // count is unchanged and the card still offers its actions.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(progress).toHaveText("0 von 4 gesichtet");
+  await expect(npcCard.getByText("NPC angelegt")).toHaveCount(0);
+  await expect(npcCard.getByRole("button", { name: "NPC anlegen" })).toBeVisible();
+  expect(await npcRowReviewed(api)).toBe(false);
 });
 
 test.describe("with yesterday's session, ended after midnight", () => {

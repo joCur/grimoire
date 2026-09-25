@@ -36,6 +36,17 @@ async function search(q: string): Promise<SearchResult[]> {
 }
 
 /** GET /entry, for the write cases below (they need the guard token). */
+/** Write one npc on its own resource (ADR #31) — its fields flat. */
+async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Response> {
+  const read = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  const { rev } = (await read.json()) as { rev: number };
+  return app.request(`/api/campaigns/beispiel/npcs/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev, ...fields }),
+  });
+}
+
 async function readEntry(rel: string): Promise<{ rev: number; body: string }> {
   const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
@@ -132,8 +143,9 @@ describe("reference queries", () => {
       kind: "npc",
       id: "jorna",
       title: "Hafenmeisterin Jorna",
-      path: "npcs/jorna",
     });
+    // An npc is its own resource (ADR #31): the hit names it by kind and id.
+    expect(Object.hasOwn(results[0]!, "path")).toBe(false);
     // the scene that has her in `npcs:` and in its prose is found too, below her
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
@@ -232,16 +244,10 @@ describe("the index follows every write", () => {
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
 
-  test("a properties patch re-indexes title and tags", async () => {
-    const rel = "npcs/fenn";
+  test("a field write re-indexes the name", async () => {
     expect(await search("bucht-kapitaen")).toEqual([]);
 
-    const entry = await readEntry(rel);
-    const res = await app.request(entriesUrl("beispiel", rel), {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: entry.rev, properties: { name: "Bucht-Kapitaen Fenn" } }),
-    });
+    const res = await patchNpc("fenn", { name: "Bucht-Kapitaen Fenn" });
     expect(res.status).toBe(200);
 
     const results = await search("bucht-kapitaen");
@@ -258,27 +264,17 @@ describe("the index follows every write", () => {
       true,
     );
 
-    const entry = await readEntry("npcs/jorna");
-    const res = await app.request(entriesUrl("beispiel", "npcs/jorna"), {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: entry.rev, properties: { motivation: "Die Sturmflut überstehen." } }),
-    });
+    const res = await patchNpc("jorna", { motivation: "Die Sturmflut überstehen." });
     expect(res.status).toBe(200);
     expect((await search("Sturmflut")).some((r) => r.id === "jorna")).toBe(true);
     expect((await search("Herbstkonvois")).some((r) => r.id === "jorna")).toBe(false);
   });
 
-  test("a properties patch does not un-index an npc's relationship note", async () => {
-    // ONE rule for the indexed text of an npc: the whole entry. A status
-    // change must not drop `## Beziehungen` out of the index.
+  test("a field write does not un-index an npc's relationship note", async () => {
+    // ONE rule for the indexed text of an npc: its motivation and its whole
+    // text. A status change must not drop `## Beziehungen` out of the index.
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
-    const entry = await readEntry("npcs/fenn");
-    const res = await app.request(entriesUrl("beispiel", "npcs/fenn"), {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: entry.rev, properties: { status: "dead" } }),
-    });
+    const res = await patchNpc("fenn", { status: "dead" });
     expect(res.status).toBe(200);
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
   });

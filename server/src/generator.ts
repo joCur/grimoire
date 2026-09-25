@@ -5,11 +5,12 @@
 //   3. call the LLM provider
 //   4. read the reply and validate it MECHANICALLY. EVERY call answers a
 //      JSON object whose shape the provider forces: the outline
-//      its own small object (shared/outline-schema), an entry call the
-//      object that mirrors the stored row — `properties` per kind, `body`,
-//      `warnings` (shared/entry-schema, read by ./entry-reply), a location
-//      call every field of the location plus `warnings`
-//      (shared/location, read by ./location-reply). Errors
+//      its own small object (shared/outline-schema), a scene call the
+//      object that mirrors the stored row — `properties`, `body`,
+//      `warnings` (shared/entry-schema, read by ./entry-reply), an npc call
+//      every field of the npc plus `warnings` (shared/npc, read by
+//      ./npc-reply), a location call every field of the location plus
+//      `warnings` (shared/location, read by ./location-reply). Errors
 //      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
 //      default 1, max 2), never to the user; exhausted retries
 //      -> 422.
@@ -21,23 +22,23 @@
 //      NOTHING; only POST /generate/apply stores anything, and it
 //      re-validates server-side instead of trusting the client.
 //
-// A scene or npc DRAFT IS `{ properties, body }` from the reply to the store
-// (ADR #24), and a proposed location is a `LocationProposal` — the location
-// without its guard (ADR #31): nothing here renders one into one markdown
-// text and nothing parses one back.
+// A scene DRAFT IS `{ properties, body }` from the reply to the store
+// (ADR #24), and a proposed npc or location is an `NpcProposal` or a
+// `LocationProposal` — the entity without its guard (ADR #31): nothing here
+// renders one into one markdown text and nothing parses one back.
 //
 // Steps 1-4 run in the BACKGROUND: POST /generate starts a
 // job (./generate-jobs) and answers 202, the result waits in the job store
 // until it is applied or discarded. runGenerate itself is unchanged by that
 // — it is the job runner's one call.
 //
-// There is a SECOND run kind next to scenes: one NPC entry
-// from source material (runGenerateNpc, POST /generate/npc). It shares
-// everything that is mechanics — provider factory, correction turns,
-// truncation fail-fast, usage accounting, the reply split (runPipeline) and
-// the apply endpoint — and differs only in its prompt assets
-// (generator/npc-*.md), its context (no chapter) and its validation rules
-// (validateNpcReply). Still ONE job per campaign, whatever its kind.
+// There is a SECOND run kind next to scenes: one npc from source material
+// (runGenerateNpc, POST /generate/npc). It shares everything that is
+// mechanics — provider factory, correction turns, truncation fail-fast, usage
+// accounting (runPipeline) and the accept — and differs only in its prompt
+// assets (generator/npc-*.md), its context (no chapter), its reply (the npc's
+// own, ./npc-reply) and its validation rules (validateNpcReply). Still ONE
+// job per campaign, whatever its kind.
 //
 // The provider is resolved lazily (per request, after the cheap request
 // checks), so the read-only API never needs an API key (see server.ts).
@@ -47,23 +48,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CALLOUT_KINDS,
-  NPC_STATUSES,
   SCENE_TYPES,
   kindFromAddress,
   type GenerateNpcResult,
   type GenerateUsage,
   type GeneratedSceneDraft,
-  type GeneratedStub,
   type LocationProposal,
   type NamingHint,
+  type NpcProposal,
 } from "@grimoire/shared";
-import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { bodyEntityRefSlugs, entityRefSource } from "@grimoire/shared/refs";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
-import { parseEntryReply, type EntryReply } from "./entry-reply";
+import type { EntryReply } from "./entry-reply";
 import type { LocationReply } from "./location-reply";
+import { npcReplyRequest, parseNpcReply, type NpcReply } from "./npc-reply";
 import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
@@ -71,14 +71,14 @@ import { requireCampaign } from "./store/campaigns";
 import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
-import { applyDrafts, draftTargetExists } from "./store/drafts";
+import { applyDrafts } from "./store/drafts";
 import { readLocationProposal } from "./store/locations";
+import { npcHoldsContent, readNpcProposal } from "./store/npcs";
 import {
   addressHead,
   addressIdentity,
   addressSegments,
   chapterPath,
-  npcPath,
   scenePath,
 } from "./store/paths";
 import {
@@ -164,12 +164,19 @@ export interface PromptAssets {
 }
 
 /**
- * The two asset pairs: scenes and NPCs have their own prompt and
- * their own few-shot target, cached per kind after the first read.
+ * The asset pairs: scenes, npcs, locations and the outline have their own
+ * prompt and their own few-shot target, cached per kind after the first
+ * read; the augment runs and the single-scene mode carry a prompt alone.
  */
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
+  // An npc has a single-call run of its own (the NPC run), and a scene run
+  // loads this pair for every npc its outline proposes; the npc augment run
+  // takes the field section of the prompt and the few-shot from here.
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
+  // The npc augment run's own augmentation rule; the npc pair above brings
+  // the fields and the few-shot.
+  npcAugment: { systemPrompt: "npc-augment-system-prompt.md" },
   // Locations have no single-call run of their own: a scene run loads this
   // pair for every location its outline proposes, and the location augment
   // run takes the field section of the prompt and the few-shot from here.
@@ -201,13 +208,14 @@ export const ASSET_FILES = {
 const promptAssets = new Map<string, PromptAssets>();
 
 /**
- * The kinds that have a prompt PAIR. `augment`, `locationAugment` and
- * `sceneSingle` do not: the first two send the target kind's example asset,
- * the third is only an output schema spliced into the scene prompt.
+ * The kinds that have a prompt PAIR. `augment`, `npcAugment`,
+ * `locationAugment` and `sceneSingle` do not: the augment runs send the
+ * target's example asset, and `sceneSingle` is only an output schema spliced
+ * into the scene prompt.
  */
 type PromptPairKind = Exclude<
   keyof typeof ASSET_FILES,
-  "augment" | "locationAugment" | "sceneSingle"
+  "augment" | "npcAugment" | "locationAugment" | "sceneSingle"
 >;
 
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
@@ -315,27 +323,20 @@ export async function assertGenerateTarget(
 }
 
 /**
- * The id of an existing npc entry, for the collision check of an NPC run —
- * a request-level 409 before a single token is spent.
- * `assertSafeAddress` is not enough here: the id must be a kebab slug,
- * because it becomes the address AND the reference key.
- */
-export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-
-/**
  * Cheap request checks of an NPC run: unsafe campaign id -> 400, unknown
- * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose entry
- * already exists -> 409 (never overwrite, a non-goal: enriching an
- * existing NPC entry). Exported for the same reason as assertGenerateTarget:
- * POST /generate/npc runs it BEFORE it creates a background job.
+ * campaign -> 404, a pinned id that is not a kebab slug -> 400, and a pinned
+ * id whose npc already holds something -> 409 `{ id }` (never overwrite — an
+ * existing npc is augmented on its own resource). An npc the DM created and
+ * left empty is no conflict: the run fills it. Exported for the same reason
+ * as assertGenerateTarget: POST /generate/npc runs it BEFORE it creates a
+ * background job.
  */
 export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<void> {
   await requireCampaign(campaign); // 400 unsafe id, 404 unknown campaign
   if (npcId === undefined) return;
-  if (!NPC_ID_PATTERN.test(npcId)) throw new ApiError(400, "invalid npc id");
-  const rel = npcPath(npcId);
-  if (await draftTargetExists(campaign, rel)) {
-    throw new ApiError(409, "npc entry already exists", { path: rel });
+  if (!ENTITY_SLUG.test(npcId)) throw new ApiError(400, "invalid npc id");
+  if (await npcHoldsContent(campaign, npcId)) {
+    throw new ApiError(409, "npc already exists", { id: npcId });
   }
 }
 
@@ -402,22 +403,6 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
-/**
- * One entry of a model reply. There is no `path`:
- * the model does not address anything. It writes an ENTRY, the `id` in its
- * properties is the entity's key, and the server builds the address from the
- * run's chapter plus that id — which is what makes a corrected `location`
- * move the scene instead of contradicting a path the model chose.
- *
- * `kind` is how a suggested ENTRY says what it is; scenes and the npc run's
- * single entry carry none (the run knows).
- */
-export interface RawEntry {
-  kind?: string;
-  /** The reply object of this entry (./entry-reply). */
-  reply: EntryReply;
-}
-
 const KNOWN_CALLOUTS = new Set<string>(CALLOUT_KINDS);
 /** `> [!kind]` markers at line starts (nested `>>` included). */
 const CALLOUT_MARKER = /^\s*>+\s*\[!([^\]\s]+)\]/gm;
@@ -473,98 +458,34 @@ function declaredId(properties: Record<string, unknown>): string | undefined {
   return typeof id === "string" && id !== "" ? id : undefined;
 }
 
-/** Last segment of a campaign-relative address — the entity's id. */
-function addressId(rel: string): string {
-  return rel.slice(rel.lastIndexOf("/") + 1);
-}
-
 /**
- * The properties of a draft as the review and the store read them: the `id`
- * spelled out, and the display name fallen back to it.
+ * The properties of a scene draft as the review and the store read them: the
+ * `id` spelled out, and the title fallen back to it.
  *
- * The fallback is the format's (README: a scene/chapter shows its `title`, an
- * npc/location its `name`, and an entry that names none is shown under its
- * id). It is applied HERE, once, where the draft is built — a reply may
- * legitimately omit the display name, and everything downstream reads the
+ * The fallback is the format's (README: a scene that names no title is shown
+ * under its id). It is applied HERE, once, where the draft is built — a reply
+ * may legitimately omit the title, and everything downstream reads the
  * properties as they are.
  */
-function draftProperties(
-  properties: Record<string, unknown>,
-  id: string,
-  nameKey: "title" | "name",
-): Record<string, unknown> {
+function draftProperties(properties: Record<string, unknown>, id: string): Record<string, unknown> {
   const out: Record<string, unknown> = { ...properties, id };
-  const name = out[nameKey];
-  if (typeof name !== "string" || name === "") out[nameKey] = id;
+  const title = out.title;
+  if (typeof title !== "string" || title === "") out.title = id;
   return out;
 }
 
 /**
- * The npc `status` rule, shared by the stub validation and the NPC generator:
- * present, and one of NPC_STATUSES. `subject` names who the rule
- * is about, so the correction turn reads naturally in both places.
- *
- * `status: draft` belongs to SCENES only: per the data contract (README) an
- * npc knows alive/dead/missing/unknown, so a `draft` leaking into a stub
- * becomes an invalid pass-through value in the UI. The prompt asks for
- * `alive` unless the source text says otherwise, which is why a MISSING
- * status is an error too. Shared by the reply validation (-> correction
- * turn) and the apply re-validation (-> 400): the same rule, checked on both
- * ways in.
+ * Validate one proposed NPC of a scene run, read by the npc's reply schema
+ * (./npc-reply.ts): its `id` is its key and has to be a kebab slug. Returns
+ * the proposal or pushes errors.
  */
-export function npcStatusErrors(props: Record<string, unknown>, subject: string): string[] {
-  if (!Object.hasOwn(props, "status")) {
-    return [`"status" fehlt — ${subject} brauchen einen status (im Normalfall "alive")`];
-  }
-  const status = props.status;
-  if (typeof status !== "string" || !(NPC_STATUSES as readonly string[]).includes(status)) {
-    return [
-      `"status" muss einer von ${NPC_STATUSES.join(", ")} sein — ` +
-        `${subject} im Normalfall "alive"`,
-    ];
-  }
-  return [];
-}
-
-/**
- * Validate one suggested NPC of a scene run: the properties `id` is its key,
- * and the server addresses it as `npcs/<id>`. Returns the GeneratedStub or
- * pushes errors. A proposed location is read by its own reply schema
- * (`validateLocationProposal`).
- */
-export function validateEntry(entry: RawEntry, index: number, errors: string[]): GeneratedStub | null {
-  const kind = entry.kind;
-  if (kind !== "npc") {
-    errors.push(`entries[${index}]: "kind" must be "npc"`);
+export function validateNpcProposal(reply: NpcReply, errors: string[]): NpcProposal | null {
+  const { npc } = reply;
+  if (!ENTITY_ID_PATTERN.test(npc.id)) {
+    errors.push(`npc "${npc.id}": "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
     return null;
   }
-  const preview = `entries[${index}]`;
-  const props = entry.reply.properties;
-  const propsId = declaredId(props);
-  if (propsId === undefined) {
-    errors.push(`${kind} entry ${preview}: "id" fehlt — jeder Eintrag nennt seine kebab-case id`);
-    return null;
-  }
-  if (!ENTITY_ID_PATTERN.test(propsId)) {
-    errors.push(
-      `${kind} entry ${preview}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
-    );
-    return null;
-  }
-  const id = propsId;
-  const properties = draftProperties(props, id, "name");
-  const label = `${kind} entry "${id}"`;
-  // A status error does not stop the mapping: the stub still resolves the
-  // scene's reference, so the correction turn gets the ONE real error
-  // instead of a cascade of "npc does not exist".
-  for (const msg of npcStatusErrors(props, "NPC-Stubs")) errors.push(`${label}: ${msg}`);
-  return {
-    kind,
-    id,
-    name: typeof properties.name === "string" ? properties.name : id,
-    properties,
-    body: entry.reply.body,
-  };
+  return npc;
 }
 
 /**
@@ -678,7 +599,7 @@ export function validateSceneEntry(input: {
       for (const npc of props.npcs as string[]) {
         if (!allowed.npcIds.has(npc)) {
           errors.push(
-            `${label}: npc "${npc}" does not exist in the campaign and no suggested entry provides it`,
+            `${label}: npc "${npc}" does not exist in the campaign and the outline does not propose it`,
           );
         }
       }
@@ -688,7 +609,7 @@ export function validateSceneEntry(input: {
     if (!allowed.locationIds.has(props.location)) {
       errors.push(
         `${label}: location "${props.location}" does not exist in the campaign and ` +
-          `no suggested entry provides it`,
+          `the outline does not propose it`,
       );
     }
   }
@@ -702,65 +623,24 @@ export function validateSceneEntry(input: {
 
   return {
     path: scenePath(chapter, "", propsId),
-    properties: draftProperties(props, propsId, "title"),
+    properties: draftProperties(props, propsId),
     body: reply.body,
   };
 }
 
 // --- mechanical validation of an NPC reply -----------------------------------
 
-/** The only legal target of an NPC run — the id IS the address. */
-const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
-
-/**
- * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
- * number 2 and the plus — the whole point of a social modifier — is gone
- * before anyone sees the value.
- *
- * A REPLY cannot break the rule: `quickstats` travels
- * as a `{ key, value }` LIST whose values the schema types as strings, and
- * the server folds it into the mapping itself (entry-reply.ts
- * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
- * the augment run — pass exactly such a folded mapping, so the check fires on
- * none of them.
- *
- * It stays as a BACKSTOP, and the augment path is why: there the mapping does
- * not end up in an entry the server just composed but in a properties PATCH the
- * DM accepts, next to the entry's own historical values (`sameValue` against
- * a campaign that carries bare numbers). A future way in that skips
- * `pairsValue` would otherwise write a `+2` that YAML eats — and this
- * function is the only place that says so.
- */
-export function quickstatsErrors(props: Record<string, unknown>): string[] {
-  const quickstats = props.quickstats;
-  if (quickstats === undefined || quickstats === null) return [];
-  if (typeof quickstats !== "object" || Array.isArray(quickstats)) {
-    return ['"quickstats" muss ein Objekt sein, z. B. { wis: "+2" }'];
-  }
-  const bad = Object.entries(quickstats)
-    .filter(([, value]) => typeof value !== "string")
-    .map(([key]) => key);
-  return bad.length === 0
-    ? []
-    : [
-        '"quickstats" — Werte als Strings in Anführungszeichen ("+2"), sonst verschluckt ' +
-          `YAML das Plus: ${bad.join(", ")}`,
-      ];
-}
-
 /**
  * Mechanical validation of one raw NPC reply against the campaign context.
  * Same contract as every other validator: the mapped result, or the error
  * list for the correction turn.
  *
- * The reply is the schema-forced OBJECT (./entry-reply): `properties` per
- * kind, `body`, `warnings`. The rules: an `id` that is a kebab-case id — the
- * ADDRESS is the server's (`npcs/<id>`), the model does not name one — a
- * valid NpcStatus (`alive` unless the source says otherwise), no invented
- * `chapter`, quoted quickstats, only known callouts, and every `[[id]]` of the
- * body naming an entry of the campaign or the npc itself. An id that already
- * exists is an error too — the DM can pin a different one via the request's
- * `id`.
+ * The reply is the npc's own schema-forced object (./npc-reply): every field
+ * of the npc, `body` among them, and `warnings`. The rules: an `id` that is a
+ * kebab-case id, the pinned id when the DM set one, no id the campaign
+ * already has, no `chapter` (an NPC run has no target chapter), only known
+ * callouts, and every `[[id]]` of the body naming something of the campaign
+ * or the npc itself. The DM can pin a different id via the request's `id`.
  *
  * No rule looks for a heading (ADR #29): the sections of an npc body are the
  * prompt's recommendation, and the text under them is the model's prose.
@@ -770,64 +650,40 @@ export function validateNpcReply(
   ctx: CampaignContext,
   pinnedId?: string,
 ): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
-  const read = parseEntryReply(raw, "npc");
+  const read = parseNpcReply(raw);
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `npc: ${e}`) };
-  const { reply } = read;
-  const errors: string[] = [];
-
-  const props = reply.properties;
-  const propsId = declaredId(props);
-  if (propsId === undefined) {
-    return {
-      ok: false,
-      errors: ['npc: "id" fehlt — der Eintrag muss seine kebab-case id nennen'],
-    };
-  }
-  if (!ENTITY_ID_PATTERN.test(propsId)) {
+  const { npc, warnings } = read.reply;
+  if (!ENTITY_ID_PATTERN.test(npc.id)) {
     return {
       ok: false,
       errors: ['npc: "id" muss eine kebab-case id sein (a-z, 0-9, einzelne Bindestriche)'],
     };
   }
-  const id = propsId;
-  const properties = draftProperties(props, id, "name");
-  const label = `npc "${id}"`;
-  if (pinnedId !== undefined && id !== pinnedId) {
+  const label = `npc "${npc.id}"`;
+  const errors: string[] = [];
+  if (pinnedId !== undefined && npc.id !== pinnedId) {
     errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
   }
-  if (ctx.npcIds.has(id)) {
+  if (ctx.npcIds.has(npc.id) && npc.id !== pinnedId) {
     errors.push(
-      `${label}: id "${id}" existiert schon in der Kampagne — andere id wählen ` +
+      `${label}: id "${npc.id}" existiert schon in der Kampagne — andere id wählen ` +
         '(oder der DM gibt eine id über das Feld "id" vor)',
     );
   }
-
-  // `name` is NOT checked: a missing display name degrades to the id
-  // (`draftProperties`), so there is nothing mechanical left to complain
-  // about — the prompt asks for one, the format survives without it.
-  if (Object.hasOwn(props, "chapter")) {
-    errors.push(`${label}: kein "chapter" — der NPC-Lauf kennt kein Ziel-Kapitel`);
+  if (npc.chapter !== undefined) {
+    errors.push(`${label}: "chapter" ist null — der NPC-Lauf kennt kein Ziel-Kapitel`);
   }
-  for (const msg of npcStatusErrors(props, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
-  for (const msg of quickstatsErrors(props)) errors.push(`${label}: ${msg}`);
-
-  for (const kind of unknownCallouts(reply.body)) {
+  for (const kind of unknownCallouts(npc.body)) {
     errors.push(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
   }
-  // The npc itself is the one entry this run proposes.
-  const known = campaignRefIds(ctx).add(id);
-  for (const msg of unknownRefErrors(reply.body, known)) errors.push(`${label}: ${msg}`);
+  // The npc itself is the one thing this run proposes.
+  const known = campaignRefIds(ctx).add(npc.id);
+  for (const msg of unknownRefErrors(npc.body, known)) errors.push(`${label}: ${msg}`);
 
   if (errors.length > 0) return { ok: false, errors };
-  return {
-    ok: true,
-    result: {
-      npc: { path: npcPath(id), properties, body: reply.body },
-      warnings: reply.warnings,
-    },
-  };
+  return { ok: true, result: { npc, warnings } };
 }
 
 /**
@@ -857,7 +713,7 @@ export function buildCorrectionMessage(
   ].join("\n\n");
 }
 
-const NPC_CORRECTION_TAIL = "den vollständigen NPC-Eintrag enthalten";
+const NPC_CORRECTION_TAIL = "den vollständigen NPC enthalten";
 
 // --- run accounting ----------------------------------------------------------
 
@@ -926,14 +782,9 @@ export function truncationMessage(maxTokens: number | undefined): string {
   );
 }
 
-/** Where a stub would be written — the address the hint has to name. */
-export function stubPath(stub: GeneratedStub): string {
-  return npcPath(stub.id);
-}
-
 /**
- * Attach the naming check's findings to a result. Its own function so a
- * scene run and an NPC run cannot drift apart on it, and so the "no rules,
+ * Attach the naming check's findings to a result. Its own function so the
+ * runs cannot drift apart on it, and so the "no rules,
  * no field" case is spelled once: with nothing to report the key stays
  * ABSENT rather than becoming an empty array every client has to ignore.
  */
@@ -1023,11 +874,11 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
  * validation, with the same correction turns, the same truncation fail-fast
  * and the same usage accounting as a scene run (runPipeline). Writes NOTHING;
- * the draft goes into the review and only apply writes.
+ * the proposed npc goes into the review and only the accept writes it.
  *
- * `npcId` is the DM's optional pin: it decides the target id and is
- * checked for collisions BEFORE the provider is called. Without it the model
- * picks the id (and a collision becomes a correction turn).
+ * `npcId` is the DM's optional pin: it decides the npc's id and is checked
+ * for collisions BEFORE the provider is called. Without it the model picks
+ * the id (and a collision becomes a correction turn).
  */
 export async function runGenerateNpc(
   campaign: string,
@@ -1049,23 +900,21 @@ export async function runGenerateNpc(
         ...(npcId === undefined ? {} : { targetId: npcId }),
       },
       sourceText,
-      // The reply object, forced by the provider — the same
+      // The npc's own reply object, forced by the provider — the same
       // guarantee the outline call has always had.
-      jsonSchema: entryReplySchema("npc", "create"),
+      jsonSchema: npcReplyRequest("create"),
     },
     provider: getProvider(),
     validate: (raw) => validateNpcReply(raw, ctx, npcId),
     correctionTail: NPC_CORRECTION_TAIL,
   });
-  return withNamingHints(result, [result.npc], ctx.namingRules);
+  const { body, ...fields } = result.npc;
+  return withNamingHints(result, [{ npc: result.npc.id, fields, body }], ctx.namingRules);
 }
 
 // --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
 
 const SCENE_ITEM_KEYS = new Set(["path", "properties", "body"]);
-const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "properties", "body"]);
-/** Same three keys as a scene draft — the client may pass the draft verbatim. */
-const NPC_ITEM_KEYS = SCENE_ITEM_KEYS;
 
 /** One validated entry ready to be written. */
 export interface ApplyTarget {
@@ -1075,10 +924,9 @@ export interface ApplyTarget {
 }
 
 /**
- * The `properties`/`body` pair of one apply item. A draft is those two halves
- * and nothing else, so this is the whole shape check — no text is parsed on
- * the way in any more, and a body is allowed to be empty (an entry whose
- * content is entirely in its properties is a legal entry).
+ * The `properties`/`body` pair of one scene item. A scene draft is those two
+ * halves and nothing else, so this is the whole shape check — no text is
+ * parsed on the way in, and a body is allowed to be empty.
  */
 function itemHalves(
   item: Record<string, unknown>,
@@ -1137,54 +985,20 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   return { rel, properties, body };
 }
 
-/**
- * Deep-validate the `npc` item of the apply body -> write target.
- * Re-validated on the way in, exactly like a scene draft and for the same
- * reason (apply is a separate request — never trust the client): the target
- * address, the id matching it and a valid NpcStatus. The rules that shape the
- * MODEL's reply (callouts, `[[id]]` references) are deliberately not re-run
- * here — from here on the DM is the author of the entry, and their own edit
- * must not be rejected for a prompt rule.
- */
-export function applyNpcTarget(item: unknown): ApplyTarget {
-  const label = "npc";
-  if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
-  assertKnownKeys(item, NPC_ITEM_KEYS, label);
-  const rel = item.path;
-  if (typeof rel !== "string") throw new ApiError(400, `${label}.path must be a string`);
-  const { properties, body } = itemHalves(item, label);
-  if (!NPC_PATH_PATTERN.test(rel)) {
-    throw new ApiError(400, `${label}.path must be "npcs/<kebab-case-id>"`);
-  }
-  assertSafeAddress(rel); // defense in depth — the pattern rules escapes out
-  const id = addressId(rel);
-  if (properties.id !== id) {
-    throw new ApiError(400, `${label}: properties id does not match the address`);
-  }
-  const statusError = npcStatusErrors(properties, "NPC-Einträge")[0];
-  if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
-  return { rel, properties, body };
-}
 
-/** Deep-validate one stub item of the apply body -> write target. */
-export function applyStubTarget(item: unknown, index: number): ApplyTarget {
-  const label = `stubs[${index}]`;
-  if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
-  assertKnownKeys(item, STUB_ITEM_KEYS, label);
-  const kind = item.kind;
-  const id = item.id;
-  if (kind !== "npc") throw new ApiError(400, `${label}.kind must be "npc"`);
-  if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+
+/**
+ * Deep-validate one proposed npc of the apply body: an npc without its
+ * guard, checked against the npc's schema — a key an npc does not have (a
+ * `kind`, a `properties`) is a 400 that names it — and a kebab id.
+ */
+export function applyNpcItem(item: unknown, index: number): NpcProposal {
+  const label = `npcs[${index}]`;
+  const npc = readNpcProposal(item, label);
+  if (!ENTITY_ID_PATTERN.test(npc.id)) {
     throw new ApiError(400, `${label}.id must be a kebab-case slug`);
   }
-  const { properties, body } = itemHalves(item, label);
-  const rel = npcPath(id);
-  assertSafeAddress(rel); // defense in depth — the slug check above rules escapes out
-  // Re-validation, same as for scenes: a client payload must not sneak a
-  // stub status past the reply validation.
-  const statusError = npcStatusErrors(properties, "NPC-Stubs")[0];
-  if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
-  return { rel, properties, body };
+  return npc;
 }
 
 /**
@@ -1281,19 +1095,20 @@ export async function newChapterTarget(
 }
 
 /**
- * Write the reviewed drafts (as ROWS). Validates ALL drafts first
- * (400), then checks ALL targets for conflicts (409 with the conflicting
- * paths, nothing partially written), then inserts them in ONE transaction —
- * which is what "all or nothing" means literally. Returns the written
- * campaign-relative paths.
+ * Write the reviewed run (as ROWS). Validates ALL scene drafts, npcs and
+ * locations first (400), then checks ALL targets for conflicts (409 with the
+ * conflicting scene paths, npc ids and location ids, nothing partially
+ * written), then inserts them in ONE transaction — which is what "all or
+ * nothing" means literally. Returns the written scene addresses, npc ids and
+ * location ids.
  *
  * `chapter`/`chapterTitle` (both or neither) add the chapter's chapter entry
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
  * new-chapter flow.
  *
- * `npc` is the NPC generator's single draft — the same endpoint on
- * purpose: conflict handling, atomic writes and the job cleanup are identical,
- * and a second apply endpoint would only duplicate them.
+ * `npcs` are proposed npcs, each an npc without its guard — a scene run's
+ * and the NPC run's one npc alike: conflict handling, atomic writes and the
+ * job cleanup are identical.
  *
  * `jobId` is the background job the drafts came from: a
  * successful apply discards it — in the SAME transaction as the writes,
@@ -1304,33 +1119,29 @@ export async function applyGenerated(
   campaign: string,
   body: {
     scenes?: unknown;
-    stubs?: unknown;
+    npcs?: unknown;
     locations?: unknown;
-    npc?: unknown;
     chapter?: unknown;
     chapterTitle?: unknown;
   },
   jobId?: string,
-): Promise<{ written: string[]; locations: string[] }> {
+): Promise<{ written: string[]; npcs: string[]; locations: string[] }> {
   await requireCampaign(campaign);
-  const { scenes, stubs, npc, chapter, chapterTitle } = body;
+  const { scenes, chapter, chapterTitle } = body;
 
   if (scenes !== undefined && !Array.isArray(scenes)) {
     throw new ApiError(400, "scenes must be an array");
   }
-  if (stubs !== undefined && !Array.isArray(stubs)) {
-    throw new ApiError(400, "stubs must be an array");
+  if (body.npcs !== undefined && !Array.isArray(body.npcs)) {
+    throw new ApiError(400, "npcs must be an array");
   }
   if (body.locations !== undefined && !Array.isArray(body.locations)) {
     throw new ApiError(400, "locations must be an array");
   }
-  const targets: ApplyTarget[] = [
-    ...((scenes as unknown[] | undefined) ?? []).map(applySceneTarget),
-    ...((stubs as unknown[] | undefined) ?? []).map(applyStubTarget),
-    ...(npc === undefined || npc === null ? [] : [applyNpcTarget(npc)]),
-  ];
+  const targets: ApplyTarget[] = ((scenes as unknown[] | undefined) ?? []).map(applySceneTarget);
+  const npcs = ((body.npcs as unknown[] | undefined) ?? []).map(applyNpcItem);
   const locations = ((body.locations as unknown[] | undefined) ?? []).map(applyLocationItem);
-  if (targets.length === 0 && locations.length === 0) {
+  if (targets.length === 0 && npcs.length === 0 && locations.length === 0) {
     throw new ApiError(400, "nothing to apply");
   }
 
@@ -1373,9 +1184,10 @@ export async function applyGenerated(
   // collides with an existing entity is caught even when the model chose a
   // different last segment for it; the conflict is REPORTED under the path
   // the client sent, which is the draft it has to fix.
-  await applyDrafts(campaign, drafts, { locations, jobId });
+  await applyDrafts(campaign, drafts, { npcs, locations, jobId });
   return {
     written: drafts.map((draft) => draft.address),
+    npcs: npcs.map((npc) => npc.id),
     locations: locations.map((location) => location.id),
   };
 }
@@ -1428,9 +1240,8 @@ export function assertDraftId(id: unknown, rel: string): void {
  * run's chapter), the id from the properties, and the GROUP from the
  * properties `location`. Nothing about the group is taken from the path:
  * taking it from there would make a corrected `location` and the stored
- * address disagree. For every other kind the address is the path (an npc or
- * location draft is validated against its own segment, a chapter's id IS the
- * first segment).
+ * address disagree. For a chapter the address is the path — its id IS the
+ * first segment.
  *
  * An unusable `location` is NOT rejected here — `insertDraft` does that, in
  * the transaction, with the code the app has a sentence for.

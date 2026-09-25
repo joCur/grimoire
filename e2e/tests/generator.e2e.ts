@@ -115,9 +115,10 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   });
   await expect(page.getByText("1 Szene · 2 vorgeschlagene Einträge · noch nichts geschrieben")).toBeVisible();
   // What the run cost: it is summed over every CALL of the
-  // pipeline — the outline plus the one scene plus the two entries. Not one
-  // correction among them: the scene and the location name `[[grella]]`,
-  // an npc only this run proposes, and a reference to a proposal is valid.
+  // pipeline — the outline plus the one scene plus the npc and the location.
+  // Not one correction among them: the scene and the location name
+  // `[[grella]]`, an npc only this run proposes, and a reference to a
+  // proposal is valid.
   await expect(page.getByText(/~[\d.]+ Tokens · 4 Aufrufe/)).toBeVisible();
   // The model's warning is shown, not swallowed.
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
@@ -132,7 +133,8 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   await expect(card.locator("details[data-if-section]")).toHaveCount(2);
   // The draft's prose uses `[[slug]]` and the review resolves it —
   // `[[fenn]]` becomes the NPC's current name as a link, while `[[grella]]`
-  // (only a STUB in this reply, no entity yet) stays visible as source text.
+  // (only proposed by this run, nothing stored yet) stays visible as source
+  // text.
   await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toHaveText("Fenn");
   await expect(card).toContainText("[[grella]]");
 
@@ -140,9 +142,9 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   expect(await api.exists(DRAFT_PATH)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
-  // Suggested entries are decided one by one. An undecided row is the innermost div that
-  // carries the target path AND its own "Ablehnen" button.
-  const acceptStub = async (targetPath: string, name: string) => {
+  // Proposed npcs and locations are decided one by one. An undecided row is
+  // the innermost div that carries its label AND its own "Ablehnen" button.
+  const acceptProposal = async (targetPath: string, name: string) => {
     const row = page
       .locator("div")
       .filter({ hasText: targetPath })
@@ -152,52 +154,76 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
     await row.getByRole("button", { name: "Annehmen" }).click();
   };
   await expect(page.getByText("Vorgeschlagene Einträge — einzeln entscheiden")).toBeVisible();
-  // The run's proposed location is its own typed list (ADR #31): the
-  // location itself, no kind, no path — and no stub.
+  // The run's proposed npc and location are each their own typed list
+  // (ADR #31): the npc and the location themselves, no kind, no path, no
+  // properties map.
   const run = await api.get<{
-    result: { stubs: Array<{ kind: string; id: string }>; locations: Array<Record<string, unknown>> };
+    result: {
+      npcs: Array<Record<string, unknown>>;
+      locations: Array<Record<string, unknown>>;
+    };
   }>("campaigns/beispiel/generate/job");
-  expect(run.result.stubs.map((stub) => `${stub.kind}:${stub.id}`)).toEqual([`npc:${NPC_STUB_ID}`]);
+  expect(run.result.npcs).toEqual([
+    expect.objectContaining({ id: NPC_STUB_ID, name: NPC_STUB_NAME, status: "alive" }),
+  ]);
   expect(run.result.locations).toEqual([
     expect.objectContaining({ id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME }),
   ]);
-  for (const key of ["kind", "path", "properties", "rev"]) {
-    expect(Object.keys(run.result.locations[0]!)).not.toContain(key);
+  for (const proposal of [...run.result.npcs, ...run.result.locations]) {
+    for (const key of ["kind", "path", "properties", "rev"]) {
+      expect(Object.keys(proposal)).not.toContain(key);
+    }
+    // A proposal is the npc or location without its guard: an optional field
+    // the model answered with `null` is absent, never `null`, and `warnings`
+    // travel apart.
+    expect(Object.values(proposal)).not.toContain(null);
   }
-  // A proposal is the location without its guard: an optional field the
-  // model left out is absent, never `null`, and `warnings` travel apart.
-  for (const location of run.result.locations) {
-    expect(Object.keys(location).sort()).toEqual(["atmosphere", "body", "id", "name"]);
-    expect(Object.values(location)).not.toContain(null);
-  }
-  await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
-  await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
+  expect(Object.keys(run.result.npcs[0]!).sort()).toEqual([
+    "body",
+    "id",
+    "motivation",
+    "name",
+    "status",
+  ]);
+  expect(Object.keys(run.result.locations[0]!).sort()).toEqual([
+    "atmosphere",
+    "body",
+    "id",
+    "name",
+  ]);
+  await acceptProposal(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
+  await acceptProposal(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
 
   await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene Einträge\)$/ }).click();
 
-  // Done state lists exactly what was written — the ADDRESSES, so the DM sees
-  // where the scene actually landed and not the id the model proposed.
+  // Done state lists exactly what was written — the scene's ADDRESS, so the
+  // DM sees where it actually landed and not the id the model proposed.
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   const writtenList = page.getByRole("listitem");
   await expect(writtenList.getByText(SCENE_PATH, { exact: true })).toBeVisible();
   await expect(writtenList.getByText(`npcs/${NPC_STUB_ID}`, { exact: true })).toBeVisible();
-  // The location has no address; it names itself by its resource segment,
-  // the same way the npc beside it does.
+  // The npc and the location have no address; each names itself by its
+  // resource segment.
   await expect(
     writtenList.getByText(`locations/${LOCATION_STUB_ID}`, { exact: true }),
   ).toBeVisible();
 
-  // Stored: the draft plus both stubs, and a location stub without a status.
+  // Stored: the draft plus the npc and the location, the location without a
+  // status.
   const scene = await api.entry(SCENE_PATH);
   expect(scene.properties.status).toBe("draft");
   expect(scene.properties.title).toBe(SCENE_TITLE);
   expect(scene.body).toContain("> [!loot]");
-  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).status).toBe("alive");
+  const writtenNpc = await api.npc(NPC_STUB_ID);
+  expect(writtenNpc.status).toBe("alive");
+  for (const key of ["kind", "path", "properties"]) {
+    expect(Object.keys(writtenNpc)).not.toContain(key);
+  }
   const writtenLocation = await api.location(LOCATION_STUB_ID);
   expect(Object.keys(writtenLocation)).not.toContain("status");
   // The prose fields the model proposed rode along with the npc and the location.
-  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).motivation).toBe(NPC_STUB_MOTIVATION);
+  expect(writtenNpc.motivation).toBe(NPC_STUB_MOTIVATION);
   expect(writtenLocation.atmosphere).toBe(LOCATION_STUB_ATMOSPHERE);
   // The co-proposed npc's reference arrived as written, and now resolves.
   expect(writtenLocation.body).toContain(`[[${NPC_STUB_ID}]]`);
@@ -284,7 +310,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
-  // One scene, no suggested entries — and, the point of the case, exactly TWO
+  // One scene, nothing else proposed — and, the point of the case, exactly TWO
   // calls: the outline and the one scene. A correction turn would be a third.
   await expect(
     page.getByText("1 Szene · 0 vorgeschlagene Einträge · noch nichts geschrieben"),
@@ -328,13 +354,13 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   // Quoted quickstats survive as strings — the plus is still there.
   await expect(card).toContainText("insight +1");
   await expect(card.locator("[data-callout='secret']")).toContainText("Hat gesehen");
-  // The motivation is a property of the draft, shown like on the NPC card —
-  // its `[[fenn]]` as the current name.
+  // The motivation is a field of the proposed npc, shown like on the NPC
+  // card — its `[[fenn]]` as the current name.
   await expect(card).toContainText("Will: Dass die Boote wieder sicher rausfahren können");
   await expect(card).toContainText("traut Fenn nicht");
 
-  // „Bearbeiten" offers it beside the text, where the entry editor does —
-  // and an edit there is part of the properties half the accept writes.
+  // „Bearbeiten" offers it beside the text, where the npc's editor does —
+  // and an edit there is one of the npc's changes the accept writes.
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   const text = card.getByRole("region", { name: "Text" });
   const motivation = text.getByRole("textbox", { name: "Will", exact: true });
@@ -347,22 +373,41 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await motivation.blur();
   await expect(page.getByText("Gespeichert")).toBeVisible();
 
-  expect(await api.exists("npcs/brakk")).toBe(false);
+  // The run's npc is the npc itself (ADR #31) — no properties map, no `null`
+  // — and the DM's change travels as an npc edit by id, the one field that
+  // was touched; a scene draft edit is something else.
+  const job = await api.get<{
+    npcResult: { npc: Record<string, unknown> };
+    npcEdits: Record<string, Record<string, unknown>>;
+    draftEdits: Record<string, unknown>;
+  }>("campaigns/beispiel/generate/job");
+  expect(job.npcResult.npc).toMatchObject({ id: "brakk", name: NPC_DEFAULT_NAME, status: "alive" });
+  for (const key of ["kind", "path", "properties", "rev"]) {
+    expect(Object.keys(job.npcResult.npc)).not.toContain(key);
+  }
+  expect(Object.values(job.npcResult.npc)).not.toContain(null);
+  expect(job.npcResult.npc.motivation).toBe(NPC_MOTIVATION);
+  expect(Object.keys(job.npcEdits)).toEqual(["brakk"]);
+  expect(job.npcEdits.brakk).toMatchObject({ motivation: edited });
+  expect(job.draftEdits).toEqual({});
+
+  expect(await api.npcExists("brakk")).toBe(false);
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 
   await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
-  const npc = await api.properties("npcs/brakk");
+  await expect(page.getByRole("listitem").getByText("npcs/brakk", { exact: true })).toBeVisible();
+  const npc = await api.npc("brakk");
   expect(npc.id).toBe("brakk");
   expect(npc.status).toBe("alive");
   // Quoted quickstats stay STRINGS — a relative value is not read as a number.
   expect(npc.quickstats).toMatchObject({ insight: "+1" });
-  // The edited motivation, as a property — the text carries no `## Will`.
+  // The edited motivation, as a field — the text carries no `## Will`.
   expect(npc.motivation).toBe(edited);
-  expect(await api.body("npcs/brakk")).not.toContain("## Will");
+  expect(npc.body).not.toContain("## Will");
 
-  // "NPC ansehen" opens the entry that now exists.
+  // "NPC ansehen" opens the npc that now exists, on its own route.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/brakk$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 
@@ -370,7 +415,7 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
   page,
   api,
 }) => {
-  // The stub's first reply names `[[der-fremde]]`, an entry nobody has; the
+  // The stub's first reply names `[[der-fremde]]`, an id nobody has; the
   // server sends it back as a correction turn and the second reply is the
   // good one. The DM only ever sees the corrected draft.
   await page.goto("/campaigns/beispiel/generate");
@@ -385,13 +430,13 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
   await expect(page.getByText(/~[\d.]+ Tokens · 2 Versuche/)).toBeVisible();
   const card = page.locator("div").filter({ hasText: `npcs/${NPC_DEFAULT_ID}` }).last();
   await expect(card).not.toContainText(UNKNOWN_REF_ID);
-  // The relation to an entry the campaign has stayed, as a link.
+  // The relation to an npc the campaign has stayed, as a link.
   await expect(card).toContainText("kennt ihn vom Kai");
   await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
   await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
-  const body = await api.body(`npcs/${NPC_DEFAULT_ID}`);
+  const { body } = await api.npc(NPC_DEFAULT_ID);
   expect(body).toContain("- [[fenn]]: kennt ihn vom Kai");
   expect(body).not.toContain(UNKNOWN_REF_ID);
 });
@@ -479,29 +524,33 @@ test("review state survives navigation and reload; parts are accepted one by one
   // the edit, not the model's properties.
   await expect(page.getByRole("heading", { level: 2, name: EDITED_TITLE })).toBeVisible();
 
-  // (2) A decision about a suggested entry survives a RELOAD (a second tab
-  // sees the same, for the same reason: it is a row).
-  const stubRow = (targetPath: string) =>
+  // (2) A decision about a proposed npc survives a RELOAD (a second tab sees
+  // the same, for the same reason: it is a row).
+  const proposalRow = (targetPath: string) =>
     page
       .locator("div")
       .filter({ hasText: targetPath })
       .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
       .last();
-  await stubRow(`npcs/${NPC_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
+  await proposalRow(`npcs/${NPC_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
   await page.reload();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
 
-  // (3) The second suggested entry, decided as well: the scene NAMES both of
+  // (3) The proposed location, decided as well: the scene NAMES both of
   // them, and a scene cannot be written while a reference names nothing
   // (ADR #19) — accepting is that decision, the write comes below.
-  await stubRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
+  await proposalRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
   // Accepted is a decision, not a write.
-  expect(await api.exists(`npcs/${NPC_STUB_ID}`)).toBe(false);
+  expect(await api.npcExists(NPC_STUB_ID)).toBe(false);
+  const decided = await api.get<{ review: { npcs: Record<string, string> } }>(
+    "campaigns/beispiel/generate/job",
+  );
+  expect(decided.review.npcs).toEqual({ [NPC_STUB_ID]: "accepted" });
 
-  // (4) Accepting the scene writes the scene AND the two accepted entries it
-  // references — one batch, so nothing is half-written.
+  // (4) Accepting the scene writes the scene AND the accepted npc and
+  // location it references — one batch, so nothing is half-written.
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await page
     .locator("div")
@@ -519,8 +568,8 @@ test("review state survives navigation and reload; parts are accepted one by one
   // …and the untouched fields of the edited half are still the run's.
   expect(written.properties.status).toBe("draft");
   expect(written.properties.location).toBe(LOCATION_STUB_ID);
-  // Both entries carry their NAME, so they were written as proposed.
-  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
+  // Both carry their NAME, so they were written as proposed.
+  expect((await api.npc(NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
   expect((await api.location(LOCATION_STUB_ID)).name).toBe(LOCATION_STUB_NAME);
   // Nothing is left open, so the job is gone.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
@@ -615,8 +664,8 @@ async function storedDraftEdit(api: Api): Promise<DraftEdit> {
 }
 
 /**
- * Accept the whole run: both suggested entries, then the bulk accept. The
- * scene NAMES them, and a scene cannot be written while a reference names
+ * Accept the whole run: the proposed npc and location, then the bulk accept.
+ * The scene NAMES them, and a scene cannot be written while a reference names
  * nothing (ADR #19), so they have to be decided first.
  */
 async function acceptWholeRun(page: Page): Promise<void> {
@@ -641,7 +690,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
     timeout: 30_000,
   });
 
-  // One suggested entry is accepted and written — it references nothing, so
+  // The proposed npc is accepted and written — it references nothing new, so
   // it stands on its own — and the rest of the run is thrown away.
   const npcRow = page
     .locator("div")
@@ -656,13 +705,20 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toBeVisible();
+  // Once written, the row links to the npc's own route (ADR #31).
+  await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toHaveAttribute(
+    "href",
+    `/campaigns/beispiel/npcs/${NPC_STUB_ID}`,
+  );
+  const partial = await api.get<{ review: { writtenNpcs: string[] } }>(
+    "campaigns/beispiel/generate/job",
+  );
+  expect(partial.review.writtenNpcs).toEqual([NPC_STUB_ID]);
 
   await page.getByRole("button", { name: "Rest verwerfen" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
-  // The accepted entry is an entry now; the scene and the other suggestion
-  // never landed.
-  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
+  // The accepted npc is stored now; the scene and the location never landed.
+  expect((await api.npc(NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
   expect(await api.exists(SCENE_PATH)).toBe(false);
   expect(await api.locationExists(LOCATION_STUB_ID)).toBe(false);
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
@@ -717,8 +773,8 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   });
 
   await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
-  // The accept writes the scene, the chapter it hangs in and the two
-  // suggested entries the scene NAMES — a scene cannot be written while a
+  // The accept writes the scene, the chapter it hangs in and the npc and the
+  // location the scene NAMES — a scene cannot be written while a
   // reference names nothing (ADR #19), so they come along. Nothing is left
   // open afterwards, so the review is done.
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
@@ -762,7 +818,7 @@ test("a run into an existing chapter leaves the chapter's text alone", async ({ 
   await expect(page.getByRole("heading", { name: "Beschreibung des Kapitels" })).toHaveCount(0);
   await expect(page.getByText("Nachts verschwinden Ladungen", { exact: false })).toHaveCount(0);
 
-  // Accept the whole run: both suggested entries, then everything open.
+  // Accept the whole run: the proposed npc and location, then everything open.
   const acceptEntry = page.getByRole("button", { name: "Annehmen" });
   await expect(acceptEntry).toHaveCount(2);
   await acceptEntry.first().click();

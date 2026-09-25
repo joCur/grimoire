@@ -1,9 +1,9 @@
 // Render test of the draft editor (react-dom/server — no DOM).
 //
-// What must hold is that a draft is edited as an ENTRY is edited: the field
-// list of its kind with the labels of the properties dialog, its address as a
-// read-only id, and the body on the entry editor's surfaces — nothing that
-// asks the DM to read or write a properties block.
+// What must hold is that a proposed scene is edited as a written one is: the
+// field list of its kind with the labels of the properties dialog, its
+// address as a read-only id, and the body on the body editor's surfaces —
+// nothing that asks the DM to read or write a properties block.
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
@@ -14,7 +14,7 @@ import { DraftEditor } from "./DraftEditor";
 const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [],
-  npcs: [{ path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" }],
+  npcs: [{ id: "fenn", name: "Fenn", status: "alive" }],
   locations: [{ id: "leuchtturm", name: "Der Leuchtturm" }],
   sessions: [],
 };
@@ -52,18 +52,6 @@ describe("the draft editor", () => {
     expect(html).toContain("Blöcke");
     expect(html).toContain("Markdown");
     expect(html).toContain("Der Leuchtturm ist dunkel.");
-  });
-
-  test("an npc draft gets the npc field list", () => {
-    const html = render({
-      path: "npcs/brakk",
-      kind: "npc",
-      properties: { name: "Brakk", status: "alive" },
-      body: "Ein Schmuggler.\n",
-    });
-    expect(html).toContain("npcs/brakk");
-    expect(html).toContain("Name");
-    expect(html).toContain('value="Brakk"');
   });
 
   test("a kind without a field list still edits its body", () => {

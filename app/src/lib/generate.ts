@@ -1,16 +1,17 @@
 // Pure helpers for the generator view. Everything here is
 // derivation and formatting — no fetching, no state:
 //
-//   - the "Neues Kapitel" flow needs a chapter id BEFORE anything exists:
+//   - the new-chapter flow needs a chapter id BEFORE anything exists:
 //     the next free numeric prefix from the tree plus a kebab slug of the
 //     title (the path preview shows exactly what apply will create). Since
 //     that preview is an editable field: the suggestion is only a
 //     suggestion, the DM may name the directory freely — so the id also
 //     needs a client-side check (chapterIdError) and the rule for when the
 //     suggestion still follows the title (chapterIdValue).
-//   - the edits the review keeps on the job: one record per draft path, each
-//     half (properties, body) a whole replacement of what the run produced,
-//     merged here exactly the way the server merges them.
+//   - the edits the review keeps on the job: one record per scene draft path,
+//     each half (properties, body) a whole replacement of what the run
+//     produced, and one change per proposed npc, field by field — merged here
+//     exactly the way the server merges them.
 //   - the count labels for the context hint and the apply button — from the
 //     out of the catalog, with the translator PASSED IN (the lib layer
 //     must not decide which language the UI is in, see i18n/index.ts).
@@ -25,6 +26,7 @@ import type {
   GenerateJobPart,
   GenerateJobReview,
   GenerateReviewDecision,
+  NpcChange,
 } from "@grimoire/shared/types";
 
 import type { Translate } from "@/i18n";
@@ -118,27 +120,6 @@ export function chapterIdError(id: string, t: Translate): string | undefined {
 }
 
 /**
- * Is this string usable as an npc id? The npc generator's `id`
- * field is OPTIONAL — an empty field means "the model chooses" and is
- * therefore not an error. Everything else follows the same bar as a chapter
- * id (the server's kebab pattern) plus the one check only the client can do
- * cheaply: an id that already exists would be a 409, and saying so
- * before the run costs nothing.
- */
-export function npcIdError(
-  id: string,
-  existingIds: readonly string[],
-  t: Translate,
-): string | undefined {
-  if (id === "") return undefined;
-  if (id.includes("/") || id.includes("\\")) return t("generate.input.npcId.slash");
-  if (/\s/.test(id)) return t("generate.input.npcId.space");
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return t("generate.input.npcId.charset");
-  if (existingIds.includes(id)) return t("generate.input.npcId.exists");
-  return undefined;
-}
-
-/**
  * What the chapter-id field shows: the manually entered
  * value once the DM has touched the field, the derived suggestion until
  * then. `manual === undefined` IS the untouched state — and because the view
@@ -153,12 +134,13 @@ export function chapterIdValue(
 }
 
 /**
- * Summary inside the apply button: "2 Szenen · 1 Stub". One catalog entry per
- * sentence, so the plural of both halves is the message's business (ICU) and
- * nothing is glued together here.
+ * Summary inside the apply button: "2 Szenen · 1 vorgeschlagener Eintrag".
+ * One catalog entry per sentence, so the plural of both halves is the
+ * message's business (ICU) and nothing is glued together here. `proposed`
+ * counts the proposed npcs and locations together.
  */
-export function applySummary(sceneCount: number, stubCount: number, t: Translate): string {
-  return t("generate.review.summary", { scenes: sceneCount, stubs: stubCount });
+export function applySummary(sceneCount: number, proposed: number, t: Translate): string {
+  return t("generate.review.summary", { scenes: sceneCount, stubs: proposed });
 }
 
 /**
@@ -316,9 +298,9 @@ export function restoredMode(current: GenerateMode, job: GenerateJob | null | un
 
 /**
  * The error body of a failed job — the same `{ error, validationErrors?,
- * rawReply?, usage? }` shape the synchronous endpoint used to answer with
- * (issues #18/#20), so the 422 block in the view is unchanged. Undefined for
- * every other status, and for a failed job without a body to show.
+ * rawReply?, usage? }` shape a generator 422 carries, so the view shows one
+ * error block for both. Undefined for every other status, and for a failed
+ * job without a body to show.
  */
 export function jobErrorBody(
   job: GenerateJob | null | undefined,
@@ -350,20 +332,22 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 
 // --- the review state on the job -------------------------------------------
 //
-// Everything the DM does in the review — the edited text, the decision per
-// npc stub and per proposed location, the dropped scenes, the per field/block
-// decisions of an augment run — lives on the JOB, not in this browser. These are the pure
+// Everything the DM does in the review — the edited scene drafts and proposed
+// npcs, the decision per proposed npc and per proposed location, the dropped
+// scenes, the per field/block decisions of an augment run — lives on the JOB,
+// not in this browser. These are the pure
 // halves of that: what the state IS, what a patch does to it, and what is
 // still open. No fetching; the hook (lib/use-job-review.ts) does that.
 
 /** A review state with nothing decided — also the fallback for an older payload. */
 export function emptyReview(): GenerateJobReview {
   return {
-    entries: {},
     dropped: [],
     fields: {},
     blocks: {},
     written: {},
+    npcs: {},
+    writtenNpcs: [],
     locations: {},
     writtenLocations: [],
   };
@@ -374,11 +358,12 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
   const review = job?.review;
   if (review === undefined) return emptyReview();
   return {
-    entries: review.entries ?? {},
     dropped: review.dropped ?? [],
     fields: review.fields ?? {},
     blocks: review.blocks ?? {},
     written: review.written ?? {},
+    npcs: review.npcs ?? {},
+    writtenNpcs: review.writtenNpcs ?? [],
     locations: review.locations ?? {},
     writtenLocations: review.writtenLocations ?? [],
   };
@@ -386,8 +371,12 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
 
 /** What one `PATCH …/review` changes — the same merge the server does. */
 export interface ReviewPatch {
+  /** The edited halves of a scene draft, by its path. */
   edits?: Record<string, DraftEdit>;
-  entries?: Record<string, GenerateReviewDecision | null>;
+  /** The DM's change to a proposed npc, by its id — merged field by field. */
+  npcEdits?: Record<string, NpcChange>;
+  /** The decision per proposed npc, by its id. */
+  npcs?: Record<string, GenerateReviewDecision | null>;
   /** The decision per proposed location, by its id. */
   locations?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
@@ -396,15 +385,7 @@ export interface ReviewPatch {
 }
 
 /**
- * The job as it will look once a patch lands — the OPTIMISTIC copy the UI
- * shows while the request is in flight. It must merge exactly the way the
- * server does (generate-jobs.ts `applyReviewPatch`), including the one
- * asymmetry: `dropped` is a set sent whole, everything else merges per key,
- * and a `null` value — in `entries`, `locations`, `fields` and `blocks`
- * alike — means that the decision is open again, which deletes the key.
- */
-/**
- * What the review shows for one draft: the generated properties and body with
+ * What the review shows for one scene draft: the generated properties and body with
  * every edit laid on top, in order — the job's stored edit first, the buffer
  * the DM is typing in last. An edit half that is absent leaves the generated
  * one standing.
@@ -441,6 +422,23 @@ export function mergeDraftEdits(
   return out;
 }
 
+/**
+ * Merge npc changes PER NPC and field by field: a text edit must not drop a
+ * field edit that is already on the job. A field the patch names replaces the
+ * stored one — `null` included, which clears it on the npc.
+ */
+export function mergeNpcEdits(
+  into: Record<string, NpcChange>,
+  patch?: Record<string, NpcChange>,
+): Record<string, NpcChange> {
+  const out = { ...into };
+  for (const [id, change] of Object.entries(patch ?? {})) {
+    out[id] = { ...out[id], ...change };
+  }
+  return out;
+}
+
+
 /** Merge boolean decisions; `null` deletes the key (the server does this). */
 function mergeFlags(
   into: Record<string, boolean>,
@@ -467,17 +465,27 @@ function mergeDecisions(
   return out;
 }
 
+/**
+ * The job as it will look once a patch lands — the OPTIMISTIC copy the UI
+ * shows while the request is in flight. It must merge exactly the way the
+ * server does (generate-jobs.ts `applyReviewPatch`), including the one
+ * asymmetry: `dropped` is a set sent whole, everything else merges per key,
+ * and a `null` decision — in `npcs`, `locations`, `fields` and `blocks`
+ * alike — means that the decision is open again, which deletes the key.
+ */
 export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): GenerateJob {
   const review = reviewOf(job);
   return {
     ...job,
     draftEdits: mergeDraftEdits(job.draftEdits, patch.edits),
+    npcEdits: mergeNpcEdits(job.npcEdits ?? {}, patch.npcEdits),
     review: {
-      entries: mergeDecisions(review.entries, patch.entries),
       dropped: patch.dropped === undefined ? review.dropped : [...new Set(patch.dropped)],
       fields: mergeFlags(review.fields, patch.fields),
       blocks: mergeFlags(review.blocks, patch.blocks),
       written: review.written,
+      npcs: mergeDecisions(review.npcs, patch.npcs),
+      writtenNpcs: review.writtenNpcs,
       locations: mergeDecisions(review.locations, patch.locations),
       writtenLocations: review.writtenLocations,
     },
@@ -488,21 +496,30 @@ export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): Generate
 export type PartState = "open" | "written" | "dropped" | "rejected";
 
 /**
- * The state of one part, addressed the way the review addresses it: a scene
- * by its draft path, a suggested entry by the address it would be written to
- * (`npcs/grella`). A WRITTEN part is read-only and links to the entry; a
- * dropped or rejected one is out of every accept.
+ * The state of one scene of a run, by its draft path. A WRITTEN scene is
+ * read-only and links to what it became; a dropped one is out of every
+ * accept.
  */
 export function partState(job: GenerateJob | null | undefined, path: string): PartState {
   const review = reviewOf(job);
   if (review.written[path] !== undefined) return "written";
   if (review.dropped.includes(path)) return "dropped";
-  if (review.entries[path] === "rejected") return "rejected";
   return "open";
 }
 
 /**
- * The state of one proposed location, by its id — the same four states, read
+ * The state of one proposed npc, by its id — read off the npc's own
+ * decisions and written list (ADR #31).
+ */
+export function npcState(job: GenerateJob | null | undefined, id: string): PartState {
+  const review = reviewOf(job);
+  if (review.writtenNpcs.includes(id)) return "written";
+  if (review.npcs[id] === "rejected") return "rejected";
+  return "open";
+}
+
+/**
+ * The state of one proposed location, by its id — the same states, read
  * off the location's own decisions and written list.
  */
 export function locationState(job: GenerateJob | null | undefined, id: string): PartState {
@@ -513,15 +530,19 @@ export function locationState(job: GenerateJob | null | undefined, id: string): 
 }
 
 /**
- * Every scene and npc part of a run, by the path the review addresses it
- * with. The proposed locations are addressed by id (`jobLocations`).
+ * Every scene of a run, by its draft path. The proposed npcs and locations
+ * are addressed by id (`jobNpcs`, `jobLocations`).
  */
 export function jobParts(job: GenerateJob | null | undefined): string[] {
-  const parts = (job?.result?.scenes ?? []).map((scene) => scene.path);
-  for (const stub of job?.result?.stubs ?? []) parts.push(`npcs/${stub.id}`);
-  const npc = job?.npcResult?.npc.path;
-  if (npc !== undefined) parts.push(npc);
-  return parts;
+  return (job?.result?.scenes ?? []).map((scene) => scene.path);
+}
+
+/** The ids of the npcs a run proposes — a scene run's list, or the NPC run's one npc. */
+export function jobNpcs(job: GenerateJob | null | undefined): string[] {
+  const ids = (job?.result?.npcs ?? []).map((npc) => npc.id);
+  const npc = job?.npcResult?.npc.id;
+  if (npc !== undefined) ids.push(npc);
+  return ids;
 }
 
 /** The ids of the locations a run proposes. */
@@ -540,13 +561,15 @@ export function jobProgress(job: GenerateJob | null | undefined): {
   total: number;
 } {
   const parts = jobParts(job);
+  const npcs = jobNpcs(job);
   const locations = jobLocations(job);
   const review = reviewOf(job);
   return {
     written:
       parts.filter((path) => review.written[path] !== undefined).length +
+      npcs.filter((id) => review.writtenNpcs.includes(id)).length +
       locations.filter((id) => review.writtenLocations.includes(id)).length,
-    total: parts.length + locations.length,
+    total: parts.length + npcs.length + locations.length,
   };
 }
 
@@ -575,9 +598,14 @@ export function acceptProgress(job: GenerateJob | null | undefined): {
   return { written: progress.written, total: Math.max(parts.length, progress.total) };
 }
 
-/** The scene and npc parts still open, by path. */
+/** The scenes still open, by path. */
 export function openParts(job: GenerateJob | null | undefined): string[] {
   return jobParts(job).filter((path) => partState(job, path) === "open");
+}
+
+/** The proposed npcs still open, by id. */
+export function openNpcs(job: GenerateJob | null | undefined): string[] {
+  return jobNpcs(job).filter((id) => npcState(job, id) === "open");
 }
 
 /** The proposed locations still open, by id. */

@@ -88,7 +88,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(note).toContainText("Kontingenz");
 
   // NPC card of the scene: name, mono id, voice, "Will" (the npc's
-  // `motivation` property — the body carries no such section), quickstats
+  // `motivation` field — the body carries no such section), quickstats
   // chips.
   const aside = page.getByRole("complementary").filter({ hasText: "NPCs dieser Szene" });
   await expect(aside).toContainText("Hafenmeisterin Jorna");
@@ -97,14 +97,16 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText("knapp, wetterrau, duzt jeden");
   await expect(aside).toContainText("Will");
   await expect(aside).toContainText("Das Leuchtfeuer muss wieder brennen");
-  // …and it can only have come from the property: the text does not say it.
-  expect((await api.entry("npcs/jorna")).body).not.toContain("Das Leuchtfeuer");
+  // …and it can only have come from the field: the text does not say it.
+  expect((await api.npc("jorna")).body).not.toContain("Das Leuchtfeuer");
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 
-  // The card links into the NPC reading view.
+  // The card links into the NPC reading view, on the npc's own route
+  // (ADR #31).
   await aside.getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 });
 
 test("reference scene 2: contingency header, collapsible If-sections, consequence", async ({
@@ -159,15 +161,15 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
 });
 
 test("a referenced NPC without information is a thin card, not a gap", async ({ page, api }) => {
-  // An npc entry created and not filled in: the aside shows it like any
-  // other card — the id as the name, nothing else. No "NPC-Eintrag fehlt",
-  // no "Stub anlegen" detour, and the card opens the (equally thin) page.
-  expect(await api.exists("npcs/holm")).toBe(false);
-  await api.send("POST", "campaigns/beispiel/npcs", { name: "holm" });
+  // An npc created and not filled in: the aside shows it like any other
+  // card — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
+  // "Stub anlegen" detour, and the card opens the (equally thin) page.
+  expect(await api.npcExists("holm")).toBe(false);
+  await api.createNpc({ name: "holm" });
   await api.patchProperties("01-salzhafen/leuchtturm/lighthouse-arrival", {
     npcs: ["jorna", "holm"],
   });
-  expect(await api.exists("npcs/holm")).toBe(true);
+  expect(await api.npcExists("holm")).toBe(true);
 
   await page.goto(ARRIVAL);
   const aside = page.getByRole("complementary").filter({ hasText: "NPCs dieser Szene" });
@@ -176,9 +178,9 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(aside.getByRole("button", { name: "Stub anlegen" })).toHaveCount(0);
 
   await aside.getByRole("link", { name: /holm/ }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/holm$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/holm$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
-  // And it is editable from here like every other entry.
+  // And it is editable from here like every other npc.
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
 });
 
@@ -213,7 +215,7 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   });
   expect(await api.locationExists("der-alte-hafen")).toBe(false);
 
-  // With the Ort created, the patch lands and the scene MOVES with it.
+  // With the location created, the patch lands and the scene MOVES with it.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(scene, { location: "nordbucht" });
   const moved = await api.entry(scene);

@@ -35,15 +35,22 @@ import {
 
 const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 
-/** The fixture entry as it is stored: the shape the API speaks. */
+/** A fixture as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
   return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
 }
 
-/** Every fixture entry that carries a body, sorted. */
+/**
+ * Every fixture that carries a body, sorted — the campaign's own files and
+ * the npcs and locations in their directories (`npcs/<id>.json`,
+ * `locations/<id>.json`).
+ */
 function fixtureFiles(): string[] {
-  return readdirSync(FIXTURES, { encoding: "utf8" })
-    .filter((name) => name.endsWith(".json"))
+  const inDir = (dir: string): string[] =>
+    readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => `${dir}${name}`);
+  return [...inDir(""), ...inDir("npcs/"), ...inDir("locations/")]
     .filter((name) => fixture(name).body !== undefined)
     .sort();
 }
@@ -613,8 +620,8 @@ describe("list operations are lossless when nothing actually moves", () => {
   });
 });
 
-// The labels come from the catalog and the translator is passed in (issue
-// #69) — the German names are the ones the reading view shows.
+// The labels come from the catalog and the translator is passed in
+// (ADR #15) — the German names are the ones the reading view shows.
 const t = translator("de");
 
 describe("labels", () => {

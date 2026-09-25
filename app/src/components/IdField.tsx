@@ -8,7 +8,7 @@
 // prefilled with the id that is on screen anyway.
 //
 // The static part stays static. Only the id itself is editable — the address
-// prefix („npcs/", „<kapitel>/") and the campaign's id label are context, not
+// prefix (`npcs/`, `<chapter>/`) and the campaign's id label are context, not
 // something to type over, so they sit outside the input and the DM cannot
 // produce an address that is half typed.
 //
@@ -24,8 +24,8 @@ import { useT } from "@/i18n";
 
 interface IdFieldProps {
   /**
-   * The unchangeable text in front of the id: an address prefix („npcs/",
-   * „locations/", „<kapitel>/"), the empty string for a chapter (whose id IS
+   * The unchangeable text in front of the id: a resource or address prefix
+   * (`npcs/`, `locations/`, `<chapter>/`), the empty string for a chapter (whose id IS
    * the address), or the campaign's id label, which has no address to show.
    */
   prefix: string;

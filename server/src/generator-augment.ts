@@ -1,13 +1,13 @@
-// AI augmentation: the generator pipeline pointed at an entry
-// that ALREADY EXISTS — an NPC or a scene. A location is augmented on its own
-// resource, by ./location-augment.ts (ADR #31).
+// AI augmentation: the generator pipeline pointed at a scene that ALREADY
+// EXISTS. An npc and a location are augmented on their own resources, by
+// ./npc-augment.ts and ./location-augment.ts (ADR #31).
 //
 // It is deliberately the SAME pipeline as the two create runs
 // (./generator.ts): same provider factory, same correction turns, same
 // truncation fail-fast, same usage accounting, same background job, same
 // naming check. Only three things differ, and they are the whole module:
 //
-//   1. the prompt carries the existing entry COMPLETE (properties + body)
+//   1. the prompt carries the existing scene COMPLETE (properties + body)
 //      — as prompt text, formatted by the transport (llm-provider.ts), never
 //      as a storage format — plus the DM's instruction, under the
 //      augmentation rule of
@@ -47,9 +47,7 @@ import {
   campaignRefIds,
   collectContext,
   loadAsset,
-  npcStatusErrors,
   obtainProvider,
-  quickstatsErrors,
   runPipeline,
   unknownCallouts,
   unknownRefErrors,
@@ -91,7 +89,7 @@ export async function readAugmentTarget(
 ): Promise<{ kind: AugmentKind; stored: EntryResponse }> {
   const stored = await readEntry(campaign, rel); // 400 unsafe, 404 unknown
   if (!isAugmentKind(stored.kind)) {
-    throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc or scene only`);
+    throw new ApiError(400, `"${stored.kind}" cannot be augmented here — a scene only`);
   }
   return { kind: stored.kind, stored };
 }
@@ -105,9 +103,8 @@ const FORMAT_HEADING = "## Eigenschaften und Text des Eintrags";
  * The FORMAT half of a create prompt: its title line plus the
  * „## Eigenschaften und Text des Eintrags" section, and nothing else.
  *
- * Why the slice: a create prompt also carries its own „## Ausgabeformat" —
- * `scenes`/`entries` for a scene run, `npc` for an NPC run — and its
- * „## Regeln" speak of stubs the augment run can never produce. Embedding
+ * Why the slice: a create prompt also carries its own „## Ausgabeformat" and
+ * its own „## Regeln", written for a run that creates something. Embedding
  * the whole prompt would put TWO contradictory output schemas in front of the
  * model, and "this prompt wins" is a sentence, not a guarantee. The augment
  * run brings its own output schema and its own rules; all it needs from the
@@ -151,7 +148,7 @@ export function augmentFewShotFile(kind: AugmentKind): string {
 // --- validation ------------------------------------------------------------------
 
 /**
- * The kind's own mechanical rules, as far as they apply to an entry that
+ * The scene's own mechanical rules, as far as they apply to a scene that
  * already exists. Deliberately NARROWER than the create runs':
  *
  *   * a scene's `status` is whatever the DM made it (`ready`, `played`, …) —
@@ -161,30 +158,11 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  *     next to the button gets, so checking it twice would only make the
  *     review say it in worse words.
  *
- * What IS checked is what would make the entry unreadable or would break the
+ * What IS checked is what would make the scene unreadable or would break the
  * data contract: an unchanged id, only known callouts, `[[id]]` references
- * that resolve (validateAugmentReply), a legal status per kind, quoted
- * quickstats.
+ * that resolve (validateAugmentReply), a legal type and status.
  */
-function kindErrors(
-  kind: AugmentKind,
-  props: Record<string, unknown>,
-  current: Record<string, unknown>,
-  label: string,
-  errors: string[],
-): void {
-  if (kind === "npc") {
-    for (const msg of npcStatusErrors(props, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
-    // Only a quickstats the proposal CHANGES is checked. The rule ("+2" as a
-    // quoted string, or YAML eats the plus) is about what a MODEL writes; a
-    // campaign that carries bare numbers from its own history — the example
-    // campaign does — must not make every augment run fail on a value the DM
-    // authored and this run does not touch.
-    if (!sameValue(current.quickstats, props.quickstats)) {
-      for (const msg of quickstatsErrors(props)) errors.push(`${label}: ${msg}`);
-    }
-    return;
-  }
+function kindErrors(props: Record<string, unknown>, label: string, errors: string[]): void {
   if (props.type !== undefined && !(SCENE_TYPES as readonly string[]).includes(String(props.type))) {
     errors.push(`${label}: "type" muss einer von ${SCENE_TYPES.join(", ")} sein`);
   }
@@ -207,8 +185,7 @@ function kindErrors(
  * (`campaignRefIds`): an augment run proposes no entry of its own, so that is
  * the campaign. A reference the STORED body already carries is not the
  * model's — the DM wrote it, and the augmentation rule tells the model to keep
- * it — so only a reference the proposal ADDS is checked, the same line the
- * quickstats rule draws below.
+ * it — so only a reference the proposal ADDS is checked.
  */
 export function validateAugmentReply(
   raw: string,
@@ -258,7 +235,7 @@ export function validateAugmentReply(
   }
   const known = new Set([...refIds, ...bodyEntityRefSlugs(stored.body)]);
   for (const msg of unknownRefErrors(reply.body, known)) errors.push(`${label}: ${msg}`);
-  kindErrors(kind, props, stored.properties, label, errors);
+  kindErrors(props, label, errors);
   if (errors.length > 0) return { ok: false, errors };
 
   return {

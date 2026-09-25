@@ -18,8 +18,14 @@
 // focus (./ref-preview.tsx) — the click stays exactly what it is.
 //
 // Unresolved stays literal text: no red, no tooltip, no icon. The reference
-// simply becomes alive the moment the entity exists — without touching the
+// simply becomes alive the moment its target exists — without touching the
 // body again.
+//
+// This module only ASSIGNS a slug to what it names — an npc, a location or a
+// scene — out of the tree. Where the reference leads and what its preview
+// shows come from the one that is named (lib/open-target.ts,
+// components/EntityPreview.tsx, and from there the npc's and the location's
+// own slices).
 
 import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
@@ -35,19 +41,24 @@ import { openTargetHref, type OpenTarget } from "@/lib/open-target";
 import { RefPreview, useCanHover, type RefPreviewTrigger } from "./ref-preview";
 
 /**
- * What a slug resolves to: the CURRENT display name plus where it lives — an
- * npc or a scene by its address (the tree's own, never re-derived), a
- * location as its own resource by its id (ADR #31).
+ * What a slug resolves to: the CURRENT display name plus where it lives — a
+ * scene by its address (the tree's own, never re-derived), an npc and a
+ * location as their own resources by their id (ADR #31).
  */
 export type ResolvedEntityRef =
-  | { kind: "npc" | "scene"; slug: string; name: string; path: string }
-  | { kind: "location"; slug: string; name: string };
+  | { kind: "scene"; slug: string; name: string; path: string }
+  | { kind: "npc" | "location"; slug: string; name: string };
 
 /** What a resolved reference opens. */
 export function refTarget(target: ResolvedEntityRef): OpenTarget {
-  return target.kind === "location"
-    ? { kind: "location", id: target.slug }
-    : { kind: "entry", path: target.path };
+  switch (target.kind) {
+    case "npc":
+      return { kind: "npc", id: target.slug };
+    case "location":
+      return { kind: "location", id: target.slug };
+    case "scene":
+      return { kind: "entry", path: target.path };
+  }
 }
 
 interface EntityRefContextValue {
@@ -81,7 +92,7 @@ export function entityRefIndex(
 
   for (const kind of ENTITY_REF_KINDS) {
     if (kind === "npc") {
-      for (const npc of tree.npcs) put({ kind: "npc", slug: npc.id, name: npc.name, path: npc.path });
+      for (const npc of tree.npcs) put({ kind: "npc", slug: npc.id, name: npc.name });
     } else if (kind === "location") {
       for (const location of tree.locations) {
         put({ kind: "location", slug: location.id, name: location.name });

@@ -72,7 +72,7 @@ describe("flush", () => {
   test("with nothing pending it still waits for what is in flight", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 0);
-    queue.decide({ entries: { "npcs/grella": "accepted" } });
+    queue.decide({ npcs: { grella: "accepted" } });
     // Nothing of its own to send — but the decision above must be done.
     await queue.flush();
     expect(h.sent).toHaveLength(1);
@@ -87,6 +87,19 @@ describe("flush", () => {
     await queue.flush();
     expect(h.sent).toEqual([
       { edits: { a: { body: "one" }, b: { body: "two" } }, dropped: ["c"] },
+    ]);
+  });
+});
+
+describe("a proposed npc", () => {
+  test("its changes merge field by field into one patch", async () => {
+    const h = harness();
+    const queue = createReviewQueue(h.io, 10_000);
+    queue.editNpc("grella", { role: "Fischerin", voice: "heiser" });
+    queue.editNpc("grella", { body: "Neu.\n", voice: null });
+    await queue.flush();
+    expect(h.sent).toEqual([
+      { npcEdits: { grella: { role: "Fischerin", voice: null, body: "Neu.\n" } } },
     ]);
   });
 });
@@ -121,12 +134,12 @@ describe("a failed patch", () => {
 
     // A LATER decision succeeds — but the failed edit is still waiting, so
     // reporting the review as saved would be a lie about it as a whole.
-    queue.decide({ entries: { "npcs/grella": "accepted" } });
+    queue.decide({ npcs: { grella: "accepted" } });
     await queue.flush();
     expect(last(h.statuses)).toBe("saved");
     // …and the retried edit went along with it.
     expect(h.sent).toEqual([
-      { edits: { kai: { body: "im Regen" } }, entries: { "npcs/grella": "accepted" } },
+      { edits: { kai: { body: "im Regen" } }, npcs: { grella: "accepted" } },
     ]);
   });
 
@@ -134,7 +147,7 @@ describe("a failed patch", () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new ApiError(409, "conflict", { code: "rev_conflict", rev: 7 });
-    queue.decide({ entries: { "npcs/grella": "accepted" } });
+    queue.decide({ npcs: { grella: "accepted" } });
     await queue.flush();
     expect(last(h.statuses)).toBe("conflict");
     expect(h.rereads).toBe(1);

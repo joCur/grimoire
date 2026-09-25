@@ -6,13 +6,11 @@
 // reply are each derived from it below with zod's own API, so a new field of
 // a location is one line in the schema and one in its form fields.
 //
-// The FORM FIELDS the app's dialog is built from stand here too, keyed by the
-// same field names: which control edits a field, which list a reference picks
-// from, and where it is edited. They are typed against the schema, so a field
-// without a form entry — or a form entry without a field — does not compile.
+// The app edits a location with its own form fields, typed against the type
+// derived here (app/src/location/), so a field the form does not handle does
+// not compile.
 
 import { z } from "zod";
-import type { PropertyFieldDef } from "./property-fields";
 
 /**
  * A location, exactly as `GET /api/campaigns/:c/locations/:id` answers it:
@@ -107,25 +105,3 @@ export function locationFromReply(reply: LocationReplyObject): {
     warnings,
   };
 }
-
-// --- the form fields ------------------------------------------------------------
-
-/**
- * How the app edits each field, in the order the dialog shows them. `id` is
- * fixed at creation (ADR #21) and `body` has its own editor, so neither is
- * here; `atmosphere` is edited beside the body, not in the dialog
- * (`surface: "text"`, ADR #29).
- */
-const LOCATION_FORM: {
-  [K in Exclude<keyof LocationFields, "id" | "body">]-?: Omit<PropertyFieldDef, "key">;
-} = {
-  name: { control: "text", required: true },
-  chapter: { control: "reference", source: "chapters" },
-  roll20Page: { control: "text" },
-  atmosphere: { control: "textarea", surface: "text" },
-};
-
-/** The form fields of a location, as a list in dialog order. */
-export const LOCATION_FIELDS: readonly PropertyFieldDef[] = Object.entries(LOCATION_FORM).map(
-  ([key, def]) => ({ key, ...def }),
-);

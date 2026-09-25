@@ -1,5 +1,7 @@
 // The create entry points — trigger plus wiring around the shared
-// CreateDialog.
+// CreateDialog. The npc's and the location's live in their own slices
+// (app/src/npc/, app/src/location/), built from the trigger and the
+// after-create step exported here.
 //
 // The CAMPAIGN has two surfaces and both run through `useCampaignCreate` here,
 // so they cannot drift apart: the cold-start PAGE (routes/home.tsx — an empty
@@ -23,8 +25,8 @@
 //   npc /     the head of their list pages — the only surfaces that show all
 //   location  of them, and the ones a phone can reach.
 //
-// WHAT HAPPENS AFTER a successful create differs per kind, and that is the
-// point of having four wrappers rather than one:
+// WHAT HAPPENS AFTER a successful create differs, and that is the point of
+// having a wrapper each rather than one:
 //
 //   a SCENE opens immediately in the editor (`?edit=1`) — a scene with a title
 //     and nothing else is an invitation to write, and the composer is that
@@ -43,19 +45,27 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { createCampaign, createChapter, createLocation, createNpc, createScene } from "@/api";
+import { createCampaign, createChapter, createScene } from "@/api";
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
 import { useT } from "@/i18n";
-import { locationHref } from "@/lib/open-target";
 import { Button } from "@/components/ui/button";
+import { locationsKey } from "@/location/location-query";
+import { npcsKey } from "@/npc/npc-query";
 
 /** Queries that go stale when anything is created. */
 function invalidationKeys(campaign: string) {
-  return [["tree", campaign], ["campaigns"], ["search", campaign], ["locations", campaign]];
+  return [
+    ["tree", campaign],
+    ["campaigns"],
+    ["search", campaign],
+    npcsKey(campaign),
+    locationsKey(campaign),
+  ];
 }
 
-function useAfterCreate(campaign: string) {
+/** The step after every create: the lists that read the new row are refetched. */
+export function useAfterCreate(campaign: string) {
   const queryClient = useQueryClient();
   return async () => {
     await Promise.all(
@@ -134,7 +144,7 @@ export function CampaignCreateDialog({ onClose }: { onClose: () => void }) {
  * button, because there is nothing else on the surface to be quiet next to;
  * everywhere else it is the header vocabulary of the reading view.
  */
-function CreateTrigger({
+export function CreateTrigger({
   label,
   variant,
   onClick,
@@ -244,81 +254,6 @@ export function SceneCreateAction({
             setOpen(false);
             // Straight into the composer — an empty scene is there to be written.
             await navigate(`/campaigns/${campaign}/entries/${created.path}?edit=1`);
-          }}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
-export function NpcCreateAction({ campaign }: { campaign: string }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const afterCreate = useAfterCreate(campaign);
-  if (campaign === "") return null;
-
-  return (
-    <>
-      <CreateTrigger
-        label={t("create.npc.title")}
-        variant="quiet"
-        onClick={() => setOpen(true)}
-      />
-      {open && (
-        <CreateDialog
-          title={t("create.npc.title")}
-          description={t("create.npc.description")}
-          nameLabel={t("create.npc.nameLabel")}
-          namePlaceholder={t("create.npc.namePlaceholder")}
-          addressPrefix="npcs/"
-          create={async (values: CreateValues) => {
-            const created = await createNpc(campaign, {
-              name: values.name,
-              ...(values.id === undefined ? {} : { id: values.id }),
-            });
-            await afterCreate();
-            setOpen(false);
-            await navigate(`/campaigns/${campaign}/entries/${created.path}`);
-          }}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
-export function LocationCreateAction({ campaign }: { campaign: string }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const afterCreate = useAfterCreate(campaign);
-  if (campaign === "") return null;
-
-  return (
-    <>
-      <CreateTrigger
-        label={t("create.location.title")}
-        variant="quiet"
-        onClick={() => setOpen(true)}
-      />
-      {open && (
-        <CreateDialog
-          title={t("create.location.title")}
-          description={t("create.location.description")}
-          nameLabel={t("create.location.nameLabel")}
-          namePlaceholder={t("create.location.namePlaceholder")}
-          addressPrefix="locations/"
-          create={async (values: CreateValues) => {
-            const created = await createLocation(campaign, {
-              name: values.name,
-              ...(values.id === undefined ? {} : { id: values.id }),
-            });
-            await afterCreate();
-            setOpen(false);
-            // A location is its own resource: its reading view is its own route.
-            await navigate(locationHref(campaign, created.id));
           }}
           onClose={() => setOpen(false)}
         />

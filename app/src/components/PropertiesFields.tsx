@@ -1,85 +1,26 @@
-// The controls of the properties form — one row per
-// properties field, chosen by the field's control. Kept apart from the dialog
-// so the dialog stays the save/409 shell and this file stays plain rendering:
-// every row gets its value and gives back a new one, no queries, no writes.
+// The controls of the properties form of a scene and a chapter — one row per
+// field, chosen by the field's control, each built from the field building
+// blocks (./fields/). Plain rendering: every row gets its value and gives
+// back a new one, no queries, no writes.
 //
 // Keyboard first (quality floor): every control is a native input/select/
-// button, chips are added with Enter and removed with their own button (or
-// Backspace in an empty add-input), and the reference inputs offer the existing
-// ids through a native <datalist> — a list that SUGGESTS but never closes the
-// field, because a reference to an entry that does not exist yet must stay
-// typeable (README: the format degrades).
-//
-// Two keyboard details that only look like details: Enter NEVER submits from
-// inside this form (chips take it, the quickstat cells swallow it — a save
-// closing the dialog mid-edit is the bug it prevents), and every Enter/
-// Backspace handler steps aside while an IME composition is running.
+// button, chips are added with Enter and removed with their own button, and
+// the reference inputs offer the existing ids through a native <datalist>.
 
 import type { CampaignTree } from "@grimoire/shared/types";
-import { ChevronDown, X } from "lucide-react";
-import type { KeyboardEvent, ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
-import { INPUT_CLASS } from "@/components/ui/field";
+import { ChipsField } from "@/components/fields/ChipsField";
+import { fieldId } from "@/components/fields/FieldRow";
+import { ReferenceField, ReferenceNote } from "@/components/fields/ReferenceField";
+import { SelectField, type FieldOption } from "@/components/fields/SelectField";
+import { TextField } from "@/components/fields/TextField";
 import { useT } from "@/i18n";
-
 import {
   locationRef,
-  referenceLabel,
   referenceOptions,
-  type FieldOption,
   type FieldValue,
   type PropertiesField,
 } from "@/lib/properties-form";
-import { cn } from "@/lib/utils";
-
-/** Stable per-field DOM id — one dialog is on screen at a time. */
-function fieldId(key: string): string {
-  return `prop-${key.replace(/[^a-zA-Z0-9-]/g, "-")}`;
-}
-
-/** Label, control, hint — the same three lines for every field. */
-function FieldRow({
-  field,
-  labelFor,
-  issue,
-  children,
-}: {
-  field: PropertiesField;
-  /** Set when ONE input carries the field; unset for the group controls. */
-  labelFor?: string;
-  /** What blocks the save in THIS field (propertiesFormIssues), in German. */
-  issue?: string;
-  children: ReactNode;
-}) {
-  const t = useT();
-  const label = (
-    <span className="text-[12px] text-body-secondary">
-      {field.label}
-      {field.required === true && (
-        <span className="text-faint">{t("properties.field.required")}</span>
-      )}
-    </span>
-  );
-  return (
-    <div className="flex flex-col gap-1.5">
-      {labelFor === undefined ? (
-        label
-      ) : (
-        <label htmlFor={labelFor} className="flex flex-col">
-          {label}
-        </label>
-      )}
-      {children}
-      {field.hint !== undefined && <p className="text-[11.5px] text-faint">{field.hint}</p>}
-      {issue !== undefined && (
-        <p aria-live="polite" className="text-[11.5px] text-destructive">
-          {issue}
-        </p>
-      )}
-    </div>
-  );
-}
 
 /**
  * One field of the form. `pending` is the text still standing in a chip input
@@ -99,345 +40,111 @@ export function PropertiesFieldControl({
   /** Reference options come from the campaign tree; undefined = none yet. */
   tree: CampaignTree | undefined;
   pending: string;
-  /** The German line that says why the save is blocked in this field. */
+  /** The line that says why the save is blocked in this field. */
   issue?: string;
   onChange: (value: FieldValue) => void;
   onPendingChange: (text: string) => void;
 }) {
   const t = useT();
   const options = field.source === undefined ? [] : referenceOptions(tree, field.source);
+  const id = fieldId(field.key);
+  const copy = {
+    label: field.label,
+    ...(field.hint === undefined ? {} : { hint: field.hint }),
+    ...(field.required === true ? { required: true } : {}),
+    ...(issue === undefined ? {} : { issue }),
+  };
 
   if (value.kind === "list") {
     return (
       <ChipsField
-        field={field}
+        {...copy}
+        id={id}
         items={value.items}
-        options={options}
+        {...(field.control === "references" ? { options } : {})}
         pending={pending}
-        issue={issue}
         onChange={(items) => onChange({ kind: "list", items })}
         onPendingChange={onPendingChange}
       />
     );
   }
-  if (value.kind === "pairs") {
-    return (
-      <PairsField
-        field={field}
-        entries={value.entries}
-        issue={issue}
-        onChange={(entries) => onChange({ kind: "pairs", entries })}
-      />
-    );
-  }
 
-  const id = fieldId(field.key);
   const setText = (text: string) => onChange({ kind: "text", text });
 
   if (field.control === "select") {
     return (
-      <FieldRow field={field} labelFor={id} issue={issue}>
-        <div className="relative">
-          <select
-            id={id}
-            value={value.text}
-            onChange={(e) => setText(e.target.value)}
-            className={cn(INPUT_CLASS, "appearance-none pr-9")}
-          >
-            {/* Clearing is a real choice: it deletes the key. */}
-            <option value="">{t("properties.field.unset")}</option>
-            {/* The closed list itself — the column admits nothing else (ADR #25). */}
-            {(field.options ?? []).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            aria-hidden
-            size={14}
-            className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground"
-          />
-        </div>
-      </FieldRow>
-    );
-  }
-
-  if (field.control === "textarea") {
-    return (
-      <FieldRow field={field} labelFor={id} issue={issue}>
-        <textarea
-          id={id}
-          rows={2}
-          value={value.text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={field.placeholder}
-          className={cn(INPUT_CLASS, "resize-y leading-[1.55]")}
-        />
-      </FieldRow>
-    );
-  }
-
-  const isReference = field.control === "reference";
-  return (
-    <FieldRow field={field} labelFor={id} issue={issue}>
-      <input
+      <SelectField
+        {...copy}
         id={id}
         value={value.text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={field.placeholder}
-        autoComplete="off"
-        spellCheck={!isReference}
-        list={isReference ? `${id}-options` : undefined}
-        className={cn(INPUT_CLASS, isReference && "font-mono text-[13px]")}
+        // Clearing is a real choice: it deletes the value. The closed list
+        // itself follows — the column admits nothing else (ADR #25).
+        options={[{ value: "", label: t("properties.field.unset") }, ...(field.options ?? [])]}
+        onChange={setText}
       />
-      {isReference && <ReferenceOptions id={`${id}-options`} options={options} />}
-      {isReference && <ReferenceHint field={field} options={options} value={value.text} />}
-    </FieldRow>
-  );
-}
-
-/** The suggestion list of a reference input — ids with their names. */
-function ReferenceOptions({ id, options }: { id: string; options: readonly FieldOption[] }) {
-  return (
-    <datalist id={id}>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </datalist>
-  );
-}
-
-/**
- * What the typed id resolves to. Says nothing while the field is empty, names
- * the entity when the id is known, and says so when nothing has that id — a reference names an entry that exists, so the save would be
- * refused, and the DM should see that before clicking rather than in a toast
- * afterwards.
- *
- * `location` is the one field whose text is not its id: it is the group the
- * scene sits under in its chapter, so it STORES an id while the DM types a
- * name, and the form slugs it. The line therefore resolves over the SLUG —
- * typing the name of an existing location shows that location.
- */
-function ReferenceHint({
-  field,
-  options,
-  value,
-}: {
-  field: PropertiesField;
-  options: readonly FieldOption[];
-  value: string;
-}) {
-  const t = useT();
-  const id = value.trim();
-  if (id === "") return null;
-  if (field.source === "locations") {
-    // Resolved over the SLUG, so typing the name of an existing location
-    // shows that location's name — the save would land on exactly this entry.
-    const ref = locationRef(id, options);
-    switch (ref.kind) {
-      case "empty":
-        return null;
-      // The save is blocked and `propertiesFormIssues` already says why —
-      // one line under the field, not two.
-      case "unusable":
-        return null;
-      case "known":
-        return ref.name === undefined ? null : (
-          <p className="text-[11.5px] text-faint">{ref.name}</p>
-        );
-      case "unknown":
-        return (
-          <p className="text-[11.5px] text-faint">{t("properties.ref.unknownLocation")}</p>
-        );
-    }
-  }
-  const name = referenceLabel(options, id);
-  if (name !== undefined) return <p className="text-[11.5px] text-faint">{name}</p>;
-  if (options.some((option) => option.value === id)) return null;
-  if (field.source === "chapters") {
-    return (
-      <p className="text-[11.5px] text-faint">{t("properties.ref.unknownChapter")}</p>
     );
   }
-  return <p className="text-[11.5px] text-faint">{t("properties.ref.unknown")}</p>;
-}
 
-/** Chips for a string list (`tags`, `handouts`) or an id list (`npcs`). */
-function ChipsField({
-  field,
-  items,
-  options,
-  pending,
-  issue,
-  onChange,
-  onPendingChange,
-}: {
-  field: PropertiesField;
-  items: readonly string[];
-  options: readonly FieldOption[];
-  pending: string;
-  issue?: string;
-  onChange: (items: string[]) => void;
-  onPendingChange: (text: string) => void;
-}) {
-  const t = useT();
-  const id = fieldId(field.key);
-  const isReference = field.control === "references";
-  const add = () => {
-    const entry = pending.trim();
-    onPendingChange("");
-    if (entry === "" || items.includes(entry)) return;
-    onChange([...items, entry]);
-  };
+  if (field.control === "reference") {
+    return (
+      <ReferenceField
+        {...copy}
+        id={id}
+        value={value.text}
+        options={options}
+        placeholder={field.placeholder}
+        onChange={setText}
+        note={
+          field.source === "locations" ? (
+            <LocationNote options={options} value={value.text} />
+          ) : (
+            <ReferenceNote
+              options={options}
+              value={value.text}
+              unknown={t(
+                field.source === "chapters" ? "properties.ref.unknownChapter" : "properties.ref.unknown",
+              )}
+            />
+          )
+        }
+      />
+    );
+  }
 
   return (
-    <FieldRow field={field} labelFor={id} issue={issue}>
-      {items.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
-          {/* Keyed and removed BY INDEX: a hand-edited `tags: [social, social]`
-              has to render twice and lose exactly the chip that was clicked —
-              removing by value would delete both (README: format degrades). */}
-          {items.map((item, index) => (
-            <li
-              key={index}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-card py-1 pr-1 pl-3 text-[12.5px] text-body-secondary"
-            >
-              <span className={isReference ? "font-mono text-[12px]" : undefined}>{item}</span>
-              {isReference && referenceLabel(options, item) !== undefined && (
-                <span className="text-faint">{referenceLabel(options, item)}</span>
-              )}
-              <button
-                type="button"
-                aria-label={t("properties.field.remove.aria", { item })}
-                onClick={() => onChange(items.filter((_, i) => i !== index))}
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <X aria-hidden size={12} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <input
-        id={id}
-        value={pending}
-        onChange={(e) => onPendingChange(e.target.value)}
-        onKeyDown={(e) => {
-          // While an IME composition runs, these keys belong to the
-          // composition (Enter confirms a candidate, Backspace deletes a
-          // syllable) — making a chip or dropping one there eats the input.
-          const composing = e.nativeEvent.isComposing;
-          if (e.key === "Enter") {
-            // Enter belongs to the chip, not to the form — a half-typed tag
-            // must never be what submits the dialog. That holds mid-composition
-            // too, so the default is stopped before the IME guard.
-            e.preventDefault();
-            if (!composing) add();
-            return;
-          }
-          if (composing) return;
-          if (e.key === ",") {
-            e.preventDefault();
-            add();
-            return;
-          }
-          if (e.key === "Backspace" && pending === "" && items.length > 0) {
-            onChange(items.slice(0, -1));
-          }
-        }}
-        autoComplete="off"
-        spellCheck={!isReference}
-        list={isReference ? `${id}-options` : undefined}
-        placeholder={t("properties.field.chipsPlaceholder")}
-        className={cn(INPUT_CLASS, isReference && "font-mono text-[13px]")}
-      />
-      {isReference && <ReferenceOptions id={`${id}-options`} options={options} />}
-    </FieldRow>
+    <TextField
+      {...copy}
+      id={id}
+      value={value.text}
+      placeholder={field.placeholder}
+      multiline={field.control === "textarea"}
+      onChange={setText}
+    />
   );
 }
 
 /**
- * Free key/value rows (`quickstats`) — a row without a value deletes its key,
- * a row without a name blocks the save (propertiesFormIssues) instead of
- * disappearing quietly.
+ * What the scene's location field resolves to. `location` is the one field
+ * whose text is not its id: it is the group the scene sits under in its
+ * chapter, so it STORES an id while the DM types a name, and the form slugs
+ * it. The line therefore resolves over the SLUG — typing the name of an
+ * existing location shows that location, the one the save would land on.
  */
-function PairsField({
-  field,
-  entries,
-  issue,
-  onChange,
-}: {
-  field: PropertiesField;
-  entries: readonly { key: string; value: string }[];
-  issue?: string;
-  onChange: (entries: { key: string; value: string }[]) => void;
-}) {
+function LocationNote({ options, value }: { options: readonly FieldOption[]; value: string }) {
   const t = useT();
-  const replace = (index: number, entry: { key: string; value: string }) =>
-    onChange(entries.map((existing, i) => (i === index ? entry : existing)));
-  // These two inputs are the only ones in the form where Enter would hit the
-  // form's implicit submit — the dialog would save and close in the middle of
-  // typing a stat. Enter here means "done with this cell", i.e. nothing.
-  const swallowEnter = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") e.preventDefault();
-  };
-
-  return (
-    <FieldRow field={field} issue={issue}>
-      {entries.map((entry, index) => (
-        <div key={index} className="flex items-center gap-1.5">
-          <input
-            value={entry.key}
-            onChange={(e) => replace(index, { ...entry, key: e.target.value })}
-            onKeyDown={swallowEnter}
-            aria-label={t("properties.field.row.name.aria", {
-              label: field.label,
-              row: index + 1,
-            })}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="insight"
-            className={cn(INPUT_CLASS, "flex-1 font-mono text-[13px]")}
-          />
-          <input
-            value={entry.value}
-            onChange={(e) => replace(index, { ...entry, value: e.target.value })}
-            onKeyDown={swallowEnter}
-            aria-label={t("properties.field.row.value.aria", {
-              label: field.label,
-              row: index + 1,
-            })}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="+2"
-            className={cn(INPUT_CLASS, "w-[84px] flex-none font-mono text-[13px]")}
-          />
-          <button
-            type="button"
-            aria-label={t("properties.field.remove.aria", {
-              item:
-                entry.key === ""
-                  ? t("properties.field.row", { row: index + 1 })
-                  : entry.key,
-            })}
-            onClick={() => onChange(entries.filter((_, i) => i !== index))}
-            className="flex-none rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-          >
-            <X aria-hidden size={13} />
-          </button>
-        </div>
-      ))}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => onChange([...entries, { key: "", value: "" }])}
-        className="h-auto self-start border-input bg-transparent px-2.5 py-1 text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-      >
-        {t("properties.field.addRow")}
-      </Button>
-    </FieldRow>
-  );
+  const ref = locationRef(value, options);
+  switch (ref.kind) {
+    case "empty":
+      return null;
+    // The save is blocked and `propertiesFormIssues` already says why — one
+    // line under the field, not two.
+    case "unusable":
+      return null;
+    case "known":
+      return ref.name === undefined ? null : (
+        <p className="text-[11.5px] text-faint">{ref.name}</p>
+      );
+    case "unknown":
+      return <p className="text-[11.5px] text-faint">{t("properties.ref.unknownLocation")}</p>;
+  }
 }

@@ -18,6 +18,7 @@ import {
   chapterIdError,
   chapterIdValue,
   contextHint,
+  jobNpcs,
   jobParts,
   acceptProgress,
   jobProgress,
@@ -37,7 +38,8 @@ import {
   mergeDraftEdits,
   newChapterId,
   nextChapterPrefix,
-  npcIdError,
+  npcState,
+  openNpcs,
   restoredMode,
   slugify,
   stringField,
@@ -48,8 +50,8 @@ import {
   usageLabel,
 } from "./generate";
 
-// The copy comes from the catalog and the translator is passed in (issue
-// #69) — so a test says which language it asserts.
+// The copy comes from the catalog and the translator is passed in — so a
+// test says which language it asserts.
 const t = translator("de");
 const tEn = translator("en");
 
@@ -440,6 +442,7 @@ describe("jobErrorBody", () => {
         status: "running",
         startedAt: "2026-08-20T10:00:00.000Z",
         draftEdits: {},
+        npcEdits: {},
       }),
     ).toBeUndefined();
   });
@@ -495,32 +498,6 @@ describe("restoredMode", () => {
   });
 });
 
-describe("npcIdError", () => {
-  test("an empty field is not an error — it means 'the model chooses'", () => {
-    expect(npcIdError("", [], t)).toBeUndefined();
-  });
-
-  test("accepts kebab ids", () => {
-    expect(npcIdError("grella", [], t)).toBeUndefined();
-    expect(npcIdError("die-graue-witwe", [], t)).toBeUndefined();
-    expect(npcIdError("wache-2", [], t)).toBeUndefined();
-  });
-
-  test("rejects what the server would reject", () => {
-    expect(npcIdError("Grella", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("die graue", [], t)).toContain("Leerzeichen");
-    expect(npcIdError("npcs/grella", [], t)).toContain("Schrägstriche");
-    expect(npcIdError("grella_2", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("-grella", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("gräfin", [], t)).toContain("Kleinbuchstaben");
-  });
-
-  test("an id whose entry exists is named as such — the server would 409", () => {
-    expect(npcIdError("fenn", ["fenn", "jorna"], t)).toContain("existiert schon");
-    expect(npcIdError("grella", ["fenn", "jorna"], t)).toBeUndefined();
-  });
-});
-
 // --- the review state on the job -------------------------------------------
 
 describe("review state mapping", () => {
@@ -532,13 +509,14 @@ describe("review state mapping", () => {
       status: "done",
       startedAt: "2026-01-01T00:00:00.000Z",
       draftEdits: {},
+      npcEdits: {},
       rev: 0,
       result: {
         scenes: [
           { path: "01-x/a", properties: {}, body: "a" },
           { path: "01-x/b", properties: {}, body: "b" },
         ],
-        stubs: [{ kind: "npc", id: "grella", name: "Grella", properties: {}, body: "s" }],
+        npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
         locations: [],
         warnings: [],
       },
@@ -547,11 +525,12 @@ describe("review state mapping", () => {
 
   test("a payload without a review degrades to „nothing decided yet“", () => {
     expect(reviewOf(job())).toEqual({
-      entries: {},
       dropped: [],
       fields: {},
       blocks: {},
       written: {},
+      npcs: {},
+      writtenNpcs: [],
       locations: {},
       writtenLocations: [],
     });
@@ -559,21 +538,20 @@ describe("review state mapping", () => {
   });
 
   test("a patch merges per key — and `null` puts a decision back to open", () => {
-    let next = mergeReviewPatch(job(), { entries: { "npcs/grella": "accepted" } });
+    let next = mergeReviewPatch(job(), { npcs: { grella: "accepted" } });
     next = mergeReviewPatch(next, { edits: { "01-x/a": { body: "typed" } } });
-    expect(next.review?.entries).toEqual({ "npcs/grella": "accepted" });
+    expect(next.review?.npcs).toEqual({ grella: "accepted" });
     expect(next.draftEdits["01-x/a"]).toEqual({ body: "typed" });
 
-    next = mergeReviewPatch(next, { entries: { "npcs/grella": null } });
-    expect(next.review?.entries).toEqual({});
+    next = mergeReviewPatch(next, { npcs: { grella: null } });
+    expect(next.review?.npcs).toEqual({});
     // The unrelated half is untouched — that is what merging has to mean.
     expect(next.draftEdits["01-x/a"]).toEqual({ body: "typed" });
   });
 
   test("`null` clears a field or block decision, mirroring the server", () => {
     // What an augment 409 needs: the re-alignment renames the block ids, so
-    // the decisions cut against the old ones have to be deletable (issue
-    // #97 review, finding 5).
+    // the decisions cut against the old ones have to be deletable.
     let next = mergeReviewPatch(job(), { fields: { role: true }, blocks: { aug1: false } });
     expect(next.review?.blocks).toEqual({ aug1: false });
 
@@ -585,6 +563,12 @@ describe("review state mapping", () => {
     expect(next.review?.fields).toEqual({});
   });
 
+  test("an npc change merges field by field", () => {
+    let next = mergeReviewPatch(job(), { npcEdits: { grella: { role: "Fischerin" } } });
+    next = mergeReviewPatch(next, { npcEdits: { grella: { body: "Neu.\n" } } });
+    expect(next.npcEdits).toEqual({ grella: { role: "Fischerin", body: "Neu.\n" } });
+  });
+
   test("`dropped` is a set sent whole, not a merge", () => {
     const next = mergeReviewPatch(
       mergeReviewPatch(job(), { dropped: ["01-x/a"] }),
@@ -593,59 +577,63 @@ describe("review state mapping", () => {
     expect(next.review?.dropped).toEqual(["01-x/b"]);
   });
 
-  test("a part is open, written, dropped or rejected", () => {
+  test("a scene is open, written or dropped; a proposed npc open, written or rejected", () => {
     const decided = job({
       review: {
-        entries: { "npcs/grella": "rejected" },
         dropped: ["01-x/b"],
         fields: {},
         blocks: {},
         written: { "01-x/a": "01-x/a" },
+        npcs: { grella: "rejected" },
+        writtenNpcs: [],
         locations: {},
         writtenLocations: [],
       },
     });
     expect(partState(decided, "01-x/a")).toBe("written");
     expect(partState(decided, "01-x/b")).toBe("dropped");
-    expect(partState(decided, "npcs/grella")).toBe("rejected");
+    expect(npcState(decided, "grella")).toBe("rejected");
+    expect(openNpcs(decided)).toEqual([]);
     expect(partState(job(), "01-x/a")).toBe("open");
+    expect(npcState(job(), "grella")).toBe("open");
   });
 
-  test("the parts of a run are the scenes, the suggested entries and an npc draft", () => {
-    expect(jobParts(job())).toEqual(["01-x/a", "01-x/b", "npcs/grella"]);
-    expect(
-      jobParts(
-        job({
-          result: undefined,
-          kind: "npc",
-          npcResult: { npc: { path: "npcs/brakk", properties: {}, body: "m" }, warnings: [] },
-        }),
-      ),
-    ).toEqual(["npcs/brakk"]);
+  test("the scenes of a run by path, its npcs by id — the NPC run's one npc among them", () => {
+    expect(jobParts(job())).toEqual(["01-x/a", "01-x/b"]);
+    expect(jobNpcs(job())).toEqual(["grella"]);
+    const npcRun = job({
+      result: undefined,
+      kind: "npc",
+      npcResult: { npc: { id: "brakk", name: "Brakk", status: "unknown", body: "m" }, warnings: [] },
+    });
+    expect(jobParts(npcRun)).toEqual([]);
+    expect(jobNpcs(npcRun)).toEqual(["brakk"]);
   });
 
   test("progress counts the written parts — „2 von 3 übernommen“", () => {
     expect(jobProgress(job())).toEqual({ written: 0, total: 3 });
     const partly = job({
       review: {
-        entries: {},
         dropped: [],
         fields: {},
         blocks: {},
-        written: { "01-x/a": "01-x/a", "npcs/grella": "npcs/grella" },
+        written: { "01-x/a": "01-x/a" },
+        npcs: {},
+        writtenNpcs: ["grella"],
         locations: {},
         writtenLocations: [],
       },
     });
     expect(jobProgress(partly)).toEqual({ written: 2, total: 3 });
     expect(openParts(partly)).toEqual(["01-x/b"]);
+    expect(npcState(partly, "grella")).toBe("written");
   });
 
   test("a proposed location is decided, written and counted by its id", () => {
     const withLocation = job({
       result: {
         scenes: [{ path: "01-x/a", properties: {}, body: "a" }],
-        stubs: [],
+        npcs: [],
         locations: [{ id: "alte-mole", name: "Alte Mole", body: "m" }],
         warnings: [],
       },
@@ -669,16 +657,18 @@ describe("review state mapping", () => {
   test("a dropped or rejected part is not part of the rest", () => {
     const decided = job({
       review: {
-        entries: { "npcs/grella": "rejected" },
         dropped: ["01-x/b"],
         fields: {},
         blocks: {},
         written: {},
+        npcs: { grella: "rejected" },
+        writtenNpcs: [],
         locations: {},
         writtenLocations: [],
       },
     });
     expect(openParts(decided)).toEqual(["01-x/a"]);
+    expect(openNpcs(decided)).toEqual([]);
   });
 });
 
@@ -698,6 +688,7 @@ describe("the run's parts", () => {
       status: "running",
       startedAt: "2026-09-15T10:00:00.000Z",
       draftEdits: {},
+      npcEdits: {},
       pipeline: {
         parts: statuses.map((status, i) => ({
           key: `scene:s${i}`,
@@ -712,7 +703,7 @@ describe("the run's parts", () => {
     };
   }
 
-  test("a RUNNING run with a finished part is already the review (AK2)", () => {
+  test("a RUNNING run with a finished part is already the review", () => {
     const base = { applied: false, starting: false, jobChecked: true, jobStatus: "running" as const };
     // Nothing done yet: the spinner is still the honest answer.
     expect(generatePhase({ ...base, hasParts: false })).toBe("working");
@@ -792,16 +783,17 @@ describe("the run's parts", () => {
           { path: "01-salzhafen/s0", properties: {}, body: "a" },
           { path: "01-salzhafen/s1", properties: {}, body: "b" },
         ],
-        stubs: [],
+        npcs: [],
         locations: [],
         warnings: [],
       },
       review: {
-        entries: {},
         dropped: [],
         fields: {},
         blocks: {},
         written: { "01-salzhafen/s0": "01-salzhafen/s0" },
+        npcs: {},
+        writtenNpcs: [],
         locations: {},
         writtenLocations: [],
       },
@@ -814,29 +806,30 @@ describe("the run's parts", () => {
     const single = { ...run, pipeline: undefined };
     expect(acceptProgress(single)).toEqual(jobProgress(single));
     expect(acceptProgress(null)).toEqual({ written: 0, total: 0 });
-    // An accepted suggested entry is a part of the review without being a
-    // part of the outline — the total never falls below what is written.
-    const withStub = job(["done"], {
+    // An accepted proposed npc is a part of the review without being a part
+    // of the outline — the total never falls below what is written.
+    const withNpc = job(["done"], {
       result: {
         scenes: [{ path: "01-salzhafen/s0", properties: {}, body: "a" }],
-        stubs: [{ kind: "npc", id: "grella", name: "Grella", properties: {}, body: "s" }],
+        npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
         locations: [],
         warnings: [],
       },
       review: {
-        entries: { "npcs/grella": "accepted" },
         dropped: [],
         fields: {},
         blocks: {},
-        written: { "01-salzhafen/s0": "01-salzhafen/s0", "npcs/grella": "npcs/grella" },
+        written: { "01-salzhafen/s0": "01-salzhafen/s0" },
+        npcs: { grella: "accepted" },
+        writtenNpcs: ["grella"],
         locations: {},
         writtenLocations: [],
       },
     });
-    expect(acceptProgress(withStub)).toEqual({ written: 2, total: 2 });
+    expect(acceptProgress(withNpc)).toEqual({ written: 2, total: 2 });
   });
 
-  test("the cost line sums the run's tokens and COUNTS CALLS (AK5)", () => {
+  test("the cost line sums the run's tokens and COUNTS CALLS", () => {
     expect(pipelineCostLabel(job(["done"]), t)).toBe("~12.400 Tokens · 5 Aufrufe");
     expect(pipelineCostLabel(job(["done"]), tEn)).toBe("~12,400 tokens · 5 calls");
     // A run whose endpoint reports no tokens still reports its calls.

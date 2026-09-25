@@ -19,11 +19,11 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
   fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
   abzuschalten.
 
-**Eintrags-Antworten — der Normalfall.** Szenen-Teil, NPC-Teil, NPC-Lauf
-und das Ergänzen von Szene und NPC antworten mit dem Objekt, das den
-gespeicherten Eintrag **spiegelt**: die Eigenschaften unter `properties`, den
-ganzen Text als **ein** String unter `body`, die Hinweise für den DM unter
-`warnings`. Der Ort antwortet als er selbst, siehe unten.
+**Szenen-Antworten.** Szenen-Teil und das Ergänzen einer Szene antworten mit
+dem Objekt, das die gespeicherte Szene **spiegelt**: die Eigenschaften unter
+`properties`, den ganzen Text als **ein** String unter `body`, die Hinweise
+für den DM unter `warnings`. NPC und Ort antworten als sie selbst, siehe
+unten.
 
 ```json
 {
@@ -38,10 +38,31 @@ ganzen Text als **ein** String unter `body`, die Hinweise für den DM unter
 }
 ```
 
-**Orts-Antworten.** Ein Ort ist seine eigene Ressource mit eigenem Typ
-(ADR #31). Orts-Teil und Orts-Ergänzung antworten mit dem Ort selbst ohne
-`rev` — alle Felder nebeneinander, `body` eines davon — und daneben
-`warnings`:
+**NPC- und Orts-Antworten.** NPC und Ort sind jeweils ihre eigene Ressource
+mit eigenem Typ (ADR #31). NPC-Teil, NPC-Lauf und NPC-Ergänzung antworten mit
+dem NPC selbst ohne `rev`, Orts-Teil und Orts-Ergänzung mit dem Ort selbst
+ohne `rev` — alle Felder nebeneinander, `body` eines davon — und daneben
+`warnings`. Beim NPC reist `quickstats` als **Liste** von
+`{ "key": …, "value": … }`, der Wert immer ein String:
+
+```json
+{
+  "id": "grella",
+  "name": "Grella",
+  "role": "Schmugglerin mit eigenen Plänen",
+  "chapter": null,
+  "status": "alive",
+  "statblock": null,
+  "quickstats": [{ "key": "insight", "value": "+3" }],
+  "voice": null,
+  "appearance": null,
+  "motivation": "Die Route durch die Nordbucht für sich allein.",
+  "body": "## Weiß\n\n> [!secret] …\n",
+  "warnings": []
+}
+```
+
+Ein Ort:
 
 ```json
 {
@@ -58,29 +79,34 @@ ganzen Text als **ein** String unter `body`, die Hinweise für den DM unter
 Die Felder sind **je Entität** getypt — ein Modell kann genau die Felder
 schreiben, die der DM auch bearbeiten kann, und keins mehr. Nichts setzt aus
 einer Antwort einen Markdown-Text zusammen und nichts liest einen zurück,
-also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Bei Szene
-und NPC bleibt der **Entwurf** das Paar aus Eigenschaften und `body` von der
-Antwort bis in die Zeile (ADR #24). Ein vorgeschlagener Ort ist der Ort ohne
-`rev` (`LocationProposal`); ein Job listet diese Orte unter
-`result.locations`, getrennt von Szenen und NPCs, und Prüfen, Entscheiden und
-Übernehmen laufen für sie über ihre `id`.
+also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Bei der
+Szene bleibt der **Entwurf** das Paar aus Eigenschaften und `body` von der
+Antwort bis in die Zeile (ADR #24). Ein vorgeschlagener NPC ist der NPC ohne
+`rev` (`NpcProposal`), ein vorgeschlagener Ort der Ort ohne `rev`
+(`LocationProposal`); ein Job listet sie unter `result.npcs` bzw.
+`result.locations`, getrennt von den Szenen, und Prüfen, Entscheiden und
+Übernehmen laufen für sie über ihre `id`. Ändert der DM einen
+vorgeschlagenen NPC im Review, liegt die Änderung als `npcEdits[<id>]` neben
+dem Vorschlag und wird beim Übernehmen darübergelegt.
 
-Das Antwort-Schema des Orts hat **genau eine Quelle**: sein zod-Schema
-(`shared/src/location.ts`). Daraus leitet der Ort seine Generator-Form
-selbst ab, mit der API von zod (`locationReplySchema`: der Ort ohne `rev`,
-die optionalen Felder `null`-fähig statt optional, dazu `warnings`, nichts
-Zusätzliches erlaubt), und `locationReplyRequest` in
+Die Antwort-Schemata von NPC und Ort haben **genau eine Quelle**: ihr
+zod-Schema (`shared/src/npc.ts`, `shared/src/location.ts`). Daraus leitet
+jede Entität ihre Generator-Form selbst ab, mit der API von zod
+(`npcReplySchema`, `locationReplySchema`: die Entität ohne `rev`, die
+optionalen Felder `null`-fähig statt optional, beim NPC `quickstats` als
+Liste von Paaren, dazu `warnings`, nichts Zusätzliches erlaubt), und
+`npcReplyRequest` in `server/src/npc-reply.ts` bzw. `locationReplyRequest` in
 `server/src/location-reply.ts` gibt sie per `z.toJSONSchema` an den Provider
-— je Lauf unter eigenem Namen (`location`, `augmented_location`). Das Schema
-trägt keine `description`: was das Modell über die Felder wissen muss (die
-id-Regel, welche Kapitel-id `chapter` nennen darf, was `atmosphere` ist, die
-Form von `body` und `warnings`), steht in `location-system-prompt.md` unter
-„## Die Felder des Orts“, und der Ergänzen-Lauf bekommt genau diesen
-Abschnitt mit. Szene und NPC laden ihre Schemata als **lesbares
-JSON** aus `shared/schema/`, eines je Entität
-und Lauf (`scene.schema.json`, `npc.schema.json`,
-`augmented-scene.schema.json`, `augmented-npc.schema.json`), dazu
-`outline.schema.json`; `shared/test/entry-schema.test.ts` prüft deren
+— je Lauf unter eigenem Namen (`npc`, `augmented_npc`, `location`,
+`augmented_location`). Das Schema trägt keine `description`: was das Modell
+über die Felder wissen muss (die id-Regel, welche Kapitel-id `chapter`
+nennen darf, was `motivation` oder `atmosphere` ist, die Form von
+`quickstats`, `body` und `warnings`), steht im Prompt der Entität unter
+„## Die Felder des NPC“ bzw. „## Die Felder des Orts“, und der Ergänzen-Lauf
+bekommt genau diesen Abschnitt mit. Die Szene lädt ihre Schemata als
+**lesbares JSON** aus `shared/schema/`, eines je Lauf (`scene.schema.json`,
+`augmented-scene.schema.json`), dazu `outline.schema.json`;
+`shared/test/entry-schema.test.ts` prüft deren
 Schlüssel und Wertelisten gegen die Feldliste
 (`shared/src/property-fields.ts`) und für **jedes** Schema, abgeleitet oder
 geladen, die Regeln des strict mode. Der Unterschied zwischen den Läufen
@@ -88,11 +114,12 @@ steht in den Schemata selbst: eine bestehende Szene behält den Status, den
 der DM ihr gegeben hat, während eine **neue** Szene nur `draft` sein kann.
 
 **Die Prompts zeigen genau dieses Objekt.** Der Formatabschnitt jedes
-Create-Prompts — „## Eigenschaften und Text des Eintrags“ bei Szene und NPC,
-„## Die Felder des Orts“ beim Ort — führt ein ```json-Beispiel des
-Antwort-Objekts: die Felder in derselben Reihenfolge wie das Schema der Entität
-(ein Feld ohne Quelle als `null`) — bei Szene und NPC unter `properties`,
-beim Ort nebeneinander —, `body` als **ein** String — dessen
+Create-Prompts — „## Eigenschaften und Text des Eintrags“ bei der Szene,
+„## Die Felder des NPC“ beim NPC, „## Die Felder des Orts“ beim Ort — führt
+ein ```json-Beispiel des Antwort-Objekts: die Felder in derselben Reihenfolge
+wie das Schema der Entität (ein Feld ohne Quelle als `null`) — bei der Szene
+unter `properties`, bei NPC und Ort nebeneinander —, `body` als **ein**
+String — dessen
 Aufbau, `## Flow`, `## If:`, die sechs Callouts und `[[id]]`-Verweise, steht
 als Beschreibung dieses Strings darunter — und `warnings` als Liste von
 Strings. Prompt, Schema und Few-Shot zeigen damit Feld für Feld dieselbe
@@ -103,15 +130,16 @@ und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
 Prozess):
 
 * kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
-  nicht sagen kann, steht in einer `description` (bei Szene und NPC) bzw. im
-  Orts-Prompt (beim Ort) und wird dort geprüft, wo es immer geprüft wurde
+  nicht sagen kann, steht in einer `description` (bei der Szene) bzw. im
+  Prompt der Entität (bei NPC und Ort) und wird dort geprüft, wo es immer
+  geprüft wurde
   (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
 * **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
   stattdessen `null`-fähig, und der Server liest `null` als „nicht
   angegeben“ und lässt den Schlüssel weg,
 * eine freie Schlüssel/Wert-Abbildung (`quickstats`) lässt sich gar nicht
-  ausdrücken, also reist sie als **Liste** von `{ key, value }` und der Server
-  faltet sie zurück in die Mapping-Form des Format-Vertrags.
+  ausdrücken, also reist sie als **Liste** von `{ key, value }`, und
+  `npcFromReply` faltet sie zurück in die Kurzwerte des NPC.
 
 Warum nicht den Eintrag als **einen** Markdown-Text als Antwort? Weil damit
 die JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum,
@@ -141,8 +169,9 @@ bekommen hat. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik,
 kein stilles Ersetzen.
 
 **Die Gliederung** hat ihr eigenes Schema (`shared/schema/outline.schema.json`) und
-das einzige, das keinen Eintrag beschreibt: ein kleines, flaches Objekt aus
-Szenenliste, neuen Einträgen und, für ein neues Kapitel, dessen Beschreibung.
+das einzige, das keine Entität beschreibt: ein kleines, flaches Objekt aus
+der Szenenliste, der Liste neuer NPCs (`npcs`), der Liste neuer Orte
+(`locations`) und, für ein neues Kapitel, dessen Beschreibung.
 Die **semantischen** Prüfungen bleiben auch
 dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
 Durchlauf nur einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER
@@ -161,8 +190,9 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 1. **Gliederung** (ein Aufruf, `outline-system-prompt.md` +
    `outline-example-output.json`): kleines JSON, per Schema erzwungen (siehe
    „Antwortformate“) — mit der Szenenliste: `id`,
-   `title`, `type`, `location`, Querverweise (`refs`) — und der Liste neuer
-   Figuren/Orte (`entries`). Jede Szene nennt zusätzlich den **ersten und
+   `title`, `type`, `location`, Querverweise (`refs`) — und je einer Liste
+   neuer NPCs (`npcs`) und neuer Orte (`locations`), jeder Eintrag darin
+   `{ id, name, summary }`. Jede Szene nennt zusätzlich den **ersten und
    letzten Satz ihres Quelltext-Abschnitts wörtlich** (`sourceExcerpt`); der
    Server schneidet den Abschnitt damit aus dem Quelltext. Findet er die
    Zitate nicht wörtlich wieder (Whitespace wird normalisiert, sonst nichts),
@@ -181,8 +211,8 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    kein Lauf. Eine fehlende Beschreibung kostet keinen Korrektur-Turn — das
    Kapitel beginnt dann mit leerem Text.
 
-   **Obergrenze:** höchstens 12 Szenen und 12 neue Einträge je Lauf
-   (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_ENTRIES`). Jeder Teil ist ein
+   **Obergrenze:** höchstens 12 Szenen und zusammen 12 neue NPCs und Orte je
+   Lauf (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Jeder Teil ist ein
    Provider-Aufruf, also entscheidet die Gliederung, was ein Lauf kostet;
    darüber ist die Antwort ein Validierungsfehler und damit ein
    Korrektur-Turn, der um Zusammenfassen bittet — kein fehlgeschlagener Lauf.
@@ -201,9 +231,10 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    Szenen-Objekt. Validierung, Korrektur-Turns und Namensprüfung **je
    Szene**; ein fehlgeschlagener Teil blockiert die anderen nicht.
 
-3. **Vorschläge** (je neuem Eintrag ein Aufruf): `npc-system-prompt.md` bzw.
-   `location-system-prompt.md`, mit der Gliederung und den Abschnitten der
-   Szenen, die den Eintrag referenzieren. Dedupliziert über die id.
+3. **Vorschläge** (je neuem NPC und je neuem Ort ein Aufruf):
+   `npc-system-prompt.md` bzw. `location-system-prompt.md`, mit der
+   Gliederung und den Abschnitten der Szenen, die den NPC nennen bzw. am Ort
+   spielen. Dedupliziert über die id.
 
 Was das dem DM bringt: ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar und übernehmbar, und ein defekter Teil lässt sich
@@ -216,35 +247,35 @@ jedem Aufruf **zuerst** und wird beim Claude-Provider mit
 `cache_control: ephemeral` markiert (System-Prompt und konstanter Block je
 eine Marke); OpenAI-kompatible Endpoints cachen denselben Prefix implizit. Nur
 der variable Rest wechselt je Teil: **welche Szene dieser Aufruf schreibt**
-(„## Diese Szene schreibst du jetzt“), der Ausschnitt, der bestehende Eintrag,
-die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
+(„## Diese Szene schreibst du jetzt“), der Ausschnitt, die bestehende Szene,
+der bestehende NPC oder Ort, die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
 **byteweise identisch** — deshalb steht die Zuweisung nicht darin.
 
 Die Anzeige „~N Tokens · M Aufrufe“ summiert über alle Teile, die Gliederung
 eingeschlossen.
 
-**Ein Aufruf bleiben** (PO-Entscheid): der Ergänzen-Lauf und die
-NPC-Generierung — je ein Eintrag, nichts zu zerlegen.
+**Ein Aufruf bleiben** (PO-Entscheid): die Ergänzen-Läufe und die
+NPC-Generierung — je eine Szene, ein NPC oder ein Ort, nichts zu zerlegen.
 
 ## Ablauf pro Aufruf
 
 Gilt für jeden EINZELNEN Provider-Aufruf — den Gliederungs-Aufruf, jeden
-Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
+Szenen-Aufruf, jeden NPC- und Orts-Aufruf und die Ein-Aufruf-Läufe:
 
 1. Server sammelt Kontext: alle npc-/location-ids + Namen, Kapitel-id,
    **Kampagnenwissen** und Glossar (beides aus der Datenbank —
    `campaign_knowledge` bzw. `glossary`).
 2. Prompt = `system-prompt.md` + `example-output.json` (Few-Shot-Ziel)
    + Kampagnenwissen + Glossar + Kontext + Quelltext.
-3. LLM antwortet — mit dem **Eintrags-Objekt** (Szene, NPC, Ort, Ergänzung)
+3. LLM antwortet — mit dem **Objekt der Entität** (Szene, NPC, Ort, Ergänzung)
    bzw. mit dem **Gliederungs-Objekt**, je per Schema erzwungen; siehe
    „Antwortformate“ oben.
 4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
    Inhalt):
    - nur bekannte Eigenschaften, kebab-`id`? `type`/`status` gültig?
      `status == draft`?
-     Stubs: NPC-Status gültig (Normalfall `alive`); ein Ort hat kein
-     `status`-Feld, sein Schema kennt keins.
+     NPC: `status` einer der vier Werte (Normalfall `alive`), das Schema
+     erzwingt ihn; ein Ort hat kein `status`-Feld, sein Schema kennt keins.
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Vorschlag
      desselben Laufs bei?
    - jedes `[[id]]` im Text nennt einen NPC, Ort oder eine Szene der
@@ -314,9 +345,12 @@ Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
 zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
 nur den Formatabschnitt einschneidet (`formatContract` in
-`server/src/generator-augment.ts`; beim Ort „## Die Felder des Orts“ aus
-`location-system-prompt.md` unter den Ort-Ergänzen-Prompt
-`location-augment-system-prompt.md`, `server/src/location-augment.ts`). Der Server korrigiert nichts nach: es
+`server/src/generator-augment.ts`; beim NPC „## Die Felder des NPC“ aus
+`npc-system-prompt.md` unter den NPC-Ergänzen-Prompt
+`npc-augment-system-prompt.md`, `server/src/npc-augment.ts`, beim Ort
+„## Die Felder des Orts“ aus `location-system-prompt.md` unter den
+Ort-Ergänzen-Prompt `location-augment-system-prompt.md`,
+`server/src/location-augment.ts`). Der Server korrigiert nichts nach: es
 gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
 Prompt.
 
@@ -349,10 +383,18 @@ Trennzeile ist Text — Degradation statt Fehler.
 
 Gleiche Pipeline, eigener Endpoint (`POST /api/campaigns/:campaign/generate/npc`)
 und eigene Prompt-Assets (`npc-system-prompt.md` und `npc-example-output.json`
-als Few-Shot-Ziel). Zielformat: NPC-Entität aus README.md; `[[id]]` nur auf
-existierende Einträge, Quickstats als gequotete Strings (das Plus überlebt),
-status alive als Normalfall. Ein Generator-Job pro Kampagne, egal ob
-Szenen oder NPC.
+als Few-Shot-Ziel). Zielformat: der NPC aus README.md, ohne `rev`; `[[id]]`
+nur auf NPCs, Orte und Szenen der Kampagne oder den NPC selbst, Quickstats
+als Strings (das Plus überlebt), `status: alive` als Normalfall, `chapter`
+leer. Ein Generator-Job pro Kampagne, egal ob Szenen oder NPC. Das Ergebnis
+steht unter `npcResult.npc` und wird wie jeder vorgeschlagene NPC über seine
+`id` übernommen.
+
+Ein bestehender NPC wird an seiner Ressource ergänzt (`POST
+…/npcs/<id>/augment`, übernommen mit `POST …/npcs/<id>/augment/apply`):
+`npc-augment-system-prompt.md` trägt die Ergänzungsregel, der Abschnitt
+„## Die Felder des NPC“ aus `npc-system-prompt.md` die Felder, und der
+bestehende NPC steht im Prompt in der Antwort-Form (`quickstats` als Paare).
 
 ## Provider
 
@@ -377,22 +419,22 @@ docs/DEPLOYMENT.md Abschnitt 2.
 
 ## Adressen bildet der Server
 
-Das Modell liefert **Einträge**, und der Server bildet die Adresse:
+Das Modell liefert **Szenen, NPCs und Orte**, und der Server bildet die
+Adresse einer Szene:
 
 * Szenen: `<kapitel>/<id>` — Kapitel aus dem Kontext des Laufs, `id` aus
   den Eigenschaften. Die **Gruppe** kommt aus `location`, also lautet die
   gespeicherte Adresse `<kapitel>/<location>/<id>` (ohne `location`:
   Kapitelebene).
-* Vorgeschlagene NPCs: im Job-Ergebnis unter `stubs`, die `id` in den
-  Eigenschaften, adressiert als `npcs/<id>`.
-* Vorgeschlagene Orte haben keine Adresse: sie stehen als Orte ohne `rev`
-  unter `result.locations` und werden über ihre `id` geprüft, entschieden
-  und übernommen (`accept { locations: [<id>] }`; die Antwort nennt die
-  geschriebenen Orte unter `locations`).
+* Vorgeschlagene NPCs und Orte haben keine Adresse: sie stehen als NPCs bzw.
+  Orte ohne `rev` unter `result.npcs` und `result.locations` und werden über
+  ihre `id` geprüft, entschieden und übernommen (`accept { npcs: [<id>],
+  locations: [<id>] }`; die Antwort nennt die geschriebenen unter `npcs` und
+  `locations`).
 * NPC-Lauf und Ergänzen-Lauf: ein Objekt ohne `path`; beim Ergänzen steht
-  das Ziel ohnehin serverseitig fest — beim Ort ist es die Ressource, an der
-  der Lauf hängt (`POST …/locations/<id>/augment`, übernommen mit `POST
-  …/locations/<id>/augment/apply`).
+  das Ziel ohnehin serverseitig fest — bei NPC und Ort ist es die Ressource,
+  an der der Lauf hängt (`POST …/npcs/<id>/augment`, `POST
+  …/locations/<id>/augment`, übernommen mit `…/augment/apply`).
 
 Der Prüfschritt adressiert die Teile eines Laufs weiterhin über die vom
 Server gebildete Adresse (`GenerateResult.scenes[].path` = `<kapitel>/<id>`);
