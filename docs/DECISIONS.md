@@ -589,7 +589,7 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
   dieses Plugins besteht, ist die Major-Version des Linters die kleinere
   Abhängigkeit. Anheben, sobald das Plugin ESLint 10 als Peer führt.
 - Enum-Labels, die sich viele Views teilen (Szenen-/NPC-Status in
-  `lib/scene-status.ts`, `lib/entity.ts`), kommen ebenfalls aus dem Katalog;
+  `lib/scene-status.ts`, `npc/npc-status.ts`), kommen ebenfalls aus dem Katalog;
   die Helfer nehmen dafür `t: Translate` als Argument (`sceneStatusMeta`,
   `sceneStatusOptions`, `npcStatusLabel`, `browseListTitle`). Ein **unbekannter**
   Wert wird weiter verbatim angezeigt — die Datei bleibt die Wahrheit.
@@ -1581,8 +1581,8 @@ Code hat allein `## If:`, ein Element des Renderers (README).
   erscheint bei der Anzeige als aktueller Name — Anzeige, keine Referenz im
   Sinn von ADR #19 —, und die Suche indexiert beide Felder mit aufgelösten
   Namen.
-- Bearbeitet werden sie auf der Fläche des Eintrags neben dem Text, nicht im
-  Eigenschaften-Dialog (`surface: "text"` in `shared/src/property-fields.ts`).
+- Bearbeitet werden sie im Bearbeiten-Modus der Leseansicht neben dem Text,
+  nicht im Eigenschaften-Dialog.
   Sie teilen den einen Wächter `rev` (ADR #23): ein Speichern ist ein PATCH
   mit dem, was sich geändert hat, und „Trotzdem speichern" schreibt genau
   das — eine fremd geänderte Eigenschaft bleibt.
@@ -1809,9 +1809,23 @@ Die API-Pfade stehen unter `/api` (ADR #22).
   `rev`. Prüfen, Entscheiden und Übernehmen laufen je Entität.
 - **Server:** Das Domänenmodul einer Entität (`server/src/store/<entität>.ts`)
   rendert, liest, schreibt und übernimmt sie getypt.
-- **App:** Die Formularfelder einer Entität stehen neben ihrem Schema und
-  sind gegen dessen Felder getypt, sodass ein Feld ohne Beschreibung nicht
-  übersetzt.
+- **App: Jede Entität verwaltet sich selbst.** Alles, was die App über eine
+  Entität weiß, liegt in ihrem Ordner `app/src/<entität>/`: Route und
+  Leseansicht, Aktionen, Bearbeiten-Hook und Anlege-Dialog, Karte, Vorschau,
+  Kurzfassung und Drawer-Inhalt, ihre Formularfelder, Link und Beschriftung,
+  die Teile des Generators, die nur sie betreffen, und die Tests daneben. Die
+  Formularfelder sind gegen den Typ der Entität getypt, sodass ein Feld ohne
+  Formularfeld nicht übersetzt.
+  - Slices importieren einander nicht. Gemeinsam sind nur UI-Bausteine ohne
+    Wissen über Entitäten (Formularfelder in `app/src/components/fields/`,
+    Kartenhülle, Kurzform, Dialog- und Editor-Flächen); keiner kennt ein
+    `kind`.
+  - Wo wirklich gemischt wird — `[[id]]`-Auflösung, Suche, Kampagnenbaum,
+    Topbar, Seitenkontext, Live-Drawer —, steht nur ein Verteiler: Er ordnet
+    eine id oder einen Treffer ihrer Entität zu; Beschriftung, Link und
+    Vorschau kommen aus deren Slice.
+  - Kein Barrel: Aufrufer importieren die konkrete Datei
+    (`@/npc/NpcCard`).
 
 **Warum zod:** Validierung und Schemata sind eine allgemeine Aufgabe (ADR #30).
 zod liefert Typ, Prüfung und JSON-Schema aus einer Beschreibung, in der

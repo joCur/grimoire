@@ -62,7 +62,13 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `knowledge`, `threads` (die offenen Fäden), `drafts` — und jedes trägt die
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
-- `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
+- `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
+  Slice `app/src/<entität>/` (`npc/`, `location/`) mit allem, was die App
+  über sie weiß (ADR #31); **Slices importieren einander nicht.** Gemeinsam
+  sind nur UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`,
+  etwa `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
+  Kampagnenbaum) sind reine Verteiler. Kein Barrel: Aufrufer importieren die
+  konkrete Datei.
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
   siehe design/README.md). Bei Widerspruch zu docs/UI-BRIEF.md gewinnt design/.
