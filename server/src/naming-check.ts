@@ -28,7 +28,7 @@
 // "salzhafen" → "Salzhafen" flags the lower-case spelling and not its own
 // target. Both are `findRuleHits`.
 //
-// `from`/`to` arrive here ALREADY ref-expanded (store/knowledge.ts namingRules):
+// `from`/`to` arrive here ALREADY ref-expanded (store/knowledge-items.ts namingRules):
 // the DM may write a rule as "[[fenn]]", and the proposals contain the name.
 //
 // The check looks at the BODY and at the properties that hold PROSE the DM

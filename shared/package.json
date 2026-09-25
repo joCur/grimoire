@@ -16,6 +16,8 @@
     "./scene": "./src/scene.ts",
     "./thread": "./src/thread.ts",
     "./idea": "./src/idea.ts",
+    "./glossary-term": "./src/glossary-term.ts",
+    "./knowledge-item": "./src/knowledge-item.ts",
     "./session-state": "./src/session-state.ts"
   },
   "scripts": {

@@ -72,7 +72,12 @@ export const ERROR_CODES = [
    * APPEND-ONLY.
    */
   "played_scene_unknown",
-  /** 400, glossary write: one term appears twice. `{ term }` */
+  /**
+   * NO LONGER SENT. It was the 400 for a whole-glossary write that named one
+   * term twice; every glossary term is its own resource (ADR #31), and a
+   * term that is already there answers `glossary_term_taken` below. The
+   * string stays because codes are APPEND-ONLY.
+   */
   "glossary_duplicate_term",
   /**
    * 400, scene-order write: the list is not exactly the chapter's scenes —
@@ -92,16 +97,17 @@ export const ERROR_CODES = [
    * `{ rev }` always, plus the CURRENT state where there is one to hand back,
    * so the app can show what is in the way instead of fetching it again,
    * under the key of what was written: `{ campaign }`, `{ chapter }`,
-   * `{ scene }`, `{ npc }`, `{ location }`, `{ thread }` or `{ idea }` for
-   * the write of one of those, `{ session }` for `PATCH /sessions/:id`. A
-   * whole-list write (the glossary, the campaign knowledge, the scene order)
-   * carries none of them — the page reloads its own list.
+   * `{ scene }`, `{ npc }`, `{ location }`, `{ thread }`, `{ idea }`,
+   * `{ glossaryTerm }` or `{ knowledgeItem }` for the write of one of those,
+   * `{ session }` for `PATCH /sessions/:id`, and `{ knowledgeItemOrder }` for
+   * the order of the knowledge items. The scene order carries none of them —
+   * the chapter overview reloads its tree.
    */
   "rev_conflict",
   /**
    * 400, a patch that names nothing to change: a campaign, chapter, scene,
-   * npc, location, thread or idea patch without a field, a session patch
-   * without a timestamp. No parameters.
+   * npc, location, thread, idea, glossary-term or knowledge-item patch without
+   * a field, a session patch without a timestamp. No parameters.
    */
   "nothing_to_write",
   /**
@@ -150,6 +156,12 @@ export const ERROR_CODES = [
    * is what the sentence names.
    */
   "timestamp_not_allowed",
+  /**
+   * 409, glossary-term create or write: the campaign's glossary already has
+   * this term — a term stands in the glossary once. Nothing is written.
+   * `{ term }`
+   */
+  "glossary_term_taken",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

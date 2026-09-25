@@ -32,9 +32,9 @@ import { ApiError } from "../api-error";
 import { campaignRoutes } from "./campaigns";
 import { chapterRoutes } from "./chapters";
 import { generateRoutes } from "./generate";
-import { glossaryRoutes } from "./glossary";
+import { glossaryTermRoutes } from "./glossary-terms";
 import { ideaRoutes } from "./ideas";
-import { knowledgeRoutes } from "./knowledge";
+import { knowledgeItemRoutes } from "./knowledge-items";
 import { locationRoutes } from "./locations";
 import { npcRoutes } from "./npcs";
 import { reviewRoutes } from "./review";
@@ -78,12 +78,12 @@ api.route("/", npcRoutes);
 api.route("/", locationRoutes);
 api.route("/", threadRoutes);
 api.route("/", ideaRoutes);
-api.route("/", knowledgeRoutes);
+api.route("/", glossaryTermRoutes);
+api.route("/", knowledgeItemRoutes);
 
-// A session and the glossary answer their OWN shapes on their own endpoints
-// — `SessionResponse` and `GlossaryResponse`, rows all the way down.
+// A session answers its OWN shape on its own endpoints — `SessionResponse`,
+// rows all the way down.
 api.route("/", sessionRoutes);
-api.route("/", glossaryRoutes);
 
 api.route("/", reviewRoutes);
 api.route("/", searchRoutes);

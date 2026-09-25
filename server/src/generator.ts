@@ -66,8 +66,8 @@ import type { SceneReply } from "./scene-reply";
 // nothing else is a data source.
 import { requireCampaign } from "./store/campaigns";
 import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
-import { knowledgeText, namingRules } from "./store/knowledge";
-import { glossaryText } from "./store/glossary";
+import { knowledgeText, namingRules } from "./store/knowledge-items";
+import { glossaryText } from "./store/glossary-terms";
 import { writeGenerated } from "./store/generated";
 import { readLocationProposal } from "./store/locations";
 import { npcHoldsContent, readNpcProposal } from "./store/npcs";
@@ -341,9 +341,8 @@ export async function collectSceneContext(
 
 /**
  * The part of the context that is the same for every run kind. Reads the
- * campaign's npcs/locations out of the tree query and the glossary out of its
- * TABLE — rendered as the `EN → DE` lines the prompt documents,
- * so the prompt text the LLM sees is the same as before.
+ * campaign's npcs/locations out of the tree query and its glossary terms —
+ * rendered as the `EN → DE` lines the prompt documents.
  */
 export async function collectContext(campaign: string): Promise<CampaignContext> {
   const tree = await buildTree(campaign);

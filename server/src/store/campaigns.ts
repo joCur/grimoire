@@ -98,6 +98,7 @@ export function renderCampaign(row: CampaignRow): Campaign {
     name: campaignDisplayName(row),
     ...(row.description === null ? {} : { description: row.description }),
     body: row.body,
+    glossaryIntro: row.glossaryIntro,
     rev: row.rev,
   };
 }
@@ -128,7 +129,7 @@ function storedName(name: string, id: string): string {
  * in ONE row update against ONE `rev`.
  *
  * Only the fields the patch names are touched; `null` clears the
- * description. `force` replaces the guard by the row's current rev — the DM's
+ * description, and the glossary intro is stored like the body. `force` replaces the guard by the row's current rev — the DM's
  * answer to the conflict dialog, which writes only what this request
  * carries. The id may be echoed, never changed (ADR #21). A patch that names
  * no field is a 400 `nothing_to_write`.
@@ -156,10 +157,18 @@ export async function patchCampaign(campaign: string, raw: unknown): Promise<Cam
       name: fields.name === undefined ? row.name : storedName(fields.name, row.id),
       description: fields.description === undefined ? row.description : fields.description,
       body: fields.body === undefined ? row.body : normalizeBody(fields.body),
+      glossaryIntro:
+        fields.glossaryIntro === undefined ? row.glossaryIntro : normalizeBody(fields.glossaryIntro),
       rev: row.rev + 1,
     };
     tx.update(campaigns)
-      .set({ name: next.name, description: next.description, body: next.body, rev: next.rev })
+      .set({
+        name: next.name,
+        description: next.description,
+        body: next.body,
+        glossaryIntro: next.glossaryIntro,
+        rev: next.rev,
+      })
       .where(eq(campaigns.id, campaign))
       .run();
     indexCampaign(tx, next);
@@ -311,6 +320,7 @@ export function insertCampaignSeed(tx: GrimoireDb, seed: CampaignSeed): void {
       name: storedName(seed.name, seed.id),
       description: seed.description ?? null,
       body: seed.body,
+      glossaryIntro: seed.glossaryIntro,
     })
     .run();
   const row = campaignRow(tx, seed.id);

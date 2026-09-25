@@ -70,7 +70,7 @@ describe("GET /api/campaigns", () => {
       sessionIds: string[] = [],
     ): CampaignFixture {
       return {
-        campaign: { name: "", ...fields, body: "" },
+        campaign: { name: "", ...fields, body: "", glossaryIntro: "" },
         sessions: sessionIds.map((id) => ({
           kind: "session",
           properties: { id, scenes_played: [] },

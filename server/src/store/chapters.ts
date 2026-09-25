@@ -198,9 +198,9 @@ function sceneOrderMismatch(
  * PUT /api/campaigns/:campaign/chapters/:chapter/scene-order
  * `{ scenes, rev }` -> the stored order plus the order's fresh guard token.
  *
- * The whole order in one request, like the glossary's list write: dragging a
- * scene changes the positions of its neighbours too, so the array IS the
- * order and there is no per-scene "move" to race against.
+ * The whole order in one request: dragging a scene changes the positions of
+ * its neighbours too, so the array IS the order and there is no per-scene
+ * "move" to race against.
  *
  * THE GUARD IS `chapters.scene_order_rev`, a counter of its own, and the
  * write bumps only that one. Neither `chapters.rev` nor `scenes.rev` moves:
@@ -208,9 +208,9 @@ function sceneOrderMismatch(
  * reordering touches none of them.
  * Bumping either would turn an editor that is open on something else into a
  * conflict the moment somebody rearranges the chapter around it, which is a
- * write that editor is not competing with. The order is its own list with
- * its own lifetime, so it counts its own writes, exactly like the two list
- * guards on `campaigns`.
+ * write that editor is not competing with. The order has its own lifetime,
+ * so it counts its own writes, exactly like the knowledge-item order on
+ * `campaigns`.
  *
  * The list has to be EXACTLY the chapter's scenes — a missing, a foreign or
  * a repeated id is 400 `scene_order_mismatch` and nothing is written. A

@@ -56,7 +56,7 @@ describe("reading ideas", () => {
   });
 
   test("a campaign without ideas answers an empty list, not a 404", async () => {
-    seedCampaign(await getDb(), { campaign: { id: "frischling", name: "", body: "" } });
+    seedCampaign(await getDb(), { campaign: { id: "frischling", name: "", body: "", glossaryIntro: "" } });
     expect(await listIdeas("/api/campaigns/frischling/ideas")).toEqual([]);
   });
 

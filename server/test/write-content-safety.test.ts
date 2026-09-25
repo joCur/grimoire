@@ -8,13 +8,8 @@
 // line whose columns fell apart.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
-import type {
-  CampaignTree,
-  GlossaryResponse,
-  Npc,
-  SceneProposal,
-  SessionResponse,
-} from "@grimoire/shared";
+import type { CampaignTree, Npc, SceneProposal, SessionResponse } from "@grimoire/shared";
+import type { GlossaryTerm } from "@grimoire/shared/glossary-term";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
 import { writeGenerated } from "../src/store/generated";
@@ -54,21 +49,13 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-/** PUT /glossary — the glossary's own write: the whole list plus its token. */
-async function putGlossary(
-  entries: Array<{ term: string; explanation: string }>,
-  rev: number,
-): Promise<{ entries: Array<{ term: string; explanation: string }>; rev: number }> {
-  const res = await app.request("/api/campaigns/beispiel/glossary", {
-    method: "PUT",
+/** Send a JSON body to one glossary term, or to the list of them. */
+async function sendTerm(method: string, url: string, body: unknown): Promise<Response> {
+  return app.request(url, {
+    method,
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ entries, rev }),
+    body: JSON.stringify(body),
   });
-  expect(res.status).toBe(200);
-  return (await res.json()) as {
-    entries: Array<{ term: string; explanation: string }>;
-    rev: number;
-  };
 }
 
 async function tree(): Promise<CampaignTree> {
@@ -77,11 +64,11 @@ async function tree(): Promise<CampaignTree> {
   return (await res.json()) as CampaignTree;
 }
 
-/** The glossary as its own endpoint answers it — the only way in (ADR #26). */
-async function getGlossary(): Promise<GlossaryResponse> {
-  const res = await app.request("/api/campaigns/beispiel/glossary");
+/** The campaign's glossary terms — each its own resource (ADR #31). */
+async function listTerms(): Promise<GlossaryTerm[]> {
+  const res = await app.request(TERMS);
   expect(res.status).toBe(200);
-  return (await res.json()) as GlossaryResponse;
+  return (await res.json()) as GlossaryTerm[];
 }
 
 async function version(): Promise<number> {
@@ -91,7 +78,7 @@ async function version(): Promise<number> {
 }
 
 const NPC = "fenn";
-const GLOSSARY = "glossary";
+const TERMS = "/api/campaigns/beispiel/glossary-terms";
 
 beforeEach(async () => {
   setSystemTime(new Date(2026, 7, 19, 21, 5));
@@ -149,37 +136,15 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
   });
 });
 
-describe("glossary — a list, edited as a list", () => {
-  test("it has no entry address at all, so no write can reach it as a text", async () => {
-    // The glossary is TERM ROWS. It used to take its own rendering back as
-    // markdown and parse it into rows again — the one text-to-columns path,
-    // and the one that could lose a line nobody could assign. That is gone
-    // twice over: the list endpoint writes the rows, and the address the
-    // parse hung off does not exist any more (ADR #26).
-    expect((await app.request(entriesUrl("beispiel", GLOSSARY))).status).toBe(404);
-    const before = await getGlossary();
-    expect(
-      (await patchEntry(GLOSSARY, { rev: before.rev, body: "\n- tide pool → Gezeitentümpel\n" }))
-        .status,
-    ).toBe(404);
-    expect(await getGlossary()).toEqual(before);
-  });
-
-  test("an emptied glossary is an empty LIST (200), still editable", async () => {
-    const before = await getGlossary();
-    const emptied = await putGlossary([], before.rev);
-    expect(emptied.entries).toEqual([]);
-    // The 404 this used to answer made the list the editor was in
-    // unreachable.
-    const read = await getGlossary();
-    expect(read.entries).toEqual([]);
-    // …and the DM can type the glossary back in.
-    const refilled = await putGlossary(
-      [{ term: "tide pool", explanation: "Gezeitentümpel" }],
-      read.rev,
-    );
-    expect(refilled.entries).toEqual([{ term: "tide pool", explanation: "Gezeitentümpel" }]);
-    expect((await getGlossary()).entries).toEqual([
+describe("glossary terms — rows, each with its own guard", () => {
+  test("an emptied glossary is an empty list (200), and the DM can type it back in", async () => {
+    for (const term of await listTerms()) {
+      expect((await sendTerm("DELETE", `${TERMS}/${term.id}`, { rev: term.rev })).status).toBe(204);
+    }
+    expect(await listTerms()).toEqual([]);
+    const res = await sendTerm("POST", TERMS, { term: "tide pool", explanation: "Gezeitentümpel" });
+    expect(res.status).toBe(201);
+    expect((await listTerms()).map(({ term, explanation }) => ({ term, explanation }))).toEqual([
       { term: "tide pool", explanation: "Gezeitentümpel" },
     ]);
   });
@@ -187,54 +152,39 @@ describe("glossary — a list, edited as a list", () => {
   test("a multi-line explanation keeps its line breaks through a save", async () => {
     // Nothing flattens an explanation on the way in or out: it is one column
     // and travels as one string.
-    const before = await getGlossary();
     const explanation = "Zeile eins\nZeile zwei";
-    const saved = await putGlossary([{ term: "Ton", explanation }], before.rev);
-    expect(saved.entries).toEqual([{ term: "Ton", explanation }]);
-    expect((await getGlossary()).entries).toEqual([{ term: "Ton", explanation }]);
+    const res = await sendTerm("POST", TERMS, { term: "Ton", explanation });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as GlossaryTerm;
+    expect(created.explanation).toBe(explanation);
+    expect((await listTerms()).find((term) => term.id === created.id)?.explanation).toBe(
+      explanation,
+    );
   });
-});
 
-describe("the glossary's guard token", () => {
-  test("an unrelated write does not invalidate an open glossary edit", async () => {
-    // The bug: `campaigns.version` was the glossary's token, so ANY write —
-    // a quick note during a running session — made a pending glossary edit
-    // unsaveable. The token is the glossary's own counter now.
-    const glossary = await getGlossary();
+  test("an unrelated write does not invalidate an open term edit", async () => {
+    // A term's guard is its own row version, not `campaigns.version`, which
+    // any write — a quick note during a running session — moves.
+    const [open] = await listTerms();
     expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/log", { text: "Etwas passiert" })).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/ideas", { text: "Idee #idee" })).status).toBe(201);
     expect(await version()).toBeGreaterThan(1);
 
-    const saved = await putGlossary(
-      [{ term: "tide pool", explanation: "Gezeitentümpel" }],
-      glossary.rev,
-    );
-    expect(saved.entries[0]?.explanation).toBe("Gezeitentümpel");
-    // its own writes DO move the token
-    expect(saved.rev).toBe(glossary.rev + 1);
-    const stale = await app.request("/api/campaigns/beispiel/glossary", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ entries: [], rev: glossary.rev }),
+    const saved = await sendTerm("PATCH", `${TERMS}/${open!.id}`, {
+      rev: open!.rev,
+      explanation: "Gezeitentümpel",
+    });
+    expect(saved.status).toBe(200);
+    // Its own writes DO move it: the same guard again is a 409 with the term.
+    const stale = await sendTerm("PATCH", `${TERMS}/${open!.id}`, {
+      rev: open!.rev,
+      explanation: "Überschrieben",
     });
     expect(stale.status).toBe(409);
-    // The same 409 code and the current token — but NO `entry` beside them:
-    // the glossary is not an entry, and the settings page reloads its own
-    // list.
-    const conflict = (await stale.json()) as {
-      code: string;
-      rev: number;
-      entry?: unknown;
-    };
+    const conflict = (await stale.json()) as { code: string; glossaryTerm: GlossaryTerm };
     expect(conflict.code).toBe("rev_conflict");
-    expect(conflict.rev).toBe(saved.rev);
-    expect(conflict.entry).toBeUndefined();
-    // Nothing was written: the emptying the stale request asked for did not
-    // happen.
-    expect((await getGlossary()).entries).toEqual([
-      { term: "tide pool", explanation: "Gezeitentümpel" },
-    ]);
+    expect(conflict.glossaryTerm.explanation).toBe("Gezeitentümpel");
   });
 });
 

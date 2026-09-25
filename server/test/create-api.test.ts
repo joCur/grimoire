@@ -65,6 +65,7 @@ describe("POST /api/campaigns — the cold start", () => {
       name: "Die Küste von Salzhafen",
       description: "Ein Küstenabenteuer",
       body: "",
+      glossaryIntro: "",
       rev: 1,
     });
 

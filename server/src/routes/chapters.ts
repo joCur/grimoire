@@ -91,10 +91,9 @@ chapterRoutes.patch("/campaigns/:campaign/chapters/:id", async (c) => {
 
 // PUT /api/campaigns/:campaign/chapters/:chapter/scene-order { scenes, rev }
 //   -> { scenes, rev }
-// The order of the scenes INSIDE one chapter, written as a whole — the
-// glossary's contract applied to a chapter: the array IS the order, and
-// there is no per-scene "move", because moving one scene changes where its
-// neighbours sit too.
+// The order of the scenes INSIDE one chapter, written as a whole: the array
+// IS the order, and there is no per-scene "move", because moving one scene
+// changes where its neighbours sit too.
 //
 // `rev` is the ORDER's own guard token (`ChapterNode.sceneOrderRev`), and the
 // answer carries the fresh one — not the chapter's `rev`, which guards its

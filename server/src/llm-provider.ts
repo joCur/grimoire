@@ -47,7 +47,7 @@ export interface GenerateRequest {
   fewShotTarget: string; // generator/example-output.json (npc run: npc-example-output.json)
   /**
    * The campaign-knowledge lines, already rendered and with
-   * `[[slug]]` references resolved (store/knowledge.ts knowledgeText). `""` means
+   * `[[slug]]` references resolved (store/knowledge-items.ts knowledgeText). `""` means
    * the campaign has none — the prompt then has no knowledge section at all,
    * so a campaign that never uses the feature sees the prompt unchanged.
    */

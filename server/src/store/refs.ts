@@ -27,8 +27,8 @@
 // space). The campaign entry used to be scanned HALF: its index row expanded
 // references (write.ts `indexCampaign`) but no scan ever found it again, so a
 // changed display name left a stale name in the search index. It is now a
-// FULL body kind: `reindexReferrers` covers it like any other entry. The
-// glossary stays out — its rows are term/explanation pairs, not a prose body.
+// FULL body kind: `reindexReferrers` covers it like any other entry. Glossary
+// terms stay out — a term and its explanation are no prose body.
 //
 // CODE IS NOT PROSE: `` `[[jorna]]` `` and fenced blocks render literally, so
 // the expansion may not touch them. That rule lives once,

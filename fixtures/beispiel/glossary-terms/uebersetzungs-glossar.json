@@ -1,0 +1,5 @@
+{
+  "id": "uebersetzungs-glossar",
+  "term": "Übersetzungs-Glossar",
+  "explanation": "Wird bei jedem Generator-Aufruf mitgeschickt. Format: `EN → DE`.\nEigennamen ohne Eintrag bleiben unübersetzt."
+}

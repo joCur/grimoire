@@ -56,7 +56,7 @@ async function getSession(id: string, campaign = "beispiel"): Promise<SessionRes
 const FRESH = "frischling";
 
 async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
-  seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "" } });
+  seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "", glossaryIntro: "" } });
   await fn();
 }
 
