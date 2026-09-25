@@ -32,23 +32,23 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Projektstruktur
 
 - `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
-  ein Objekt je Datei in der Form der API: eine Szene unter
+  ein Objekt je Datei in der Form der API: die Kampagne unter
+  `fixtures/beispiel/campaigns/<id>.json`, ein Kapitel unter
+  `fixtures/beispiel/chapters/<id>.json`, eine Szene unter
   `fixtures/beispiel/scenes/<id>.json`, ein NPC unter
   `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
   `fixtures/beispiel/locations/<id>.json`, jede als das Objekt, das ihre
-  Ressource liefert, ohne `rev`; Kampagne und Kapitel
-  `properties` + `body`;
-  Sessions, Ideen und Glossar strukturiert. Sie ist
+  Ressource liefert, ohne `rev`; Sessions, Ideen, Glossar und offene Fäden
+  strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.
 - `shared/` — Entitäts-Typen (`@grimoire/shared`), von Server und App
-  gemeinsam genutzt. Autorität über das Format sind
-  `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
-  (Adressen), beschrieben in README.md — die drei synchron halten. Eine
-  Entität mit eigener Ressource hat ihr zod-Schema in
+  gemeinsam genutzt. Autorität über das Format ist
+  `server/src/db/schema.ts` (Speicherform), beschrieben in README.md — beide
+  synchron halten. Eine Entität mit eigener Ressource hat ihr zod-Schema in
   `shared/src/<entität>.ts` (ADR #31).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   ein Routen-Modul je Ressource, `server/src/routes/<ressource>.ts`, ein
@@ -59,9 +59,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
   (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
   — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
-  `locations`, `entries`
-  (der eine Schreibweg, ADR #23), `sessions`, `inbox`, `glossary`,
-  `knowledge`, `threads` (die offenen Fäden), `drafts` — und jedes trägt die
+  `locations`, `sessions`, `inbox`, `glossary`, `knowledge`, `threads` (die
+  offenen Fäden), `generated` (das Übernehmen eines Generator-Laufs) — und
+  jedes trägt die
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
@@ -99,22 +99,22 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Kampagne und Kapitel haben eine Adresse (`campaign`, `<kapitel>`); das
-  Schema steht in `server/src/store/paths.ts`. Auf der Leitung heißen ihre
-  Felder `properties`, ihr Markdown `body`. Szene, NPC und Ort sind jeweils
-  ihre eigene Ressource (ADR #31): `…/scenes/<id>` antwortet mit `Scene`,
-  `…/npcs/<id>` mit `Npc`, `…/locations/<id>` mit `Location`, alle Felder
-  nebeneinander, ohne `kind` und `path`; die App-Routen sind
+- Kampagne, Kapitel, Szene, NPC und Ort sind jeweils ihre eigene Ressource
+  (ADR #31): `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>`
+  mit `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
+  `…/locations/<id>` mit `Location`, alle Felder nebeneinander, `body`
+  eingeschlossen, ohne `kind` und `path`; die App-Routen sind
+  `/campaigns/:id` (Kapitelübersicht), `/campaigns/:id/chapters/<id>`,
   `/campaigns/:id/scenes/<id>`, `/campaigns/:id/npcs/<id>` und
   `/campaigns/:id/locations/<id>`. Eine Szene liegt flach unter ihrer
-  Kampagne, ihr Kapitel ist ein Feld.
+  Kampagne, ihr Kapitel ist ein Feld. Welches Kapitel aktiv ist, sagt sein
+  `status`: höchstens eines je Kampagne, und wer eines aktiviert, setzt das
+  bisher aktive im selben Vorgang auf `planned`.
 - Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
   **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
   ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
   `…/sessions/<id>`, `…/inbox`, `…/glossary`, `…/chapters/<kapitel>/threads`)
-  — Zeilen mit Spalten, kein `body`, kein `properties`-Map. Die
-  Segmente `sessions`, `inbox` und `glossary` bleiben in `RESERVED_SEGMENTS`
-  reserviert; als Eintrags-Adresse antworten sie 404.
+  — Zeilen mit Spalten, kein `body`, kein `properties`-Map.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
@@ -240,11 +240,13 @@ Die Pfade:
    gelesen über `GET …/scenes/<id>`) — Callouts, If-Sections, NPC-Karten der
    Referenzszenen
 3. ⌘K-Suche findet und öffnet: indexiert sind Kampagne, Kapitel, Szenen,
-   NPCs, Orte und die Glossar-Begriffe. Ein Szenen-Treffer nennt sich mit
-   `kind` + `id` ohne Adresse und öffnet `/campaigns/:id/scenes/<id>`, ein
-   NPC-Treffer ebenso und öffnet `/campaigns/:id/npcs/<id>`, ein
-   Orts-Treffer ebenso und öffnet `/campaigns/:id/locations/<id>`, ein
-   Glossar-Treffer ebenso und öffnet `/campaigns/:id/glossary`; Sessions und
+   NPCs, Orte und die Glossar-Begriffe. Jeder Treffer nennt sich mit
+   `kind` + `id` ohne Adresse: ein Kampagnen-Treffer öffnet
+   `/campaigns/:id`, ein Kapitel-Treffer `/campaigns/:id/chapters/<id>`, ein
+   Szenen-Treffer `/campaigns/:id/scenes/<id>`, ein
+   NPC-Treffer `/campaigns/:id/npcs/<id>`, ein Orts-Treffer
+   `/campaigns/:id/locations/<id>` und ein Glossar-Treffer
+   `/campaigns/:id/glossary`; Sessions und
    Ideen sind nicht indexiert
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →
@@ -279,6 +281,9 @@ Die Pfade:
    Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine
    gleichzeitige Textänderung übersteht das). Der Status-Regler selbst hat
    keine Konflikt-Aktionen: er meldet den veralteten Stand, der DM lädt neu.
+   Ein Kapitel aktiviert der Regler mit `PATCH …/chapters/<id> { rev,
+   status: "active" }`; das bisher aktive steht danach auf `planned`, und
+   genau ein Kapitel ist aktiv.
 8. Mobil-Startfläche + Ideen-Einwurf bei 390px: die Idee wird eine Zeile der
    Ideen-Liste (`InboxResponse`), angehängt, nichts abgehakt
 9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
@@ -290,10 +295,10 @@ Die Pfade:
    auch ein reiner Status-Write eines Zweitschreibers ein Konflikt — der
    Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
    es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
-   Der Kampagnen-Eintrag hat beide Hälften wie jeder andere: sein Text ist
-   bearbeitbar wie ein Kapiteltext (`Bearbeiten` öffnet den normalen
-   Text-Editor), und seine Eigenschaften — Name und Beschreibung — stehen
-   unter `Eigenschaften` im Dialog „Kampagne bearbeiten". Der Kopf der
+   Die Kampagne wird wie jede Entität über ihre Ressource geschrieben
+   (`PATCH /campaigns/:id`): ihr `body` ist bearbeitbar wie ein Kapiteltext
+   (`Bearbeiten` öffnet den normalen Text-Editor), und Name und Beschreibung
+   stehen unter `Eigenschaften` im Dialog „Kampagne bearbeiten". Der Kopf der
    Kapitelübersicht bleibt unberührt: dort führt das eine `Bearbeiten` in
    denselben Dialog.
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13 der Normalfall

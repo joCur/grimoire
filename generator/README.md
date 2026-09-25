@@ -204,7 +204,8 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    und die Gliederung beschreibt das Kapitel unter `chapterDescription` —
    ein bis drei Sätze aus dem Quelltext, worum es geht und was die Gruppe
    erreichen soll. „Entwürfe prüfen“ zeigt sie als „Beschreibung des
-   Kapitels“, und das Übernehmen legt das Kapitel mit ihr als Text an. Für ein
+   Kapitels“, und das Übernehmen legt das Kapitel getypt an — als `Chapter`
+   ohne `rev`, `planned`, mit der Beschreibung als `body`. Für ein
    bestehendes Kapitel ist das Feld `null`, und was dort trotzdem steht,
    verwirft die Validierung: den Text eines bestehenden Kapitels erreicht
    kein Lauf. Eine fehlende Beschreibung kostet keinen Korrektur-Turn — das
@@ -436,7 +437,8 @@ Das Modell liefert **Szenen, NPCs und Orte**, jede als ihre Entität ohne
   und `result.locations`. Geprüft, entschieden und übernommen wird jede über
   ihre `id` (`accept { scenes: [<id>], npcs: [<id>], locations: [<id>] }`;
   die Antwort nennt die geschriebenen unter `scenes`, `npcs` und
-  `locations`).
+  `locations`). Ein Konflikt ist eine 409 `{ chapters, scenes, npcs,
+  locations }` mit den ids, die schon belegt sind.
 * NPC-Lauf und Ergänzen-Lauf: beim Ergänzen steht das Ziel ohnehin
   serverseitig fest — es ist die Ressource, an der der Lauf hängt (`POST
   …/scenes/<id>/augment`, `POST …/npcs/<id>/augment`, `POST
