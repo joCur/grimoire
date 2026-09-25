@@ -15,7 +15,7 @@ import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import { campaigns, chapters, generateJobs } from "../db/schema";
+import { campaigns, chapters } from "../db/schema";
 import {
   campaignRow,
   indexCampaign,
@@ -111,10 +111,6 @@ function guardEntryRev(
  * the fields of this request, so a status somebody else changed meanwhile
  * survives a forced text save.
  *
- * `jobId` discards the generator job the write came from, in the SAME
- * transaction (drafts and job can never disagree after a crash). A stale id
- * matches nothing and is ignored.
- *
  * A scene, an npc and a location have no address, so there is nothing here
  * to reach them: each is written through its own resource (ADR #31).
  */
@@ -122,7 +118,6 @@ export async function patchEntry(
   campaign: string,
   rel: string,
   request: PatchEntryRequest,
-  jobId?: string,
 ): Promise<EntryResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
@@ -145,15 +140,9 @@ export async function patchEntry(
     // With fields in the request the body rides along in the SAME update; a
     // text-only save is the body write on its own. Either way: one update,
     // one rev step, one re-index.
-    const written = hasProperties
+    return hasProperties
       ? patchLocator(tx, campaign, locator, guard, patch as Record<string, unknown>, body)
       : writeBodyIn(tx, campaign, locator, guard, body as string);
-    if (jobId !== undefined) {
-      tx.delete(generateJobs)
-        .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
-        .run();
-    }
-    return written;
   });
 }
 

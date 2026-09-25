@@ -635,6 +635,13 @@ Server ist die Wahrheit).
 
 ## 17. Die Gruppe einer Szene IST ihr `location` — kein eigenes Feld
 
+> **Teilweise überholt (ADR #31):** Eine Szene hat keine Adresse mehr: sie
+> liegt flach unter `…/scenes/:id`, und `location` ist ein Feld, aus dem
+> nichts abgeleitet wird. `sceneAddress(row)` und die Auflösung einer
+> veralteten Szenen-Adresse gibt es nicht. Was GILT: es gibt keine zweite
+> Spalte neben `location`, `location` ist eine Orts-id oder leer, Freitext ist
+> 400 (`location_not_an_id`), eine id ohne Ort 400 (`location_unknown`).
+
 **Entscheidung:** `scenes.group_slug` entfällt ersatzlos (Migration 0009).
 Adresse und Kapitelgruppierung einer Szene werden aus der Spalte `location`
 abgeleitet: `<kapitel>/<location>/<id>`, ohne `location` `<kapitel>/<id>`.
@@ -1367,6 +1374,11 @@ beide sind keine Eigenschaften, beide werden nicht im Dialog gepflegt, und
 `scenes.pos` reiht sich genau dort ein. Neu ist nur, dass sie bedienbar wird:
 die Spalte gab es schon, sie wurde beim Anlegen kampagnenweit hochgezählt und
 danach von niemandem gelesen.
+
+> **Teilweise überholt (ADR #31):** Die Adressableitung, die der folgende
+> Absatz als gültig festhält, gibt es nicht mehr: eine Szene liegt flach
+> unter `…/scenes/:id`. Reihenfolge, Wächter und Startwert eines Laufs gelten
+> unverändert.
 
 **Verhältnis zu ADR #17:** Jener Eintrag hat zwei Hälften, und nur eine
 wird abgelöst.

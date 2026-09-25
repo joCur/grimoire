@@ -1154,7 +1154,7 @@ export async function runPartsPooled(
 }
 
 /**
- * The whole scene run: outline, then every part. Writes NOTHING — the drafts
+ * The whole scene run: outline, then every part. Writes NOTHING — the proposals
  * land in the job and only the apply step touches the store.
  */
 export async function runScenePipeline(input: {

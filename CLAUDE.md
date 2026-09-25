@@ -32,10 +32,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Projektstruktur
 
 - `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
-  ein Objekt je Datei in der Form der API: ein NPC unter
+  ein Objekt je Datei in der Form der API: eine Szene unter
+  `fixtures/beispiel/scenes/<id>.json`, ein NPC unter
   `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
-  `fixtures/beispiel/locations/<id>.json`, jeder als das Objekt, das seine
-  Ressource liefert, ohne `rev`; Kampagne, Kapitel und Szene
+  `fixtures/beispiel/locations/<id>.json`, jede als das Objekt, das ihre
+  Ressource liefert, ohne `rev`; Kampagne und Kapitel
   `properties` + `body`;
   Sessions, Ideen und Glossar strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
@@ -57,7 +58,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `server/src/routes/http.ts`. `server/src/server.ts` setzt nur die App
   zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
   (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
-  — `campaigns`, `chapters` (mit den Szenen), `npcs`, `locations`, `entries`
+  — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
+  `locations`, `entries`
   (der eine Schreibweg, ADR #23), `sessions`, `inbox`, `glossary`,
   `knowledge`, `threads` (die offenen Fäden), `drafts` — und jedes trägt die
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
@@ -89,21 +91,23 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Der Callout-Renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
   `[!outcome]`, `[!loot]`, `[!note]`) ist die zentrale Komponente —
   Änderungen daran immer gegen die Referenzszenen
-  `fixtures/beispiel/scene-lighthouse-arrival.json` und
-  `scene-smuggler-captured.json` prüfen, sichtbar im Dev-Harness
+  `fixtures/beispiel/scenes/lighthouse-arrival.json` und
+  `scenes/smuggler-captured.json` prüfen, sichtbar im Dev-Harness
   `/dev/markdown`.
 - Format degradiert: unbekannte Callouts/Überschriften als normalen Text
   rendern, niemals Fehler werfen.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Jeder Eintrag hat eine Adresse (`<kapitel>`, `<kapitel>/<szenen-id>`,
-  `campaign`); das Schema steht in `server/src/store/paths.ts`. Auf der
-  Leitung heißen die Felder eines Eintrags `properties`, sein Markdown
-  `body`. NPC und Ort sind jeweils ihre eigene Ressource (ADR #31):
-  `…/npcs/<id>` antwortet mit `Npc`, `…/locations/<id>` mit `Location`, alle
-  Felder nebeneinander, ohne `kind` und `path`; die App-Routen sind
-  `/campaigns/:id/npcs/<id>` und `/campaigns/:id/locations/<id>`.
+- Kampagne und Kapitel haben eine Adresse (`campaign`, `<kapitel>`); das
+  Schema steht in `server/src/store/paths.ts`. Auf der Leitung heißen ihre
+  Felder `properties`, ihr Markdown `body`. Szene, NPC und Ort sind jeweils
+  ihre eigene Ressource (ADR #31): `…/scenes/<id>` antwortet mit `Scene`,
+  `…/npcs/<id>` mit `Npc`, `…/locations/<id>` mit `Location`, alle Felder
+  nebeneinander, ohne `kind` und `path`; die App-Routen sind
+  `/campaigns/:id/scenes/<id>`, `/campaigns/:id/npcs/<id>` und
+  `/campaigns/:id/locations/<id>`. Eine Szene liegt flach unter ihrer
+  Kampagne, ihr Kapitel ist ein Feld.
 - Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
   **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
   ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
@@ -232,11 +236,13 @@ Die Pfade:
    in der Metazeile), umsortiert über Hoch/Runter — der Schreibweg trägt den
    eigenen Wächter der Reihenfolge (`scene_order_rev`), ein alter Stand ist
    409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei
-2. Szene lesen: aus dieser Liste geöffnet — Callouts, If-Sections,
-   NPC-Karten der Referenzszenen
+2. Szene lesen: aus dieser Liste geöffnet (`/campaigns/:id/scenes/<id>`,
+   gelesen über `GET …/scenes/<id>`) — Callouts, If-Sections, NPC-Karten der
+   Referenzszenen
 3. ⌘K-Suche findet und öffnet: indexiert sind Kampagne, Kapitel, Szenen,
-   NPCs, Orte und die Glossar-Begriffe. Ein NPC-Treffer nennt sich mit `kind`
-   + `id` ohne Adresse und öffnet `/campaigns/:id/npcs/<id>`, ein
+   NPCs, Orte und die Glossar-Begriffe. Ein Szenen-Treffer nennt sich mit
+   `kind` + `id` ohne Adresse und öffnet `/campaigns/:id/scenes/<id>`, ein
+   NPC-Treffer ebenso und öffnet `/campaigns/:id/npcs/<id>`, ein
    Orts-Treffer ebenso und öffnet `/campaigns/:id/locations/<id>`, ein
    Glossar-Treffer ebenso und öffnet `/campaigns/:id/glossary`; Sessions und
    Ideen sind nicht indexiert
@@ -254,13 +260,12 @@ Die Pfade:
    Listen-`rev` `threads_rev`) — eine unbekannte id ist 404, kein stilles 200,
    ein alter Listen-Stand 409 mit der aktuellen Liste. Dazu die Fäden in der
    Kapitelübersicht pflegen: anlegen, abhaken, umformulieren, löschen
-6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
-   in den Kapiteln; plus 409-/Fehlerpfad. Ein Entwurf ist ein Paar aus
-   Eigenschaften und Text (ADR #24): „Bearbeiten" öffnet beide Hälften —
-   Eigenschaften-Felder wie im Eigenschaften-Dialog, den Text auf den
-   Oberflächen des Eintrags-Editors —, gespeichert wird **je Hälfte**, und
-   „Übernehmen" schreibt die bearbeitete Hälfte plus die unberührte des
-   Modells. Dazu Kampagnenwissen und Glossar auf ihren eigenen Seiten (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen —
+6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen →
+   Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
+   die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
+   Felder und ihren Text, gespeichert werden die geänderten Felder je Szene
+   (`sceneEdits`), und „Übernehmen" schreibt sie über dem Vorschlag des
+   Modells; geprüft, verworfen und übernommen wird je `id`. Dazu Kampagnenwissen und Glossar auf ihren eigenen Seiten (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen —
    anlegen, bearbeiten, löschen, umsortieren, 409 — und der Lauf danach:
    Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
    Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
@@ -280,10 +285,10 @@ Die Pfade:
    sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe Konfliktzeile
    statt still überschreiben. „Neu laden" verwirft den Entwurf und übernimmt
    den gespeicherten Stand, „Trotzdem speichern" schreibt nur den Text, sodass
-   eine fremd geänderte Eigenschaft bleibt. Weil Eigenschaften und Text EINE
-   Zeile und EINEN Wächter teilen (ADR #23), ist auch ein reiner
-   Eigenschaften-Write eines Zweitschreibers ein Konflikt — der Status neben
-   dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
+   eine fremd geänderte Eigenschaft bleibt. Weil alle Felder einer Szene,
+   `body` eingeschlossen, EINE Zeile und EINEN Wächter teilen (ADR #23), ist
+   auch ein reiner Status-Write eines Zweitschreibers ein Konflikt — der
+   Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
    es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
    Der Kampagnen-Eintrag hat beide Hälften wie jeder andere: sein Text ist
    bearbeitbar wie ein Kapiteltext (`Bearbeiten` öffnet den normalen

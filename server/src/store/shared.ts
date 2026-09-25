@@ -273,10 +273,10 @@ export function compareSessionsNewestFirst(
 // an empty `holm-2` proposes `holm-3` — while typing "Holm 2" still fills
 // `holm-2`.
 //
-// RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are the
-// address schema's first segments (store/paths, RESERVED_SEGMENTS), so a
-// chapter with one of those ids would be a row whose own entry and scenes
-// resolve to an entity kind instead — created, then unreachable forever. It is
+// RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are
+// reserved segments of the address schema (store/paths, RESERVED_SEGMENTS),
+// so a chapter with one of those ids would be a row whose address names
+// nothing — created, then unreachable forever. It is
 // answered like a collision (same 409 shape, same one-click proposal) under its
 // own code `slug_reserved`, because from the dialog's side it is the same
 // situation — only the reason differs, and the reason is what the app says.
@@ -288,8 +288,9 @@ export function compareSessionsNewestFirst(
  * label: the sentence the DM reads is built by the app from its own catalog in
  * the UI language. The `error` text here is the English technical
  * fallback that curl, the log and an unknown-code client get. `path` is the
- * address of what is in the way, where it has one; an npc or a location, each
- * its own resource (ADR #31), is named by `kind` and `id` alone.
+ * address of what is in the way, where it has one; a scene, an npc or a
+ * location, each its own resource (ADR #31), is named by `kind` and `id`
+ * alone.
  */
 export function slugTaken(
   kind: ErrorKind,
