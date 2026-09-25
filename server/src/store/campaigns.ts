@@ -190,7 +190,7 @@ export async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Pr
 
 // --- the search index row of a campaign --------------------------------------
 
-// The campaign entry is not referenceable either — but its note body CONTAINS
+// The campaign is not referenceable — but its note body CONTAINS
 // references like any other, and store/refs.ts scans it for them, so nothing
 // here is half-supported.
 export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {

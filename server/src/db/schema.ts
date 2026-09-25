@@ -22,10 +22,10 @@
 //      TWO CONSEQUENCES, and they are the point. A write that names an
 //      entry which does not exist is refused (400) instead of storing a
 //      hole, and NOTHING creates an entry because something mentioned it.
-//      The creation paths are: the create endpoints (the review's „NPC
-//      anlegen" from a log line among them), accepting a generator
+//      The creation paths are: the create endpoints (the review's create-npc
+//      action from a log line among them), accepting a generator
 //      proposal — and, inside that
-//      accept, the chapter a „Neues Kapitel" run decided on. Nowhere else.
+//      accept, the chapter a new-chapter run decided on. Nowhere else.
 //      A `[[slug]]` in prose is not a
 //      reference in this sense: it is body text, it stays visible text, and
 //      it constrains nothing — which is also why an npc's `## Beziehungen`
@@ -835,7 +835,7 @@ export const generateJobs = sqliteTable(
     locationId: text("location_id"),
     /**
      * Target chapter of a scene run; NULL for an npc run. The one reference
-     * WITHOUT a foreign key (rule 3): a run with „Neues Kapitel" names the
+     * WITHOUT a foreign key (rule 3): a new-chapter run names the
      * chapter it is going to create, so the chapter exists only once the
      * proposal is accepted.
      */
@@ -894,10 +894,10 @@ export const generateJobs = sqliteTable(
      * restart, when nothing but the row is left. Only a scene run stores it.
      */
     sourceText: text("source_text"),
-    /** The run's „Neues Kapitel" flag — a retry must not 404 on it. */
+    /** The run's new-chapter flag — a retry must not 404 on it. */
     newChapter: integer("new_chapter").notNull().default(0),
     /**
-     * TITLE of the chapter a „Neues Kapitel" run creates. It belongs to the
+     * TITLE of the chapter a new-chapter run creates. It belongs to the
      * run, not to the browser: the review state is persistent, a browser's
      * copy of the start form is not, so a title taken from that copy would be
      * missing after a navigation or a reload — and the chapter with it. It is

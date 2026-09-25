@@ -162,7 +162,7 @@ export function isErrorCode(value: unknown): value is ErrorCode {
 
 /**
  * The entity kinds a create error can name. Stable TOKENS, not labels: the
- * app turns them into „NPC" / „Ort" / "location" itself.
+ * app turns them into the words of its UI language itself.
  */
 export const ERROR_KINDS = ["campaign", "chapter", "scene", "npc", "location"] as const;
 

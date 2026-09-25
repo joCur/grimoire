@@ -267,7 +267,7 @@ export interface CampaignContext {
 export interface SceneContext extends CampaignContext {
   chapter: string;
   /**
-   * The run creates its chapter (a „Neues Kapitel" run): the outline then
+   * The run creates its chapter (a new-chapter run): the outline then
    * also describes that chapter. False for a run into an existing chapter.
    */
   newChapter: boolean;

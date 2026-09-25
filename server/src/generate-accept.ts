@@ -21,8 +21,8 @@ import { sceneRunPos, takeSceneRunStart, type SceneRunStart } from "./store/chap
 import { writeGenerated, type ScenePlacement } from "./store/generated";
 
 /**
- * Accept PART of a finished run — „Diesen übernehmen" per scene, npc and
- * location, and „Alle übernehmen" for whatever is left.
+ * Accept PART of a finished run — the accept of one scene, npc or location,
+ * and accept-all for whatever is left.
  *
  * The whole-run apply (`applyGenerated`) stays exactly as it was; this is
  * the same write with a selection in front of it and different job
@@ -56,7 +56,7 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  *               the same commit.
  *   job         the written parts are recorded ON the job in that same
  *               commit, and the row is deleted the moment nothing is left
- *               open. „Verwerfen" (DELETE …/job) therefore removes only the
+ *               open. Discarding (DELETE …/job) therefore removes only the
  *               open rest — what was written is a row now, not a job.
  */
 export async function acceptJobParts(

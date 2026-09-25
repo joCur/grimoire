@@ -2,9 +2,7 @@
 //
 // A LOCATION IS ITS OWN RESOURCE (ADR #31): `…/locations` and
 // `…/locations/:id`, answering the `Location` type — every field of the
-// location flat, `body` among them, beside its `rev`. It has no address, so
-// `…/entries/locations/<id>` answers 404 like any other address the schema
-// does not describe.
+// location flat, `body` among them, beside its `rev`.
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";

@@ -38,7 +38,7 @@ export const LOCAL_DATE_TIME_SHAPE = LOCAL_DATE_TIME_SECONDS.replace(/'/g, "");
  * The stored string stays zone-less on purpose (README), but only the server
  * knows which wall clock those digits belong to — a browser in another
  * timezone would compute a session runtime that is hours off. So the server
- * ships the interpretation alongside the string (EntryResponse
+ * ships the interpretation alongside the string (SessionResponse
  * startedMs/endedMs) and the client does plain epoch arithmetic.
  *
  * Anything that is not exactly the one shape — a blank `ended`, a value some

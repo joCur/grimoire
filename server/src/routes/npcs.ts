@@ -2,8 +2,7 @@
 //
 // AN NPC IS ITS OWN RESOURCE (ADR #31): `…/npcs` and `…/npcs/:id`, answering
 // the `Npc` type — every field of the npc flat, `body` among them, beside its
-// `rev`. It has no address, so `…/entries/npcs/<id>` answers 404 like any
-// other address the schema does not describe.
+// `rev`.
 
 import { Hono } from "hono";
 import { npcCreateSchema } from "@grimoire/shared";

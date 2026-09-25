@@ -3,10 +3,9 @@
 // A SCENE IS ITS OWN RESOURCE (ADR #31): `…/scenes` and `…/scenes/:id`,
 // answering the `Scene` type — every field of the scene flat, `body` among
 // them, beside its `rev`. It lies flat under its campaign: its id is unique
-// per campaign, and its chapter is a field. It has no address, so
-// `…/entries/<chapter>/<scene>` answers 404 like any other address the schema
-// does not describe. Where a scene stands in its chapter is the chapter's
-// scene order (`PUT …/chapters/:chapter/scene-order`, ./chapters.ts).
+// per campaign, and its chapter is a field. Where a scene stands in its
+// chapter is the chapter's scene order (`PUT …/chapters/:chapter/scene-order`,
+// ./chapters.ts).
 
 import { Hono } from "hono";
 import { sceneCreateSchema } from "@grimoire/shared";

@@ -836,7 +836,7 @@ describe("accept the npc of an NPC run", () => {
     });
     expect(patched.status).toBe(200);
     job = (await patched.json()) as GenerateJob;
-    // „Alle übernehmen" of an NPC run is its one npc.
+    // accept-all of an NPC run is its one npc.
     const res = await postJson(`/api/campaigns/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({

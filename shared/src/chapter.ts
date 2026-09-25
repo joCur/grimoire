@@ -2,7 +2,7 @@
 //
 // `chapterSchema` is the chapter as `GET /api/campaigns/:c/chapters/:id`
 // answers it. The TypeScript type, the PATCH and the POST the resource
-// accepts, and the chapter a fixture holds and a „Neues Kapitel" run creates
+// accepts, and the chapter a fixture holds and a new-chapter run creates
 // are each derived from it below with zod's own API, so a new field of a
 // chapter is one line in the schema and one in its form fields.
 //
@@ -42,7 +42,7 @@ export type Chapter = z.infer<typeof chapterSchema>;
 
 /**
  * A chapter without its guard: what a fixture holds
- * (`fixtures/<campaign>/chapters/<id>.json`) and what a „Neues Kapitel" run
+ * (`fixtures/<campaign>/chapters/<id>.json`) and what a new-chapter run
  * creates when it is accepted.
  */
 export const chapterProposalSchema = chapterSchema.omit({ rev: true });

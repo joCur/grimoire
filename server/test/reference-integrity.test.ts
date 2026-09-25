@@ -211,7 +211,7 @@ describe("a reference that names nothing is refused", () => {
   test("a scene's chapter cannot be removed at all — 400 chapter_required", async () => {
     // Clearing the chapter field in the dialog is the way to get here, so the
     // refusal carries a CODE: the app reads its own sentence off it and
-    // disables „Speichern" instead of letting the save round-trip.
+    // disables saving instead of letting the save round-trip.
     const res = await patchSceneRes(SCENE, { chapter: null });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "chapter_required" });

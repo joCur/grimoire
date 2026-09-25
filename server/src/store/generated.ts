@@ -1,7 +1,7 @@
 // Taking over what a generator run produced.
 //
 // A run proposes entities, each the entity itself without its guard
-// (ADR #31): the chapter a „Neues Kapitel" run creates is a
+// (ADR #31): the chapter a new-chapter run creates is a
 // `ChapterProposal`, a proposed scene a `SceneProposal`, a proposed npc an
 // `NpcProposal` and a proposed location a `LocationProposal`. This is the
 // write behind `POST /generate/apply` and the accept: one transaction for
@@ -64,7 +64,7 @@ export type ScenePlacement = (tx: GrimoireDb, scene: SceneProposal) => number | 
 export async function writeGenerated(
   campaign: string,
   options: {
-    /** The chapter a „Neues Kapitel" run creates, when it is not there yet. */
+    /** The chapter a new-chapter run creates, when it is not there yet. */
     chapter?: ChapterProposal;
     scenes?: SceneProposal[];
     npcs?: NpcProposal[];

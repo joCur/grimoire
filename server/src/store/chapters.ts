@@ -402,7 +402,7 @@ export function patchChapterIn(
 // --- taking over a proposal ---------------------------------------------------
 
 /**
- * A chapter without its guard — a fixture or the chapter a „Neues Kapitel"
+ * A chapter without its guard — a fixture or the chapter a new-chapter
  * run creates — checked against the chapter's schema. A key a chapter does
  * not have, or a value of the wrong shape, is refused with the message `what`
  * introduces.
@@ -591,7 +591,7 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
  * empty text.
  *
  * Both ways a chapter comes into being with a text use it: the create dialog
- * and a „Neues Kapitel" generator run (generator.ts `newChapterTarget`).
+ * and a new-chapter generator run (generator.ts `newChapterTarget`).
  */
 export function newChapterBody(body?: string): string {
   const trimmed = body?.trim() ?? "";
