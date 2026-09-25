@@ -6,8 +6,8 @@
 // among them, beside its `rev`. Which chapter is the active one is its
 // `status`: a write that makes a chapter `active` puts the one that held it
 // back to `planned`, in the same transaction. The order of a chapter's scenes
-// and its open threads are no fields of it: each has its own endpoint and its
-// own guard (below, and ./threads.ts).
+// is no field of it: it has its own endpoint and its own guard (below). Its
+// threads are a resource of their own, each naming its chapter (./threads.ts).
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";
@@ -81,7 +81,8 @@ chapterRoutes.post("/campaigns/:campaign/chapters", async (c) => {
 // nothing — `chapter` is the chapter as it stands now. `force: true` writes
 // the given fields on top of that current row instead: only what this request
 // carries is written, so a field changed in between survives a forced save of
-// the text. Neither the scene order's guard nor the thread list's moves.
+// the text. The scene order's guard does not move, and neither does any
+// thread of the chapter.
 // 404 for an unknown campaign or chapter.
 chapterRoutes.patch("/campaigns/:campaign/chapters/:id", async (c) => {
   const body = await jsonBody(c, null);

@@ -21,9 +21,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { IdeaSeed } from "@grimoire/shared/idea";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { ThreadSeed } from "@grimoire/shared/thread";
 import type { GrimoireDb } from "../../src/db/client";
 import { readFixtureCampaign, seedCampaign, type SeedSession } from "../../src/db/seed";
 import { closeStore, initStore } from "../../src/store/handle";
@@ -50,6 +52,8 @@ export interface SeedOverrides {
   scenes?: SceneProposal[];
   npcs?: NpcProposal[];
   locations?: LocationProposal[];
+  threads?: ThreadSeed[];
+  ideas?: IdeaSeed[];
   sessions?: SeedSession[];
   /** Fixture objects to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
   without?: {
@@ -57,6 +61,8 @@ export interface SeedOverrides {
     scenes?: string[];
     npcs?: string[];
     locations?: string[];
+    threads?: string[];
+    ideas?: string[];
     sessions?: string[];
   };
 }
@@ -95,6 +101,8 @@ export async function seedStore(overrides: SeedOverrides = {}): Promise<Grimoire
     scenes: merged(fixture.scenes, overrides.scenes, without.scenes, byId),
     npcs: merged(fixture.npcs, overrides.npcs, without.npcs, byId),
     locations: merged(fixture.locations, overrides.locations, without.locations, byId),
+    threads: merged(fixture.threads, overrides.threads, without.threads, byId),
+    ideas: merged(fixture.ideas, overrides.ideas, without.ideas, byId),
     sessions: merged(
       fixture.sessions,
       overrides.sessions,

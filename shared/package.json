@@ -14,6 +14,8 @@
     "./location": "./src/location.ts",
     "./npc": "./src/npc.ts",
     "./scene": "./src/scene.ts",
+    "./thread": "./src/thread.ts",
+    "./idea": "./src/idea.ts",
     "./session-state": "./src/session-state.ts"
   },
   "scripts": {

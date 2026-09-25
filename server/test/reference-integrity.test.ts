@@ -420,14 +420,3 @@ describe("the generator's apply step", () => {
     expect(await npcStatus("holm")).toBe(404);
   });
 });
-
-describe("empty is not missing", () => {
-  test("an empty inbox is an empty LIST (200), not a missing one", async () => {
-    const res = await app.request("/api/campaigns/beispiel/inbox");
-    expect(res.status).toBe(200);
-    const inbox = (await res.json()) as { entries: unknown[]; rev: number };
-    expect(Array.isArray(inbox.entries)).toBe(true);
-    expect(typeof inbox.rev).toBe("number");
-  });
-});
-

@@ -11,9 +11,9 @@
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
-//      npcs of a scene, the chapter of an npc and of a location, the scene
-//      of a log line and of a played-scenes entry each carry a composite
-//      `(campaign_id, <ref>)` foreign key with
+//      npcs of a scene, the chapter of an npc, a location and a thread, the
+//      scene of a log line and of a played-scenes entry each carry a
+//      composite `(campaign_id, <ref>)` foreign key with
 //      `ON UPDATE CASCADE` (rule 5) and `ON DELETE NO ACTION`. So a stored
 //      reference names an entry that EXISTS, and the database is what
 //      guarantees it. Nullable where the reference may be absent;
@@ -122,20 +122,19 @@ export const campaigns = sqliteTable("campaigns", {
    */
   glossaryIntro: text("glossary_intro").notNull().default(""),
   /**
-   * Guard tokens of the two LIST entries, glossary and inbox. Neither is a
+   * Guard token of the GLOSSARY, which is written as a whole list. It is no
    * single row that could carry a `rev`, and `version` — which every
    * unrelated write bumps — would make an open glossary edit unsaveable
-   * during a running session. These count only their own list's writes, so
-   * they behave exactly like an entity's `rev`.
+   * during a running session. It counts only the glossary's writes, so it
+   * behaves exactly like an entity's `rev`.
    */
   glossaryRev: integer("glossary_rev").notNull().default(1),
-  inboxRev: integer("inbox_rev").notNull().default(1),
   /**
-   * Guard token of the CAMPAIGN KNOWLEDGE list. Third of the same
-   * kind as the two above and for the same reason: `campaign_knowledge` is a
-   * whole list, so the version belongs to the LIST and not to a row
-   * — and `campaigns.version`, which every unrelated write bumps, would make
-   * an open knowledge edit unsaveable during a running session.
+   * Guard token of the CAMPAIGN KNOWLEDGE list, of the same kind as the one
+   * above and for the same reason: `campaign_knowledge` is a whole list, so
+   * the version belongs to the LIST and not to a row — and
+   * `campaigns.version`, which every unrelated write bumps, would make an
+   * open knowledge edit unsaveable during a running session.
    */
   knowledgeRev: integer("knowledge_rev").notNull().default(1),
 });
@@ -169,7 +168,7 @@ export const chapters = sqliteTable(
      * scenes below it, which `PUT /chapters/:chapter/scene-order` writes as a
      * whole.
      *
-     * Its own counter, for the reason the three list guards on `campaigns`
+     * Its own counter, for the reason the two list guards on `campaigns`
      * have theirs: the order is a list that lives on its own, and `rev` —
      * which every unrelated write of the chapter bumps — would make an open
      * chapter-text edit unsaveable the moment somebody rearranges the scenes.
@@ -178,16 +177,6 @@ export const chapters = sqliteTable(
      * only its own writes, and `rev` counts only the chapter's.
      */
     sceneOrderRev: integer("scene_order_rev").notNull().default(1),
-    /**
-     * Guard token of the chapter's THREAD LIST (`threads` below) — the
-     * fourth list counter of its kind, for the reason `scene_order_rev` has
-     * its own: the open threads are a list with a lifetime of their own, and
-     * `rev` guards the chapter's fields (`body` among them, ADR #23). A thread
-     * adopted in the review must not 409 an open chapter-text editor, and a
-     * text save must not invalidate a tick in the overview. So the list
-     * counts only its own writes.
-     */
-    threadsRev: integer("threads_rev").notNull().default(1),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -195,31 +184,26 @@ export const chapters = sqliteTable(
   ],
 );
 
-// --- open threads -------------------------------------------------------------
+// --- threads ------------------------------------------------------------------
 
 /**
- * One OPEN THREAD — a storyline the DM keeps track of — as a row of a list
- * (ADR #26, #29). The list replaces the `## Offene Fäden` checklist a
- * chapter used to carry in its text: what the review writes and reads back
- * is a row with columns, never a line found under a heading.
+ * One THREAD — a storyline the DM keeps track of — as its own row (ADR #29,
+ * ADR #31): what the review writes and the chapter overview reads back is a
+ * row with columns, never a line found under a heading of a chapter's text.
  *
- * COLUMNS ONLY, as in `inbox_entries`: the text, the flag and the position.
  * `id` is an OPAQUE random string (store/threads.ts), unique per campaign —
- * not per chapter and not the position — so a row keeps its identity through
- * every edit, a later reorder and a list that gains another anchor.
+ * not per chapter and not the position — so a thread keeps its identity
+ * through every edit and a move to another chapter.
  *
- * THE ANCHOR is the chapter, and today it is the only one: `chapter_id` is
- * NOT NULL and a foreign key (rule 3). The list belongs to the chapter the
- * way its tags belong to a scene, so a chapter's removal would take its
- * threads with it (`ON DELETE CASCADE`) — there is no delete path for
- * entries, the rule only says whose rows these are. Another anchor (a
- * scene, the campaign) would be one more owner column of the same shape and
- * a counter on that anchor's row; the rows, their ids and the response
- * shape stay as they are.
+ * `chapter_id` is the chapter that carries it: NOT NULL and a foreign key
+ * (rule 3). It may change, and the thread's URL does not, because a thread
+ * lies flat under its campaign. A chapter's removal would take its threads
+ * with it (`ON DELETE CASCADE`) — there is no delete path for chapters, the
+ * rule only says whose rows these are.
  *
- * `pos` is the display order within the anchor — appended at the end, a
- * sort key with gaps allowed. No `rev` on the row: like the inbox, the list
- * is the guarded unit, and its token is `chapters.threads_rev`.
+ * `pos` is the order of creation — a new thread gets one past the highest of
+ * the campaign, a sort key with gaps allowed — and nothing reorders it. `rev`
+ * is the thread's own guard (rule 4).
  */
 export const threads = sqliteTable(
   "threads",
@@ -233,6 +217,7 @@ export const threads = sqliteTable(
     text: text("text").notNull(),
     done: integer("done").notNull().default(0),
     pos: integer("pos").notNull(),
+    rev: revColumn(),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -670,34 +655,37 @@ export const sessionScenesPlayed = sqliteTable(
   ],
 );
 
-// --- inbox ------------------------------------------------------------------
+// --- ideas ------------------------------------------------------------------
 
 /**
- * One idea in the campaign inbox. Append-only with one exception, the `done`
- * flag — the DM ticks an idea off in the review and nothing else rewrites a
- * row.
+ * One IDEA the DM threw in on the go. Its text is written once; the one
+ * thing that changes later is `done` — the DM ticks an idea off in the
+ * review.
  *
- * COLUMNS ONLY, as in `log_entries`: the text and the flag. The inbox is a
- * table the API answers as rows (ADR #26), so it holds no headings, no prose
- * and no list markers — those were the skeleton of a text that no longer
- * exists.
+ * COLUMNS ONLY, as in `log_entries`: the text and the flag — no headings, no
+ * prose and no list markers. `id` is an OPAQUE random string
+ * (store/ideas.ts), unique per campaign, the idea's key on the wire. `pos` is
+ * the order of creation, one past the highest of the campaign; nothing
+ * reorders it. `rev` is the idea's own guard (rule 4).
  */
-export const inboxEntries = sqliteTable(
-  "inbox_entries",
+export const ideas = sqliteTable(
+  "ideas",
   {
     campaignId: text("campaign_id").notNull(),
-    /** The append counter, the key — and the row's id on the wire. */
-    pos: integer("pos").notNull(),
+    /** Opaque random id — the idea's identity on the wire. */
+    id: text("id").notNull(),
     /** The idea as the DM typed it, hashtags included. */
     text: text("text").notNull().default(""),
     done: integer("done").notNull().default(0),
+    pos: integer("pos").notNull(),
+    rev: revColumn(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.pos] }),
+    primaryKey({ columns: [t.campaignId, t.id] }),
     foreignKey({
       columns: [t.campaignId],
       foreignColumns: [campaigns.id],
-      name: "inbox_entries_campaign_fk",
+      name: "ideas_campaign_fk",
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
@@ -1002,7 +990,7 @@ export const schema = {
   sessionPauses,
   logEntries,
   sessionScenesPlayed,
-  inboxEntries,
+  ideas,
   glossary,
   campaignKnowledge,
   generateJobs,

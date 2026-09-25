@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bu
 import type {
   CampaignTree,
   GlossaryResponse,
-  InboxResponse,
   Npc,
   SceneProposal,
   SessionResponse,
@@ -83,12 +82,6 @@ async function getGlossary(): Promise<GlossaryResponse> {
   const res = await app.request("/api/campaigns/beispiel/glossary");
   expect(res.status).toBe(200);
   return (await res.json()) as GlossaryResponse;
-}
-
-async function getInbox(): Promise<InboxResponse> {
-  const res = await app.request("/api/campaigns/beispiel/inbox");
-  expect(res.status).toBe(200);
-  return (await res.json()) as InboxResponse;
 }
 
 async function version(): Promise<number> {
@@ -202,7 +195,7 @@ describe("glossary — a list, edited as a list", () => {
   });
 });
 
-describe("guard tokens of the two lists", () => {
+describe("the glossary's guard token", () => {
   test("an unrelated write does not invalidate an open glossary edit", async () => {
     // The bug: `campaigns.version` was the glossary's token, so ANY write —
     // a quick note during a running session — made a pending glossary edit
@@ -210,7 +203,7 @@ describe("guard tokens of the two lists", () => {
     const glossary = await getGlossary();
     expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/log", { text: "Etwas passiert" })).status).toBe(200);
-    expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Idee #idee" })).status).toBe(200);
+    expect((await postJson("/api/campaigns/beispiel/ideas", { text: "Idee #idee" })).status).toBe(201);
     expect(await version()).toBeGreaterThan(1);
 
     const saved = await putGlossary(
@@ -242,14 +235,6 @@ describe("guard tokens of the two lists", () => {
     expect((await getGlossary()).entries).toEqual([
       { term: "tide pool", explanation: "Gezeitentümpel" },
     ]);
-  });
-
-  test("the inbox token moves on inbox writes only", async () => {
-    const before = await getInbox();
-    expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
-    expect(await getInbox()).toEqual(before);
-    expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Neu" })).status).toBe(200);
-    expect((await getInbox()).rev).toBe(before.rev + 1);
   });
 });
 

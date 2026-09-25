@@ -6,9 +6,9 @@
 // are each derived from it below with zod's own API, so a new field of a
 // chapter is one line in the schema and one in its form fields.
 //
-// What a chapter says about its scenes — their order — and its open threads
-// are not fields of the chapter: each has its own endpoint and its own guard
-// (ADR #27, ADR #29).
+// What a chapter says about its scenes — their order — is not a field of the
+// chapter: it has its own endpoint and its own guard (ADR #27). Its threads
+// are an entity of their own (./thread.ts), each naming its chapter.
 
 import { z } from "zod";
 
