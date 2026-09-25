@@ -19,7 +19,7 @@ import {
 } from "./scene-order";
 
 function scene(id: string, type: SceneType = "planned", status: SceneStatus = "ready"): SceneSummary {
-  return { path: `01/${id}`, id, title: id, type, status, npcs: [], tags: [] };
+  return { id, title: id, type, status, npcs: [], tags: [] };
 }
 
 /** The order as the endpoint would receive it. */

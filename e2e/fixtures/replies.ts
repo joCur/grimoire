@@ -3,9 +3,9 @@
 // Every reply is an OBJECT, exactly as the schema the server forces through
 // the provider describes it:
 //
-//   a scene call      `{ properties, body, warnings }` — the properties of
-//                     the scene, its whole text as one string, and the
-//                     notes the review shows the DM
+//   a scene call      every field of the scene — `body` among them, an
+//                     absent optional field as `null` — beside `warnings`,
+//                     the notes the review shows the DM (ADR #31)
 //   an npc call       every field of the npc — `body` among them, an absent
 //                     optional field as `null`, `quickstats` as a list of
 //                     `{ key, value }` pairs — beside `warnings` (ADR #31)
@@ -21,12 +21,11 @@
 // well-behaved model would answer, written to pass the CURRENT mechanical
 // validation of server/src/generator.ts:
 //
-//   scenes         no address at all — the server builds it from the run's
-//                  chapter and the `id` property — a kebab `id` used only
-//                  once, type planned|contingency, status draft, only known
-//                  callouts, npc/location references either existing in the
-//                  campaign or proposed by the same run, and a `location`
-//                  that is an id (it IS the scene's group)
+//   scenes         a kebab `id` used only once, the run's chapter, type
+//                  planned|contingency, status draft, only known callouts,
+//                  npc/location references either existing in the campaign
+//                  or proposed by the same run, and a `location` that is an
+//                  id
 //   proposals      an npc carries a status (alive unless the source says
 //                  otherwise), a location carries none
 //   npc run        one npc, kebab `id`, no `chapter`, quickstats values
@@ -45,11 +44,45 @@
 // proposal is accepted) and `[[smuggler-captured]]` (a scene — the third
 // referenceable kind).
 
-/** One scene reply, the shape the forced schema describes. */
-export interface SceneReply {
-  properties: Record<string, unknown>;
+/**
+ * A scene as its reply form carries it (ADR #31): every field of the scene,
+ * `body` among them, an optional one the source does not give as `null` —
+ * the very form a scene augment prompt shows the scene in.
+ */
+export interface SceneFields {
+  id: string;
+  title: string;
+  type: string;
+  trigger: string | null;
+  chapter: string;
+  location: string | null;
+  npcs: string[];
+  handouts: string[];
+  tags: string[];
+  status: string;
   body: string;
+}
+
+/** One scene reply: the scene's fields beside the notes. */
+export interface SceneReply extends SceneFields {
   warnings: string[];
+}
+
+/** A new scene's reply: the fields a fixture names, the rest empty. */
+function sceneReply(
+  fields: Pick<SceneFields, "id" | "title" | "chapter" | "body"> & Partial<SceneFields>,
+): SceneReply {
+  return {
+    type: "planned",
+    trigger: null,
+    location: null,
+    npcs: [],
+    handouts: [],
+    tags: [],
+    status: "draft",
+    ...fields,
+    warnings: [],
+  };
 }
 
 /**
@@ -264,16 +297,12 @@ function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): Scen
     // Deliberately WITHOUT the references of the rich draft below: this
     // case is about the quotation marks, and every reference is one more
     // thing that could fail for another reason.
-    return {
-      properties: {
-        id: SCENE_ID,
-        title: SCENE_TITLE,
-        type: "planned",
-        chapter,
-        npcs: ["fenn"],
-        tags: ["stealth"],
-        status: "draft",
-      },
+    return sceneReply({
+      id: SCENE_ID,
+      title: SCENE_TITLE,
+      chapter,
+      npcs: ["fenn"],
+      tags: ["stealth"],
       body: `## Flow
 
 Die Wache am Kran murrt: „Wer nachts hier steht, hat was zu verbergen".
@@ -282,39 +311,29 @@ Die Wache am Kran murrt: „Wer nachts hier steht, hat was zu verbergen".
 > [!readaloud] ${ASCII_QUOTE_LINE}
 > jünger, als sie sein sollte.
 `,
-      warnings: [],
-    };
+    });
   }
   if (oldName) {
-    return {
-      properties: {
-        id: SCENE_ID,
-        title: `Nachtwache in ${OLD_NAME}`,
-        type: "planned",
-        chapter,
-        tags: ["stealth"],
-        status: "draft",
-      },
+    return sceneReply({
+      id: SCENE_ID,
+      title: `Nachtwache in ${OLD_NAME}`,
+      chapter,
+      tags: ["stealth"],
       body: `## Flow
 
 Die Gruppe beobachtet den Kai von ${OLD_NAME}, während die Flut fällt.
 
 > [!readaloud] Über den Dächern von ${OLD_NAME} hängt der Nebel.
 `,
-      warnings: [],
-    };
+    });
   }
-  return {
-    properties: {
-      id: SCENE_ID,
-      title: SCENE_TITLE,
-      type: "planned",
-      chapter,
-      location: LOCATION_STUB_ID,
-      npcs: ["fenn", NPC_STUB_ID],
-      tags: ["stealth", "social"],
-      status: "draft",
-    },
+  return sceneReply({
+    id: SCENE_ID,
+    title: SCENE_TITLE,
+    chapter,
+    location: LOCATION_STUB_ID,
+    npcs: ["fenn", NPC_STUB_ID],
+    tags: ["stealth", "social"],
     body: `## Flow
 
 Die Gruppe beobachtet den Kai, während die Flut fällt. Zwei Laternen
@@ -344,8 +363,7 @@ die Ladung ins Dorf bringt.
 [[fenn]] ruft seine Leute zurück und stellt sich selbst auf die Mole —
 er will reden, nicht kämpfen.
 `,
-    warnings: [],
-  };
+  });
 }
 
 /** The motivation of the npc a scene run proposes — a field, not a section. */
@@ -474,12 +492,12 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): Record<string, unk
 
 /**
  * The heading the „Mit KI ergänzen" prompt of a scene puts the existing scene
- * under — server/src/llm-provider.ts EXISTING_ENTRY_HEADING. Duplicated on
+ * under — server/src/llm-provider.ts EXISTING_SCENE_HEADING. Duplicated on
  * purpose, like KNOWLEDGE_HEADING in the stub: the fixture reads the prompt
  * the way a model does, so the server agrees with it by ASSERTION and not by
  * import.
  */
-export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
+export const EXISTING_SCENE_HEADING = "## Bestehende Szene — ergänzen, nicht ersetzen";
 
 /** The same heading of an npc augment run — EXISTING_NPC_HEADING there. */
 export const EXISTING_NPC_HEADING = "## Bestehender NPC — ergänzen, nicht ersetzen";
@@ -515,25 +533,15 @@ export const AUGMENT_NPC_MOTIVATION =
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
 /**
- * The existing scene as the PROMPT shows it: the `properties` and `body` pair
- * as JSON, which is the same shape the reply is forced into (ADR #24). The
- * augment run is the one case that has to read it — its reply echoes the
- * scene it was given, so nothing here reconstructs properties from text.
- */
-export interface ExistingScene {
-  properties: Record<string, unknown>;
-  body: string;
-}
-
-/**
- * The reply of a scene augment run: the scene as it was shown, unchanged,
- * plus one NEW `## If:` section at the end — every existing block comes back
+ * The reply of a scene augment run: the scene as it was shown — every field,
+ * in the reply form the prompt shows it in — unchanged, plus one NEW
+ * `## If:` section at the end of its text; every existing block comes back
  * unchanged.
  */
-export function augmentReply(scene: ExistingScene, knowledge = ""): SceneReply {
+export function augmentReply(scene: SceneFields, knowledge = ""): SceneReply {
   const kept = scene.body.replace(/^\n+/, "").replace(/\n*$/, "\n");
   return {
-    properties: scene.properties,
+    ...scene,
     body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
     warnings: contextEchoWarnings(knowledge),
   };
@@ -543,7 +551,7 @@ export function augmentReply(scene: ExistingScene, knowledge = ""): SceneReply {
  * The first reply of a TRIGGER.unknownRef augment run: the good proposal plus
  * a sentence naming an id nothing has — a correction turn.
  */
-export function unknownRefAugmentReply(scene: ExistingScene): SceneReply {
+export function unknownRefAugmentReply(scene: SceneFields): SceneReply {
   const good = augmentReply(scene);
   return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
 }
@@ -552,8 +560,8 @@ export function unknownRefAugmentReply(scene: ExistingScene): SceneReply {
  * An augment reply that FAILS validation: it CHANGES the id — the rule the
  * augment run cares about most.
  */
-export function invalidAugmentReply(): SceneReply {
-  return { properties: { id: "not-the-scene" }, body: "", warnings: [] };
+export function invalidAugmentReply(scene: SceneFields): SceneReply {
+  return { ...scene, id: "not-the-scene", warnings: [] };
 }
 
 // --- augmenting an npc -------------------------------------------------------
@@ -683,7 +691,7 @@ function wholeSourceExcerpt(source: string): { first: string; last: string } {
 /**
  * The context line of a new-chapter run's outline call —
  * server/src/llm-provider.ts NEW_CHAPTER_LINE, duplicated on purpose like
- * EXISTING_ENTRY_HEADING: the stub reads the prompt the way a model does.
+ * EXISTING_SCENE_HEADING: the stub reads the prompt the way a model does.
  */
 export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
 
@@ -824,12 +832,16 @@ export function scenePartReply(
 export function invalidScenePartReply(chapter: string, sceneId: string): SceneReply {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
   return {
-    properties: { id: sceneId, title, type: "planned", chapter, status: "ready" },
-    body: `## Flow
+    ...sceneReply({
+      id: sceneId,
+      title,
+      chapter,
+      body: `## Flow
 
 > [!combat] Zwei Wachen, Initiative wie üblich.
 `,
-    warnings: [],
+    }),
+    status: "ready",
   };
 }
 
@@ -839,16 +851,12 @@ export function invalidScenePartReply(chapter: string, sceneId: string): SceneRe
  * fixture adds is one more thing that can fail for another reason.
  */
 function plainSceneDraft(chapter: string, id: string, title: string): SceneReply {
-  return {
-    properties: {
-      id,
-      title,
-      type: "planned",
-      chapter,
-      npcs: ["fenn"],
-      tags: ["stealth"],
-      status: "draft",
-    },
+  return sceneReply({
+    id,
+    title,
+    chapter,
+    npcs: ["fenn"],
+    tags: ["stealth"],
     body: `## Flow
 
 [[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
@@ -856,8 +864,7 @@ function plainSceneDraft(chapter: string, id: string, title: string): SceneReply
 > [!readaloud] Über der Mole hängt der Nebel, und irgendwo unter euch
 > knirscht ein Kiel gegen Stein.
 `,
-    warnings: [],
-  };
+  });
 }
 
 /** One proposed npc or location — each in its own reply form. */

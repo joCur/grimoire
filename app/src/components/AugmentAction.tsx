@@ -2,11 +2,10 @@
 // next to the edit and the properties action. Same vocabulary, same size, no
 // new chrome: the topbar does not grow, and the reading view gains one word.
 //
-// `AugmentAction` is the scene's trigger (the run names the scene by its
-// address); every other reading view builds its own from the parts exported
-// here, over the run that starts on its own resource (ADR #31). Everything
-// below the trigger is shared; what differs per reading view is how the run
-// starts, where its proposal sits on the job, and the write that accepts it.
+// Every reading view builds its trigger from the parts exported here, over
+// the run that starts on its own resource (ADR #31). Everything below the
+// trigger is shared; what differs per reading view is how the run starts,
+// where its proposal sits on the job, and the write that accepts it.
 //
 // The flow is three states in ONE dialog, because it is one errand:
 //
@@ -33,19 +32,12 @@
 // searching and inbox surface (UI-BRIEF), and a block-by-block diff review is
 // not that. The reading view itself is untouched by this at every width.
 
-import type {
-  AugmentPropertyProposal,
-  EntryResponse,
-  GenerateJob,
-  GenerateJobStarted,
-  NamingHint,
-} from "@grimoire/shared/types";
-import { isAugmentKind } from "@grimoire/shared/types";
+import type { GenerateJob, GenerateJobStarted, NamingHint } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { applyAugment, deleteGenerateJob, startAugmentJob } from "@/api";
+import { deleteGenerateJob } from "@/api";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
@@ -61,25 +53,15 @@ import {
   type BlockChange,
   type BlockChangeKind,
   type DiffToken,
+  type FieldProposal,
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
-import { propString } from "@/lib/properties";
 import { reviewOf, runJobArrived } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview, type JobReviewSync } from "@/lib/use-job-review";
-import { useEntryEdit } from "@/lib/use-entry-edit";
 import { cn } from "@/lib/utils";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
-
-/**
- * What the dialog CALLS the scene: the title the DM gave it, never the wire
- * address. An address like `01-salzhafen/ankunft` is how the scene is
- * addressed, not how it is known at the table.
- */
-function displayName(entry: EntryResponse): string {
-  return propString(entry.properties.name) ?? propString(entry.properties.title) ?? entry.path;
-}
 
 /**
  * What is accepted right now: the computed DEFAULT set, overridden by every
@@ -105,7 +87,7 @@ type ReviewMode = "blocks" | "markdown";
 /** A proposal as the review shows it. */
 export interface ProposalView {
   /** Only the fields the proposal adds or changes. */
-  fields: AugmentPropertyProposal[];
+  fields: FieldProposal[];
   /** The text as the run read it — the BEFORE side of the diff. */
   currentBody: string;
   /** The model's proposed text, complete. */
@@ -131,42 +113,6 @@ export interface ApplySession {
 }
 
 // --- the triggers -------------------------------------------------------------------
-
-/** The augment action of a scene. Renders nothing for any other entry. */
-export function AugmentAction({ campaign, entry }: { campaign: string; entry: EntryResponse }) {
-  if (!isAugmentKind(entry.kind)) return null;
-  return (
-    <AugmentTrigger openKey={`${campaign}/${entry.path}`}>
-      {(onClose) => (
-        <AugmentDialog
-          campaign={campaign}
-          name={displayName(entry)}
-          isMine={(job) => job.kind === "augment" && job.target === entry.path}
-          start={(input) => startAugmentJob(campaign, { path: entry.path, ...input })}
-          review={(job) =>
-            job.augmentResult === undefined ? undefined : (
-              <EntryAugmentReview
-                campaign={campaign}
-                entry={entry}
-                job={job}
-                path={job.augmentResult.path}
-                proposal={{
-                  fields: job.augmentResult.properties,
-                  currentBody: job.augmentResult.currentBody,
-                  proposedBody: job.augmentResult.proposedBody,
-                  warnings: job.augmentResult.warnings,
-                  namingHints: job.augmentResult.namingHints,
-                }}
-                onDone={onClose}
-              />
-            )
-          }
-          onClose={onClose}
-        />
-      )}
-    </AugmentTrigger>
-  );
-}
 
 /**
  * The trigger and its open state. Open-BY-ROW, like the properties dialog: the
@@ -445,67 +391,11 @@ export function AugmentDialog({
   );
 }
 
-// --- the review of a scene ------------------------------------------------------------
+// --- the stale queries -------------------------------------------------------------
 
 /** The queries an accepted proposal makes stale: the tree, ⌘K and the job itself. */
 export function staleAfterApply(campaign: string) {
   return [["tree", campaign], ["search", campaign], generateJobKey(campaign)];
-}
-
-/**
- * The review of a scene proposal. The accept is an ordinary editing
- * session over the entry — same held version, same conflict answer as every
- * other editing surface — but it does NOT go through the entry write: the
- * accept endpoint discards the job in the same transaction, which is the
- * whole reason it exists. So the session is handed that request instead, and
- * the force action is not offered, because that endpoint has no force.
- */
-function EntryAugmentReview({
-  campaign,
-  entry,
-  job,
-  path,
-  proposal,
-  onDone,
-}: {
-  campaign: string;
-  entry: EntryResponse;
-  job: GenerateJob;
-  path: string;
-  proposal: ProposalView;
-  onDone: () => void;
-}) {
-  const state = useAugmentReviewState(campaign, job, proposal);
-  const apply = useEntryEdit(campaign, entry.path, entry.rev, {
-    writeEntry: (request) =>
-      applyAugment(campaign, {
-        path,
-        rev: request.rev,
-        ...(request.properties === undefined ? {} : { properties: request.properties }),
-        ...(request.body === undefined ? {} : { body: request.body }),
-        jobId: job.id,
-      }),
-    canForce: false,
-    invalidateOnSuccess: staleAfterApply(campaign),
-    onSaved: onDone,
-    onReload: (stored) => state.recut(stored.body),
-  });
-  return (
-    <AugmentReview
-      campaign={campaign}
-      proposal={proposal}
-      state={state}
-      session={{
-        ...apply,
-        save: (change) =>
-          apply.save({
-            ...(change.fields === undefined ? {} : { properties: change.fields }),
-            ...(change.body === undefined ? {} : { body: change.body }),
-          }),
-      }}
-      onDone={onDone}
-    />
-  );
 }
 
 // --- the review -----------------------------------------------------------------------
@@ -787,7 +677,7 @@ function PropertyRow({
   onDecide,
   t,
 }: {
-  field: AugmentPropertyProposal;
+  field: FieldProposal;
   accepted: boolean;
   onDecide: (take: boolean) => void;
   t: Translate;
@@ -964,7 +854,7 @@ function StateBadge({
   state,
   t,
 }: {
-  state: AugmentPropertyProposal["state"] | Exclude<BlockChangeKind, "same">;
+  state: FieldProposal["state"] | Exclude<BlockChangeKind, "same">;
   t: Translate;
 }) {
   const key =

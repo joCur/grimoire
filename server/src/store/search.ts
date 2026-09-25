@@ -4,12 +4,12 @@
 // (./fts). The response is `{ results: SearchResult[] }`, max 20, with
 // `score` meaning "0 is a perfect match, values grow toward 1".
 //
-// A hit carries `path` only for a kind reached through its address. A
-// location is its own resource (ADR #31), and a glossary term is a row of a
-// LIST (ADR #26): neither has an address, so such a hit is named by `kind` and
-// `id` alone and the app opens the resource or the list from those. Leaving
-// `path` out is the point — an address that names nothing would 404 the
-// moment somebody followed it.
+// A hit carries `path` only for a kind reached through its address. A scene,
+// an npc and a location are each their own resource (ADR #31), and a glossary
+// term is a row of a LIST (ADR #26): none of them has an address, so such a
+// hit is named by `kind` and `id` alone and the app opens the resource or the
+// list from those. Leaving `path` out is the point — an address that names
+// nothing would 404 the moment somebody followed it.
 //
 // The two properties the reference queries depend on:
 //
@@ -29,15 +29,7 @@ import { sql } from "drizzle-orm";
 import type { EntityKind, SearchResult } from "@grimoire/shared";
 import { requireCampaign } from "./campaigns";
 import { getDb } from "./handle";
-import {
-  CAMPAIGN_PATH,
-  chapterPath,
-  sceneAddress,
-  scenePath,
-} from "./paths";
-import type { GrimoireDb } from "../db/client";
-import { eq, and } from "drizzle-orm";
-import { scenes } from "../db/schema";
+import { CAMPAIGN_PATH, chapterPath } from "./paths";
 
 export type { SearchResult };
 
@@ -101,36 +93,19 @@ interface FtsRow {
 
 /**
  * The address an indexed entity is reached by (see ./paths), or undefined for
- * a hit that is a LIST ROW and has none.
+ * a hit that has none.
  */
-function pathForHit(
-  db: GrimoireDb,
-  campaign: string,
-  kind: string,
-  id: string,
-): string | undefined {
+function pathForHit(kind: string, id: string): string | undefined {
   switch (kind) {
-    case "scene": {
-      const row = db
-        .select({ chapterId: scenes.chapterId, location: scenes.location })
-        .from(scenes)
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
-        .all()[0];
-      return sceneAddress({
-        chapterId: row?.chapterId ?? null,
-        location: row?.location ?? null,
-        id,
-      });
-    }
     case "chapter":
       return chapterPath(id);
     case "campaign":
       return CAMPAIGN_PATH;
     default:
-      // An npc and a location — each its own resource, opened by `kind` and
-      // `id` (ADR #31) —, `glossary`, and any list kind added to the index
-      // later: the row is named by `kind` and `id`, and there is no address
-      // to offer.
+      // A scene, an npc and a location — each its own resource, opened by
+      // `kind` and `id` (ADR #31) —, `glossary`, and any list kind added to
+      // the index later: the row is named by `kind` and `id`, and there is
+      // no address to offer.
       return undefined;
   }
 }
@@ -154,7 +129,7 @@ export async function searchCampaign(campaign: string, query: string): Promise<S
     limit ${MAX_RESULTS}
   `);
   return rows.map((row) => {
-    const path = pathForHit(db, campaign, row.kind, row.entity_id);
+    const path = pathForHit(row.kind, row.entity_id);
     const result: SearchResult = {
       kind: row.kind as EntityKind,
       id: row.entity_id,

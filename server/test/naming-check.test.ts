@@ -15,12 +15,13 @@ import {
 
 const RULES = [{ from: "Salt Harbour", to: "Salzhafen" }];
 
+/** A proposed scene as the check reads it: its id, its fields and its body. */
 function draft(
-  path: string,
-  properties: Record<string, unknown>,
+  scene: string,
+  fields: Record<string, unknown>,
   body: string,
-): { path: string; properties: Record<string, unknown>; body: string } {
-  return { path, properties, body: `${body}\n` };
+): { scene: string; fields: Record<string, unknown>; body: string } {
+  return { scene, fields, body: `${body}\n` };
 }
 
 describe("findWordHits", () => {
@@ -69,14 +70,14 @@ describe("findWordHits", () => {
 
 describe("checkDraftNaming", () => {
   test("no rules means no findings, whatever the draft says", () => {
-    expect(checkDraftNaming(draft("a/b", { title: "Salt Harbour" }, "Salt Harbour"), [])).toEqual(
+    expect(checkDraftNaming(draft("b", { title: "Salt Harbour" }, "Salt Harbour"), [])).toEqual(
       [],
     );
   });
 
   test("a clean draft produces nothing", () => {
     const hints = checkDraftNaming(
-      draft("01-salzhafen/kai", { title: "Nachtwache" }, "Die Gruppe geht durch Salzhafen."),
+      draft("kai", { title: "Nachtwache" }, "Die Gruppe geht durch Salzhafen."),
       RULES,
     );
     expect(hints).toEqual([]);
@@ -85,7 +86,7 @@ describe("checkDraftNaming", () => {
   test("a body hit carries the line number and the line", () => {
     const hints = checkDraftNaming(
       draft(
-        "01-salzhafen/kai",
+        "kai",
         { title: "Nachtwache" },
         "## Flow\n\nDie Gruppe erreicht Salt Harbour bei Ebbe.",
       ),
@@ -95,14 +96,14 @@ describe("checkDraftNaming", () => {
     expect(hints[0]).toEqual({
       from: "Salt Harbour",
       to: "Salzhafen",
-      path: "01-salzhafen/kai",
+      scene: "kai",
       field: "body",
       line: 3,
       excerpt: "Die Gruppe erreicht Salt Harbour bei Ebbe.",
     });
   });
 
-  test("a properties hit names the KEY and carries no line", () => {
+  test("a field hit names the KEY and carries no line", () => {
     const hints = checkDraftNaming(
       draft(
         "npcs/brakk",
@@ -120,7 +121,7 @@ describe("checkDraftNaming", () => {
   test("ids, tags and references are NOT checked — they are addresses", () => {
     const hints = checkDraftNaming(
       draft(
-        "01-salzhafen/kai",
+        "kai",
         {
           id: "salt-harbour",
           title: "Nachtwache",
@@ -136,7 +137,7 @@ describe("checkDraftNaming", () => {
 
   test("one finding per rule per line, not one per occurrence", () => {
     const hints = checkDraftNaming(
-      draft("01-salzhafen/kai", { title: "Nachtwache" }, "Salt Harbour und Salt Harbour."),
+      draft("kai", { title: "Nachtwache" }, "Salt Harbour und Salt Harbour."),
       RULES,
     );
     expect(hints).toHaveLength(1);
@@ -145,7 +146,7 @@ describe("checkDraftNaming", () => {
   test("several rules each report separately", () => {
     const hints = checkDraftNaming(
       draft(
-        "01-salzhafen/kai",
+        "kai",
         { title: "Nachtwache" },
         "Salt Harbour, und Fenn heißt jetzt anders.",
       ),
@@ -156,17 +157,17 @@ describe("checkDraftNaming", () => {
 
   test("a long line is capped and marked as cut", () => {
     const long = `Salt Harbour ${"x".repeat(400)}`;
-    const hints = checkDraftNaming(draft("a/b", { title: "T" }, long), RULES);
+    const hints = checkDraftNaming(draft("b", { title: "T" }, long), RULES);
     expect(hints[0]?.excerpt.endsWith("…")).toBe(true);
     expect(hints[0]?.excerpt.length).toBeLessThanOrEqual(161);
   });
 
-  test("properties with nothing readable in them leave the body — no throw", () => {
-    // A draft whose properties hold no prose at all (a number, a list, a
+  test("fields with nothing readable in them leave the body — no throw", () => {
+    // A scene whose fields hold no prose at all (a number, a list, a
     // mapping) is checked on its body alone: the check never throws, it
     // reports what it can read.
     const hints = checkDraftNaming(
-      draft("a/b", { title: 7, tags: ["x"] }, "Salt Harbour hier."),
+      draft("b", { title: 7, tags: ["x"] }, "Salt Harbour hier."),
       RULES,
     );
     expect(hints.map((h) => h.field)).toEqual(["body"]);
@@ -177,14 +178,14 @@ describe("checkDraftsNaming", () => {
   test("reports per draft, in draft order", () => {
     const hints = checkDraftsNaming(
       [
-        draft("01-salzhafen/a", { title: "A" }, "Nichts hier."),
-        draft("01-salzhafen/b", { title: "Salt Harbour" }, "Salt Harbour."),
+        draft("a", { title: "A" }, "Nichts hier."),
+        draft("b", { title: "Salt Harbour" }, "Salt Harbour."),
       ],
       RULES,
     );
-    expect(hints.map((h) => `${h.path}:${h.field}`)).toEqual([
-      "01-salzhafen/b:title",
-      "01-salzhafen/b:body",
+    expect(hints.map((h) => `${h.scene}:${h.field}`)).toEqual([
+      "b:title",
+      "b:body",
     ]);
   });
 });
@@ -236,7 +237,7 @@ describe("findRuleHits", () => {
 describe("checkDraftNaming — the refined rules end to end", () => {
   test("a draft that applied the Dragon rule produces NO hint", () => {
     const hints = checkDraftNaming(
-      draft("01-salzhafen/kai", { title: "Der Red Dragon" }, "## Flow\n\nDer Red Dragon schläft."),
+      draft("kai", { title: "Der Red Dragon" }, "## Flow\n\nDer Red Dragon schläft."),
       [{ from: "Dragon", to: "Red Dragon" }],
     );
     expect(hints).toEqual([]);
@@ -244,7 +245,7 @@ describe("checkDraftNaming — the refined rules end to end", () => {
 
   test("a draft that did NOT apply it is flagged, title and body", () => {
     const hints = checkDraftNaming(
-      draft("01-salzhafen/kai", { title: "Der Dragon" }, "## Flow\n\nDer Dragon schläft."),
+      draft("kai", { title: "Der Dragon" }, "## Flow\n\nDer Dragon schläft."),
       [{ from: "Dragon", to: "Red Dragon" }],
     );
     expect(hints.map((h) => h.field)).toEqual(["title", "body"]);
@@ -253,7 +254,7 @@ describe("checkDraftNaming — the refined rules end to end", () => {
   test("a casing rule flags only the lower-case line", () => {
     const hints = checkDraftNaming(
       draft(
-        "01-salzhafen/kai",
+        "kai",
         { title: "Nachtwache" },
         "In Salzhafen ist Markt.\nIn salzhafen auch.",
       ),

@@ -7,6 +7,6 @@ export * from "./session-state";
 export * from "./error-codes";
 export * from "./outline-schema";
 export * from "./property-fields";
-export * from "./entry-schema";
 export * from "./location";
 export * from "./npc";
+export * from "./scene";

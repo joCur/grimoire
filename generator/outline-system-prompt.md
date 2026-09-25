@@ -48,11 +48,10 @@ Gib genau dieses JSON-Objekt zurück:
 
 Das JSON-Objekt ist die ganze Antwort.
 
-**Adressen und Inhalte kommen später.** Dieser Aufruf liefert allein die
-Gliederung: ids, Titel, Typ, Ort, Zitatgrenzen, Querverweise und — für ein
-neues Kapitel — dessen Beschreibung. Szenentexte,
-Callouts und Eigenschaften schreiben die folgenden Aufrufe, und die Adresse
-bildet der Server aus dem Kapitel im Kontext und der `id`.
+**Inhalte kommen später.** Dieser Aufruf liefert allein die Gliederung: ids,
+Titel, Typ, Ort, Zitatgrenzen, Querverweise und — für ein neues Kapitel —
+dessen Beschreibung. Szenentexte, Callouts und die übrigen Felder schreiben
+die folgenden Aufrufe; das Kapitel jeder Szene ist das aus dem Kontext.
 
 ## Regeln
 
@@ -99,10 +98,9 @@ bildet der Server aus dem Kapitel im Kontext und der `id`.
 11. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
    Rechtschreibung — ä, ö, ü und ß stehen als genau diese Zeichen. Das gilt
    für Fließtext, Read-Alouds, alle Callouts, `## If:`-Bedingungen,
-   Überschriften, `warnings` und für jeden Eigenschafts-Wert, der Text ist
-   (`title`, `name`, `role`, `voice`, `appearance`, `trigger`, `goal`,
-   `statblock` …). **Einzige Ausnahme**: `id`-Werte und Adressen/Pfade —
-   die bleiben kebab-case ASCII. Eigennamen aus dem Quelltext bleiben genau
+   Überschriften, `warnings` und für jedes Feld, das Text ist (`title`,
+   `name`, `summary`, `chapterDescription`). **Einzige Ausnahme**: `id`-Werte
+   — die bleiben kebab-case ASCII. Eigennamen aus dem Quelltext bleiben genau
    so geschrieben, wie sie dort stehen. **Anführungszeichen**: deutsche
    typografische Anführungszeichen „…“ (unten öffnend U+201E, oben
    schließend U+201C), einfach ‚…‘, als Apostroph ’.

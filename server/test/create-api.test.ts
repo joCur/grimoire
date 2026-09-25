@@ -20,7 +20,7 @@
 //     filling one of those is the DM's own decision about that id.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignSummary, EntryResponse, Location, Npc } from "@grimoire/shared";
+import type { CampaignSummary, EntryResponse, Location, Npc, Scene } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
@@ -209,17 +209,17 @@ describe("the per-campaign creates", () => {
     // typed nothing else.
     await created<Npc>("/campaigns/nordwind/npcs", { name: "holm-2" });
     await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
+    const scene = await created<Scene>("/campaigns/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
     // A scene may reference it — the npc exists.
     expect(
       (
-        await app.request(entriesUrl("nordwind", scene.path), {
+        await app.request(`/api/campaigns/nordwind/scenes/${scene.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ rev: scene.rev, properties: { npcs: ["holm-2"] } }),
+          body: JSON.stringify({ rev: scene.rev, npcs: ["holm-2"] }),
         })
       ).status,
     ).toBe(200);
@@ -238,21 +238,23 @@ describe("the per-campaign creates", () => {
 
   test("a scene lands in its chapter as a draft with an empty body", async () => {
     await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
+    const scene = await created<Scene>("/campaigns/nordwind/scenes", {
       title: "Ankunft am Leuchtturm",
       chapter: "01-salzhafen",
     });
-    expect(scene.path).toBe("01-salzhafen/ankunft-am-leuchtturm");
-    expect(scene.properties.status).toBe("draft");
-    expect(scene.properties.type).toBe("planned");
-    expect(scene.properties.chapter).toBe("01-salzhafen");
+    expect(scene.id).toBe("ankunft-am-leuchtturm");
+    expect(scene.status).toBe("draft");
+    expect(scene.type).toBe("planned");
+    expect(scene.chapter).toBe("01-salzhafen");
     expect(scene.body).toBe("");
+    // A scene is its own resource (ADR #31): no address.
+    expect(Object.hasOwn(scene, "path")).toBe(false);
 
     // …and the chapter overview sees it (the tree is what every list reads).
     const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
-      chapters: Array<{ id: string; scenes: Array<{ path: string }> }>;
+      chapters: Array<{ id: string; scenes: Array<{ id: string }> }>;
     };
-    expect(tree.chapters[0]?.scenes[0]?.path).toBe("01-salzhafen/ankunft-am-leuchtturm");
+    expect(tree.chapters[0]?.scenes[0]?.id).toBe("ankunft-am-leuchtturm");
   });
 
   test("a scene under an unknown chapter is a 400 — chapters are never created by naming", async () => {
@@ -260,7 +262,7 @@ describe("the per-campaign creates", () => {
     expect(res.status).toBe(400);
     const error = await errorBody(res);
     expect(String(error.error)).toContain("unknown chapter");
-    // The SAME refusal a properties patch answers with, code included, so the
+    // The SAME refusal a scene patch answers with, code included, so the
     // German sentence comes out of the one catalog entry.
     expect(error).toMatchObject({ code: "chapter_unknown", value: "gibt-es-nicht" });
   });
@@ -301,20 +303,17 @@ describe("the per-campaign creates", () => {
 
   test("an EMPTY npc or location is filled, not collided with", async () => {
     await created<EntryResponse>("/campaigns/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<EntryResponse>("/campaigns/nordwind/scenes", {
+    const scene = await created<Scene>("/campaigns/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
     // An npc and a location created and left empty — their name is their own id.
     await created<Npc>("/campaigns/nordwind/npcs", { name: "holm" });
-    await created<EntryResponse>("/campaigns/nordwind/locations", { name: "bucht" });
-    const patched = await app.request(entriesUrl("nordwind", scene.path), {
+    await created<Location>("/campaigns/nordwind/locations", { name: "bucht" });
+    const patched = await app.request(`/api/campaigns/nordwind/scenes/${scene.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        rev: scene.rev,
-        properties: { npcs: ["holm"], location: "bucht" },
-      }),
+      body: JSON.stringify({ rev: scene.rev, npcs: ["holm"], location: "bucht" }),
     });
     expect(patched.status).toBe(200);
 

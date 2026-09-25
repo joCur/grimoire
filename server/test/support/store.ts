@@ -39,7 +39,7 @@ export interface SeedOverrides {
    * so" without restating the rest.
    */
   entries?: SeedEntry[];
-  /** Fixture file stems to leave out, e.g. `"session-2026-01-15"`. */
+  /** Fixture file stems to leave out, e.g. `"session-2026-01-15"` or `"scenes/smuggler-captured"`. */
   without?: string[];
 }
 
@@ -48,6 +48,7 @@ function identity(entry: SeedEntry): string {
   if (entry.kind === "inbox" || entry.kind === "glossary") return entry.kind;
   if (entry.kind === "location") return `location/${entry.location.id}`;
   if (entry.kind === "npc") return `npc/${entry.npc.id}`;
+  if (entry.kind === "scene") return `scene/${entry.scene.id}`;
   const id = entry.properties.id;
   return `${entry.kind}/${typeof id === "string" ? id : ""}`;
 }

@@ -21,6 +21,7 @@ import type { MessageKey, Translate } from "@/i18n";
 import { encodeAddress } from "@/lib/address";
 import { locationHref } from "@/location/location-links";
 import { npcHref } from "@/npc/npc-links";
+import { sceneHref } from "@/scene/scene-links";
 
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
@@ -49,7 +50,7 @@ export function kindLabel(kind: string, t: Translate): string {
 /**
  * Icon per entity kind. The search result itself does not carry the scene
  * `type`, so contingency is derived from the (cache-shared) campaign tree
- * — see contingencyPaths(); without tree data every scene gets the bookmark.
+ * — see contingencyScenes(); without tree data every scene gets the bookmark.
  */
 export function kindIcon(kind: string, isContingency = false): LucideIcon {
   switch (kind) {
@@ -79,28 +80,28 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
   }
 }
 
-/** Paths of all contingency scenes in the tree (fast lookup for kindIcon). */
-export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
-  const paths = new Set<string>();
+/** Ids of all contingency scenes in the tree (fast lookup for kindIcon). */
+export function contingencyScenes(tree: CampaignTree | undefined): Set<string> {
+  const ids = new Set<string>();
   for (const chapter of tree?.chapters ?? []) {
     for (const scene of chapter.scenes) {
-      if (scene.type === "contingency") paths.add(scene.path);
+      if (scene.type === "contingency") ids.add(scene.id);
     }
   }
-  return paths;
+  return ids;
 }
 
 /**
- * Route for a picked result. An npc and a location open their own reading
- * views by their id — the route their slice names (ADR #31); a scene or a
- * chapter opens by its address (/campaigns/:campaign/entries/<path>); the lists open the page that
- * HOLDS the row — a session its reading page, an idea the wrap-up it is
- * waiting in, a term the glossary page — and the campaign itself opens the
- * chapter overview.
+ * Route for a picked result. A scene, an npc and a location open their own
+ * reading views by their id — the route their slice names (ADR #31); a
+ * chapter opens by its address (/campaigns/:campaign/entries/<path>); the
+ * lists open the page that HOLDS the row — a session its reading page, an
+ * idea the review it is waiting in, a term the glossary page — and the
+ * campaign itself opens the chapter overview.
  *
- * A result without a `path` can only be one of those kinds, so an unknown one
- * falls back to the chapter overview rather than building an entry address out
- * of nothing (degrade, README).
+ * A chapter hit without a `path`, or a kind nobody knows, falls back to the
+ * chapter overview rather than building an address out of nothing (degrade,
+ * README).
  */
 export function resultHref(
   campaign: string,
@@ -110,6 +111,8 @@ export function resultHref(
   switch (result.kind) {
     case "campaign":
       return scope;
+    case "scene":
+      return sceneHref(encodeURIComponent(campaign), result.id);
     case "npc":
       return npcHref(encodeURIComponent(campaign), result.id);
     case "location":

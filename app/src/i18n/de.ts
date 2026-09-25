@@ -197,7 +197,7 @@ export const de = {
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
   "properties.scene.location.hint":
-    "Ort aus der Liste — die Szene steht im Kapitel unter diesem Ort.",
+    "Ort aus der Liste wählen — die Szene nennt ihn in ihrer Metazeile, in der Leseansicht und in der Session-Ansicht.",
   "properties.scene.npcs.label": "NPCs",
   "properties.scene.npcs.hint": "Nur ids — der NPC muss schon einen Eintrag haben.",
   "properties.scene.handouts.label": "Handouts",
@@ -480,7 +480,7 @@ export const de = {
   "live.scene.none":
     "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",
   "live.scene.loading": "Lade Szene …",
-  "live.scene.unloadable": "Szene nicht ladbar — Pfad prüfen.",
+  "live.scene.unloadable": "Diese Szene ließ sich nicht laden.",
   "live.scene.locationHeading": "Ort",
   "live.scene.npcsHeading": "NPCs",
   "live.scene.noNpcs": "Keine NPCs in dieser Szene.",

@@ -1,5 +1,5 @@
-// Critical path 7: properties patch via the status control, including the
-// 409 conflict; see CLAUDE.md.
+// Critical path 7: the scene's status written through the status control,
+// including the 409 conflict; see CLAUDE.md.
 //
 // The patch goes through the documented API with its guard token (CLAUDE.md);
 // the conflict is provoked by a SECOND WRITER through the same API — since the
@@ -7,13 +7,13 @@
 
 import { expect, test } from "../support/test";
 
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
+const SCENE = "lighthouse-arrival";
+const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
-test("the status control writes the status into the entry", async ({ page, api }) => {
+test("the status control writes the status of the scene", async ({ page, api }) => {
   await page.goto(SCENE_URL);
-  expect((await api.properties(SCENE)).status).toBe("ready");
+  expect((await api.scene(SCENE)).status).toBe("ready");
 
   // The pill IS the control.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
@@ -27,13 +27,13 @@ test("the status control writes the status into the entry", async ({ page, api }
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
 
   await expect(trigger).toHaveText(/Gespielt/);
-  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
+  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "played");
 
-  // …and back to "Bereit" — the entry follows every pick.
+  // …and back to "Bereit" — the scene follows every pick.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Bereit" }).click();
   await expect(trigger).toHaveText(/Bereit/);
-  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "ready");
+  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "ready");
 
   // The chapter overview row shows the same control with the same label.
   await page.goto("/campaigns/beispiel");
@@ -60,7 +60,7 @@ test("a second writer: the status pick reports the conflict inline", async ({
   // in between heals the staleness — hence up to three attempts.
   let conflicted = false;
   for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
-    await api.writeBody(SCENE, secondWriter(attempt));
+    await api.patchScene(SCENE, { body: secondWriter(attempt) });
     await trigger.click();
     await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
     conflicted = await message
@@ -71,14 +71,14 @@ test("a second writer: the status pick reports the conflict inline", async ({
   expect(conflicted, "the 409 conflict message never appeared").toBe(true);
 
   // Nothing was written: the other writer's content stands, unchanged.
-  const stored = await api.entry(SCENE);
-  expect(stored.properties.status).toBe("ready");
+  const stored = await api.scene(SCENE);
+  expect(stored.status).toBe("ready");
   expect(stored.body).toContain("Von einem zweiten Schreiber geändert");
 
-  // The control re-read the entry, so the SAME pick works now.
+  // The control re-read the scene, so the SAME pick works now.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
   await expect(trigger).toHaveText(/Gespielt/);
   await expect(message).toHaveCount(0);
-  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
+  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "played");
 });

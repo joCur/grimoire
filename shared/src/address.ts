@@ -1,13 +1,10 @@
 // Taking an ADDRESS apart — the one place a `/` in an address is read.
 //
-// An address is the string that names an entry (`<chapter>`,
-// `<chapter>/<location>/<scene-id>`; the schema is in
-// server/src/store/paths.ts, which re-exports these two functions as the
-// server's own door to them). Everything that wanted a chapter segment, a last
-// segment or a segment count used to write `rel.split("/")` itself, which meant
-// the sentence "an address is a `/`-separated list of segments" stood in ten
-// modules and could be got subtly wrong in each — a filter here, an `?? ""`
-// there.
+// An address is the string that names an entry (`campaign`, `<chapter>`; the
+// schema is in server/src/store/paths.ts, which re-exports this function as
+// the server's own door to it). Everything that wants a segment or a segment
+// count reads it here, so the sentence "an address is a `/`-separated list of
+// segments" stands in one module.
 //
 // It lives in shared/ and not next to the schema because the app needs it too
 // (`kindFromAddress` in ./kind is written against these segments), and shared/
@@ -24,12 +21,4 @@
  */
 export function addressSegments(address: string): string[] {
   return address.split("/");
-}
-
-/**
- * The FIRST segment of an address, `""` for the empty string. For a scene
- * that is the segment the rest hangs off: its chapter.
- */
-export function addressHead(address: string): string {
-  return addressSegments(address)[0] ?? "";
 }

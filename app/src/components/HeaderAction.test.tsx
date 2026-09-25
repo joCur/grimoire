@@ -72,7 +72,7 @@ describe("the call sites", () => {
     };
     expect(
       renderToStaticMarkup(
-        <PropertiesAction campaign="beispiel" entry={chapter} tree={undefined} />,
+        <PropertiesAction campaign="beispiel" entry={chapter} />,
       ),
     ).toBe(
       renderToStaticMarkup(
@@ -93,7 +93,7 @@ describe("the call sites", () => {
       rev: 1,
     };
     expect(
-      renderToStaticMarkup(<PropertiesAction campaign="beispiel" entry={entry} tree={undefined} />),
+      renderToStaticMarkup(<PropertiesAction campaign="beispiel" entry={entry} />),
     ).toBe("");
   });
 });

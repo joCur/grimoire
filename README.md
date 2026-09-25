@@ -31,13 +31,14 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 | ------- | ------- |
 | Kampagne | `campaign` |
 | Kapitel | `<kapitel-id>` |
-| Szene | `<kapitel-id>/<orts-id>/<szenen-id>` — ohne Ort: `<kapitel-id>/<szenen-id>` |
 
-Ein **NPC** und ein **Ort** haben keine Adresse: jeder ist seine eigene
-Ressource unter `/api/campaigns/<kampagne>/npcs/<id>` bzw.
+Eine **Szene**, ein **NPC** und ein **Ort** haben keine Adresse: jede ist
+ihre eigene Ressource unter `/api/campaigns/<kampagne>/scenes/<id>`,
+`/api/campaigns/<kampagne>/npcs/<id>` bzw.
 `/api/campaigns/<kampagne>/locations/<id>`, in der App
-`/campaigns/<kampagne>/npcs/<id>` bzw. `/campaigns/<kampagne>/locations/<id>`
-(ADR #31, siehe „NPC“ und „Ort“ unten).
+`/campaigns/<kampagne>/scenes/<id>`, `/campaigns/<kampagne>/npcs/<id>` bzw.
+`/campaigns/<kampagne>/locations/<id>` (ADR #31, siehe „Szene“, „NPC“ und
+„Ort“ unten).
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
@@ -45,12 +46,8 @@ Referenz-Schlüssel in Adressen, Links und `[[id]]`-Referenzen und ändert sich
 danach nie mehr (ADR #21). Der Eigenschaften-Dialog zeigt sie, bietet aber
 keine Änderung.
 
-Die Adresse einer Szene enthält ihren **Ort**. Ändert der DM den Ort einer
-Szene, ändert sich ihre Adresse — die alte bleibt auflösbar, der Server
-antwortet mit der aktuellen und die App ersetzt die URL.
-
-Gegliedert wird die Kapitelübersicht davon nicht. Sie ist eine durchgehende
-Liste in der **Reihenfolge, die der DM setzt** (ADR #27); der Ort steht mit
+Die Kapitelübersicht ist eine durchgehende Liste der Szenen eines Kapitels
+in der **Reihenfolge, die der DM setzt** (ADR #27); der Ort steht mit
 seinem Namen in der Metazeile der einzelnen Szene — hat eine Szene keinen,
 fehlt dort schlicht der Ortsteil —, Eventualszenen stehen als eigener Block
 am Ende. Diese Reihenfolge ist **keine Eigenschaft** — sie ist
@@ -83,17 +80,18 @@ nichts.
 Alles Kampagnenabhängige hängt unter der Kampagne — in der API
 `/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` (ADR #22).
 Die Adresse steht dabei im Pfad: `GET
-/api/campaigns/beispiel/entries/01-salzhafen/leuchtturm/ankunft-leuchtturm`
-liest diesen Eintrag, `GET /api/campaigns/beispiel` den Kampagnen-Eintrag.
+/api/campaigns/beispiel/entries/01-salzhafen` liest dieses Kapitel, `GET
+/api/campaigns/beispiel` den Kampagnen-Eintrag.
 Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 ## Eigenschaften
 
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
 außer dem Text (`body`). Jede Entität hat ihren eigenen Typ aus genau
-einem zod-Schema (ADR #31). **NPC** und **Ort** sind jeweils ihre eigene
-Ressource mit ihren eigenen Feldern (siehe „NPC“ und „Ort“ unten); bei
-Kampagne, Kapitel und Szene reisen die Felder gesammelt unter `properties`.
+einem zod-Schema (ADR #31). **Szene**, **NPC** und **Ort** sind jeweils ihre
+eigene Ressource mit ihren eigenen Feldern (siehe „Szene“, „NPC“ und „Ort“
+unten); bei Kampagne und Kapitel reisen die Felder gesammelt unter
+`properties`.
 Die App zeigt sie im Eigenschaften-Dialog, und `PATCH
 /api/campaigns/<kampagne>/entries/<adresse>` ändert genau die Felder, die der
 DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die
@@ -118,7 +116,7 @@ wenige Zeilen begrenzt und aufklappbar. Ohne Text steht dort nichts.
 
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | stabil; erstes Segment jeder Szenen-Adresse |
+| `id` | stabil; das Feld `chapter` einer Szene nennt es |
 | `title` | Anzeigename |
 | `status` | `planned`, `active` oder `done` |
 
@@ -159,18 +157,68 @@ die Liste nicht.
 
 ### Szene
 
+Eine Szene ist ihre eigene Ressource mit ihrem eigenen Typ (`Scene`, aus dem
+zod-Schema in `shared/src/scene.ts`, ADR #31). Sie liegt flach unter ihrer
+Kampagne: ihre `id` ist je Kampagne eindeutig, und ihr Kapitel ist ein Feld,
+das sich ändern kann.
+
+| Lesen/Ändern | Anlegen/Liste | App-Route |
+| ------------ | ------------- | --------- |
+| `GET/PATCH /api/campaigns/<kampagne>/scenes/<id>` | `GET/POST /api/campaigns/<kampagne>/scenes` | `/campaigns/<kampagne>/scenes/<id>` |
+
+`GET` antwortet mit der Szene selbst — ohne `kind`, ohne `path`, alle Felder
+nebeneinander:
+
+```json
+{
+  "id": "lighthouse-arrival",
+  "title": "Ankunft am Leuchtturm",
+  "type": "planned",
+  "chapter": "01-salzhafen",
+  "location": "leuchtturm",
+  "npcs": ["jorna"],
+  "handouts": ["Karte von Salzhafen"],
+  "tags": ["social", "travel"],
+  "status": "ready",
+  "body": "\n## Flow\n\n…",
+  "rev": 1
+}
+```
+
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | stabil, wird referenziert (`scenes_played`, Log) |
-| `title` | Anzeigename, frei änderbar |
+| `id` | stabil, wird referenziert (`scenesPlayed`, `sceneId` einer Log-Zeile, `[[id]]`) |
+| `title` | Anzeigename, frei änderbar; ohne eigenen Titel zeigt die Szene ihre id |
 | `type` | `planned` oder `contingency` (Eventualszene) |
-| `trigger` | nur bei `contingency`: wann feuert sie? Freitext |
-| `chapter` | Kapitel-id; muss existieren |
-| `location` | Orts-id; bestimmt die Adresse der Szene |
-| `npcs` | Liste von NPC-ids |
+| `trigger` | nur bei `contingency`: wann feuert sie? Freitext; optional |
+| `chapter` | Kapitel-id; immer gesetzt, muss existieren |
+| `location` | Orts-id, wo die Szene spielt; optional, muss existieren |
+| `npcs` | Liste von NPC-ids in ihrer Reihenfolge; jede muss existieren |
 | `handouts` | Namen der Roll20-Handouts, nur Verweis |
 | `tags` | frei; empfohlen: `combat`, `social`, `stealth`, `travel` |
-| `status` | `draft`, `ready`, `played`, `dropped` |
+| `status` | `draft`, `ready`, `played` oder `dropped`; immer gesetzt |
+| `body` | Markdown der Szene |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+
+Ein optionales Feld ohne Wert fehlt in der Antwort; die drei Listen stehen
+immer da, leer, wenn die Szene nichts nennt. Geschrieben wird mit `PATCH
+…/scenes/<id>` und `{ rev, force?, …Teilmenge der Felder }` — `null` löscht
+`trigger` oder `location`, ein Feld, das eine Szene nicht hat, oder ein Wert
+der falschen Form ist eine 400, die das Feld nennt, ein `status` außerhalb
+der vier eine 400 `status_not_allowed`, ein `type` außerhalb der zwei eine
+400 `scene_type_not_allowed`. Das Kapitel lässt sich wechseln, aber nicht
+leeren (400 `chapter_required`); wechselt eine Szene das Kapitel, landet sie
+am Ende des Zielkapitels. Ein veralteter `rev` ist 409 mit der aktuellen
+Szene. Wo sie in ihrem Kapitel steht, ist kein Feld der Szene, sondern die
+Szenenreihenfolge des Kapitels (siehe Schreibregeln).
+
+`POST …/scenes { title, chapter, id? }` legt eine Szene an und antwortet mit
+ihr: die `id` entsteht aus dem Titel, wenn die Anfrage keine setzt, das
+Kapitel muss existieren, und die Szene steht als `draft` am Ende ihres
+Kapitels. Eine vergebene `id` ist eine 409 `slug_taken` mit Vorschlag.
+Fixture und Generator-Vorschlag sind die Szene ohne `rev`. Ergänzen hängt an
+der Szene: `POST …/scenes/<id>/augment` startet den Lauf, `POST
+…/scenes/<id>/augment/apply` übernimmt ihn.
 
 ### NPC
 
@@ -337,9 +385,8 @@ Hinweis, den Eintrag zuerst anzulegen — es entsteht nichts nebenbei.
 Einträge entstehen über „Neu anlegen" und über das Übernehmen eines
 Generator-Vorschlags, sonst nirgends.
 
-`location:` verlangt eine id in Slug-Form (400 sonst) — sie ist zugleich das
-mittlere Segment der Szenen-Adresse. Jede Szene gehört zu einem Kapitel;
-`chapter:` lässt sich nicht leeren.
+`location:` verlangt eine id in Slug-Form (400 sonst). Jede Szene gehört zu
+einem Kapitel; `chapter:` lässt sich nicht leeren.
 
 Eine Nennung im **Text** ist keine Referenz in diesem Sinn: `[[id]]` und was
 unter `## Beziehungen` steht bleiben sichtbarer Text. Ein `[[id]]`, zu dem
@@ -391,7 +438,7 @@ in `## If:`-Abschnitten.
 
 (Im Callout steht die Tabelle unter demselben `>`-Block wie der Text — siehe
 die Szene „Ankunft am Leuchtturm",
-`fixtures/beispiel/scene-lighthouse-arrival.json`.)
+`fixtures/beispiel/scenes/lighthouse-arrival.json`.)
 
 - **Nur Tabellen.** Kein Durchgestrichen (`~~x~~`), **keine Aufgabenlisten**,
   keine Auto-Links, keine Fußnoten. `- [x]` bleibt bewusst normaler
@@ -475,7 +522,9 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   `server/src/routes/<ressource>.ts`): Log, Ideen,
   Nachbereitung, Generator-Entwürfe — und für einen Eintrag der eine
   Schreibweg `PATCH /api/campaigns/<kampagne>/entries/<adresse>`, der
-  Eigenschaften, Text oder beides in einem Zug schreibt (ADR #23).
+  Eigenschaften, Text oder beides in einem Zug schreibt (ADR #23); eine
+  Szene, ein NPC und ein Ort haben je ihren eigenen `PATCH` auf ihrer
+  Ressource.
   Glossar, Kampagnenwissen, Ideen und offene Fäden sind Listen und werden
   über ihre eigenen Endpoints gepflegt; einen Text nehmen sie nicht an.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
@@ -498,12 +547,12 @@ Nachbereitung zeigt sie zusammen mit dem Log.
 
 ## Generator
 
-Siehe `generator/README.md`. Kurzfassung: Quelltext (EN) rein → Szenen als
-Entwürfe (DE, dieses Format) raus, immer `status: draft`, immer mit
-„Entwürfe prüfen" vor dem Übernehmen.
+Siehe `generator/README.md`. Kurzfassung: Quelltext (EN) rein →
+vorgeschlagene Szenen (DE, dieses Format) raus, immer `status: draft`, immer
+mit „Entwürfe prüfen" vor dem Übernehmen.
 
 Ein Szenen-Lauf ist eine **Pipeline**: ein Gliederungs-Aufruf legt die
-Szenen und ihre ids fest, danach wird jede Szene und jeder neue Eintrag
+Szenen und ihre ids fest, danach wird jede Szene und jeder neue NPC und Ort
 einzeln geschrieben. Ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
 wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
@@ -513,26 +562,24 @@ dem Quellmaterial; „Entwürfe prüfen“ zeigt diese Beschreibung, und das
 Kapitels ändert kein Lauf.
 
 **Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
-über die Provider-API **erzwingt**. Ein NPC- oder Orts-Aufruf (Anlegen wie
-Ergänzen) liefert den NPC bzw. den Ort ohne `rev`, alle Felder
-nebeneinander, dazu die Hinweise für den DM unter `warnings`; `quickstats`
-reist dabei als Liste von Paaren `{ key, value }`. NPC und Ort leiten ihr
-Schema selbst aus ihrem zod-Schema ab (`z.toJSONSchema`, ADR #31), und was
-das Modell über ihre Felder wissen muss, steht in ihrem Prompt
-(`generator/npc-system-prompt.md`, `generator/location-system-prompt.md`).
-Ein Job listet die vorgeschlagenen NPCs unter `result.npcs` und die Orte
-unter `result.locations`; ein NPC-Lauf trägt seinen einen NPC unter
-`npcResult.npc`. Ein Aufruf für eine Szene oder ihre Ergänzung liefert die
-Eigenschaften der Szene getypt unter `properties`, den Text als einen String
-unter `body` und `warnings`; dieses Paar ist der **Entwurf** — im
-Prüfschritt, in den Änderungen des DM und beim Übernehmen (ADR #24), nie ein
-Markdown-Text mit Eigenschaften davor. Die Schemata der Szene liegen als
-lesbares JSON in `shared/schema/`; Details in `generator/README.md`.
+über die Provider-API **erzwingt**. Ein Szenen-, NPC- oder Orts-Aufruf
+(Anlegen wie Ergänzen) liefert die Szene, den NPC bzw. den Ort ohne `rev`,
+alle Felder nebeneinander, dazu die Hinweise für den DM unter `warnings`;
+eine neue Szene ist dabei immer `draft`, und `quickstats` eines NPC reist als
+Liste von Paaren `{ key, value }`. Szene, NPC und Ort leiten ihr Schema
+selbst aus ihrem zod-Schema ab (`z.toJSONSchema`, ADR #31), und was das
+Modell über ihre Felder wissen muss, steht in ihrem Prompt
+(`generator/system-prompt.md`, `generator/npc-system-prompt.md`,
+`generator/location-system-prompt.md`). Ein Job listet die vorgeschlagenen
+Szenen unter `result.scenes`, die NPCs unter `result.npcs` und die Orte unter
+`result.locations`; ein NPC-Lauf trägt seinen einen NPC unter
+`npcResult.npc`. Änderungen des DM an einem Vorschlag liegen je Szene unter
+`sceneEdits` und je NPC unter `npcEdits`. Details in `generator/README.md`.
 
-Die mechanische Prüfung liest Eigenschaften und Text, aber keine
-Überschrift (ADR #29): die Abschnitte eines Entwurfs sind die Empfehlung der
-Prompts. Jedes `[[id]]` in einem erzeugten Text nennt einen Eintrag der
-Kampagne (NPC, Ort, Szene) oder einen Vorschlag desselben Laufs, sonst geht
+Die mechanische Prüfung liest die Felder und den Text, aber keine
+Überschrift (ADR #29): die Abschnitte eines Vorschlags sind die Empfehlung
+der Prompts. Jedes `[[id]]` in einem erzeugten Text nennt einen NPC, einen
+Ort oder eine Szene der Kampagne oder einen Vorschlag desselben Laufs, sonst geht
 die Antwort als Korrektur-Turn zurück. Im Ergänzen-Lauf gilt das für die
 Verweise, die der Vorschlag neu bringt; was im bestehenden Text schon steht,
 bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
@@ -541,11 +588,12 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
-strukturierten Felder und der Text als ein String unter `body`. Ein NPC und
-ein Ort liegen in eigenen Dateien unter `fixtures/beispiel/npcs/<id>.json`
-bzw. `fixtures/beispiel/locations/<id>.json`, genau als das Objekt, das
-`GET …/npcs/<id>` bzw. `GET …/locations/<id>` liefert, ohne `rev` (ADR #31);
-Kampagne, Kapitel und Szene tragen ihre Felder unter `properties`. Ideen, Glossar
+strukturierten Felder und der Text als ein String unter `body`. Eine Szene,
+ein NPC und ein Ort liegen in eigenen Dateien unter
+`fixtures/beispiel/scenes/<id>.json`, `fixtures/beispiel/npcs/<id>.json` bzw.
+`fixtures/beispiel/locations/<id>.json`, genau als das Objekt, das ihre
+Ressource liefert, ohne `rev` (ADR #31); Kampagne und Kapitel tragen ihre
+Felder unter `properties`. Ideen, Glossar
 und Sessions tragen ihre Listen ebenso strukturiert,
 als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
 `threads`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
@@ -553,6 +601,6 @@ wie ein Faden `{ text, done? }`. Eine Markdown-Zeile steht in keiner davon.
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/npcs/*.json` und `<dir>/<kampagne>/locations/*.json` und
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/scenes/*.json`, `<dir>/<kampagne>/npcs/*.json` und `<dir>/<kampagne>/locations/*.json` und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

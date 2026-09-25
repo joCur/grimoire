@@ -14,15 +14,14 @@ import {
   locationFromReply,
   locationProposalSchema,
   locationReplySchema,
-  type EntryMode,
   type LocationProposal,
 } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
-import { parseJsonReply, REPAIRED_ENTRY_WARNING } from "./entry-reply";
-import type { ReplySchema } from "./llm-provider";
+import { parseJsonReply, REPAIRED_OBJECT_WARNING } from "./json-reply";
+import type { ReplySchema, RunMode } from "./llm-provider";
 
 /** The tool (Claude) or `json_schema` (OpenAI) name a location call travels under, per run. */
-const LOCATION_REPLY_NAMES: Record<EntryMode, string> = {
+const LOCATION_REPLY_NAMES: Record<RunMode, string> = {
   create: "location",
   augment: "augmented_location",
 };
@@ -33,7 +32,7 @@ const LOCATION_REPLY_NAMES: Record<EntryMode, string> = {
  * dropped — a request carries the schema as data. Built on every call, so no
  * request can reach into the next one's payload.
  */
-export function locationReplyRequest(mode: EntryMode): ReplySchema {
+export function locationReplyRequest(mode: RunMode): ReplySchema {
   const { $schema: _dialect, ...schema } = z.toJSONSchema(locationReplySchema) as JsonSchema;
   return { name: LOCATION_REPLY_NAMES[mode], schema };
 }
@@ -84,7 +83,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function parseLocationReply(
   raw: string,
-  mode: EntryMode = "create",
+  mode: RunMode = "create",
 ): { ok: true; reply: LocationReply } | { ok: false; errors: string[] } {
   const parsed = parseJsonReply(raw);
   if (parsed === null || !isRecord(parsed.value)) {
@@ -136,7 +135,7 @@ export function parseLocationReply(
         // lines and exactly one trailing newline.
         body: `${location.body.replace(/^\n+/, "").trimEnd()}\n`,
       },
-      warnings: parsed.repaired ? [...notes, REPAIRED_ENTRY_WARNING] : notes,
+      warnings: parsed.repaired ? [...notes, REPAIRED_OBJECT_WARNING] : notes,
       ignored,
     },
   };

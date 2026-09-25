@@ -28,22 +28,24 @@ import { ArrowRight, Bookmark, Check, ChevronDown, GitFork } from "lucide-react"
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { appendLog, endSession, fetchEntry, fetchTree } from "@/api";
+import { appendLog, endSession, fetchTree } from "@/api";
 import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
 import { LocationCard } from "@/location/LocationCard";
 import type { OpenTarget } from "@/lib/open-target";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/npc/NpcCard";
 import { PcReminders } from "@/components/PcReminders";
-import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
 import { initialSessionScene, nextSessionScene } from "@/lib/scene-order";
-import { isSceneDone } from "@/lib/scene-status";
 import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
 import { cn } from "@/lib/utils";
 import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
+import { SceneArticle } from "@/scene/SceneArticle";
+import { sceneHref } from "@/scene/scene-links";
+import { sceneQuery } from "@/scene/scene-query";
+import { isSceneDone } from "@/scene/scene-status";
 
 export function LiveRoute() {
   const { campaign = "" } = useParams();
@@ -80,7 +82,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
         <p className="text-[14px] leading-[1.6] text-muted-foreground">{t("live.mobile.note")}</p>
         {scene !== undefined && (
           <Link
-            to={`/campaigns/${campaign}/entries/${scene.path}`}
+            to={sceneHref(campaign, scene.id)}
             className="mt-2 inline-flex min-h-11 items-center text-[15px] text-primary hover:text-primary-hover"
           >
             {t("live.mobile.read", { title: scene.title })}
@@ -118,11 +120,6 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // PLANNED scene of the order that is not behind us, and with the plan played
   // its first scene — `initialSessionScene`. A chapter without a planned scene
   // leaves it undefined and the center column says so.
-  //
-  // The ID and not the address: a scene's address carries its
-  // `location`, so a location change moves the address out from under the
-  // selection — the tree refetches, no scene matches the stored path any
-  // more, and the live view jumps back to the start of the chapter mid-session.
   const [selectedId, setSelectedId] = useState<string>();
   const selected = scenes.find((s) => s.id === selectedId) ?? initialSessionScene(scenes);
   // The thread of the evening: where the DM reaches after this scene.
@@ -169,7 +166,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
         <div className="mb-6 flex flex-col gap-0.5">
           {planned.map((scene) => (
             <SceneNavRow
-              key={scene.path}
+              key={scene.id}
               scene={scene}
               active={scene.id === selected?.id}
               played={playedIds.includes(scene.id)}
@@ -190,7 +187,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             <div className="mb-6 flex flex-col gap-0.5">
               {contingencies.map((scene) => (
                 <SceneNavRow
-                  key={scene.path}
+                  key={scene.id}
                   scene={scene}
                   active={scene.id === selected?.id}
                   played={playedIds.includes(scene.id)}
@@ -226,7 +223,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                     `## If:` branches the DM opened in one scene would stay open
                     in the next one — the branches start collapsed per scene and
                     nothing is remembered across a switch. */}
-                <LiveScene key={selected.path} campaign={campaign} path={selected.path} />
+                <LiveScene key={selected.id} campaign={campaign} id={selected.id} />
               </EntityRefDrawerTarget>
               {next !== undefined && (
                 <NextSceneStep title={next.title} onPick={() => setSelectedId(next.id)} />
@@ -326,7 +323,7 @@ function PlayedGroup({
         <div role="group" aria-label={t("live.nav.played")} className="flex flex-col gap-0.5">
           {scenes.map((scene) => (
             <SceneNavRow
-              key={scene.path}
+              key={scene.id}
               scene={scene}
               active={scene.id === selectedId}
               played={playedIds.includes(scene.id)}
@@ -389,12 +386,9 @@ function SceneNavRow({
 }
 
 /** Center column: the selected scene through the shared article pipeline. */
-function LiveScene({ campaign, path }: { campaign: string; path: string }) {
+function LiveScene({ campaign, id }: { campaign: string; id: string }) {
   const t = useT();
-  const { data, isPending, isError } = useQuery({
-    queryKey: ["entry", campaign, path],
-    queryFn: () => fetchEntry(campaign, path),
-  });
+  const { data, isPending, isError } = useQuery(sceneQuery(campaign, id));
   const tree = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
@@ -404,7 +398,7 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
   if (isError || !data) {
     return <p className="text-muted-foreground">{t("live.scene.unloadable")}</p>;
   }
-  return <SceneArticle entry={data} tree={tree.data} variant="live" />;
+  return <SceneArticle scene={data} tree={tree.data} variant="live" />;
 }
 
 /**

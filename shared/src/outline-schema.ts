@@ -11,7 +11,7 @@
 // The schema itself is plain data, ../schema/outline.schema.json: nothing
 // here assembles it, this module loads it and hands it to the provider. Its
 // enums and the numbers its descriptions name are asserted against the
-// constants below in `shared/test/entry-schema.test.ts`, so the shape the
+// constants below in `shared/test/reply-schema.test.ts`, so the shape the
 // model is forced into and the shape the server accepts cannot drift apart —
 // a schema that allowed a fourth scene type would be a run that fails
 // validation on a reply the API promised was valid.

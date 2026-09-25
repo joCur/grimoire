@@ -10,8 +10,8 @@ import { setProviderForTests } from "../src/generator";
 import { dropStore, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
 
-const SCENE_AT_MOLE = "01-salzhafen/an-der-mole";
-const SCENE_AT_TOWER = "01-salzhafen/am-turm";
+const SCENE_AT_MOLE = "an-der-mole";
+const SCENE_AT_TOWER = "am-turm";
 
 function scene(id: string, title: string, location: string) {
   return {
@@ -130,7 +130,7 @@ test("accepting one location by id writes it to the location resource", async ()
   const res = await accept(job, { locations: ["alte-mole"] });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({
-    written: {},
+    scenes: [],
     npcs: [],
     locations: ["alte-mole"],
     jobDeleted: false,
@@ -141,21 +141,21 @@ test("accepting one location by id writes it to the location resource", async ()
   expect(after.review?.writtenLocations).toEqual(["alte-mole"]);
   // Accepted twice is nothing to do, not an error.
   const again = await accept(after, { locations: ["alte-mole"] });
-  expect(await again.json()).toEqual({ written: {}, npcs: [], locations: [], jobDeleted: false });
+  expect(await again.json()).toEqual({ scenes: [], npcs: [], locations: [], jobDeleted: false });
   expect((await accept(after, { locations: ["gibt-es-nicht"] })).status).toBe(400);
 });
 
 test("a scene carries the location it is set at; the other scene does not", async () => {
   const job = await runJob();
-  const tower = await accept(job, { paths: [SCENE_AT_TOWER] });
+  const tower = await accept(job, { scenes: [SCENE_AT_TOWER] });
   expect(((await tower.json()) as { locations: string[] }).locations).toEqual([]);
   expect(await readLocation("alte-mole")).toBeUndefined();
 
-  const mole = await accept((await fetchJob())!, { paths: [SCENE_AT_MOLE] });
+  const mole = await accept((await fetchJob())!, { scenes: [SCENE_AT_MOLE] });
   expect(mole.status).toBe(200);
   // Everything is written now, so the job disappears by itself.
   expect(await mole.json()).toEqual({
-    written: { [SCENE_AT_MOLE]: "01-salzhafen/alte-mole/an-der-mole" },
+    scenes: [SCENE_AT_MOLE],
     npcs: [],
     locations: ["alte-mole"],
     jobDeleted: true,
@@ -165,7 +165,7 @@ test("a scene carries the location it is set at; the other scene does not", asyn
 
 test("accept-all writes an ACCEPTED location, never an undecided or a rejected one", async () => {
   const undecided = await runJob();
-  const scenesOnly = (await (await patchReview(undecided, { dropped: [SCENE_AT_MOLE] })).json()) as GenerateJob;
+  const scenesOnly = (await (await patchReview(undecided, { droppedScenes: [SCENE_AT_MOLE] })).json()) as GenerateJob;
   const bulk = await accept(scenesOnly);
   expect(((await bulk.json()) as { locations: string[] }).locations).toEqual([]);
   expect(await readLocation("alte-mole")).toBeUndefined();
@@ -193,6 +193,6 @@ test("a location that already holds content is a conflict, reported by id", asyn
 
   const res = await accept(job, { locations: ["alte-mole"] });
   expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ conflicts: [], locations: ["alte-mole"] });
+  expect(await res.json()).toMatchObject({ conflicts: [], scenes: [], locations: ["alte-mole"] });
   expect((await readLocation("alte-mole"))?.body).toBe("Schon beschrieben.\n");
 });

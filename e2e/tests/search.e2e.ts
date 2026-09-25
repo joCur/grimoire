@@ -8,15 +8,23 @@
 // there is no watcher to wait for.
 //
 // And what the index HOLDS: campaign, chapters, scenes, npcs, locations and the
-// glossary terms. An npc and a location are each their own resource (ADR #31)
-// and a glossary term a row of a list (ADR #26), so their hits carry `kind`
-// and `id` and no address — the palette opens the npc's route, the location's
-// route and the glossary page.
+// glossary terms. A scene, an npc and a location are each their own resource
+// (ADR #31) and a glossary term a row of a list (ADR #26), so their hits carry
+// `kind` and `id` and no address — the palette opens the scene's route, the
+// npc's route, the location's route and the glossary page.
 // Sessions and ideas are not indexed at all, so no query can produce one.
 
 import { expect, test } from "../support/test";
 
-test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
+test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page, api }) => {
+  // On the wire a scene hit is `{ kind: "scene", id, title }` and no `path`.
+  const { results } = await api.get<{
+    results: { kind: string; id: string; path?: string; title: string }[];
+  }>("campaigns/beispiel/search?q=leucht");
+  const sceneHit = results.find((hit) => hit.kind === "scene");
+  expect(sceneHit).toMatchObject({ kind: "scene", id: "lighthouse-arrival" });
+  expect(sceneHit).not.toHaveProperty("path");
+
   await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
@@ -54,9 +62,7 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
   await expect(scene).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Enter");
 
-  await expect(page).toHaveURL(
-    /\/campaigns\/beispiel\/entries\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
-  );
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   // The palette closed on pick.
   await expect(page.getByRole("combobox")).toHaveCount(0);
@@ -69,7 +75,7 @@ test("content the APP just wrote is findable right away", async ({
   // A word that appears nowhere in the example campaign, so a hit can only
   // come from the paragraph typed below.
   const WORD = "Zwirbelmuschel";
-  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const SCENE = "lighthouse-arrival";
 
   // Not findable before — proven through the search endpoint itself.
   const before = await api.get<{ results: unknown[] }>(
@@ -78,7 +84,7 @@ test("content the APP just wrote is findable right away", async ({
   expect(before.results).toEqual([]);
 
   // The DM writes it in the editor: „Bearbeiten" → „Markdown" → save.
-  await page.goto(`/campaigns/beispiel/entries/${SCENE}`);
+  await page.goto(`/campaigns/beispiel/scenes/${SCENE}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
@@ -97,7 +103,7 @@ test("content the APP just wrote is findable right away", async ({
   await expect(hit).toHaveCount(1);
   // … and the row opens the scene the word was typed into.
   await hit.click();
-  await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/entries/${SCENE.replace(/\./g, "\\.")}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/scenes/${SCENE}$`));
   await expect(page.getByRole("article")).toContainText(WORD);
 });
 

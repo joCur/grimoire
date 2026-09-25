@@ -16,8 +16,8 @@
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
-//   scene part     the scripted reply's scene entry, as the REPLY OBJECT:
-//                  `properties`, `body`, and the batch reply's `warnings`.
+//   scene part     the scripted reply's scene, as the scene's own flat
+//                  REPLY OBJECT, with the batch reply's `warnings`.
 //   npc/location   the scripted reply's matching `entries` item, in the
 //   part           npc's or the location's own reply form.
 //   single call    the npc/augment run's scripted entry, likewise — a
@@ -25,12 +25,13 @@
 //                  `{ entry }` object travels verbatim, which is what the
 //                  garbage and the truncation cases are about.
 //
-// A script writes every entry as `{ properties, body }`, so it says in one
+// A script writes every proposal as `{ properties, body }`, so it says in one
 // literal exactly what the run is about, and the fake adds what a
-// schema-forced provider adds: the `warnings`, and for an npc or a location
-// its own flat reply form (every field beside `body`, `null` for an optional
-// field the script leaves out, an npc's `quickstats` as its list of pairs).
-// Nothing here renders or parses an entry as one markdown text.
+// schema-forced provider adds: the `warnings`, and the entity's own flat
+// reply form (every field beside `body`, `null` for an optional field the
+// script leaves out, `[]` for a list, a scene's chapter the run's, an npc's
+// `quickstats` as its list of pairs). Nothing here renders or parses a
+// proposal as one markdown text.
 //
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part.
@@ -129,18 +130,20 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
  * The REPLY OBJECT of a scripted entry plus the script's warnings — what a
  * schema-forced provider delivers.
  *
- * A scene replies with its two halves. An npc and a location reply with
- * their own fields (ADR #31): the script's fields stand beside `body` and
- * `warnings`, and an optional field the script leaves out is `null` — "not
- * given", exactly as a strict provider delivers it. An npc's status is one
- * of its four values in every reply the provider lets through, so a script
- * that names none answers `unknown`, and its `quickstats` set travels as the
- * list of pairs the schema asks for.
+ * A scene, an npc and a location reply with their own fields (ADR #31): the
+ * script's fields stand beside `body` and `warnings`, and an optional field
+ * the script leaves out is `null` — "not given", exactly as a strict
+ * provider delivers it. A scene's lists are `[]` then, its type `planned`,
+ * its status `draft` and its chapter `chapter`, the run's. An npc's status is
+ * one of its four values in every reply the provider lets through, so a
+ * script that names none answers `unknown`, and its `quickstats` set travels
+ * as the list of pairs the schema asks for.
  */
 export function entryReply(
   entry: ScriptedEntry,
   warnings: readonly string[] = [],
   kind: "scene" | "npc" | "location" = "scene",
+  chapter: string | null = null,
 ): string {
   if (kind === "npc") {
     const { quickstats, ...fields } = entry.properties;
@@ -176,7 +179,15 @@ export function entryReply(
     });
   }
   return JSON.stringify({
-    properties: entry.properties,
+    type: "planned",
+    trigger: null,
+    chapter,
+    location: null,
+    npcs: [],
+    handouts: [],
+    tags: [],
+    status: "draft",
+    ...entry.properties,
     body: entry.body,
     warnings: [...warnings],
   });
@@ -353,11 +364,12 @@ export class PipelineFake implements LLMProvider {
         text: entryReply(
           entry.content,
           entry.warnings,
-          req.existingEntry !== undefined
+          req.existingScene !== undefined
             ? "scene"
             : req.existingLocation !== undefined
               ? "location"
               : "npc",
+          req.existingScene?.chapter ?? null,
         ),
       };
     }
@@ -373,7 +385,7 @@ export class PipelineFake implements LLMProvider {
       const scene =
         batch.scenes.find((doc) => property(doc.content, "id") === part.id) ?? batch.scenes[0];
       return {
-        text: entryReply(scene!.content, batch.warnings, "scene"),
+        text: entryReply(scene!.content, batch.warnings, "scene", req.context.chapter ?? null),
         truncated: false,
         ...(typeof scripted === "string" || scripted.usage === undefined
           ? {}

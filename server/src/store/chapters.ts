@@ -1,17 +1,15 @@
-// Chapters and the scenes in them.
+// Chapters, and the order of the scenes in them.
 //
-// A scene lives here rather than in a module of its own: its chapter and its
-// location are its ADDRESS (ADR #17), so creating one, moving one and listing
-// the tree are all statements about a chapter. This module builds that tree,
-// creates chapters and scenes, holds the one-active-chapter rule and writes
-// the order of a chapter's scenes. A chapter's open threads are a list of
-// their own (./threads.ts).
+// This module builds the campaign tree, creates chapters, holds the
+// one-active-chapter rule and writes the order of a chapter's scenes — the
+// chapter's statement about its scenes, with its own guard (ADR #27). A
+// scene itself is its own resource (./scenes.ts), and a chapter's open
+// threads are a list of their own (./threads.ts).
 
 import { and, asc, eq } from "drizzle-orm";
 import {
   ENTITY_SLUG,
   freeSlug,
-  toSlug,
   type CampaignTree,
   type ChapterNode,
   type ChapterStatus,
@@ -27,22 +25,13 @@ import {
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { chapters, locations, npcs, sceneNpcs, sceneTags, scenes } from "../db/schema";
+import { chapters, locations, npcs, scenes } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import {
-  chapterIdExists,
-  chapterRowOf,
-  indexChapter,
-  indexScene,
-  refNpcs,
-  refTags,
-  sceneRowOf,
-} from "./entity-rows";
+import { chapterRowOf, indexChapter, refNpcs, refTags } from "./entity-rows";
 import { getDb } from "./handle";
-import { chapterPath, sceneAddress, RESERVED_SEGMENTS } from "./paths";
+import { chapterPath, RESERVED_SEGMENTS } from "./paths";
 import {
   renderChapter,
-  renderScene,
   type ChapterRow,
   type LocationRow,
   type NpcRow,
@@ -50,14 +39,12 @@ import {
 } from "./render";
 import { sessionSummaries } from "./session-rows";
 import {
-  asOptStr,
   assertSafeChapterId,
   guardRev,
   nextPos,
   resolveNewId,
   slugReserved,
   slugTaken,
-  unknownRef,
 } from "./shared";
 
 // --- chapter status ----------------------------------------------------------
@@ -103,67 +90,6 @@ export function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep:
   }
 }
 
-// --- a scene's location -------------------------------------------------------
-
-/**
- * A scene's `location`, validated: an entity id, or null.
- *
- * `location` is a REFERENCE — it is part of the scene's address (ADR #17) —
- * so free text is a 400 that carries the slug it would have been, and the
- * app can say which id to use; whether that id HAS an entry is the next
- * question (`assertLocationRef`).
- */
-export function sceneLocation(value: unknown): string | null {
-  const raw = asOptStr(value);
-  if (raw === null) return null;
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  if (!ENTITY_SLUG.test(trimmed)) {
-    const suggestion = toSlug(trimmed);
-    throw new ApiError(
-      400,
-      `location "${trimmed}" is not a location id — a scene's location is a reference` +
-        (suggestion === "" ? "" : `; use "${suggestion}" and create that location first`),
-      suggestion === ""
-        ? { code: "location_not_an_id", value: trimmed }
-        : { code: "location_not_an_id", value: trimmed, suggestion },
-    );
-  }
-  return trimmed;
-}
-
-/**
- * Replace a scene's reference rows. The caller has checked the npc ids
- * (`assertNpcRefs`); the rows are deleted and rewritten because `pos` — the
- * authored order — is part of the content.
- */
-export function replaceSceneRefs(
-  tx: GrimoireDb,
-  campaign: string,
-  sceneId: string,
-  npcRefs: string[],
-  tags: string[],
-): void {
-  tx.delete(sceneNpcs)
-    .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.sceneId, sceneId)))
-    .run();
-  const seenNpcs = new Set<string>();
-  npcRefs.forEach((npcId, pos) => {
-    if (npcId === "" || seenNpcs.has(npcId)) return;
-    seenNpcs.add(npcId);
-    tx.insert(sceneNpcs).values({ campaignId: campaign, sceneId, npcId, pos }).run();
-  });
-  tx.delete(sceneTags)
-    .where(and(eq(sceneTags.campaignId, campaign), eq(sceneTags.sceneId, sceneId)))
-    .run();
-  const seenTags = new Set<string>();
-  tags.forEach((tag, pos) => {
-    if (tag === "" || seenTags.has(tag)) return;
-    seenTags.add(tag);
-    tx.insert(sceneTags).values({ campaignId: campaign, sceneId, tag, pos }).run();
-  });
-}
-
 // --- the order of the scenes in a chapter ------------------------------------
 
 /**
@@ -175,7 +101,7 @@ export function replaceSceneRefs(
  * the campaign while saying nothing about where the scene sits among its
  * siblings. Every path that brings a scene into a chapter uses this one —
  * creating it, moving one here from another chapter, and accepting a
- * generated draft, which uses it through the run's start below.
+ * generated scene, which uses it through the run's start below.
  */
 export function nextScenePos(tx: GrimoireDb, campaign: string, chapter: string): number {
   return nextPos(
@@ -271,8 +197,8 @@ function sceneOrderMismatch(
  *
  * THE GUARD IS `chapters.scene_order_rev`, a counter of its own, and the
  * write bumps only that one. Neither `chapters.rev` nor `scenes.rev` moves:
- * those guard ENTRIES — a chapter's properties and text, a scene's
- * properties and text (ADR #23) — and reordering touches none of them.
+ * those guard a chapter's fields and a scene's fields (ADR #23), and
+ * reordering touches none of them.
  * Bumping either would turn an editor that is open on something else into a
  * conflict the moment somebody rearranges the chapter around it, which is a
  * write that editor is not competing with. The order is its own list with
@@ -335,7 +261,7 @@ export async function writeSceneOrder(
   });
 }
 
-// --- reading a chapter or a scene entry ---------------------------------------
+// --- reading a chapter entry --------------------------------------------------
 
 /**
  * The chapter entry an address names; 404 when the campaign has no chapter
@@ -349,23 +275,6 @@ export function readChapterEntry(
   const row = chapterRowOf(tx, campaign, id);
   if (row === undefined) throw new ApiError(404, "entry not found");
   return renderChapter(row);
-}
-
-/**
- * The scene entry an address names; 404 when the campaign has no scene with
- * that id.
- *
- * A scene is resolved by its ID alone. The chapter and location segments of
- * the address are not matched: `location` moves whenever the DM corrects it,
- * so an old link is a STALE ADDRESS for a scene that still exists, not a
- * wrong one. The answer carries the CURRENT address in `path`
- * (renderScene builds it from the row) and the app replaces the URL with it.
- * See ADR #17.
- */
-export function readSceneEntry(tx: GrimoireDb, campaign: string, id: string): EntryResponse {
-  const row = sceneRowOf(tx, campaign, id);
-  if (row === undefined) throw new ApiError(404, "entry not found");
-  return renderScene(row, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
 }
 
 // --- GET /api/campaigns/:campaign/tree ----------------------------------------
@@ -387,7 +296,6 @@ export function sceneSummaryRow(
   locationNames: ReadonlyMap<string, string>,
 ): SceneSummary {
   const summary: SceneSummary = {
-    path: sceneAddress(row),
     id: row.id,
     title: row.title === "" ? row.id : row.title,
     // Both columns are CHECK constraints over the shared lists (ADR #25), so
@@ -499,7 +407,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   };
 }
 
-// --- creating a chapter and a scene -------------------------------------------
+// --- creating a chapter -------------------------------------------------------
 
 /** True when the campaign has a chapter with this id (generator target check). */
 export async function chapterExists(campaign: string, chapter: string): Promise<boolean> {
@@ -616,73 +524,14 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
 }
 
 /**
- * POST /api/campaigns/:campaign/scenes { title, chapter } -> the scene entry.
- *
- * The chapter is REQUIRED and has to exist (400 otherwise): a scene's chapter
- * is part of its address, and a scene under an unknown chapter has no node to
- * hang in — the same rule `assertChapterRef` enforces for a properties patch,
- * and the same code (ADR #19, a mention creates nothing).
- *
- * A scene created here has no `location`, so it sits at chapter level.
- * Setting one later is an ordinary entry PATCH — and that patch is also what
- * changes the scene's address. It is appended to the END of its chapter
- * (`nextScenePos`): a new scene has no place of its own yet, and the DM
- * moves it where it belongs.
- */
-export async function createScene(
-  campaign: string,
-  title: string,
-  chapter: string,
-  explicitId?: string,
-): Promise<EntryResponse> {
-  const id = resolveNewId(explicitId, title, "scene", "title");
-  assertSafeChapterId(chapter);
-  return mutate(campaign, (tx) => {
-    if (!chapterIdExists(tx, campaign, chapter)) {
-      throw unknownRef("chapter_unknown", "chapter", chapter);
-    }
-    const existing = sceneRowOf(tx, campaign, id);
-    if (existing !== undefined) {
-      const suggestion = freeSlug(
-        id,
-        (candidate) => sceneRowOf(tx, campaign, candidate) !== undefined,
-      );
-      throw slugTaken(
-        "scene",
-        id,
-        suggestion,
-        sceneAddress({
-          chapterId: existing.chapterId ?? chapter,
-          location: existing.location,
-          id: existing.id,
-        }),
-      );
-    }
-    tx.insert(scenes)
-      .values({
-        campaignId: campaign,
-        id,
-        chapterId: chapter,
-        title: title.trim(),
-        pos: nextScenePos(tx, campaign, chapter),
-      })
-      .run();
-    const row = sceneRowOf(tx, campaign, id);
-    if (row === undefined) throw new ApiError(500, "scene could not be created");
-    indexScene(tx, campaign, row, []);
-    return renderScene(row, [], []);
-  });
-}
-
-/**
  * The chapter of a GENERATED scene, created if it has none of its own.
  *
- * The ONE write that brings an entry into existence without the DM naming it
- * in a dialog, and it is not a mention creating anything: the run itself
+ * The ONE write that brings a chapter into existence without the DM naming
+ * it in a dialog, and it is not a mention creating anything: the run itself
  * decided the chapter (and, for a new-chapter run, its title), so
  * accepting the proposal has to be able to write it. Without this a scene
- * ends up under a chapter that has no entry — and the overview lists
- * chapters, so the chapter and every scene in it would be unreachable.
+ * would name a chapter that has no row — and the overview lists chapters,
+ * so the chapter and every scene in it would be unreachable.
  *
  * Idempotent and quiet: false when the chapter is already there, and false
  * for an id that is no entity slug — `assertChapterRef` then answers for it.

@@ -16,10 +16,10 @@
 // CREATING CONTENT: five POSTs, one shape (campaigns, chapters, scenes, npcs,
 // locations): the DM types a NAME, the server derives the id with
 // the shared slug rule (@grimoire/shared/slug) and answers with what it
-// created in the shape its kind's GET answers — an `EntryResponse`, or an
-// `Npc` or a `Location` — so the app can navigate straight into it. A
-// taken id is `409 { code: "slug_taken", id, suggestion, path }` (an npc's
-// and a location's without `path`); a name that yields no
+// created in the shape its kind's GET answers — an `EntryResponse`, or a
+// `Scene`, an `Npc` or a `Location` — so the app can navigate straight into
+// it. A taken id is `409 { code: "slug_taken", id, suggestion, path }` (a
+// scene's, an npc's and a location's without `path`); a name that yields no
 // slug at all is a 400 that says so (store/shared.ts explains why neither is
 // silently resolved). Every one of them also accepts an explicit `id` — that
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of

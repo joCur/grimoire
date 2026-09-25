@@ -8,24 +8,24 @@
 // it was.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { EntryResponse, Npc } from "@grimoire/shared";
+import type { EntryResponse, Npc, Scene } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const CHAPTER = "01-salzhafen";
-/** An npc is its own resource (ADR #31): its fields travel flat. */
+/** A scene and an npc are their own resources (ADR #31): their fields travel flat. */
+const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
+const CHAPTER = entriesUrl("beispiel", "01-salzhafen");
 const NPC_URL = "/api/campaigns/beispiel/npcs/jorna";
 
-async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(entriesUrl("beispiel", rel));
+async function read(url: string): Promise<{ rev: number }> {
+  const res = await app.request(url);
   expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
+  return (await res.json()) as { rev: number };
 }
 
-async function patch(rel: string, body: unknown): Promise<Response> {
-  return app.request(entriesUrl("beispiel", rel), {
+async function patch(url: string, body: unknown): Promise<Response> {
+  return app.request(url, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -40,13 +40,17 @@ interface Refusal {
   kind?: string;
 }
 
-/** PATCH one field to a foreign value and read the refusal. */
-async function refusal(rel: string, properties: Record<string, unknown>): Promise<Refusal> {
-  const before = await read(rel);
-  const res = await patch(rel, { rev: before.rev, properties });
+/**
+ * PATCH one field to a foreign value and read the refusal — flat on a
+ * resource, under `properties` on an entry address.
+ */
+async function refusal(url: string, fields: Record<string, unknown>): Promise<Refusal> {
+  const before = await read(url);
+  const body = url === CHAPTER ? { rev: before.rev, properties: fields } : { rev: before.rev, ...fields };
+  const res = await patch(url, body);
   expect(res.status).toBe(400);
   // Nothing was written — the guard token has not moved.
-  expect((await read(rel)).rev).toBe(before.rev);
+  expect((await read(url)).rev).toBe(before.rev);
   return (await res.json()) as Refusal;
 }
 
@@ -97,17 +101,16 @@ describe("a foreign status or type is a 400", () => {
     expect(body.allowed).toEqual(["planned", "active", "done"]);
   });
 
-  test("a value of the list is written, and clearing the field is allowed", async () => {
+  test("a value of the list is written; a chapter's status can be cleared", async () => {
     const before = await read(SCENE);
-    const res = await patch(SCENE, { rev: before.rev, properties: { status: "played" } });
+    const res = await patch(SCENE, { rev: before.rev, status: "played" });
     expect(res.status).toBe(200);
-    expect(((await res.json()) as EntryResponse).properties.status).toBe("played");
+    expect(((await res.json()) as Scene).status).toBe("played");
 
-    // `null` is not a foreign value: it clears the key, and the column falls
-    // back to its default.
-    const cleared = await read(SCENE);
-    const next = await patch(SCENE, { rev: cleared.rev, properties: { status: null } });
+    // `null` is not a foreign value: on a chapter it clears the status.
+    const chapter = await read(CHAPTER);
+    const next = await patch(CHAPTER, { rev: chapter.rev, properties: { status: null } });
     expect(next.status).toBe(200);
-    expect(((await next.json()) as EntryResponse).properties.status).toBe("draft");
+    expect(((await next.json()) as EntryResponse).properties.status).toBeUndefined();
   });
 });

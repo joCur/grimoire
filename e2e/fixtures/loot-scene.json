@@ -1,15 +1,14 @@
 {
-  "kind": "scene",
-  "properties": {
-    "id": "loot-check",
-    "title": "Beutezug in der Räucherkammer",
-    "type": "planned",
-    "chapter": "01-salzhafen",
-    "location": "leuchtturm",
-    "tags": [
-      "loot"
-    ],
-    "status": "draft"
-  },
+  "id": "loot-check",
+  "title": "Beutezug in der Räucherkammer",
+  "type": "planned",
+  "chapter": "01-salzhafen",
+  "location": "leuchtturm",
+  "npcs": [],
+  "handouts": [],
+  "tags": [
+    "loot"
+  ],
+  "status": "draft",
   "body": "\n## Flow\n\nNur als Callout-Prüfung da: `[!loot]` kommt in den Referenzszenen nicht vor\n(die dürfen nicht angefasst werden — CLAUDE.md), der Renderer muss den Kasten\naber genauso zeigen wie die anderen fünf.\n\n> [!loot] Zwei Ballen Schmuggeltabak, ein Silberring am Daumen des Wärters\n> und ein Frachtbrief ohne Absender.\n\n> [!erfunden] Unbekannte Callout-Sorte — degradiert zum normalen Zitat,\n> niemals ein Fehler.\n"
 }

@@ -23,7 +23,7 @@ import { npcAugmentSystemPrompt, validateNpcAugmentReply } from "../src/npc-augm
 import { parseNpcReply } from "../src/npc-reply";
 import {
   buildPrompt,
-  EXISTING_ENTRY_HEADING,
+  EXISTING_SCENE_HEADING,
   EXISTING_NPC_HEADING,
   type CompletionResult,
   type CorrectionTurn,
@@ -168,7 +168,7 @@ describe("the prompt", () => {
     expect(prompt).toContain('"key": "insight"');
     expect(prompt).toContain('"value": "2"');
     expect(prompt).not.toContain('"insight": 2');
-    expect(prompt).not.toContain(EXISTING_ENTRY_HEADING);
+    expect(prompt).not.toContain(EXISTING_SCENE_HEADING);
     expect(prompt.indexOf("FEWSHOT")).toBeLessThan(prompt.indexOf(EXISTING_NPC_HEADING));
     expect(prompt.indexOf(EXISTING_NPC_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
   });
@@ -183,8 +183,8 @@ describe("the run", () => {
     expect(job.status).toBe("done");
     expect(job.kind).toBe("npc-augment");
     expect(job.npc).toBe("jorna");
-    expect(job.target).toBeUndefined();
-    expect(job.augmentResult).toBeUndefined();
+    expect(job.scene).toBeUndefined();
+    expect(job.sceneAugmentResult).toBeUndefined();
     const result = job.npcAugmentResult!;
     expect(result.id).toBe("jorna");
     expect(result.rev).toBe(stored.rev);
@@ -200,7 +200,7 @@ describe("the run", () => {
 
     const req = fake.calls[0]!.req;
     expect(req.existingNpc).toEqual(npcToReply(withoutGuard(stored)));
-    expect(req.existingEntry).toBeUndefined();
+    expect(req.existingScene).toBeUndefined();
     expect(req.jsonSchema?.name).toBe("augmented_npc");
     expect(req.systemPrompt).toContain("System-Prompt: NPC ergänzen");
     expect(req.fewShotTarget).toContain('"id": "fenn"');

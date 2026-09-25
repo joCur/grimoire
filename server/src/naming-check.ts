@@ -182,31 +182,26 @@ function excerpt(line: string): string {
 }
 
 /**
- * One text as the check reads it: a scene draft by its address, its
- * properties and its body, or an npc or a location by its id, the fields to
- * check and its body.
+ * One text as the check reads it: a scene, an npc or a location by its id,
+ * the fields to check and its body.
  */
 export type CheckedDraft =
-  | { path: string; properties: Record<string, unknown>; body: string }
+  | { scene: string; fields: Record<string, unknown>; body: string }
   | { npc: string; fields: Record<string, unknown>; body: string }
   | { location: string; fields: Record<string, unknown>; body: string };
 
-/** Where a finding sits — the key of the draft's own kind — and the fields it reads. */
-function placeOf(draft: CheckedDraft): {
-  where: { path: string } | { npc: string } | { location: string };
-  fields: Record<string, unknown>;
-} {
-  if ("npc" in draft) return { where: { npc: draft.npc }, fields: draft.fields };
-  if ("location" in draft) return { where: { location: draft.location }, fields: draft.fields };
-  return { where: { path: draft.path }, fields: draft.properties };
+/** Where a finding sits — the key of the proposal's own kind. */
+function placeOf(draft: CheckedDraft): { scene: string } | { npc: string } | { location: string } {
+  if ("npc" in draft) return { npc: draft.npc };
+  if ("location" in draft) return { location: draft.location };
+  return { scene: draft.scene };
 }
 
 /**
  * Check ONE draft against the campaign's naming conventions.
  *
- * The draft arrives as the two halves the review shows and apply writes —
- * its properties and its body — so the check can never disagree with what
- * the DM is looking at.
+ * The proposal arrives as the fields the review shows and apply writes, so
+ * the check can never disagree with what the DM is looking at.
  *
  * At most ONE finding per rule per line: a convention broken three times in
  * one sentence is one thing to fix, and three identical rows in the review
@@ -214,7 +209,8 @@ function placeOf(draft: CheckedDraft): {
  */
 export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule[]): NamingHint[] {
   if (rules.length === 0) return [];
-  const { where, fields } = placeOf(draft);
+  const where = placeOf(draft);
+  const { fields } = draft;
   const hints: NamingHint[] = [];
 
   for (const rule of rules) {

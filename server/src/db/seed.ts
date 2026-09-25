@@ -2,18 +2,20 @@
 //
 // One object per fixture file, in the shape the API speaks. An entity with
 // its own resource (ADR #31) has a directory of its own, and each fixture in
-// it is exactly what the resource answers, without the guard: an npc is
-// `npcs/<id>.json`, a location `locations/<id>.json`, each
-// `{ id, name, …, body }`. The other kinds sit in the campaign directory as
-// `{ kind, properties, body }`, the shape `GET /entries/<address>` answers. The seed is therefore not a second data format — it is the
-// API's own shape written down, which is what makes it readable next to a
-// response and reviewable in a diff.
+// it is exactly what the resource answers, without the guard: a scene is
+// `scenes/<id>.json`, an npc `npcs/<id>.json`, a location
+// `locations/<id>.json`, each its fields side by side, `body` among them. The
+// other kinds sit in the campaign directory as `{ kind, properties, body }`,
+// the shape `GET /entries/<address>` answers. The seed is therefore not a
+// second data format — it is the API's own shape written down, which is what
+// makes it readable next to a response and reviewable in a diff.
 //
 // THREE RULES hold this together:
 //
-//   1. THE STORE LAYER DOES THE WRITING wherever it has a path for it:
-//      chapter and scene go through `insertDraft` (store/drafts.ts), an npc
-//      through `insertNpcProposal` (store/npcs.ts), a location through
+//   1. THE STORE LAYER DOES THE WRITING wherever it has a path for it: a
+//      chapter goes through `insertDraft` (store/drafts.ts), a scene through
+//      `insertSceneProposal` (store/scenes.ts), an npc through
+//      `insertNpcProposal` (store/npcs.ts), a location through
 //      `insertLocationProposal` (store/locations.ts), so
 //      references, tags, handouts and the search index are maintained by the
 //      same code a create endpoint runs. What has no
@@ -22,10 +24,10 @@
 //      open threads — is written as rows here and indexed the way the store
 //      indexes it.
 //   2. A REFERENCE TO SOMETHING THAT DOES NOT EXIST IS AN ERROR. Every
-//      reference is a foreign key (ADR #19) and nothing creates an entry
-//      because something mentioned it, so a seed that names a missing entry
+//      reference is a foreign key (ADR #19) and nothing creates a row
+//      because something mentioned it, so a seed that names a missing row
 //      throws instead of degrading. That is the one place the format's
-//      degrade rule does not apply: an entry is loaded whole or not at all.
+//      degrade rule does not apply: a fixture is loaded whole or not at all.
 //   3. ONE TRANSACTION per campaign. Either the campaign is in the database
 //      completely or nothing of it is.
 //
@@ -48,7 +50,12 @@ import {
   sessionScenesPlayed,
   sessions,
 } from "./schema";
-import { isEntityId, type LocationProposal, type NpcProposal } from "@grimoire/shared";
+import {
+  isEntityId,
+  type LocationProposal,
+  type NpcProposal,
+  type SceneProposal,
+} from "@grimoire/shared";
 import { campaignRow, indexCampaign } from "../store/campaigns";
 import { indexGlossaryTerm } from "../store/glossary";
 import { insertThreadRows } from "../store/threads";
@@ -56,8 +63,9 @@ import { PROPERTY_CONTRACT } from "../store/properties";
 import { insertDraft } from "../store/drafts";
 import { insertLocationProposal, readLocationProposal } from "../store/locations";
 import { insertNpcProposal, readNpcProposal } from "../store/npcs";
+import { insertSceneProposal, readSceneProposal } from "../store/scenes";
 import { logLineId } from "../store/body-parse";
-import { chapterPath, sceneAddress } from "../store/paths";
+import { chapterPath } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";
 
 /** An entry's properties as the API speaks them. */
@@ -100,15 +108,14 @@ export interface SeedGlossaryEntry {
 
 /**
  * One seeded object. `kind` is what decides the shape — the discriminator a
- * fixture file of the campaign directory carries, and for an npc or a
- * location the directory it was read from (that fixture file carries no
- * kind: it is the npc or the location as its resource answers it, without
- * the guard).
+ * fixture file of the campaign directory carries, and for a scene, an npc or
+ * a location the directory it was read from (that fixture file carries no
+ * kind: it is the entity as its resource answers it, without the guard).
  */
 export type SeedEntry =
   | { kind: "campaign"; properties: Properties; body?: string }
   | { kind: "chapter"; properties: Properties; body?: string; threads?: SeedThread[] }
-  | { kind: "scene"; properties: Properties; body?: string }
+  | { kind: "scene"; scene: SceneProposal }
   | { kind: "npc"; npc: NpcProposal }
   | { kind: "location"; location: LocationProposal }
   | { kind: "session"; properties: Properties; body?: string; log?: SeedLogLine[] }
@@ -116,7 +123,7 @@ export type SeedEntry =
   | { kind: "glossary"; intro?: string; entries: SeedGlossaryEntry[] };
 
 /** The kinds that carry `properties` and a `body`. */
-const ENTRY_KINDS = ["campaign", "chapter", "scene", "session"] as const;
+const ENTRY_KINDS = ["campaign", "chapter", "session"] as const;
 
 /**
  * The order the kinds are written in — the foreign keys decide it, so this is
@@ -234,10 +241,25 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
     };
   }
   return {
-    kind: kind as "campaign" | "scene",
+    kind: "campaign",
     properties,
     body: typeof body === "string" ? body : "",
   };
+}
+
+/**
+ * One scene fixture: the scene as its resource answers it, without the
+ * guard — or the seed error that names what is wrong.
+ */
+export function asSeedScene(where: string, value: unknown): SeedEntry {
+  let scene: SceneProposal;
+  try {
+    scene = readSceneProposal(value, "scene");
+  } catch (error) {
+    fail(where, error instanceof Error ? error.message : String(error));
+  }
+  if (!isEntityId(scene.id)) fail(where, "`id` must be a kebab-case slug");
+  return { kind: "scene", scene };
 }
 
 /**
@@ -295,13 +317,18 @@ export async function readFixtureCampaign(dir: string): Promise<SeedEntry[]> {
 /**
  * `readFixtureCampaign`, with the fixture file stem each entry came from. The
  * stem of a fixture file in an entity's own directory carries the directory
- * (`npcs/fenn`, `locations/leuchtturm`).
+ * (`scenes/smuggler-captured`, `npcs/fenn`, `locations/leuchtturm`).
  */
 export async function readFixtureSources(dir: string): Promise<SeedSource[]> {
   const sources: SeedSource[] = [];
   for (const name of await jsonFiles(dir)) {
     const stem = name.slice(0, -".json".length);
     sources.push({ stem, entry: asSeedEntry(name, await readJson(dir, name)) });
+  }
+  const sceneDir = path.join(dir, "scenes");
+  for (const name of await jsonFiles(sceneDir)) {
+    const stem = `scenes/${name.slice(0, -".json".length)}`;
+    sources.push({ stem, entry: asSeedScene(`${stem}.json`, await readJson(sceneDir, name)) });
   }
   const npcDir = path.join(dir, "npcs");
   for (const name of await jsonFiles(npcDir)) {
@@ -349,21 +376,6 @@ function asOptString(value: unknown): string | null {
 function asStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v) => v !== null && v !== undefined).map((v) => String(v));
-}
-
-/** The campaign-relative address one seeded entry is written to. */
-function addressOf(entry: SeedEntry & { properties: Properties }): string {
-  const id = asString(entry.properties.id);
-  switch (entry.kind) {
-    case "chapter":
-      return chapterPath(id);
-    default:
-      return sceneAddress({
-        chapterId: asOptString(entry.properties.chapter),
-        location: asOptString(entry.properties.location),
-        id,
-      });
-  }
 }
 
 /**
@@ -414,19 +426,17 @@ function writeEntry(tx: GrimoireDb, campaignId: string, entry: SeedEntry): void 
       return insertLocationProposal(tx, campaignId, entry.location);
     case "npc":
       return insertNpcProposal(tx, campaignId, entry.npc);
-    case "chapter":
-    case "scene": {
-      const address = addressOf(entry);
+    case "scene":
+      return insertSceneProposal(tx, campaignId, entry.scene);
+    case "chapter": {
+      const id = asString(entry.properties.id);
       insertDraft(tx, campaignId, {
-        rel: address,
-        address,
+        rel: chapterPath(id),
         properties: entry.properties,
         body: entry.body ?? "",
       });
       // The threads hang off the chapter row, so they follow it directly.
-      if (entry.kind === "chapter" && entry.threads !== undefined) {
-        insertThreadRows(tx, campaignId, asString(entry.properties.id), entry.threads);
-      }
+      if (entry.threads !== undefined) insertThreadRows(tx, campaignId, id, entry.threads);
       return;
     }
     case "session":

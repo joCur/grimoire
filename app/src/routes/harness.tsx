@@ -1,20 +1,18 @@
 // "/dev/markdown" — dev harness: renders the markdown pipeline against the
-// reference fixtures (the callout reference) without a running server. The
-// fixtures are entries in the shape the API speaks, so the harness reads their
-// `body` the way the reading view does. CLAUDE.md names exactly these two
-// entries as the check for renderer changes.
+// reference scenes (the callout reference) without a running server. The
+// fixtures are the scenes as their resource answers them, so the harness reads
+// their `body` the way the reading view does and shows the other fields beside
+// it. CLAUDE.md names exactly these two scenes as the check for renderer
+// changes.
 
-import lighthouseFixture from "../../../fixtures/beispiel/scene-lighthouse-arrival.json";
-import smugglersFixture from "../../../fixtures/beispiel/scene-smuggler-captured.json";
+import lighthouseFixture from "../../../fixtures/beispiel/scenes/lighthouse-arrival.json";
+import smugglersFixture from "../../../fixtures/beispiel/scenes/smuggler-captured.json";
 
 import { useT } from "@/i18n";
 import { Markdown } from "@/markdown/Markdown";
 
-/** An entry fixture: its properties and its markdown body. */
-interface EntryFixture {
-  properties?: Record<string, unknown>;
-  body: string;
-}
+/** A fixture: its markdown body, and the fields beside it. */
+type Fixture = { body: string } & Record<string, unknown>;
 
 // Extra snippet exercising the degrade paths that the fixtures do not cover.
 const degradeSample = `## If: die Gruppe flieht sofort
@@ -28,19 +26,19 @@ Ein Absatz innerhalb der Verzweigung.
 Text nach der Verzweigung, außerhalb des details-Elements.
 `;
 
-function Fixture({ name, entry }: { name: string; entry: EntryFixture }) {
+function FixtureSection({ name, fixture }: { name: string; fixture: Fixture }) {
   const t = useT();
-  const { properties, body } = entry;
+  const { body, ...fields } = fixture;
   return (
     <section className="space-y-3 border-t pt-6">
       <h2 className="font-mono text-sm text-muted-foreground">{name}</h2>
-      {properties && (
+      {Object.keys(fields).length > 0 && (
         <details>
           <summary className="cursor-pointer text-sm text-muted-foreground">
             {t("harness.properties")}
           </summary>
           <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
-            {JSON.stringify(properties, null, 2)}
+            {JSON.stringify(fields, null, 2)}
           </pre>
         </details>
       )}
@@ -57,9 +55,9 @@ export function HarnessRoute() {
         <h1 className="text-lg font-semibold">{t("harness.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("harness.lead")}</p>
       </header>
-      <Fixture name="scene-lighthouse-arrival" entry={lighthouseFixture as EntryFixture} />
-      <Fixture name="scene-smuggler-captured" entry={smugglersFixture as EntryFixture} />
-      <Fixture name="degrade-beispiele (inline)" entry={{ body: degradeSample }} />
+      <FixtureSection name="scenes/lighthouse-arrival" fixture={lighthouseFixture} />
+      <FixtureSection name="scenes/smuggler-captured" fixture={smugglersFixture} />
+      <FixtureSection name="degrade-beispiele (inline)" fixture={{ body: degradeSample }} />
     </div>
   );
 }

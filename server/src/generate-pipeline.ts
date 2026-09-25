@@ -43,10 +43,10 @@ import {
   SCENE_TYPES,
   type GenerateJobPart,
   type GenerateUsage,
-  type GeneratedSceneDraft,
   type LocationProposal,
   type NamingHint,
   type NpcProposal,
+  type SceneProposal,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import {
@@ -56,9 +56,8 @@ import {
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
-import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ApiError } from "./api-error";
-import { checkDraftsNaming } from "./naming-check";
+import { checkDraftsNaming, type CheckedDraft } from "./naming-check";
 import {
   ASSET_FILES,
   campaignRefIds,
@@ -71,14 +70,15 @@ import {
   unknownRefErrors,
   validateLocationProposal,
   validateNpcProposal,
-  validateSceneEntry,
+  validateSceneProposal,
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
-import { parseEntryReply, parseJsonReply } from "./entry-reply";
+import { parseJsonReply } from "./json-reply";
 import { locationReplyRequest, parseLocationReply } from "./location-reply";
 import { npcReplyRequest, parseNpcReply } from "./npc-reply";
+import { parseSceneReply, sceneReplyRequest } from "./scene-reply";
 import type { LLMProvider } from "./llm-provider";
 
 /** How many scene, npc and location calls of one run are in flight at once. */
@@ -171,7 +171,7 @@ export const REPAIRED_REPLY_WARNING =
 
 /**
  * The outline reply as a JSON value — read by the tolerant reader every reply
- * shares (`parseJsonReply`, ./entry-reply): the whole text first (which is
+ * shares (`parseJsonReply`, ./json-reply): the whole text first (which is
  * what a schema-forced reply is), then a fence, then the brace span, and ONE
  * deterministic `jsonrepair` attempt before a correction turn is spent.
  *
@@ -467,9 +467,9 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
  * tables, the callout list, the reference rules) must be the SAME text in
  * both, and the one way to guarantee that is to keep them side by side.
  *
- * Both sections describe the RAW entry — the swap adds
- * what only the pipeline knows: the outline is binding, and every id of the
- * run is already decided.
+ * Both sections describe the reply object — the swap adds what only the
+ * pipeline knows: the outline is binding, and every id of the run is already
+ * decided.
  */
 export async function sceneSystemPrompt(): Promise<string> {
   const doc = await loadAsset(ASSET_FILES.scene.systemPrompt);
@@ -521,33 +521,31 @@ export function assignmentBlock(scene: OutlineScene): string {
 
 // --- per-part validation -------------------------------------------------------
 
-/** What a single-scene reply must look like: one entry plus warnings. */
+/** What a single-scene reply must look like: one new scene plus warnings. */
 export function validateSingleSceneReply(input: {
   raw: string;
   ctx: SceneContext;
   scene: OutlineScene;
   allowed: AllowedRefs;
-}): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
-  // The reply is the schema-forced OBJECT: `properties`,
-  // `body`, `warnings` (./entry-reply reads it and composes the entry
-  // the server would store). Everything below judges that object.
-  const read = parseEntryReply(input.raw, "scene");
+}): { ok: true; result: { scene: SceneProposal; warnings: string[] } } | { ok: false; errors: string[] } {
+  // The reply is the schema-forced OBJECT: every field of the scene plus
+  // `warnings` (./scene-reply reads it). Everything below judges that object.
+  const read = parseSceneReply(input.raw, "create");
   // Labelled like every other error of this part: the review shows the list
   // per part, and "which scene" is the first thing the DM looks for.
-  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `scene "${input.scene.id}": ${e}`) };
-  const reply = read.reply;
+  if (!read.ok) {
+    return { ok: false, errors: read.errors.map((e: string) => `scene "${input.scene.id}": ${e}`) };
+  }
   const errors: string[] = [];
-  const draft = validateSceneEntry({
-    reply,
-    label: `scene "${input.scene.id}"`,
+  const scene = validateSceneProposal({
+    reply: read.reply,
     chapter: input.ctx.chapter,
     allowed: input.allowed,
-    seenIds: new Set(),
     errors,
     expectedId: input.scene.id,
   });
-  if (draft === null || errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { scene: draft, warnings: reply.warnings } };
+  if (scene === null) return { ok: false, errors };
+  return { ok: true, result: { scene, warnings: read.reply.warnings } };
 }
 
 /**
@@ -626,7 +624,7 @@ export function validateLocationPartReply(
 
 /** What one finished part contributes to the job's result. */
 export interface PartOutcome {
-  scene?: GeneratedSceneDraft;
+  scene?: SceneProposal;
   npc?: NpcProposal;
   location?: LocationProposal;
   warnings: string[];
@@ -890,7 +888,7 @@ export async function runScenePart(
   ]);
   const cut = excerptOf(plan, scene);
   const result = await runPipeline<{
-    scene: GeneratedSceneDraft;
+    scene: SceneProposal;
     warnings: string[];
     usage?: GenerateUsage;
   }>({
@@ -904,7 +902,7 @@ export async function runScenePart(
       assignment: assignmentBlock(scene),
       sourceText: cut.text,
       // Forced like the outline: the reply is the scene object.
-      jsonSchema: entryReplySchema("scene", "create"),
+      jsonSchema: sceneReplyRequest("create"),
     },
     provider,
     validate: (raw) => validateSingleSceneReply({ raw, ctx: plan.ctx, scene, allowed: plan.allowed }),
@@ -926,11 +924,17 @@ export async function runScenePart(
                 "zuordnen — diese Szene wurde aus dem ganzen Quelltext geschrieben.",
             ]),
       ],
-      namingHints: checkDraftsNaming([result.scene], plan.ctx.namingRules),
+      namingHints: checkDraftsNaming([sceneChecked(result.scene)], plan.ctx.namingRules),
       ...(cut.matched ? {} : { excerptFallback: true }),
     },
     usage: usageOf(result.usage, counter.count()),
   };
+}
+
+/** A proposed scene as the naming check reads it: its id, its fields and its body. */
+function sceneChecked(scene: SceneProposal): CheckedDraft {
+  const { body, ...fields } = scene;
+  return { scene: scene.id, fields, body };
 }
 
 /** Step 3: one proposed npc, with the scenes that mention it as context. */
@@ -1150,7 +1154,7 @@ export async function runPartsPooled(
 }
 
 /**
- * The whole scene run: outline, then every part. Writes NOTHING — the drafts
+ * The whole scene run: outline, then every part. Writes NOTHING — the proposals
  * land in the job and only the apply step touches the store.
  */
 export async function runScenePipeline(input: {

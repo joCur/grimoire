@@ -10,10 +10,10 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type {
   CampaignTree,
-  EntryResponse,
   GlossaryResponse,
   InboxResponse,
   Npc,
+  SceneProposal,
   SessionResponse,
 } from "@grimoire/shared";
 import { app } from "../src/server";
@@ -22,24 +22,12 @@ import { applyDrafts } from "../src/store/drafts";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-async function getEntry(rel: string): Promise<EntryResponse> {
-  const res = await app.request(entriesUrl("beispiel", rel));
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
-}
-
 async function patchEntry(rel: string, body: unknown): Promise<Response> {
   return app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-}
-
-async function patchOk(rel: string, body: unknown): Promise<EntryResponse> {
-  const res = await patchEntry(rel, body);
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
 }
 
 /** An npc is its own resource (ADR #31): read and written flat, `body` among its fields. */
@@ -110,7 +98,6 @@ async function version(): Promise<number> {
 }
 
 const NPC = "fenn";
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const GLOSSARY = "glossary";
 
 beforeEach(async () => {
@@ -266,61 +253,47 @@ describe("guard tokens of the two lists", () => {
   });
 });
 
-describe("the entry PATCH — a scene's `chapter`", () => {
-  test("null is refused: a scene belongs to a chapter, the address is the chapter", async () => {
-    const before = await getEntry(SCENE);
-    expect(before.properties.chapter).toBe("01-salzhafen");
-
-    const res = await patchEntry(SCENE, { rev: before.rev, properties: { chapter: null } });
-    expect(res.status).toBe(400);
-    // Nothing written: same chapter, same address, same rev.
-    const after = await getEntry(SCENE);
-    expect(after.properties.chapter).toBe("01-salzhafen");
-    expect(after.path).toBe(SCENE);
-    expect(after.rev).toBe(before.rev);
-  });
-});
-
 describe("applyDrafts — the conflict check is IN the insert transaction", () => {
-  /** The properties/body of a scene draft, as the generator hands it over. */
-  function draft(id: string): {
-    rel: string;
-    address: string;
-    properties: Record<string, unknown>;
-    body: string;
-  } {
-    const rel = `01-salzhafen/${id}`;
+  /** A proposed scene, as the generator hands it over — the scene without its guard. */
+  function proposal(id: string): SceneProposal {
     return {
-      rel,
-      address: rel,
-      properties: { id, title: id, type: "planned", chapter: "01-salzhafen", status: "draft" },
+      id,
+      title: id,
+      type: "planned",
+      chapter: "01-salzhafen",
+      npcs: [],
+      handouts: [],
+      tags: [],
+      status: "draft",
       body: "\n## Flow\n\nNeu.\n",
     };
   }
 
-  test("an existing target is the documented 409 { conflicts }, never a 500", async () => {
+  test("an existing target is the documented 409 { scenes }, never a 500", async () => {
     // The check used to run BEFORE the transaction (generator.ts), which left
     // a window in which the target could appear between "free" and "insert" —
     // and then the documented answer became a primary-key violation.
     let thrown: unknown;
     try {
-      await applyDrafts("beispiel", [draft("lighthouse-arrival")]);
+      await applyDrafts("beispiel", [], { scenes: [proposal("lighthouse-arrival")] });
     } catch (error) {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(ApiError);
     const api = thrown as ApiError;
     expect(api.status).toBe(409);
-    // reported under the path the CALLER sent (`<chapter>/<id>`)
-    expect(api.extra?.conflicts).toEqual(["01-salzhafen/lighthouse-arrival"]);
+    // reported by the scene's id
+    expect(api.extra?.scenes).toEqual(["lighthouse-arrival"]);
   });
 
   test("all or nothing: a conflict late in the batch writes none of it", async () => {
     const before = await tree();
     await expect(
-      applyDrafts("beispiel", [draft("ganz-neu"), draft("smuggler-captured")]),
+      applyDrafts("beispiel", [], {
+        scenes: [proposal("ganz-neu"), proposal("smuggler-captured")],
+      }),
     ).rejects.toThrow();
-    // not even the first, conflict-free draft landed
+    // not even the first, conflict-free scene landed
     expect(await tree()).toEqual(before);
   });
 });

@@ -43,6 +43,13 @@
       "when": 1790287979932,
       "tag": "0005_drop_npc_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790322527742,
+      "tag": "0006_drop_scene_jobs",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@ import { useNavigate } from "react-router";
 import { fetchSearch, fetchTree } from "@/api";
 import { useT, type Translate } from "@/i18n";
 import { LOOKUP_TARGETS, type LookupTarget } from "@/lib/lookup";
-import { contingencyPaths, kindIcon, kindLabel, resultHref } from "@/lib/search";
+import { contingencyScenes, kindIcon, kindLabel, resultHref } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
@@ -75,7 +75,7 @@ export function CommandPalette({
     queryFn: () => fetchTree(campaign),
     enabled: open,
   });
-  const forkPaths = useMemo(() => contingencyPaths(tree.data), [tree.data]);
+  const forks = useMemo(() => contingencyScenes(tree.data), [tree.data]);
 
   // Empty query shows nothing yet; results only exist for a non-empty term.
   const hits = term === "" ? [] : (search.data?.results ?? []);
@@ -179,7 +179,7 @@ export function CommandPalette({
               const nav = item.kind === "nav";
               const Icon = nav
                 ? item.target.icon
-                : kindIcon(item.result.kind, forkPaths.has(item.result.path ?? ""));
+                : kindIcon(item.result.kind, forks.has(item.result.id));
               return (
                 <div
                   key={nav ? `nav:${item.target.id}` : `${item.result.kind}:${item.result.id}`}

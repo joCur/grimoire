@@ -26,21 +26,18 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { E2E_FIXTURES_DIR } from "../support/paths";
-import { expect, test, type SeedEntry } from "../support/test";
+import { expect, test, type SeedScene } from "../support/test";
 
-/** The scene with the `[[…]]` references, as an entry. */
-const SCENE: SeedEntry = JSON.parse(
+/** The scene with the `[[…]]` references, as its fixture holds it. */
+const SCENE: SeedScene = JSON.parse(
   readFileSync(path.join(E2E_FIXTURES_DIR, "entity-refs-scene.json"), "utf8"),
-) as SeedEntry;
+) as SeedScene;
 
-/** Its address: chapter, location and the scene's id. */
-const SCENE_PATH = "01-salzhafen/leuchtturm/entity-refs";
-
-const SCENE_URL = "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/entity-refs";
+const SCENE_URL = "/campaigns/beispiel/scenes/entity-refs";
 const SCENE_TITLE = "Referenzen am Kai";
 const JORNA = "Hafenmeisterin Jorna";
 
-test.use({ seed: { entries: { "scene-entity-refs": SCENE } } });
+test.use({ seed: { entries: { "scenes/entity-refs": SCENE } } });
 
 test("reading view: references render as the current name, unknown ones stay text", async ({
   page,
@@ -62,6 +59,11 @@ test("reading view: references render as the current name, unknown ones stay tex
   const locationRef = page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first();
   await expect(locationRef).toBeVisible();
   await expect(locationRef).toHaveAttribute("href", "/campaigns/beispiel/locations/leuchtturm");
+
+  // …and so does a scene — by its id, on the scene's own route (ADR #31).
+  await expect(
+    page.getByRole("link", { name: "Szene: Von den Schmugglern erwischt" }),
+  ).toHaveAttribute("href", "/campaigns/beispiel/scenes/smuggler-captured");
 
   // Degradation: nothing owns `niemand`, so the source stays visible — no
   // error, no warning colour, and it becomes a link the moment it exists.
@@ -141,7 +143,7 @@ test("a changed display name reaches the prose without touching the body", async
 
   // The NAME changes, the body does not.
   await api.patchNpc("jorna", { name: NEW_NAME });
-  const stored = await api.entry(SCENE_PATH);
+  const stored = await api.scene(SCENE.id);
   expect(stored.body).toContain("[[jorna]]");
   expect(stored.body).not.toContain(NEW_NAME);
 

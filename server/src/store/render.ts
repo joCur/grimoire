@@ -1,10 +1,10 @@
 // Rows → the API's entry shapes.
 //
-// The campaign, chapters and scenes are rendered here into an
-// `EntryResponse`: an address, a `properties` mapping, a markdown body, and
-// the concurrency token the client sends back. The npc and the location have
-// their own types (ADR #31) and render themselves in their domain modules
-// (./npcs.ts, ./locations.ts); their row shapes stand below with the others.
+// The campaign and the chapters are rendered here into an `EntryResponse`: an
+// address, a `properties` mapping, a markdown body, and the concurrency token
+// the client sends back. The scene, the npc and the location have their own
+// types (ADR #31) and render themselves in their domain modules (./scenes.ts,
+// ./npcs.ts, ./locations.ts); their row shapes stand below with the others.
 //
 // Three rules hold this together:
 //
@@ -33,8 +33,7 @@ import type {
   SessionSummary,
 } from "@grimoire/shared";
 import { localDateTimeToMs } from "./time";
-import { unpackStringArray } from "../db/schema";
-import { CAMPAIGN_PATH, chapterPath, sceneAddress } from "./paths";
+import { CAMPAIGN_PATH, chapterPath } from "./paths";
 
 // --- row shapes (the columns the renderer needs) ----------------------------
 
@@ -211,41 +210,6 @@ export function chapterProperties(row: ChapterRow): Record<string, unknown> {
 
 export function renderChapter(row: ChapterRow): EntryResponse {
   return parsed(chapterPath(row.id), "chapter", chapterProperties(row), row.body, row.rev);
-}
-
-export function sceneProperties(
-  row: SceneRow,
-  npcs: string[],
-  tags: string[],
-): Record<string, unknown> {
-  const handouts = unpackStringArray(row.handouts);
-  return compact([
-    ["id", row.id],
-    ["title", row.title === "" ? row.id : row.title],
-    // `type`/`status` are the two lifecycle fields every consumer reads;
-    // they are always present so a status control never has to guess.
-    ["type", row.type === "" ? "planned" : row.type],
-    ["trigger", row.trigger],
-    // The chapter is part of the scene's address — always present.
-    ["chapter", row.chapterId],
-    ["location", row.location],
-    // Empty reference lists are omitted, not written as `[]`: the format
-    // says nothing about them, so an absent list is an absent key.
-    ["npcs", npcs.length === 0 ? undefined : npcs],
-    ["handouts", handouts.length === 0 ? undefined : handouts],
-    ["tags", tags.length === 0 ? undefined : tags],
-    ["status", row.status === "" ? "draft" : row.status],
-  ]);
-}
-
-export function renderScene(row: SceneRow, npcs: string[], tags: string[]): EntryResponse {
-  return parsed(
-    sceneAddress(row),
-    "scene",
-    sceneProperties(row, npcs, tags),
-    row.body,
-    row.rev,
-  );
 }
 
 // --- sessions ---------------------------------------------------------------

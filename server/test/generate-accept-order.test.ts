@@ -2,7 +2,7 @@
 //
 // The outline step decides the dramaturgical sequence of a run's scenes, and
 // that sequence is what the DM has to read in the chapter overview (ADR #27)
-// — whatever order the review names its paths in, and however many accepts
+// — whatever order the review names its scenes in, and however many accepts
 // it takes. A scene of the run goes to the run's START plus its outline
 // number: the start is the chapter's end at the first scene accept, stored
 // on the job; after a hand reorder of the chapter the rest of the run is
@@ -18,7 +18,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import type { CampaignTree, ChapterNode, EntryResponse, GenerateJob } from "@grimoire/shared";
+import type { CampaignTree, ChapterNode, GenerateJob, Scene } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
@@ -122,9 +122,6 @@ async function sceneIds(chapter: string): Promise<string[]> {
   return (await chapterNode(chapter)).scenes.map((scene) => scene.id);
 }
 
-/** The path the review addresses a scene draft with. */
-const reviewPath = (chapter: string, id: string): string => `${chapter}/${id}`;
-
 /**
  * Accept the named scenes of the CURRENT job, one call per scene and in the
  * order given — each call reads the job afresh, because every accept moves
@@ -134,7 +131,8 @@ async function acceptOneByOne(chapter: string, ids: readonly string[]): Promise<
   for (const id of ids) {
     const job = await fetchJob();
     expect(job).not.toBeNull();
-    const res = await accept(job!, { paths: [reviewPath(chapter, id)] });
+    expect(job!.result?.scenes.find((scene) => scene.id === id)?.chapter).toBe(chapter);
+    const res = await accept(job!, { scenes: [id] });
     expect(res.status).toBe(200);
   }
 }
@@ -161,7 +159,7 @@ async function posOf(id: string): Promise<number | undefined> {
 async function createScene(title: string, chapter: string): Promise<string> {
   const res = await send("POST", `/api/campaigns/${CAMPAIGN}/scenes`, { title, chapter });
   expect(res.status).toBe(201);
-  return ((await res.json()) as EntryResponse).properties.id as string;
+  return ((await res.json()) as Scene).id;
 }
 
 /** Reorder the chapter by hand, against its current order guard. */
@@ -174,11 +172,12 @@ async function reorder(chapter: string, order: string[]): Promise<void> {
   expect(res.status).toBe(200);
 }
 
-/** The `rev` of one entry. */
-async function entryRev(address: string): Promise<number> {
-  const res = await app.request(entriesUrl(CAMPAIGN, address));
+/** The `rev` of the chapter entry, or of a scene on its own resource. */
+async function entryRev(target: string): Promise<number> {
+  const url = target.startsWith("/api/") ? target : entriesUrl(CAMPAIGN, target);
+  const res = await app.request(url);
   expect(res.status).toBe(200);
-  return ((await res.json()) as EntryResponse).rev;
+  return ((await res.json()) as { rev: number }).rev;
 }
 
 beforeEach(async () => {
@@ -200,8 +199,7 @@ test("a complete accept writes the scenes in outline order", async () => {
 
 test("a selection sent in REVERSE order still lands in outline order", async () => {
   const job = await runJob(NEW_CHAPTER, true);
-  const paths = [...OUTLINE].reverse().map((id) => reviewPath(NEW_CHAPTER, id));
-  expect((await accept(job, { paths })).status).toBe(200);
+  expect((await accept(job, { scenes: [...OUTLINE].reverse() })).status).toBe(200);
 
   expect(await sceneIds(NEW_CHAPTER)).toEqual(OUTLINE);
 });
@@ -246,7 +244,7 @@ test("a dropped scene keeps its number and leaves a gap", async () => {
   const job = await runJob(EXISTING_CHAPTER);
   const dropped = await send("PATCH", `/api/campaigns/${CAMPAIGN}/generate/job/${job.id}/review`, {
     rev: job.rev ?? 0,
-    dropped: [reviewPath(EXISTING_CHAPTER, "zweite-szene")],
+    droppedScenes: ["zweite-szene"],
   });
   expect(dropped.status).toBe(200);
   await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene", "erste-szene"]);
@@ -389,7 +387,7 @@ test("after a hand reorder the rest of the run goes to the end", async () => {
 // --- what an accept does not touch -------------------------------------------
 
 test("no accept moves the order guard, the chapter's rev or an existing scene's rev", async () => {
-  const arrival = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const arrival = `/api/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival`;
   const before = {
     order: (await chapterNode(EXISTING_CHAPTER)).sceneOrderRev,
     chapter: await entryRev(EXISTING_CHAPTER),

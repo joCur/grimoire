@@ -41,20 +41,13 @@ export function sceneTitle(
 }
 
 /**
- * Resolve a scene id to its ADDRESS via the tree — what a link to that scene
- * needs. Undefined for an id the tree does not know, so a caller renders the
- * title as plain text instead of linking into nothing (degrade).
+ * Does the tree know a scene with this id? A link to a scene needs one; a
+ * caller renders the title as plain text for an id the tree does not know
+ * instead of linking into nothing (degrade).
  */
-export function scenePath(
-  tree: CampaignTree | undefined,
-  sceneId: string | undefined,
-): string | undefined {
-  if (sceneId === undefined) return undefined;
-  for (const chapter of tree?.chapters ?? []) {
-    const scene = chapter.scenes.find((s) => s.id === sceneId);
-    if (scene !== undefined) return scene.path;
-  }
-  return undefined;
+export function hasScene(tree: CampaignTree | undefined, sceneId: string | undefined): boolean {
+  if (sceneId === undefined) return false;
+  return (tree?.chapters ?? []).some((chapter) => chapter.scenes.some((s) => s.id === sceneId));
 }
 
 /**

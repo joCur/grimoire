@@ -34,9 +34,9 @@ import {
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
-import { entryReplySchema, entrySchemaName } from "@grimoire/shared/entry-schema";
 import { locationReplyRequest } from "../src/location-reply";
 import { npcReplyRequest } from "../src/npc-reply";
+import { sceneReplyRequest } from "../src/scene-reply";
 
 // --- factory ------------------------------------------------------------------
 
@@ -132,7 +132,7 @@ const REQ: GenerateRequest = {
  * for exactly that reason: the transports must still behave when nothing is
  * forced, which is what `LLM_FORCE_JSON=0` and a future unforced call rely on.
  *
- * The OUTLINE request, and one ENTRY request per kind and mode below it.
+ * The OUTLINE request, and one request per entity and run below it.
  */
 const OUTLINE_REQ: GenerateRequest = {
   ...REQ,
@@ -143,15 +143,11 @@ const OUTLINE_REQ: GenerateRequest = {
   },
 };
 
-/** Every entry request a run can make — per mode a scene's, an npc's and a location's. */
+/** Every entity request a run can make — per run a scene's, an npc's and a location's. */
 const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
-  ...(["create", "augment"] as const).map((mode) => ({
-    label: `scene/${mode}`,
-    name: entrySchemaName("scene", mode),
-    req: { ...REQ, jsonSchema: entryReplySchema("scene", mode) } as GenerateRequest,
-  })),
   ...(["create", "augment"] as const).flatMap((mode) =>
     [
+      { label: `scene/${mode}`, reply: sceneReplyRequest(mode) },
       { label: `npc/${mode}`, reply: npcReplyRequest(mode) },
       { label: `location/${mode}`, reply: locationReplyRequest(mode) },
     ].map(({ label, reply }) => ({
@@ -220,7 +216,7 @@ describe("buildPrompt", () => {
 
   test("the sections after it are unchanged and in their old order", () => {
     const prompt = buildPrompt({ ...REQ, knowledge: KNOWLEDGE });
-    const order = ["## Glossar", "## Kontext", "## Referenz-Zieleintrag", "## Quelltext"].map((h) =>
+    const order = ["## Glossar", "## Kontext", "## Referenz-Beispiel", "## Quelltext"].map((h) =>
       prompt.indexOf(h),
     );
     expect(order.every((at) => at !== -1)).toBe(true);

@@ -166,13 +166,15 @@ function useSettingsCampaign(isSettings: boolean): string {
 export function Topbar() {
   const t = useT();
   const { pathname } = useLocation();
-  const sceneMatch = matchPath("/campaigns/:campaign/entries/*", pathname);
+  // What is read by its address — a chapter, the campaign.
+  const addressMatch = matchPath("/campaigns/:campaign/entries/*", pathname);
   const liveMatch = matchPath("/campaigns/:campaign/live", pathname);
   const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
   const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
   const listMatch = matchPath("/campaigns/:campaign/list/*", pathname);
-  // An npc's and a location's own routes — each its list and its reading
-  // view (ADR #31).
+  // A scene's, an npc's and a location's own routes — the reading view, and
+  // for the npc and the location their list (ADR #31).
+  const scenesMatch = matchPath("/campaigns/:campaign/scenes/*", pathname);
   const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
   const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
   // The two campaign-content pages. They are NOT in the nav trio
@@ -185,7 +187,8 @@ export function Topbar() {
   const isSettings = matchPath("/settings", pathname) !== null;
   const settingsFrom = useSettingsCampaign(isSettings);
   const campaign =
-    campaignOf(sceneMatch) ??
+    campaignOf(addressMatch) ??
+    campaignOf(scenesMatch) ??
     campaignOf(liveMatch) ??
     campaignOf(reviewMatch) ??
     campaignOf(generateMatch) ??
@@ -197,19 +200,21 @@ export function Topbar() {
     campaignOf(chapterOverviewMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??
     "";
-  const entryPath = sceneMatch?.params["*"] ?? "";
+  const entryPath = addressMatch?.params["*"] ?? "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
   // resolved from `?from=` (see above), so asking `campaign !== ""` would make
   // the settings page the chapter overview of that campaign, marking the
   // chapters entry and hanging the chapter overview's review and generator
   // entries into the row.
-  const isScene = campaignOf(sceneMatch) !== undefined && entryPath !== "";
-  // An npc's and a location's reading views are reading views like an
-  // entry's; their lists are not.
+  const isAddressView = campaignOf(addressMatch) !== undefined && entryPath !== "";
+  const isScene =
+    campaignOf(scenesMatch) !== undefined && (scenesMatch?.params["*"] ?? "") !== "";
+  // An npc's and a location's reading views are reading views like a
+  // scene's; their lists are not.
   const isNpcView = campaignOf(npcsMatch) !== undefined && (npcsMatch?.params["*"] ?? "") !== "";
   const isLocationView =
     campaignOf(locationsMatch) !== undefined && (locationsMatch?.params["*"] ?? "") !== "";
-  const isReadingView = isScene || isNpcView || isLocationView;
+  const isReadingView = isAddressView || isScene || isNpcView || isLocationView;
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
@@ -221,7 +226,14 @@ export function Topbar() {
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
   const isNpcs = campaignOf(npcsMatch) !== undefined;
   const isLocations = campaignOf(locationsMatch) !== undefined;
-  const section = navSection({ isChapterOverview, listKind, entryPath, isNpcs, isLocations });
+  const section = navSection({
+    isChapterOverview,
+    listKind,
+    entryPath,
+    isScene,
+    isNpcs,
+    isLocations,
+  });
 
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.

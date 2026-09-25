@@ -17,7 +17,6 @@ import type { SearchResult } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ftsQuery, scoreFromRank } from "../src/store/search";
 import { dropStore, seedStore } from "./support/store";
-import { entriesUrl } from "./support/urls";
 
 beforeEach(async () => {
   await seedStore();
@@ -35,7 +34,6 @@ async function search(q: string): Promise<SearchResult[]> {
   return body.results;
 }
 
-/** GET /entry, for the write cases below (they need the guard token). */
 /** Write one npc on its own resource (ADR #31) — its fields flat. */
 async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Response> {
   const read = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
@@ -47,8 +45,9 @@ async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Re
   });
 }
 
-async function readEntry(rel: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(entriesUrl("beispiel", rel));
+/** Read one scene on its own resource — the write cases below need its guard token. */
+async function readScene(id: string): Promise<{ rev: number; body: string }> {
+  const res = await app.request(`/api/campaigns/beispiel/scenes/${id}`);
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
@@ -172,12 +171,10 @@ describe("reference queries", () => {
       title: "Der Leuchtturm von Salzhafen",
       path: "campaign",
     });
-    // and the scene, whose path is derived from its ID now (store/paths)
-    expect(results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toMatchObject({
-      id: "lighthouse-arrival",
-      title: "Ankunft am Leuchtturm",
-      path: "01-salzhafen/leuchtturm/lighthouse-arrival",
-    });
+    // and the scene, its own resource too (ADR #31): no address either.
+    const scene = results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival");
+    expect(scene).toMatchObject({ id: "lighthouse-arrival", title: "Ankunft am Leuchtturm" });
+    expect(Object.hasOwn(scene!, "path")).toBe(false);
   });
 
   test("diacritics are folded: 'lampenol' finds the Lampenöl body", async () => {
@@ -211,7 +208,7 @@ describe("reference queries", () => {
     expect(entry?.path).toBeUndefined();
     // An ENTRY hit, by contrast, carries its address — asserted on a query
     // that finds one.
-    expect((await search("Leuchtturm")).find((r) => r.kind === "scene")?.path).toBeDefined();
+    expect((await search("Leuchtturm")).find((r) => r.kind === "chapter")?.path).toBeDefined();
     // the explanation is the body, so it is searchable from the German side
     expect(
       (await search("Leuchtturmwärter")).some((r) => r.kind === "glossary"),
@@ -222,15 +219,14 @@ describe("reference queries", () => {
 // --- index maintenance ------------------------------------------------------
 
 describe("the index follows every write", () => {
-  test("a body written through the entry PATCH is searchable immediately", async () => {
+  test("a body written through the scene PATCH is searchable immediately", async () => {
     // The guarantee that replaced invalidateCampaign(): the write and the
     // index row are one transaction, so there is no window in which the DM
     // cannot find what they just typed.
-    const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     expect(await search("nachtwache")).toEqual([]);
 
-    const entry = await readEntry(rel);
-    const res = await app.request(entriesUrl("beispiel", rel), {
+    const entry = await readScene("lighthouse-arrival");
+    const res = await app.request("/api/campaigns/beispiel/scenes/lighthouse-arrival", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

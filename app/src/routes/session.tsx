@@ -19,7 +19,7 @@ import { fetchTree } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
-import { scenePath, sceneTitle } from "@/lib/campaign";
+import { hasScene, sceneTitle } from "@/lib/campaign";
 import {
   formatDuration,
   sessionDateLabel,
@@ -27,6 +27,7 @@ import {
   sessionTimeLabel,
 } from "@/lib/session";
 import { useSession } from "@/lib/use-session";
+import { sceneHref } from "@/scene/scene-links";
 
 export function SessionRoute() {
   const t = useT();
@@ -112,7 +113,7 @@ export function SessionRoute() {
           ) : (
             <ul className="flex flex-col gap-2">
               {data.log.map((row) => {
-                const path = scenePath(tree.data, row.sceneId);
+                const known = hasScene(tree.data, row.sceneId);
                 const title = sceneTitle(tree.data, row.sceneId);
                 return (
                   <li key={row.id} className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[14px]">
@@ -122,7 +123,7 @@ export function SessionRoute() {
                       </span>
                     )}
                     {title !== undefined &&
-                      (path === undefined ? (
+                      (!known || row.sceneId === undefined ? (
                         // A scene the tree does not know: name it, claim no
                         // link (degrade, README).
                         <span className="flex-none text-[12.5px] text-muted-foreground">
@@ -130,7 +131,7 @@ export function SessionRoute() {
                         </span>
                       ) : (
                         <Link
-                          to={`/campaigns/${campaign}/entries/${path}`}
+                          to={sceneHref(campaign, row.sceneId)}
                           className="flex-none rounded-md text-[12.5px] text-primary hover:text-primary-hover"
                         >
                           {title}
@@ -178,15 +179,14 @@ export function SessionRoute() {
           ) : (
             <ul className="flex flex-col gap-1.5">
               {data.scenesPlayed.map((sceneId) => {
-                const path = scenePath(tree.data, sceneId);
                 const title = sceneTitle(tree.data, sceneId) ?? sceneId;
                 return (
                   <li key={sceneId} className="text-[14px]">
-                    {path === undefined ? (
+                    {!hasScene(tree.data, sceneId) ? (
                       <span className="text-body-secondary">{title}</span>
                     ) : (
                       <Link
-                        to={`/campaigns/${campaign}/entries/${path}`}
+                        to={sceneHref(campaign, sceneId)}
                         className="rounded-md text-primary hover:text-primary-hover"
                       >
                         {title}

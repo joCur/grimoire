@@ -1,9 +1,9 @@
 // An npc's augment proposal, field by field (ADR #31): what the model changes
 // against the npc as the run read it. Pure, so the rule is unit-testable.
 
-import type { AugmentPropertyProposal, NpcProposal } from "@grimoire/shared/types";
+import type { NpcProposal } from "@grimoire/shared/types";
 
-import { formatPropertyValue } from "@/lib/augment";
+import { formatPropertyValue, type FieldProposal } from "@/lib/augment";
 
 /** "No value here" for any field of an npc: absent, blank text, no pair. */
 function isEmptyValue(value: unknown): boolean {
@@ -39,9 +39,9 @@ function comparable(value: unknown): string {
 export function npcFieldProposals(
   current: NpcProposal,
   proposed: NpcProposal,
-): AugmentPropertyProposal[] {
+): FieldProposal[] {
   const { id: _id, body: _body, ...fields } = proposed;
-  const out: AugmentPropertyProposal[] = [];
+  const out: FieldProposal[] = [];
   for (const [key, value] of Object.entries(fields) as Array<[keyof typeof fields, unknown]>) {
     const before: unknown = current[key];
     if (isEmptyValue(value) || comparable(before) === comparable(value)) continue;

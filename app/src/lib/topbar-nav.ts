@@ -23,8 +23,10 @@ export interface NavView {
   isChapterOverview: boolean;
   /** `:kind` of "/campaigns/:campaign/list/:kind", or "" when this is not a list view. */
   listKind?: string;
-  /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not an entry view. */
+  /** The address of "/campaigns/:campaign/entries/*" (a chapter, the campaign), or "". */
   entryPath?: string;
+  /** A scene's reading view: "/campaigns/:campaign/scenes/:id". */
+  isScene?: boolean;
   /** An npc's own routes: "/campaigns/:campaign/npcs" and "…/npcs/:id". */
   isNpcs?: boolean;
   /** A location's own routes: "/campaigns/:campaign/locations" and "…/locations/:id". */
@@ -34,13 +36,14 @@ export interface NavView {
 /**
  * The section to mark, or undefined for the views that belong to none.
  *
- * The chapter overview and the scene list are Chapters; an entry's section
- * comes from its kind (the shared path table — the format contract in code
- * exactly once): scenes and chapters are Chapters. An npc's and a location's
- * list and reading view are NPCs and Locations — their own routes (ADR #31).
+ * The chapter overview, the scene list and a scene's reading view are
+ * Chapters, and so is a chapter read by its address (the shared address
+ * table — the format contract in code exactly once). An npc's and a
+ * location's list and reading view are NPCs and Locations — each its own
+ * route (ADR #31).
  */
 export function navSection(view: NavView): NavSection | undefined {
-  if (view.isChapterOverview) return "chapters";
+  if (view.isChapterOverview || view.isScene === true) return "chapters";
   if (view.isNpcs === true) return "npcs";
   if (view.isLocations === true) return "locations";
 
@@ -48,12 +51,6 @@ export function navSection(view: NavView): NavSection | undefined {
 
   const path = view.entryPath ?? "";
   if (path === "") return undefined;
-  switch (kindFromAddress(path)) {
-    case "scene":
-    case "chapter":
-      return "chapters";
-    default:
-      // The campaign entry and anything unknown — no section.
-      return undefined;
-  }
+  // The campaign and anything unknown — no section.
+  return kindFromAddress(path) === "chapter" ? "chapters" : undefined;
 }

@@ -4,9 +4,9 @@
 // `tests/entry-edit.e2e.ts` owns that fallback and the whole save/409/discard
 // machinery seen from it; this spec owns the composer.
 //
-// What has to hold, and why every test below reads the entry back through the API:
+// What has to hold, and why every test below reads the scene back through the API:
 //
-//   * OPENING AND CLOSING AN ENTRY MUST NOT COST A BYTE. The composer parses the
+//   * OPENING AND CLOSING A SCENE MUST NOT COST A BYTE. The composer parses the
 //     body and serializes it again, so the round trip is the one thing that
 //     could quietly reformat a hand-written scene. „Speichern" stays disabled
 //     after a Blöcke → Roh → Blöcke detour, and every save is asserted as
@@ -29,14 +29,14 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type Api, type SeedEntry } from "../support/test";
+import { expect, test, type Api, type SeedScene } from "../support/test";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
+const SCENE = "lighthouse-arrival";
+const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
 /** The reference scene WITH two `## If:` sections and their children. */
-const IF_SCENE = "01-salzhafen/bucht/smuggler-captured";
-const IF_SCENE_URL = `/campaigns/beispiel/entries/${IF_SCENE}`;
+const IF_SCENE = "smuggler-captured";
+const IF_SCENE_URL = `/campaigns/beispiel/scenes/${IF_SCENE}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
 const CONFLICT_LINE = "Inzwischen geändert";
 
@@ -50,10 +50,18 @@ const SCENE_BLOCKS = [
   "Notiz 6",
 ];
 
-/** Read the entry: its properties and its text — the two halves every assertion looks at. */
-async function split(api: Api, rel: string) {
-  const { properties, body } = await api.entry(rel);
-  return { properties, body };
+/**
+ * Read the scene: its text, and every other field beside it — a save of the
+ * text has to leave those alone, which is what the assertions look at.
+ */
+async function split(api: Api, id: string) {
+  const { body, rev: _rev, ...fields } = await api.scene(id);
+  return { fields, body };
+}
+
+/** The scene's text. */
+async function bodyOf(api: Api, id: string): Promise<string> {
+  return (await api.scene(id)).body;
 }
 
 /**
@@ -76,7 +84,7 @@ function composer(page: Page): Locator {
   return page.getByRole("region", { name: /^Blöcke: / });
 }
 
-/** The raw textarea of „Markdown" (EntryBodyEditor labels it with the entry's address). */
+/** The raw textarea of „Markdown" (the body editor labels it with the scene's title). */
 function rawTextarea(page: Page): Locator {
   return page.getByRole("textbox", { name: /^Markdown-Text von/ });
 }
@@ -233,9 +241,9 @@ test("editing a Vorlesetext card writes THAT block and nothing else", async ({ p
 
   // On disk: the readaloud block gained ONE quoted line, and that is the whole
   // diff — asserted as the full body, so a reflowed neighbour would fail here.
-  await expect.poll(() => api.body(SCENE)).toContain(added);
+  await expect.poll(() => bodyOf(api, SCENE)).toContain(added);
   const after = await split(api, SCENE);
-  expect(after.properties).toEqual(before.properties);
+  expect(after.fields).toEqual(before.fields);
   const readaloudBefore = blockOf(before.body, "> [!readaloud]");
   expect(after.body).toBe(
     before.body.replace(`${readaloudBefore}\n`, `${readaloudBefore}\n> ${added}\n`),
@@ -296,14 +304,14 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
 
   // On disk: the markers the DM never typed, one blank line of separation, and
   // the body's single trailing newline — everything before it untouched.
-  await expect.poll(() => api.body(SCENE)).toContain("[!loot]");
+  await expect.poll(() => bodyOf(api, SCENE)).toContain("[!loot]");
   const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n> [!loot] ${lootText}\n`);
 });
 
 // --- e: moving blocks ---------------------------------------------------------
 
-test("⌄/⌃ reorder the blocks — the entry follows, both blocks verbatim", async ({ page, api }) => {
+test("⌄/⌃ reorder the blocks — the scene follows, both blocks verbatim", async ({ page, api }) => {
   const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
@@ -335,7 +343,7 @@ test("⌄/⌃ reorder the blocks — the entry follows, both blocks verbatim", a
   const check = blockOf(before.body, "> [!check]");
   const secret = blockOf(before.body, "> [!secret]");
   const after = await split(api, SCENE);
-  expect(after.properties).toEqual(before.properties);
+  expect(after.fields).toEqual(before.fields);
   expect(after.body).toBe(before.body.replace(`${check}\n\n${secret}`, `${secret}\n\n${check}`));
   expect(blockOf(after.body, "> [!check]")).toBe(check);
   expect(blockOf(after.body, "> [!secret]")).toBe(secret);
@@ -399,9 +407,9 @@ test("a child of the first If-section edits without touching the two headings", 
 
   // On disk: BOTH `## If:` heading lines byte-identical (the section keeps its
   // own source when only a child changes), and the child is the only diff.
-  await expect.poll(() => api.body(IF_SCENE)).toContain(added);
+  await expect.poll(() => bodyOf(api, IF_SCENE)).toContain(added);
   const after = await split(api, IF_SCENE);
-  expect(after.properties).toEqual(before.properties);
+  expect(after.fields).toEqual(before.fields);
   expect(blockOf(after.body, "## If: sie geben zu")).toBe("## If: sie geben zu, für Jorna zu arbeiten");
   expect(blockOf(after.body, "## If: sie lügen")).toBe(
     blockOf(before.body, "## If: sie lügen"),
@@ -457,9 +465,9 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   // On disk: the new heading sits between the two `## If:` lines, i.e. INSIDE
   // the first section — which is what the composer showed all along.
   await expect(composer(page)).toHaveCount(0);
-  await expect.poll(() => api.body(IF_SCENE)).toContain("### Boom");
+  await expect.poll(() => bodyOf(api, IF_SCENE)).toContain("### Boom");
   const after = await split(api, IF_SCENE);
-  expect(after.properties).toEqual(before.properties);
+  expect(after.fields).toEqual(before.fields);
   expect(after.body).toBe(before.body.replace(paragraph, `${paragraph}\n### Boom`));
   expect(after.body.indexOf("### Boom")).toBeGreaterThan(
     after.body.indexOf("## If: sie geben zu"),
@@ -483,7 +491,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
 }) => {
   const before = await split(api, SCENE);
   const mine = "Im Blockformular getippt, während der Eintrag sich bewegte.";
-  // Same properties, different body — only the row's guard token moves, and
+  // Same fields, different body — only the row's guard token moves, and
   // that is what the server compares against.
   const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
@@ -498,7 +506,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
   // A SECOND WRITER moves the row under the open composer, through the same
   // API with a fresh token. No race to win: the editor holds the token it was
   // seeded from until a conflict tells it otherwise.
-  await api.writeBody(SCENE, externalBody);
+  await api.patchScene(SCENE, { body: externalBody });
   await field.fill(`${original}\n${mine}`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
@@ -511,7 +519,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
   await expect(field).toHaveValue(`${original}\n${mine}`);
   expect(await blockNames(page)).toEqual(SCENE_BLOCKS);
   // Nothing was written: the other writer's content stands, untouched.
-  expect(await split(api, SCENE)).toEqual({ properties: before.properties, body: externalBody });
+  expect(await split(api, SCENE)).toEqual({ fields: before.fields, body: externalBody });
 
   // Forcing writes the draft on top of the row as it stands — deliberately on
   // top of the external body: the DM saw the line and decided.
@@ -520,9 +528,9 @@ test("409 with a block form open: the message, the form and the typed text stay"
   await expect(conflictLine).toHaveCount(0);
   await expect(page.locator("[data-callout='note']")).toContainText(mine);
 
-  await expect.poll(() => api.body(SCENE)).toContain(mine);
+  await expect.poll(() => bodyOf(api, SCENE)).toContain(mine);
   const after = await split(api, SCENE);
-  expect(after.properties).toEqual(before.properties);
+  expect(after.fields).toEqual(before.fields);
   const noteBefore = blockOf(before.body, "> [!note]");
   expect(after.body).toBe(before.body.replace(`${noteBefore}\n`, `${noteBefore}\n> ${mine}\n`));
   expect(after.body).not.toContain("Von einem zweiten Schreiber");
@@ -530,7 +538,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
 
 // --- h: the discard guard -----------------------------------------------------
 
-test("Abbrechen after a block edit asks first — Verwerfen leaves the entry alone", async ({
+test("Abbrechen after a block edit asks first — Verwerfen leaves the scene alone", async ({
   page,
   api,
 }) => {
@@ -569,25 +577,19 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the entry alo
 
 /**
  * A scene with two constructs the composer does not model: an UNKNOWN callout
- * kind and a markdown table. Seeded as an entry of its own and written out
+ * kind and a markdown table. Seeded as a scene of its own and written out
  * here verbatim, because the assertions are about these exact bytes.
  */
-/** Its last address segment is the scene's id, like every scene address. */
-const ODD_SCENE_PATH = "01-salzhafen/leuchtturm/seltsame-mechanik";
-
-const ODD_SCENE: SeedEntry = {
-  kind: "scene",
-  properties: {
-    id: "seltsame-mechanik",
-    title: "Seltsame Mechanik",
-    type: "planned",
-    chapter: "01-salzhafen",
-    location: "leuchtturm",
-    npcs: [],
-    handouts: [],
-    tags: ["test"],
-    status: "draft",
-  },
+const ODD_SCENE: SeedScene = {
+  id: "seltsame-mechanik",
+  title: "Seltsame Mechanik",
+  type: "planned",
+  chapter: "01-salzhafen",
+  location: "leuchtturm",
+  npcs: [],
+  handouts: [],
+  tags: ["test"],
+  status: "draft",
   body: `
 ## Flow
 
@@ -603,17 +605,17 @@ Die Gruppe würfelt auf der Tabelle unten.
 };
 
 test.describe("with a scene of unknown constructs", () => {
-  test.use({ seed: { entries: { "scene-seltsame-mechanik": ODD_SCENE } } });
+  test.use({ seed: { entries: { "scenes/seltsame-mechanik": ODD_SCENE } } });
 
   test("unknown callouts and tables become cards — and survive a neighbour's save", async ({
     page,
     api,
   }) => {
-    const rel = ODD_SCENE_PATH;
+    const rel = ODD_SCENE.id;
     const before = await split(api, rel);
     const added = "Bei einem Patt würfelt die Gruppe erneut.";
 
-    await page.goto(`/campaigns/beispiel/entries/${rel}`);
+    await page.goto(`/campaigns/beispiel/scenes/${rel}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
     await page.getByRole("button", { name: "Bearbeiten" }).click();
 
@@ -654,9 +656,9 @@ test.describe("with a scene of unknown constructs", () => {
     await expect(page.getByRole("article")).toContainText(added);
 
     // On disk: both unmodelled constructs byte-identical, one paragraph longer.
-    await expect.poll(() => api.body(rel)).toContain(added);
+    await expect.poll(() => bodyOf(api, rel)).toContain(added);
     const after = await split(api, rel);
-    expect(after.properties).toEqual(before.properties);
+    expect(after.fields).toEqual(before.fields);
     expect(blockOf(after.body, "> [!weird]")).toBe("> [!weird] bla");
     expect(blockOf(after.body, "| Wurf")).toBe(blockOf(before.body, "| Wurf"));
     expect(after.body).toBe(
@@ -720,7 +722,7 @@ test.describe("at 390px", () => {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
 
     const after = await split(api, SCENE);
-    expect(after.properties).toEqual(before.properties);
+    expect(after.fields).toEqual(before.fields);
     const paragraphBefore = blockOf(before.body, "Die Gruppe erreicht");
     expect(after.body).toBe(
       before.body.replace(paragraphBefore, `${paragraphBefore}\n${added}`),

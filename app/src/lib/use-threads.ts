@@ -18,7 +18,7 @@ import { useState } from "react";
 import { appendThread, deleteThread, fetchThreads, patchThread, threadsConflict } from "@/api";
 import { useT } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
-import { isStaleEntryError } from "@/lib/write-with-rev";
+import { isWriteConflict } from "@/lib/write-with-rev";
 
 /** Query key of one chapter's thread list — shared by review and overview. */
 export function threadsKey(campaign: string, chapter: string): [string, string, string] {
@@ -82,7 +82,7 @@ export function useThreadWrites(campaign: string, chapter: string): ThreadWrites
       queryClient.setQueryData(key, list);
     },
     onError: (error) => {
-      if (isStaleEntryError(error)) {
+      if (isWriteConflict(error)) {
         setStale(threadsConflict(error) ?? "unknown");
         return;
       }

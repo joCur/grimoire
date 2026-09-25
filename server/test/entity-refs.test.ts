@@ -15,8 +15,8 @@ import { expandBodyRefs, referrersOf } from "../src/store/refs";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-/** A scene of the example campaign we overwrite with reference prose. */
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+/** A scene of the example campaign we overwrite with reference prose — its own resource. */
+const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
 
 /**
  * The seed's OWN reference to jorna: fenn's `## Beziehungen` names her as
@@ -34,28 +34,24 @@ afterEach(() => {
   dropStore();
 });
 
-async function readEntry(rel: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(entriesUrl("beispiel", rel));
+/** The URL of what a case writes: the scene's resource, or an entry's address. */
+function urlOf(target: string): string {
+  return target.startsWith("/api/") ? target : entriesUrl("beispiel", target);
+}
+
+async function readEntry(target: string): Promise<{ rev: number; body: string }> {
+  const res = await app.request(urlOf(target));
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
 
-async function writeBody(rel: string, body: string): Promise<void> {
-  const entry = await readEntry(rel);
-  const res = await app.request(entriesUrl("beispiel", rel), {
+/** Write the text of a scene or an entry — a `{ rev, body }` PATCH either way. */
+async function writeBody(target: string, body: string): Promise<void> {
+  const entry = await readEntry(target);
+  const res = await app.request(urlOf(target), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: entry.rev, body }),
-  });
-  expect(res.status).toBe(200);
-}
-
-async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
-  const entry = await readEntry(rel);
-  const res = await app.request(entriesUrl("beispiel", rel), {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: entry.rev, properties: p }),
   });
   expect(res.status).toBe(200);
 }
@@ -240,14 +236,17 @@ describe("the seed expands references (second pass)", () => {
       entries: [
         {
           kind: "scene",
-          properties: {
+          scene: {
             id: "seeded-ref",
             title: "Referenz aus dem Seed",
             type: "planned",
             chapter: "01-salzhafen",
+            npcs: [],
+            handouts: [],
+            tags: [],
             status: "draft",
+            body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
           },
-          body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
         },
       ],
     });

@@ -31,7 +31,7 @@
 // the query the overview already runs for the chapter's text, passed in rather
 // than fetched twice.
 
-import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 
@@ -64,7 +64,6 @@ export function ChapterActions({
   campaign,
   chapter,
   entry,
-  tree,
 }: {
   campaign: string;
   chapter: string;
@@ -74,8 +73,6 @@ export function ChapterActions({
    * its rev, so they simply are not offered yet.
    */
   entry: EntryResponse | undefined;
-  /** For the properties dialog's reference fields. */
-  tree: CampaignTree | undefined;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
@@ -92,7 +89,6 @@ export function ChapterActions({
           <PropertiesAction
             campaign={campaign}
             entry={entry}
-            tree={tree}
             triggerLabel={t("chapterOverview.chapter.properties")}
           />
           <HeaderAction

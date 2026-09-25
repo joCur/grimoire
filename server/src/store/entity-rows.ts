@@ -8,12 +8,10 @@
 // per-kind index functions and the loaders it needs stay together.
 
 import { and, asc, eq } from "drizzle-orm";
-import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { chapters, locations, npcs, sceneNpcs, sceneTags, scenes } from "../db/schema";
 import { campaignRow, indexCampaign } from "./campaigns";
 import { indexEntity } from "./fts";
-import type { Locator } from "./paths";
 import { expandBodyRefs, referrersOf, type RefBodyKind } from "./refs";
 import type { ChapterRow, LocationRow, NpcRow, SceneRow } from "./render";
 import { unknownRef } from "./shared";
@@ -37,28 +35,6 @@ export function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneR
     .from(scenes)
     .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
     .all()[0] as SceneRow | undefined;
-}
-
-/**
- * The scene a `{ kind: "scene" }` locator addresses — by ID, which is the
- * key. The chapter and group segments are not matched against the row: the
- * group is `location`, and it MOVES when the DM corrects the location, so
- * every address handed out before that move is a stale address for a scene
- * that still exists. Resolving by id is what makes the correction
- * non-destructive — the response carries the current
- * address in `path`, and the app replaces the URL with it (ADR #17).
- *
- * The write is not unguarded by this: `rev` is the guard that a write which
- * has not seen the current entry is refused (ADR #4).
- */
-export function sceneRowAt(
-  tx: GrimoireDb,
-  campaign: string,
-  locator: Extract<Locator, { kind: "scene" }>,
-): SceneRow {
-  const row = sceneRowOf(tx, campaign, locator.id);
-  if (row === undefined) throw new ApiError(404, "entry not found");
-  return row;
 }
 
 export function npcRowOf(tx: GrimoireDb, campaign: string, id: string): NpcRow | undefined {
@@ -103,9 +79,9 @@ export function refTags(tx: GrimoireDb, campaign: string, sceneId: string): stri
     .map((r) => r.tag);
 }
 
-// --- references, and what an entry is ---------------------------------------
+// --- references ----------------------------------------------------------------
 //
-// A reference names an entry that EXISTS — the database says so (schema.ts
+// A reference names a row that EXISTS — the database says so (schema.ts
 // rule 3), and the assertions below are what turns a write that names
 // something else into one readable sentence instead of a constraint error.
 //
@@ -126,7 +102,7 @@ export function assertChapterRef(tx: GrimoireDb, campaign: string, declared: str
   throw unknownRef("chapter_unknown", "chapter", declared);
 }
 
-/** A scene's `location` has to name a location entry. */
+/** A scene's `location` has to name a location. */
 export function assertLocationRef(tx: GrimoireDb, campaign: string, id: string | null): void {
   if (id === null) return;
   if (locationRowOf(tx, campaign, id) !== undefined) return;
@@ -134,7 +110,7 @@ export function assertLocationRef(tx: GrimoireDb, campaign: string, id: string |
 }
 
 /**
- * Every entry of a scene's `npcs` has to name an npc entry.
+ * Every id of a scene's `npcs` has to name an npc.
  *
  * This is also what answers a NAME typed where an id belongs ("Alte
  * Fischerin"): no npc has that id, so the list names something that does not

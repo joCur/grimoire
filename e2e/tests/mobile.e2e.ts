@@ -112,7 +112,13 @@ test.describe("with a session open since yesterday", () => {
 });
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
-  await page.goto("/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival");
+  // Reached the way a phone reaches it: the lookup row of the start surface,
+  // then the scene list — onto the scene's own route (ADR #31).
+  await page.goto("/campaigns/beispiel");
+  await page.getByRole("link", { name: /^Szenen/ }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/scenes$/);
+  await page.getByRole("link", { name: /Ankunft am Leuchtturm/ }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

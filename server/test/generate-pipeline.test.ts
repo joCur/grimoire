@@ -440,15 +440,15 @@ test("the single-scene mode swaps the output schema and keeps every rule", async
   expect(single).toContain("Du antwortest mit **einem JSON-Objekt**");
   expect(single).toContain("`warnings`");
   expect(single).not.toContain("---warnings---");
-  // The outline-bound half of the swap: one scene per call, no entries.
+  // The outline-bound half of the swap: one scene per call, nothing else.
   expect(single).toContain("GENAU EINE Szene");
   expect(single).toContain("Die Gliederung ist verbindlich.");
-  // Exactly one output-format heading, and the entry format and the rules of
+  // Exactly one output-format heading, and the scene's fields and the rules of
   // the scene prompt are untouched — that is why this is a swap and not a
   // second prompt file.
   expect(single.split("## Ausgabeformat").length - 1).toBe(1);
   for (const marker of [
-    "## Eigenschaften und Text des Eintrags",
+    "## Die Felder der Szene",
     "**Deutsche Orthografie**",
     "**Anführungszeichen**",
     "**Tabellen**",
@@ -535,15 +535,16 @@ const SCENE_IDS = ["eins", "zwei", "drei"] as const;
 /** One scene as the REPLY OBJECT — what a part's call answers. */
 function sceneDoc(id: string, over: { status?: string } = {}): string {
   return JSON.stringify({
-    properties: {
-      id,
-      title: `Szene ${id}`,
-      type: "planned",
-      location: "leuchtturm",
-      npcs: ["fenn"],
-      tags: ["social"],
-      status: over.status ?? "draft",
-    },
+    id,
+    title: `Szene ${id}`,
+    type: "planned",
+    trigger: null,
+    chapter: "01-salzhafen",
+    location: "leuchtturm",
+    npcs: ["fenn"],
+    handouts: [],
+    tags: ["social"],
+    status: over.status ?? "draft",
     body: "## Flow\n\nFenn wartet am Kai.\n",
     warnings: [],
   });
@@ -670,12 +671,12 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   // body only ever has one, for a run that can have many parts).
   expect(failed.rawReply).toContain('"status":"ready"');
   expect(failed.validationErrors).toEqual(
-    expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
+    expect.arrayContaining([expect.stringContaining('scene "zwei": "status"')]),
   );
   // The two finished scenes are in the result, in OUTLINE order.
-  expect(job.result!.scenes.map((s) => s.path)).toEqual([
-    "01-salzhafen/eins",
-    "01-salzhafen/drei",
+  expect(job.result!.scenes.map((s) => s.id)).toEqual([
+    "eins",
+    "drei",
   ]);
   // 1 + 3 calls, plus the broken part's correction turn.
   expect(job.pipeline!.totals.calls).toBe(provider.calls.length);
@@ -684,11 +685,11 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   // …and one of them can be accepted while the failed part is still open.
   const accepted = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     rev: job.rev ?? 0,
-    paths: ["01-salzhafen/eins"],
+    scenes: ["eins"],
   });
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
-    written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    scenes: ["eins"],
     npcs: [],
     locations: [],
     // The job stays: the failed part is not settled.
@@ -724,11 +725,11 @@ test("a done part is acceptable while the run is still RUNNING (AK2)", async () 
 
   const accepted = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     rev: job.rev,
-    paths: ["01-salzhafen/eins"],
+    scenes: ["eins"],
   });
   expect(accepted.status).toBe(200);
   expect(await accepted.json()).toEqual({
-    written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    scenes: ["eins"],
     npcs: [],
     locations: [],
     jobDeleted: false,
@@ -787,10 +788,10 @@ test("„Erneut versuchen“ re-runs ONE part and leaves the rest alone (AK3)", 
   expect(after.id).toBe(first.id);
   expect(after.pipeline!.parts.map((p) => p.status)).toEqual(["done", "done", "done"]);
   expect(after.pipeline!.parts[1]!.error).toBeUndefined();
-  expect(after.result!.scenes.map((s) => s.path)).toEqual([
-    "01-salzhafen/eins",
-    "01-salzhafen/zwei",
-    "01-salzhafen/drei",
+  expect(after.result!.scenes.map((s) => s.id)).toEqual([
+    "eins",
+    "zwei",
+    "drei",
   ]);
   // Only the retried part ran — no outline call, no sibling.
   expect(retryProvider.calls).toEqual(["zwei"]);
@@ -841,10 +842,10 @@ test("a retry that races a sibling's result does not clobber it", async () => {
   expect(after.pipeline!.parts.map((p) => p.status)).toEqual(["done", "done", "done"]);
   // …and the run settled, which is the property the clobber destroyed.
   expect(after.status).toBe("done");
-  expect(after.result!.scenes.map((s) => s.path)).toEqual([
-    "01-salzhafen/eins",
-    "01-salzhafen/zwei",
-    "01-salzhafen/drei",
+  expect(after.result!.scenes.map((s) => s.id)).toEqual([
+    "eins",
+    "zwei",
+    "drei",
   ]);
 });
 
@@ -929,9 +930,9 @@ test("a restart fails the open parts and keeps the finished ones (AK3)", async (
   expect(after.status).toBe("done");
   expect(after.pipeline!.parts.map((p) => p.status)).toEqual(["done", "done", "failed"]);
   expect(after.pipeline!.parts[2]!.error).toBe(RESTART_FAILURE_MESSAGE);
-  expect(after.result!.scenes.map((s) => s.path)).toEqual([
-    "01-salzhafen/eins",
-    "01-salzhafen/zwei",
+  expect(after.result!.scenes.map((s) => s.id)).toEqual([
+    "eins",
+    "zwei",
   ]);
   // The abandoned call finishing later must not resurrect anything.
   held?.();

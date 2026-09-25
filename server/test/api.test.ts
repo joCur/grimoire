@@ -155,9 +155,8 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // display name the meta line shows.
     expect(arrival.location).toBe("leuchtturm");
     expect(arrival.locationName).toBe("Der Leuchtturm von Salzhafen");
-    // The path segment is the scene ID now (store/paths.ts) — the old stem
-    // ("ankunft-leuchtturm") does not exist anywhere any more.
-    expect(arrival.path).toBe("01-salzhafen/leuchtturm/lighthouse-arrival");
+    // A scene is its own resource and carries no address (ADR #31).
+    expect(Object.hasOwn(arrival, "path")).toBe(false);
     expect(chapter.scenes[1]!.type).toBe("contingency");
     // The order carries its own guard token, separate from the chapter
     // entry's `rev`.
@@ -193,10 +192,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // The tree has no slot for campaign metadata;
     // the campaign row is addressed by campaign and by nothing in here.
     expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
-    const paths = t.chapters.flatMap((c) => [
-      ...(c.path === undefined ? [] : [c.path]),
-      ...c.scenes.map((s) => s.path),
-    ]);
+    const paths = t.chapters.flatMap((c) => (c.path === undefined ? [] : [c.path]));
     for (const rootEntry of ["campaign", "inbox", "glossary"]) expect(paths).not.toContain(rootEntry);
   });
 
@@ -226,16 +222,16 @@ describe("GET /api/campaigns/:campaign/entries", () => {
   });
 
   test("returns properties, body and the rev", async () => {
-    const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
+    const rel = "01-salzhafen";
     const res = await app.request(entriesUrl("beispiel", rel));
     expect(res.status).toBe(200);
     const body = (await res.json()) as EntryResponse;
     expect(body.path).toBe(rel);
-    expect(body.kind).toBe("scene");
-    expect(body.properties.id).toBe("lighthouse-arrival");
-    expect(body.properties.status).toBe("ready");
-    expect(body.body).toContain("## Flow");
-    expect(body.body).not.toContain("id: lighthouse-arrival");
+    expect(body.kind).toBe("chapter");
+    expect(body.properties.id).toBe("01-salzhafen");
+    expect(body.properties.status).toBe("active");
+    expect(body.body).toContain("Leuchtfeuer");
+    expect(body.body).not.toContain("id: 01-salzhafen");
     // `rev` is the ROW VERSION (store/render.ts rule 3): an opaque
     // guard token the client only ever sends back. A freshly imported row is
     // at 1 — that it INCREASES per write is pinned in write-api.test.ts.
@@ -267,24 +263,16 @@ describe("GET /api/campaigns/:campaign/entries", () => {
     expect((await app.request(entriesUrl("nope", "campaign"))).status).toBe(404);
   });
 
-  test("a STALE scene address resolves and answers with the current one", async () => {
-    // The group segment is the scene's `location` and moves with it, so an
-    // address written down before a correction names the right scene with
-    // the wrong group. It resolves by id and reports the address it has now
-    // — that is what the app follows (ADR #17).
-    for (const stale of [
+  test("a scene has no address — what used to name one is a 404", async () => {
+    // A scene is its own resource, `…/scenes/:id` (ADR #31): no address
+    // under its chapter reaches it, with or without its location.
+    for (const address of [
       "01-salzhafen/lighthouse-arrival",
-      "01-salzhafen/hafen/lighthouse-arrival",
-      "02-nope/lighthouse-arrival",
+      "01-salzhafen/leuchtturm/lighthouse-arrival",
+      "scenes/lighthouse-arrival",
     ]) {
-      const res = await app.request(entriesUrl("beispiel", stale));
-      expect(res.status).toBe(200);
-      expect(((await res.json()) as { path: string }).path).toBe(
-        "01-salzhafen/leuchtturm/lighthouse-arrival",
-      );
+      expect((await app.request(entriesUrl("beispiel", address))).status).toBe(404);
     }
-    // An unknown ID is still a 404 — nothing to redirect to.
-    expect((await app.request(entriesUrl("beispiel", "01-salzhafen/nirgends"))).status).toBe(404);
   });
 
   test("400 without an address", async () => {
