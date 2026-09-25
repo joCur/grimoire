@@ -1,39 +1,37 @@
 // Critical path 5: the session review; the harvest metaphor lives on in spec
 // and identifier names only. See CLAUDE.md.
 //
-// Adopt a thread → a row of the chapter's thread list, tick off an inbox
-// line, create an NPC from a note — on the npc's own resource, `POST …/npcs`
-// (ADR #31) — and the progress counter. The thread list itself
-// — its rows, its guard and the chapter overview that keeps it — is
-// threads.e2e.ts.
+// Adopt a thread → a thread of the chapter, `POST …/threads`; tick off an
+// idea → `PATCH …/ideas/:id { rev, done }`; create an NPC from a note — on
+// the npc's own resource, `POST …/npcs` (ADR #31) — and the progress counter.
+// The threads themselves — their guard and the chapter overview that keeps
+// them — are threads.e2e.ts.
 //
 // TODAY's session is the harvest's data, so it is SEEDED as a session of its
 // own (the same rows the live view would have written — path 4 covers the
 // writing itself).
 //
-// Sessions, ideas and a chapter's open threads are LISTS (ADR #26): the
-// review reads rows and names them back by their id — `POST /review/seen
-// { sessionId, logId }` and `POST /review/inbox-done { id }` — and adopting a
-// thread appends a row to the chapter's list. So every assertion about what
-// was harvested reads a row, not a rendered text, and the chapter's own text
-// and `rev` stay exactly as they were.
+// The review reads rows and names them back by their id — a log row with
+// `POST /review/seen { sessionId, logId }`, an idea on its own resource — and
+// adopting a thread creates a thread of the chapter. So every assertion about
+// what was harvested reads a row, not a rendered text, and the chapter's own
+// text and `rev` stay exactly as they were.
 //
 // The source chip of a log row names the SCENE by its title (resolved via
 // the tree), not by the row's `sceneId`.
 
-import type { ThreadsResponse } from "@grimoire/shared/types";
 import { expect, test } from "../support/test";
 import type { SeedSession } from "../../server/src/db/seed";
-import type { Api } from "../support/api";
+import { underCampaign, type Api } from "../support/api";
 import { getChapter } from "../support/chapter";
-import { getInbox } from "../support/inbox";
+import { getIdeas, ideaPath } from "../support/idea";
 import { createNpc, getNpc, npcExists } from "../support/npc";
 import { getSession, sessionExists, todaySessionId } from "../support/session";
-import { getThreads, threadsPath } from "../support/threads";
+import { getThreads, patchThread, threadPath } from "../support/thread";
 
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
-const INBOX_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
+const IDEA_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
 /** An idea thrown in on the go — no hashtag at all. */
 const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
 /** A note ABOUT a player character — `#pc` plus the name tag. */
@@ -88,7 +86,7 @@ const PAST_MIDNIGHT = (() => {
   return { id: yesterday, session };
 })();
 
-test("adopting a thread lands in the chapter's list, the inbox line gets ticked off", async ({
+test("adopting a thread creates a thread of the chapter, the idea gets ticked off", async ({
   page,
   api,
 }) => {
@@ -103,9 +101,9 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   // Three tagged log rows + the tagged idea of the example campaign.
   await expect(progress).toHaveText("0 von 4 gesichtet");
   await expect(page.getByText("Noch keine offenen Handlungsstränge in diesem Kapitel.")).toHaveCount(0);
-  // The chapter already carries one open thread — a row of its list.
+  // The chapter already carries one open thread.
   await expect(page.getByText("Wer bezahlt die Schmuggler?")).toBeVisible();
-  expect(threadsBefore.entries.map((row) => row.text)).toEqual(["Wer bezahlt die Schmuggler?"]);
+  expect(threadsBefore.map((row) => row.text)).toEqual(["Wer bezahlt die Schmuggler?"]);
 
   // --- adopt the #thread log line -----------------------------------------
   const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
@@ -119,44 +117,47 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   // The thread list shows the new item with the "neu" chip.
   await expect(page.getByText("neu", { exact: true })).toBeVisible();
 
-  // Stored: the chapter's thread list gained a ROW at its end …
+  // Stored: the chapter gained a THREAD at its end …
   await expect
     .poll(async () =>
-      (await getThreads(api, "01-salzhafen")).entries.map((row) => [row.text, row.done]),
+      (await getThreads(api, "01-salzhafen")).map((row) => [row.text, row.done]),
     )
     .toEqual([
       ["Wer bezahlt die Schmuggler?", false],
       [THREAD_TEXT, false],
     ]);
-  // … and the CHAPTER did not move: not its text, not its guard.
+  // … and the CHAPTER did not move: not its text, not its guard. Neither did
+  // the thread that was there.
   const chapterAfter = await getChapter(api, "01-salzhafen");
   expect(chapterAfter.body).toBe(chapterBefore.body);
   expect(chapterAfter.rev).toBe(chapterBefore.rev);
-  // The list's own guard moved instead.
-  expect((await getThreads(api, "01-salzhafen")).rev).toBe(threadsBefore.rev + 1);
+  const [seededThread, adopted] = await getThreads(api, "01-salzhafen");
+  expect(seededThread).toEqual(threadsBefore[0]);
 
-  // The adopted thread is a row with an id, and ticking it names that id.
-  const list = await getThreads(api, "01-salzhafen");
-  const adopted = list.entries.at(-1)!;
-  const ticked = await api.send<ThreadsResponse>("PATCH", threadsPath(api, "01-salzhafen", adopted.id), {
-    rev: list.rev,
-    done: true,
+  // The adopted thread is its own resource, flat, with its own guard.
+  expect(adopted).toEqual({
+    id: adopted!.id,
+    chapter: "01-salzhafen",
+    text: THREAD_TEXT,
+    done: false,
+    rev: 1,
   });
-  expect(ticked.entries.at(-1)).toEqual({ ...adopted, done: true });
+  const ticked = await patchThread(api, adopted!.id, { rev: adopted!.rev, done: true });
+  expect(ticked).toEqual({ ...adopted, done: true, rev: 2 });
   expect((await getChapter(api, "01-salzhafen")).rev).toBe(chapterBefore.rev);
-  const patchThread = (id: string, body: unknown) =>
-    api.fetch(threadsPath(api, "01-salzhafen", id), {
+  const patchRaw = (id: string, body: unknown) =>
+    api.fetch(threadPath(api, id), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  // An id the list does not hold is 404 — never a quiet 200.
-  expect((await patchThread("no-such-thread", { rev: ticked.rev, done: true })).status).toBe(404);
-  // A stale token is 409, writes nothing and hands back the current list.
-  const stale = await patchThread(adopted.id, { rev: list.rev, done: false });
+  // An id no thread has is 404 — never a quiet 200.
+  expect((await patchRaw("no-such-thread", { rev: 1, done: true })).status).toBe(404);
+  // A stale `rev` is 409, writes nothing and hands back the current thread.
+  const stale = await patchRaw(adopted!.id, { rev: adopted!.rev, done: false });
   expect(stale.status).toBe(409);
-  expect(((await stale.json()) as { threads: ThreadsResponse }).threads).toEqual(ticked);
-  expect(await getThreads(api, "01-salzhafen")).toEqual(ticked);
+  expect(await stale.json()).toMatchObject({ code: "rev_conflict", thread: ticked });
+  expect((await getThreads(api, "01-salzhafen")).at(-1)).toEqual(ticked);
   // … and the source ROW carries the flag: the review named it by the `id`
   // the log handed out, so exactly that row is marked and no other.
   await expect
@@ -168,16 +169,41 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
     .toEqual([`${THREAD_TEXT} #thread`]);
 
   // --- tick off the idea ---------------------------------------------------
-  const inboxCard = page.locator("div").filter({ hasText: INBOX_TEXT }).last();
-  await expect(inboxCard.getByText("Idee", { exact: true })).toBeVisible();
-  await inboxCard.getByRole("button", { name: "Verwerfen" }).click();
+  const [ideaBefore] = await getIdeas(api);
+  const ideaCard = page.locator("div").filter({ hasText: IDEA_TEXT }).last();
+  await expect(ideaCard.getByText("Idee", { exact: true })).toBeVisible();
+  await ideaCard.getByRole("button", { name: "Verwerfen" }).click();
 
-  await expect(inboxCard.getByText("Verworfen")).toBeVisible();
+  await expect(ideaCard.getByText("Verworfen")).toBeVisible();
   await expect(progress).toHaveText("2 von 4 gesichtet");
-  // `done` is a column of the row, not a checkbox marker in a text.
+  // Ticking it off is a PATCH of the idea's `done` against its own guard.
   await expect
-    .poll(async () => (await getInbox(api)).entries.map((row) => [row.done, row.text]))
-    .toEqual([[true, expect.stringContaining(INBOX_TEXT)]]);
+    .poll(async () => await getIdeas(api))
+    .toEqual([{ ...ideaBefore, done: true, rev: ideaBefore!.rev + 1 }]);
+  const [ideaAfter] = await getIdeas(api);
+  const patchIdea = (body: unknown) =>
+    api.fetch(ideaPath(api, ideaAfter!.id), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  // A stale `rev` is 409 with the current idea, and writes nothing.
+  const staleIdea = await patchIdea({ rev: ideaBefore!.rev, done: false });
+  expect(staleIdea.status).toBe(409);
+  expect(await staleIdea.json()).toMatchObject({ code: "rev_conflict", idea: ideaAfter });
+  // An idea's text is written once: a PATCH naming it is a 400 that says so.
+  const textPatch = await patchIdea({ rev: ideaAfter!.rev, text: "Umformuliert" });
+  expect(textPatch.status).toBe(400);
+  expect(await textPatch.text()).toContain("text");
+  expect(await getIdeas(api)).toEqual([ideaAfter]);
+  // The inbox and its tick-off action name nothing.
+  expect((await api.fetch(underCampaign(api, "inbox"))).status).toBe(404);
+  const inboxDone = await api.fetch(underCampaign(api, "review", "inbox-done"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: ideaAfter!.id }),
+  });
+  expect(inboxDone.status).toBe(404);
 
   // "Fertig" goes back to the chapters.
   await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
@@ -186,7 +212,7 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
 });
 
-test("an untagged inbox note is reviewable and can be ticked off", async ({
+test("an untagged idea is reviewable and can be ticked off", async ({
   page,
   api,
 }) => {
@@ -197,9 +223,9 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await page.getByLabel("Ideen").fill(NOTE_TEXT);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
-  // The idea arrives as its own row, appended to the list.
+  // The idea arrives as an idea of its own, at the end.
   await expect
-    .poll(async () => (await getInbox(api)).entries.map((row) => row.text))
+    .poll(async () => (await getIdeas(api)).map((row) => row.text))
     .toContain(NOTE_TEXT);
 
   // At the desk it shows up in the session review — in its own untagged-entries
@@ -221,10 +247,10 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await noteCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(noteCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(progress).toHaveText("1 von 5 gesichtet");
-  // The ROW is ticked off — and only that one.
+  // The IDEA is ticked off — and only that one.
   await expect
     .poll(async () =>
-      (await getInbox(api)).entries.filter((row) => row.done).map((row) => row.text),
+      (await getIdeas(api)).filter((row) => row.done).map((row) => row.text),
     )
     .toEqual([NOTE_TEXT]);
 
@@ -274,10 +300,10 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("1 von 5 gesichtet");
-  // The ROW is ticked off, hashtags and all — the text is stored as typed.
+  // The IDEA is ticked off, hashtags and all — the text is stored as typed.
   await expect
     .poll(async () =>
-      (await getInbox(api)).entries.filter((row) => row.done).map((row) => row.text),
+      (await getIdeas(api)).filter((row) => row.done).map((row) => row.text),
     )
     .toEqual([`${PC_TEXT} #pc #kaela`]);
 
@@ -431,7 +457,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
       .toEqual([true]);
     expect(await sessionExists(api, todaySessionId())).toBe(false);
     await expect
-      .poll(async () => (await getThreads(api, "01-salzhafen")).entries.map((row) => row.text))
+      .poll(async () => (await getThreads(api, "01-salzhafen")).map((row) => row.text))
       .toContain(THREAD_TEXT);
   });
 });
