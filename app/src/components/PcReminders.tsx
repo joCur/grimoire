@@ -21,6 +21,7 @@ import { markLogLineSeen } from "@/api";
 import { useT } from "@/i18n";
 import { tickIdea } from "@/idea/idea-api";
 import { ideasKey, withIdea } from "@/idea/idea-query";
+import { tickFailureKey } from "@/idea/idea-tick";
 import { isWriteConflict } from "@/lib/write-with-rev";
 import type { ReviewEntry } from "@/lib/use-review";
 import { pcGroups, useReviewEntries } from "@/lib/use-review";
@@ -100,7 +101,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
       </div>
       {done.isError && (
         <p className="pt-1.5 text-[11.5px] text-destructive" aria-live="polite">
-          {t("live.pc.failed")}
+          {t(tickFailureKey(done.error, "live.pc.failed"))}
         </p>
       )}
     </section>

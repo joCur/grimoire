@@ -32,6 +32,7 @@ import type { Translate } from "@/i18n";
 import { useT } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { tickIdea } from "@/idea/idea-api";
+import { tickFailureKey } from "@/idea/idea-tick";
 import { ideasKey, withIdea } from "@/idea/idea-query";
 import { createConflict } from "@/lib/create";
 import type { ReviewActionKind } from "@/lib/review-memory";
@@ -203,7 +204,7 @@ export function ReviewRoute() {
     act.isError && act.variables?.action === "npc" ? npcFailure(act.error, t) : undefined;
   const cardError = (entry: ReviewEntry) =>
     act.isError && act.variables?.action !== "npc" && act.variables?.entry.key === entry.key
-      ? t("review.action.failed")
+      ? t(tickFailureKey(act.error, "review.action.failed"))
       : undefined;
 
   const harvest = model.entries.filter((entry) => entry.section === "harvest");

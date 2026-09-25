@@ -455,6 +455,7 @@ export const en: Messages = {
   "live.pc.done": "Mark \u201c{text}\u201d done",
   "live.pc.allDone": "All done.",
   "live.pc.failed": "Not saved — check the server.",
+  "idea.tick.stale": "This idea was changed in the meantime. The list has been reloaded.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Loading details …",

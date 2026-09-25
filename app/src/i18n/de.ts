@@ -509,6 +509,9 @@ export const de = {
   "live.pc.done": "„{text}“ erledigt",
   "live.pc.allDone": "Alles erledigt.",
   "live.pc.failed": "Nicht gespeichert — Server prüfen.",
+  // An idea ticked off against a stale state: nothing was written, the ideas
+  // were read again (review and live aside).
+  "idea.tick.stale": "Diese Idee wurde inzwischen geändert. Die Liste ist neu geladen.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Lade Details …",
