@@ -1,132 +1,121 @@
-// A session: the evening's cycle, its log and its pauses.
+// Sessions: the session resource.
 //
-// Start, pause, continue, end, discard — plus the quick note that grows the
-// log and the scenes it played, the review's "seen" flag, and the one patch
-// the DM makes by hand (the timestamps). Reads and writes answer the same
-// `SessionResponse`, because a session is not an entry and has no address
-// (ADR #26); the rows behind all of it are ./session-rows.ts.
+// A session is its own resource with its own type (ADR #31,
+// @grimoire/shared/session): listed, read, started, ended and deleted here,
+// typed by its one zod schema. It answers with its children embedded — its
+// pauses (./pauses.ts), its log (./log-entries.ts) and its played scenes
+// (./played-scenes.ts) —, but each child is written on its own resource, and
+// a session write touches none of them, with one exception: ending a session
+// ends its open pause at the same moment.
+//
+// `started` and `ended` are zone-less wall-clock strings (./time.ts): a start
+// is the server's clock, and a moment from the wire arrives as an epoch value
+// the server reads into that shape in its own timezone.
 
 import { and, eq } from "drizzle-orm";
-import {
-  ENTITY_SLUG,
-  isEnded,
-  isSessionEmpty,
-  type PatchSessionRequest,
-  type SessionResponse,
-  type SessionSummary,
-} from "@grimoire/shared";
 import { format } from "date-fns";
+import {
+  isSessionEmpty,
+  isSessionEnded,
+  sessionCreateSchema,
+  sessionDeleteSchema,
+  sessionPatchSchema,
+  sessionSeedSchema,
+  type Session,
+  type SessionCreate,
+  type SessionDelete,
+  type SessionPatch,
+  type SessionSeed,
+  type SessionSummary,
+} from "@grimoire/shared/session";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { logEntries, sessionPauses, sessionScenesPlayed, sessions } from "../db/schema";
+import { sessions } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertSceneRef } from "./entity-rows";
 import { getDb } from "./handle";
-import type { SessionRow } from "./render";
+import { insertLogEntrySeed, sessionLog } from "./log-entries";
+import { closeOpenPause, insertPauseSeed, sessionPauses } from "./pauses";
+import { insertPlayedSceneSeed, sessionPlayedScenes } from "./played-scenes";
 import {
-  appendLogRow,
-  bumpSessionRev,
-  closeOpenPauses,
-  logRows,
-  pauseRows,
-  pickSession,
-  playedScenes,
-  renderSessionRow,
-  requireActive,
-  sessionRow,
-  sessionSummaries,
+  requireSessionRow,
+  runningSessionRow,
+  sessionRowsNewestFirst,
+  type SessionRow,
 } from "./session-rows";
-import { asMap, asOptStr, nextPos } from "./shared";
-import { LOCAL_DATE_TIME_SECONDS, LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "./time";
+import { parseRequest, revConflict } from "./shared";
+import { LOCAL_DATE_TIME_SECONDS, epochToLocalDateTime, localDateTimeToMs } from "./time";
 
-// --- reading a session --------------------------------------------------------
+/** `yyyy-mm-dd` in local time — the calendar day of a `started`. */
+const LOCAL_DATE = "yyyy-MM-dd";
+
+// --- rendering and reading ----------------------------------------------------
 
 /**
- * GET /api/campaigns/:campaign/sessions — the campaign's sessions, newest
- * first (`started`, with the row's insertion time as the tie-break: several
- * sessions per day are possible and the opaque id orders nothing).
+ * The session's own fields of a row: the two moments with the server's epoch
+ * reading beside them. A moment the server cannot read contributes no
+ * reading, and an `ended` that is blank is no end.
  */
-export async function listSessions(campaign: string): Promise<SessionSummary[]> {
-  await requireCampaign(campaign);
-  return sessionSummaries(await getDb(), campaign);
+function sessionSummary(row: SessionRow): SessionSummary {
+  const startedMs = localDateTimeToMs(row.started);
+  const endedMs = localDateTimeToMs(row.ended);
+  return {
+    id: row.id,
+    started: row.started ?? "",
+    ...(startedMs === undefined ? {} : { startedMs }),
+    ...(isSessionEnded(row) && row.ended !== null ? { ended: row.ended } : {}),
+    ...(endedMs === undefined ? {} : { endedMs }),
+  };
 }
 
+/** The session of a row, with its children embedded. */
+function renderSession(db: GrimoireDb, campaign: string, row: SessionRow): Session {
+  return {
+    ...sessionSummary(row),
+    body: row.body,
+    pauses: sessionPauses(db, campaign, row.id),
+    log: sessionLog(db, campaign, row.id),
+    playedScenes: sessionPlayedScenes(db, campaign, row.id),
+    rev: row.rev,
+  };
+}
+
+/** The value of the `running` filter of the session list. */
+export type RunningFilter = "true" | undefined;
+
 /**
- * GET /api/campaigns/:campaign/session — the ACTIVE session, or NULL when
- * none runs. With `includeEnded` it is the last STARTED session, ended or
- * not, and null only when the campaign has no session at all.
- *
- * `null` and not a 404: "no session is running" is the ordinary state of a
- * campaign between two evenings, and a 404 would make every reader
- * special-case an answer that means nothing is wrong.
+ * GET /api/campaigns/:campaign/sessions[?running=true] — every session of the
+ * campaign, NEWEST FIRST (`started`, with the row's insertion time as the
+ * tie-break), or with `running` only the one that runs: none or one.
  */
-export async function readActiveSession(
-  campaign: string,
-  includeEnded = false,
-): Promise<SessionResponse | null> {
+export async function listSessions(campaign: string, running: RunningFilter): Promise<Session[]> {
   await requireCampaign(campaign);
   const db = await getDb();
-  const row = pickSession(db, campaign, includeEnded);
-  return row === undefined ? null : renderSessionRow(db, campaign, row);
+  const rows =
+    running === undefined
+      ? sessionRowsNewestFirst(db, campaign)
+      : [runningSessionRow(db, campaign)].filter((row) => row !== undefined);
+  return rows.map((row) => renderSession(db, campaign, row));
 }
 
 /** GET /api/campaigns/:campaign/sessions/:id — 404 for an unknown id. */
-export async function readSession(campaign: string, id: string): Promise<SessionResponse> {
+export async function readSession(campaign: string, id: string): Promise<Session> {
   await requireCampaign(campaign);
   const db = await getDb();
-  const row = sessionRow(db, campaign, id);
-  if (row === undefined) throw new ApiError(404, "session not found");
-  return renderSessionRow(db, campaign, row);
+  return renderSession(db, campaign, requireSessionRow(db, campaign, id));
 }
 
-// --- the local-time formats and the new row -----------------------------------
-
-/**
- * `yyyy-mm-dd` in local time — today's calendar day, which a start compares
- * the running session's `started` against.
- */
-const LOCAL_DATE = "yyyy-MM-dd";
-
-/** `HH:MM` in local time — the timestamp a log line carries. */
-const LOCAL_TIME = "HH:mm";
-
-/**
- * The id for a NEW session: an OPAQUE RANDOM string, `crypto.randomUUID()`.
- * See db/schema.ts (`sessions`) for the reasoning — in short, nobody reads a
- * session id, so it needs no shape, and a random one needs no coordination:
- * the former `yyyy-mm-dd-<n>` scheme had to persist a per-day high-water mark
- * in `meta` so a discarded session's id could not be re-issued onto another
- * evening's log rows. A random id is unique whether or not the row it named
- * still exists.
- *
- * `crypto` is the WHATWG global (Node ≥ 19 and Bun) — no import, no npm
- * dependency, no hand-rolled base32 encoder (DECISIONS: Node portability).
- */
-function newSessionId(): string {
-  return crypto.randomUUID();
+/** The sessions of a campaign as the campaign tree lists them, newest first. */
+export function sessionSummaries(db: GrimoireDb, campaign: string): SessionSummary[] {
+  return sessionRowsNewestFirst(db, campaign).map(sessionSummary);
 }
 
-/**
- * The CALENDAR DAY of a session's `started`, or undefined when the value says
- * nothing usable. Just the date part of the zone-less wall-clock string the
- * format carries — no timezone arithmetic, because the string already is the
- * server's local reading (./time).
- */
-function startedDate(started: string | null): string | undefined {
-  return /^(\d{4}-\d{2}-\d{2})/.exec(started ?? "")?.[1];
-}
+// --- starting a session --------------------------------------------------------
 
 /**
  * The `createdAt` for a new session row: the ORDER tie-break behind `started`
  * (db/schema.ts), in epoch milliseconds and STRICTLY greater than every
- * createdAt the campaign already holds.
- *
- * Hence the `highest + 1` floor rather than a plain `Date.now()`: the value
- * must be monotonic — "start, beenden, wieder starten" inside one millisecond
- * has to order, and so does a clock that jumped backwards (NTP, DST on a
- * machine that stores UTC wrong) or one a test froze. Without the floor every
- * row of such a run would share the tie-break, and the order would fall back
- * to the query's row order again.
+ * createdAt the campaign already holds — a start, an end and another start
+ * inside one millisecond still order, and so does a clock that jumped back.
  */
 function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
   const highest = tx
@@ -138,140 +127,132 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
   return Math.max(Date.now(), highest + 1);
 }
 
-// --- the cycle ----------------------------------------------------------------
+/** The body of a session POST: nothing — a session starts on the server's clock. */
+export function readSessionCreate(raw: unknown): SessionCreate {
+  return parseRequest(sessionCreateSchema, raw, "session");
+}
 
 /**
- * POST /api/campaigns/:campaign/session/start — two answers:
+ * POST /api/campaigns/:campaign/sessions — start a session. Three answers:
  *
- *   * a RUNNING session of today is returned untouched (the start button
- *     stays idempotent while the evening runs);
- *   * an OLDER running session is a 409 `session_running` — ending someone
- *     else's evening is not implied by "starten";
- *   * otherwise a NEW session is created, even when today already has ended
- *     ones. "Beenden" is final: the new row gets its own id,
- *     an empty log and a runtime that starts at 0. The former 409
- *     `session_ended` and POST /session/resume are gone with it.
+ *   * the RUNNING session, when it was started TODAY — the calendar day of
+ *     its `started` —, comes back untouched with `created` false: pressing
+ *     "start" twice re-enters the evening;
+ *   * a running session of an EARLIER day is a 409 `session_running` naming
+ *     it: ending someone else's evening is not implied by starting one;
+ *   * otherwise a NEW session with an opaque random id, started now, even
+ *     when today already has ended ones. Ending is final: a new session has
+ *     its own empty log and a runtime that starts at 0.
  */
-export async function startSession(campaign: string): Promise<SessionResponse> {
+export async function createSession(
+  campaign: string,
+): Promise<{ session: Session; created: boolean }> {
   return mutate(campaign, (tx) => {
-    const d = new Date();
-    const today = format(d, LOCAL_DATE);
-    const active = pickSession(tx, campaign, false);
-    // "Is the running session TODAY's?" is answered by `started`, not by the
-    // id — the id is opaque and says nothing about a day.
-    //
-    // A row whose `started` is unreadable is not the "running session" in the
-    // first place — it has no place in the chronology (store/shared.ts
-    // `sessionOrderKey`) — so `pickSession` never returns it here and the next
-    // start simply opens a new session. `startedDate` therefore only ever
-    // decides between today and an EARLIER day.
-    if (active !== undefined && startedDate(active.started) !== today) {
-      throw new ApiError(409, "another session is still running — end it first", {
-        code: "session_running",
-        id: active.id,
-      });
+    const now = new Date();
+    const running = runningSessionRow(tx, campaign);
+    if (running !== undefined) {
+      if (running.started?.startsWith(format(now, LOCAL_DATE)) !== true) {
+        throw new ApiError(409, "another session is still running — end it first", {
+          code: "session_running",
+          id: running.id,
+        });
+      }
+      return { session: renderSession(tx, campaign, running), created: false };
     }
-    if (active !== undefined) return renderSessionRow(tx, campaign, active);
-    const id = newSessionId();
+    const id = crypto.randomUUID();
     tx.insert(sessions)
       .values({
         campaignId: campaign,
         id,
-        started: format(d, LOCAL_DATE_TIME_SECONDS),
+        started: format(now, LOCAL_DATE_TIME_SECONDS),
         createdAt: nextCreatedAt(tx, campaign),
       })
       .run();
-    const row = sessionRow(tx, campaign, id);
-    if (row === undefined) throw new ApiError(500, "session could not be created");
-    return renderSessionRow(tx, campaign, row);
+    return { session: renderSession(tx, campaign, requireSessionRow(tx, campaign, id)), created: true };
   });
 }
 
+// --- writing a session ---------------------------------------------------------
+
 /**
- * POST /session/end — set `ended` in the ACTIVE session (which may be
- * yesterday's row when the evening ran past midnight). Idempotent: with
- * nothing running it falls back to the last started session and keeps its
- * existing `ended`; an OPEN pause is closed by the end.
+ * The body of a session PATCH, checked against the session's schema: the
+ * guard, `force` and its moments as epoch values — a key that is none of
+ * these, or a value of the wrong shape, is a 400 that names it.
  */
-export async function endSession(campaign: string): Promise<SessionResponse> {
+export function readSessionPatch(raw: unknown): SessionPatch {
+  return parseRequest(sessionPatchSchema, raw, "session patch");
+}
+
+/**
+ * PATCH /api/campaigns/:campaign/sessions/:id `{ rev, force?, startedMs?,
+ * endedMs? }` — end the session (`endedMs`), let it run again
+ * (`endedMs: null`) or correct its start, in one row update against its
+ * `rev`. Ending closes an open pause at the same moment, and that pause's
+ * `rev` moves with it. A patch that names no field is 400 `nothing_to_write`;
+ * the id may be echoed, never changed.
+ *
+ * A stale `rev` is 409 with the current session under `session`; `force`
+ * writes the given fields on top of it instead. An unknown id is 404.
+ */
+export async function patchSession(
+  campaign: string,
+  id: string,
+  patch: SessionPatch,
+): Promise<Session> {
+  const { rev, force, id: patchedId, startedMs, endedMs } = patch;
+  if (startedMs === undefined && endedMs === undefined && patchedId === undefined) {
+    throw new ApiError(400, "nothing to write — send startedMs or endedMs", {
+      code: "nothing_to_write",
+    });
+  }
   return mutate(campaign, (tx) => {
-    const row = pickSession(tx, campaign, false) ?? pickSession(tx, campaign, true);
-    if (row === undefined) throw new ApiError(404, "no active session");
-    if (isEnded({ ended: row.ended })) return renderSessionRow(tx, campaign, row);
-    const d = new Date();
-    closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS));
-    const ended = format(d, LOCAL_DATE_TIME_SECONDS);
+    const row = requireSessionRow(tx, campaign, id);
+    const guard = force === true ? row.rev : rev;
+    if (row.rev !== guard) {
+      throw revConflict(row.rev, "session changed", {
+        session: renderSession(tx, campaign, row),
+      });
+    }
+    if (patchedId !== undefined && patchedId !== row.id) {
+      throw new ApiError(400, "id is the primary key — it is set at creation and never changes");
+    }
+    const started = startedMs === undefined ? row.started : epochToLocalDateTime(startedMs);
+    const ended =
+      endedMs === undefined ? row.ended : endedMs === null ? null : epochToLocalDateTime(endedMs);
+    if (ended !== null && endedMs !== undefined) closeOpenPause(tx, campaign, row.id, ended);
     tx.update(sessions)
-      .set({ ended, rev: row.rev + 1 })
+      .set({ started, ended, rev: row.rev + 1 })
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
       .run();
-    return renderSessionRow(tx, campaign, { ...row, ended, rev: row.rev + 1 });
+    return renderSession(tx, campaign, requireSessionRow(tx, campaign, row.id));
   });
 }
 
-/**
- * POST /session/pause — really STOP the clock: one open `pauses` interval.
- * Idempotent: pausing a paused session changes nothing.
- *
- * No log row is written for it. A pause IS a `session_pauses` row, and the
- * `— Pause` line the log used to carry was the same pause written a second
- * time — a marker the reader of a text needed and a reader of rows does not
- * (ADR #26).
- */
-export async function pauseSession(campaign: string): Promise<SessionResponse> {
-  return mutate(campaign, (tx) => {
-    const row = requireActive(tx, campaign);
-    const pauses = pauseRows(tx, campaign, row.id);
-    if (pauses.some((p) => p.toTs === null)) return renderSessionRow(tx, campaign, row);
-    const d = new Date();
-    tx.insert(sessionPauses)
-      .values({
-        campaignId: campaign,
-        sessionId: row.id,
-        pos: nextPos(pauses),
-        fromTs: format(d, LOCAL_DATE_TIME_SECONDS),
-        toTs: null,
-      })
-      .run();
-    bumpSessionRev(tx, campaign, row);
-    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
-  });
+/** The body of a session DELETE: the guard the session was read with. */
+export function readSessionDelete(raw: unknown): SessionDelete {
+  return parseRequest(sessionDeleteSchema, raw, "session delete");
 }
 
 /**
- * POST /session/continue — close the open interval. It ends a PAUSE, not a
- * session. No log row either, for the reason above.
+ * DELETE /api/campaigns/:campaign/sessions/:id `{ rev }` — the undo of a
+ * mis-clicked start. Only an EMPTY session may go (`isSessionEmpty`): one
+ * with content is ended, never deleted — 409 `session_not_empty`. A stale
+ * `rev` is 409 with the current session under `session`; an unknown id is
+ * 404. Either refusal removes nothing.
  */
-export async function continueSession(campaign: string): Promise<SessionResponse> {
-  return mutate(campaign, (tx) => {
-    const row = requireActive(tx, campaign);
-    const d = new Date();
-    if (!closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS))) {
-      return renderSessionRow(tx, campaign, row);
+export async function deleteSession(
+  campaign: string,
+  id: string,
+  request: SessionDelete,
+): Promise<void> {
+  await mutate(campaign, (tx) => {
+    const row = requireSessionRow(tx, campaign, id);
+    const session = renderSession(tx, campaign, row);
+    if (row.rev !== request.rev) {
+      throw revConflict(row.rev, "session changed", { session });
     }
-    bumpSessionRev(tx, campaign, row);
-    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
-  });
-}
-
-/**
- * POST /session/discard — DELETE the active session, the undo of a mis-clicked
- * "Session starten". Allowed only while it is EMPTY (no log row, no played
- * scene, no hand-written body); everything else is ended, not deleted -> 409
- * `session_not_empty`.
- *
- * It answers `{ id }`, the session that is gone. Not an address: a session
- * never had one to hand back (ADR #26).
- */
-export async function discardSession(campaign: string): Promise<{ id: string }> {
-  return mutate(campaign, (tx) => {
-    const row = requireActive(tx, campaign);
-    const log = logRows(tx, campaign, row.id);
-    const played = playedScenes(tx, campaign, row.id);
-    const empty =
-      log.length === 0 && isSessionEmpty({ scenes_played: played }, row.body);
-    if (!empty) {
-      throw new ApiError(409, "this session has content — end it instead of discarding it", {
+    if (!isSessionEmpty(session)) {
+      throw new ApiError(409, "this session has content — end it instead of deleting it", {
         code: "session_not_empty",
         id: row.id,
       });
@@ -279,211 +260,37 @@ export async function discardSession(campaign: string): Promise<{ id: string }> 
     tx.delete(sessions)
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
       .run();
-    return { id: row.id };
   });
 }
 
-// --- the log ------------------------------------------------------------------
+// --- the seed -----------------------------------------------------------------
 
 /**
- * POST /api/campaigns/:campaign/log — append `- HH:MM (sceneId) text` to the RUNNING
- * session; 404 when none runs (a note typed after "Session beenden" is
- * refused instead of landing in a closed log). With a sceneId
- * `scenes_played` is maintained in the same transaction.
+ * A session without its guards — a fixture — checked against the session's
+ * schema. A key a session or one of its children does not have, or a value of
+ * the wrong shape, is refused with the message `what` introduces.
  */
-export async function appendLogEntry(
-  campaign: string,
-  text: string,
-  sceneId?: string,
-): Promise<SessionResponse> {
-  // A scene is referenced by its id, and an id is a slug — the rule every
-  // create holds. The column is a foreign key, so a value outside that shape
-  // could only be a client bug.
-  if (sceneId !== undefined && !ENTITY_SLUG.test(sceneId)) {
-    throw new ApiError(400, "sceneId must be a kebab-case slug (a-z, 0-9, single dashes)");
-  }
-  return mutate(campaign, (tx) => {
-    const row = requireActive(tx, campaign);
-    // The note's scene is a reference: it has to name a scene that exists,
-    // and nothing is created for it.
-    if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
-    appendLogRow(tx, campaign, row.id, format(new Date(), LOCAL_TIME), sceneId ?? null, text);
-    if (sceneId !== undefined) {
-      const played = playedScenes(tx, campaign, row.id);
-      if (!played.includes(sceneId)) {
-        tx.insert(sessionScenesPlayed)
-          .values({
-            campaignId: campaign,
-            sessionId: row.id,
-            sceneId,
-            pos: played.length,
-          })
-          .run();
-      }
-    }
-    bumpSessionRev(tx, campaign, row);
-    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
-  });
-}
-
-// --- review actions ------------------------------------------------------------
-
-/**
- * POST /api/campaigns/:campaign/review/seen `{ sessionId, logId }` — mark one
- * log row as reviewed. `reviewed` is a flag on the row (db/schema.ts), and
- * `logId` is the row's own id (`SessionLogEntry.id`).
- *
- * Idempotent: a row that already carries the flag is answered unchanged, and
- * nothing is written, so the session's guard token stands.
- *
- * 404 when the session has no row with that id. The review reads the log and
- * sends back an id it read, so a miss is the session having moved on or a
- * caller inventing ids — both worth saying out loud instead of hiding behind
- * a 200 that changed nothing.
- */
-export async function markLogLineSeen(
-  campaign: string,
-  sessionId: string,
-  logId: string,
-): Promise<SessionResponse> {
-  return mutate(campaign, (tx) => {
-    const row = sessionRow(tx, campaign, sessionId);
-    if (row === undefined) throw new ApiError(404, "session not found");
-    const entry = logRows(tx, campaign, sessionId).find((l) => l.hash === logId);
-    if (entry === undefined) throw new ApiError(404, "no such log entry in this session");
-    if (entry.reviewed !== 0) return renderSessionRow(tx, campaign, row);
-    tx.update(logEntries)
-      .set({ reviewed: 1 })
-      .where(
-        and(
-          eq(logEntries.campaignId, campaign),
-          eq(logEntries.sessionId, sessionId),
-          eq(logEntries.pos, entry.pos),
-        ),
-      )
-      .run();
-    bumpSessionRev(tx, campaign, row);
-    return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
-  });
-}
-
-// --- the timestamps the DM edits ----------------------------------------------
-
-/**
- * A session timestamp a write may carry: the ONE shape a stored timestamp has
- * (./time.ts), or nothing.
- *
- * The same closedness a closed field has (store/shared.ts), one layer down.
- * `started`, `ended` and the two ends of a pause are written from the
- * server's own clock everywhere else; a PATCH of a session is the only door
- * through which a value from outside reaches those columns. Without this
- * guard a stored `19:30` would leave that session without a place in the
- * campaign's chronology.
- *
- * An EMPTY value is left through. `null` clears the column, and a blank
- * string is "not set" to the reader — refusing it would make clearing a
- * field depend on how the caller spells "nothing".
- */
-function assertTimestamp(value: string | null, field: string): void {
-  if (value === null || value.trim() === "") return;
-  if (localDateTimeToMs(value) !== undefined) return;
-  throw new ApiError(400, `invalid ${field}: ${value} — expected ${LOCAL_DATE_TIME_SHAPE}`, {
-    code: "timestamp_not_allowed",
-    field,
-    value,
-  });
+export function readSessionSeed(raw: unknown, what: string): SessionSeed {
+  return parseRequest(sessionSeedSchema, raw, what);
 }
 
 /**
- * The pause rows a `pauses` patch becomes, in the order they will be stored.
- * An entry without `from` is not a pause and drops out — the positions close
- * up behind it, so `pos` stays a gap-less sequence.
- *
- * Both ends go through the timestamp guard here rather than at the insert,
- * because the whole list is checked before the first row is written.
+ * Write one session of a fixture with its children, INSIDE the caller's
+ * transaction. Its played scenes and the scenes of its log are foreign keys,
+ * so a fixture naming a scene the campaign does not have is refused by the
+ * database. Nothing about a session is indexed for search.
  */
-function patchedPauses(value: unknown): { fromTs: string; toTs: string | null }[] {
-  const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
-  const rows: { fromTs: string; toTs: string | null }[] = [];
-  entries.forEach((entry, index) => {
-    const map = asMap(entry);
-    const fromTs = asOptStr(map.from);
-    if (fromTs === null) return;
-    const toTs = asOptStr(map.to);
-    assertTimestamp(fromTs, `pauses[${index}].from`);
-    assertTimestamp(toTs, `pauses[${index}].to`);
-    rows.push({ fromTs, toTs });
-  });
-  return rows;
-}
-
-/**
- * PATCH /api/campaigns/:campaign/sessions/:id `{ rev, started?, ended?,
- * pauses? }` — the TIMESTAMPS of a session, which is everything about it the
- * DM edits by hand: a start typed into the wrong hour, a pause that was
- * never closed.
- *
- * The log and `scenesPlayed` are not patchable. They grow through their own
- * endpoints (`POST /log`, the review actions), and a whole-list write of an
- * append-only log is not an edit anybody asked for.
- *
- * Three rules, the same ones every guarded write follows:
- *
- *   * a field that is ABSENT keeps its stored value; `ended: null` clears it
- *     and the session runs again, and `pauses` replaces the whole list.
- *   * EVERY timestamp of the request is checked before the first write, so a
- *     refusal (400 `timestamp_not_allowed`) refuses the whole patch and not
- *     its tail.
- *   * a stale `rev` is 409 `rev_conflict` carrying the current `rev` and the
- *     current SESSION, so the conflict dialog shows what is in the way
- *     without a second request. The key is `session` and not `entry`: a
- *     session is not an entry (ADR #26).
- */
-export async function patchSession(
-  campaign: string,
-  id: string,
-  request: PatchSessionRequest,
-): Promise<SessionResponse> {
-  const touches =
-    request.started !== undefined || request.ended !== undefined || request.pauses !== undefined;
-  if (!touches) {
-    throw new ApiError(400, "nothing to write — send started, ended or pauses", {
-      code: "nothing_to_write",
-    });
-  }
-  return mutate(campaign, (tx) => {
-    const row = sessionRow(tx, campaign, id);
-    if (row === undefined) throw new ApiError(404, "session not found");
-    if (row.rev !== request.rev) {
-      throw new ApiError(409, "session changed — reload before saving", {
-        code: "rev_conflict",
-        rev: row.rev,
-        session: renderSessionRow(tx, campaign, row),
-      });
-    }
-    const started = request.started === undefined ? row.started : asOptStr(request.started);
-    const ended = request.ended === undefined ? row.ended : asOptStr(request.ended);
-    assertTimestamp(started, "started");
-    assertTimestamp(ended, "ended");
-    const nextPauses =
-      request.pauses === undefined ? undefined : patchedPauses(request.pauses);
-
-    tx.update(sessions)
-      .set({ started, ended, rev: row.rev + 1 })
-      .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, id)))
-      .run();
-
-    if (nextPauses !== undefined) {
-      tx.delete(sessionPauses)
-        .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, id)))
-        .run();
-      nextPauses.forEach((pause, pos) => {
-        tx.insert(sessionPauses)
-          .values({ campaignId: campaign, sessionId: id, pos, ...pause })
-          .run();
-      });
-    }
-    const updated = sessionRow(tx, campaign, id);
-    return renderSessionRow(tx, campaign, updated ?? { ...row, rev: row.rev + 1 });
-  });
+export function insertSessionSeed(tx: GrimoireDb, campaign: string, seed: SessionSeed): void {
+  tx.insert(sessions)
+    .values({
+      campaignId: campaign,
+      id: seed.id,
+      started: seed.started === "" ? null : seed.started,
+      ended: seed.ended ?? null,
+      body: seed.body,
+    })
+    .run();
+  for (const pause of seed.pauses) insertPauseSeed(tx, campaign, seed.id, pause);
+  for (const entry of seed.log) insertLogEntrySeed(tx, campaign, seed.id, entry);
+  for (const played of seed.playedScenes) insertPlayedSceneSeed(tx, campaign, seed.id, played);
 }

@@ -36,8 +36,10 @@ import { glossaryTermRoutes } from "./glossary-terms";
 import { ideaRoutes } from "./ideas";
 import { knowledgeItemRoutes } from "./knowledge-items";
 import { locationRoutes } from "./locations";
+import { logEntryRoutes } from "./log-entries";
 import { npcRoutes } from "./npcs";
-import { reviewRoutes } from "./review";
+import { pauseRoutes } from "./pauses";
+import { playedSceneRoutes } from "./played-scenes";
 import { sceneRoutes } from "./scenes";
 import { searchRoutes } from "./search";
 import { sessionRoutes } from "./sessions";
@@ -80,11 +82,9 @@ api.route("/", threadRoutes);
 api.route("/", ideaRoutes);
 api.route("/", glossaryTermRoutes);
 api.route("/", knowledgeItemRoutes);
-
-// A session answers its OWN shape on its own endpoints — `SessionResponse`,
-// rows all the way down.
 api.route("/", sessionRoutes);
-
-api.route("/", reviewRoutes);
+api.route("/", pauseRoutes);
+api.route("/", logEntryRoutes);
+api.route("/", playedSceneRoutes);
 api.route("/", searchRoutes);
 api.route("/", generateRoutes);

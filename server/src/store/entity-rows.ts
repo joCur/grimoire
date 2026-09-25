@@ -125,11 +125,8 @@ export function assertNpcRefs(tx: GrimoireDb, campaign: string, ids: readonly st
 }
 
 /**
- * The scene a quick note names. `code` is `log_scene_unknown`; the sibling
- * code `played_scene_unknown` has no caller, because the played list has no
- * write path of its own (see ./sessions.ts `patchSession`) — it is maintained
- * by the note that named the scene, and this check is what stands in front of
- * that.
+ * The scene a session's log entry or played scene names — `code` says which
+ * of the two it is (`log_scene_unknown`, `played_scene_unknown`).
  */
 export function assertSceneRef(
   tx: GrimoireDb,

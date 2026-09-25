@@ -31,8 +31,8 @@ import {
   type SceneStatus,
   type SceneSummary,
   type SceneType,
-  type SessionSummary,
 } from "@grimoire/shared";
+import type { SessionSummary } from "@grimoire/shared/session";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { chapters, locations, npcs, scenes } from "../db/schema";
@@ -40,7 +40,7 @@ import { mutate, requireCampaign } from "./campaigns";
 import { chapterRowOf, indexChapter, refNpcs, refTags } from "./entity-rows";
 import { getDb } from "./handle";
 import type { ChapterRow, LocationRow, NpcRow, SceneRow } from "./render";
-import { sessionSummaries } from "./session-rows";
+import { sessionSummaries } from "./sessions";
 import {
   assertChapterStatus,
   assertSafeChapterId,

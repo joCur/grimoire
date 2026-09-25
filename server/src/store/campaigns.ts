@@ -27,8 +27,8 @@ import { indexEntity } from "./fts";
 import { getDb } from "./handle";
 import { expandBodyRefs } from "./refs";
 import type { CampaignRow } from "./render";
+import { compareSessionsNewestFirst } from "./session-rows";
 import {
-  compareSessionsNewestFirst,
   normalizeBody,
   parseRequest,
   resolveNewId,

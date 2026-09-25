@@ -1,199 +1,118 @@
-// The rows behind a session, and how they become a `SessionResponse`.
+// The session row: how it is found, which one runs, and the order of two.
 //
-// A session is a row plus three lists — its pauses, its log and the scenes it
-// played. Reading them, picking the ACTIVE one out of a campaign, appending a
-// log row, closing an open pause and stepping the session's guard token are
-// all the same handful of statements, and every endpoint in ./sessions.ts is
-// built from them.
+// The session's own module (./sessions.ts) and the modules of its children
+// (./pauses.ts, ./log-entries.ts, ./played-scenes.ts) all look up the session
+// a request names, and the campaign list (./campaigns.ts) orders the sessions
+// of a campaign the way the session list does — so these statements stand
+// here once, and nothing here renders or writes.
 
-import { and, asc, eq } from "drizzle-orm";
-import { isEnded, type SessionResponse, type SessionSummary } from "@grimoire/shared";
+import { and, eq } from "drizzle-orm";
+import { isSessionEnded } from "@grimoire/shared/session";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { logEntries, sessionPauses, sessionScenesPlayed, sessions } from "../db/schema";
-import { logLineId } from "./body-parse";
-import {
-  renderSession,
-  sessionSummary,
-  type LogRow,
-  type PauseRow,
-  type SessionRow,
-} from "./render";
-import { compareSessionsNewestFirst, nextPos, sessionOrderKey } from "./shared";
+import { sessions } from "../db/schema";
+import { localDateTimeToMs } from "./time";
 
-// --- the three lists of a session ---------------------------------------------
+/** One stored session row. */
+export type SessionRow = typeof sessions.$inferSelect;
 
-export function playedScenes(db: GrimoireDb, campaign: string, sessionId: string): string[] {
-  return db
-    .select({ sceneId: sessionScenesPlayed.sceneId })
-    .from(sessionScenesPlayed)
-    .where(
-      and(
-        eq(sessionScenesPlayed.campaignId, campaign),
-        eq(sessionScenesPlayed.sessionId, sessionId),
-      ),
-    )
-    .orderBy(asc(sessionScenesPlayed.pos))
-    .all()
-    .map((r) => r.sceneId);
-}
-
-export function pauseRows(db: GrimoireDb, campaign: string, sessionId: string): PauseRow[] {
-  return db
-    .select({
-      pos: sessionPauses.pos,
-      fromTs: sessionPauses.fromTs,
-      toTs: sessionPauses.toTs,
-    })
-    .from(sessionPauses)
-    .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, sessionId)))
-    .orderBy(asc(sessionPauses.pos))
-    .all() as PauseRow[];
-}
-
-export function logRows(db: GrimoireDb, campaign: string, sessionId: string): LogRow[] {
-  return db
-    .select({
-      pos: logEntries.pos,
-      at: logEntries.at,
-      sceneId: logEntries.sceneId,
-      text: logEntries.text,
-      hash: logEntries.hash,
-      reviewed: logEntries.reviewed,
-    })
-    .from(logEntries)
-    .where(and(eq(logEntries.campaignId, campaign), eq(logEntries.sessionId, sessionId)))
-    .orderBy(asc(logEntries.pos))
-    .all() as LogRow[];
-}
-
-// --- the session row ----------------------------------------------------------
-
-export function sessionRow(
-  db: GrimoireDb,
-  campaign: string,
-  id: string,
-): SessionRow | undefined {
+/** The session with this id, or undefined when the campaign has none. */
+export function sessionRowOf(db: GrimoireDb, campaign: string, id: string): SessionRow | undefined {
   return db
     .select()
     .from(sessions)
     .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, id)))
-    .all()[0] as SessionRow | undefined;
+    .all()[0];
 }
 
-function pickLatest(rows: SessionRow[]): SessionRow | undefined {
-  const candidates = rows.filter((row) => sessionOrderKey(row) !== undefined);
-  if (candidates.length === 0) return undefined;
-  return [...candidates].sort(compareSessionsNewestFirst)[0];
-}
-
-/**
- * The ACTIVE session row: the last STARTED one that is not ended. With
- * `includeEnded` it is simply the last started session — the row the review
- * harvests, which may be yesterday's when the evening ran past midnight.
- */
-export function pickSession(
-  db: GrimoireDb,
-  campaign: string,
-  includeEnded: boolean,
-): SessionRow | undefined {
-  const rows = db
-    .select()
-    .from(sessions)
-    .where(eq(sessions.campaignId, campaign))
-    .all() as SessionRow[];
-  const candidates = includeEnded ? rows : rows.filter((r) => !isEnded({ ended: r.ended }));
-  return pickLatest(candidates);
-}
-
-export function renderSessionRow(
-  db: GrimoireDb,
-  campaign: string,
-  row: SessionRow,
-): SessionResponse {
-  return renderSession(
-    row,
-    pauseRows(db, campaign, row.id),
-    logRows(db, campaign, row.id),
-    playedScenes(db, campaign, row.id),
-  );
-}
-
-/** Every session of a campaign as a list head, NEWEST FIRST. */
-export function sessionSummaries(db: GrimoireDb, campaign: string): SessionSummary[] {
-  return (
-    db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
-  )
-    .sort(compareSessionsNewestFirst)
-    .map(sessionSummary);
-}
-
-// --- the statements every endpoint shares -------------------------------------
-
-export function requireActive(tx: GrimoireDb, campaign: string): SessionRow {
-  const row = pickSession(tx, campaign, false);
-  if (row === undefined) throw new ApiError(404, "no active session");
+/** The session with this id; 404 when the campaign has none. */
+export function requireSessionRow(db: GrimoireDb, campaign: string, id: string): SessionRow {
+  const row = sessionRowOf(db, campaign, id);
+  if (row === undefined) throw new ApiError(404, "session not found");
   return row;
 }
 
-export function bumpSessionRev(tx: GrimoireDb, campaign: string, row: SessionRow): void {
-  tx.update(sessions)
-    .set({ rev: row.rev + 1 })
-    .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
-    .run();
+/**
+ * The session with this id, which has to be RUNNING: a log entry, a pause or
+ * a played scene belongs to the evening that is still going on. 404 when the
+ * campaign has no such session, 409 `session_ended` when it is ended — the
+ * session exists, it just takes nothing new.
+ */
+export function requireRunningSessionRow(db: GrimoireDb, campaign: string, id: string): SessionRow {
+  const row = requireSessionRow(db, campaign, id);
+  if (isSessionEnded(row)) {
+    throw new ApiError(409, "this session is ended — it takes nothing new", {
+      code: "session_ended",
+      id: row.id,
+    });
+  }
+  return row;
 }
 
-export function closeOpenPauses(
-  tx: GrimoireDb,
-  campaign: string,
-  sessionId: string,
-  to: string,
-): boolean {
-  const open = pauseRows(tx, campaign, sessionId).filter((p) => p.toTs === null);
-  if (open.length === 0) return false;
-  for (const pause of open) {
-    tx.update(sessionPauses)
-      .set({ toTs: to })
-      .where(
-        and(
-          eq(sessionPauses.campaignId, campaign),
-          eq(sessionPauses.sessionId, sessionId),
-          eq(sessionPauses.pos, pause.pos),
-        ),
-      )
-      .run();
-  }
-  return true;
+// --- the chronological order of two sessions ---------------------------------
+
+/** The only three session columns the ordering rule below looks at. */
+export type SessionOrderFields = Pick<SessionRow, "id" | "started" | "createdAt">;
+
+/**
+ * Chronological order key of a session in epoch milliseconds, or undefined
+ * when the row says nothing usable about WHEN it started.
+ *
+ * `started` is the ONLY source. The id is an opaque random string and there
+ * is nothing in it to read, so a row without a usable `started` wins nothing.
+ *
+ * Takes only the column it reads, so callers that need nothing else of a
+ * session (the campaign list) can select just those.
+ */
+export function sessionOrderKey(row: Pick<SessionOrderFields, "started">): number | undefined {
+  return localDateTimeToMs(row.started);
 }
 
 /**
- * Append one log row (append-only: existing rows are never rewritten).
+ * Newest-first comparator: `started` decides, and `createdAt` — the row's
+ * insertion time in milliseconds — breaks the tie. Two sessions of the same
+ * evening can share a `started` to the SECOND (start, end, start again), and
+ * "the last started one" has to be the second of them, deterministically.
+ * The opaque id cannot say which came first, so the row records it.
  *
- * The row is written as COLUMNS — time, scene, text — and its id is the hash
- * of the canonical line those columns spell (./body-parse). Nothing composes
- * a markdown line to store, and nothing parses one back: a note that begins
- * with "(…)" is text like any other, and the scene a note MEANS arrives as
- * this function's own `sceneId`, checked by the caller.
+ * Last resort for two rows that share both (a seeded row carries `createdAt`
+ * 0): a plain string compare of the ids. Which of them then counts as newer
+ * is arbitrary — but it is STABLE, and that is the property callers need.
+ *
+ * A row without a usable `started` sorts behind every row that has one.
  */
-export function appendLogRow(
-  tx: GrimoireDb,
-  campaign: string,
-  sessionId: string,
-  at: string,
-  sceneId: string | null,
-  text: string,
-): void {
-  const rows = logRows(tx, campaign, sessionId);
-  tx.insert(logEntries)
-    .values({
-      campaignId: campaign,
-      sessionId,
-      pos: nextPos(rows),
-      at,
-      sceneId,
-      text,
-      hash: logLineId(at, sceneId, text),
-      reviewed: 0,
-    })
-    .run();
+export function compareSessionsNewestFirst(
+  a: SessionOrderFields,
+  b: SessionOrderFields,
+): number {
+  const ka = sessionOrderKey(a) ?? -Infinity;
+  const kb = sessionOrderKey(b) ?? -Infinity;
+  if (ka !== kb) return kb - ka;
+  if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+/** Every session row of a campaign, NEWEST FIRST. */
+export function sessionRowsNewestFirst(db: GrimoireDb, campaign: string): SessionRow[] {
+  return db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.campaignId, campaign))
+    .all()
+    .sort(compareSessionsNewestFirst);
+}
+
+/**
+ * The RUNNING session row: the last STARTED one that is not ended — today's
+ * or an older one, so a session that runs past midnight stays the running
+ * one instead of vanishing at 00:00. A row without a usable `started` has no
+ * place in the chronology and is never the running session.
+ *
+ * This is the one place that decides what "the running session" is; a client
+ * never derives it from its own date.
+ */
+export function runningSessionRow(db: GrimoireDb, campaign: string): SessionRow | undefined {
+  return sessionRowsNewestFirst(db, campaign).find(
+    (row) => sessionOrderKey(row) !== undefined && !isSessionEnded(row),
+  );
 }
