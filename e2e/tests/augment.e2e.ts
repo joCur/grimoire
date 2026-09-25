@@ -448,10 +448,15 @@ test("the entry point: npc, location and scene — and nothing else", async ({
   await page.goto(SCENE_URL);
   await expect(action).toBeVisible();
 
-  // The campaign entry is not augmentable — no augment prompt, no
-  // action, and the reading view is untouched.
-  await page.goto("/campaigns/beispiel/entries/campaign");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // A chapter and the campaign are not augmentable — no augment prompt, no
+  // action on the chapter's reading view or the campaign's route.
+  await page.goto("/campaigns/beispiel/chapters/01-salzhafen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Kapitel 1: Der Leuchtturm von Salzhafen",
+  );
+  await expect(action).toHaveCount(0);
+  await page.goto("/campaigns/beispiel");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
   await expect(action).toHaveCount(0);
 });
 

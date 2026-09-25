@@ -15,19 +15,19 @@
 // really means storage, through `db`.
 //
 // The FIXTURES are therefore only an INPUT, read exactly once per test — by
-// that seed run. `fixtures/beispiel/*.json` holds one entry per fixture file in the
+// that seed run. `fixtures/beispiel/` holds one object per fixture file in the
 // shape the API speaks, and a test that needs content the example campaign
 // does not have overrides the fixtures in its own copy of that directory:
 //
 //   test.use({ seed: { entries: { "scenes/loot": { id: "loot", … } } } });
 //   test.use({ seed: { without: ["session-2026-01-15"] } });
 //
-// The keys are FIXTURE FILE STEMS, not addresses: a stem that already exists
-// in `fixtures/beispiel` REPLACES that entry, any other stem adds one. A
-// scene, an npc and a location are each their own resource (ADR #31): their
-// stems are `scenes/<id>`, `npcs/<id>` and `locations/<id>`, and the fixture
-// is the scene, the npc or the location itself, every field flat, without a
-// guard.
+// The keys are FIXTURE FILE STEMS: a stem that already exists in
+// `fixtures/beispiel` REPLACES that fixture, any other stem adds one. The
+// campaign, a chapter, a scene, an npc and a location are each their own
+// resource (ADR #31): their stems are `campaigns/<id>`, `chapters/<id>`,
+// `scenes/<id>`, `npcs/<id>` and `locations/<id>`, and the fixture is the
+// entity itself, every field flat, without a guard.
 //
 // Without overrides the pristine copy from the global setup is used directly
 // (it is never written to), so most tests copy nothing at all.
@@ -92,22 +92,15 @@ export interface ServerHandle {
 }
 
 /**
- * One entry as a fixture file holds it — the shape `grimoire seed` reads and
- * the shape the API speaks. Structural on purpose: the suite drives the
+ * One list or session as a fixture file of the campaign directory holds it —
+ * the shape `grimoire seed` reads. Structural on purpose: the suite drives the
  * server as a process and never imports its types.
  */
 export type SeedEntry =
   | {
-      kind: "campaign";
-      properties: Record<string, unknown>;
-      body?: string;
-    }
-  | {
-      kind: "chapter";
-      properties: Record<string, unknown>;
-      body?: string;
-      /** The chapter's open threads — ROWS beside the entry, never text in it. */
-      threads?: { text: string; done?: boolean }[];
+      kind: "threads";
+      /** The open threads of the campaign's chapters, each naming its chapter. */
+      entries: { chapter: string; text: string; done?: boolean }[];
     }
   | {
       kind: "session";
@@ -125,6 +118,29 @@ export type SeedEntry =
       intro?: string;
       entries: { term: string; explanation: string }[];
     };
+
+/**
+ * The campaign as its fixture holds it (`campaigns/<id>.json`) — every field
+ * flat, `body` among them, no guard (ADR #31). A name that equals the id is
+ * the campaign without a name of its own.
+ */
+export interface SeedCampaign {
+  id: string;
+  name: string;
+  description?: string;
+  body: string;
+}
+
+/**
+ * One chapter as its fixture holds it (`chapters/<id>.json`) — every field
+ * flat, `body` among them, no guard (ADR #31).
+ */
+export interface SeedChapter {
+  id: string;
+  title: string;
+  status?: "planned" | "active" | "done";
+  body: string;
+}
 
 /**
  * One scene as its fixture holds it (`scenes/<id>.json`) — every field flat,
@@ -178,11 +194,15 @@ export interface SeedNpc {
 /** What a test changes about the fixtures its database is seeded from. */
 export interface Seed {
   /**
-   * fixture file stem -> entry; a stem that exists in fixtures/beispiel
-   * REPLACES it. A scene's stem is `scenes/<id>`, an npc's `npcs/<id>`, a
+   * fixture file stem -> fixture; a stem that exists in fixtures/beispiel
+   * REPLACES it. The campaign's stem is `campaigns/<id>`, a chapter's
+   * `chapters/<id>`, a scene's `scenes/<id>`, an npc's `npcs/<id>`, a
    * location's `locations/<id>`.
    */
-  entries?: Record<string, SeedEntry | SeedScene | SeedNpc | SeedLocation>;
+  entries?: Record<
+    string,
+    SeedEntry | SeedCampaign | SeedChapter | SeedScene | SeedNpc | SeedLocation
+  >;
   /** fixture file stems to leave out, e.g. "session-2026-01-15" */
   without?: string[];
   /**
@@ -201,13 +221,21 @@ export interface Seed {
   skip?: boolean;
 }
 
-/** One entry as GET /api/campaigns/:campaign/entries/<address> answers it. */
-export interface ApiEntry {
-  path: string;
-  kind: string;
-  properties: Record<string, unknown>;
-  body: string;
-  /** The row version (`rev`) — an opaque guard token. */
+/**
+ * The campaign as GET /api/campaigns/:campaign answers it — its own resource
+ * (ADR #31): every field flat, `body` among them, beside its guard. The name
+ * is the id for a campaign without a name of its own.
+ */
+export interface ApiCampaign extends SeedCampaign {
+  rev: number;
+}
+
+/**
+ * One chapter as GET /api/campaigns/:campaign/chapters/:id answers it — its
+ * own resource (ADR #31): every field flat, `body` among them, beside its
+ * guard.
+ */
+export interface ApiChapter extends SeedChapter {
   rev: number;
 }
 
@@ -264,8 +292,8 @@ export interface ApiLogEntry {
 }
 
 /**
- * ONE SESSION as every session endpoint answers it. A session has no address
- * and no `properties` map: it is a table, so its log, its pauses and its
+ * ONE SESSION as every session endpoint answers it. A session has no
+ * `properties` map: it is a table, so its log, its pauses and its
  * played scenes come back as rows and lists.
  */
 export interface ApiSession {
@@ -298,7 +326,7 @@ export interface ApiInbox {
 
 /**
  * A chapter's open threads as `GET …/chapters/:chapter/threads` answers them:
- * rows plus the LIST's guard token — not the chapter entry's `rev`.
+ * rows plus the LIST's guard token — not the chapter's `rev`.
  */
 export interface ApiThreads {
   entries: { id: string; text: string; done: boolean }[];
@@ -318,14 +346,33 @@ export interface Api {
   get<T>(apiPath: string): Promise<T>;
   /** POST/PATCH/PUT with a JSON body, parsed as JSON; throws on non-2xx. */
   send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
-  /** GET the entry at an address; throws when it is unknown. */
-  entry(rel: string): Promise<ApiEntry>;
-  /** The markdown text of an entry. */
-  body(rel: string): Promise<string>;
-  /** The properties of an entry. */
-  properties(rel: string): Promise<Record<string, unknown>>;
-  /** Whether the address names an existing row (404 = no). */
-  exists(rel: string): Promise<boolean>;
+  /** GET the campaign from its own resource; throws when it is unknown. */
+  campaign(): Promise<ApiCampaign>;
+  /** The request path of the campaign. */
+  campaignPath(): string;
+  /**
+   * The ONE write of the campaign: PATCH its resource with `rev` and any
+   * subset of its fields, `body` among them. Omitted, `rev` is read first —
+   * the helper then plays the second writer.
+   */
+  patchCampaign(
+    change: { rev?: number; force?: boolean } & Record<string, unknown>,
+  ): Promise<ApiCampaign>;
+  /** GET one chapter from its own resource; throws when it is unknown. */
+  chapter(id: string): Promise<ApiChapter>;
+  /** Whether the campaign has a chapter with that id (404 = no). */
+  chapterExists(id: string): Promise<boolean>;
+  /** The request path of a chapter (or, without an id, of the chapter list). */
+  chapterPath(id?: string): string;
+  /**
+   * The ONE write of a chapter: PATCH its resource with `rev` and any subset
+   * of its fields, `body` among them. Omitted, `rev` is read first — the
+   * helper then plays the second writer.
+   */
+  patchChapter(
+    id: string,
+    change: { rev?: number; force?: boolean } & Record<string, unknown>,
+  ): Promise<ApiChapter>;
   /** GET one scene from its own resource; throws when it is unknown. */
   scene(id: string): Promise<ApiScene>;
   /** Whether the campaign has a scene with that id (404 = no). */
@@ -400,33 +447,6 @@ export interface Api {
   threads(chapter: string): Promise<ApiThreads>;
   /** The request path of a chapter's thread list, or of one row in it. */
   threadsPath(chapter: string, id?: string): string;
-  /**
-   * The ONE write path of an entry: PATCH the address with `rev` and at least
-   * one of `properties` and `body` (ADR #23). Fields and text together are one
-   * write against one `rev`. `force` writes the given fields on top of the row
-   * as it stands instead of refusing a stale `rev`.
-   *
-   * Pass `rev` to write against a token the spec already holds — that is how a
-   * test writes with the SAME token an editing surface is holding. Omitted, the
-   * helper reads the current token first and so plays the second writer.
-   */
-  patchEntry(
-    rel: string,
-    change: {
-      rev?: number;
-      properties?: Record<string, unknown>;
-      body?: string;
-      force?: boolean;
-    },
-  ): Promise<ApiEntry>;
-  /**
-   * Replace the body with a FRESH guard token: a second writer, not a race.
-   * Returns the new token. This is how a spec provokes the app's 409 — an entry
-   * only ever changes through the API.
-   */
-  writeBody(rel: string, body: string): Promise<number>;
-  /** Set properties with a fresh guard token; returns the new token. */
-  patchProperties(rel: string, patch: Record<string, unknown>): Promise<number>;
 }
 
 /** Read access to the test's database, with the server's own driver. */
@@ -532,16 +552,7 @@ export function todaySessionId(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/**
- * The API path of one entry: the address sits in the path, one encoded
- * segment per address segment (ADR #22).
- */
-function entriesPath(campaign: string, rel: string): string {
-  const address = rel.split("/").map(encodeURIComponent).join("/");
-  return `campaigns/${encodeURIComponent(campaign)}/entries/${address}`;
-}
-
-/** The API path of ONE session — its own endpoint, not an entry address. */
+/** The API path of ONE session. */
 function sessionsPath(campaign: string, id: string): string {
   return `campaigns/${encodeURIComponent(campaign)}/sessions/${encodeURIComponent(id)}`;
 }
@@ -579,20 +590,32 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       });
       return json<T>(response, `${method} ${apiPath}`);
     },
-    entry(rel) {
-      return api.get<ApiEntry>(entriesPath(campaign, rel));
+    campaign() {
+      return api.get<ApiCampaign>(api.campaignPath());
     },
-    async body(rel) {
-      return (await api.entry(rel)).body;
+    campaignPath() {
+      return `campaigns/${encodeURIComponent(campaign)}`;
     },
-    async properties(rel) {
-      return (await api.entry(rel)).properties;
+    async patchCampaign(change) {
+      const rev = change.rev ?? (await api.campaign()).rev;
+      return api.send<ApiCampaign>("PATCH", api.campaignPath(), { ...change, rev });
     },
-    async exists(rel) {
-      const response = await fetchApi(entriesPath(campaign, rel));
+    chapter(id) {
+      return api.get<ApiChapter>(api.chapterPath(id));
+    },
+    async chapterExists(id) {
+      const response = await fetchApi(api.chapterPath(id));
       if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`GET chapter ${id}: HTTP ${response.status}`);
       return true;
+    },
+    chapterPath(id) {
+      const base = `campaigns/${encodeURIComponent(campaign)}/chapters`;
+      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+    },
+    async patchChapter(id, change) {
+      const rev = change.rev ?? (await api.chapter(id)).rev;
+      return api.send<ApiChapter>("PATCH", api.chapterPath(id), { ...change, rev });
     },
     scene(id) {
       return api.get<ApiScene>(api.scenePath(id));
@@ -679,22 +702,6 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       const base = `campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/threads`;
       return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
     },
-    async patchEntry(rel, change) {
-      const rev = change.rev ?? (await api.entry(rel)).rev;
-      const { properties, body, force } = change;
-      return api.send<ApiEntry>("PATCH", entriesPath(campaign, rel), {
-        rev,
-        ...(properties === undefined ? {} : { properties }),
-        ...(body === undefined ? {} : { body }),
-        ...(force === undefined ? {} : { force }),
-      });
-    },
-    async writeBody(rel, body) {
-      return (await api.patchEntry(rel, { body })).rev;
-    },
-    async patchProperties(rel, patch) {
-      return (await api.patchEntry(rel, { properties: patch })).rev;
-    },
   };
   return api;
 }
@@ -734,17 +741,17 @@ export const test = base.extend<Fixtures>({
     await mkdir(dir, { recursive: true });
     await cp(pristineDir(), dir, { recursive: true });
     const campaignDir = path.join(dir, CAMPAIGN);
-    // One entry per fixture file, `<stem>.json` — so a stem the pristine copy already
-    // has is overwritten, and any other stem adds an entry.
+    // One object per fixture file, `<stem>.json` — so a stem the pristine copy
+    // already has is overwritten, and any other stem adds one.
     for (const stem of without) {
       await rm(path.join(campaignDir, `${stem}.json`), { force: true });
     }
-    for (const [stem, entry] of Object.entries(entries)) {
+    for (const [stem, fixture] of Object.entries(entries)) {
       // A stem may name a resource's own directory (`npcs/<id>`, `locations/<id>`).
       await mkdir(path.dirname(path.join(campaignDir, `${stem}.json`)), { recursive: true });
       await writeFile(
         path.join(campaignDir, `${stem}.json`),
-        `${JSON.stringify(entry, null, 2)}\n`,
+        `${JSON.stringify(fixture, null, 2)}\n`,
         "utf8",
       );
     }

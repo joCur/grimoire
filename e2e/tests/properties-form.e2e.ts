@@ -720,13 +720,13 @@ test("navigating away closes the dialog — no diff of scene A lands in npc B", 
 test("Ort and Kapitel have the form too — the campaign brings its own", async ({
   page,
 }) => {
-  // The four kinds with typed fields offer it — an npc and a location on
-  // their own routes (ADR #31) …
+  // The four entities with a reading view offer it, each on its own route
+  // (ADR #31) …
   const withForm: [string, string, string][] = [
     ["scenes/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
-    ["entries/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
+    ["chapters/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
   ];
   for (const [route, heading, kindLabel] of withForm) {
     await page.goto(`/campaigns/beispiel/${route}`);
@@ -738,21 +738,16 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // The three LISTS never reach this view: they have no address (ADR #26),
-  // so there is no reading view on which a properties form could be missing.
-  // The 404 of those addresses is asserted once, in entry-edit.e2e.ts.
+  // The lists have no reading view (ADR #26), so there is none on which a
+  // form could be missing.
 
-  // The campaign entry brings its OWN properties half: its name and
-  // description are the two values no typed form models, so its dialog stands
-  // under the properties name, and there is no generic form beside it.
-  // The edit action there belongs to the body, like a chapter's.
-  await page.goto("/campaigns/beispiel/entries/campaign");
+  // The campaign's route is the chapter overview, and its one edit action in
+  // the header opens its own dialog over name, description and text.
+  await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
-  const campaignProperties = page.getByRole("button", { name: "Eigenschaften" });
-  await expect(campaignProperties).toHaveCount(1);
-  await campaignProperties.click();
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("Kampagne bearbeiten");
 });
 

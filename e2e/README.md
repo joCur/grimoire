@@ -14,26 +14,26 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   `fixtures/beispiel` auf und startet DANN den Server (der Boot selbst lädt
   nichts).
 - **Die Fixtures sind EINGABE**, einmal pro Test gelesen. `fixtures/beispiel`
-  hält die Beispielkampagne als **ein JSON pro Eintrag**, genau in der Form,
-  die die API spricht (`{ kind, properties, body }`, dazu `log` als **Zeilen**
-  `{ at, sceneId?, text, reviewed? }` für eine Session, `entries` für
-  Eingang und Glossar und `threads` als Zeilen `{ text, done? }` für die
-  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Eine
-  Szene, ein NPC und ein Ort sind je eine eigene Ressource (ADR #31) und
-  liegen als `scenes/<id>.json`, `npcs/<id>.json` bzw. `locations/<id>.json`:
-  die Szene, der NPC bzw. Ort selbst, alle Felder flach, `body` eines davon,
-  ohne `kind` und ohne `rev`. Ein Test, der Inhalte braucht, die die
-  Beispielkampagne nicht hat, überschreibt sie in seiner eigenen Kopie des
-  Verzeichnisses:
+  hält die Beispielkampagne als **ein JSON pro Objekt**, genau in der Form,
+  die die API spricht. Die Kampagne, ein Kapitel, eine Szene, ein NPC und ein
+  Ort sind je eine eigene Ressource (ADR #31) und liegen als
+  `campaigns/<id>.json`, `chapters/<id>.json`, `scenes/<id>.json`,
+  `npcs/<id>.json` bzw. `locations/<id>.json`: die Entität selbst, alle Felder
+  flach, `body` eines davon, ohne `kind` und ohne `rev`. Sessions, Ideen,
+  Glossar und die offenen Fäden liegen daneben als `{ kind, … }` mit ihren
+  **Zeilen** (`log` als `{ at, sceneId?, text, reviewed? }` für eine Session,
+  `entries` für Ideen, Glossar und Fäden, ein Faden als
+  `{ chapter, text, done? }` — Zeilen, kein Markdown). Ein Test, der Inhalte
+  braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
+  eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { entries: { "scenes/loot-check": { id: "loot-check", … } }, without: ["session-2026-01-15"] } })`.
   Die Schlüssel sind **Dateinamen ohne `.json`**: ein Name, den
-  `fixtures/beispiel` schon hat, ERSETZT diesen Eintrag, jeder andere legt
-  einen dazu; eine Szene hat den Namen `scenes/<id>`, ein NPC `npcs/<id>`,
-  ein Ort `locations/<id>`. Kampagne und Kapitel haben eine Adresse, die der
-  Server vergibt (`server/src/store/paths.ts`) — sie ist etwas anderes als der
-  Fixture-Name (`campaign`, `01-salzhafen`). Ohne Überschreibung wird die
-  geteilte pristine Kopie direkt benutzt (niemand schreibt hinein), die
-  meisten Tests kopieren also gar nichts.
+  `fixtures/beispiel` schon hat, ERSETZT dieses Objekt, jeder andere legt
+  eines dazu; die Kampagne hat den Namen `campaigns/<id>`, ein Kapitel
+  `chapters/<id>`, eine Szene `scenes/<id>`, ein NPC `npcs/<id>`, ein Ort
+  `locations/<id>`. Ohne Überschreibung wird die geteilte pristine Kopie
+  direkt benutzt (niemand schreibt hinein), die meisten Tests kopieren also
+  gar nichts.
 - **Eine Referenz zeigt auf etwas, das existiert.** Eine Szene, die einen
   Ort oder NPC nennt, den es nicht gibt, lässt den Seed-Lauf
   scheitern (ADR #19) — das ist ein Fehler im Fixture, keine Degradierung.
@@ -42,13 +42,14 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   (Pfad 10).
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
   Zusicherung wirklich die Speicherung meint, über `db`.
-- **Eine Adresse ist kein Fixture-Name**, und eine Szene hat keine: sie
-  antwortet unter `…/scenes/<id>` (`api.scene(id)`), ihre frühere Adresse
-  `…/entries/<kapitel>/…/<id>` ist ein 404.
+- **Jede Entität antwortet unter ihrer eigenen Ressource**: die Kampagne
+  unter `/campaigns/<id>` (`api.campaign()`), ein Kapitel unter
+  `…/chapters/<id>` (`api.chapter(id)`), eine Szene unter `…/scenes/<id>`
+  (`api.scene(id)`). Einen allgemeinen Endpunkt gibt es nicht: jede frühere
+  Adresse unter `…/entries/*` ist ein 404.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion). Ein veraltetes `rev`
-  antwortet mit 409 `rev_conflict` und trägt den aktuellen Stand mit — bei
-  einer Szene unter `scene`, bei Kampagne und Kapitel unter `entry` (deren
-  Felder heißen auf der Leitung noch `properties`).
+  antwortet mit 409 `rev_conflict` und trägt den aktuellen Stand unter dem
+  Namen der Entität mit — `campaign`, `chapter`, `scene`, `npc`, `location`.
 - **Eine vorgeschlagene Szene des Generators ist die Szene ohne `rev`**
   (ADR #31) — auf der Leitung `result.scenes`, jede mit ihrer `id`, alle
   Felder flach. Änderungen des Prüfschritts reisen **je Szene und je Feld**:
@@ -62,11 +63,13 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   Text zusammen sind **ein** Schreibvorgang gegen **einen** `rev` — ein
   Schritt der Zeilenversion, egal wie viel die Anfrage trug. Ein Feld, das
   eine Szene nicht hat, ist eine 400, die es nennt. Kampagne und Kapitel
-  schreiben über `PATCH …/entries/<adresse>` mit `{ rev, properties?, body?,
-  force? }` (`api.patchEntry`).
+  schreiben genauso über ihre Ressource (`api.patchCampaign`,
+  `api.patchChapter`). Ein Kapitel wird aktiv, indem sein `status` auf
+  `active` geht — der Server setzt das bisher aktive im selben Vorgang auf
+  `planned`.
 - **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
-  Pfad 9 schreibt über die API (`api.patchScene`, für Kampagne und Kapitel
-  `api.writeBody`, `api.patchProperties` oder `api.patchEntry`), während der
+  Pfad 9 schreibt über die API (`api.patchScene`, `api.patchChapter`,
+  `api.patchCampaign`), während der
   Editor offen steht, danach speichert die UI — und muss die Konfliktzeile
   mit ihren zwei Aktionen zeigen statt still zu überschreiben. Genauso in
   `status-control`, `properties-form` und `block-composer`.
@@ -100,9 +103,9 @@ seinem Namen in der Metazeile der Zeile. Für die Suite heißt das vier Dinge:
   `api.scenePath(id?)` für rohe Aufrufe. Beide Orte der Beispielkampagne
   gibt es als eigene Ressource (`…/locations/leuchtturm`, `…/locations/bucht`;
   `api.location(id)`) — eine Referenz legt nichts an (ADR #19) —, die
-  Kampagne hat also **zwei** Orte. Eine Szene, ein NPC und ein Ort haben
-  keine Eintrags-Adresse: `…/entries/<kapitel>/…/<id>`,
-  `…/entries/npcs/<id>` und `…/entries/locations/<id>` sind ein 404.
+  Kampagne hat also **zwei** Orte. Frühere Adressen wie
+  `…/entries/<kapitel>/…/<id>`, `…/entries/npcs/<id>` und
+  `…/entries/locations/<id>` sind ein 404.
 - **Ein neuer Ort oder ein neues Kapitel ändert kein Feld der Route.** Die
   Szene bleibt unter `…/scenes/<id>`; wechselt sie das Kapitel, steht sie am
   Ende des Zielkapitels (Pfad 10, `cold-start`).
@@ -174,23 +177,21 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
 
 **Die zwei Zusicherungs-Helfer:**
 
-- `api` — getippte Aufrufe gegen den Server dieses Tests. Für Kampagne und
-  Kapitel: `api.entry(rel)` (der Eintrag: `properties`, `body`, `rev`),
-  `api.body`, `api.properties`, `api.exists`, `api.get`/`api.send` und der
-  Schreibweg `api.patchEntry(rel, { rev?, properties?, body?, force? })`.
-  Ohne `rev` holt er sich frisch ein Token und spielt damit den „zweiten
-  Schreiber"; `api.writeBody` und `api.patchProperties` sind die zwei
-  bequemen Fälle davon und geben das neue Token zurück.
+- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.get`/
+  `api.send` für jeden Endpunkt und `api.fetch` für Statuscodes.
 
-  Eine **Szene**, ein **NPC** und ein **Ort** sind je eine eigene Ressource
-  (ADR #31) und haben eigene Helfer: `api.scene(id)`, `api.npc(id)` bzw.
+  Die **Kampagne**, ein **Kapitel**, eine **Szene**, ein **NPC** und ein
+  **Ort** sind je eine eigene Ressource (ADR #31) und haben eigene Helfer:
+  `api.campaign()`, `api.chapter(id)`, `api.scene(id)`, `api.npc(id)` bzw.
   `api.location(id)` (alle Felder flach, `body`, `rev`),
-  `api.sceneExists(id)`/`api.npcExists(id)`/`api.locationExists(id)`,
+  `api.chapterExists(id)`/`api.sceneExists(id)`/`api.npcExists(id)`/
+  `api.locationExists(id)`, `api.campaignPath()`/`api.chapterPath(id?)`/
   `api.scenePath(id?)`/`api.npcPath(id?)`/`api.locationPath(id?)` für rohe
-  Aufrufe, der Schreibweg `api.patchScene(id, …)`/`api.patchNpc(id, …)`/
-  `api.patchLocation(id, { rev?, force?, …Felder })` — ohne `rev` wieder der
-  „zweite Schreiber" — und `api.createNpc({ name, id?, body? })`, das
-  `POST …/npcs`.
+  Aufrufe, der Schreibweg `api.patchCampaign(…)`/`api.patchChapter(id, …)`/
+  `api.patchScene(id, …)`/`api.patchNpc(id, …)`/
+  `api.patchLocation(id, { rev?, force?, …Felder })` — ohne `rev` holt er
+  sich frisch ein Token und spielt damit den „zweiten Schreiber" — und
+  `api.createNpc({ name, id?, body? })`, das `POST …/npcs`.
 
   Für die **Listen** gibt es eigene Helfer, weil sie keine Adresse haben
   (ADR #26): `api.activeSession(includeEnded?)` und `api.sessionId(…)` (die
@@ -347,24 +348,25 @@ mehrere Schreibwege auf ihm liegen:
 
 | Pfad (CLAUDE.md)   | Spec                                                           |
 | ------------------ | -------------------------------------------------------------- |
-| 1 Auto-Einstieg    | `tests/chapter-overview.e2e.ts` (eine Liste, Ort in der Metazeile, Reihenfolge samt 409) |
+| 1 Auto-Einstieg    | `tests/chapter-overview.e2e.ts` (eine Liste, Ort in der Metazeile, Reihenfolge samt 409, Status-Regler des Kapitels) |
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Nachbereitung    | `tests/review.e2e.ts`, `tests/threads.e2e.ts`                  |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
-| 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts` |
+| 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/chapter-overview.e2e.ts` (das aktive Kapitel) |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
-| 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`        |
+| 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`, `tests/chapter-overview.e2e.ts` („Kampagne bearbeiten") |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
 Die Pfade 3, 4, 5 und 8 arbeiten auf den **Listen-Endpoints** (ADR #26) und
 lesen darum Zeilen statt Texte:
 
 - **Pfad 3** (`search.e2e.ts`): indexiert sind Kampagne, Kapitel, Szenen,
-  NPCs, Orte und die Glossar-Begriffe. Ein Szenen-, NPC-, Orts- und
-  Glossar-Treffer trägt `kind` + `id` und **kein** `path` — der Spec prüft das
-  auf der Leitung und klickt ihn danach in der Palette auf
+  NPCs, Orte und die Glossar-Begriffe. Jeder Treffer trägt `kind` + `id` und
+  **kein** `path` — der Spec prüft das auf der Leitung und klickt ihn danach
+  in der Palette: der Kampagnen-Treffer öffnet `/campaigns/beispiel`, die
+  anderen `/campaigns/beispiel/chapters/<id>`,
   `/campaigns/beispiel/scenes/<id>`, `/campaigns/beispiel/npcs/<id>`,
   `/campaigns/beispiel/locations/<id>` bzw. `/campaigns/beispiel/glossary`. Sessions und Ideen sind nicht
   indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
@@ -512,19 +514,19 @@ niemanden von der Textarea in den Composer —, „Trotzdem speichern" schreibt
 den Text und lässt den fremden Status stehen. Ein Test belegt Felder und Text in EINER Anfrage direkt am
 Schreibweg der Szene — ein Schritt der Zeilenversion, und kein Feld dabei ist
 400 `nothing_to_write` —, weil keine Oberfläche der App heute beides in einem
-Speichern schickt. Die drei Listen (Session, Eingang, Glossar) haben
-seit ADR #26 **keine Adresse**: `entries/sessions/<id>`, `entries/inbox` und
-`entries/glossary` antworten 404 — keine Umleitung, kein Alias — und ebenso
-die früheren Adressen einer Szene, eines NPC und eines Orts. Genau das hält
-der Spec an EINER Stelle fest (GET und PATCH); es gibt keinen
-`body` mehr, für den ein `body_not_editable` zu senden wäre. Die Pflege des
-Glossars läuft über seinen Listen-Endpoint und seine eigene Seite, was
-derselbe Spec belegt. Der Kampagnen-Eintrag ist der Gegenfall und hat beide
-Hälften: ein Test öffnet `campaign`, ändert den Text über denselben Editor
-wie bei einem Kapitel, speichert und liest ihn gerendert und über die API
-zurück (die Eigenschaften kommen dabei unverändert heraus); die Aktion
-„Eigenschaften" daneben öffnet weiterhin den Dialog „Kampagne bearbeiten",
-denn Name und Beschreibung modelliert kein getipptes Formular. Jeder Test dort betritt den
+Speichern schickt. Kapitel und Kampagne sind eigene Ressourcen (ADR #31):
+ein Test liest beide flach (alle Felder nebeneinander, ohne `kind`, `path`
+und `properties`), schickt einen alten `rev` (409 mit dem aktuellen Stand,
+nichts geschrieben) und ein Feld, das die Entität nicht hat (400, die es
+nennt). Einen allgemeinen Endpunkt gibt es nicht: jede Adresse, die früher
+`…/entries/*` bildete — das Kapitel, `campaign`, die Listen, NPC, Ort und
+Szene —, antwortet 404, keine Umleitung, kein Alias. Genau das hält der Spec
+an EINER Stelle fest (GET und PATCH). Der Text eines Kapitels wird auf
+seiner Leseansicht `/campaigns/:id/chapters/<id>` bearbeitet wie der einer
+Szene — gespeichert, gerendert, Titel und Status unverändert — und ein
+Zweitschreiber führt zur Konfliktzeile, deren „Neu laden" den gespeicherten
+Stand übernimmt. Die Pflege des Glossars läuft über seinen Listen-Endpoint
+und seine eigene Seite, was derselbe Spec belegt. Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
 zusätzlich den neuen Ort ab: eine Szene, deren `location` sich geändert hat,
@@ -559,25 +561,27 @@ die ihn angelegt hat: `tests/chapter-overview.e2e.ts` prüft zusätzlich den Ort
 Metazeile, die Szenen-Reihenfolge mitsamt Konflikt (und dass der `PATCH`
 einer Szene deren Wächter nicht bewegt), die Zeile, die auf
 `/campaigns/:id/scenes/<id>` öffnet,
-die Topbar-Navigation und den Kampagnen-Metadaten-Dialog,
+die Topbar-Navigation und den Dialog „Kampagne bearbeiten" (Name,
+Beschreibung und Text über `PATCH /campaigns/:id`, samt Konfliktzeile, deren
+„Trotzdem speichern" nur die geänderten Felder schreibt),
 `tests/review.e2e.ts` den Szenentitel im Quellchip, und
 `tests/search.e2e.ts` die Frische-Zusicherung des Cutovers: was die
 APP gerade geschrieben hat, findet ⌘K sofort — der Index wandert in derselben
 Transaktion mit, es gibt keinen Watcher mehr, auf den zu warten wäre.
 
-## Das Kapitel als Eintrag
+## Das Kapitel als eigene Ressource
 
-Zwei Pfade tragen das Kapitel als eigenen Eintrag.
+Zwei Pfade tragen das Kapitel als eigene Ressource.
 
 - **Pfad 6** (`generator.e2e.ts`): „Neues Kapitel" → **Seite verlassen** →
   zurück → „Übernehmen". Die Navigation ist der Kern des Tests, nicht Deko:
   der Prüfschritt ist persistent, also ist genau das der Normalfall. Titel
   und id des neuen Kapitels liegen am Job
   (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
-  Spec prüft sie am Kapitel-Eintrag UND in der Übersicht. Die Gliederung
+  Spec prüft sie am Kapitel (`api.chapter(id)`) UND in der Übersicht. Die Gliederung
   beschreibt das neue Kapitel (der Stub antwortet mit einer Beschreibung,
   sobald der Kontext `neues Kapitel: ja` trägt): „Entwürfe prüfen“ zeigt sie
-  als „Beschreibung des Kapitels“, und der Kapitel-Eintrag hat sie danach als
+  als „Beschreibung des Kapitels“, und das Kapitel hat sie danach als
   Text. Ein Lauf in ein bestehendes Kapitel mit `E2E_DESCRIBE_ANYWAY` zeigt,
   dass eine trotzdem gelieferte Beschreibung den Text dieses Kapitels nicht
   erreicht.
@@ -585,11 +589,15 @@ Zwei Pfade tragen das Kapitel als eigenen Eintrag.
   Einträge offen (Regel des Prüfschritts), der Prüfschritt bleibt stehen und
   meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.
 - **Pfad 1** (`chapter-overview.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
-  wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte
-  Eigenschaften-Dialog), „Kapitel bearbeiten" (der Kapiteltext, den die
-  Übersicht zeigt, inkl. 409 gegen einen zweiten Schreiber) und das
-  **Status-Bedienelement** in der Kapitelzeile, dessen „Aktiv" die Fahne in
-  **einem** Serveraufruf umhängt. Den Text von Kapitel und Kampagne zeigt die
+  wird — „Kapitel-Eigenschaften" (Titel/Status, der Dialog des Kapitels),
+  „Kapitel bearbeiten" (der Kapiteltext, den die Übersicht zeigt, inkl. 409
+  gegen einen zweiten Schreiber) und das **Status-Bedienelement** in der
+  Kapitelzeile. Jeder Wert ist **ein** `PATCH …/chapters/<id> { rev, status }`;
+  „Aktiv" macht das Kapitel zum aktiven, der Server setzt das bisher aktive
+  im selben Vorgang auf „Geplant", und laut Baum ist genau ein Kapitel aktiv.
+  Ein Zweitschreiber zwischen dem Öffnen des Menüs und der Wahl ergibt die
+  leise Meldung ohne Konflikt-Aktionen (Pfad 7), die nächste Wahl gelingt.
+  Den Text von Kapitel und Kampagne zeigt die
   Übersicht ganz und gerendert, auf vier Zeilen begrenzt: „Mehr anzeigen“
   steht nur bei einem längeren Text da (der Spec schreibt dafür einen langen
   Text über die API), öffnet und schließt ihn, und ein Verweis im

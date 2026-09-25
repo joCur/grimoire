@@ -1087,9 +1087,9 @@ export function GenerateRoute() {
                   {t("generate.review.conflicts")}
                 </p>
                 <ul className="flex flex-col gap-1">
-                  {conflicts.map((path) => (
-                    <li key={path} className="font-mono text-[11.5px] text-body-secondary">
-                      {path}
+                  {conflicts.map((label) => (
+                    <li key={label} className="font-mono text-[11.5px] text-body-secondary">
+                      {label}
                     </li>
                   ))}
                 </ul>
@@ -1187,9 +1187,9 @@ export function GenerateRoute() {
               {t(mode === "npc" ? "generate.written.title.npc" : "generate.written.title.scene")}
             </p>
             <ul className="flex flex-col gap-1.5">
-              {written.map((path) => (
-                <li key={path} className="font-mono text-[12.5px] text-body-secondary">
-                  {path}
+              {written.map((label) => (
+                <li key={label} className="font-mono text-[12.5px] text-body-secondary">
+                  {label}
                 </li>
               ))}
             </ul>

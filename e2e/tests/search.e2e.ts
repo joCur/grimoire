@@ -8,10 +8,11 @@
 // there is no watcher to wait for.
 //
 // And what the index HOLDS: campaign, chapters, scenes, npcs, locations and the
-// glossary terms. A scene, an npc and a location are each their own resource
-// (ADR #31) and a glossary term a row of a list (ADR #26), so their hits carry
-// `kind` and `id` and no address — the palette opens the scene's route, the
-// npc's route, the location's route and the glossary page.
+// glossary terms. The campaign, a chapter, a scene, an npc and a location are
+// each their own resource (ADR #31) and a glossary term a row of a list
+// (ADR #26), so every hit carries `kind` and `id` and no address — the palette
+// opens the campaign's route (the chapter overview), the chapter's, the
+// scene's, the npc's and the location's route and the glossary page.
 // Sessions and ideas are not indexed at all, so no query can produce one.
 
 import { expect, test } from "../support/test";
@@ -179,6 +180,62 @@ test("a location hit opens the location's own route — its kind and id, no addr
     "href",
     "/campaigns/beispiel/locations",
   );
+});
+
+test("a chapter hit opens the chapter's own route, a campaign hit the chapter overview", async ({
+  page,
+  api,
+}) => {
+  // On the wire: `{ kind: "chapter", id, title }` and no `path`.
+  const { results } = await api.get<{
+    results: { kind: string; id: string; path?: string; title: string }[];
+  }>("campaigns/beispiel/search?q=Leuchtfeuer");
+  const chapter = results.find((hit) => hit.kind === "chapter");
+  expect(chapter).toMatchObject({ kind: "chapter", id: "01-salzhafen" });
+  expect(chapter).not.toHaveProperty("path");
+
+  await page.goto("/campaigns/beispiel");
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByRole("combobox").fill("Leuchtfeuer");
+  const hit = page
+    .getByRole("option")
+    .filter({ hasText: "Kapitel 1: Der Leuchtturm von Salzhafen" });
+  await expect(hit).toHaveCount(1);
+  await hit.click();
+
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/chapters\/01-salzhafen$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Kapitel 1: Der Leuchtturm von Salzhafen",
+  );
+  await expect(page.getByRole("article")).toContainText("Herausfinden, warum das Leuchtfeuer");
+  // The context line leads back to the chapter overview, where its scenes are.
+  await expect(
+    page.getByRole("navigation", { name: "Kontext" }).getByRole("link"),
+  ).toHaveAttribute("href", "/campaigns/beispiel");
+  // The topbar marks the chapters section.
+  await expect(page.getByRole("link", { name: "Kapitel", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+
+  // The campaign's own hit opens the campaign's route: the chapter overview.
+  const campaignHits = await api.get<{ results: { kind: string; id: string }[] }>(
+    "campaigns/beispiel/search?q=Kampagnenweite",
+  );
+  expect(campaignHits.results.find((result) => result.kind === "campaign")).toMatchObject({
+    kind: "campaign",
+    id: "beispiel",
+  });
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByRole("combobox").fill("Kampagnenweite");
+  const campaignHit = page
+    .getByRole("option")
+    .filter({ hasText: "Kampagne" })
+    .filter({ hasText: "Der Leuchtturm von Salzhafen" });
+  await expect(campaignHit).toHaveCount(1);
+  await campaignHit.click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
 });
 
 test("a glossary hit opens the glossary page — no address, and none needed", async ({

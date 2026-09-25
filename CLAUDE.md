@@ -65,12 +65,16 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
-  Slice `app/src/<entität>/` (`scene/`, `npc/`, `location/`) mit allem, was die App
-  über sie weiß (ADR #31); **Slices importieren einander nicht.** Gemeinsam
-  sind nur UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`,
-  etwa `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
-  Kampagnenbaum) sind reine Verteiler. Kein Barrel: Aufrufer importieren die
-  konkrete Datei.
+  Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
+  `location/`) mit allem, was die App über sie weiß (ADR #31); **Slices
+  importieren einander nicht.** Gemeinsam sind nur UI-Bausteine ohne Wissen
+  über Entitäten (`app/src/components/`, etwa `components/fields/`);
+  gemischte Stellen (Suche, `[[id]]`-Auflösung, Kampagnenbaum) sind reine
+  Verteiler. Eine Seite, die mehrere Entitäten zeigt, setzt sich wie
+  `App.tsx` aus den Slices zusammen und reicht fremde Teile als Slot hinein
+  (die Kapitelübersicht reicht dem Kapitel seine Szenenliste, die Szene
+  bekommt ihre NPC-Karten). Kein Barrel: Aufrufer importieren die konkrete
+  Datei.
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
   siehe design/README.md). Bei Widerspruch zu docs/UI-BRIEF.md gewinnt design/.
@@ -295,12 +299,15 @@ Die Pfade:
    auch ein reiner Status-Write eines Zweitschreibers ein Konflikt — der
    Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
    es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
-   Die Kampagne wird wie jede Entität über ihre Ressource geschrieben
-   (`PATCH /campaigns/:id`): ihr `body` ist bearbeitbar wie ein Kapiteltext
-   (`Bearbeiten` öffnet den normalen Text-Editor), und Name und Beschreibung
-   stehen unter `Eigenschaften` im Dialog „Kampagne bearbeiten". Der Kopf der
-   Kapitelübersicht bleibt unberührt: dort führt das eine `Bearbeiten` in
-   denselben Dialog.
+   Der Text eines Kapitels ist auf seiner Leseansicht
+   (`/campaigns/:id/chapters/<id>`) bearbeitbar wie der einer Szene. Die
+   Kampagne wird wie jede Entität über ihre Ressource geschrieben
+   (`PATCH /campaigns/:id`); ihre Route ist die Kapitelübersicht. Der Kopf der
+   Kapitelübersicht bleibt unberührt: sein eines `Bearbeiten` öffnet den
+   Dialog „Kampagne bearbeiten" über Name, Beschreibung und `body` — den Text
+   als Markdown wie im Textdialog eines Kapitels —, mit derselben
+   Konfliktzeile, deren „Trotzdem speichern" nur die geänderten Felder
+   schreibt.
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
     Szene befüllen → Session starten → Szene in der Session-Ansicht

@@ -78,8 +78,10 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // Straight into the (empty) chapter overview of the new campaign.
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
-  const campaignDoc = await api.entry("campaign");
-  expect(campaignDoc.properties.name).toBe(CAMPAIGN_NAME);
+  // The campaign is its own resource: every field flat, the text among them.
+  const created = await api.campaign();
+  expect(created).toMatchObject({ id: CAMPAIGN_ID, name: CAMPAIGN_NAME, body: "" });
+  expect(created.description).toBe("Ein erloschener Leuchtturm.");
 
   // The empty chapter overview names the NEXT STEP instead of the generator, which needs
   // an API key and source material.
@@ -106,8 +108,15 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const chapter = page.getByRole("button", { name: /01 Salzhafen/ });
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText("keine Szenen");
-  const chapterDoc = await api.entry("01-salzhafen");
-  expect(chapterDoc.body).toBe("Herausfinden, warum das Leuchtfeuer erloschen ist.\n");
+  // The chapter is its own resource: the description became its text, and it
+  // starts planned.
+  const createdChapter = await api.chapter("01-salzhafen");
+  expect(createdChapter).toMatchObject({
+    id: "01-salzhafen",
+    title: "01 Salzhafen",
+    status: "planned",
+    body: "Herausfinden, warum das Leuchtfeuer erloschen ist.\n",
+  });
   await expect(
     page.getByText("Herausfinden, warum das Leuchtfeuer erloschen ist.", { exact: true }),
   ).toBeVisible();
@@ -373,14 +382,14 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(page).toHaveURL(new RegExp(`/campaigns/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);
   await expect(switcher).toHaveAccessibleName(`Kampagne: ${SECOND_NAME}`);
-  expect((await second.entry("campaign")).properties.name).toBe(SECOND_NAME);
+  expect((await second.campaign()).name).toBe(SECOND_NAME);
 
   // Both campaigns are in the menu now, and the first one is untouched.
   await switcher.click();
   await expect(page.getByRole("menu")).toContainText(CAMPAIGN_NAME);
   await expect(page.getByRole("menu")).toContainText(SECOND_NAME);
   await expect(page.getByRole("menu")).toContainText("Nebel, Torf und ein Verschwundener.");
-  expect((await first.entry("campaign")).properties.name).toBe(CAMPAIGN_NAME);
+  expect((await first.campaign()).name).toBe(CAMPAIGN_NAME);
 
   // …and switching back works, which is what the menu was there for already.
   await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(CAMPAIGN_NAME) }).click();
@@ -432,9 +441,9 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
-  expect((await api.entry("campaign")).properties.name).toBe(CAMPAIGN_NAME);
+  expect((await api.campaign()).name).toBe(CAMPAIGN_NAME);
 
-  // --- a chapter, whose id IS its address ----------------------------------
+  // --- a chapter, with an id of its own -------------------------------------
   await page.getByRole("button", { name: "Kapitel anlegen" }).last().click();
   const chapterDialog = page.getByRole("dialog");
   await chapterDialog.getByLabel("Titel").fill("Erstes Kapitel");
@@ -451,9 +460,9 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await chapterId.fill("01-salzhafen");
   await chapterDialog.getByRole("button", { name: "Anlegen" }).click();
   await expect(page.getByRole("button", { name: /Erstes Kapitel/ })).toBeVisible();
-  expect(await api.exists("01-salzhafen")).toBe(true);
+  expect(await api.chapterExists("01-salzhafen")).toBe(true);
   // The derived id was never written — only the one that was typed.
-  expect(await api.exists("erstes-kapitel")).toBe(false);
+  expect(await api.chapterExists("erstes-kapitel")).toBe(false);
 
   // --- an NPC: the prefix stays in front, only the id is typed -------------
   await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/npcs`);

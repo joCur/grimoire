@@ -720,8 +720,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
 // The chapter and its title come from the JOB, not from the app's own state:
 // the review state is persistent, so the accept regularly happens after a
 // navigation or a reload, when that state is gone — and scenes written under
-// a chapter that has no entry of its own are something the overview cannot
-// list.
+// a chapter that does not exist are something the overview cannot list.
 //
 // The navigation is the whole point of the test, so it is a REAL one: to the
 // overview and back, which is what a DM does while the run is going.
@@ -772,8 +771,8 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   // The point: the chapter exists, with the title the RUN was started with —
   // not the id, and not nothing — and the outline's description as its text,
   // verbatim and without a heading.
-  const chapter = await api.entry(CHAPTER_ID);
-  expect(chapter.properties.title).toBe(CHAPTER_TITLE);
+  const chapter = await api.chapter(CHAPTER_ID);
+  expect(chapter.title).toBe(CHAPTER_TITLE);
   expect(chapter.body).toBe(`${CHAPTER_DESCRIPTION}\n`);
   // …and the scene really hangs in it.
   expect((await api.scene(SCENE_ID)).chapter).toBe(CHAPTER_ID);
@@ -796,7 +795,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 // sends anyway is dropped by the server — the review shows none, and the
 // accept leaves the text exactly as the DM wrote it.
 test("a run into an existing chapter leaves the chapter's text alone", async ({ page, api }) => {
-  const before = await api.entry("01-salzhafen");
+  const before = await api.chapter("01-salzhafen");
   await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE} ${TRIGGER.describeAnyway}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
@@ -817,5 +816,5 @@ test("a run into an existing chapter leaves the chapter's text alone", async ({ 
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
 
   expect((await api.scene(SCENE_ID)).chapter).toBe("01-salzhafen");
-  expect((await api.entry("01-salzhafen")).body).toBe(before.body);
+  expect((await api.chapter("01-salzhafen")).body).toBe(before.body);
 });

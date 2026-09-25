@@ -91,7 +91,7 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   page,
   api,
 }) => {
-  const chapterBefore = await api.entry("01-salzhafen");
+  const chapterBefore = await api.chapter("01-salzhafen");
   const threadsBefore = await api.threads("01-salzhafen");
   await page.goto("/campaigns/beispiel/review");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
@@ -127,8 +127,8 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
       ["Wer bezahlt die Schmuggler?", false],
       [THREAD_TEXT, false],
     ]);
-  // … and the chapter ENTRY did not move: not its text, not its guard.
-  const chapterAfter = await api.entry("01-salzhafen");
+  // … and the CHAPTER did not move: not its text, not its guard.
+  const chapterAfter = await api.chapter("01-salzhafen");
   expect(chapterAfter.body).toBe(chapterBefore.body);
   expect(chapterAfter.rev).toBe(chapterBefore.rev);
   // The list's own guard moved instead.
@@ -142,7 +142,7 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
     done: true,
   });
   expect(ticked.entries.at(-1)).toEqual({ ...adopted, done: true });
-  expect((await api.entry("01-salzhafen")).rev).toBe(chapterBefore.rev);
+  expect((await api.chapter("01-salzhafen")).rev).toBe(chapterBefore.rev);
   const patchThread = (id: string, body: unknown) =>
     api.fetch(api.threadsPath("01-salzhafen", id), {
       method: "PATCH",
