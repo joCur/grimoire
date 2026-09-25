@@ -321,7 +321,7 @@ test("a competing write is a conflict, not a silent overwrite — for an item an
   });
   // What the DM typed is still on screen, and retrying blindly is not offered.
   await expect(page.getByLabel("Neu (in dieser Kampagne)")).toHaveValue("Mein Neu");
-  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Speichern", exact: true })).toBeDisabled();
 
   // Reloading costs the draft, so it asks first.
   await page.getByRole("button", { name: "Neu laden" }).click();

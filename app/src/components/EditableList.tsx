@@ -284,7 +284,11 @@ function EditableListBody<T extends EditableRow, V>({
       busy={busy}
       canSave={isSendable(open.value) && !stale}
       onSave={() => void onSave()}
-      onCancel={() => setEditing(undefined)}
+      onCancel={() => {
+        // Closing the row closes what was said about it, too.
+        setEditing(undefined);
+        setStatus({ kind: "idle" });
+      }}
       t={t}
     >
       {renderForm(open.value, (value) => setEditing({ ...open, value }), t)}

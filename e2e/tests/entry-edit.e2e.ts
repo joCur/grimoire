@@ -670,7 +670,14 @@ test("the chapter and the campaign are their own resources; the entry addresses 
     status: "active",
   });
   const campaign = await getCampaign(api);
-  expect(Object.keys(campaign).sort()).toEqual(["body", "description", "id", "name", "rev"]);
+  expect(Object.keys(campaign).sort()).toEqual([
+    "body",
+    "description",
+    "glossaryIntro",
+    "id",
+    "name",
+    "rev",
+  ]);
   expect(campaign.name).toBe("Der Leuchtturm von Salzhafen");
 
   // A stale rev is 409 with the current state and writes nothing.
