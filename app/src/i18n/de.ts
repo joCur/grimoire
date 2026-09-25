@@ -382,7 +382,7 @@ export const de = {
   "editConflict.force": "Trotzdem speichern",
   "status.change.aria": "Status ändern, aktuell {current}",
   "status.sceneUnloadable": "Szene nicht ladbar",
-  "status.chapterUnloadable": "Kapitel nicht ladbar",
+  "status.chapterUnloadable": "Dieses Kapitel ließ sich nicht laden.",
 
   // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
   "chapterOverview.loading": "Lade Szenen …",
@@ -609,7 +609,7 @@ export const de = {
   // --- campaign edit dialog (campaign/CampaignEditAction.tsx) --------------
   "campaignEdit.title": "Kampagne bearbeiten",
   "campaignEdit.description":
-    "Name, Beschreibung und Text der Kampagne. Die Kapitelübersicht zeigt den Text als Markdown unter der Beschreibung. Die Kennung bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
+    "Name, Beschreibung und Text der Kampagne. Die Kapitelübersicht zeigt den Text unter der Beschreibung. Die Kennung der Kampagne bleibt, wie sie ist.",
   "campaignEdit.field.name": "Name",
   "campaignEdit.field.description": "Beschreibung",
   "campaignEdit.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",

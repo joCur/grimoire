@@ -346,7 +346,7 @@ export const en: Messages = {
   "editConflict.force": "Save anyway",
   "status.change.aria": "Change status, currently {current}",
   "status.sceneUnloadable": "Scene not loadable",
-  "status.chapterUnloadable": "Chapter not loadable",
+  "status.chapterUnloadable": "This chapter could not be loaded.",
 
 
   // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
@@ -553,7 +553,7 @@ export const en: Messages = {
   // --- campaign edit dialog (campaign/CampaignEditAction.tsx) --------------
   "campaignEdit.title": "Edit campaign",
   "campaignEdit.description":
-    "Name, description and text of the campaign. The chapter overview shows the text as markdown under the description. The ID stays as it is — it is part of every address and does not change here.",
+    "Name, description and text of the campaign. The chapter overview shows the text under the description. The campaign’s ID stays as it is.",
   "campaignEdit.field.name": "Name",
   "campaignEdit.field.description": "Description",
   "campaignEdit.field.description.placeholder": "One sentence that places the campaign",
