@@ -5,9 +5,9 @@
 // something mentioned it. These cases pin both halves on every write path
 // that can introduce a reference:
 //
-//   * a `location`, an `npcs` entry, a `chapter`, the scene of a quick note
-//     and of a played-scenes list are refused with 400 and their own code
-//     when they name nothing, and the write leaves no trace;
+//   * a `location`, an `npcs` entry and a `chapter` are refused with 400 and
+//     their own code when they name nothing, and the write leaves no trace
+//     (the scene of a log entry and of a played scene: their own tests);
 //   * an entry is only ever created by a create endpoint or by accepting a
 //     generator proposal;
 //   * a mention in TEXT — a `## Beziehungen` line, `[[slug]]` in prose —
@@ -21,7 +21,6 @@ import type {
   NpcProposal,
   Scene,
   SceneProposal,
-  SessionResponse,
 } from "@grimoire/shared";
 import { app } from "../src/server";
 import { writeGenerated } from "../src/store/generated";
@@ -129,15 +128,6 @@ async function tree(): Promise<CampaignTree> {
   return (await res.json()) as CampaignTree;
 }
 
-/** The ACTIVE session as rows — a session is not an entry (ADR #26). */
-async function getSession(): Promise<SessionResponse> {
-  const res = await app.request("/api/campaigns/beispiel/session");
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as SessionResponse | null;
-  expect(body).not.toBeNull();
-  return body as SessionResponse;
-}
-
 beforeEach(async () => {
   await seedStore();
 });
@@ -217,52 +207,6 @@ describe("a reference that names nothing is refused", () => {
     expect(await res.json()).toMatchObject({ code: "chapter_required" });
     // …and the scene still hangs where it did.
     expect((await getScene(SCENE)).chapter).toBe("01-salzhafen");
-  });
-
-  test("a quick note's scene: 400 log_scene_unknown, and the log stays empty", async () => {
-    expect((await post("/session/start", {})).status).toBe(200);
-    const res = await post("/log", { text: "Etwas passiert", sceneId: "gibt-es-nicht" });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      code: "log_scene_unknown",
-      value: "gibt-es-nicht",
-    });
-    // Neither the played scene nor the note itself was written.
-    const active = await getSession();
-    expect(active.scenesPlayed).toEqual([]);
-    expect(active.log).toEqual([]);
-  });
-
-  test("parentheses in the NOTE are text, and nothing else", async () => {
-    // A note is a COLUMN, so there is no `- HH:MM (id) text` grammar left to
-    // read a scene out of: a note that happens to begin with „(…)" is stored
-    // exactly as typed, names no scene, and is never refused over something
-    // the DM did not write as a reference.
-    expect((await post("/session/start", {})).status).toBe(200);
-    const res = await post("/log", { text: "(vermutlich) der Turmwärter lügt" });
-    expect(res.status).toBe(200);
-    const session = await getSession();
-    expect(session.log.map((l) => [l.text, l.sceneId])).toEqual([
-      ["(vermutlich) der Turmwärter lügt", undefined],
-    ]);
-    expect(session.scenesPlayed).toEqual([]);
-  });
-
-  test("the played scenes have no write path of their own any more", async () => {
-    // `scenesPlayed` is maintained by POST /log, which checks the reference
-    // it was given (`log_scene_unknown`, above). `PATCH /sessions/:id` takes
-    // the timestamps and nothing else (ADR #26), so there is no request that
-    // could hand the list a scene that does not exist.
-    expect((await post("/session/start", {})).status).toBe(200);
-    const id = (await getSession()).id;
-    const res = await app.request(`/api/campaigns/beispiel/sessions/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: 1, scenes_played: ["gibt-es-nicht"] }),
-    });
-    // An unknown field is refused outright, so nothing is written.
-    expect(res.status).toBe(400);
-    expect((await getSession()).scenesPlayed).toEqual([]);
   });
 });
 

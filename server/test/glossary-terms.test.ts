@@ -291,8 +291,13 @@ describe("glossary terms — rows, each with its own guard", () => {
     // A term's guard is its own row version, not `campaigns.version`, which
     // any write — a quick note during a running session — moves.
     const [open] = await listTerms();
-    expect((await send("POST", "/api/campaigns/beispiel/session/start", {})).status).toBe(200);
-    expect((await send("POST", "/api/campaigns/beispiel/log", { text: "Etwas passiert" })).status).toBe(200);
+    const started = await send("POST", "/api/campaigns/beispiel/sessions", {});
+    expect(started.status).toBe(201);
+    const { id: session } = (await started.json()) as { id: string };
+    expect(
+      (await send("POST", `/api/campaigns/beispiel/sessions/${session}/log`, { text: "Etwas passiert" }))
+        .status,
+    ).toBe(201);
     expect((await send("POST", "/api/campaigns/beispiel/ideas", { text: "Idee #idee" })).status).toBe(201);
     expect(await version()).toBeGreaterThan(1);
 
