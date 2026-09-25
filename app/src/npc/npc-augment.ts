@@ -3,7 +3,7 @@
 
 import type { NpcProposal } from "@grimoire/shared/types";
 
-import { formatPropertyValue, type FieldProposal } from "@/lib/augment";
+import { formatFieldValue, type FieldProposal } from "@/lib/augment";
 
 /** "No value here" for any field of an npc: absent, blank text, no pair. */
 function isEmptyValue(value: unknown): boolean {
@@ -24,9 +24,9 @@ function comparable(value: unknown): string {
     const sorted = Object.fromEntries(
       Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
     );
-    return formatPropertyValue(sorted).trim();
+    return formatFieldValue(sorted).trim();
   }
-  return formatPropertyValue(value).trim();
+  return formatFieldValue(value).trim();
 }
 
 /**

@@ -47,16 +47,9 @@ describe("canCreate", () => {
 describe("createConflict", () => {
   test("reads the slug_taken body", () => {
     const conflict = createConflict(
-      conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2", path: "npcs/holm" }),
+      conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
     );
-    expect(conflict).toEqual({ id: "holm", suggestion: "holm-2", path: "npcs/holm" });
-  });
-
-  test("a missing path degrades to an empty one rather than throwing", () => {
-    const conflict = createConflict(
-      conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),
-    );
-    expect(conflict?.path).toBe("");
+    expect(conflict).toEqual({ id: "holm", suggestion: "holm-2" });
   });
 
   test("no proposal, no button", () => {
@@ -66,13 +59,6 @@ describe("createConflict", () => {
       createConflict(conflictError({ code: "slug_taken", id: "holm", suggestion: "" })),
     ).toBeUndefined();
     expect(createConflict(conflictError({ code: "slug_taken", id: "holm" }))).toBeUndefined();
-  });
-
-  test("a reserved id offers the same one-click proposal", () => {
-    const conflict = createConflict(
-      conflictError({ code: "slug_reserved", kind: "chapter", id: "npcs", suggestion: "npcs-2" }),
-    );
-    expect(conflict).toEqual({ id: "npcs", suggestion: "npcs-2", path: "" });
   });
 
   test("other 409s and other errors are not collisions", () => {
@@ -92,12 +78,6 @@ describe("createErrorMessage", () => {
     ).toBe('NPC „holm“ existiert schon — Vorschlag: „holm-2“');
     expect(
       createErrorMessage(
-        conflictError({ code: "slug_reserved", kind: "chapter", id: "npcs", suggestion: "npcs-2" }),
-        t,
-      ),
-    ).toBe('„npcs“ ist ein reservierter Name — Vorschlag: „npcs-2“');
-    expect(
-      createErrorMessage(
         new ApiError(400, "x", {
           code: "slug_empty",
           kind: "npc",
@@ -110,9 +90,8 @@ describe("createErrorMessage", () => {
   });
 
   test("a body with no kind reads as a GRAMMATICAL German sentence", () => {
-    // The generic kind carries its article („Der Eintrag“), so the sentence
-    // has to be built around a nominative — „… gibt es schon“ wanted an
-    // accusative and read wrong (PR #83 review).
+    // The generic kind carries its article, so the sentence is built around a
+    // nominative — an accusative construction would read wrong in German.
     expect(
       createErrorMessage(conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }), t),
     ).toBe('Der Eintrag „holm“ existiert schon — Vorschlag: „holm-2“');

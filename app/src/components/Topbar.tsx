@@ -90,8 +90,8 @@ import {
   fetchTree,
   pauseSession,
 } from "@/api";
+import { CampaignCreateDialog } from "@/campaign/CampaignCreate";
 import { CommandPalette } from "@/components/CommandPalette";
-import { CampaignCreateDialog } from "@/components/CreateActions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -166,14 +166,13 @@ function useSettingsCampaign(isSettings: boolean): string {
 export function Topbar() {
   const t = useT();
   const { pathname } = useLocation();
-  // What is read by its address — a chapter, the campaign.
-  const addressMatch = matchPath("/campaigns/:campaign/entries/*", pathname);
   const liveMatch = matchPath("/campaigns/:campaign/live", pathname);
   const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
   const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
   const listMatch = matchPath("/campaigns/:campaign/list/*", pathname);
-  // A scene's, an npc's and a location's own routes — the reading view, and
-  // for the npc and the location their list (ADR #31).
+  // A chapter's, a scene's, an npc's and a location's own routes — the
+  // reading view, and for the npc and the location their list (ADR #31).
+  const chaptersMatch = matchPath("/campaigns/:campaign/chapters/*", pathname);
   const scenesMatch = matchPath("/campaigns/:campaign/scenes/*", pathname);
   const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
   const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
@@ -187,7 +186,7 @@ export function Topbar() {
   const isSettings = matchPath("/settings", pathname) !== null;
   const settingsFrom = useSettingsCampaign(isSettings);
   const campaign =
-    campaignOf(addressMatch) ??
+    campaignOf(chaptersMatch) ??
     campaignOf(scenesMatch) ??
     campaignOf(liveMatch) ??
     campaignOf(reviewMatch) ??
@@ -200,13 +199,13 @@ export function Topbar() {
     campaignOf(chapterOverviewMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??
     "";
-  const entryPath = addressMatch?.params["*"] ?? "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
   // resolved from `?from=` (see above), so asking `campaign !== ""` would make
   // the settings page the chapter overview of that campaign, marking the
   // chapters entry and hanging the chapter overview's review and generator
   // entries into the row.
-  const isAddressView = campaignOf(addressMatch) !== undefined && entryPath !== "";
+  const isChapter =
+    campaignOf(chaptersMatch) !== undefined && (chaptersMatch?.params["*"] ?? "") !== "";
   const isScene =
     campaignOf(scenesMatch) !== undefined && (scenesMatch?.params["*"] ?? "") !== "";
   // An npc's and a location's reading views are reading views like a
@@ -214,7 +213,7 @@ export function Topbar() {
   const isNpcView = campaignOf(npcsMatch) !== undefined && (npcsMatch?.params["*"] ?? "") !== "";
   const isLocationView =
     campaignOf(locationsMatch) !== undefined && (locationsMatch?.params["*"] ?? "") !== "";
-  const isReadingView = isAddressView || isScene || isNpcView || isLocationView;
+  const isReadingView = isChapter || isScene || isNpcView || isLocationView;
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
@@ -229,7 +228,7 @@ export function Topbar() {
   const section = navSection({
     isChapterOverview,
     listKind,
-    entryPath,
+    isChapter,
     isScene,
     isNpcs,
     isLocations,

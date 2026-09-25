@@ -1,5 +1,6 @@
 import { Outlet, Route, Routes, useParams } from "react-router";
 
+import { ChapterRoute } from "@/chapter/ChapterRoute";
 import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
@@ -15,7 +16,6 @@ import { LiveRoute } from "@/routes/live";
 import { LocationRoute } from "@/location/LocationRoute";
 import { NpcCard } from "@/npc/NpcCard";
 import { NpcRoute } from "@/npc/NpcRoute";
-import { AddressRoute } from "@/routes/address";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SessionRoute } from "@/routes/session";
@@ -83,12 +83,15 @@ export function App() {
           {/* The scene list — reached from the mobile start surface's
               lookup rows. */}
           <Route path="list/:kind" element={<BrowseRoute />} />
-          {/* A scene, an npc and a location are each their own resource
-              (ADR #31): their reading views live at their own routes, and so
-              do the npc and location lists, reached from the topbar's quiet
-              npc and location links and the mobile lookup rows. The scene's
-              reading view is handed the npc cards of its aside — the npc
-              draws them, the scene only says where. */}
+          {/* The campaign is its own resource, and its route is the chapter
+              overview above. A chapter, a scene, an npc and a location are
+              each their own resource as well (ADR #31): their reading views
+              live at their own routes, and so do the npc and location lists,
+              reached from the topbar's quiet npc and location links and the
+              mobile lookup rows. The scene's reading view is handed the npc
+              cards of its aside — the npc draws them, the scene only says
+              where. */}
+          <Route path="chapters/:id" element={<ChapterRoute />} />
           <Route
             path="scenes/:id"
             element={
@@ -112,11 +115,8 @@ export function App() {
           {/* Review — the session review, entered after ending a session
               and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
-          {/* One evening, read-only: a session is rows, not an entry, so it
-              has its own address instead of an entry one. Reached from ⌘K. */}
+          {/* One evening, read-only. Reached from ⌘K. */}
           <Route path="sessions/:id" element={<SessionRoute />} />
-          {/* A chapter and the campaign, reached by their address. */}
-          <Route path="entries/*" element={<AddressRoute />} />
         </Route>
       </Route>
     </Routes>

@@ -2,8 +2,8 @@
 // reading view, its list, the context line of its reading view, and the label
 // it carries beside the addresses of a run's scenes.
 
+import type { ContextCrumb } from "@/components/PageContext";
 import type { Translate } from "@/i18n";
-import type { ContextCrumb } from "@/lib/page-context";
 
 /** The reading view of one location. */
 export function locationHref(campaign: string, id: string): string {

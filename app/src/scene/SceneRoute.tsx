@@ -28,7 +28,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { fetchTree } from "@/api";
-import { EntryBodyEditAction } from "@/components/EntryBodyEditor";
+import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
@@ -110,7 +110,7 @@ export function SceneRoute({
   // reading surface).
   const actions = (
     <>
-      {editing ? null : <EntryBodyEditAction onEdit={() => setEditingId(data.id)} />}
+      {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
       <SceneFieldsAction campaign={campaign} scene={data} tree={tree.data} />
       {editing ? null : <SceneAugmentAction campaign={campaign} scene={data} />}
     </>

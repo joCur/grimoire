@@ -19,7 +19,7 @@
 // the chapter overview then carries the next step, creating a chapter.
 //
 // The SECOND campaign is created from the topbar switcher instead, through the
-// same `useCampaignCreate` (components/CreateActions.tsx) — one create, two
+// same `useCampaignCreate` (campaign/CampaignCreate.tsx) — one create, two
 // surfaces. The field hints here are generic (the campaign's name): a
 // placeholder naming the example campaign reads like a default.
 
@@ -28,7 +28,7 @@ import { useId, useState } from "react";
 import { Navigate } from "react-router";
 
 import { fetchCampaigns } from "@/api";
-import { useCampaignCreate } from "@/components/CreateActions";
+import { useCampaignCreate } from "@/campaign/CampaignCreate";
 import { IdField } from "@/components/IdField";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { Button } from "@/components/ui/button";
@@ -220,7 +220,7 @@ function ColdStart() {
           so the topbar carries no switcher — without this row the FIRST screen
           of a new installation would be the one screen whose language cannot be
           changed. A footer, hairline above, well below the form: the first
-          thing to do here is still „Kampagne anlegen". */}
+          thing to do here is still creating the campaign. */}
       <footer className="mt-10 border-t border-divider pt-3.5">
         <LanguageSwitch />
       </footer>

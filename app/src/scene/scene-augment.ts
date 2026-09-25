@@ -4,7 +4,7 @@
 
 import type { SceneProposal } from "@grimoire/shared/types";
 
-import { formatPropertyValue, type FieldProposal } from "@/lib/augment";
+import { formatFieldValue, type FieldProposal } from "@/lib/augment";
 
 /** "No value here" for any field of a scene: absent, blank text, an empty list. */
 function isEmptyValue(value: unknown): boolean {
@@ -19,7 +19,7 @@ function isEmptyValue(value: unknown): boolean {
  * its order — a reordered `npcs` IS a change.
  */
 function comparable(value: unknown): string {
-  return formatPropertyValue(value).trim();
+  return formatFieldValue(value).trim();
 }
 
 /**

@@ -1,4 +1,4 @@
-// The shared raw editor (issue #15, extracted from the generator review):
+// The shared raw editor:
 // exactly one of the two surfaces is on screen, the toggle names the OTHER
 // one, and the aria wiring points at the textarea only while it exists.
 
@@ -66,7 +66,7 @@ describe("MarkdownEditorSurface", () => {
 
 describe("EditorShell", () => {
   // The frame the callers compose themselves: the reading view puts its mode
-  // switch and its save/cancel actions in here (EntryBodyEditor). The shell
+  // switch and its save/cancel actions in here (BodyEditor). The shell
   // owns the toolbar row, nothing else.
   const shell = (editing: boolean) =>
     renderToStaticMarkup(
@@ -75,7 +75,7 @@ describe("EditorShell", () => {
           <MarkdownEditorToggle
             editing={editing}
             onToggleEditing={() => {}}
-            controlsId="entry-body-scene"
+            controlsId="body-scene"
           />
         }
         // Stand-in caller markup, not app copy — hence the literal (in an
@@ -86,7 +86,7 @@ describe("EditorShell", () => {
           value={BODY}
           onChange={() => {}}
           editing={editing}
-          id="entry-body-scene"
+          id="body-scene"
           label="Markdown-Text von 01-salzhafen/leuchtturm/lighthouse-arrival"
         />
       </EditorShell>,
@@ -96,8 +96,8 @@ describe("EditorShell", () => {
     const html = shell(true);
     expect(html).toContain("Vorschau");
     expect(html).toContain("Speichern");
-    expect(html).toContain('id="entry-body-scene"');
-    expect(html).toContain('aria-controls="entry-body-scene"');
+    expect(html).toContain('id="body-scene"');
+    expect(html).toContain('aria-controls="body-scene"');
   });
 
   test("the toggle flips the surface to the rendered preview", () => {

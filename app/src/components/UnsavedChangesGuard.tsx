@@ -1,19 +1,19 @@
-// „Änderungen verwerfen?" for views whose save is EXPLICIT (review of #53).
+// The "discard changes?" question for views whose save is EXPLICIT.
 //
-// The campaign-content pages (components/EntryListPage.tsx) edit an entry
-// inline and save it with a button, which means there is a window in which the
-// DM's work lives only in the page. Leaving it
-// — „‹ Kapitel", the campaign switcher, the browser's back button, a reload —
-// used to throw that work away without a word. That is the same silent loss
-// ADR #4 forbids on the write path, just on the way out instead of on the way
-// in, and the app already has the answer for it: the properties dialog's
-// discard confirmation (components/PropertiesAction.tsx). This is that
-// confirmation, for navigation.
+// The campaign-content pages (components/EntryListPage.tsx) edit a row inline
+// and save it with a button, which means there is a window in which the DM's
+// work lives only in the page. Leaving it — the back row, the campaign
+// switcher, the browser's back button, a reload — would throw that work away
+// without a word. That is the same silent loss ADR #4 forbids on the write
+// path, just on the way out instead of on the way in, and the app already has
+// the answer for it: the dialogs' discard confirmation
+// (components/fields/FieldsDialog.tsx). This is that confirmation, for
+// navigation.
 //
 // TWO EXITS, two mechanisms, because a page cannot guard both with one:
 //
 //   * inside the app it is react-router's `useBlocker` — a real dialog with
-//     the app's own copy, and „Weiter bearbeiten" leaves the DM exactly where
+//     the app's own copy, and "keep editing" leaves the DM exactly where
 //     they were;
 //   * out of the app (reload, closing the tab, a foreign link) only
 //     `beforeunload` exists, and the browser writes that text itself. It is
@@ -24,7 +24,7 @@
 // WHY A PROVIDER and not a hook per editor: `useBlocker` is one blocker per
 // router, and a page may carry more than one editor. So the editors only
 // report whether they are dirty (`useUnsavedChanges`) and the page owns the
-// one blocker and the one dialog — which is also the honest UX, since „you
+// one blocker and the one dialog — which is also the honest UX, since "you
 // have unsaved changes" is a statement about the PAGE, not about one list.
 
 import {
@@ -122,7 +122,7 @@ export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
         <Dialog
           open
           onOpenChange={(open) => {
-            // Escape and the backdrop mean „Weiter bearbeiten": the safe
+            // Escape and the backdrop mean "keep editing": the safe
             // choice is the one a stray keystroke may not skip past.
             if (!open) blocker.reset();
           }}

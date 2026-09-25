@@ -12,12 +12,13 @@ import { useT } from "@/i18n";
 
 import { createLocation } from "./location-api";
 import { locationHref } from "./location-links";
+import { locationsKey } from "./location-query";
 
 export function LocationCreateAction({ campaign }: { campaign: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const afterCreate = useAfterCreate(campaign);
+  const afterCreate = useAfterCreate(campaign, locationsKey(campaign));
   if (campaign === "") return null;
 
   return (

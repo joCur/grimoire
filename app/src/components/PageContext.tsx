@@ -1,5 +1,5 @@
-// The context line above a page title: the entry's place in the hierarchy,
-// rendered inside the page. Quiet, one line, `›` between the steps, the
+// The context line above a page title: the place of what is on screen in the
+// hierarchy, rendered inside the page. Quiet, one line, `›` between the steps, the
 // linkable step(s) as links.
 //
 // Desktop only (`max-md:hidden`) — below md MobileBackRow already answers
@@ -13,7 +13,16 @@
 import { Link } from "react-router";
 
 import { useT } from "@/i18n";
-import type { ContextCrumb } from "@/lib/page-context";
+
+/**
+ * One step of the context line; without `to` it is plain text. The campaign
+ * name is never one of them — it appears once in the whole chrome, in the
+ * switcher — and each reading view names the steps of its own context.
+ */
+export interface ContextCrumb {
+  label: string;
+  to?: string;
+}
 
 export function PageContext({ crumbs }: { crumbs: ContextCrumb[] }) {
   const t = useT();

@@ -346,6 +346,7 @@ export const en: Messages = {
   "editConflict.force": "Save anyway",
   "status.change.aria": "Change status, currently {current}",
   "status.sceneUnloadable": "Scene not loadable",
+  "status.chapterUnloadable": "Chapter not loadable",
 
 
   // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
@@ -392,7 +393,7 @@ export const en: Messages = {
   "browse.empty.npcs": "No NPCs yet.",
   "browse.empty.locations": "No locations yet.",
 
-  // --- the reading view ("/campaigns/:campaign/entries/*", routes/scene.tsx) -------------
+  // --- the reading views (scene/, chapter/, npc/, location/) ----------------
   "scene.loading": "Loading entry …",
   "scene.notLoadable": "Entry not loadable — check the path or start the server.",
   "scene.npcs.heading": "NPCs in this scene",
@@ -549,16 +550,18 @@ export const en: Messages = {
   "update.available": "New version available — reload",
   "update.reload": "Reload",
 
-  // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
-  "campaignMeta.title": "Edit campaign",
-  "campaignMeta.description":
-    "Name and description of the campaign. The ID stays as it is — it is part of every address and does not change here.",
-  "campaignMeta.field.name": "Name",
-  "campaignMeta.field.description": "Description",
-  "campaignMeta.field.description.placeholder": "One sentence that places the campaign",
-  "campaignMeta.unreachable": "Campaign not loadable — check the server",
+  // --- campaign edit dialog (campaign/CampaignEditAction.tsx) --------------
+  "campaignEdit.title": "Edit campaign",
+  "campaignEdit.description":
+    "Name, description and text of the campaign. The chapter overview shows the text as markdown under the description. The ID stays as it is — it is part of every address and does not change here.",
+  "campaignEdit.field.name": "Name",
+  "campaignEdit.field.description": "Description",
+  "campaignEdit.field.description.placeholder": "One sentence that places the campaign",
+  "campaignEdit.field.body": "Text",
+  "campaignEdit.field.body.placeholder": "What holds for the whole campaign",
+  "campaignEdit.unreachable": "Campaign not loadable — check the server",
 
-  // --- body editor (components/EntryBodyEditor.tsx) -------------------------
+  // --- body editor (components/BodyEditor.tsx) ------------------------------
   "bodyEditor.markdown.aria": "Markdown text of {path}",
   "bodyEditor.hint": "The body only — the properties stay unchanged.",
   "bodyEditor.hint.withFields": "The body and {fields} — the other properties stay unchanged.",
@@ -570,7 +573,7 @@ export const en: Messages = {
 
   // --- entity-kind labels ---------------------------------------------------
   // ONE set for every place a kind is named to the DM: the ⌘K result rows
-  // (lib/search.ts) and the properties dialog's title (lib/properties-form.ts).
+  // (lib/search.ts) and the title of an entity's dialog.
   // An unknown kind is shown verbatim — the wire value is the truth.
   "kind.scene": "Scene",
   "kind.npc": "NPC",
@@ -629,8 +632,6 @@ export const en: Messages = {
   "generate.input.chapterId.leadingDot": "No leading dot.",
   "generate.input.chapterId.space": "No spaces — separate words with a hyphen.",
   "generate.input.chapterId.charset": "Lowercase letters, digits and hyphens only.",
-  "generate.input.chapterId.reserved":
-    "“npcs”, “locations” and “sessions” are reserved — not a chapter name.",
   "generate.input.npcId.slash": "No slashes — the ID is a single segment.",
   "generate.input.npcId.space": "No spaces — separate words with a hyphen.",
   "generate.input.npcId.charset":

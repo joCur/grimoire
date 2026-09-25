@@ -13,6 +13,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { fetchVersion } from "@/api";
+import { CAMPAIGN_QUERY_ROOTS } from "@/campaign/campaign-query";
+import { CHAPTER_QUERY_ROOTS } from "@/chapter/chapter-query";
 import { reportServerBuild } from "@/lib/build-id";
 import { LOCATION_QUERY_ROOTS } from "@/location/location-query";
 import { NPC_QUERY_ROOTS } from "@/npc/npc-query";
@@ -44,15 +46,15 @@ export function useCampaignVersion(campaign: string): void {
     if (data === undefined) return;
     // Build handshake first — it must run on EVERY poll, including the very
     // first one and polls where the counter did not move (a deploy changes
-    // the build id, not the campaign entries).
+    // the build id, not the campaign).
     reportServerBuild(data.build);
     const previous = last.current;
     last.current = { campaign, version: data.version };
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
     // Something changed on the server — refetch everything read from this
-    // campaign. A scene's, an npc's and a location's reads name their own key
-    // roots in their slices (ADR #31). "active-session" rides along: a session
+    // campaign. The campaign's, a chapter's, a scene's, an npc's and a
+    // location's reads name their own key roots in their slices (ADR #31). "active-session" rides along: a session
     // ended in another tab, a hand-edited `ended`, or simply midnight passing
     // must reach the global live indicator without a reload.
     // "last-session" is the review's session (ended or not) — same reasoning,
@@ -63,12 +65,13 @@ export function useCampaignVersion(campaign: string): void {
     // "knowledge"/"glossary" are campaign reads like the rest:
     // the two content pages have to learn about a write from another tab.
     // NOTE what that means for an OPEN row there: the list under it changes.
-    // components/EntryListPage.tsx therefore addresses its save by the
-    // entry's CONTENT and sends the `rev` that applied when the row was
-    // opened — a fresh list must not turn into a silent overwrite.
+    // components/EntryListPage.tsx therefore addresses its save by the row's
+    // CONTENT and sends the `rev` that applied when the row was opened — a
+    // fresh list must not turn into a silent overwrite.
     for (const key of [
       "tree",
-      "entry",
+      ...CAMPAIGN_QUERY_ROOTS,
+      ...CHAPTER_QUERY_ROOTS,
       ...SCENE_QUERY_ROOTS,
       ...NPC_QUERY_ROOTS,
       ...LOCATION_QUERY_ROOTS,

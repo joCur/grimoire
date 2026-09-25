@@ -7,7 +7,7 @@
 import type { CampaignTree, Scene } from "@grimoire/shared/types";
 import { useState } from "react";
 
-import { BodyEditor, useBodyDraft } from "@/components/EntryBodyEditor";
+import { BodyEditor, useBodyDraft } from "@/components/BodyEditor";
 import { FieldsDialog, FieldsDialogAction, useFieldsForm } from "@/components/fields/FieldsDialog";
 import { useT } from "@/i18n";
 

@@ -1,8 +1,8 @@
-// The heart of the Block-Composer's phase 1: the round-trip.
+// The heart of the block composer: the round-trip.
 //
 // A composer that rewrites a hand-edited body on open is worse than no
 // composer, so the central test is not a unit test at all — it reads the body
-// of EVERY fixture entry, exactly as the app receives it from the API, and
+// of EVERY fixture, exactly as the app receives it from the API, and
 // demands `serializeBlocks(parseBlocks(body)) === body`, byte for byte.
 // Blank-line runs, `>` styles, wrapping, the trailing newline: nothing may
 // move.
@@ -41,21 +41,22 @@ function fixture(name: string): { body?: string } {
 }
 
 /**
- * Every fixture that carries a body, sorted — the campaign's own files and
- * the scenes, npcs and locations in their directories (`scenes/<id>.json`,
- * `npcs/<id>.json`, `locations/<id>.json`).
+ * Every fixture that carries a body, sorted — the campaign, its chapters,
+ * scenes, npcs and locations, each in its own directory
+ * (`campaigns/<id>.json`, `chapters/<id>.json`, `scenes/<id>.json`, …).
  */
 function fixtureFiles(): string[] {
   const inDir = (dir: string): string[] =>
     readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
       .filter((name) => name.endsWith(".json"))
       .map((name) => `${dir}${name}`);
-  return [...inDir(""), ...inDir("scenes/"), ...inDir("npcs/"), ...inDir("locations/")]
+  return ["campaigns/", "chapters/", "scenes/", "npcs/", "locations/"]
+    .flatMap(inDir)
     .filter((name) => fixture(name).body !== undefined)
     .sort();
 }
 
-/** The body as the app sees it: whatever GET /entry answered. */
+/** The body as the app sees it: whatever the resource answered. */
 function fixtureBody(name: string): string {
   const body = fixture(name).body;
   if (body === undefined) throw new Error(`fixture ${name} has no body`);

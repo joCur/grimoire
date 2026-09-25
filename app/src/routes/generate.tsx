@@ -2,7 +2,7 @@
 // reference's GENERATOR section, four states in one route:
 //
 //   input   target chapter (existing chip or the new-chapter flow with
-//           a live path preview) + source text + the context hint
+//           a live id preview) + source text + the context hint
 //   working the spinner while the SERVER's job runs (correction turns happen
 //           inside that job, generator/README.md)
 //   review  the proposed scenes of a finished job: rendered through the SAME
@@ -65,14 +65,14 @@ import {
   retryJobPart,
   startGenerateJob,
 } from "@/api";
+import { chapterLabel } from "@/chapter/chapter-links";
+import { chapterIdError, chapterIdValue, newChapterId } from "@/chapter/chapter-run";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { serverErrorBodyMessage, serverErrorMessage, useT, type Translate } from "@/i18n";
 import {
   applySummary,
-  chapterIdError,
-  chapterIdValue,
   contextHint,
   knowledgeHint,
   generatePhase,
@@ -83,7 +83,6 @@ import {
   jobPipelineParts,
   jobProgress,
   locationState,
-  newChapterId,
   npcState,
   openLocations,
   openNpcs,
@@ -186,9 +185,8 @@ export function GenerateRoute() {
   const newIdInput = chapterIdValue(suggestedId, manualId);
   const newIdError = chapterIdError(newIdInput, t);
   // A typed id may name a chapter that is already there: then this is NOT a
-  // new chapter — the drafts go into the existing directory and its
-  // chapter entry stays untouched, so neither the newChapter
-  // flag nor a chapterTitle travels.
+  // new chapter — the drafts go into that chapter, which stays untouched, so
+  // neither the newChapter flag nor a chapterTitle travels.
   const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
   const creatingChapter = target.kind === "new" && !newIdExists;
   const chapterId =
@@ -393,7 +391,7 @@ export function GenerateRoute() {
       }
     },
     onSuccess: (data) => {
-      const addresses = [
+      const labels = [
         ...data.scenes.map(sceneLabel),
         ...data.npcs.map(npcLabel),
         ...data.locations.map(locationLabel),
@@ -403,7 +401,7 @@ export function GenerateRoute() {
       // job that is still open into one that had vanished.
       if (data.jobDeleted) {
         droppedRef.current = true;
-        setWritten((prev) => [...(prev ?? []), ...addresses]);
+        setWritten((prev) => [...(prev ?? []), ...labels]);
         if (data.npcs[0] !== undefined) setWrittenNpc(data.npcs[0]);
       }
       // The scenes, npcs and locations exist now — the chapter overview and
@@ -640,12 +638,12 @@ export function GenerateRoute() {
   const failedUsage = usageLabel(failed?.usage, t);
   const failedMessage = serverErrorBodyMessage(failed, t);
   const resultUsage = usageLabel(result?.usage ?? npcResult?.usage, t);
-  // A write conflict names what is in the way: the chapter by its address,
-  // scenes, npcs and locations by their resource segment and id.
+  // A write conflict names what is in the way: the chapter, the scenes, npcs
+  // and locations, each by its resource segment and id.
   const conflicts =
     apply.error instanceof ApiError && apply.error.status === 409
       ? [
-          ...stringList(apply.error.details.conflicts),
+          ...stringList(apply.error.details.chapters).map(chapterLabel),
           ...stringList(apply.error.details.scenes).map(sceneLabel),
           ...stringList(apply.error.details.npcs).map(npcLabel),
           ...stringList(apply.error.details.locations).map(locationLabel),

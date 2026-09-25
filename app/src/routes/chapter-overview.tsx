@@ -1,37 +1,34 @@
-// "/campaigns/:campaign" — the chapter overview per the design reference: campaign header
-// with the campaign's text, chapter accordions with the chapter's text and
-// open threads, the chapter's planned
+// "/campaigns/:campaign" — the campaign's route, the chapter overview per the
+// design reference: the campaign header with the campaign's text, chapter
+// accordions with the chapter's text and open threads, the chapter's planned
 // scenes as ONE list in the order the DM arranged (ADR #27) and a separate
 // contingency group at the end.
+//
+// The overview shows several entities, so it is composed from their slices,
+// like the app's routes: the campaign's text and edit action, each chapter's
+// accordion with its status control and actions, and the scene list handed
+// into that accordion — no slice reaches into another.
+//
 // Below md the SAME route shows the mobile start surface instead — a
 // responsive swap, no separate URL: the desktop chapter overview is
 // `hidden md:block`, the mobile start `md:hidden`. Both share the tree query
 // cache, so nothing fetches twice.
 
-import type { ChapterNode, SceneSummary } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Bookmark, ChevronDown, GitFork } from "lucide-react";
-import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 
-import { fetchEntry, fetchTree } from "@/api";
-import { CampaignMetaAction } from "@/components/CampaignMetaAction";
-import { ChapterActions } from "@/components/ChapterActions";
-import { ClampedText } from "@/components/ClampedText";
+import { fetchTree } from "@/api";
+import { CampaignEditAction } from "@/campaign/CampaignEditAction";
+import { campaignQuery } from "@/campaign/campaign-query";
+import { ChapterCreateAction } from "@/chapter/ChapterCreateAction";
+import { ChapterSection } from "@/chapter/ChapterSection";
 import { ChapterThreads } from "@/components/ChapterThreads";
-import { ChapterStatusControl } from "@/components/ChapterStatusMenu";
-import { ChapterCreateAction } from "@/components/CreateActions";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ClampedText } from "@/components/ClampedText";
 import { useT } from "@/i18n";
-import { CAMPAIGN_META_PATH } from "@/lib/campaign-meta";
 import { CHAPTER_OVERVIEW_LOOKUP_TARGETS } from "@/lib/lookup";
-import { contingencyScenes, plannedScenes } from "@/lib/scene-order";
 import { useCampaignMeta } from "@/lib/use-campaign";
-import { useSceneOrderWrite } from "@/lib/use-scene-order";
 import { MobileStart } from "@/routes/mobile-start";
-import { SceneCreateAction } from "@/scene/SceneCreateAction";
-import { SceneStatusControl } from "@/scene/SceneStatusMenu";
-import { sceneHref } from "@/scene/scene-links";
+import { SceneOrderList } from "@/scene/SceneOrderList";
 
 export function ChapterOverviewRoute() {
   const t = useT();
@@ -44,15 +41,14 @@ export function ChapterOverviewRoute() {
 
   const sceneCount = data?.chapters.reduce((n, ch) => n + ch.scenes.length, 0) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
-  // Display name + description from campaign; the header
-  // degrades to the campaign id when the entry is missing.
+  // Display name + description from the campaign list; the header degrades
+  // to the campaign id while the list does not know it.
   const meta = useCampaignMeta(campaign);
-  // The campaign's TEXT stands under the description. It is the campaign
-  // entry's body, which the campaign list does not carry — the same query the
-  // campaign's edit dialog and reading view read, so it is cached once.
-  const campaignEntry = useQuery({
-    queryKey: ["entry", campaign, CAMPAIGN_META_PATH],
-    queryFn: () => fetchEntry(campaign, CAMPAIGN_META_PATH),
+  // The campaign's TEXT stands under the description. The list does not carry
+  // it, so it is read from the campaign itself — the same query the edit
+  // dialog reads, so it is cached once.
+  const campaignRead = useQuery({
+    ...campaignQuery(campaign),
     enabled: campaign !== "",
     retry: false,
   });
@@ -102,7 +98,7 @@ export function ChapterOverviewRoute() {
                     they are read. */}
                 <span className="flex flex-none items-center gap-1 md:ml-auto">
                   <ChapterCreateAction campaign={campaign} />
-                  <CampaignMetaAction campaign={campaign} />
+                  <CampaignEditAction campaign={campaign} />
                 </span>
               </div>
               {meta.description !== undefined && (
@@ -114,7 +110,7 @@ export function ChapterOverviewRoute() {
                   picked out of it by a heading (ADR #29). A campaign without
                   one shows nothing here. */}
               <ClampedText className="mt-2.5 max-w-[62ch]">
-                {campaignEntry.data?.body ?? ""}
+                {campaignRead.data?.body ?? ""}
               </ClampedText>
               <LookupLine campaign={campaign} />
             </div>
@@ -131,275 +127,21 @@ export function ChapterOverviewRoute() {
               </div>
             )}
             {data.chapters.map((chapter, index) => (
-              <Chapter
+              <ChapterSection
                 key={chapter.id}
                 campaign={campaign}
                 chapter={chapter}
                 defaultOpen={anyActive ? chapter.status === "active" : index === 0}
+                // The storylines the chapter carries, under its text — their
+                // own list, read once the chapter is open.
+                threads={<ChapterThreads campaign={campaign} chapter={chapter.id} enabled />}
+                scenes={<SceneOrderList campaign={campaign} chapter={chapter} />}
               />
             ))}
           </>
         )}
       </div>
     </>
-  );
-}
-
-function Chapter({
-  campaign,
-  chapter,
-  defaultOpen,
-}: {
-  campaign: string;
-  chapter: ChapterNode;
-  defaultOpen: boolean;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(defaultOpen);
-  // ONE list in the order the DM arranged, shown as two blocks: the plan, and
-  // the contingencies at the end. `pos` runs over both (ADR #27).
-  const scenes = chapter.scenes;
-  const planned = plannedScenes(scenes);
-  const contingencies = contingencyScenes(scenes);
-  const order = useSceneOrderWrite(campaign, chapter);
-
-  // The chapter's text is its entry's body — fetched lazily on first expand;
-  // a missing entry or an empty text simply shows no text.
-  const chapterEntry = useQuery({
-    queryKey: ["entry", campaign, chapter.path],
-    queryFn: () => fetchEntry(campaign, chapter.path as string),
-    enabled: open && chapter.path !== undefined,
-    retry: false,
-  });
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="mb-4">
-      {/* ONE row, but not one button: the status control is a menu trigger,
-          and a button inside a button is invalid markup. So the trigger covers
-          the chevron, the heading and the scene count — the whole reading of
-          the row — and the control sits BESIDE it in the same flex line with
-          the shared bottom border. */}
-      <div className="flex w-full items-center gap-2.5 border-b border-border pt-2.5 pb-3">
-        <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2.5 text-left">
-          <ChevronDown
-            aria-hidden
-            size={15}
-            className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0"
-          />
-          {/* The chapter names a section of the page, so it IS a heading —
-              inside the trigger, which stays the button that opens it. Without
-              it the outline jumped from the chapter overview's h1 straight to the group
-              h3s, and the chapter the groups belong to was not in the tree at
-              all. */}
-          <h2 className="min-w-0 truncate font-serif text-[18px] font-semibold text-foreground">
-            {chapter.title}
-          </h2>
-          <span className="flex-1" />
-          <span className="flex-none text-[12.5px] text-muted-foreground">
-            {t("chapterOverview.sceneCount", { count: scenes.length })}
-          </span>
-        </CollapsibleTrigger>
-        {/* The status is the control: picking the active status swaps the
-            active chapter in one server call, the other two patch this
-            chapter. Mobile never sees it — the route renders the start
-            surface instead of the overview below md. */}
-        <ChapterStatusControl campaign={campaign} chapter={chapter.id} status={chapter.status} />
-      </div>
-      <CollapsibleContent>
-        <div className="pt-4 pb-1 pl-[25px]">
-          {/* The chapter's own actions. They sit INSIDE the accordion and not
-              in the heading row: that row is already as wide as it gets, and
-              the actions are for the chapter the DM has opened. */}
-          <ChapterActions campaign={campaign} chapter={chapter.id} entry={chapterEntry.data} />
-          {/* The whole text of the chapter, whatever it says and however it
-              is structured — a few lines of it until the DM opens it. */}
-          <ClampedText className="mb-3">{chapterEntry.data?.body ?? ""}</ClampedText>
-          {/* The storylines the chapter carries, under its text — their own
-              list, read lazily like the text. */}
-          <ChapterThreads campaign={campaign} chapter={chapter.id} enabled={open} />
-          {scenes.length === 0 && (
-            <p className="pt-0.5 pb-3 text-[13.5px] text-muted-foreground">
-              {t("chapterOverview.chapter.empty")}
-            </p>
-          )}
-          {/* No heading over the plan: it IS the chapter's list, and the one
-              thing a heading could still name — the location — now stands in
-              the meta line of the scene it belongs to. */}
-          {planned.length > 0 && (
-            <div className="mb-7">
-              {planned.map((scene, index) => (
-                <SceneRow
-                  key={scene.id}
-                  campaign={campaign}
-                  scene={scene}
-                  first={index === 0}
-                  last={index === planned.length - 1}
-                  busy={order.isPending}
-                  onMove={(delta) => order.move(scene.id, delta)}
-                />
-              ))}
-            </div>
-          )}
-          {contingencies.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
-                <GitFork aria-hidden size={15} className="flex-none text-muted-foreground" />
-                {/* A real heading: it names a section of the chapter, and the
-                    accessibility tree should be able to say so. */}
-                <h3 className="font-medium text-soft">{t("scene.contingencies.heading")}</h3>
-                <span className="text-muted-foreground">· {t("chapterOverview.contingencies.hint")}</span>
-              </div>
-              {/* Moved WITHIN this block: the ends of the block are the ends
-                  of the move, so the last planned scene and the first
-                  contingency never trade places for a press that then looks
-                  like nothing happened. */}
-              {contingencies.map((scene, index) => (
-                <SceneRow
-                  key={scene.id}
-                  campaign={campaign}
-                  scene={scene}
-                  first={index === 0}
-                  last={index === contingencies.length - 1}
-                  busy={order.isPending}
-                  onMove={(delta) => order.move(scene.id, delta)}
-                />
-              ))}
-            </div>
-          )}
-          {/* One quiet line at the list, never a toast — the DM is looking
-              straight at the rows they just moved. */}
-          {order.message !== undefined && (
-            <p role="status" className="pt-2.5 text-[12.5px] text-destructive">
-              {order.message}
-            </p>
-          )}
-          {/* The scene create action sits IN the chapter, which is what
-              prefills the chapter — no picker, no second decision. */}
-          <div className="pb-4">
-            <SceneCreateAction
-              campaign={campaign}
-              chapter={chapter.id}
-              variant={scenes.length === 0 ? "primary" : "quiet"}
-            />
-          </div>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-/**
- * One chapter overview row. The row opens the scene — except the status area, which is
- * its own control (same menu as the reading view). The link
- * therefore covers everything but that control instead of wrapping it: a
- * button inside an anchor is invalid markup and would need click juggling,
- * two siblings in one hover row need neither.
- *
- * Exported for the render test: the meta line and the two move controls.
- */
-export function SceneRow({
-  campaign,
-  scene,
-  first,
-  last,
-  busy,
-  onMove,
-}: {
-  campaign: string;
-  scene: SceneSummary;
-  /** Ends of the DISPLAYED block — where the move has nowhere to go. */
-  first: boolean;
-  last: boolean;
-  /** A move of this chapter is on the wire; the rows hold still until it lands. */
-  busy: boolean;
-  onMove: (delta: -1 | 1) => void;
-}) {
-  const t = useT();
-  const isContingency = scene.type === "contingency";
-  // The location is a word of the scene now, not a heading above it — the
-  // NAME the server resolved, degraded to the id it could not resolve. A
-  // scene without one simply has no location part: no placeholder, no dangling
-  // separator (ADR #27).
-  const meta = [scene.locationName ?? scene.location, scene.tags.map((tag) => `#${tag}`).join(" ")]
-    .filter((part) => part !== undefined && part !== "")
-    .join(" · ");
-
-  return (
-    <div className="group flex items-center gap-3 rounded-md border-b border-divider px-2.5 hover:bg-card">
-      <Link
-        to={sceneHref(campaign, scene.id)}
-        className="flex min-w-0 flex-1 items-center gap-3 py-[13px]"
-      >
-        {isContingency ? (
-          <GitFork aria-hidden size={17} className="flex-none text-muted-foreground" />
-        ) : (
-          <Bookmark aria-hidden size={17} className="flex-none text-muted-foreground" />
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14.5px] text-foreground">{scene.title}</span>
-          {isContingency && scene.trigger !== undefined ? (
-            <span className="mt-0.5 block text-[12.5px] text-muted-foreground italic">
-              {t("chapterOverview.scene.trigger", { trigger: scene.trigger })}
-            </span>
-          ) : meta !== "" ? (
-            <span className="mt-0.5 block text-[12.5px] text-muted-foreground">{meta}</span>
-          ) : null}
-        </span>
-      </Link>
-      {/* Quiet until the row is the one in hand (UI-BRIEF §1): the pair fades
-          in on hover and on keyboard focus, and it is never a standing label
-          next to every scene. Opacity only — the buttons stay in the tab order
-          and keep their accessible names either way. */}
-      <span className="flex flex-none items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none">
-        <MoveButton
-          label={t("chapterOverview.scene.moveUp.aria", { title: scene.title })}
-          disabled={first || busy}
-          onClick={() => onMove(-1)}
-        >
-          <ArrowUp aria-hidden />
-        </MoveButton>
-        <MoveButton
-          label={t("chapterOverview.scene.moveDown.aria", { title: scene.title })}
-          disabled={last || busy}
-          onClick={() => onMove(1)}
-        >
-          <ArrowDown aria-hidden />
-        </MoveButton>
-      </span>
-      {/* No rev in the tree — the control fetches the scene when it opens. */}
-      <SceneStatusControl
-        campaign={campaign}
-        id={scene.id}
-        status={scene.status}
-        variant="row"
-      />
-    </div>
-  );
-}
-
-/** Icon-only up/down control of a row — named for screen readers by its scene. */
-function MoveButton({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-panel-deep hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-35 motion-reduce:transition-none [&_svg]:size-[15px]"
-    >
-      {children}
-    </button>
   );
 }
 
