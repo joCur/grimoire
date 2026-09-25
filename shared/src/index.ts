@@ -1,7 +1,6 @@
 export * from "./types";
 export * from "./refs";
 export * from "./slug";
-export * from "./session-state";
 export * from "./error-codes";
 export * from "./outline-schema";
 export * from "./campaign";
@@ -13,3 +12,7 @@ export * from "./thread";
 export * from "./idea";
 export * from "./glossary-term";
 export * from "./knowledge-item";
+export * from "./session";
+export * from "./log-entry";
+export * from "./pause";
+export * from "./played-scene";
