@@ -480,7 +480,7 @@ export const de = {
   "live.scene.none":
     "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",
   "live.scene.loading": "Lade Szene …",
-  "live.scene.unloadable": "Szene nicht ladbar — läuft der Server?",
+  "live.scene.unloadable": "Diese Szene ließ sich nicht laden.",
   "live.scene.locationHeading": "Ort",
   "live.scene.npcsHeading": "NPCs",
   "live.scene.noNpcs": "Keine NPCs in dieser Szene.",

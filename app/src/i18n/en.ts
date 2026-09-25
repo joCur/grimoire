@@ -426,7 +426,7 @@ export const en: Messages = {
   "live.scene.none":
     "No scene in the active chapter — create scenes on the chapters page.",
   "live.scene.loading": "Loading scene …",
-  "live.scene.unloadable": "Scene not loadable — is the server running?",
+  "live.scene.unloadable": "This scene could not be loaded.",
   "live.scene.locationHeading": "Location",
   "live.scene.npcsHeading": "NPCs",
   "live.scene.noNpcs": "No NPCs in this scene.",
