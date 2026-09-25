@@ -1,7 +1,7 @@
-// Unit tests of the review helpers: the hashtag vocabulary of log and inbox
-// rows and the grouping of player-character notes. Rows — the chapter's open
-// threads included — arrive from the server and are named by their id, so
-// there is no list-out-of-text parsing left to test.
+// Unit tests of the review helpers: the hashtag vocabulary of log rows and
+// ideas and the grouping of player-character notes. Rows — threads included —
+// arrive from the server and are named by their id, so there is no
+// list-out-of-text parsing left to test.
 
 import { describe, expect, test } from "bun:test";
 
@@ -47,8 +47,8 @@ describe("firstReviewTag", () => {
     for (const tag of ["date", "idee", ""]) expect(isReviewTag(tag)).toBe(false);
   });
 
-  test("inbox rule: the row's tag list keeps every tag in order", () => {
-    // use-review names an inbox row by its first tag, unless a harvest tag
+  test("idea rule: the row's tag list keeps every tag in order", () => {
+    // use-review names an idea by its first tag, unless a harvest tag
     // appears later in the text.
     expect(extractHashtags("Idee zum Hafen #idee #npc")).toEqual(["idee", "npc"]);
   });

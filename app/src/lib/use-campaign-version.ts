@@ -15,10 +15,12 @@ import { useEffect, useRef } from "react";
 import { fetchVersion } from "@/api";
 import { CAMPAIGN_QUERY_ROOTS } from "@/campaign/campaign-query";
 import { CHAPTER_QUERY_ROOTS } from "@/chapter/chapter-query";
+import { IDEA_QUERY_ROOTS } from "@/idea/idea-query";
 import { reportServerBuild } from "@/lib/build-id";
 import { LOCATION_QUERY_ROOTS } from "@/location/location-query";
 import { NPC_QUERY_ROOTS } from "@/npc/npc-query";
 import { SCENE_QUERY_ROOTS } from "@/scene/scene-query";
+import { THREAD_QUERY_ROOTS } from "@/thread/thread-query";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -58,10 +60,10 @@ export function useCampaignVersion(campaign: string): void {
     // ended in another tab, a hand-edited `ended`, or simply midnight passing
     // must reach the global live indicator without a reload.
     // "last-session" is the review's session (ended or not) — same reasoning,
-    // and "session"/"sessions"/"inbox" are the reads of one evening, the list
-    // of evenings and the ideas thrown in from the phone.
-    // "threads" are the open threads of each chapter, keyed per chapter
-    // below the campaign — the prefix reaches all of them.
+    // and "session"/"sessions" are the reads of one evening and the list of
+    // evenings. The ideas and each chapter's threads name their key roots in
+    // their slices too; the threads are keyed per chapter below the campaign,
+    // and the prefix reaches all of them.
     // "knowledge"/"glossary" are campaign reads like the rest:
     // the two content pages have to learn about a write from another tab.
     // NOTE what that means for an OPEN row there: the list under it changes.
@@ -80,8 +82,8 @@ export function useCampaignVersion(campaign: string): void {
       "last-session",
       "session",
       "sessions",
-      "inbox",
-      "threads",
+      ...THREAD_QUERY_ROOTS,
+      ...IDEA_QUERY_ROOTS,
       "knowledge",
       "glossary",
     ]) {

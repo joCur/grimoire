@@ -10,7 +10,6 @@ import {
   Bookmark,
   FileText,
   GitFork,
-  Inbox,
   MapPin,
   NotebookPen,
   User,
@@ -39,7 +38,6 @@ const KIND_KEYS: Record<string, MessageKey> = {
   chapter: "kind.chapter",
   campaign: "kind.campaign",
   session: "kind.session",
-  inbox: "kind.inbox",
   glossary: "kind.glossary",
 };
 
@@ -67,12 +65,10 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
     // volume, a chapter is a page in it.
     case "campaign":
       return BookMarked;
-    // A session is what was written down that evening, the inbox what was
-    // thrown in on the go, the glossary the campaign's words.
+    // A session is what was written down that evening, the glossary the
+    // campaign's words.
     case "session":
       return NotebookPen;
-    case "inbox":
-      return Inbox;
     case "glossary":
       return BookA;
     default:
@@ -94,9 +90,8 @@ export function contingencyScenes(tree: CampaignTree | undefined): Set<string> {
 /**
  * Route for a picked result. The campaign, a chapter, a scene, an npc and a
  * location open their own routes by their id — the route their slice names
- * (ADR #31), the campaign's being the chapter overview; the lists open the
- * page that HOLDS the row — a session its reading page, an idea the review it
- * is waiting in, a term the glossary page.
+ * (ADR #31), the campaign's being the chapter overview; a session opens its
+ * reading page, a glossary term the glossary page.
  *
  * A kind nobody knows falls back to the chapter overview rather than building
  * a route out of nothing (degrade, README).
@@ -114,8 +109,6 @@ export function resultHref(campaign: string, result: Pick<SearchResult, "kind" |
       return locationHref(encodeURIComponent(campaign), result.id);
     case "session":
       return `${scope}/sessions/${encodeURIComponent(result.id)}`;
-    case "inbox":
-      return `${scope}/review`;
     case "glossary":
       return `${scope}/glossary`;
     default:

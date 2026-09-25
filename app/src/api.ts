@@ -3,8 +3,8 @@
 // response shapes come from @grimoire/shared — the format contract exists
 // exactly once. An entity with a slice of its own keeps its client there
 // (campaign/campaign-api.ts, chapter/chapter-api.ts, scene/scene-api.ts,
-// npc/npc-api.ts, location/location-api.ts), built from the HTTP helpers
-// exported here.
+// npc/npc-api.ts, location/location-api.ts, thread/thread-api.ts,
+// idea/idea-api.ts), built from the HTTP helpers exported here.
 
 import type {
   CampaignSummary,
@@ -13,7 +13,6 @@ import type {
   GenerateJobStarted,
   GlossaryEntry,
   GlossaryResponse,
-  InboxResponse,
   InstanceSettings,
   KnowledgeEntry,
   KnowledgeResponse,
@@ -23,7 +22,6 @@ import type {
   SearchResponse,
   SessionResponse,
   SessionSummary,
-  ThreadsResponse,
 } from "@grimoire/shared/types";
 
 export class ApiError extends Error {
@@ -85,6 +83,16 @@ export async function sendJson<T>(
   });
   if (!response.ok) throw await failure(`${method} /api${path}`, response);
   return (await response.json()) as T;
+}
+
+/** DELETE with a JSON body — its guard — and no answer body; a non-2xx becomes an ApiError. */
+export async function deleteJson(path: string, body: unknown): Promise<void> {
+  const response = await fetch(`/api${path}`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw await failure(`DELETE /api${path}`, response);
 }
 
 export function fetchCampaigns(): Promise<CampaignSummary[]> {
@@ -209,75 +217,6 @@ export function putSceneOrder(
     `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/scene-order`,
     { scenes, rev },
   );
-}
-
-// --- a chapter's open threads ------------------------------------------------
-
-/** The request path of a chapter's thread list, or of one row in it. */
-function threadsUrl(campaign: string, chapter: string, id?: string): string {
-  const base = `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/threads`;
-  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-}
-
-/**
- * The chapter's open threads as ROWS plus the list's own guard token — a
- * list beside the chapter, never a checklist in its text (ADR #29).
- */
-export function fetchThreads(campaign: string, chapter: string): Promise<ThreadsResponse> {
-  return getJson<ThreadsResponse>(threadsUrl(campaign, chapter));
-}
-
-/**
- * Append one thread at the end of the chapter's list — adopting a plot
- * thread in the review and the overview's add action. No `rev`: an
- * append has nothing to overwrite, so the list moving elsewhere is no reason
- * to refuse it.
- */
-export function appendThread(
-  campaign: string,
-  chapter: string,
-  text: string,
-): Promise<ThreadsResponse> {
-  return postJson<ThreadsResponse>(threadsUrl(campaign, chapter), { text });
-}
-
-/**
- * Tick, untick or reword ONE thread against the list's `rev`. A stale token
- * answers 409 with the current list (`threadsConflict`), an id the list does
- * not hold 404.
- */
-export function patchThread(
-  campaign: string,
-  chapter: string,
-  id: string,
-  change: { rev: number; text?: string; done?: boolean },
-): Promise<ThreadsResponse> {
-  return sendJson<ThreadsResponse>("PATCH", threadsUrl(campaign, chapter, id), change);
-}
-
-/** Delete ONE thread against the list's `rev`; same refusals as the patch. */
-export function deleteThread(
-  campaign: string,
-  chapter: string,
-  id: string,
-  rev: number,
-): Promise<ThreadsResponse> {
-  return sendJson<ThreadsResponse>("DELETE", threadsUrl(campaign, chapter, id), { rev });
-}
-
-/**
- * The current list a thread write was refused against — the 409 carries it
- * under `threads`. `undefined` for any other failure and for a 409 without a
- * usable list (degrade: the caller then reads the list again).
- */
-export function threadsConflict(error: unknown): ThreadsResponse | undefined {
-  if (!(error instanceof ApiError) || error.status !== 409) return undefined;
-  const { threads } = error.details;
-  if (threads === null || typeof threads !== "object") return undefined;
-  const candidate = threads as Partial<ThreadsResponse>;
-  return Array.isArray(candidate.entries) && typeof candidate.rev === "number"
-    ? (candidate as ThreadsResponse)
-    : undefined;
 }
 
 /** POST an optional JSON body and parse the JSON answer; a non-2xx becomes an ApiError. */
@@ -423,16 +362,6 @@ export function discardSession(campaign: string): Promise<{ id?: string }> {
   return postJson<{ id?: string }>(`/campaigns/${encodeURIComponent(campaign)}/session/discard`);
 }
 
-/** The campaign's inbox as ROWS — ideas, not text (list plus its `rev`). */
-export function fetchInbox(campaign: string): Promise<InboxResponse> {
-  return getJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/inbox`);
-}
-
-/** Throw one idea into the campaign's inbox (mobile capture). */
-export function appendInbox(campaign: string, text: string): Promise<InboxResponse> {
-  return postJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/inbox`, { text });
-}
-
 /**
  * Append a log row to the ACTIVE session (404 when none runs) — which may be
  * yesterday's session when the session ran past midnight; the server picks it.
@@ -463,13 +392,6 @@ export function markLogLineSeen(
   return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/seen`, {
     sessionId,
     logId,
-  });
-}
-
-/** Tick ONE inbox row off by its id (idempotent). Returns the inbox. */
-export function markInboxLineDone(campaign: string, id: string): Promise<InboxResponse> {
-  return postJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/inbox-done`, {
-    id,
   });
 }
 

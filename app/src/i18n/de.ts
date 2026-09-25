@@ -554,7 +554,7 @@ export const de = {
   "review.notes.lead":
     "Einträge aus den Ideen ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
-  // Player-character notes: `#pc` lines from log and inbox.
+  // Player-character notes: `#pc` lines from the log and the ideas.
   "review.pc.title": "Spielercharaktere",
   "review.pc.lead":
     "Einträge mit #pc — Erinnerungen für den Tisch, kein Kampagneninhalt. Abhaken oder für die nächste Nachbereitung behalten.",
@@ -637,7 +637,6 @@ export const de = {
   "kind.chapter": "Kapitel",
   "kind.campaign": "Kampagne",
   "kind.session": "Session",
-  "kind.inbox": "Idee",
   "kind.glossary": "Glossar",
   // The accessible name of a `[[ref]]` in a body (markdown/entity-refs.tsx):
   // what it points at, then its current name.

@@ -1,28 +1,26 @@
 // The mobile start surface — rendered by the chapter overview route below
 // the md breakpoint per design/Grimoire-Mobil.dc.html: wordmark row, tappable
-// search field (opens the ⌘K palette, touch-first), inbox capture card
-// (POST /api/campaigns/:campaign/inbox) and the lookup rows into the mobile
+// search field (opens the ⌘K palette, touch-first), the idea capture card
+// (idea/IdeaCapture.tsx) and the lookup rows into the mobile
 // list pages. The prototype's recently-viewed section is deliberately
 // left out: recents would need server-side persistence (no localStorage —
 // the server is the truth) and there is no recents endpoint yet.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { BookA, Bookmark, ChevronRight, Lightbulb, MapPin, Search, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 
-import { appendInbox, fetchTree } from "@/api";
+import { fetchTree } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
-import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { useT, type MessageKey } from "@/i18n";
+import { IdeaCapture } from "@/idea/IdeaCapture";
 import { locationsHref } from "@/location/location-links";
 import { npcsHref } from "@/npc/npc-links";
 import { useCampaignMeta } from "@/lib/use-campaign";
-import { inboxKey } from "@/lib/use-review";
-import { cn } from "@/lib/utils";
 
 export function MobileStart({ campaign }: { campaign: string }) {
   const t = useT();
@@ -69,7 +67,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
         hotkey={false}
       />
 
-      <InboxCard campaign={campaign} />
+      <IdeaCapture campaign={campaign} />
 
       <nav aria-label={t("lookup.heading")} className="mt-8">
         <p className="mb-1 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
@@ -138,77 +136,5 @@ function BrowseRow({
       )}
       <ChevronRight aria-hidden size={15} className="flex-none text-faint" />
     </Link>
-  );
-}
-
-/** Inbox capture: textarea + brass submit action, quiet text confirmation
- * (no animation — reduced-motion safe by construction). The answer is the
- * whole inbox, so the wrap-up and the live aside see the new idea at once. */
-function InboxCard({ campaign }: { campaign: string }) {
-  const t = useT();
-  const inputId = useId();
-  const [text, setText] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const queryClient = useQueryClient();
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  const inbox = useMutation({
-    mutationFn: (line: string) => appendInbox(campaign, line),
-    onSuccess: (answer) => {
-      // The answer is the whole list, so the wrap-up and the live aside know
-      // about the new idea without a second request.
-      queryClient.setQueryData(inboxKey(campaign), answer);
-      setText("");
-      setConfirmed(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setConfirmed(false), 2500);
-    },
-    onMutate: () => setConfirmed(false),
-  });
-
-  const send = () => {
-    const line = text.trim();
-    if (line === "" || inbox.isPending) return;
-    inbox.mutate(line);
-  };
-
-  return (
-    <div className="rounded-xl border border-input bg-card px-4 pt-3.5 pb-3">
-      <label htmlFor={inputId} className="sr-only">
-        {t("mobileStart.inbox.label")}
-      </label>
-      <textarea
-        id={inputId}
-        rows={2}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={t("mobileStart.inbox.placeholder")}
-        className="min-h-11 w-full resize-none bg-transparent text-[16px] leading-[1.5] text-foreground outline-none placeholder:text-muted-foreground md:text-[15px]"
-      />
-      <div className="flex items-center justify-end gap-3 pt-1">
-        <p
-          aria-live="polite"
-          className={cn(
-            "min-w-0 flex-1 truncate text-[12.5px]",
-            confirmed ? "text-success-text" : "text-destructive",
-          )}
-        >
-          {confirmed
-            ? t("mobileStart.inbox.saved")
-            : inbox.isError
-              ? t("mobileStart.inbox.failed")
-              : ""}
-        </p>
-        <Button
-          type="button"
-          disabled={inbox.isPending}
-          onClick={send}
-          className="h-auto min-h-11 flex-none px-4 py-2 text-[14px] font-semibold"
-        >
-          {t("mobileStart.inbox.submit")}
-        </Button>
-      </div>
-    </div>
   );
 }

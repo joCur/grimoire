@@ -1,13 +1,13 @@
 // "/campaigns/:campaign" — the campaign's route, the chapter overview per the
 // design reference: the campaign header with the campaign's text, chapter
-// accordions with the chapter's text and open threads, the chapter's planned
+// accordions with the chapter's text and threads, the chapter's planned
 // scenes as ONE list in the order the DM arranged (ADR #27) and a separate
 // contingency group at the end.
 //
 // The overview shows several entities, so it is composed from their slices,
 // like the app's routes: the campaign's text and edit action, each chapter's
-// accordion with its status control and actions, and the scene list handed
-// into that accordion — no slice reaches into another.
+// accordion with its status control and actions, and the threads and the
+// scene list handed into that accordion — no slice reaches into another.
 //
 // Below md the SAME route shows the mobile start surface instead — a
 // responsive swap, no separate URL: the desktop chapter overview is
@@ -22,13 +22,13 @@ import { CampaignEditAction } from "@/campaign/CampaignEditAction";
 import { campaignQuery } from "@/campaign/campaign-query";
 import { ChapterCreateAction } from "@/chapter/ChapterCreateAction";
 import { ChapterSection } from "@/chapter/ChapterSection";
-import { ChapterThreads } from "@/components/ChapterThreads";
 import { ClampedText } from "@/components/ClampedText";
 import { useT } from "@/i18n";
 import { CHAPTER_OVERVIEW_LOOKUP_TARGETS } from "@/lib/lookup";
 import { useCampaignMeta } from "@/lib/use-campaign";
 import { MobileStart } from "@/routes/mobile-start";
 import { SceneOrderList } from "@/scene/SceneOrderList";
+import { ThreadList } from "@/thread/ThreadList";
 
 export function ChapterOverviewRoute() {
   const t = useT();
@@ -134,7 +134,7 @@ export function ChapterOverviewRoute() {
                 defaultOpen={anyActive ? chapter.status === "active" : index === 0}
                 // The storylines the chapter carries, under its text — their
                 // own list, read once the chapter is open.
-                threads={<ChapterThreads campaign={campaign} chapter={chapter.id} enabled />}
+                threads={<ThreadList campaign={campaign} chapter={chapter.id} enabled />}
                 scenes={<SceneOrderList campaign={campaign} chapter={chapter} />}
               />
             ))}

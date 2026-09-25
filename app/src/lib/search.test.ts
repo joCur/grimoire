@@ -7,7 +7,6 @@ import {
   Bookmark,
   FileText,
   GitFork,
-  Inbox,
   MapPin,
   NotebookPen,
   User,
@@ -27,9 +26,7 @@ describe("kindLabel", () => {
     expect(kindLabel("location", t)).toBe("Ort");
     expect(kindLabel("chapter", t)).toBe("Kapitel");
     expect(kindLabel("campaign", t)).toBe("Kampagne");
-    // The three that are lists, not entries — they are searchable too.
     expect(kindLabel("session", t)).toBe("Session");
-    expect(kindLabel("inbox", t)).toBe("Idee");
     expect(kindLabel("glossary", t)).toBe("Glossar");
   });
 
@@ -50,7 +47,6 @@ describe("kindIcon", () => {
     expect(kindIcon("chapter")).toBe(BookOpen);
     expect(kindIcon("campaign")).toBe(BookMarked);
     expect(kindIcon("session")).toBe(NotebookPen);
-    expect(kindIcon("inbox")).toBe(Inbox);
     expect(kindIcon("glossary")).toBe(BookA);
   });
 
@@ -118,8 +114,7 @@ describe("resultHref", () => {
     );
   });
 
-  test("an idea opens the review, a term the glossary page", () => {
-    expect(resultHref("beispiel", { kind: "inbox", id: "i-1" })).toBe("/campaigns/beispiel/review");
+  test("a term opens the glossary page", () => {
     expect(resultHref("beispiel", { kind: "glossary", id: "salzhafen" })).toBe(
       "/campaigns/beispiel/glossary",
     );

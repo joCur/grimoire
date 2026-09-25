@@ -1,50 +1,52 @@
 // "/campaigns/:campaign/review" — the session wrap-up view, per the design
-// reference: the tagged lines of today's log and of the inbox as cards with
-// one-click actions, the chapter's open threads below, a brass finish action
+// reference: the tagged lines of today's log and the tagged ideas as cards
+// with one-click actions, the chapter's threads below, a brass finish action
 // at the end. Reached after a session is ended and from the quiet chapter
 // overview affordance.
 //
 // The server is the truth: every action writes through its endpoint, and what
-// comes back — the chapter's thread list a thread was appended to, the npc
-// that was created, plus the session or the inbox the row was ticked off in —
-// is seeded into the caches. An npc is created on its own resource
+// comes back — the thread that was created, the npc that was created, plus
+// the session the log row was marked in or the idea that was ticked off — is
+// seeded into the caches. An npc is created on its own resource
 // (`POST …/npcs`) with the note as its text; when the id already names an npc
 // with content, nothing is written, the dialog says so, and the row stays
-// open. Adopting a thread appends a ROW to the
-// active chapter's thread list; the chapter's text and its `rev` stay as they
-// are (ADR #29). The ONLY client state is cosmetic: which action a card got in
+// open. Adopting a thread creates a thread of the active chapter
+// (`POST …/threads`); the chapter's text and its `rev` stay as they are
+// (ADR #29). The ONLY client state is cosmetic: which action a card got in
 // this sitting (the server stores done/not-done, not which action) and which
-// thread rows were adopted here (the "neu" chip, by row id).
+// threads were adopted here (the "neu" chip, by thread id).
 // Mobile: the desk task stays usable — one column, stacked cards.
 
-import type {
-  InboxResponse,
-  Npc,
-  SessionResponse,
-  ThreadsResponse,
-} from "@grimoire/shared/types";
+import type { Idea } from "@grimoire/shared/idea";
+import type { Thread } from "@grimoire/shared/thread";
+import type { Npc, SessionResponse } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { appendThread, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
+import { fetchTree, markLogLineSeen } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
 import { useT } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
+import { tickIdea } from "@/idea/idea-api";
+import { ideasKey, withIdea } from "@/idea/idea-query";
 import { createConflict } from "@/lib/create";
 import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
-import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
+import { pcGroups, useReviewEntries } from "@/lib/use-review";
 import { seedSession } from "@/lib/use-session";
-import { threadsKey, useThreads } from "@/lib/use-threads";
+import { isWriteConflict } from "@/lib/write-with-rev";
 import { NpcFromNoteDialog } from "@/npc/NpcFromNoteDialog";
 import { createNpc } from "@/npc/npc-api";
 import { npcKey, npcsKey } from "@/npc/npc-query";
+import { createThread } from "@/thread/thread-api";
+import { threadsKey, withThread } from "@/thread/thread-query";
+import { ThreadSummary } from "@/thread/ThreadSummary";
 
 type ActionKind = ReviewActionKind;
 
@@ -58,10 +60,10 @@ interface ActVars {
 interface ActResult {
   /** The npc the action created, or filled when it was empty. */
   npc?: Npc;
-  /** The chapter's thread list after an adoption, and the row it appended. */
-  threads?: { chapter: string; list: ThreadsResponse; adoptedId?: string };
+  /** The thread an adoption created. */
+  thread?: Thread;
   session?: SessionResponse;
-  inbox?: InboxResponse;
+  idea?: Idea;
 }
 
 /** Why creating an npc from a note wrote nothing, as the sentence the dialog shows. */
@@ -125,21 +127,13 @@ export function ReviewRoute() {
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
 
-  // The chapter's open threads: rows of its own list, read as rows.
-  const threadList = useThreads(campaign, chapter?.id);
-  const threads = threadList.data?.entries;
-
   const act = useMutation({
     mutationFn: async ({ entry, action, npc }: ActVars): Promise<ActResult> => {
       let created: Npc | undefined;
-      let threads: ActResult["threads"];
+      let thread: Thread | undefined;
       if (action === "thread") {
         if (chapter === undefined) throw new Error("no chapter to adopt into");
-        const list = await appendThread(campaign, chapter.id, entry.text);
-        // An append lands at the END of the list, and the answer is read in
-        // the same transaction — so its last row is the one just written.
-        const adoptedId = list.entries.at(-1)?.id;
-        threads = { chapter: chapter.id, list, ...(adoptedId === undefined ? {} : { adoptedId }) };
+        thread = await createThread(campaign, { chapter: chapter.id, text: entry.text });
       } else if (action === "npc") {
         if (npc === undefined) throw new Error("no npc id");
         // The note becomes the npc's text. An id whose npc already holds
@@ -152,33 +146,38 @@ export function ReviewRoute() {
           body: entry.text,
         });
       }
-      const npcPart = created === undefined ? {} : { npc: created };
+      const made = {
+        ...(created === undefined ? {} : { npc: created }),
+        ...(thread === undefined ? {} : { thread }),
+      };
       // Only after the harvest succeeded is the source marked done.
-      if (entry.source === "log") {
-        // The session comes from the server (the last started one — which may
-        // be yesterday's). Without it there is nothing to mark.
-        if (model.sessionId === "") throw new Error("no session to mark in");
-        const session = await markLogLineSeen(campaign, model.sessionId, entry.id);
-        return { ...npcPart, session, ...(threads === undefined ? {} : { threads }) };
+      if (entry.idea !== undefined) {
+        return { ...made, idea: await tickIdea(campaign, entry.idea) };
       }
-      const inbox = await markInboxLineDone(campaign, entry.id);
-      return { ...npcPart, inbox, ...(threads === undefined ? {} : { threads }) };
+      // The session comes from the server (the last started one — which may
+      // be yesterday's). Without it there is nothing to mark.
+      if (model.sessionId === "") throw new Error("no session to mark in");
+      return { ...made, session: await markLogLineSeen(campaign, model.sessionId, entry.id) };
     },
     onSuccess: (result, vars) => {
       // Every endpoint returns what it wrote: seed the npc's own query.
       if (result.npc !== undefined) {
         queryClient.setQueryData(npcKey(campaign, result.npc.id), result.npc);
       }
-      // A log row's done-state lives in the session, an idea's in the inbox —
+      // A log row's done-state lives in the session, an idea's on the idea —
       // the live aside and the topbar read both, so they see the fresh answer
       // (same rule as components/PcReminders).
       if (result.session !== undefined) seedSession(queryClient, campaign, result.session);
-      if (result.inbox !== undefined) {
-        queryClient.setQueryData(inboxKey(campaign), result.inbox);
+      const { idea, thread } = result;
+      if (idea !== undefined) {
+        queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withIdea(list, idea));
       }
-      // The thread list answered whole — the overview reads the same key.
-      if (result.threads !== undefined) {
-        queryClient.setQueryData(threadsKey(campaign, result.threads.chapter), result.threads.list);
+      // The new thread joins its chapter's threads — the overview reads the
+      // same key.
+      if (thread !== undefined) {
+        queryClient.setQueryData<Thread[]>(threadsKey(campaign, thread.chapter), (list) =>
+          withThread(list, thread),
+        );
       }
       // A new npc changes the tree, the npc list and ⌘K.
       if (vars.action === "npc") {
@@ -186,8 +185,13 @@ export function ReviewRoute() {
         void queryClient.invalidateQueries({ queryKey: npcsKey(campaign) });
         void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
       }
-      remember(campaign, vars.entry.key, vars.action, result.threads?.adoptedId);
+      remember(campaign, vars.entry.key, vars.action, thread?.id);
       if (vars.action === "npc") setNpcEntry(undefined);
+    },
+    onError: (error) => {
+      // The idea moved since it was read: read the ideas again, so the next
+      // attempt carries its current guard.
+      if (isWriteConflict(error)) void queryClient.invalidateQueries({ queryKey: ideasKey(campaign) });
     },
   });
 
@@ -300,7 +304,7 @@ export function ReviewRoute() {
                     </div>
                   </section>
                 )}
-                {/* Untagged inbox lines get their own section so
+                {/* Untagged ideas get their own section so
                     the tagged harvest above keeps reading as one list. */}
                 {notes.length > 0 && (
                   <section className="mt-9">
@@ -320,36 +324,7 @@ export function ReviewRoute() {
               <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
                 {t("review.threads.title")}
               </h2>
-              {threads === undefined ? null : threads.length === 0 ? (
-                <p className="text-[13.5px] text-muted-foreground">{t("review.threads.empty")}</p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {threads.map((thread) => (
-                    <li
-                      key={thread.id}
-                      className={cn(
-                        "flex items-center gap-2.5 text-[14px] text-body",
-                        thread.done && "text-muted-foreground",
-                      )}
-                    >
-                      {thread.done ? (
-                        <Check aria-hidden size={14} className="flex-none text-success-text" />
-                      ) : (
-                        <span
-                          aria-hidden
-                          className="size-3.5 flex-none rounded-[4px] border-[1.5px] border-muted-foreground"
-                        />
-                      )}
-                      <span>{thread.text}</span>
-                      {adoptedHere.includes(thread.id) && (
-                        <span className="flex-none rounded-[4px] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-[7px] py-px text-[11px] text-primary-hover">
-                          {t("review.threads.new")}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <ThreadSummary campaign={campaign} chapter={chapter?.id} adopted={adoptedHere} />
             </section>
 
             <Button
