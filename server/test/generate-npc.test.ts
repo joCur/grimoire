@@ -13,6 +13,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type { GenerateJob, GenerateNpcResult, GenerateUsage, Npc } from "@grimoire/shared";
 import { app } from "../src/server";
+import { setKnowledge } from "./support/knowledge-items";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
 import { entryReply, type ScriptedEntry } from "./support/pipeline-fake";
@@ -915,17 +916,6 @@ describe("accept the npc of an NPC run", () => {
 // visible to the DM as a wrong body line).
 
 describe("campaign knowledge", () => {
-  async function setKnowledge(entries: unknown[]): Promise<void> {
-    const current = await app.request("/api/campaigns/beispiel/knowledge");
-    const { rev } = (await current.json()) as { rev: number };
-    const res = await app.request("/api/campaigns/beispiel/knowledge", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ entries, rev }),
-    });
-    expect(res.status).toBe(200);
-  }
-
   // The database is shared by this file — nothing may leak upwards.
   afterEach(async () => {
     await setKnowledge([]);

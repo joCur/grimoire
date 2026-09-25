@@ -3,7 +3,7 @@
 // One rule holds every case in this file together, and it is the guard rail of
 // the whole cutover: NO WRITE PATH MAY SILENTLY LOSE CONTENT. Each test below
 // stands for one way the first cut of the store did lose some — an npc's
-// prose under `## Beziehungen`, the glossary's unassignable text, a scene's
+// prose under `## Beziehungen`, a glossary term's line breaks, a scene's
 // place in the tree, an open edit that could not be saved any more, a log
 // line whose columns fell apart.
 
@@ -14,16 +14,6 @@ import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
 import { writeGenerated } from "../src/store/generated";
 import { dropStore, seedStore } from "./support/store";
-import { entriesUrl } from "./support/urls";
-
-async function patchEntry(rel: string, body: unknown): Promise<Response> {
-  return app.request(entriesUrl("beispiel", rel), {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 /** An npc is its own resource (ADR #31): read and written flat, `body` among its fields. */
 async function getNpc(id: string): Promise<Npc> {
   const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);

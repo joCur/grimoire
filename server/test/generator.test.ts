@@ -36,6 +36,7 @@ import type {
   SceneProposal,
 } from "@grimoire/shared";
 import { app } from "../src/server";
+import { setKnowledge } from "./support/knowledge-items";
 import { eq } from "drizzle-orm";
 import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
 import { generateJobs } from "../src/db/schema";
@@ -2051,18 +2052,6 @@ describe("campaign knowledge", () => {
       ...over,
       entries: [{ kind: "npc", content: proposedNpc({ id: FRESH_NPC, name: "Grella" }) }],
     });
-  }
-
-  /** Write the campaign's knowledge list against its current rev. */
-  async function setKnowledge(entries: unknown[]): Promise<void> {
-    const current = await app.request("/api/campaigns/beispiel/knowledge");
-    const { rev } = (await current.json()) as { rev: number };
-    const res = await app.request("/api/campaigns/beispiel/knowledge", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ entries, rev }),
-    });
-    expect(res.status).toBe(200);
   }
 
   // The database is shared by this file, so the list must not leak into
