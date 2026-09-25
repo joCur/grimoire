@@ -38,8 +38,8 @@ function fixtureBlocks(name: string): SceneBlock[] {
   return parseBlocks(body);
 }
 
-const ARRIVAL = "scene-lighthouse-arrival.json";
-const SMUGGLERS = "scene-smuggler-captured.json";
+const ARRIVAL = "scenes/lighthouse-arrival.json";
+const SMUGGLERS = "scenes/smuggler-captured.json";
 
 function composer(blocks: SceneBlock[], issues: Record<string, string> = {}): string {
   return renderToStaticMarkup(

@@ -2,7 +2,9 @@
 // changes against the location as the run read it. Pure, so the rule is
 // unit-testable.
 
-import type { AugmentPropertyProposal, LocationProposal } from "@grimoire/shared/types";
+import type { LocationProposal } from "@grimoire/shared/types";
+
+import type { FieldProposal } from "@/lib/augment";
 
 /** "No value here" — an absent field or blank text. */
 function isEmptyText(value: string | undefined): boolean {
@@ -18,9 +20,9 @@ function isEmptyText(value: string | undefined): boolean {
 export function locationFieldProposals(
   current: LocationProposal,
   proposed: LocationProposal,
-): AugmentPropertyProposal[] {
+): FieldProposal[] {
   const { id: _id, body: _body, ...fields } = proposed;
-  const out: AugmentPropertyProposal[] = [];
+  const out: FieldProposal[] = [];
   for (const [key, value] of Object.entries(fields) as Array<[keyof typeof fields, string | undefined]>) {
     const before = current[key];
     if (isEmptyText(value) || (before ?? "").trim() === (value ?? "").trim()) continue;

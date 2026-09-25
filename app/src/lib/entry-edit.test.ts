@@ -22,13 +22,13 @@ import {
   type EntryEditEvent,
 } from "./entry-edit";
 
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
+const CHAPTER = "01-salzhafen";
 
 function entryAt(rev: number, body: string): EntryResponse {
   return {
-    path: SCENE,
-    kind: "scene",
-    properties: { id: "arrival", title: "Ankunft", status: "ready" },
+    path: CHAPTER,
+    kind: "chapter",
+    properties: { id: CHAPTER, title: "Salzhafen", status: "active" },
     body,
     rev,
   };
@@ -180,12 +180,12 @@ const realFetch = globalThis.fetch;
 describe("patchEntry", () => {
   test("PATCHes the entry address with the request as given", async () => {
     const calls = mockFetch([{ status: 200, body: entryAt(222, "Mein Text.\n") }]);
-    const written = await patchEntry("beispiel", SCENE, { rev: 111, body: "Mein Text.\n" });
+    const written = await patchEntry("beispiel", CHAPTER, { rev: 111, body: "Mein Text.\n" });
     globalThis.fetch = realFetch;
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
+    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/entries/${CHAPTER}`);
     expect(calls[0]?.body).toEqual({ rev: 111, body: "Mein Text.\n" });
     expect(written.rev).toBe(222);
   });
@@ -197,7 +197,7 @@ describe("patchEntry", () => {
       write: MINE,
       conflict: { rev: 999, entry: entryAt(999, "Fremder Text.\n") },
     });
-    await patchEntry("beispiel", SCENE, entryEditRequest(state, state.refused ?? {}, true));
+    await patchEntry("beispiel", CHAPTER, entryEditRequest(state, state.refused ?? {}, true));
     globalThis.fetch = realFetch;
 
     expect(calls[0]?.body).toEqual({ rev: 111, body: "Mein Text.\n", force: true });
@@ -215,7 +215,7 @@ describe("patchEntry", () => {
         },
       },
     ]);
-    const failure = await patchEntry("beispiel", SCENE, { rev: 111, body: "x" }).catch(
+    const failure = await patchEntry("beispiel", CHAPTER, { rev: 111, body: "x" }).catch(
       (error: unknown) => error,
     );
     globalThis.fetch = realFetch;

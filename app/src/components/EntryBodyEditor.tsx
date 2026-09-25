@@ -1,11 +1,11 @@
 // Edit mode of the reading view: the edit action in the header swaps the
 // rendered text for the editor. `BodyEditor` is the surface, the same on every
-// reading view; `EntryBodyEditor` hands it the editing session of a scene, a
-// chapter or the campaign, and every other reading view hands it its own.
+// reading view; `EntryBodyEditor` hands it the editing session of a chapter or
+// the campaign, and every other reading view hands it its own.
 //
 // That editor has TWO surfaces over ONE draft:
 //
-//   blocks (default)  the block composer — the scene as a list of typed
+//   blocks (default)  the block composer — the text as a list of typed
 //                     forms, the way a phone can edit it.
 //   markdown          the raw textarea, with a preview of the whole rendered
 //                     text — the fallback for everything a form does not
@@ -153,11 +153,11 @@ export interface BodyEditSession<F extends object = Record<string, unknown>> {
   forceSave?: (() => void) | undefined;
 }
 
-// --- the editor of a scene, a chapter and the campaign -----------------------------
+// --- the editor of a chapter and the campaign ---------------------------------------
 
 /**
- * The editor of a scene, a chapter or the campaign: its text, written
- * through its editing session.
+ * The editor of a chapter or the campaign: its text, written through its
+ * editing session.
  */
 export function EntryBodyEditor({
   campaign,

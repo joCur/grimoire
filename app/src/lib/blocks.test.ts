@@ -42,15 +42,15 @@ function fixture(name: string): { body?: string } {
 
 /**
  * Every fixture that carries a body, sorted — the campaign's own files and
- * the npcs and locations in their directories (`npcs/<id>.json`,
- * `locations/<id>.json`).
+ * the scenes, npcs and locations in their directories (`scenes/<id>.json`,
+ * `npcs/<id>.json`, `locations/<id>.json`).
  */
 function fixtureFiles(): string[] {
   const inDir = (dir: string): string[] =>
     readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
       .filter((name) => name.endsWith(".json"))
       .map((name) => `${dir}${name}`);
-  return [...inDir(""), ...inDir("npcs/"), ...inDir("locations/")]
+  return [...inDir(""), ...inDir("scenes/"), ...inDir("npcs/"), ...inDir("locations/")]
     .filter((name) => fixture(name).body !== undefined)
     .sort();
 }
@@ -78,7 +78,7 @@ describe("roundtrip over the fixtures", () => {
 
   test("finds the example campaign", () => {
     expect(files.length).toBeGreaterThan(5);
-    expect(files).toContain("scene-lighthouse-arrival.json");
+    expect(files).toContain("scenes/lighthouse-arrival.json");
   });
 
   for (const rel of files) {
@@ -119,7 +119,7 @@ describe("roundtrip over the fixtures", () => {
 
 describe("structure of the reference scenes", () => {
   test("lighthouse arrival: Flow plus the four callouts", () => {
-    const blocks = parseBlocks(fixtureBody("scene-lighthouse-arrival.json"));
+    const blocks = parseBlocks(fixtureBody("scenes/lighthouse-arrival.json"));
     expect(shape(blocks)).toEqual([
       "heading",
       "text",
@@ -147,7 +147,7 @@ describe("structure of the reference scenes", () => {
 
   test("smuggler captured: two If-sections with their children", () => {
     const blocks = parseBlocks(
-      fixtureBody("scene-smuggler-captured.json"),
+      fixtureBody("scenes/smuggler-captured.json"),
     );
     expect(shape(blocks)).toEqual([
       "heading",
@@ -187,7 +187,7 @@ describe("structure of the reference scenes", () => {
 });
 
 describe("editing a block", () => {
-  const rel = "scene-lighthouse-arrival.json";
+  const rel = "scenes/lighthouse-arrival.json";
 
   test("only the edited callout changes, every sibling byte-identical", () => {
     const body = fixtureBody(rel);
@@ -609,7 +609,7 @@ describe("list operations are lossless when nothing actually moves", () => {
   });
 
   test("insert then remove restores the body", () => {
-    const body = fixtureBody("scene-lighthouse-arrival.json");
+    const body = fixtureBody("scenes/lighthouse-arrival.json");
     const blocks = parseBlocks(body);
     const fresh = makeCallout("loot", "Ein Silberring am Daumen.");
     for (let at = 0; at <= blocks.length; at++) {
@@ -643,8 +643,8 @@ describe("labels", () => {
 
   test("ids are unique across blocks and parses", () => {
     const ids = [
-      ...parseBlocks(fixtureBody("scene-lighthouse-arrival.json")),
-      ...parseBlocks(fixtureBody("scene-lighthouse-arrival.json")),
+      ...parseBlocks(fixtureBody("scenes/lighthouse-arrival.json")),
+      ...parseBlocks(fixtureBody("scenes/lighthouse-arrival.json")),
       makeText("neu"),
     ].map((block) => block.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -700,7 +700,7 @@ describe("tables are part of a text block, byte-stable", () => {
   });
 
   test("the reference scene's own table survives a re-serialize", () => {
-    const rel = "scene-lighthouse-arrival.json";
+    const rel = "scenes/lighthouse-arrival.json";
     const body = fixtureBody(rel);
     expect(body).toContain("| W6 | Was die Brandung anschwemmt |");
     const blocks = parseBlocks(body);

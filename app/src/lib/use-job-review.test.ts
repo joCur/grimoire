@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import type { DraftEdit } from "@grimoire/shared/types";
+import type { SceneChange } from "@grimoire/shared/types";
 
 import type { ReviewPatch } from "@/lib/generate";
 import {
@@ -21,8 +21,8 @@ interface Harness {
   io: ReviewQueueIo;
   sent: ReviewPatch[];
   statuses: ReviewSaveStatus[];
-  /** What the optimistic copy currently shows, per edited path. */
-  shown: Record<string, DraftEdit>;
+  /** What the optimistic copy currently shows, per edited scene. */
+  shown: Record<string, SceneChange>;
   rereads: number;
   /** The next send's outcome; `undefined` resolves. */
   fail?: unknown;
@@ -33,7 +33,7 @@ function harness(): Harness {
   h.io = {
     optimistic: (patch) => {
       const before = { ...h.shown };
-      Object.assign(h.shown, patch.edits ?? {});
+      Object.assign(h.shown, patch.sceneEdits ?? {});
       return () => {
         h.shown = before;
       };
@@ -61,11 +61,11 @@ describe("flush", () => {
     // A long debounce — an un-awaited flush would leave the edit in the
     // queue, which is exactly how the accept lost it.
     const queue = createReviewQueue(h.io, 10_000);
-    queue.edit("01-salzhafen/hafen/kai", { body: "im Regen" });
+    queue.editScene("kai", { body: "im Regen" });
     expect(h.sent).toEqual([]);
 
     await queue.flush();
-    expect(h.sent).toEqual([{ edits: { "01-salzhafen/hafen/kai": { body: "im Regen" } } }]);
+    expect(h.sent).toEqual([{ sceneEdits: { kai: { body: "im Regen" } } }]);
     expect(last(h.statuses)).toBe("saved");
   });
 
@@ -81,18 +81,29 @@ describe("flush", () => {
   test("everything pending goes in ONE patch, and requests are serialized", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
-    queue.edit("a", { body: "one" });
-    queue.edit("b", { body: "two" });
-    queue.decide({ dropped: ["c"] });
+    queue.editScene("a", { body: "one" });
+    queue.editScene("b", { body: "two" });
+    queue.decide({ droppedScenes: ["c"] });
     await queue.flush();
     expect(h.sent).toEqual([
-      { edits: { a: { body: "one" }, b: { body: "two" } }, dropped: ["c"] },
+      { sceneEdits: { a: { body: "one" }, b: { body: "two" } }, droppedScenes: ["c"] },
     ]);
   });
 });
 
-describe("a proposed npc", () => {
-  test("its changes merge field by field into one patch", async () => {
+describe("a proposed scene and npc", () => {
+  test("a scene's changes merge field by field into one patch", async () => {
+    const h = harness();
+    const queue = createReviewQueue(h.io, 10_000);
+    queue.editScene("kai", { title: "Am Kai", location: "leuchtturm" });
+    queue.editScene("kai", { body: "Neu.\n", location: null });
+    await queue.flush();
+    expect(h.sent).toEqual([
+      { sceneEdits: { kai: { title: "Am Kai", location: null, body: "Neu.\n" } } },
+    ]);
+  });
+
+  test("an npc's changes merge field by field into one patch", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
     queue.editNpc("grella", { role: "Fischerin", voice: "heiser" });
@@ -110,7 +121,7 @@ describe("a failed patch", () => {
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new Error("network");
 
-    queue.edit("kai", { body: "im Regen" });
+    queue.editScene("kai", { body: "im Regen" });
     await queue.flush();
     expect(h.sent).toEqual([]);
     expect(last(h.statuses)).toBe("error");
@@ -119,7 +130,7 @@ describe("a failed patch", () => {
 
     // The next flush retries it — nothing was lost.
     await queue.flush();
-    expect(h.sent).toEqual([{ edits: { kai: { body: "im Regen" } } }]);
+    expect(h.sent).toEqual([{ sceneEdits: { kai: { body: "im Regen" } } }]);
     expect(h.shown).toEqual({ kai: { body: "im Regen" } });
     expect(last(h.statuses)).toBe("saved");
   });
@@ -128,7 +139,7 @@ describe("a failed patch", () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new Error("network");
-    queue.edit("kai", { body: "im Regen" });
+    queue.editScene("kai", { body: "im Regen" });
     await queue.flush();
     expect(last(h.statuses)).toBe("error");
 
@@ -139,7 +150,7 @@ describe("a failed patch", () => {
     expect(last(h.statuses)).toBe("saved");
     // …and the retried edit went along with it.
     expect(h.sent).toEqual([
-      { edits: { kai: { body: "im Regen" } }, npcs: { grella: "accepted" } },
+      { sceneEdits: { kai: { body: "im Regen" } }, npcs: { grella: "accepted" } },
     ]);
   });
 

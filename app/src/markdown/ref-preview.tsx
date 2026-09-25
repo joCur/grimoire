@@ -3,7 +3,7 @@
 //
 // Timing, in one place:
 //
-//   * hover or KEYBOARD focus opens it after OPEN_DELAY_MS; the entry is
+//   * hover or KEYBOARD focus opens it after OPEN_DELAY_MS; the target is
 //     requested at once, so on a local server it is usually there before the
 //     card is;
 //   * moving on to another reference while one is open — or within
@@ -44,19 +44,15 @@ import {
   type ReactNode,
 } from "react";
 
-import { fetchEntry } from "@/api";
 import { EntityPreview } from "@/components/EntityPreview";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import type { NameOf } from "@/lib/entity-excerpt";
 import { locationQuery } from "@/location/location-query";
 import { npcQuery } from "@/npc/npc-query";
+import { sceneQuery } from "@/scene/scene-query";
 
 import type { ResolvedEntityRef } from "./entity-refs";
 
-/**
- * The query the preview of a target reads — the npc's and the location's own,
- * from their slices (ADR #31), the scene's by its address.
- */
+/** The query the preview of a target reads — its own, from its slice (ADR #31). */
 function previewQuery(
   campaign: string,
   target: ResolvedEntityRef,
@@ -67,10 +63,7 @@ function previewQuery(
     case "location":
       return locationQuery(campaign, target.slug);
     case "scene":
-      return {
-        queryKey: ["entry", campaign, target.path],
-        queryFn: () => fetchEntry(campaign, target.path),
-      };
+      return sceneQuery(campaign, target.slug);
   }
 }
 
@@ -197,7 +190,8 @@ export function RefPreview({
 }: {
   campaign: string;
   target: ResolvedEntityRef;
-  nameOf: NameOf;
+  /** Display name of a slug — references inside a short form read as names. */
+  nameOf: (slug: string) => string | undefined;
   /**
    * Renders the reference element: spread `trigger` onto it and put `anchor`
    * first inside it, before the name.

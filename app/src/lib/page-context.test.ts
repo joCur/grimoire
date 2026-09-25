@@ -1,73 +1,40 @@
 import { describe, expect, test } from "bun:test";
 import type { CampaignTree } from "@grimoire/shared/types";
 
-import { translator } from "@/i18n";
-
 import { pageContextCrumbs } from "./page-context";
-
-const de = translator("de");
 
 const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [{ id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm von Salzhafen", scenes: [] }],
   npcs: [],
-  locations: [
-    { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
-  ],
+  locations: [],
   sessions: [],
 };
 
 describe("pageContextCrumbs", () => {
-  test("a scene with a location reads chapter title then location, chapter links to the chapter overview", () => {
-    expect(
-      pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm", tree, de),
-    ).toEqual([
-      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
-      // No location entry for "hafen" — the slug stands as written.
-      { label: "hafen" },
-    ]);
-  });
-
-  test("a middle segment WITH a location entry shows the location's name", () => {
-    expect(
-      pageContextCrumbs("beispiel", "01-salzhafen/leuchtturm/aufstieg", tree, de),
-    ).toEqual([
-      { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
-      { label: "Der Leuchtturm von Salzhafen" },
-    ]);
-  });
-
-  test("a scene addressed directly under its chapter has no location crumb", () => {
-    expect(pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de)).toEqual([
+  test("a chapter reads its title, linking to the chapter overview", () => {
+    expect(pageContextCrumbs("beispiel", "01-salzhafen", tree)).toEqual([
       { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/campaigns/beispiel" },
     ]);
   });
 
-  test("the campaign name never appears in the context line", () => {
-    const labels = pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de).map(
-      (c) => c.label,
-    );
-    expect(labels).not.toContain("beispiel");
-  });
-
-  test("entries outside the hierarchy get no context line", () => {
-    for (const path of ["campaign", "npcs/fenn", "sessions/2026-01-15", "inbox", "glossary"]) {
-      expect(pageContextCrumbs("beispiel", path, tree, de)).toEqual([]);
+  test("the campaign and addresses outside the hierarchy get no context line", () => {
+    for (const path of ["campaign", "npcs", "sessions", "inbox", "glossary", "01-salzhafen/prolog"]) {
+      expect(pageContextCrumbs("beispiel", path, tree)).toEqual([]);
     }
   });
 
-  test("degrades: unknown chapter keeps its id, no tree keeps every raw value", () => {
-    expect(pageContextCrumbs("beispiel", "09-unbekannt/szene", tree, de)).toEqual([
+  test("degrades: an unknown chapter keeps its id, and so does a missing tree", () => {
+    expect(pageContextCrumbs("beispiel", "09-unbekannt", tree)).toEqual([
       { label: "09-unbekannt", to: "/campaigns/beispiel" },
     ]);
-    expect(pageContextCrumbs("beispiel", "01-salzhafen/hafen/x", undefined, de)).toEqual([
+    expect(pageContextCrumbs("beispiel", "01-salzhafen", undefined)).toEqual([
       { label: "01-salzhafen", to: "/campaigns/beispiel" },
-      { label: "hafen" },
     ]);
   });
 
   test("no campaign or no path yields nothing", () => {
-    expect(pageContextCrumbs("", "01-salzhafen/prolog", tree, de)).toEqual([]);
-    expect(pageContextCrumbs("beispiel", "", tree, de)).toEqual([]);
+    expect(pageContextCrumbs("", "01-salzhafen", tree)).toEqual([]);
+    expect(pageContextCrumbs("beispiel", "", tree)).toEqual([]);
   });
 });

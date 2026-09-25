@@ -8,7 +8,7 @@
 // `hidden md:block`, the mobile start `md:hidden`. Both share the tree query
 // cache, so nothing fetches twice.
 
-import type { CampaignTree, ChapterNode, SceneSummary } from "@grimoire/shared/types";
+import type { ChapterNode, SceneSummary } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Bookmark, ChevronDown, GitFork } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -20,8 +20,7 @@ import { ChapterActions } from "@/components/ChapterActions";
 import { ClampedText } from "@/components/ClampedText";
 import { ChapterThreads } from "@/components/ChapterThreads";
 import { ChapterStatusControl } from "@/components/ChapterStatusMenu";
-import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
-import { SceneStatusControl } from "@/components/SceneStatusMenu";
+import { ChapterCreateAction } from "@/components/CreateActions";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useT } from "@/i18n";
 import { CAMPAIGN_META_PATH } from "@/lib/campaign-meta";
@@ -30,6 +29,9 @@ import { contingencyScenes, plannedScenes } from "@/lib/scene-order";
 import { useCampaignMeta } from "@/lib/use-campaign";
 import { useSceneOrderWrite } from "@/lib/use-scene-order";
 import { MobileStart } from "@/routes/mobile-start";
+import { SceneCreateAction } from "@/scene/SceneCreateAction";
+import { SceneStatusControl } from "@/scene/SceneStatusMenu";
+import { sceneHref } from "@/scene/scene-links";
 
 export function ChapterOverviewRoute() {
   const t = useT();
@@ -133,7 +135,6 @@ export function ChapterOverviewRoute() {
                 key={chapter.id}
                 campaign={campaign}
                 chapter={chapter}
-                tree={data}
                 defaultOpen={anyActive ? chapter.status === "active" : index === 0}
               />
             ))}
@@ -147,12 +148,10 @@ export function ChapterOverviewRoute() {
 function Chapter({
   campaign,
   chapter,
-  tree,
   defaultOpen,
 }: {
   campaign: string;
   chapter: ChapterNode;
-  tree: CampaignTree;
   defaultOpen: boolean;
 }) {
   const t = useT();
@@ -211,12 +210,7 @@ function Chapter({
           {/* The chapter's own actions. They sit INSIDE the accordion and not
               in the heading row: that row is already as wide as it gets, and
               the actions are for the chapter the DM has opened. */}
-          <ChapterActions
-            campaign={campaign}
-            chapter={chapter.id}
-            entry={chapterEntry.data}
-            tree={tree}
-          />
+          <ChapterActions campaign={campaign} chapter={chapter.id} entry={chapterEntry.data} />
           {/* The whole text of the chapter, whatever it says and however it
               is structured — a few lines of it until the DM opens it. */}
           <ClampedText className="mb-3">{chapterEntry.data?.body ?? ""}</ClampedText>
@@ -235,7 +229,7 @@ function Chapter({
             <div className="mb-7">
               {planned.map((scene, index) => (
                 <SceneRow
-                  key={scene.path}
+                  key={scene.id}
                   campaign={campaign}
                   scene={scene}
                   first={index === 0}
@@ -261,7 +255,7 @@ function Chapter({
                   like nothing happened. */}
               {contingencies.map((scene, index) => (
                 <SceneRow
-                  key={scene.path}
+                  key={scene.id}
                   campaign={campaign}
                   scene={scene}
                   first={index === 0}
@@ -333,7 +327,7 @@ export function SceneRow({
   return (
     <div className="group flex items-center gap-3 rounded-md border-b border-divider px-2.5 hover:bg-card">
       <Link
-        to={`/campaigns/${campaign}/entries/${scene.path}`}
+        to={sceneHref(campaign, scene.id)}
         className="flex min-w-0 flex-1 items-center gap-3 py-[13px]"
       >
         {isContingency ? (
@@ -372,10 +366,10 @@ export function SceneRow({
           <ArrowDown aria-hidden />
         </MoveButton>
       </span>
-      {/* No rev in the tree — the control fetches the entry when it opens. */}
+      {/* No rev in the tree — the control fetches the scene when it opens. */}
       <SceneStatusControl
         campaign={campaign}
-        path={scene.path}
+        id={scene.id}
         status={scene.status}
         variant="row"
       />

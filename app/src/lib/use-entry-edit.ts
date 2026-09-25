@@ -1,7 +1,8 @@
-// The react-query envelope around one editing session (lib/entry-edit.ts holds
-// the rules). Every editing surface of the app runs through here: the body
-// editor, the properties dialog, the campaign dialog, the chapter text dialog
-// and the generator's accept step.
+// The react-query envelope around one editing session over what is read by
+// its address — a chapter, the campaign (lib/entry-edit.ts holds the rules).
+// Their body editor, their properties dialog, the campaign dialog and the
+// chapter text dialog run through here; a scene, an npc and a location each
+// have their own session in their slice, built on the same rules.
 //
 // What this layer owns:
 //
@@ -25,7 +26,7 @@ import type { EntryResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useReducer, useRef, useState } from "react";
 
-import { patchEntry, revConflict, type PatchEntryRequest } from "@/api";
+import { patchEntry, revConflict } from "@/api";
 import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
@@ -58,11 +59,7 @@ export interface EntryEdit {
    * the poll brings the truth.
    */
   reload: () => void;
-  /**
-   * Resend the refused fields with `force`, i.e. on top of what is stored.
-   * Undefined when the write path cannot force (the generator's accept step),
-   * so the conflict line simply does not offer it.
-   */
+  /** Resend the refused fields with `force`, i.e. on top of what is stored. */
   forceSave?: (() => void) | undefined;
   /** Quiet inline message for a write that failed for any OTHER reason. */
   message?: string | undefined;
@@ -89,18 +86,6 @@ export interface EntryEditOptions {
    * error code shows that code's sentence, which is the specific one.
    */
   errorMessage?: MessageKey;
-  /**
-   * The request, when this surface does not write through PATCH /entries —
-   * the generator's accept step posts the same fields to its own endpoint so
-   * it can discard the job in the same transaction. Its `force` is ignored,
-   * hence `canForce`.
-   */
-  writeEntry?: (request: PatchEntryRequest) => Promise<EntryResponse>;
-  /**
-   * False for a write path that has no force — the conflict line then offers
-   * reloading only.
-   */
-  canForce?: boolean;
 }
 
 /**
@@ -118,8 +103,6 @@ export function useEntryEdit(
     onReload,
     invalidateOnSuccess = [],
     errorMessage = WRITE_FAILED_MESSAGE,
-    writeEntry,
-    canForce = true,
   }: EntryEditOptions,
 ): EntryEdit {
   const t = useT();
@@ -134,8 +117,7 @@ export function useEntryEdit(
 
   const mutation = useMutation({
     mutationFn: ({ write, force }: { write: EntryWrite; force: boolean }) => {
-      const request = entryEditRequest(state, write, force);
-      return (writeEntry ?? ((r: PatchEntryRequest) => patchEntry(campaign, path, r)))(request);
+      return patchEntry(campaign, path, entryEditRequest(state, write, force));
     },
     onMutate: () => {
       setMessage(undefined);
@@ -197,9 +179,7 @@ export function useEntryEdit(
       dispatch({ type: "adopted", entry: stored });
       onReload?.(stored);
     },
-    ...(canForce && refused !== undefined
-      ? { forceSave: () => start(refused, true) }
-      : {}),
+    ...(refused === undefined ? {} : { forceSave: () => start(refused, true) }),
     message,
   };
 }

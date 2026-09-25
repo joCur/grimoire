@@ -5,11 +5,11 @@
 //           a live path preview) + source text + the context hint
 //   working the spinner while the SERVER's job runs (correction turns happen
 //           inside that job, generator/README.md)
-//   review  the drafts of a finished job: rendered through the SAME markdown
-//           pipeline as a real scene, editable in the forms and on the
-//           surfaces the scene itself is edited with (DraftEditor), proposed
-//           npcs and locations accepted/rejected one by one. NOTHING is
-//           written yet.
+//   review  the proposed scenes of a finished job: rendered through the SAME
+//           markdown pipeline as a real scene, editable in the fields and on
+//           the surfaces the scene itself is edited with (the scene's slice,
+//           scene/SceneProposalCard.tsx), proposed npcs and locations
+//           accepted/rejected one by one. NOTHING is written yet.
 //   done    what the accept wrote — the scenes as drafts
 //
 // The route has TWO modes, picked by the quiet chip row above
@@ -40,28 +40,18 @@
 // in edit mode, and what a finished accept wrote. The decisions live on the
 // job (review.npcs, review.locations).
 
-import { kindFromAddress } from "@grimoire/shared/kind";
 import type {
-  CampaignTree,
-  DraftEdit,
   GenerateJob,
   GenerateJobPart,
   GenerateResult,
   LocationProposal,
   NamingHint,
   NpcProposal,
+  SceneChange,
+  SceneProposal,
 } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Bookmark,
-  Check,
-  GitFork,
-  MapPin,
-  RotateCcw,
-  Sparkles,
-  SpellCheck,
-  StickyNote,
-} from "lucide-react";
+import { Check, RotateCcw, Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
@@ -75,15 +65,10 @@ import {
   retryJobPart,
   startGenerateJob,
 } from "@/api";
-import { DraftEditor } from "@/components/DraftEditor";
-import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
-import { locationName } from "@/lib/campaign";
-import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
-import { propString, propStringArray } from "@/lib/properties";
-import { sceneStatusMeta, sceneStatusOf } from "@/lib/scene-status";
+import { serverErrorBodyMessage, serverErrorMessage, useT, type Translate } from "@/i18n";
 import {
   applySummary,
   chapterIdError,
@@ -97,24 +82,22 @@ import {
   jobMode,
   jobPipelineParts,
   jobProgress,
-  draftOf,
   locationState,
   newChapterId,
   npcState,
   openLocations,
   openNpcs,
-  openParts,
-  partState,
+  openScenes,
   partsStillRunning,
   pipelineCostLabel,
   pipelineProgress,
   restoredMode,
   reviewOf,
+  sceneState,
   stringField,
   stringList,
   usageLabel,
   type GenerateMode,
-  type PartState,
 } from "@/lib/generate";
 import { promptKnowledgeCount } from "@/lib/entry-list";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
@@ -128,6 +111,9 @@ import { NpcProposalRow } from "@/npc/NpcProposalRow";
 import { NpcRunFields, NpcRunReview, NpcRunWrittenAction, useNpcRunForm } from "@/npc/NpcRun";
 import { npcLabel } from "@/npc/npc-links";
 import { npcsKey } from "@/npc/npc-query";
+import { SceneProposalCard } from "@/scene/SceneProposalCard";
+import { sceneLabel } from "@/scene/scene-links";
+import { sceneOf } from "@/scene/scene-proposal";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
 type Target = { kind: "chapter"; id: string } | { kind: "new" };
@@ -220,10 +206,10 @@ export function GenerateRoute() {
   // The NPC mode's form — its own buffers, in the npc's slice.
   const npcRun = useNpcRunForm(tree.data);
 
-  // The TYPING overlay, nothing more: the saved edits live on the job
-  // (`job.draftEdits`) and this only keeps the fields from lagging behind the
+  // The TYPING overlay, nothing more: the saved changes live on the job
+  // (`job.sceneEdits`) and this only keeps the fields from lagging behind the
   // keystroke while the debounced patch is on its way.
-  const [edits, setEdits] = useState<Record<string, DraftEdit>>({});
+  const [edits, setEdits] = useState<Record<string, SceneChange>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [written, setWritten] = useState<string[]>();
   // The npc an NPC run's accept wrote — what the open action opens once the job
@@ -297,20 +283,20 @@ export function GenerateRoute() {
     (location) => reviewState.locations[location.id] === "accepted",
   );
   /**
-   * One scene draft as the review shows it: what the run produced, with the
-   * job's stored edit and then the local buffer laid over it.
+   * One proposed scene as the review shows it: what the run produced, with
+   * the job's stored change and then the local buffer laid over it.
    */
-  const draftFor = (generated: { path: string; properties: Record<string, unknown>; body: string }) =>
-    draftOf(generated, job?.draftEdits[generated.path], edits[generated.path]);
-  /** One half of a scene draft changed: local first, then debounced into the job. */
-  const editDraft = (path: string, edit: DraftEdit): void => {
-    setEdits((previous) => ({ ...previous, [path]: { ...previous[path], ...edit } }));
-    review.edit(path, edit);
+  const sceneFor = (proposed: SceneProposal) =>
+    sceneOf(proposed, job?.sceneEdits[proposed.id], edits[proposed.id]);
+  /** A proposed scene changed: local first, then debounced into the job. */
+  const editScene = (id: string, change: SceneChange): void => {
+    setEdits((previous) => ({ ...previous, [id]: { ...previous[id], ...change } }));
+    review.editScene(id, change);
   };
   /** What is still reviewable — the accept-all and discard actions work on it. */
-  const rest = openParts(job);
+  const rest = openScenes(job);
   const progress = jobProgress(job);
-  const openScenes = scenes.filter((scene) => partState(job, scene.path) === "open");
+  const openProposedScenes = scenes.filter((scene) => sceneState(job, scene.id) === "open");
   const openAcceptedNpcs = acceptedNpcs.filter((npc) => npcState(job, npc.id) === "open");
   const openAcceptedLocations = acceptedLocations.filter(
     (location) => locationState(job, location.id) === "open",
@@ -363,9 +349,9 @@ export function GenerateRoute() {
    * which is what ends the review.
    */
   const apply = useMutation({
-    mutationFn: async (selection?: { paths?: string[]; npcs?: string[]; locations?: string[] }) => {
+    mutationFn: async (selection?: { scenes?: string[]; npcs?: string[]; locations?: string[] }) => {
       // Text the DM is still typing must be part of what gets written — and
-      // AWAITED, not merely started: the server reads `draftEdits` and
+      // AWAITED, not merely started: the server reads `sceneEdits` and
       // `npcEdits` when the accept arrives, so a patch still in flight would
       // land after the read and be deleted together with the job.
       await review.flush();
@@ -373,7 +359,7 @@ export function GenerateRoute() {
       // current now, not the one this render closed over.
       const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
       return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
-        ...(selection?.paths === undefined ? {} : { paths: selection.paths }),
+        ...(selection?.scenes === undefined ? {} : { scenes: selection.scenes }),
         ...(selection?.npcs === undefined ? {} : { npcs: selection.npcs }),
         ...(selection?.locations === undefined ? {} : { locations: selection.locations }),
         // The new chapter is created in the same batch — but the JOB
@@ -408,7 +394,7 @@ export function GenerateRoute() {
     },
     onSuccess: (data) => {
       const addresses = [
-        ...Object.values(data.written),
+        ...data.scenes.map(sceneLabel),
         ...data.npcs.map(npcLabel),
         ...data.locations.map(locationLabel),
       ];
@@ -536,9 +522,8 @@ export function GenerateRoute() {
   });
   const runProgress = pipelineProgress(job, t);
   const runCost = pipelineCostLabel(job, t);
-  /** The draft of a finished scene part, by the address the review uses. */
-  const sceneOfPart = (part: GenerateJobPart) =>
-    scenes.find((scene) => scene.path === `${job?.chapter ?? ""}/${part.id}`);
+  /** The proposed scene of a finished scene part, by its id. */
+  const sceneOfPart = (part: GenerateJobPart) => scenes.find((scene) => scene.id === part.id);
   const npcOfPart = (part: GenerateJobPart) =>
     part.kind === "npc" ? proposedNpcs.find((npc) => npc.id === part.id) : undefined;
   const locationOfPart = (part: GenerateJobPart) =>
@@ -588,6 +573,34 @@ export function GenerateRoute() {
     />
   );
 
+  /** One proposed scene of the run, edited, dropped and accepted by its id (ADR #31). */
+  const sceneCard = (proposed: SceneProposal, cardRef?: (el: HTMLElement | null) => void) => (
+    <SceneProposalCard
+      key={proposed.id}
+      campaign={campaign}
+      scene={sceneFor(proposed)}
+      tree={tree.data}
+      state={sceneState(job, proposed.id)}
+      busy={apply.isPending}
+      editing={editing[proposed.id] === true}
+      {...(cardRef === undefined ? {} : { cardRef })}
+      onToggleEditing={() =>
+        setEditing((prev) => ({ ...prev, [proposed.id]: prev[proposed.id] !== true }))
+      }
+      onChange={(change) => editScene(proposed.id, change)}
+      // Leaving a field is the last cheap moment to be sure.
+      onFlush={review.flush}
+      onAccept={() => apply.mutate({ scenes: [proposed.id] })}
+      onDrop={() =>
+        review.decide({
+          droppedScenes: reviewState.droppedScenes.includes(proposed.id)
+            ? reviewState.droppedScenes.filter((id) => id !== proposed.id)
+            : [...reviewState.droppedScenes, proposed.id],
+        })
+      }
+    />
+  );
+
   const applied = written !== undefined;
   // The window between the click and this run's job being readable is the
   // working state — and NOTHING else is: the moment the job
@@ -627,12 +640,13 @@ export function GenerateRoute() {
   const failedUsage = usageLabel(failed?.usage, t);
   const failedMessage = serverErrorBodyMessage(failed, t);
   const resultUsage = usageLabel(result?.usage ?? npcResult?.usage, t);
-  // A write conflict names what is in the way: scene drafts by their path,
-  // npcs and locations by their resource segment and id.
+  // A write conflict names what is in the way: the chapter by its address,
+  // scenes, npcs and locations by their resource segment and id.
   const conflicts =
     apply.error instanceof ApiError && apply.error.status === 409
       ? [
           ...stringList(apply.error.details.conflicts),
+          ...stringList(apply.error.details.scenes).map(sceneLabel),
           ...stringList(apply.error.details.npcs).map(npcLabel),
           ...stringList(apply.error.details.locations).map(locationLabel),
         ]
@@ -1032,67 +1046,11 @@ export function GenerateRoute() {
                   />
                 );
               }
-              return (
-                <SceneCard
-                  key={scene.path}
-                  cardRef={(el) => partCards.current.set(part.key, el)}
-                  campaign={campaign}
-                  path={scene.path}
-                  properties={draftFor(scene).properties}
-                  body={draftFor(scene).body}
-                  tree={tree.data}
-                  state={partState(job, scene.path)}
-                  writtenAt={reviewState.written[scene.path]}
-                  busy={apply.isPending}
-                  editing={editing[scene.path] === true}
-                  onToggleEditing={() =>
-                    setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
-                  }
-                  onPropertiesChange={(properties) => editDraft(scene.path, { properties })}
-                  onBodyChange={(body) => editDraft(scene.path, { body })}
-                  onFlush={review.flush}
-                  onAccept={() => apply.mutate({ paths: [scene.path] })}
-                  onDrop={() =>
-                    review.decide({
-                      dropped: reviewState.dropped.includes(scene.path)
-                        ? reviewState.dropped.filter((path) => path !== scene.path)
-                        : [...reviewState.dropped, scene.path],
-                    })
-                  }
-                />
-              );
+              return sceneCard(scene, (el) => partCards.current.set(part.key, el));
             })}
 
             {sceneParts.length === 0 &&
-              scenes.map((scene) => (
-              <SceneCard
-                key={scene.path}
-                campaign={campaign}
-                path={scene.path}
-                properties={draftFor(scene).properties}
-                body={draftFor(scene).body}
-                tree={tree.data}
-                state={partState(job, scene.path)}
-                writtenAt={reviewState.written[scene.path]}
-                busy={apply.isPending}
-                editing={editing[scene.path] === true}
-                onToggleEditing={() =>
-                  setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
-                }
-                onPropertiesChange={(properties) => editDraft(scene.path, { properties })}
-                onBodyChange={(body) => editDraft(scene.path, { body })}
-                // Leaving a field is the last cheap moment to be sure.
-                onFlush={review.flush}
-                onAccept={() => apply.mutate({ paths: [scene.path] })}
-                onDrop={() =>
-                  review.decide({
-                    dropped: reviewState.dropped.includes(scene.path)
-                      ? reviewState.dropped.filter((path) => path !== scene.path)
-                      : [...reviewState.dropped, scene.path],
-                  })
-                }
-              />
-            ))}
+              scenes.map((scene) => sceneCard(scene))}
 
             {(proposedNpcs.length > 0 ||
               proposedLocations.length > 0 ||
@@ -1141,11 +1099,11 @@ export function GenerateRoute() {
             )}
             {apply.isError && conflicts.length === 0 && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                {t(
-                  apply.error instanceof ApiError && apply.error.status === 409
-                    ? "generate.review.applyStale"
-                    : "generate.review.applyFailed",
-                )}
+                {/* A refusal the server names — a run whose chapter is gone,
+                    say — is its own sentence; everything else the review's. */}
+                {apply.error instanceof ApiError && apply.error.status === 409
+                  ? t("generate.review.applyStale")
+                  : serverErrorMessage(apply.error, t, "generate.review.applyFailed")}
               </p>
             )}
             {discard.isError && (
@@ -1162,14 +1120,17 @@ export function GenerateRoute() {
                 type="button"
                 disabled={
                   apply.isPending ||
-                  openScenes.length + openAcceptedNpcs.length + openAcceptedLocations.length === 0
+                  openProposedScenes.length +
+                    openAcceptedNpcs.length +
+                    openAcceptedLocations.length ===
+                    0
                 }
                 onClick={() => apply.mutate(undefined)}
                 className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
               >
                 {t(progress.written === 0 ? "generate.review.apply" : "generate.review.applyRest", {
                   count: applySummary(
-                    openScenes.length,
+                    openProposedScenes.length,
                     openAcceptedNpcs.length + openAcceptedLocations.length,
                     t,
                   ),
@@ -1266,7 +1227,7 @@ export function GenerateRoute() {
 function proposalReason(scenes: GenerateResult["scenes"], t: Translate): string {
   const first = scenes[0];
   if (first === undefined) return t("generate.stub.reason.run");
-  const title = propString(first.properties.title) ?? first.path;
+  const title = first.title === "" ? first.id : first.title;
   return t(scenes.length === 1 ? "generate.stub.reason.scene" : "generate.stub.reason.scenes", {
     title,
   });
@@ -1323,11 +1284,14 @@ function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Transla
       </div>
       <ul className="flex flex-col gap-2">
         {hints.map((hint, index) => {
-          // WHAT the hit sits in: a scene draft by its address, a proposed
-          // npc or location by its resource segment and id (ADR #31).
+          // WHAT the hit sits in: a proposed scene, npc or location by its
+          // resource segment and id (ADR #31).
           const where =
-            hint.path ??
-            (hint.npc !== undefined ? npcLabel(hint.npc) : locationLabel(hint.location ?? ""));
+            hint.scene !== undefined
+              ? sceneLabel(hint.scene)
+              : hint.npc !== undefined
+                ? npcLabel(hint.npc)
+                : locationLabel(hint.location ?? "");
           // The key needs every coordinate: one rule can hit the same draft
           // twice (a field and a body line), and two rules can hit the same
           // line. The index closes the remaining tie.
@@ -1527,212 +1491,5 @@ function PartCard({
         </>
       )}
     </section>
-  );
-}
-
-/**
- * One draft as a card: title/pill/edit toggle, mono target address, the chip
- * row from the properties, then either the rendered body (same markdown
- * pipeline as a real scene) or the draft editor — the properties in their
- * form, the body on the entry editor's surfaces. Title and chips read the
- * properties the card is given, so a field the DM changes shows up in the
- * header as well.
- */
-function SceneCard({
-  campaign,
-  path,
-  properties,
-  body,
-  tree,
-  state,
-  writtenAt,
-  busy,
-  editing,
-  cardRef,
-  onToggleEditing,
-  onPropertiesChange,
-  onBodyChange,
-  onFlush,
-  onAccept,
-  onDrop,
-}: {
-  campaign: string;
-  path: string;
-  properties: Record<string, unknown>;
-  body: string;
-  tree: CampaignTree | undefined;
-  /** What became of this scene — written parts are read-only. */
-  state: PartState;
-  /** The address it landed at, once it is written. */
-  writtenAt: string | undefined;
-  busy: boolean;
-  editing: boolean;
-  /**
-   * Registers this card as what represents its pipeline part right now — the
-   * retry's focus follows the part across the swap from status card to draft
-   * card.
-   */
-  cardRef?: (el: HTMLElement | null) => void;
-  onToggleEditing: () => void;
-  onPropertiesChange: (properties: Record<string, unknown>) => void;
-  onBodyChange: (body: string) => void;
-  onFlush: () => void;
-  onAccept: () => void;
-  onDrop: () => void;
-}) {
-  const t = useT();
-  const title = propString(properties.title) ?? path;
-  // Show the status LABEL, never the property value: a generated scene draft
-  // carries `status: draft` (the reply validation insists on it) and the
-  // dialog's select offers nothing but the four.
-  const statusLabel = sceneStatusMeta(sceneStatusOf(properties), t).label;
-  const isContingency = propString(properties.type) === "contingency";
-  const location = locationName(tree, propString(properties.location));
-  const tags = propStringArray(properties.tags);
-  const editorId = `gen-draft-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
-  const written = state === "written";
-
-  return (
-    <div
-      ref={cardRef}
-      // Focusable only programmatically, like the status card it replaces.
-      tabIndex={-1}
-      className={cn(
-        "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:px-6",
-        state === "dropped" && "opacity-55",
-      )}
-    >
-      <div className="mb-1 flex flex-wrap items-center gap-2.5">
-        <h2 className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground">
-          {title}
-        </h2>
-        <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
-          {statusLabel}
-        </span>
-        {/* A written part is not editable here: it is an entry now, and the
-            reading view's own editor owns it. */}
-        {!written && (
-          <MarkdownEditorToggle
-            editing={editing}
-            onToggleEditing={onToggleEditing}
-            controlsId={editorId}
-          />
-        )}
-      </div>
-      <p className="mb-3.5 font-mono text-[11.5px] text-faint">{path}</p>
-      <div className="mb-2 flex flex-wrap gap-2 border-b border-border pb-4">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-soft">
-          {isContingency ? (
-            <GitFork aria-hidden size={13} className="flex-none text-muted-foreground" />
-          ) : (
-            <Bookmark aria-hidden size={13} className="flex-none text-muted-foreground" />
-          )}
-          {t(isContingency ? "generate.review.contingency" : "generate.review.plannedScene")}
-        </span>
-        {location !== undefined && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-body-secondary">
-            <MapPin aria-hidden size={13} className="flex-none text-muted-foreground" />
-            {location}
-          </span>
-        )}
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-muted-foreground"
-          >
-            {/* The hashtag is the data format's marker, not copy. */}
-            {`#${tag}`}
-          </span>
-        ))}
-      </div>
-      {editing && !written ? (
-        <DraftEditor
-          path={path}
-          kind={kindFromAddress(path)}
-          properties={properties}
-          body={body}
-          tree={tree}
-          onPropertiesChange={onPropertiesChange}
-          onBodyChange={onBodyChange}
-          onFlush={onFlush}
-        />
-      ) : (
-        <Markdown>{body}</Markdown>
-      )}
-      <PartActions
-        campaign={campaign}
-        state={state}
-        writtenAt={writtenAt}
-        busy={busy}
-        onAccept={onAccept}
-        onDrop={onDrop}
-      />
-    </div>
-  );
-}
-
-/**
- * What can be done with ONE part of a run: write it on its own,
- * drop it, or — once it is written — open the entry it became.
- *
- * The row is deliberately the same under a scene card and under a suggested
- * entry: accepting this one means the same thing in both places, and a
- * written part reads the same way in both.
- */
-function PartActions({
-  campaign,
-  state,
-  writtenAt,
-  busy,
-  onAccept,
-  onDrop,
-}: {
-  campaign: string;
-  state: PartState;
-  writtenAt: string | undefined;
-  busy: boolean;
-  onAccept: () => void;
-  onDrop?: () => void;
-}) {
-  const t = useT();
-  if (state === "written") {
-    return (
-      <p className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
-        <Check aria-hidden size={14} className="flex-none text-success-text" />
-        {t("generate.review.partWritten")}
-        {writtenAt !== undefined && (
-          <Link
-            to={`/campaigns/${campaign}/entries/${writtenAt}`}
-            className="rounded font-mono text-[11.5px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            {writtenAt}
-          </Link>
-        )}
-      </p>
-    );
-  }
-  return (
-    <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={busy || state === "dropped"}
-        onClick={onAccept}
-        className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
-      >
-        {t("generate.review.acceptOne")}
-      </Button>
-      {onDrop !== undefined && (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={onDrop}
-          className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-        >
-          {t(state === "dropped" ? "generate.review.undrop" : "generate.review.drop")}
-        </Button>
-      )}
-    </div>
   );
 }

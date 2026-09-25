@@ -1,7 +1,7 @@
 // The create entry points — trigger plus wiring around the shared
-// CreateDialog. The npc's and the location's live in their own slices
-// (app/src/npc/, app/src/location/), built from the trigger and the
-// after-create step exported here.
+// CreateDialog. The scene's, the npc's and the location's live in their own
+// slices (app/src/scene/, app/src/npc/, app/src/location/), built from the
+// trigger and the after-create step exported here.
 //
 // The CAMPAIGN has two surfaces and both run through `useCampaignCreate` here,
 // so they cannot drift apart: the cold-start PAGE (routes/home.tsx — an empty
@@ -45,7 +45,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { createCampaign, createChapter, createScene } from "@/api";
+import { createCampaign, createChapter } from "@/api";
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
 import { useT } from "@/i18n";
@@ -206,54 +206,6 @@ export function ChapterCreateAction({
             });
             await afterCreate();
             setOpen(false);
-          }}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
-export function SceneCreateAction({
-  campaign,
-  chapter,
-  variant = "quiet",
-}: {
-  campaign: string;
-  /** The chapter id — prefilled by position, never asked for. */
-  chapter: string;
-  variant?: "quiet" | "primary";
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const afterCreate = useAfterCreate(campaign);
-  if (campaign === "" || chapter === "") return null;
-
-  return (
-    <>
-      <CreateTrigger
-        label={t("create.scene.title")}
-        variant={variant}
-        onClick={() => setOpen(true)}
-      />
-      {open && (
-        <CreateDialog
-          title={t("create.scene.title")}
-          description={t("create.scene.description")}
-          nameLabel={t("create.scene.nameLabel")}
-          namePlaceholder={t("create.scene.namePlaceholder")}
-          addressPrefix={`${chapter}/`}
-          create={async (values: CreateValues) => {
-            const created = await createScene(campaign, {
-              title: values.name,
-              chapter,
-              ...(values.id === undefined ? {} : { id: values.id }),
-            });
-            await afterCreate();
-            setOpen(false);
-            // Straight into the composer — an empty scene is there to be written.
-            await navigate(`/campaigns/${campaign}/entries/${created.path}?edit=1`);
           }}
           onClose={() => setOpen(false)}
         />

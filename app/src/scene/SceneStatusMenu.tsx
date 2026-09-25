@@ -1,67 +1,67 @@
-// The scene-status control: the status display itself becomes the
-// regler. Two densities, one menu — the pill in the scene reading view and
-// the bare dot+label of a chapter overview row; both keep the quiet look and only grow a
-// small chevron on hover/focus.
+// The scene-status control: the status display itself becomes the control.
+// Two densities, one menu — the pill in the scene reading view and the bare
+// dot+label of a chapter overview row; both keep the quiet look and only grow
+// a small chevron on hover/focus.
 //
-// The write needs the rev of the entry it is changing. The reading view has
-// the EntryResponse on screen and hands its rev down; a chapter overview row has only
-// the tree (which carries no rev), so the control fetches the entry LAZILY
-// when the menu opens — one GET, shared with the entry query cache.
+// The write needs the rev of the scene it is changing. The reading view has
+// the scene on screen and hands its rev down; a chapter overview row has only
+// the tree (which carries no rev), so the control fetches the scene LAZILY
+// when the menu opens — one GET, shared with the scene's query cache.
 //
 // While a write runs the trigger shows the TARGET value dimmed. That is a
 // display state only: the query cache is never written with a guessed value,
-// it always gets the entry the server sent back.
+// it always gets the scene the server sent back.
 
 import type { SceneStatus } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { fetchEntry } from "@/api";
 import { StatusMenu, type StatusVariant } from "@/components/StatusMenu";
 import { useT } from "@/i18n";
-import { sceneStatusMeta, sceneStatusOptions } from "@/lib/scene-status";
-import { useSceneStatusMutation } from "@/lib/use-scene-status";
+
+import { sceneQuery } from "./scene-query";
+import { sceneStatusMeta, sceneStatusOptions } from "./scene-status";
+import { useSceneStatusMutation } from "./use-scene-status";
 
 /** "pill" = scene reading view (bordered pill), "row" = chapter overview list row. */
 export type SceneStatusVariant = StatusVariant;
 
 export function SceneStatusControl({
   campaign,
-  path,
+  id,
   status,
   rev,
   variant,
 }: {
   campaign: string;
-  path: string;
-  /** The status as it stands in the log/tree. */
+  id: string;
+  /** The status as it stands in the tree or on the scene on screen. */
   status: SceneStatus;
-  /** From the loaded EntryResponse; undefined means "fetch it when opening". */
+  /** From the loaded scene; undefined means "fetch it when opening". */
   rev?: number | undefined;
   variant: SceneStatusVariant;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  // Lazy rev for the chapter overview rows: only ever requested once the menu opens,
-  // and served from the cache when the entry was read before.
-  const entry = useQuery({
-    queryKey: ["entry", campaign, path],
-    queryFn: () => fetchEntry(campaign, path),
-    enabled: open && rev === undefined && campaign !== "" && path !== "",
+  // Lazy rev for the chapter overview rows: only ever requested once the menu
+  // opens, and served from the cache when the scene was read before.
+  const scene = useQuery({
+    ...sceneQuery(campaign, id),
+    enabled: open && rev === undefined && campaign !== "" && id !== "",
     retry: false,
   });
-  const knownRev = rev ?? entry.data?.rev;
-  const { setStatus, pendingStatus, message } = useSceneStatusMutation(campaign, path, knownRev);
+  const knownRev = rev ?? scene.data?.rev;
+  const { setStatus, pendingStatus, message } = useSceneStatusMutation(campaign, id, knownRev);
 
   return (
     <SceneStatusMenu
       status={status}
       variant={variant}
       pendingStatus={pendingStatus}
-      // A row whose entry could not be read at all cannot be patched — the
+      // A row whose scene could not be read at all cannot be patched — the
       // display stays, the menu just does nothing.
-      disabled={entry.isError}
-      message={message ?? (entry.isError ? t("status.sceneUnloadable") : undefined)}
+      disabled={scene.isError}
+      message={message ?? (scene.isError ? t("status.sceneUnloadable") : undefined)}
       open={open}
       onOpenChange={setOpen}
       onSelect={setStatus}

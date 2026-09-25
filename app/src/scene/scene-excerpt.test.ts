@@ -4,15 +4,18 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { SceneProposal } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 
-import { sceneExcerpt, type ExcerptSource } from "./entity-excerpt";
+import { sceneExcerpt } from "./scene-excerpt";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
 
-/** A fixture scene of the example campaign, as the API answers it. */
-function fixture(stem: string): ExcerptSource {
-  return JSON.parse(readFileSync(path.join(FIXTURES, `${stem}.json`), "utf8")) as ExcerptSource;
+/** A scene fixture — the scene as its resource answers it (ADR #31). */
+function fixture(id: string): SceneProposal {
+  return JSON.parse(
+    readFileSync(path.join(FIXTURES, "scenes", `${id}.json`), "utf8"),
+  ) as SceneProposal;
 }
 
 const NAMES: Record<string, string> = {
@@ -21,10 +24,13 @@ const NAMES: Record<string, string> = {
 };
 const nameOf = (slug: string): string | undefined => NAMES[slug];
 
+/** The fields a short form reads, for the cases no fixture covers. */
+const planned = { type: "planned", status: "draft" } as const;
+
 describe("sceneExcerpt", () => {
   test("type, trigger, the location's display name and status", () => {
     const excerpt = sceneExcerpt(
-      fixture("scene-smuggler-captured"),
+      fixture("smuggler-captured"),
       (id) => (id === "bucht" ? "Die Nordbucht" : undefined),
       nameOf,
     );
@@ -37,31 +43,22 @@ describe("sceneExcerpt", () => {
   });
 
   test("a location nobody knows stays as written; no trigger, no row", () => {
-    const excerpt = sceneExcerpt(
-      { properties: { type: "planned", location: "irgendwo" } },
-      () => undefined,
-      nameOf,
-    );
+    const excerpt = sceneExcerpt({ ...planned, location: "irgendwo" }, () => undefined, nameOf);
     expect(excerpt.location).toBe("irgendwo");
     expect(excerpt.trigger).toBeUndefined();
-    // A scene without a stored status reads as the default every creation writes.
     expect(excerpt.status).toBe("draft");
   });
 
   test("the location is looked up as a LOCATION, not by reference priority", () => {
     // `fenn` is an npc for `[[…]]`; as a scene's location only the location
     // lookup answers.
-    const excerpt = sceneExcerpt(
-      { properties: { location: "fenn" } },
-      () => undefined,
-      nameOf,
-    );
+    const excerpt = sceneExcerpt({ ...planned, location: "fenn" }, () => undefined, nameOf);
     expect(excerpt.location).toBe("fenn");
   });
 
   test("a reference in the trigger reads as the current name", () => {
     const excerpt = sceneExcerpt(
-      { properties: { trigger: "[[jorna]] schlägt Alarm" } },
+      { ...planned, trigger: "[[jorna]] schlägt Alarm" },
       () => undefined,
       nameOf,
     );

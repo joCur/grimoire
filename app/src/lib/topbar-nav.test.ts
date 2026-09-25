@@ -8,6 +8,7 @@ const npcs = { isChapterOverview: false, isNpcs: true };
 const locations = { isChapterOverview: false, isLocations: true };
 const list = (listKind: string) => ({ isChapterOverview: false, listKind });
 const entry = (entryPath: string) => ({ isChapterOverview: false, entryPath });
+const scene = { isChapterOverview: false, isScene: true };
 
 describe("navSection", () => {
   test("the chapter overview is the Kapitel section", () => {
@@ -18,10 +19,11 @@ describe("navSection", () => {
     expect(navSection(list("scenes"))).toBe("chapters");
   });
 
-  test("a scene entry belongs under Kapitel — grouped or directly in the chapter", () => {
-    expect(navSection(entry("01-salzhafen/hafen/ankunft-leuchtturm"))).toBe("chapters");
-    expect(navSection(entry("01-salzhafen/prolog"))).toBe("chapters");
+  test("a scene's reading view and a chapter belong under Kapitel", () => {
+    expect(navSection(scene)).toBe("chapters");
     expect(navSection(entry("01-salzhafen"))).toBe("chapters");
+    // The address schema has no scene: an entry path naming one marks nothing.
+    expect(navSection(entry("01-salzhafen/prolog"))).toBeUndefined();
   });
 
   test("an npc's own routes — its list and its reading view — are NPCs", () => {

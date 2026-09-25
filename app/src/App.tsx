@@ -13,12 +13,14 @@ import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/routes/knowledge";
 import { LiveRoute } from "@/routes/live";
 import { LocationRoute } from "@/location/LocationRoute";
+import { NpcCard } from "@/npc/NpcCard";
 import { NpcRoute } from "@/npc/NpcRoute";
+import { AddressRoute } from "@/routes/address";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
-import { SceneRoute } from "@/routes/scene";
 import { SessionRoute } from "@/routes/session";
 import { SettingsRoute } from "@/routes/settings";
+import { SceneRoute } from "@/scene/SceneRoute";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
 // exactly once per campaign — when the server bumps the counter (which it
@@ -81,10 +83,18 @@ export function App() {
           {/* The scene list — reached from the mobile start surface's
               lookup rows. */}
           <Route path="list/:kind" element={<BrowseRoute />} />
-          {/* An npc and a location are each their own resource (ADR #31):
-              their lists and their reading views live at their own routes,
-              reached from the topbar's quiet npc and location links and the
-              mobile lookup rows. */}
+          {/* A scene, an npc and a location are each their own resource
+              (ADR #31): their reading views live at their own routes, and so
+              do the npc and location lists, reached from the topbar's quiet
+              npc and location links and the mobile lookup rows. The scene's
+              reading view is handed the npc cards of its aside — the npc
+              draws them, the scene only says where. */}
+          <Route
+            path="scenes/:id"
+            element={
+              <SceneRoute npcCard={(campaign, id) => <NpcCard campaign={campaign} id={id} />} />
+            }
+          />
           <Route path="npcs" element={<BrowseRoute kind="npcs" />} />
           <Route path="npcs/:id" element={<NpcRoute />} />
           <Route path="locations" element={<BrowseRoute kind="locations" />} />
@@ -105,7 +115,8 @@ export function App() {
           {/* One evening, read-only: a session is rows, not an entry, so it
               has its own address instead of an entry one. Reached from ⌘K. */}
           <Route path="sessions/:id" element={<SessionRoute />} />
-          <Route path="entries/*" element={<SceneRoute />} />
+          {/* A chapter and the campaign, reached by their address. */}
+          <Route path="entries/*" element={<AddressRoute />} />
         </Route>
       </Route>
     </Routes>

@@ -22,7 +22,6 @@ const TREE: CampaignTree = {
       title: "Kapitel 1",
       scenes: [
         {
-          path: "01-salzhafen/hafen/lighthouse-arrival",
           id: "lighthouse-arrival",
           title: "Ankunft am Leuchtturm",
           type: "planned",
@@ -32,7 +31,6 @@ const TREE: CampaignTree = {
         },
         // Same slug as the npc below — the collision case.
         {
-          path: "01-salzhafen/hafen/jorna",
           id: "jorna",
           title: "Szene namens jorna",
           type: "planned",
@@ -80,14 +78,13 @@ describe("entityRefIndex", () => {
     expect(index.get("lighthouse-arrival")?.kind).toBe("location");
   });
 
-  test("a scene resolves when no npc or location claims the slug", () => {
+  test("a scene resolves by its id when no npc or location claims the slug", () => {
     expect(entityRefIndex(TREE).get("jorna")?.name).toBe("Hafenmeisterin Jorna");
     const sceneOnly = entityRefIndex({ ...TREE, npcs: [], locations: [] });
     expect(sceneOnly.get("lighthouse-arrival")).toEqual({
       kind: "scene",
       slug: "lighthouse-arrival",
       name: "Ankunft am Leuchtturm",
-      path: "01-salzhafen/hafen/lighthouse-arrival",
     });
   });
 

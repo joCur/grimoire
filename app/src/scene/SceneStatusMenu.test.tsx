@@ -1,4 +1,4 @@
-// Render test for the status regler (issue #28): the open menu must list the
+// Render test for the status control: the open menu must list the
 // four German labels and mark the current one.
 //
 // Radix renders menu content into a PORTAL, and react-dom/server renders no

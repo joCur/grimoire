@@ -8,10 +8,9 @@
 //     suggestion, the DM may name the directory freely — so the id also
 //     needs a client-side check (chapterIdError) and the rule for when the
 //     suggestion still follows the title (chapterIdValue).
-//   - the edits the review keeps on the job: one record per scene draft path,
-//     each half (properties, body) a whole replacement of what the run
-//     produced, and one change per proposed npc, field by field — merged here
-//     exactly the way the server merges them.
+//   - the edits the review keeps on the job: one change per proposed scene
+//     and per proposed npc, by id, field by field — merged here exactly the
+//     way the server merges them.
 //   - the count labels for the context hint and the apply button — from the
 //     out of the catalog, with the translator PASSED IN (the lib layer
 //     must not decide which language the UI is in, see i18n/index.ts).
@@ -21,12 +20,12 @@
 //     and the error body of a failed job.
 
 import type {
-  DraftEdit,
   GenerateJob,
   GenerateJobPart,
   GenerateJobReview,
   GenerateReviewDecision,
   NpcChange,
+  SceneChange,
 } from "@grimoire/shared/types";
 
 import type { Translate } from "@/i18n";
@@ -332,8 +331,8 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 
 // --- the review state on the job -------------------------------------------
 //
-// Everything the DM does in the review — the edited scene drafts and proposed
-// npcs, the decision per proposed npc and per proposed location, the dropped
+// Everything the DM does in the review — the edited proposed scenes and npcs,
+// the decision per proposed npc and per proposed location, the dropped
 // scenes, the per field/block decisions of an augment run — lives on the JOB,
 // not in this browser. These are the pure
 // halves of that: what the state IS, what a patch does to it, and what is
@@ -342,10 +341,10 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 /** A review state with nothing decided — also the fallback for an older payload. */
 export function emptyReview(): GenerateJobReview {
   return {
-    dropped: [],
+    droppedScenes: [],
     fields: {},
     blocks: {},
-    written: {},
+    writtenScenes: [],
     npcs: {},
     writtenNpcs: [],
     locations: {},
@@ -358,10 +357,10 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
   const review = job?.review;
   if (review === undefined) return emptyReview();
   return {
-    dropped: review.dropped ?? [],
+    droppedScenes: review.droppedScenes ?? [],
     fields: review.fields ?? {},
     blocks: review.blocks ?? {},
-    written: review.written ?? {},
+    writtenScenes: review.writtenScenes ?? [],
     npcs: review.npcs ?? {},
     writtenNpcs: review.writtenNpcs ?? [],
     locations: review.locations ?? {},
@@ -371,73 +370,36 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
 
 /** What one `PATCH …/review` changes — the same merge the server does. */
 export interface ReviewPatch {
-  /** The edited halves of a scene draft, by its path. */
-  edits?: Record<string, DraftEdit>;
+  /** The DM's change to a proposed scene, by its id — merged field by field. */
+  sceneEdits?: Record<string, SceneChange>;
   /** The DM's change to a proposed npc, by its id — merged field by field. */
   npcEdits?: Record<string, NpcChange>;
   /** The decision per proposed npc, by its id. */
   npcs?: Record<string, GenerateReviewDecision | null>;
   /** The decision per proposed location, by its id. */
   locations?: Record<string, GenerateReviewDecision | null>;
-  dropped?: string[];
+  /** The ids of the dropped scenes — the whole set. */
+  droppedScenes?: string[];
   fields?: Record<string, boolean | null>;
   blocks?: Record<string, boolean | null>;
 }
 
 /**
- * What the review shows for one scene draft: the generated properties and body with
- * every edit laid on top, in order — the job's stored edit first, the buffer
- * the DM is typing in last. An edit half that is absent leaves the generated
- * one standing.
+ * Merge the changes of the proposals PER ID and field by field: a text edit
+ * must not drop a field edit that is already on the job, and the other way
+ * round. A field the patch names replaces the stored one — `null` included,
+ * which clears it on the proposal.
  */
-export function draftOf(
-  generated: { properties: Record<string, unknown>; body: string },
-  ...edits: Array<DraftEdit | undefined>
-): { properties: Record<string, unknown>; body: string } {
-  let out = generated;
-  for (const edit of edits) {
-    if (edit === undefined) continue;
-    out = {
-      properties: edit.properties ?? out.properties,
-      body: edit.body ?? out.body,
-    };
-  }
-  return out;
-}
-
-/**
- * Merge draft edits PER PATH and per half: a properties edit must not drop a
- * body edit that is already on the job, and the other way round. Each half
- * that a patch carries replaces its counterpart whole (that is what a half
- * means, see DraftEdit); a half the patch leaves out keeps what is there.
- */
-export function mergeDraftEdits(
-  into: Record<string, DraftEdit>,
-  patch?: Record<string, DraftEdit>,
-): Record<string, DraftEdit> {
-  const out = { ...into };
-  for (const [path, edit] of Object.entries(patch ?? {})) {
-    out[path] = { ...out[path], ...edit };
-  }
-  return out;
-}
-
-/**
- * Merge npc changes PER NPC and field by field: a text edit must not drop a
- * field edit that is already on the job. A field the patch names replaces the
- * stored one — `null` included, which clears it on the npc.
- */
-export function mergeNpcEdits(
-  into: Record<string, NpcChange>,
-  patch?: Record<string, NpcChange>,
-): Record<string, NpcChange> {
+export function mergeEdits<C extends object>(
+  into: Record<string, C>,
+  patch?: Record<string, C>,
+): Record<string, C> {
   const out = { ...into };
   for (const [id, change] of Object.entries(patch ?? {})) {
     out[id] = { ...out[id], ...change };
   }
   return out;
 }
-
 
 /** Merge boolean decisions; `null` deletes the key (the server does this). */
 function mergeFlags(
@@ -469,7 +431,7 @@ function mergeDecisions(
  * The job as it will look once a patch lands — the OPTIMISTIC copy the UI
  * shows while the request is in flight. It must merge exactly the way the
  * server does (generate-jobs.ts `applyReviewPatch`), including the one
- * asymmetry: `dropped` is a set sent whole, everything else merges per key,
+ * asymmetry: `droppedScenes` is a set sent whole, everything else merges per key,
  * and a `null` decision — in `npcs`, `locations`, `fields` and `blocks`
  * alike — means that the decision is open again, which deletes the key.
  */
@@ -477,13 +439,16 @@ export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): Generate
   const review = reviewOf(job);
   return {
     ...job,
-    draftEdits: mergeDraftEdits(job.draftEdits, patch.edits),
-    npcEdits: mergeNpcEdits(job.npcEdits ?? {}, patch.npcEdits),
+    sceneEdits: mergeEdits(job.sceneEdits ?? {}, patch.sceneEdits),
+    npcEdits: mergeEdits(job.npcEdits ?? {}, patch.npcEdits),
     review: {
-      dropped: patch.dropped === undefined ? review.dropped : [...new Set(patch.dropped)],
+      droppedScenes:
+        patch.droppedScenes === undefined
+          ? review.droppedScenes
+          : [...new Set(patch.droppedScenes)],
       fields: mergeFlags(review.fields, patch.fields),
       blocks: mergeFlags(review.blocks, patch.blocks),
-      written: review.written,
+      writtenScenes: review.writtenScenes,
       npcs: mergeDecisions(review.npcs, patch.npcs),
       writtenNpcs: review.writtenNpcs,
       locations: mergeDecisions(review.locations, patch.locations),
@@ -496,14 +461,14 @@ export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): Generate
 export type PartState = "open" | "written" | "dropped" | "rejected";
 
 /**
- * The state of one scene of a run, by its draft path. A WRITTEN scene is
+ * The state of one proposed scene of a run, by its id. A WRITTEN scene is
  * read-only and links to what it became; a dropped one is out of every
  * accept.
  */
-export function partState(job: GenerateJob | null | undefined, path: string): PartState {
+export function sceneState(job: GenerateJob | null | undefined, id: string): PartState {
   const review = reviewOf(job);
-  if (review.written[path] !== undefined) return "written";
-  if (review.dropped.includes(path)) return "dropped";
+  if (review.writtenScenes.includes(id)) return "written";
+  if (review.droppedScenes.includes(id)) return "dropped";
   return "open";
 }
 
@@ -529,12 +494,9 @@ export function locationState(job: GenerateJob | null | undefined, id: string): 
   return "open";
 }
 
-/**
- * Every scene of a run, by its draft path. The proposed npcs and locations
- * are addressed by id (`jobNpcs`, `jobLocations`).
- */
-export function jobParts(job: GenerateJob | null | undefined): string[] {
-  return (job?.result?.scenes ?? []).map((scene) => scene.path);
+/** The ids of the scenes a run proposes. */
+export function jobScenes(job: GenerateJob | null | undefined): string[] {
+  return (job?.result?.scenes ?? []).map((scene) => scene.id);
 }
 
 /** The ids of the npcs a run proposes — a scene run's list, or the NPC run's one npc. */
@@ -560,16 +522,16 @@ export function jobProgress(job: GenerateJob | null | undefined): {
   written: number;
   total: number;
 } {
-  const parts = jobParts(job);
+  const scenes = jobScenes(job);
   const npcs = jobNpcs(job);
   const locations = jobLocations(job);
   const review = reviewOf(job);
   return {
     written:
-      parts.filter((path) => review.written[path] !== undefined).length +
+      scenes.filter((id) => review.writtenScenes.includes(id)).length +
       npcs.filter((id) => review.writtenNpcs.includes(id)).length +
       locations.filter((id) => review.writtenLocations.includes(id)).length,
-    total: parts.length + npcs.length + locations.length,
+    total: scenes.length + npcs.length + locations.length,
   };
 }
 
@@ -598,9 +560,9 @@ export function acceptProgress(job: GenerateJob | null | undefined): {
   return { written: progress.written, total: Math.max(parts.length, progress.total) };
 }
 
-/** The scenes still open, by path. */
-export function openParts(job: GenerateJob | null | undefined): string[] {
-  return jobParts(job).filter((path) => partState(job, path) === "open");
+/** The proposed scenes still open, by id. */
+export function openScenes(job: GenerateJob | null | undefined): string[] {
+  return jobScenes(job).filter((id) => sceneState(job, id) === "open");
 }
 
 /** The proposed npcs still open, by id. */

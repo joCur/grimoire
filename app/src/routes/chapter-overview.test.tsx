@@ -16,7 +16,6 @@ import { SceneRow } from "./chapter-overview";
 
 function scene(id: string, over: Partial<SceneSummary> = {}): SceneSummary {
   return {
-    path: `01-salzhafen/${id}`,
     id,
     title: id,
     type: "planned",

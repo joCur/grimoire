@@ -1,12 +1,12 @@
 // Render tests for the reading view of a chapter and the campaign
-// (react-dom/server — no DOM): the titled header and the one rule behind
-// it — the scene type overline never appears above them.
+// (react-dom/server — no DOM): the titled header, and never the scene's type
+// overline above it.
 
 import type { EntryKind, EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { EntityArticle } from "./EntityArticle";
+import { AddressArticle } from "./address";
 
 function entry(
   kind: EntryKind,
@@ -17,10 +17,10 @@ function entry(
 }
 
 function render(e: EntryResponse): string {
-  return renderToStaticMarkup(<EntityArticle entry={e} />);
+  return renderToStaticMarkup(<AddressArticle entry={e} />);
 }
 
-describe("EntityArticle — titled entities", () => {
+describe("the article of a chapter and the campaign", () => {
   test("chapter renders title plus body", () => {
     const html = render(
       entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }, "## Ziel\n\nLicht an.\n"),
@@ -45,14 +45,14 @@ describe("EntityArticle — titled entities", () => {
     const grouped =
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
     const chapter = entry("chapter", { id: "01-salzhafen", title: "Salzhafen" });
-    expect(renderToStaticMarkup(<EntityArticle entry={chapter} actions={actions} />)).toMatch(
+    expect(renderToStaticMarkup(<AddressArticle entry={chapter} actions={actions} />)).toMatch(
       grouped,
     );
     // No actions, no wrapper markup.
     expect(render(chapter)).not.toMatch(/<span class="[^"]*gap-2[^"]*"><\/span>/);
   });
 
-  test("a titled entry without a title falls back to its address", () => {
+  test("a chapter without a title falls back to its address", () => {
     expect(render(entry("chapter", {}, ""))).toContain("01-salzhafen");
   });
 

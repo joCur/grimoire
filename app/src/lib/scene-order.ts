@@ -12,7 +12,7 @@
 
 import type { CampaignTree, ChapterNode, SceneSummary } from "@grimoire/shared/types";
 
-import { isSceneDone } from "@/lib/scene-status";
+import { isSceneDone } from "@/scene/scene-status";
 
 /** True for a scene of the contingency block shown at the end of the chapter. */
 export function isContingency(scene: SceneSummary): boolean {

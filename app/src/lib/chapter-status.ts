@@ -1,7 +1,7 @@
 // Chapter status: the labels/colors the overview's control and the chapter
 // properties form share, and the two writes behind them.
 //
-// Same shape as lib/scene-status.ts, and deliberately so — the labels come
+// Same shape as scene/scene-status.ts, and deliberately so — the labels come
 // from the catalog and the translator is PASSED IN (the lib layer must not
 // decide which language the UI is in), the colors stay here because they are
 // design tokens rather than copy.
@@ -22,7 +22,7 @@
 // creates a chapter writes `planned`, and no status on a chapter means "not
 // started", which is what `planned` says.
 
-import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/types";
+import { CHAPTER_STATUSES, type ChapterStatus, type EntryResponse } from "@grimoire/shared/types";
 
 import { fetchEntry, patchEntry, setChapterActive } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
@@ -101,9 +101,9 @@ export async function writeChapterStatus(
   chapter: string,
   status: ChapterStatus,
   rev: number | undefined,
-): Promise<RevWriteResult> {
+): Promise<RevWriteResult<EntryResponse>> {
   if (chapterStatusNeedsSwap(status)) {
-    return { ok: true, entry: await setChapterActive(campaign, chapter) };
+    return { ok: true, row: await setChapterActive(campaign, chapter) };
   }
   // Unreachable behind `chapterStatusWritable`; an assertion, not a path.
   if (rev === undefined) throw new Error("no version to write against");

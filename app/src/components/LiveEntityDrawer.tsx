@@ -7,24 +7,18 @@
 // renders the very same article its reading view renders, so what the DM
 // reads here is what the row says.
 //
-// This module only picks WHICH drawer content a target gets: an npc's and a
-// location's come from their own slices, a scene's and a chapter's is the
-// article of its address.
+// This module only picks WHICH drawer content a target gets; each comes from
+// the slice of the one it names.
 //
 // No animation (ui/sheet.tsx): the quality floor asks for reduced-motion
 // safety, and mid-sentence a panel that is simply there is the calm answer.
 
-import { useQuery } from "@tanstack/react-query";
-
-import { fetchEntry } from "@/api";
-import { DrawerFrame } from "@/components/DrawerFrame";
-import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { openTargetHref, type OpenTarget } from "@/lib/open-target";
-import { propString } from "@/lib/properties";
+import type { OpenTarget } from "@/lib/open-target";
 import { LocationDrawerBody } from "@/location/LocationDrawerBody";
 import { PREVIEW_BOUNDARY_ATTR } from "@/markdown/ref-preview";
 import { NpcDrawerBody } from "@/npc/NpcDrawerBody";
+import { SceneDrawerBody } from "@/scene/SceneDrawerBody";
 
 export function LiveEntityDrawer({
   campaign,
@@ -54,33 +48,10 @@ export function LiveEntityDrawer({
           ) : target.kind === "location" ? (
             <LocationDrawerBody campaign={campaign} id={target.id} />
           ) : (
-            <EntryDrawerBody campaign={campaign} path={target.path} />
+            <SceneDrawerBody campaign={campaign} id={target.id} />
           )}
         </SheetContent>
       )}
     </Sheet>
-  );
-}
-
-function EntryDrawerBody({ campaign, path }: { campaign: string; path: string }) {
-  const { data, isPending, isError } = useQuery({
-    queryKey: ["entry", campaign, path],
-    queryFn: () => fetchEntry(campaign, path),
-    retry: false,
-  });
-  const name =
-    data === undefined
-      ? path
-      : (propString(data.properties.name) ?? propString(data.properties.title) ?? path);
-  return (
-    <DrawerFrame
-      href={openTargetHref(campaign, { kind: "entry", path })}
-      shown={path}
-      name={name}
-      isPending={isPending}
-      isError={isError}
-    >
-      {data !== undefined && <EntityArticle entry={data} />}
-    </DrawerFrame>
   );
 }

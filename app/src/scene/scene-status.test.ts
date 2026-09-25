@@ -1,9 +1,10 @@
 // The status write. What matters is the payload (the rev must be the one of
-// the entry the DM was looking at) and the 409 path — the server wrote
-// NOTHING then, so the UI must re-read the entry and let the next attempt
+// the scene the DM was looking at) and the 409 path — the server wrote
+// NOTHING then, so the UI must re-read the scene and let the next attempt
 // carry the fresh rev.
 
-import { SCENE_STATUSES, type EntryResponse, type SceneStatus } from "@grimoire/shared/types";
+import { SCENE_STATUSES } from "@grimoire/shared/scene";
+import type { Scene, SceneStatus } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
@@ -21,13 +22,18 @@ import {
 const t = translator("de");
 const tEn = translator("en");
 
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
+const SCENE = "ankunft-leuchtturm";
 
-function entryAt(rev: number, status: string): EntryResponse {
+function sceneAt(rev: number, status: SceneStatus): Scene {
   return {
-    path: SCENE,
-    kind: "scene",
-    properties: { id: "arrival", title: "Ankunft", status },
+    id: SCENE,
+    title: "Ankunft",
+    type: "planned",
+    chapter: "01-salzhafen",
+    npcs: [],
+    handouts: [],
+    tags: [],
+    status,
     body: "",
     rev,
   };
@@ -65,63 +71,63 @@ afterEach(() => {
 });
 
 describe("sceneStatusPatchBody", () => {
-  test("patches only `status`, with the rev of the loaded entry", () => {
+  test("patches only `status`, with the rev of the loaded scene", () => {
     expect(sceneStatusPatchBody(1_700_000_000_123, "ready")).toEqual({
       rev: 1_700_000_000_123,
-      properties: { status: "ready" },
+      status: "ready",
     });
   });
 
-  test("nothing else of the properties is touched", () => {
+  test("no other field of the scene is touched", () => {
     const body = sceneStatusPatchBody(1, "played");
-    expect(Object.keys(body.properties ?? {})).toEqual(["status"]);
+    expect(Object.keys(body)).toEqual(["rev", "status"]);
   });
 });
 
 describe("writeSceneStatus", () => {
-  test("PATCHes the entry and returns the server's entry", async () => {
-    const calls = mockFetch([{ status: 200, body: entryAt(222, "ready") }]);
+  test("PATCHes the scene and returns the server's scene", async () => {
+    const calls = mockFetch([{ status: 200, body: sceneAt(222, "ready") }]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
-    expect(calls[0]?.body).toEqual({ rev: 111, properties: { status: "ready" } });
+    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/scenes/${SCENE}`);
+    expect(calls[0]?.body).toEqual({ rev: 111, status: "ready" });
     expect(result.ok).toBe(true);
-    expect(result.entry?.rev).toBe(222);
+    expect(result.row?.rev).toBe(222);
   });
 
-  test("409: nothing written, the entry is re-read for the fresh rev", async () => {
+  test("409: nothing written, the scene is re-read for the fresh rev", async () => {
     const calls = mockFetch([
-      { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
-      { status: 200, body: entryAt(999, "draft") },
+      { status: 409, body: { code: "rev_conflict", error: "scene changed", rev: 999 } },
+      { status: 200, body: sceneAt(999, "draft") },
     ]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(result.ok).toBe(false);
-    expect(result.entry?.rev).toBe(999);
+    expect(result.row?.rev).toBe(999);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
+    expect(calls[1]?.url).toBe(`/api/campaigns/beispiel/scenes/${SCENE}`);
   });
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {
     mockFetch([
-      { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
-      { status: 200, body: entryAt(999, "draft") },
+      { status: 409, body: { code: "rev_conflict", error: "scene changed", rev: 999 } },
+      { status: 200, body: sceneAt(999, "draft") },
     ]);
     const conflict = await writeSceneStatus("beispiel", SCENE, 111, "ready");
-    const fresh = conflict.entry?.rev;
+    const fresh = conflict.row?.rev;
 
-    const calls = mockFetch([{ status: 200, body: entryAt(1000, "ready") }]);
+    const calls = mockFetch([{ status: 200, body: sceneAt(1000, "ready") }]);
     const retry = await writeSceneStatus("beispiel", SCENE, fresh ?? 0, "ready");
 
-    expect(calls[0]?.body).toEqual({ rev: 999, properties: { status: "ready" } });
+    expect(calls[0]?.body).toEqual({ rev: 999, status: "ready" });
     expect(retry.ok).toBe(true);
   });
 
-  test("409 plus a failed reload: still a conflict, no entry to seed", async () => {
+  test("409 plus a failed reload: still a conflict, no scene to seed", async () => {
     mockFetch([
-      { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
+      { status: 409, body: { code: "rev_conflict", error: "scene changed", rev: 999 } },
       { status: 500, body: { error: "boom" } },
     ]);
     expect(await writeSceneStatus("beispiel", SCENE, 111, "ready")).toEqual({ ok: false });

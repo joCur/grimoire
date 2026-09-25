@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { translator } from "@/i18n/format";
-import { contingencyPaths, kindIcon, kindLabel, resultHref } from "./search";
+import { contingencyScenes, kindIcon, kindLabel, resultHref } from "./search";
 
 // The labels come from the catalog and the translator is passed in.
 const t = translator("de");
@@ -64,7 +64,7 @@ describe("kindIcon", () => {
   });
 });
 
-describe("contingencyPaths", () => {
+describe("contingencyScenes", () => {
   const tree = {
     campaign: "beispiel",
     chapters: [
@@ -72,8 +72,8 @@ describe("contingencyPaths", () => {
         id: "01",
         title: "Kapitel 1",
         scenes: [
-          { path: "01/hafen/a", id: "a", title: "A", type: "planned", status: "ready", npcs: [], tags: [] },
-          { path: "01/hafen/b", id: "b", title: "B", type: "contingency", status: "draft", npcs: [], tags: [] },
+          { id: "a", title: "A", type: "planned", status: "ready", npcs: [], tags: [] },
+          { id: "b", title: "B", type: "contingency", status: "draft", npcs: [], tags: [] },
         ],
       },
     ],
@@ -82,12 +82,12 @@ describe("contingencyPaths", () => {
     sessions: [],
   } satisfies CampaignTree;
 
-  test("collects exactly the contingency scene paths", () => {
-    expect(contingencyPaths(tree)).toEqual(new Set(["01/hafen/b"]));
+  test("collects exactly the contingency scene ids", () => {
+    expect(contingencyScenes(tree)).toEqual(new Set(["b"]));
   });
 
   test("no tree yet -> empty set (icon degrades to bookmark)", () => {
-    expect(contingencyPaths(undefined)).toEqual(new Set());
+    expect(contingencyScenes(undefined)).toEqual(new Set());
   });
 });
 
@@ -107,11 +107,9 @@ describe("resultHref", () => {
     ).toBe("/campaigns/h%C3%B6hlen%20kampagne");
   });
 
-  test("encodes path segments but keeps the slashes routable", () => {
-    const result = { kind: "scene", id: "späh trupp", path: "01-salzhafen/höhle/späh trupp" } as const;
-    expect(resultHref("beispiel", result)).toBe(
-      "/campaigns/beispiel/entries/01-salzhafen/h%C3%B6hle/sp%C3%A4h%20trupp",
-    );
+  test("encodes the chapter's address", () => {
+    const result = { kind: "chapter", id: "höhle", path: "höhle" } as const;
+    expect(resultHref("beispiel", result)).toBe("/campaigns/beispiel/entries/h%C3%B6hle");
   });
 
   // The three kinds that have no entry address any more: they open the page
@@ -129,8 +127,16 @@ describe("resultHref", () => {
     );
   });
 
-  test("an entry hit without a path falls back to the chapter overview", () => {
-    expect(resultHref("beispiel", { kind: "scene", id: "ankunft" })).toBe("/campaigns/beispiel");
+  test("a chapter hit without a path falls back to the chapter overview", () => {
+    expect(resultHref("beispiel", { kind: "chapter", id: "01-salzhafen" })).toBe(
+      "/campaigns/beispiel",
+    );
+  });
+
+  test("a scene hit opens the scene's own route by its id — no address needed", () => {
+    expect(resultHref("beispiel", { kind: "scene", id: "späh trupp" })).toBe(
+      "/campaigns/beispiel/scenes/sp%C3%A4h%20trupp",
+    );
   });
 
   test("an npc hit opens the npc's own route by its id — no address needed", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CampaignSummary, CampaignTree, SceneSummary } from "@grimoire/shared/types";
 
-import { locationName, pickLastCampaign, sceneTitle, settingsCampaign } from "./campaign";
+import { hasScene, locationName, pickLastCampaign, sceneTitle, settingsCampaign } from "./campaign";
 
 /**
  * A campaign whose newest session STARTED at `lastSessionStarted`. The
@@ -85,7 +85,6 @@ describe("pickLastCampaign", () => {
 });
 
 const scene = (id: string, title: string): SceneSummary => ({
-  path: `01-salzhafen/hafen/${id}`,
   id,
   title,
   type: "planned",
@@ -139,6 +138,15 @@ describe("sceneTitle", () => {
 
   test("no scene id at all → nothing to label", () => {
     expect(sceneTitle(tree, undefined)).toBeUndefined();
+  });
+});
+
+describe("hasScene", () => {
+  test("knows the scenes of every chapter, and nothing else", () => {
+    expect(hasScene(tree, "smuggler-captured")).toBe(true);
+    expect(hasScene(tree, "weg-vom-fenster")).toBe(false);
+    expect(hasScene(undefined, "smuggler-captured")).toBe(false);
+    expect(hasScene(tree, undefined)).toBe(false);
   });
 });
 

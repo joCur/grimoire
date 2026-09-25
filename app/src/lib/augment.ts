@@ -386,6 +386,24 @@ export function assembleBody(
 // --- the fields half --------------------------------------------------------------
 
 /**
+ * One field of a proposal, as the review renders it: the stored value and the
+ * proposed one side by side.
+ *
+ * `state` is what the DEFAULT decision hangs off (never silently overwrite):
+ * `new` means the row has no value for the field and the proposal is
+ * preselected; `changed` means it HAS a value and the model wants a different
+ * one — the default there is to keep the stored value. A field the proposal
+ * leaves alone is not listed at all; `current` is absent exactly when the row
+ * holds nothing there.
+ */
+export interface FieldProposal {
+  key: string;
+  current?: unknown;
+  proposed: unknown;
+  state: "new" | "changed";
+}
+
+/**
  * A rendered field value — the review shows the stored and the proposed value
  * as text, and a list or a mapping has to read as one line rather than as
  * `[object Object]`.

@@ -42,8 +42,8 @@ function fixtureBody(name: string): string {
 }
 
 const FIXTURES = [
-  "scene-lighthouse-arrival.json",
-  "scene-smuggler-captured.json",
+  "scenes/lighthouse-arrival.json",
+  "scenes/smuggler-captured.json",
   "npcs/fenn.json",
 ];
 
@@ -98,7 +98,7 @@ describe("Markdown pipeline rendering", () => {
   test("the initial state is the view's, not the text's", () => {
     // The SAME reference scene, rendered twice: the live column folds its two
     // branches, every other surface opens them. Nothing in the body differs.
-    const body = fixtureBody("scene-smuggler-captured.json");
+    const body = fixtureBody("scenes/smuggler-captured.json");
     expect(openBranches(render(body))).toBe(2);
     expect(renderCollapsed(body)).not.toMatch(OPEN_DETAILS);
     // Everything else the scene carries is untouched by the choice.
@@ -155,12 +155,12 @@ describe("HTML in the body", () => {
   });
 
   test("callouts and if-sections of the scene fixtures survive untouched", () => {
-    const smugglers = render(fixtureBody("scene-smuggler-captured.json"));
+    const smugglers = render(fixtureBody("scenes/smuggler-captured.json"));
     expect([...smugglers.matchAll(/data-callout="/g)]).toHaveLength(3);
     expect([...smugglers.matchAll(/data-if-section="/g)]).toHaveLength(2);
     expect(smugglers).toContain("Falls:");
 
-    const lighthouse = render(fixtureBody("scene-lighthouse-arrival.json"));
+    const lighthouse = render(fixtureBody("scenes/lighthouse-arrival.json"));
     expect(lighthouse).toContain('data-callout="readaloud"');
     expect(lighthouse).toContain('data-callout="check"');
     // This fixture carries a W6 table in the `[!note]`.

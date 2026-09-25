@@ -20,7 +20,7 @@ import { putSceneOrder } from "@/api";
 import { useT } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { moveSceneOrder, withSceneOrder, withSceneOrderRev } from "@/lib/scene-order";
-import { isStaleEntryError } from "@/lib/write-with-rev";
+import { isWriteConflict } from "@/lib/write-with-rev";
 
 export interface SceneOrderWrite {
   /** Move one scene one step inside its own block and write the new order. */
@@ -56,7 +56,7 @@ export function useSceneOrderWrite(campaign: string, chapter: ChapterNode): Scen
         queryClient.setQueryData(treeKey, context.previous);
       }
       setMessage(
-        isStaleEntryError(error)
+        isWriteConflict(error)
           ? t("chapterOverview.order.conflict")
           : serverErrorMessage(error, t, "chapterOverview.order.failed"),
       );

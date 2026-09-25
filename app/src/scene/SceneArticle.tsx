@@ -15,25 +15,24 @@
 // the route owns both and passes them in, so the live view simply passes
 // nothing.
 
-import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
+import type { CampaignTree, Scene } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
-import { propString, propStringArray } from "@/lib/properties";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
 export function SceneArticle({
-  entry,
+  scene,
   tree,
   variant,
   statusControl,
   actions,
   body,
 }: {
-  entry: EntryResponse;
+  scene: Scene;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
@@ -41,22 +40,18 @@ export function SceneArticle({
   /**
    * Replaces the rendered body — the reading view's edit mode puts its
    * markdown editor here, header and chips keep standing. Nothing
-   * passed means the entry's body, which is what the live view wants.
+   * passed means the scene's body, which is what the live view wants.
    */
   body?: ReactNode;
 }) {
   const t = useT();
   const live = variant === "live";
-  const properties = entry.properties;
-  // A scene carries `title`; `name` and the address are the degrade.
-  const title = propString(properties.title) ?? propString(properties.name) ?? entry.path;
-  // Everything that is not explicitly a contingency reads as a planned
-  // scene (degrade — "planned" is the unmarked case).
-  const isContingency = propString(properties.type) === "contingency";
-  const trigger = propString(properties.trigger);
-  const location = locationName(tree, propString(properties.location));
-  const tags = propStringArray(properties.tags);
-  const handouts = propStringArray(properties.handouts);
+  // A scene without a title of its own shows its id.
+  const title = scene.title === "" ? scene.id : scene.title;
+  const isContingency = scene.type === "contingency";
+  const trigger = scene.trigger === "" ? undefined : scene.trigger;
+  const location = locationName(tree, scene.location);
+  const { tags, handouts } = scene;
 
   return (
     <article className="w-full min-w-0">
@@ -146,7 +141,7 @@ export function SceneArticle({
           </div>
         )
       )}
-      {body ?? <Markdown ifSections={live ? "collapsed" : "open"}>{entry.body}</Markdown>}
+      {body ?? <Markdown ifSections={live ? "collapsed" : "open"}>{scene.body}</Markdown>}
     </article>
   );
 }

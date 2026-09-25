@@ -1,11 +1,10 @@
-// Unit tests for the generator view's derivations: the
-// new-chapter id (numeric prefix + kebab slug), the client-side properties
-// edits a review keeps per draft, the labels — and which
-// state the server's job puts the view in.
+// Unit tests for the generator view's derivations: the new-chapter id
+// (numeric prefix + kebab slug), the changes a review keeps per proposal, the
+// labels — and which state the server's job puts the view in.
 
 import { describe, expect, test } from "bun:test";
 
-import type { GenerateJob } from "@grimoire/shared/types";
+import type { GenerateJob, SceneProposal } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n/format";
 import {
@@ -19,14 +18,14 @@ import {
   chapterIdValue,
   contextHint,
   jobNpcs,
-  jobParts,
+  jobScenes,
   acceptProgress,
   jobProgress,
   locationState,
   openLocations,
   mergeReviewPatch,
-  openParts,
-  partState,
+  openScenes,
+  sceneState,
   reviewOf,
   knowledgeHint,
   generatePhase,
@@ -34,8 +33,7 @@ import {
   hasReviewableParts,
   jobErrorBody,
   jobMode,
-  draftOf,
-  mergeDraftEdits,
+  mergeEdits,
   newChapterId,
   nextChapterPrefix,
   npcState,
@@ -192,40 +190,18 @@ describe("chapterIdValue", () => {
   });
 });
 
-describe("draftOf and mergeDraftEdits", () => {
-  const generated = { properties: { title: "Am Kai", status: "draft" }, body: "## Flow\n" };
-
-  test("the generated draft stands where no edit touched it", () => {
-    expect(draftOf(generated, undefined, undefined)).toEqual(generated);
-    expect(draftOf(generated, { body: "Neu.\n" })).toEqual({
-      properties: generated.properties,
-      body: "Neu.\n",
+describe("mergeEdits", () => {
+  test("a patch merges per id AND per field", () => {
+    const before = { a: { title: "A" } };
+    const after = mergeEdits<Record<string, unknown>>(before, { a: { body: "Text" } });
+    expect(after.a).toEqual({ title: "A", body: "Text" });
+    // A field the patch names replaces its counterpart, `null` included.
+    expect(mergeEdits<Record<string, unknown>>(after, { a: { title: null } }).a).toEqual({
+      title: null,
+      body: "Text",
     });
-  });
-
-  test("the local buffer wins over the edit stored on the job", () => {
-    expect(
-      draftOf(generated, { body: "gespeichert" }, { body: "im Tippen" }).body,
-    ).toBe("im Tippen");
-    // The halves are independent: a body buffer leaves stored properties be.
-    expect(
-      draftOf(generated, { properties: { title: "Am Kai (neu)" } }, { body: "im Tippen" }),
-    ).toEqual({ properties: { title: "Am Kai (neu)" }, body: "im Tippen" });
-  });
-
-  test("a patch merges per address AND per half", () => {
-    const before = { "01-x/a": { properties: { title: "A" } } };
-    const after = mergeDraftEdits(before, { "01-x/a": { body: "Text" } });
-    expect(after["01-x/a"]).toEqual({ properties: { title: "A" }, body: "Text" });
-    // A half the patch carries replaces its counterpart whole.
-    expect(mergeDraftEdits(after, { "01-x/a": { body: "Anders" } })["01-x/a"]).toEqual({
-      properties: { title: "A" },
-      body: "Anders",
-    });
-    // And an untouched address is left alone.
-    expect(mergeDraftEdits(before, { "01-x/b": { body: "B" } })["01-x/a"]).toEqual(
-      before["01-x/a"],
-    );
+    // And an untouched id is left alone.
+    expect(mergeEdits<Record<string, unknown>>(before, { b: { body: "B" } }).a).toEqual(before.a);
   });
 });
 
@@ -415,7 +391,7 @@ describe("jobErrorBody", () => {
       chapter: "01-salzhafen",
       status: "failed",
       startedAt: "2026-08-20T10:00:00.000Z",
-      draftEdits: {},
+      sceneEdits: {},
       error,
     }) as never;
 
@@ -441,7 +417,7 @@ describe("jobErrorBody", () => {
         chapter: "01-salzhafen",
         status: "running",
         startedAt: "2026-08-20T10:00:00.000Z",
-        draftEdits: {},
+        sceneEdits: {},
         npcEdits: {},
       }),
     ).toBeUndefined();
@@ -457,7 +433,7 @@ describe("jobMode", () => {
       campaign: "beispiel",
       status: "done",
       startedAt: "2026-08-20T10:00:00.000Z",
-      draftEdits: {},
+      sceneEdits: {},
       ...(kind === undefined ? {} : { kind }),
     }) as never;
 
@@ -482,7 +458,7 @@ describe("restoredMode", () => {
       kind,
       status: "running",
       startedAt: "2026-08-20T10:00:00.000Z",
-      draftEdits: {},
+      sceneEdits: {},
     }) as never;
 
   test("a job that exists decides the mode — in both directions", () => {
@@ -500,6 +476,21 @@ describe("restoredMode", () => {
 
 // --- the review state on the job -------------------------------------------
 
+/** A proposed scene of a run — only its id matters here. */
+function proposed(id: string): SceneProposal {
+  return {
+    id,
+    title: id,
+    type: "planned",
+    chapter: "01-x",
+    npcs: [],
+    handouts: [],
+    tags: [],
+    status: "draft",
+    body: id,
+  };
+}
+
 describe("review state mapping", () => {
   const job = (over: Partial<GenerateJob> = {}): GenerateJob =>
     ({
@@ -508,14 +499,11 @@ describe("review state mapping", () => {
       kind: "scene",
       status: "done",
       startedAt: "2026-01-01T00:00:00.000Z",
-      draftEdits: {},
+      sceneEdits: {},
       npcEdits: {},
       rev: 0,
       result: {
-        scenes: [
-          { path: "01-x/a", properties: {}, body: "a" },
-          { path: "01-x/b", properties: {}, body: "b" },
-        ],
+        scenes: [proposed("a"), proposed("b")],
         npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
         locations: [],
         warnings: [],
@@ -525,10 +513,10 @@ describe("review state mapping", () => {
 
   test("a payload without a review degrades to „nothing decided yet“", () => {
     expect(reviewOf(job())).toEqual({
-      dropped: [],
+      droppedScenes: [],
       fields: {},
       blocks: {},
-      written: {},
+      writtenScenes: [],
       npcs: {},
       writtenNpcs: [],
       locations: {},
@@ -539,14 +527,14 @@ describe("review state mapping", () => {
 
   test("a patch merges per key — and `null` puts a decision back to open", () => {
     let next = mergeReviewPatch(job(), { npcs: { grella: "accepted" } });
-    next = mergeReviewPatch(next, { edits: { "01-x/a": { body: "typed" } } });
+    next = mergeReviewPatch(next, { sceneEdits: { a: { body: "typed" } } });
     expect(next.review?.npcs).toEqual({ grella: "accepted" });
-    expect(next.draftEdits["01-x/a"]).toEqual({ body: "typed" });
+    expect(next.sceneEdits.a).toEqual({ body: "typed" });
 
     next = mergeReviewPatch(next, { npcs: { grella: null } });
     expect(next.review?.npcs).toEqual({});
-    // The unrelated half is untouched — that is what merging has to mean.
-    expect(next.draftEdits["01-x/a"]).toEqual({ body: "typed" });
+    // The unrelated change is untouched — that is what merging has to mean.
+    expect(next.sceneEdits.a).toEqual({ body: "typed" });
   });
 
   test("`null` clears a field or block decision, mirroring the server", () => {
@@ -563,50 +551,53 @@ describe("review state mapping", () => {
     expect(next.review?.fields).toEqual({});
   });
 
-  test("an npc change merges field by field", () => {
+  test("a scene's and an npc's change merge field by field", () => {
     let next = mergeReviewPatch(job(), { npcEdits: { grella: { role: "Fischerin" } } });
     next = mergeReviewPatch(next, { npcEdits: { grella: { body: "Neu.\n" } } });
     expect(next.npcEdits).toEqual({ grella: { role: "Fischerin", body: "Neu.\n" } });
+    next = mergeReviewPatch(next, { sceneEdits: { a: { title: "Am Kai" } } });
+    next = mergeReviewPatch(next, { sceneEdits: { a: { location: null } } });
+    expect(next.sceneEdits).toEqual({ a: { title: "Am Kai", location: null } });
   });
 
-  test("`dropped` is a set sent whole, not a merge", () => {
+  test("`droppedScenes` is a set sent whole, not a merge", () => {
     const next = mergeReviewPatch(
-      mergeReviewPatch(job(), { dropped: ["01-x/a"] }),
-      { dropped: ["01-x/b"] },
+      mergeReviewPatch(job(), { droppedScenes: ["a"] }),
+      { droppedScenes: ["b"] },
     );
-    expect(next.review?.dropped).toEqual(["01-x/b"]);
+    expect(next.review?.droppedScenes).toEqual(["b"]);
   });
 
   test("a scene is open, written or dropped; a proposed npc open, written or rejected", () => {
     const decided = job({
       review: {
-        dropped: ["01-x/b"],
+        droppedScenes: ["b"],
         fields: {},
         blocks: {},
-        written: { "01-x/a": "01-x/a" },
+        writtenScenes: ["a"],
         npcs: { grella: "rejected" },
         writtenNpcs: [],
         locations: {},
         writtenLocations: [],
       },
     });
-    expect(partState(decided, "01-x/a")).toBe("written");
-    expect(partState(decided, "01-x/b")).toBe("dropped");
+    expect(sceneState(decided, "a")).toBe("written");
+    expect(sceneState(decided, "b")).toBe("dropped");
     expect(npcState(decided, "grella")).toBe("rejected");
     expect(openNpcs(decided)).toEqual([]);
-    expect(partState(job(), "01-x/a")).toBe("open");
+    expect(sceneState(job(), "a")).toBe("open");
     expect(npcState(job(), "grella")).toBe("open");
   });
 
-  test("the scenes of a run by path, its npcs by id — the NPC run's one npc among them", () => {
-    expect(jobParts(job())).toEqual(["01-x/a", "01-x/b"]);
+  test("the scenes and npcs of a run by id — the NPC run's one npc among them", () => {
+    expect(jobScenes(job())).toEqual(["a", "b"]);
     expect(jobNpcs(job())).toEqual(["grella"]);
     const npcRun = job({
       result: undefined,
       kind: "npc",
       npcResult: { npc: { id: "brakk", name: "Brakk", status: "unknown", body: "m" }, warnings: [] },
     });
-    expect(jobParts(npcRun)).toEqual([]);
+    expect(jobScenes(npcRun)).toEqual([]);
     expect(jobNpcs(npcRun)).toEqual(["brakk"]);
   });
 
@@ -614,10 +605,10 @@ describe("review state mapping", () => {
     expect(jobProgress(job())).toEqual({ written: 0, total: 3 });
     const partly = job({
       review: {
-        dropped: [],
+        droppedScenes: [],
         fields: {},
         blocks: {},
-        written: { "01-x/a": "01-x/a" },
+        writtenScenes: ["a"],
         npcs: {},
         writtenNpcs: ["grella"],
         locations: {},
@@ -625,14 +616,14 @@ describe("review state mapping", () => {
       },
     });
     expect(jobProgress(partly)).toEqual({ written: 2, total: 3 });
-    expect(openParts(partly)).toEqual(["01-x/b"]);
+    expect(openScenes(partly)).toEqual(["b"]);
     expect(npcState(partly, "grella")).toBe("written");
   });
 
   test("a proposed location is decided, written and counted by its id", () => {
     const withLocation = job({
       result: {
-        scenes: [{ path: "01-x/a", properties: {}, body: "a" }],
+        scenes: [proposed("a")],
         npcs: [],
         locations: [{ id: "alte-mole", name: "Alte Mole", body: "m" }],
         warnings: [],
@@ -657,17 +648,17 @@ describe("review state mapping", () => {
   test("a dropped or rejected part is not part of the rest", () => {
     const decided = job({
       review: {
-        dropped: ["01-x/b"],
+        droppedScenes: ["b"],
         fields: {},
         blocks: {},
-        written: {},
+        writtenScenes: [],
         npcs: { grella: "rejected" },
         writtenNpcs: [],
         locations: {},
         writtenLocations: [],
       },
     });
-    expect(openParts(decided)).toEqual(["01-x/a"]);
+    expect(openScenes(decided)).toEqual(["a"]);
     expect(openNpcs(decided)).toEqual([]);
   });
 });
@@ -687,7 +678,7 @@ describe("the run's parts", () => {
       chapter: "01-salzhafen",
       status: "running",
       startedAt: "2026-09-15T10:00:00.000Z",
-      draftEdits: {},
+      sceneEdits: {},
       npcEdits: {},
       pipeline: {
         parts: statuses.map((status, i) => ({
@@ -779,19 +770,16 @@ describe("the run's parts", () => {
     // Two of three parts answered, and the DM took one of them.
     const run = job(["done", "done", "running"], {
       result: {
-        scenes: [
-          { path: "01-salzhafen/s0", properties: {}, body: "a" },
-          { path: "01-salzhafen/s1", properties: {}, body: "b" },
-        ],
+        scenes: [proposed("s0"), proposed("s1")],
         npcs: [],
         locations: [],
         warnings: [],
       },
       review: {
-        dropped: [],
+        droppedScenes: [],
         fields: {},
         blocks: {},
-        written: { "01-salzhafen/s0": "01-salzhafen/s0" },
+        writtenScenes: ["s0"],
         npcs: {},
         writtenNpcs: [],
         locations: {},
@@ -810,16 +798,16 @@ describe("the run's parts", () => {
     // of the outline — the total never falls below what is written.
     const withNpc = job(["done"], {
       result: {
-        scenes: [{ path: "01-salzhafen/s0", properties: {}, body: "a" }],
+        scenes: [proposed("s0")],
         npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
         locations: [],
         warnings: [],
       },
       review: {
-        dropped: [],
+        droppedScenes: [],
         fields: {},
         blocks: {},
-        written: { "01-salzhafen/s0": "01-salzhafen/s0" },
+        writtenScenes: ["s0"],
         npcs: { grella: "accepted" },
         writtenNpcs: ["grella"],
         locations: {},

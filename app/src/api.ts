@@ -2,13 +2,12 @@
 // its route, in its resource's module server/src/routes/<resource>.ts). All
 // response shapes come from @grimoire/shared — the format contract exists
 // exactly once. An entity with a slice of its own keeps its client there
-// (npc/npc-api.ts, location/location-api.ts), built from the HTTP helpers
-// exported here.
+// (scene/scene-api.ts, npc/npc-api.ts, location/location-api.ts), built from
+// the HTTP helpers exported here.
 
 import type {
   CampaignSummary,
   CampaignTree,
-  DraftEdit,
   EntryResponse,
   GenerateJob,
   GenerateJobStarted,
@@ -19,6 +18,7 @@ import type {
   KnowledgeEntry,
   KnowledgeResponse,
   NpcChange,
+  SceneChange,
   SceneOrderResponse,
   SearchResponse,
   SessionResponse,
@@ -308,10 +308,6 @@ export function threadsConflict(error: unknown): ThreadsResponse | undefined {
  * answers 409 with its current version AND the current entry — `revConflict`
  * reads both out. `force: true` writes the given fields on top of the current
  * row instead, which is the deliberate force action of the conflict UI.
- *
- * A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
- * name an entry that exists; the server answers 400 with the code the app
- * turns into its "create it first" sentence and writes nothing.
  *
  * Defined here rather than in @grimoire/shared until the shared package
  * carries the request type.
@@ -625,18 +621,6 @@ export function createChapter(
   });
 }
 
-/** A new scene in an EXISTING chapter (the server 400s on an unknown one). */
-export function createScene(
-  campaign: string,
-  input: { title: string; chapter: string; id?: string },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/scenes`, {
-    title: input.title,
-    chapter: input.chapter,
-    ...(input.id === undefined ? {} : { id: input.id }),
-  });
-}
-
 // --- generator ---------------------------------------------------------------
 
 /**
@@ -670,52 +654,6 @@ export function startGenerateJob(
 }
 
 /**
- * Start an augment run from a scene's augment action: a scene that already
- * exists plus source material and/or an instruction, and the model proposes
- * the filled-in version. Same job model as the create runs (`startJob`), the
- * proposal is fetched via fetchGenerateJob (`kind: "augment"`,
- * `augmentResult`); an adopted running job simply owns the review.
- *
- * At least one of sourceText/instruction has to carry text; the dialog
- * enforces it and the server answers 400 for the rest.
- */
-export function startAugmentJob(
-  campaign: string,
-  input: { path: string; sourceText?: string; instruction?: string },
-): Promise<GenerateJobStarted> {
-  return startJob(`${campaignPath(campaign)}/generate/augment`, {
-    path: input.path,
-    ...runTexts(input),
-  });
-}
-
-/**
- * Accept a reviewed scene proposal: the properties fields the
- * DM took and the body they assembled from the accepted blocks, written in
- * ONE transaction against `rev`. A 409 is the ordinary conflict protocol
- * (ADR #4) and arrives as ApiError — the caller re-reads and tries again.
- * `jobId` discards the job in the same transaction.
- */
-export function applyAugment(
-  campaign: string,
-  input: {
-    path: string;
-    rev: number;
-    properties?: Record<string, unknown>;
-    body?: string;
-    jobId?: string;
-  },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/generate/augment/apply`, {
-    path: input.path,
-    rev: input.rev,
-    ...(input.properties === undefined ? {} : { properties: input.properties }),
-    ...(input.body === undefined ? {} : { body: input.body }),
-    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
-  });
-}
-
-/**
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:
@@ -743,9 +681,9 @@ export async function deleteGenerateJob(campaign: string): Promise<void> {
 
 /**
  * Store part of the REVIEW STATE on the job. Everything merges,
- * so this sends only what changed: the text of the scene draft or the fields
- * of the proposed npc being typed in (debounced by the caller), the decision
- * that was just made, the drops.
+ * so this sends only what changed: the fields of the proposed scene or npc
+ * being typed in (debounced by the caller), the decision that was just made,
+ * the drops.
  *
  * `rev` is the job's review rev as the caller read it — a 409
  * `rev_conflict` (with the current rev in `ApiError.details`) means a second
@@ -756,11 +694,11 @@ export async function patchJobReview(
   jobId: string,
   rev: number,
   patch: {
-    edits?: Record<string, DraftEdit>;
+    sceneEdits?: Record<string, SceneChange>;
     npcEdits?: Record<string, NpcChange>;
     npcs?: Record<string, "accepted" | "rejected" | null>;
     locations?: Record<string, "accepted" | "rejected" | null>;
-    dropped?: string[];
+    droppedScenes?: string[];
     fields?: Record<string, boolean | null>;
     blocks?: Record<string, boolean | null>;
   },
@@ -776,17 +714,15 @@ export async function patchJobReview(
 }
 
 /**
- * Accept PART of a finished run: one scene (`paths`), one proposed npc
- * (`npcs`, by id — the NPC run's one npc among them) or one proposed location
- * (`locations`, by id), or all of them when nothing is selected.
- * Answers what it wrote (draft path -> the address it landed at, and the ids
- * of the written npcs and locations) and whether the job is gone because
- * nothing is open any more. `rev` is the review rev as the caller read it: a
+ * Accept PART of a finished run: one proposed scene (`scenes`), npc (`npcs` —
+ * the NPC run's one npc among them) or location (`locations`), each by id, or
+ * all of them when nothing is selected. Answers the ids it wrote, per entity,
+ * and whether the job is gone because nothing is open any more. `rev` is the review rev as the caller read it: a
  * 409 `rev_conflict` means another tab decided in between and nothing was
  * written. A 409 with `details.conflicts` is the ordinary write conflict.
  */
 export interface AcceptedParts {
-  written: Record<string, string>;
+  scenes: string[];
   npcs: string[];
   locations: string[];
   jobDeleted: boolean;
@@ -797,7 +733,7 @@ export function acceptJobParts(
   jobId: string,
   rev: number,
   input: {
-    paths?: string[];
+    scenes?: string[];
     npcs?: string[];
     locations?: string[];
     chapter?: string;
@@ -807,7 +743,7 @@ export function acceptJobParts(
   const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
   return postJson<AcceptedParts>(path, {
     rev,
-    ...(input.paths === undefined ? {} : { paths: input.paths }),
+    ...(input.scenes === undefined ? {} : { scenes: input.scenes }),
     ...(input.npcs === undefined ? {} : { npcs: input.npcs }),
     ...(input.locations === undefined ? {} : { locations: input.locations }),
     ...(input.chapter === undefined || input.chapterTitle === undefined

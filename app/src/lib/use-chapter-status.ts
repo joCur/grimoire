@@ -35,9 +35,9 @@ export function useChapterStatusMutation(
    */
   current?: ChapterStatus | undefined,
 ): ChapterStatusMutation {
-  const mutation: RevWriteMutation<ChapterStatus> = useRevWriteMutation<ChapterStatus>({
+  const mutation: RevWriteMutation<ChapterStatus> = useRevWriteMutation({
     write: (status) => writeChapterStatus(campaign, chapter, status, rev),
-    entryKey: ["entry", campaign, chapterMetaPath(chapter)],
+    rowKey: ["entry", campaign, chapterMetaPath(chapter)],
     invalidateOnSuccess: [
       // Both chapters moved — the whole entry cache, not one of them.
       ["entry", campaign],

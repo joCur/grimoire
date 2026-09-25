@@ -2,18 +2,17 @@
 // companion of write-with-rev.ts, and the one place that knows how a write
 // touches the cache.
 //
-// The server is the truth: the write sends the rev of the EntryResponse
-// the UI is showing and seeds the RETURNED entry into the cache — the cache is
-// never written with a guessed value, and never invalidated for an entry the
-// server just handed us. A 409 means nothing was written: the quiet inline
-// message appears, the re-read entry is seeded, and the next attempt carries
-// the fresh rev.
+// The server is the truth: the write sends the rev of the row the UI is
+// showing and seeds the RETURNED row into the cache — the cache is never
+// written with a guessed value, and never invalidated for a row the server
+// just handed us. A 409 means nothing was written: the quiet inline message
+// appears, the re-read row is seeded, and the next attempt carries the fresh
+// rev.
 //
 // Everything that legitimately differs per path is a parameter: the write
-// itself, the entry query key to seed, WHICH queries a successful write
+// itself, the query key of the row to seed, WHICH queries a successful write
 // invalidates (the paths deliberately differ) and the error wording.
 
-import type { EntryResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
@@ -21,7 +20,7 @@ import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import {
-  STALE_FILE_MESSAGE,
+  STALE_MESSAGE,
   WRITE_FAILED_MESSAGE,
   type RevWriteResult,
 } from "@/lib/write-with-rev";
@@ -40,20 +39,20 @@ export interface RevWriteMutation<TVariables> {
   message?: string | undefined;
 }
 
-export interface RevWriteOptions<TVariables> {
+export interface RevWriteOptions<TVariables, T> {
   /**
    * The domain write — a `writeWithRev` call with its payload built.
    * `undefined` means there is nothing to write against yet (no rev, see
    * `withRev`): `write()` then does nothing at all.
    */
-  write: ((variables: TVariables) => Promise<RevWriteResult>) | undefined;
+  write: ((variables: TVariables) => Promise<RevWriteResult<T>>) | undefined;
   /**
-   * Query key of the written entry. Whatever came back — the written entry, or
-   * the re-read one after a conflict — is seeded here. NOT invalidated: both
-   * write endpoints answer with the same payload as GET /entry, so the entry
-   * in the cache is already the server's truth.
+   * Query key of the written row. Whatever came back — the written row, or
+   * the re-read one after a conflict — is seeded here. NOT invalidated: a
+   * write answers with the same payload its GET does, so the row in the cache
+   * is already the server's truth.
    */
-  entryKey: QueryKey;
+  rowKey: QueryKey;
   /**
    * Invalidated after a SUCCESSFUL write only, in order. Each write path has
    * its own set (a body write feeds tree and search, a status patch only the
@@ -73,20 +72,20 @@ export interface RevWriteOptions<TVariables> {
   /** Runs after a SUCCESSFUL write — where a dialog closes or a mode ends. */
   onSaved?: () => void;
   /**
-   * Runs after a CONFLICT with the re-read entry (undefined when even the
+   * Runs after a CONFLICT with the re-read row (undefined when even the
    * reload failed), for callers that hold their own base version.
    */
-  onConflict?: (entry: EntryResponse | undefined) => void;
+  onConflict?: (row: T | undefined) => void;
 }
 
-export function useRevWriteMutation<TVariables>({
+export function useRevWriteMutation<TVariables, T>({
   write,
-  entryKey,
+  rowKey,
   invalidateOnSuccess = [],
   errorMessage = WRITE_FAILED_MESSAGE,
   onSaved,
   onConflict,
-}: RevWriteOptions<TVariables>): RevWriteMutation<TVariables> {
+}: RevWriteOptions<TVariables, T>): RevWriteMutation<TVariables> {
   const t = useT();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string>();
@@ -108,12 +107,12 @@ export function useRevWriteMutation<TVariables>({
       inFlight.current = false;
     },
     onSuccess: (result) => {
-      // Whatever the server sent back — the written entry, or the re-read one
+      // Whatever the server sent back — the written row, or the re-read one
       // after a conflict — is the new truth for this path.
-      if (result.entry !== undefined) queryClient.setQueryData(entryKey, result.entry);
+      if (result.row !== undefined) queryClient.setQueryData(rowKey, result.row);
       if (!result.ok) {
-        setMessage(t(STALE_FILE_MESSAGE));
-        onConflict?.(result.entry);
+        setMessage(t(STALE_MESSAGE));
+        onConflict?.(result.row);
         return;
       }
       for (const queryKey of invalidateOnSuccess) {

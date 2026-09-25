@@ -1,6 +1,6 @@
 // React-query half of the scene-status control.
 //
-// The cache/409 mechanics are the shared envelope in use-rev-write.ts, the
+// The cache/409 mechanics are the shared envelope in lib/use-rev-write.ts, the
 // "is there a rev to write against at all?" gate is `withRev`; what belongs to
 // the status control is here: the tree invalidation (chapter overview rows,
 // live nav and search read the status from there) and the target value shown
@@ -9,9 +9,11 @@
 
 import type { SceneStatus } from "@grimoire/shared/types";
 
-import { writeSceneStatus } from "@/lib/scene-status";
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 import { withRev } from "@/lib/write-with-rev";
+
+import { sceneKey } from "./scene-query";
+import { writeSceneStatus } from "./scene-status";
 
 export interface SceneStatusMutation {
   /** Start a write; ignored while another one is in flight. */
@@ -24,12 +26,12 @@ export interface SceneStatusMutation {
 
 export function useSceneStatusMutation(
   campaign: string,
-  path: string,
+  id: string,
   rev: number | undefined,
 ): SceneStatusMutation {
-  const { write, pendingVariables, message } = useRevWriteMutation<SceneStatus>({
-    write: withRev(rev, (status, rev) => writeSceneStatus(campaign, path, rev, status)),
-    entryKey: ["entry", campaign, path],
+  const { write, pendingVariables, message } = useRevWriteMutation({
+    write: withRev(rev, (status: SceneStatus, rev) => writeSceneStatus(campaign, id, rev, status)),
+    rowKey: sceneKey(campaign, id),
     // The status lives in the tree as well (chapter overview rows, live nav, search).
     invalidateOnSuccess: [["tree", campaign]],
     errorMessage: "write.status.failed",

@@ -46,17 +46,21 @@ import {
 const t = translator("de");
 
 const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
-const ARRIVAL = "scene-lighthouse-arrival.json";
-const SMUGGLERS = "scene-smuggler-captured.json";
+const ARRIVAL = "scenes/lighthouse-arrival.json";
+const SMUGGLERS = "scenes/smuggler-captured.json";
 
 /** The fixture entry as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
   return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
 }
 
+/** Every fixture that carries a body — the campaign's own files and its scenes, npcs and locations. */
 function fixtureFiles(): string[] {
-  return readdirSync(FIXTURES, { encoding: "utf8" })
-    .filter((name) => name.endsWith(".json"))
+  const inDir = (dir: string): string[] =>
+    readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => `${dir}${name}`);
+  return [...inDir(""), ...inDir("scenes/"), ...inDir("npcs/"), ...inDir("locations/")]
     .filter((name) => fixture(name).body !== undefined)
     .sort();
 }

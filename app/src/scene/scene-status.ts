@@ -1,22 +1,22 @@
-// Scene status: the labels/colors the chapter overview and the reading view
-// share, the request of the status write, and the write itself (the
-// rev conflict is the shared protocol in write-with-rev.ts).
+// Scene status: the labels/colors the chapter overview, the reading view and
+// the session view share, the request of the status write, and the write
+// itself (the rev conflict is the shared protocol in lib/write-with-rev.ts).
 //
-// The LABEL comes from the catalog, and the translator is PASSED IN — this
-// module must not decide which language the UI is in
-// (CLAUDE.md/i18n/index.ts: the lib layer takes `Translate` as a parameter).
+// The LABEL comes from the catalog, and the translator is PASSED IN — a pure
+// helper never decides which language the UI is in (ADR #15).
 // The colors stay here: they are design tokens, not copy.
 //
 // `scenes.status` is a CHECK constraint of its column, so the database cannot
 // hold anything else (ADR #25) and the value is one of the four everywhere
 // below — there is no foreign value to render.
 
-import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
+import { SCENE_STATUSES } from "@grimoire/shared/scene";
+import type { Scene, ScenePatch, SceneStatus } from "@grimoire/shared/types";
 
-import { fetchEntry, patchEntry, type PatchEntryRequest } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
-import { propString } from "@/lib/properties";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
+
+import { fetchScene, patchScene } from "./scene-api";
 
 /** Catalog key + dot/text colors per design/README.md. */
 const SCENE_STATUS_META: Record<
@@ -29,19 +29,6 @@ const SCENE_STATUS_META: Record<
   dropped: { key: "status.scene.dropped", dot: "bg-faint", text: "text-muted-foreground" },
 };
 
-/** Default of a scene without a stored status — what every creation path writes. */
-export const SCENE_STATUS_DEFAULT: SceneStatus = "draft";
-
-/**
- * The status of a scene entry, read out of its untyped `properties` bag. This
- * is the one place a status crosses into the app as a bare value, so the
- * narrowing sits here: the column admits nothing but the four (ADR #25), and
- * an entry without a status reads as the default.
- */
-export function sceneStatusOf(properties: Record<string, unknown>): SceneStatus {
-  return (propString(properties.status) as SceneStatus | undefined) ?? SCENE_STATUS_DEFAULT;
-}
-
 /** Label + colors for a status value. */
 export function sceneStatusMeta(
   status: SceneStatus,
@@ -52,8 +39,8 @@ export function sceneStatusMeta(
 }
 
 /**
- * The four selectable options — SCENE_STATUSES from @grimoire/shared is the
- * single source (and already in lifecycle order: draft → ready → played →
+ * The four selectable options — SCENE_STATUSES from @grimoire/shared/scene is
+ * the single source (and already in lifecycle order: draft → ready → played →
  * dropped), so a format change lands here without a second list. A FUNCTION
  * rather than a constant: the labels depend on the UI language, so they cannot
  * be a module constant evaluated once at import time.
@@ -76,24 +63,24 @@ export function isSceneDone(status: SceneStatus): boolean {
   return DONE_STATUSES.has(status);
 }
 
-/** Request of the status write — the rev comes from the EntryResponse on screen. */
-export function sceneStatusPatchBody(rev: number, status: SceneStatus): PatchEntryRequest {
-  return { rev, properties: { status } };
+/** Request of the status write — the rev comes from the scene on screen. */
+export function sceneStatusPatchBody(rev: number, status: SceneStatus): ScenePatch {
+  return { rev, status };
 }
 
 /**
- * Write `status` into the entry's properties. The 409 handling — nothing
- * written, re-read once so the next attempt carries the fresh rev — is the
- * shared protocol of write-with-rev.ts. Every other failure throws.
+ * Write the scene's `status`. The 409 handling — nothing written, re-read
+ * once so the next attempt carries the fresh rev — is the shared protocol of
+ * lib/write-with-rev.ts. Every other failure throws.
  */
 export function writeSceneStatus(
   campaign: string,
-  path: string,
+  id: string,
   rev: number,
   status: SceneStatus,
-): Promise<RevWriteResult> {
+): Promise<RevWriteResult<Scene>> {
   return writeWithRev(
-    () => patchEntry(campaign, path, sceneStatusPatchBody(rev, status)),
-    () => fetchEntry(campaign, path),
+    () => patchScene(campaign, id, sceneStatusPatchBody(rev, status)),
+    () => fetchScene(campaign, id),
   );
 }

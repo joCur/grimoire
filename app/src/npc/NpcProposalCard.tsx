@@ -125,7 +125,7 @@ function NpcProposalEditor({
   onFlush: () => void;
 }) {
   const t = useT();
-  const path = npcLabel(npc.id);
+  const label = npcLabel(npc.id);
   const [values, setValues] = useState<NpcFormValues>(() => npcFormValues(npc));
   const edit = (next: NpcFormValues): void => {
     setValues(next);
@@ -133,11 +133,11 @@ function NpcProposalEditor({
   };
   return (
     <div className="mt-3 flex flex-col gap-4">
-      <DraftFieldsSection path={path}>
+      <DraftFieldsSection label={label}>
         <NpcFields values={values} issues={npcFormIssues(values, t)} tree={tree} onChange={edit} />
       </DraftFieldsSection>
       <DraftBodySection
-        path={path}
+        label={label}
         body={npc.body}
         beside={
           <NpcMotivationField
