@@ -18,22 +18,22 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   die die API spricht (`{ kind, properties, body }`, dazu `log` als **Zeilen**
   `{ at, sceneId?, text, reviewed? }` für eine Session, `entries` für
   Eingang und Glossar und `threads` als Zeilen `{ text, done? }` für die
-  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Ein NPC
-  und ein Ort sind je eine eigene Ressource (ADR #31) und liegen als
-  `npcs/<id>.json` bzw. `locations/<id>.json`: der NPC bzw. Ort selbst, alle
-  Felder flach, `body` eines davon, ohne `kind` und ohne `rev`. Ein Test, der
-  Inhalte
-  braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
-  eigenen Kopie des Verzeichnisses:
-  `test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } }, without: ["session-2026-01-15"] } })`.
+  offenen Fäden eines Kapitels — auch dort Zeilen, kein Markdown). Eine
+  Szene, ein NPC und ein Ort sind je eine eigene Ressource (ADR #31) und
+  liegen als `scenes/<id>.json`, `npcs/<id>.json` bzw. `locations/<id>.json`:
+  die Szene, der NPC bzw. Ort selbst, alle Felder flach, `body` eines davon,
+  ohne `kind` und ohne `rev`. Ein Test, der Inhalte braucht, die die
+  Beispielkampagne nicht hat, überschreibt sie in seiner eigenen Kopie des
+  Verzeichnisses:
+  `test.use({ seed: { entries: { "scenes/loot-check": { id: "loot-check", … } }, without: ["session-2026-01-15"] } })`.
   Die Schlüssel sind **Dateinamen ohne `.json`**: ein Name, den
   `fixtures/beispiel` schon hat, ERSETZT diesen Eintrag, jeder andere legt
-  einen dazu; ein NPC hat den Namen `npcs/<id>`, ein Ort `locations/<id>`.
-  Die Adresse vergibt der Server
-  (`server/src/store/paths.ts`) — sie ist etwas anderes als der Fixture-Name
-  (`campaign`, `01-salzhafen`, `01-salzhafen/leuchtturm/…`). Ohne Überschreibung
-  wird die geteilte pristine Kopie direkt benutzt (niemand schreibt hinein),
-  die meisten Tests kopieren also gar nichts.
+  einen dazu; eine Szene hat den Namen `scenes/<id>`, ein NPC `npcs/<id>`,
+  ein Ort `locations/<id>`. Kampagne und Kapitel haben eine Adresse, die der
+  Server vergibt (`server/src/store/paths.ts`) — sie ist etwas anderes als der
+  Fixture-Name (`campaign`, `01-salzhafen`). Ohne Überschreibung wird die
+  geteilte pristine Kopie direkt benutzt (niemand schreibt hinein), die
+  meisten Tests kopieren also gar nichts.
 - **Eine Referenz zeigt auf etwas, das existiert.** Eine Szene, die einen
   Ort oder NPC nennt, den es nicht gibt, lässt den Seed-Lauf
   scheitern (ADR #19) — das ist ein Fehler im Fixture, keine Degradierung.
@@ -42,34 +42,37 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   (Pfad 10).
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
   Zusicherung wirklich die Speicherung meint, über `db`.
-- **Eine Adresse ist kein Fixture-Name**; das letzte Segment einer Szene ist
-  ihre `id`.
-- **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
-  Eintrags `properties`. Ein veraltetes `rev` antwortet mit 409
-  `rev_conflict` und trägt den aktuellen Eintrag mit.
-- **Ein Entwurf des Generators ist ein Paar aus `properties` und `body`**
-  (ADR #24) — auf der Leitung `{ path, properties, body }`, ein Feld
-  `markdown` gibt es nicht. Änderungen des Prüfschritts reisen **je Hälfte**:
-  `edits: { "<adresse>": { properties?, body? } }` im Review-PATCH,
-  `draftEdits` in derselben Form am Job. Die genannte Hälfte ersetzt die des
-  Entwurfs vollständig, die andere bleibt die des Modells; eine unberührte
-  Hälfte wird nie mitgeschickt. Nichts in der Suite — Stub und Fixtures
-  eingeschlossen — baut aus den Hälften einen Text oder liest einen zurück.
-- **Ein Eintrag hat EINEN Schreibweg** (ADR #23):
-  `PATCH /api/campaigns/:campaign/entries/<adresse>` mit
-  `{ rev, properties?, body?, force? }`. Eigenschaften und Text zusammen sind
-  **ein** Schreibvorgang gegen **einen** `rev` — ein Schritt der
-  Zeilenversion, egal wie viel die Anfrage trug. `PATCH /properties` und
-  `PUT /entries/<adresse>` gibt es nicht mehr.
+- **Eine Adresse ist kein Fixture-Name**, und eine Szene hat keine: sie
+  antwortet unter `…/scenes/<id>` (`api.scene(id)`), ihre frühere Adresse
+  `…/entries/<kapitel>/…/<id>` ist ein 404.
+- **Das Wächter-Token heißt `rev`** (die Zeilenversion). Ein veraltetes `rev`
+  antwortet mit 409 `rev_conflict` und trägt den aktuellen Stand mit — bei
+  einer Szene unter `scene`, bei Kampagne und Kapitel unter `entry` (deren
+  Felder heißen auf der Leitung noch `properties`).
+- **Eine vorgeschlagene Szene des Generators ist die Szene ohne `rev`**
+  (ADR #31) — auf der Leitung `result.scenes`, jede mit ihrer `id`, alle
+  Felder flach. Änderungen des Prüfschritts reisen **je Szene und je Feld**:
+  `sceneEdits: { "<id>": { title?, …, body? } }` im Review-PATCH und am Job;
+  ein genanntes Feld ersetzt den Wert des Modells, `null` leert
+  `trigger`/`location`, jedes andere Feld bleibt das des Modells. Verworfen
+  und geschrieben wird je `id` (`droppedScenes`, `writtenScenes`), das
+  Übernehmen nimmt `scenes: [<id>]`.
+- **Eine Szene hat EINEN Schreibweg**: `PATCH …/scenes/<id>` mit
+  `{ rev, force?, …Teilmenge der Felder }` (`api.patchScene`). Felder und
+  Text zusammen sind **ein** Schreibvorgang gegen **einen** `rev` — ein
+  Schritt der Zeilenversion, egal wie viel die Anfrage trug. Ein Feld, das
+  eine Szene nicht hat, ist eine 400, die es nennt. Kampagne und Kapitel
+  schreiben über `PATCH …/entries/<adresse>` mit `{ rev, properties?, body?,
+  force? }` (`api.patchEntry`).
 - **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
-  Pfad 9 schreibt über die API (`api.writeBody`, `api.patchProperties` oder
-  `api.patchEntry` für beides in einer Anfrage), während der Editor offen
-  steht, danach speichert die UI — und muss die Konfliktzeile mit ihren zwei
-  Aktionen zeigen statt still zu überschreiben. Genauso in `status-control`,
-  `properties-form` und `block-composer`.
-- **Weil Eigenschaften und Text eine Zeile teilen, ist ein reiner
-  Eigenschaften-Write auch für einen offenen Texteditor ein Konflikt.** Es
-  gibt keine „textneutrale" Änderung, die eine Oberfläche still übernimmt.
+  Pfad 9 schreibt über die API (`api.patchScene`, für Kampagne und Kapitel
+  `api.writeBody`, `api.patchProperties` oder `api.patchEntry`), während der
+  Editor offen steht, danach speichert die UI — und muss die Konfliktzeile
+  mit ihren zwei Aktionen zeigen statt still zu überschreiben. Genauso in
+  `status-control`, `properties-form` und `block-composer`.
+- **Weil alle Felder einer Szene eine Zeile teilen, ist ein reiner
+  Status-Write auch für einen offenen Texteditor ein Konflikt.** Es gibt
+  keine „textneutrale" Änderung, die eine Oberfläche still übernimmt.
 - **Die Konfliktzeile ist geteilt** (`EditConflict`) und das **einzige**
   `role="alert"` der App — Specs greifen sie darum über die Rolle, nicht über
   ihren Text: die Meldung des Status-Reglers beginnt mit denselben Worten.
@@ -84,42 +87,40 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   liest, schaltet erneut auf „Markdown" um, ohne den Bearbeiten-Modus zu
   verlassen.
 
-## Ort = Adresse, Reihenfolge = eigene Liste
+## Szene = eigene Ressource, Reihenfolge = eigene Liste
 
-Der `location` einer Szene ist ihre **Adresse**, keine Gliederung über ihr:
-die Kapitelübersicht ist eine durchgehende Liste in der Reihenfolge, die der
-DM setzt (ADR #27), und der Ort steht mit seinem Namen in der Metazeile der
-Zeile. Für die Suite heißt das vier Dinge:
+Eine Szene ist ihre eigene Ressource (ADR #31): sie liegt flach unter ihrer
+Kampagne, ihr Kapitel und ihr Ort sind Felder, und die App liest sie unter
+`/campaigns/:c/scenes/<id>`. Die Kapitelübersicht ist eine durchgehende
+Liste in der Reihenfolge, die der DM setzt (ADR #27), und der Ort steht mit
+seinem Namen in der Metazeile der Zeile. Für die Suite heißt das vier Dinge:
 
-- **Die Adressen der Beispielszenen folgen ihrem Ort.** Die beiden Szenen
-  nennen verschiedene Orte, also lauten die Adressen
-  `01-salzhafen/leuchtturm/lighthouse-arrival` und
-  `01-salzhafen/bucht/smuggler-captured`; der Fixture-Name spielt dabei keine
-  Rolle. Beide Orte gibt es als eigene Ressource
-  (`…/locations/leuchtturm`, `…/locations/bucht`; `api.location(id)`) — eine
-  Referenz legt nichts an (ADR #19) —, die Kampagne hat also **zwei** Orte.
-  Ein Ort hat keine Eintrags-Adresse: `…/entries/locations/<id>` ist ein 404.
-  Ebenso hat ein NPC keine: seine Eintrags-Adresse ist ein 404, der NPC
-  antwortet unter `…/npcs/<id>` (`api.npc(id)`).
-- **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
-  Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
-  App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
-  `true` — wer prüfen will, WO eine Szene liegt, fragt
-  `(await api.entry(rel)).path`.
-- **Der Generator vergibt keine Pfade.** Der Prüfschritt adressiert eine
-  Szene als `<kapitel>/<id>` (`DRAFT_PATH` in den Specs), geschrieben wird
-  sie unter `<kapitel>/<location>/<id>` (`SCENE_PATH`). Die Fixture-Antwort
-  setzt `location: bucht` und schlägt diesen Ort im selben Lauf vor — genau
-  das prüft Pfad 6.
+- **Eine Szene wird über ihre `id` angesprochen**, egal wo sie liegt:
+  `api.scene("lighthouse-arrival")`, `api.sceneExists(id)`,
+  `api.scenePath(id?)` für rohe Aufrufe. Beide Orte der Beispielkampagne
+  gibt es als eigene Ressource (`…/locations/leuchtturm`, `…/locations/bucht`;
+  `api.location(id)`) — eine Referenz legt nichts an (ADR #19) —, die
+  Kampagne hat also **zwei** Orte. Eine Szene, ein NPC und ein Ort haben
+  keine Eintrags-Adresse: `…/entries/<kapitel>/…/<id>`,
+  `…/entries/npcs/<id>` und `…/entries/locations/<id>` sind ein 404.
+- **Ein neuer Ort oder ein neues Kapitel ändert kein Feld der Route.** Die
+  Szene bleibt unter `…/scenes/<id>`; wechselt sie das Kapitel, steht sie am
+  Ende des Zielkapitels (Pfad 10, `cold-start`).
+- **Der Generator benennt eine Szene mit ihrem Ressourcen-Segment**: der
+  Prüfschritt und die Liste des Geschriebenen zeigen `scenes/<id>`, und eine
+  geschriebene Szene verlinkt auf `/campaigns/:c/scenes/<id>`. Die
+  Fixture-Antwort setzt `location: raeucherkammer` und schlägt diesen Ort im
+  selben Lauf vor — genau das prüft Pfad 6.
 - **Die Reihenfolge ist gesetzt, nicht abgeleitet.** Der Seed-Lauf hängt jede
-  Szene ans Ende ihres Kapitels, in der Reihenfolge, in der er die
-  Fixture-Quellen liest — alphabetisch nach ihrem Namen ohne `.json`; ein
-  Spec, dessen Zusicherung von der Reihenfolge abhängt, sagt die gemeinte
-  deshalb selbst an —
+  Szene ans Ende ihres Kapitels, in der Reihenfolge, in der er `scenes/`
+  liest — alphabetisch nach der `id`; ein Spec, dessen Zusicherung von der
+  Reihenfolge abhängt, wählt seine ids danach oder sagt die gemeinte
+  Reihenfolge selbst an —
   `PUT …/chapters/<kapitel>/scene-order` mit `{ scenes, rev }`, wobei `rev`
   der `sceneOrderRev` des `ChapterNode` ist. Dieser Wächter zählt nur die
   Writes dieser Liste: ein Umsortieren bewegt weder `scenes.rev` noch
-  `chapters.rev` und ist deshalb für keinen offenen Editor ein Konflikt.
+  `chapters.rev` und ist deshalb für keinen offenen Editor ein Konflikt — und
+  umgekehrt bewegt der `PATCH` einer Szene `scene_order_rev` nicht.
   Adressiert werden die Zeilen über ihre Hoch/Runter-Schalter, die den Titel
   im zugänglichen Namen tragen (`„<Titel>“ nach oben`).
 
@@ -161,7 +162,7 @@ support/test.ts          das `test` der Suite: eigene Datenbank + eigener
 support/procs.ts         verwaltete Kindprozesse (Start, Warten, Stoppen)
 fixtures/stub-llm.ts     standalone LLM-Stub (auch einzeln startbar)
 fixtures/replies.ts      die kanonischen Modellantworten
-fixtures/*.json          Einträge, die einzelne Specs dazusäen
+fixtures/*.json          Szenen, die einzelne Specs dazusäen
 tests/*.e2e.ts           ein Spec pro kritischem Pfad (Zuordnung unten)
 ```
 
@@ -173,21 +174,23 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
 
 **Die zwei Zusicherungs-Helfer:**
 
-- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.entry(rel)` (der Eintrag:
-  `properties`, `body`, `rev`), `api.body`, `api.properties`,
-  `api.exists`, `api.get`/`api.send` und der Schreibweg `api.patchEntry(rel,
-  { rev?, properties?, body?, force? })`. Ohne `rev` holt er sich frisch ein
-  Token und spielt damit den „zweiten Schreiber"; `api.writeBody` und
-  `api.patchProperties` sind die zwei bequemen Fälle davon und geben das neue
-  Token zurück.
+- `api` — getippte Aufrufe gegen den Server dieses Tests. Für Kampagne und
+  Kapitel: `api.entry(rel)` (der Eintrag: `properties`, `body`, `rev`),
+  `api.body`, `api.properties`, `api.exists`, `api.get`/`api.send` und der
+  Schreibweg `api.patchEntry(rel, { rev?, properties?, body?, force? })`.
+  Ohne `rev` holt er sich frisch ein Token und spielt damit den „zweiten
+  Schreiber"; `api.writeBody` und `api.patchProperties` sind die zwei
+  bequemen Fälle davon und geben das neue Token zurück.
 
-  Ein **NPC** und ein **Ort** sind je eine eigene Ressource (ADR #31) und
-  haben eigene Helfer: `api.npc(id)` bzw. `api.location(id)` (alle Felder
-  flach, `body`, `rev`), `api.npcExists(id)`/`api.locationExists(id)`,
-  `api.npcPath(id?)`/`api.locationPath(id?)` für rohe Aufrufe, der Schreibweg
-  `api.patchNpc(id, …)`/`api.patchLocation(id, { rev?, force?, …Felder })`
-  — ohne `rev` wieder der „zweite Schreiber" — und `api.createNpc({ name,
-  id?, body? })`, das `POST …/npcs`.
+  Eine **Szene**, ein **NPC** und ein **Ort** sind je eine eigene Ressource
+  (ADR #31) und haben eigene Helfer: `api.scene(id)`, `api.npc(id)` bzw.
+  `api.location(id)` (alle Felder flach, `body`, `rev`),
+  `api.sceneExists(id)`/`api.npcExists(id)`/`api.locationExists(id)`,
+  `api.scenePath(id?)`/`api.npcPath(id?)`/`api.locationPath(id?)` für rohe
+  Aufrufe, der Schreibweg `api.patchScene(id, …)`/`api.patchNpc(id, …)`/
+  `api.patchLocation(id, { rev?, force?, …Felder })` — ohne `rev` wieder der
+  „zweite Schreiber" — und `api.createNpc({ name, id?, body? })`, das
+  `POST …/npcs`.
 
   Für die **Listen** gibt es eigene Helfer, weil sie keine Adresse haben
   (ADR #26): `api.activeSession(includeEnded?)` und `api.sessionId(…)` (die
@@ -214,8 +217,10 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 ## Stub-Fixtures anpassen
 
 `fixtures/replies.ts` enthält die Modellantworten als **Objekte**, genau so,
-wie das erzwungene Schema sie beschreibt: ein Szenen-Aufruf antwortet
-`{ properties, body, warnings }`; ein NPC-Aufruf mit allen Feldern des NPC
+wie das erzwungene Schema sie beschreibt: ein Szenen-Aufruf antwortet mit
+allen Feldern der Szene (`body` eines davon, `trigger`/`location` ohne Wert
+als `null`, die drei Listen immer da) neben `warnings`; ein NPC-Aufruf mit
+allen Feldern des NPC
 (`body` eines davon, ein fehlendes Feld als `null`, `quickstats` als Liste
 von `{ key, value }`-Paaren mit String-Werten) neben `warnings`; ein
 Orts-Aufruf mit allen Feldern des Orts neben `warnings`; die Gliederung ihr
@@ -261,12 +266,12 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   `status` anders vorgeschlagen und ein Text geschrieben; bei einem gefüllten
   spiegelt die Antwort jedes Feld zurück und hängt genau einen neuen
   `## If:`-Abschnitt an `body`.
-- ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf einer
-  Szene**. Die Szene steht dort als JSON-Block (`{ properties, body }`,
-  Prompt-Formatierung aus `server/src/llm-provider.ts`) — genau die Form, in
-  die die Antwort gezwungen wird; der Stub liest sie mit `JSON.parse` und
-  nicht aus einem Text. Die Antwort spiegelt die Szene zurück und hängt genau
-  einen neuen `## If:`-Abschnitt an — jeder bestehende Block unverändert.
+- ein Abschnitt „## Bestehende Szene" im Prompt → **Ergänzungs-Lauf einer
+  Szene**. Die Szene steht dort als JSON-Block in ihrer Antwortform (alle
+  Felder, ein fehlendes als `null`) — genau das Objekt, in das die Antwort
+  gezwungen wird; der Stub liest sie mit `JSON.parse` und nicht aus einem
+  Text. Die Antwort spiegelt jedes Feld zurück und hängt genau einen neuen
+  `## If:`-Abschnitt an `body` — jeder bestehende Block unverändert.
   Diese Verzweigungen werden vor den Anlege-Läufen geprüft: ein
   Szenen-Ergänzungs-Lauf trägt auch eine `chapter:`-Zeile.
 - der System-Prompt ist der **Gliederungs-Prompt** („System-Prompt:
@@ -357,9 +362,10 @@ Die Pfade 3, 4, 5 und 8 arbeiten auf den **Listen-Endpoints** (ADR #26) und
 lesen darum Zeilen statt Texte:
 
 - **Pfad 3** (`search.e2e.ts`): indexiert sind Kampagne, Kapitel, Szenen,
-  NPCs, Orte und die Glossar-Begriffe. Ein NPC-, Orts- und Glossar-Treffer
-  trägt `kind` + `id` und **kein** `path` — der Spec prüft das auf der Leitung
-  und klickt ihn danach in der Palette auf `/campaigns/beispiel/npcs/<id>`,
+  NPCs, Orte und die Glossar-Begriffe. Ein Szenen-, NPC-, Orts- und
+  Glossar-Treffer trägt `kind` + `id` und **kein** `path` — der Spec prüft das
+  auf der Leitung und klickt ihn danach in der Palette auf
+  `/campaigns/beispiel/scenes/<id>`, `/campaigns/beispiel/npcs/<id>`,
   `/campaigns/beispiel/locations/<id>` bzw. `/campaigns/beispiel/glossary`. Sessions und Ideen sind nicht
   indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
   erwartet keinen Treffer.
@@ -369,8 +375,10 @@ lesen darum Zeilen statt Texte:
   und schreibt keine Log-Zeile — der Beweis ist die unveränderte Länge des
   Logs plus der Chip-Zustand `paused`. Dazu die Leseseite einer vergangenen
   Session (`/campaigns/beispiel/sessions/2026-01-15`): Log-Zeilen mit
-  Szenen-Links, die geschlossene Pause mit ihrer Dauer, die gespielten
-  Szenen — und die alte Eintrags-Adresse derselben Session als 404.
+  Szenen-Links auf `/campaigns/beispiel/scenes/<id>`, die geschlossene Pause
+  mit ihrer Dauer, die gespielten Szenen — und die alte Eintrags-Adresse
+  derselben Session als 404. Die Leseansicht einer Szene bietet wie jede
+  Leseansicht „Session starten".
 - **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): Review und Ideen benennen
   ihre Zeilen per `id`, also liest der Spec das `reviewed` der getroffenen
   Log-Zeile und das `done` der abgehakten Idee — und prüft, dass keine andere
@@ -394,8 +402,8 @@ lesen darum Zeilen statt Texte:
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
 DEMSELBEN Datenverzeichnis: der erste startet einen Lauf bzw. bringt ihn zu
 Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
-da (Ergebnis, Review-Edits in der Form je Hälfte) und wird mit beiden
-bearbeiteten Hälften übernommen; ein **laufender** steht als `failed` mit
+da (Ergebnis, `sceneEdits` je Szene und Feld) und wird mit dem bearbeiteten
+Titel und Text übernommen; ein **laufender** steht als `failed` mit
 „Server wurde während des Laufs neu gestartet — Job neu starten" statt als
 endloser Spinner.
 
@@ -410,20 +418,19 @@ wieder startbar, weil die Gliederung mit der Zeile zurückkommt. Die Gliederung
 selbst kommt in keiner Zusicherung vor — sie wird dem Nutzer nie gezeigt.
 
 `tests/generator.e2e.ts` deckt zusätzlich den **Prüfzustand**
-ab: Entwurf bearbeiten → Seite verlassen → zurück → beide Hälften sind da
-(ein Eigenschaften-Feld und eine Zeile Text, am Job als
-`draftEdits[<adresse>].properties` und `.body` nachgelesen), und das
-Übernehmen schreibt den bearbeiteten Titel UND den bearbeiteten Text. Zwei
-Tests daneben halten die Trennung fest: eine Änderung nur an den
-Eigenschaften lässt den Text des Laufs Byte für Byte stehen, eine Änderung
-nur am Text lässt jede Eigenschaft des Laufs stehen. Jeder von ihnen braucht
-einen eigenen Lauf — beide schreiben am Ende dieselbe Szene, und ein zweites
-Übernehmen auf eine bestehende Adresse ist ein 409.
+ab: vorgeschlagene Szene bearbeiten → Seite verlassen → zurück → beides ist
+da (ein Feld und eine Zeile Text, am Job als `sceneEdits[<id>]`
+nachgelesen), und das Übernehmen schreibt den bearbeiteten Titel UND den
+bearbeiteten Text. Zwei Tests daneben halten die Trennung fest: eine
+Änderung nur an den Feldern lässt den Text des Laufs Byte für Byte stehen,
+eine Änderung nur am Text lässt jedes andere Feld des Laufs stehen. Jeder von
+ihnen braucht einen eigenen Lauf — beide schreiben am Ende dieselbe Szene,
+und ein zweites Übernehmen auf eine bestehende id ist ein 409.
 
 Wer dort an die Textarea will, geht über den Umschalter: „Bearbeiten" öffnet
 die zwei Bereiche „Eigenschaften" (`role="region"`) und „Text", und der
 Text-Bereich startet auf den Blöcken — erst „Markdown" in der Gruppe
-„Editiermodus" bringt die Textarea, deren Name „Text von &lt;adresse&gt;"
+„Editiermodus" bringt die Textarea, deren Name „Text von scenes/&lt;id&gt;"
 lautet. Gespeichert wird implizit (entprellt, auf Blur geflusht); das
 Beobachtbare ist die stille Statuszeile.
 
@@ -438,9 +445,9 @@ auf Block-Ebene — eine Block-Entscheidung überlebt den Reload.
 
 `tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
 ergänzen"): derselbe Lauf auf eine Szene, einen NPC oder einen Ort, den es
-schon gibt — NPC und Ort auf ihrer eigenen Ressource (Job-Art `npc-augment`
-bzw. `location-augment`, der Vorschlag als der NPC wie gelesen neben dem NPC
-wie vorgeschlagen).
+schon gibt — jede auf ihrer eigenen Ressource (Job-Art `scene-augment`,
+`npc-augment` bzw. `location-augment`, der Vorschlag als die Entität wie
+gelesen neben ihr wie vorgeschlagen, flach).
 Der Spec belegt: ein leerer NPC → ergänzen → Löcher gefüllt, während
 `name` und `status` (beide gefüllt) per Default NICHT ersetzt werden;
 vorbereitete Szene → ein neuer Handlungsstrang als zusätzlicher Block,
@@ -474,17 +481,19 @@ Felder des Dialogs, eine gleichzeitige Textänderung übersteht es also und wird
 über die API zurückgelesen). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
-`properties-form.e2e.ts` prüft dort auch den UMZUG: `location`
-ändern verschiebt die Szene, die URL wird ersetzt, die Kapitelübersicht
-sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und die
-Log-Zeilen der Session bleiben gültig (ihr `sceneId` nennt die Szene über ihre
-id, nicht über ihre Adresse). Freitext in `location`
+`properties-form.e2e.ts` prüft dort auch den neuen Ort: `location` ändern
+ist ein Feld der Szene, die Route bleibt `…/scenes/<id>`, die
+Kapitelübersicht behält die Reihenfolge und nennt den neuen Ortsnamen, und
+die Log-Zeilen der Session bleiben gültig (ihr `sceneId` nennt die Szene über
+ihre id). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 `scene-rendering.e2e.ts`. Und weil Status und Typ seit ADR #25
 `CHECK`-Constraints ihrer Spalten sind, hält ein Test im selben Spec die Regel
 direkt am Schreibweg fest: ein `status` außerhalb der geschlossenen Liste ist
 ein 400 mit `code: "status_not_allowed"` samt `kind`, `value` und `allowed`,
-und der Eintrag bleibt unverändert — auch die Zeilenversion.
+und die Szene bleibt unverändert — auch die Zeilenversion. Ein veralteter
+`rev` am `PATCH` einer Szene ist 409 mit der Szene, ein Feld, das sie nicht
+hat, eine 400, die es nennt — `POST` wie `PATCH` (`scene-rendering.e2e.ts`).
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
@@ -500,13 +509,14 @@ Test — derselbe Aufbau, ein fremder Status-Write neben dem offenen Editor:
 „Neu laden" verwirft den Entwurf und zeigt gespeicherten Text samt geändertem
 Status — auf derselben Oberfläche, die Antwort auf einen Konflikt schiebt
 niemanden von der Textarea in den Composer —, „Trotzdem speichern" schreibt
-den Text und lässt den fremden Status stehen. Ein Test belegt Eigenschaften und Text in EINER Anfrage direkt am
-Schreibweg — ein Schritt der Zeilenversion, und keines der beiden Felder
-dabei ist 400 `nothing_to_write` —, weil keine Oberfläche der App heute beides
-in einem Speichern schickt. Die drei Listen (Session, Eingang, Glossar) haben
+den Text und lässt den fremden Status stehen. Ein Test belegt Felder und Text in EINER Anfrage direkt am
+Schreibweg der Szene — ein Schritt der Zeilenversion, und kein Feld dabei ist
+400 `nothing_to_write` —, weil keine Oberfläche der App heute beides in einem
+Speichern schickt. Die drei Listen (Session, Eingang, Glossar) haben
 seit ADR #26 **keine Adresse**: `entries/sessions/<id>`, `entries/inbox` und
-`entries/glossary` antworten 404 — keine Umleitung, kein Alias. Genau das hält
-der Spec an EINER Stelle fest (GET und PATCH, alle drei); es gibt keinen
+`entries/glossary` antworten 404 — keine Umleitung, kein Alias — und ebenso
+die früheren Adressen einer Szene, eines NPC und eines Orts. Genau das hält
+der Spec an EINER Stelle fest (GET und PATCH); es gibt keinen
 `body` mehr, für den ein `body_not_editable` zu senden wäre. Die Pflege des
 Glossars läuft über seinen Listen-Endpoint und seine eigene Seite, was
 derselbe Spec belegt. Der Kampagnen-Eintrag ist der Gegenfall und hat beide
@@ -517,16 +527,16 @@ zurück (die Eigenschaften kommen dabei unverändert heraus); die Aktion
 denn Name und Beschreibung modelliert kein getipptes Formular. Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
-zusätzlich den Umzug ab: eine Szene, deren `location` sich geändert hat,
-wird über ihre ALTE Adresse geöffnet, bearbeitet und gespeichert — der
-Editor arbeitet nur am Körper, also ist der Umzug selbst Pfad 7, aber ein
-Speichern über eine veraltete Adresse darf nicht ins Leere laufen.
+zusätzlich den neuen Ort ab: eine Szene, deren `location` sich geändert hat,
+bleibt unter ihrer Route und wird dort bearbeitet und gespeichert.
 
 Pfad 10 (`cold-start.e2e.ts`) ist der einzige Pfad, der OHNE Seed läuft:
 `test.use({ seed: { skip: true } })` startet den Server auf einem leeren
 Datenverzeichnis, das Seed-Werkzeug läuft nie — genau das, was eine frische
 Installation ist. Der Spec legt darum alles selbst an (Kampagne →
-Kapitel → Szene → Text → Session) und baut seinen `api`-Helfer mit
+Kapitel → Szene → Text → Session; die neue Szene öffnet sich im Editor
+unter `/campaigns/:id/scenes/<id>`, und ein Kapitelwechsel im
+Eigenschaften-Dialog hängt sie ans Ende des Zielkapitels) und baut seinen `api`-Helfer mit
 `apiFor(server.url, id)`, weil die Kampagnen-id erst zur Laufzeit existiert.
 Dazu die beiden Listen-Einstiege („NPC/Ort anlegen", die Listen auf
 `/campaigns/:id/npcs` und `/campaigns/:id/locations`) mit der
@@ -537,7 +547,7 @@ Anlege-Dialog ist der einzige Ort dafür — ungültige Kennung blockiert
 „Anlegen", leeres Feld leitet wieder aus dem Namen ab) und dieselben Listen
 bei 390px, womit der Spec auch auf Pfad 8 liegt.
 
-Beide lesen nach jedem Speichern den Eintrag über die API zurück, und der
+Beide lesen nach jedem Speichern die Szene über die API zurück, und der
 Composer parst und serialisiert den Textkörper: „kein Byte Diff außer dem bearbeiteten Block" ist
 darum die eigentliche Zusicherung, nicht ein `toContain` auf dem neuen Satz.
 
@@ -546,7 +556,9 @@ Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.
 
 Ein Spec deckt auch spätere Scheiben auf seinem Pfad ab, nicht nur die Scheibe,
 die ihn angelegt hat: `tests/chapter-overview.e2e.ts` prüft zusätzlich den Ortsnamen in der
-Metazeile, die Szenen-Reihenfolge mitsamt Konflikt,
+Metazeile, die Szenen-Reihenfolge mitsamt Konflikt (und dass der `PATCH`
+einer Szene deren Wächter nicht bewegt), die Zeile, die auf
+`/campaigns/:id/scenes/<id>` öffnet,
 die Topbar-Navigation und den Kampagnen-Metadaten-Dialog,
 `tests/review.e2e.ts` den Szenentitel im Quellchip, und
 `tests/search.e2e.ts` die Frische-Zusicherung des Cutovers: was die

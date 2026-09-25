@@ -589,7 +589,7 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
   dieses Plugins besteht, ist die Major-Version des Linters die kleinere
   Abhängigkeit. Anheben, sobald das Plugin ESLint 10 als Peer führt.
 - Enum-Labels, die sich viele Views teilen (Szenen-/NPC-Status in
-  `lib/scene-status.ts`, `npc/npc-status.ts`), kommen ebenfalls aus dem Katalog;
+  `scene/scene-status.ts`, `npc/npc-status.ts`), kommen ebenfalls aus dem Katalog;
   die Helfer nehmen dafür `t: Translate` als Argument (`sceneStatusMeta`,
   `sceneStatusOptions`, `npcStatusLabel`, `browseListTitle`). Ein **unbekannter**
   Wert wird weiter verbatim angezeigt — die Datei bleibt die Wahrheit.

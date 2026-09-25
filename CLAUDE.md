@@ -65,7 +65,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
-  Slice `app/src/<entität>/` (`npc/`, `location/`) mit allem, was die App
+  Slice `app/src/<entität>/` (`scene/`, `npc/`, `location/`) mit allem, was die App
   über sie weiß (ADR #31); **Slices importieren einander nicht.** Gemeinsam
   sind nur UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`,
   etwa `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
