@@ -19,25 +19,29 @@
 // Plus the aside cards: a `[[slug]]` in the excerpt they show reads as the
 // name there too.
 //
-// The scene is SEEDED as an extra entry: it references two npcs, a location,
+// The scene is SEEDED as an extra scene: it references two npcs, a location,
 // a scene and a slug nothing owns.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { E2E_FIXTURES_DIR } from "../support/paths";
-import { expect, test, type SeedScene } from "../support/test";
+import { expect, test } from "../support/test";
+import { getLocation, patchLocation } from "../support/location";
+import { getNpc, patchNpc } from "../support/npc";
+import { getScene } from "../support/scene";
 
 /** The scene with the `[[…]]` references, as its fixture holds it. */
-const SCENE: SeedScene = JSON.parse(
+const SCENE: SceneProposal = JSON.parse(
   readFileSync(path.join(E2E_FIXTURES_DIR, "entity-refs-scene.json"), "utf8"),
-) as SeedScene;
+) as SceneProposal;
 
 const SCENE_URL = "/campaigns/beispiel/scenes/entity-refs";
 const SCENE_TITLE = "Referenzen am Kai";
 const JORNA = "Hafenmeisterin Jorna";
 
-test.use({ seed: { entries: { "scenes/entity-refs": SCENE } } });
+test.use({ seed: { scenes: [SCENE] } });
 
 test("reading view: references render as the current name, unknown ones stay text", async ({
   page,
@@ -142,8 +146,8 @@ test("a changed display name reaches the prose without touching the body", async
   ).toBeVisible();
 
   // The NAME changes, the body does not.
-  await api.patchNpc("jorna", { name: NEW_NAME });
-  const stored = await api.scene(SCENE.id);
+  await patchNpc(api, "jorna", { name: NEW_NAME });
+  const stored = await getScene(api, SCENE.id);
   expect(stored.body).toContain("[[jorna]]");
   expect(stored.body).not.toContain(NEW_NAME);
 
@@ -228,7 +232,7 @@ test("reading view: hovering a reference previews its target, per kind", async (
 });
 
 test("keyboard focus previews, Esc closes, a dead npc is marked", async ({ page, api }) => {
-  await api.patchNpc("fenn", { status: "dead" });
+  await patchNpc(api, "fenn", { status: "dead" });
   await page.goto(SCENE_URL);
   const tooltip = page.getByRole("tooltip");
 
@@ -268,8 +272,8 @@ test("a reference inside an excerpt reads as the name — in the preview and on 
 }) => {
   // The excerpt is the `motivation` FIELD. A `## Will` section written into
   // the body next to it is free text and shows on neither surface.
-  const { motivation, body } = await api.npc("jorna");
-  await api.patchNpc("jorna", {
+  const { motivation, body } = await getNpc(api, "jorna");
+  await patchNpc(api, "jorna", {
     motivation: String(motivation).replace(
       "Das Leuchtfeuer muss",
       "Das Leuchtfeuer auf [[leuchtturm]] muss",
@@ -298,8 +302,8 @@ test("a location's atmosphere is its field: a `## Atmosphäre` section does not 
   page,
   api,
 }) => {
-  const { body } = await api.location("leuchtturm");
-  await api.patchLocation("leuchtturm", {
+  const { body } = await getLocation(api, "leuchtturm");
+  await patchLocation(api, "leuchtturm", {
     atmosphere: "Kalt, still — [[jorna]] war zuletzt hier.",
     body: `\n## Atmosphäre\n\nNur im Text, nie in der Vorschau.\n${body}`,
   });
@@ -312,7 +316,7 @@ test("a location's atmosphere is its field: a `## Atmosphäre` section does not 
 
   // Emptied, the preview falls back to the Roll20 page — the section in the
   // body still does not stand in.
-  await api.patchLocation("leuchtturm", { atmosphere: null });
+  await patchLocation(api, "leuchtturm", { atmosphere: null });
   await page.reload();
   await page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first().hover();
   await expect(tooltip).toContainText("Roll20-Seite: Leuchtturm");

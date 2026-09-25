@@ -50,7 +50,11 @@ import {
   TRIGGER,
   UNKNOWN_REF_ID,
 } from "../fixtures/replies";
-import { expect, test, type Api } from "../support/test";
+import { expect, test } from "../support/test";
+import type { Api } from "../support/api";
+import { getLocation } from "../support/location";
+import { createNpc, getNpc, patchNpc } from "../support/npc";
+import { getScene, patchScene } from "../support/scene";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
 const SCENE = "smuggler-captured";
@@ -72,9 +76,9 @@ const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein"
  * possible BECAUSE it exists (ADR #19).
  */
 async function createEmptyNpc(api: Api): Promise<void> {
-  await api.createNpc({ name: EMPTY_NPC });
-  await api.patchScene(SCENE, { npcs: ["fenn", EMPTY_NPC] });
-  const npc = await api.npc(EMPTY_NPC);
+  await createNpc(api, { name: EMPTY_NPC });
+  await patchScene(api, SCENE, { npcs: ["fenn", EMPTY_NPC] });
+  const npc = await getNpc(api, EMPTY_NPC);
   expect(npc.name).toBe(EMPTY_NPC);
   expect(npc.body).toBe("");
 }
@@ -147,7 +151,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
     proposed: Record<string, unknown>;
   };
   expect(proposal.id).toBe(EMPTY_NPC);
-  const { rev: _rev, ...current } = await api.npc(EMPTY_NPC);
+  const { rev: _rev, ...current } = await getNpc(api, EMPTY_NPC);
   expect(proposal.current).toEqual(current);
   expect(proposal.proposed.role).toBe(AUGMENT_NPC_ROLE);
   for (const side of [proposal.current, proposal.proposed]) {
@@ -159,13 +163,13 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   }
 
   // Nothing is written before the accept.
-  expect((await api.npc(EMPTY_NPC)).role).toBeUndefined();
+  expect((await getNpc(api, EMPTY_NPC)).role).toBeUndefined();
 
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
   // One transaction. The holes are filled …
-  const npc = await api.npc(EMPTY_NPC);
+  const npc = await getNpc(api, EMPTY_NPC);
   expect(npc.role).toBe(AUGMENT_NPC_ROLE);
   expect(npc.voice).toBe(AUGMENT_NPC_VOICE);
   expect(npc.motivation).toBe(AUGMENT_NPC_MOTIVATION);
@@ -192,7 +196,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   page,
   api,
 }) => {
-  const before = await api.scene(SCENE);
+  const before = await getScene(api, SCENE);
 
   await page.goto(SCENE_URL);
   await startAugment(page);
@@ -252,7 +256,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // The whole point: the scene GREW. Everything that stood there before
   // stands there unchanged, character for character.
-  const after = await api.scene(SCENE);
+  const after = await getScene(api, SCENE);
   expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
   expect(after.body).toContain(AUGMENT_THREAD_TEXT);
   expect(after.body.startsWith(before.body.replace(/\n+$/, ""))).toBe(true);
@@ -273,7 +277,7 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
   // `quickstats` is a mapping in the store and a `{ key, value }` list in a
   // reply. The stub echoes the fields the prompt showed it — so a prompt that
   // shows the wrong one ends this run in a 422 instead of a review.
-  const before = await api.npc(FILLED_NPC);
+  const before = await getNpc(api, FILLED_NPC);
   expect(before.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
 
   await page.goto(FILLED_NPC_URL);
@@ -287,7 +291,7 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
 
   // The body grew, and the stats the DM authored are still the mapping they
   // were — values included, bare numbers and all.
-  const after = await api.npc(FILLED_NPC);
+  const after = await getNpc(api, FILLED_NPC);
   expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
   expect(after.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
   expect(after.name).toBe(before.name);
@@ -317,7 +321,7 @@ test("an unknown [[id]] in the proposal costs one correction turn", async ({ pag
 
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  const after = (await api.npc(FILLED_NPC)).body;
+  const after = (await getNpc(api, FILLED_NPC)).body;
   expect(after).toContain(AUGMENT_THREAD_TEXT);
   expect(after).not.toContain(UNKNOWN_REF_ID);
 });
@@ -375,7 +379,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
   page,
   api,
 }) => {
-  const before = await api.scene(SCENE);
+  const before = await getScene(api, SCENE);
 
   await page.goto(SCENE_URL);
   await startAugment(page);
@@ -386,7 +390,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
   // Nothing written — not even a new row version — and the job is gone.
-  expect(await api.scene(SCENE)).toEqual(before);
+  expect(await getScene(api, SCENE)).toEqual(before);
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 
   // And the reading view carries none of the proposal.
@@ -407,7 +411,7 @@ test("409: the scene moves while the review is open — nothing is written", asy
   // A second writer through the same API is the only way a scene changes
   // under an open review: the review writes against the version it was cut
   // from, so this invalidates it.
-  await api.patchScene(SCENE, { body: "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n" });
+  await patchScene(api, SCENE, { body: "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n" });
 
   await acceptButton(page).click();
   // The shared conflict line — with ONE action here: the accept step posts to
@@ -418,7 +422,7 @@ test("409: the scene moves while the review is open — nothing is written", asy
   await expect(conflictLine.getByRole("button", { name: "Neu laden" })).toBeVisible();
   await expect(conflictLine.getByRole("button", { name: "Trotzdem speichern" })).toHaveCount(0);
   // The dialog stays open with the decisions intact, and NOTHING was written.
-  const conflicted = (await api.scene(SCENE)).body;
+  const conflicted = (await getScene(api, SCENE)).body;
   expect(conflicted).toContain("Jemand anderes hat die Szene umgeschrieben.");
   expect(conflicted).not.toContain(AUGMENT_THREAD_TEXT);
 
@@ -429,7 +433,7 @@ test("409: the scene moves while the review is open — nothing is written", asy
   await expect(conflictLine).toHaveCount(0);
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  const written = (await api.scene(SCENE)).body;
+  const written = (await getScene(api, SCENE)).body;
   expect(written).toContain(AUGMENT_THREAD_TEXT);
   // …and the other writer is NOT overwritten by a decision that was cut
   // against the body they replaced.
@@ -464,7 +468,7 @@ test("a location is augmented on its own resource: the proposal, then one write"
   page,
   api,
 }) => {
-  const before = await api.location("leuchtturm");
+  const before = await getLocation(api, "leuchtturm");
   await page.goto("/campaigns/beispiel/locations/leuchtturm");
   await startAugment(page);
   await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
@@ -499,11 +503,11 @@ test("a location is augmented on its own resource: the proposal, then one write"
     "aria-pressed",
     "true",
   );
-  expect((await api.location("leuchtturm")).body).toBe(before.body);
+  expect((await getLocation(api, "leuchtturm")).body).toBe(before.body);
 
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  const after = await api.location("leuchtturm");
+  const after = await getLocation(api, "leuchtturm");
   expect(after.body).toContain(AUGMENT_THREAD_TEXT);
   expect(after.body.trimStart().startsWith(before.body.trim())).toBe(true);
   expect(after.atmosphere).toBe(before.atmosphere);
@@ -523,7 +527,7 @@ test.describe("at 390px (critical path 8)", () => {
     await createEmptyNpc(api);
     // What a desktop augment run leaves behind, written through the ordinary
     // API — the phone's job is to READ the result, not to review a diff.
-    await api.patchNpc(EMPTY_NPC, {
+    await patchNpc(api, EMPTY_NPC, {
       motivation: AUGMENT_NPC_MOTIVATION,
       body: `\n## Weiß\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
     });

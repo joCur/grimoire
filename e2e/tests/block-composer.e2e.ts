@@ -29,7 +29,10 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type Api, type SeedScene } from "../support/test";
+import type { SceneProposal } from "@grimoire/shared/scene";
+import { expect, test } from "../support/test";
+import type { Api } from "../support/api";
+import { getScene, patchScene } from "../support/scene";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
 const SCENE = "lighthouse-arrival";
@@ -55,13 +58,13 @@ const SCENE_BLOCKS = [
  * text has to leave those alone, which is what the assertions look at.
  */
 async function split(api: Api, id: string) {
-  const { body, rev: _rev, ...fields } = await api.scene(id);
+  const { body, rev: _rev, ...fields } = await getScene(api, id);
   return { fields, body };
 }
 
 /** The scene's text. */
 async function bodyOf(api: Api, id: string): Promise<string> {
-  return (await api.scene(id)).body;
+  return (await getScene(api, id)).body;
 }
 
 /**
@@ -506,7 +509,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
   // A SECOND WRITER moves the row under the open composer, through the same
   // API with a fresh token. No race to win: the editor holds the token it was
   // seeded from until a conflict tells it otherwise.
-  await api.patchScene(SCENE, { body: externalBody });
+  await patchScene(api, SCENE, { body: externalBody });
   await field.fill(`${original}\n${mine}`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
@@ -580,7 +583,7 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the scene alo
  * kind and a markdown table. Seeded as a scene of its own and written out
  * here verbatim, because the assertions are about these exact bytes.
  */
-const ODD_SCENE: SeedScene = {
+const ODD_SCENE: SceneProposal = {
   id: "seltsame-mechanik",
   title: "Seltsame Mechanik",
   type: "planned",
@@ -605,7 +608,7 @@ Die Gruppe würfelt auf der Tabelle unten.
 };
 
 test.describe("with a scene of unknown constructs", () => {
-  test.use({ seed: { entries: { "scenes/seltsame-mechanik": ODD_SCENE } } });
+  test.use({ seed: { scenes: [ODD_SCENE] } });
 
   test("unknown callouts and tables become cards — and survive a neighbour's save", async ({
     page,

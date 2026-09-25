@@ -22,7 +22,14 @@
 
 import type { Page } from "@playwright/test";
 
-import { apiFor, expect, test } from "../support/test";
+import { expect, test } from "../support/test";
+import { apiFor } from "../support/api";
+import { getCampaign } from "../support/campaign";
+import { chapterExists, getChapter } from "../support/chapter";
+import { getLocation } from "../support/location";
+import { getNpc, npcExists, npcPath } from "../support/npc";
+import { getScene, patchScene, scenePath } from "../support/scene";
+import { activeSessionId, getSession } from "../support/session";
 
 /**
  * The chapter overview's scene rows in DOM order, by the title they show.
@@ -79,7 +86,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   // The campaign is its own resource: every field flat, the text among them.
-  const created = await api.campaign();
+  const created = await getCampaign(api);
   expect(created).toMatchObject({ id: CAMPAIGN_ID, name: CAMPAIGN_NAME, body: "" });
   expect(created.description).toBe("Ein erloschener Leuchtturm.");
 
@@ -110,7 +117,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(chapter).toContainText("keine Szenen");
   // The chapter is its own resource: the description became its text, and it
   // starts planned.
-  const createdChapter = await api.chapter("01-salzhafen");
+  const createdChapter = await getChapter(api, "01-salzhafen");
   expect(createdChapter).toMatchObject({
     id: "01-salzhafen",
     title: "01 Salzhafen",
@@ -149,7 +156,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(page.getByRole("article")).toContainText(
     "Der Turm steht schwarz gegen den Abendhimmel.",
   );
-  const sceneDoc = await api.scene("ankunft-am-leuchtturm");
+  const sceneDoc = await getScene(api, "ankunft-am-leuchtturm");
   expect(sceneDoc.body).toContain("[!readaloud]");
   expect(sceneDoc.status).toBe("draft");
   expect(sceneDoc.chapter).toBe("01-salzhafen");
@@ -181,7 +188,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // A second chapter with a scene of its own; the first chapter's second
   // scene moves there through its field dialog and lands behind that scene.
   await api.send("POST", `campaigns/${CAMPAIGN_ID}/chapters`, { title: "Die Bucht", id: "02-bucht" });
-  await api.send("POST", api.scenePath(), { title: "Am Strand", chapter: "02-bucht" });
+  await api.send("POST", scenePath(api), { title: "Am Strand", chapter: "02-bucht" });
   await page.goto(`/campaigns/${CAMPAIGN_ID}/scenes/abendessen-bei-jorna`);
   await page.getByRole("button", { name: "Eigenschaften" }).click();
   const fields = page.getByRole("dialog");
@@ -198,13 +205,13 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
     ["am-strand", "abendessen-bei-jorna"],
   ]);
   // …and back, so the session below finds the chapter as it was: again the end.
-  await api.patchScene("abendessen-bei-jorna", { chapter: "01-salzhafen" });
+  await patchScene(api, "abendessen-bei-jorna", { chapter: "01-salzhafen" });
 
   // --- start the session, use the scene live --------------------------------
-  expect(await api.sessionId()).toBeUndefined();
+  expect(await activeSessionId(api)).toBeUndefined();
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/live$`));
-  expect(await api.sessionId()).toBeDefined();
+  expect(await activeSessionId(api)).toBeDefined();
 
   // The scene created three steps ago is the live view's default selection,
   // its text is on screen, and a quick note lands in the session's log.
@@ -229,12 +236,12 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const note = "Gruppe klopft an die Turmtür";
   await page.getByRole("textbox", { name: "Schnellnotiz" }).fill(note);
   await page.keyboard.press("Enter");
-  const sessionId = (await api.sessionId()) ?? "";
+  const sessionId = (await activeSessionId(api)) ?? "";
   await expect(async () => {
-    expect((await api.session(sessionId)).log.map((row) => row.text)).toContain(note);
+    expect((await getSession(api, sessionId)).log.map((row) => row.text)).toContain(note);
   }).toPass();
   // The note carried the scene, so the session knows what was played.
-  expect((await api.session(sessionId)).scenesPlayed).toContain("ankunft-am-leuchtturm");
+  expect((await getSession(api, sessionId)).scenesPlayed).toContain("ankunft-am-leuchtturm");
 });
 
 test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", async ({
@@ -265,7 +272,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
   // The create answers the npc itself: every field flat, no kind, no path,
   // no properties map (ADR #31).
-  const created = await api.npc("hafenmeisterin-jorna");
+  const created = await getNpc(api, "hafenmeisterin-jorna");
   expect(created.name).toBe("Hafenmeisterin Jorna");
   expect(created.status).toBe("unknown");
   expect(Object.keys(created).sort()).toEqual(["body", "id", "name", "rev", "status"]);
@@ -286,18 +293,18 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page.getByText("existiert schon", { exact: false })).toBeVisible();
   // Still exactly one npc — the 409 wrote nothing.
-  expect(await api.npcExists("hafenmeisterin-jorna-2")).toBe(false);
-  expect(await api.npc("hafenmeisterin-jorna")).toEqual(created);
-  expect((await api.get<unknown[]>(api.npcPath())).length).toBe(1);
+  expect(await npcExists(api, "hafenmeisterin-jorna-2")).toBe(false);
+  expect(await getNpc(api, "hafenmeisterin-jorna")).toEqual(created);
+  expect((await api.get<unknown[]>(npcPath(api))).length).toBe(1);
 
   await page.getByRole("button", { name: /„hafenmeisterin-jorna-2“ verwenden/ }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs/hafenmeisterin-jorna-2$`));
   // The NAME is the one that was typed; only the id came from the proposal.
-  expect((await api.npc("hafenmeisterin-jorna-2")).name).toBe("Hafenmeisterin Jorna");
+  expect((await getNpc(api, "hafenmeisterin-jorna-2")).name).toBe("Hafenmeisterin Jorna");
 
   // The same collision on the wire: 409 slug_taken with the next free id,
   // and nothing is written.
-  const taken = await api.fetch(api.npcPath(), {
+  const taken = await api.fetch(npcPath(api), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: "Jemand anderes", id: "hafenmeisterin-jorna" }),
@@ -308,18 +315,18 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
     id: "hafenmeisterin-jorna",
     suggestion: "hafenmeisterin-jorna-3",
   });
-  expect((await api.npc("hafenmeisterin-jorna")).name).toBe("Hafenmeisterin Jorna");
-  expect(await api.npcExists("hafenmeisterin-jorna-3")).toBe(false);
+  expect((await getNpc(api, "hafenmeisterin-jorna")).name).toBe("Hafenmeisterin Jorna");
+  expect(await npcExists(api, "hafenmeisterin-jorna-3")).toBe(false);
 
   // A key the create does not take is a 400 that names it, and writes nothing.
-  const unknownField = await api.fetch(api.npcPath(), {
+  const unknownField = await api.fetch(npcPath(api), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: "Holm", status: "alive" }),
   });
   expect(unknownField.status).toBe(400);
   expect(((await unknownField.json()) as { error: string }).error).toContain('"status"');
-  expect(await api.npcExists("holm")).toBe(false);
+  expect(await npcExists(api, "holm")).toBe(false);
 
   // --- create the location --------------------------------------------------
   // The location list is the location's own route (ADR #31).
@@ -333,7 +340,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   // location's own route.
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/locations/hafenviertel$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenviertel");
-  expect((await api.location("hafenviertel")).name).toBe("Hafenviertel");
+  expect((await getLocation(api, "hafenviertel")).name).toBe("Hafenviertel");
   // …and it lists on that route.
   await page.goto(`/campaigns/${CAMPAIGN_ID}/locations`);
   await expect(page.getByRole("link", { name: /Hafenviertel/ })).toHaveAttribute(
@@ -382,14 +389,14 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(page).toHaveURL(new RegExp(`/campaigns/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);
   await expect(switcher).toHaveAccessibleName(`Kampagne: ${SECOND_NAME}`);
-  expect((await second.campaign()).name).toBe(SECOND_NAME);
+  expect((await getCampaign(second)).name).toBe(SECOND_NAME);
 
   // Both campaigns are in the menu now, and the first one is untouched.
   await switcher.click();
   await expect(page.getByRole("menu")).toContainText(CAMPAIGN_NAME);
   await expect(page.getByRole("menu")).toContainText(SECOND_NAME);
   await expect(page.getByRole("menu")).toContainText("Nebel, Torf und ein Verschwundener.");
-  expect((await first.campaign()).name).toBe(CAMPAIGN_NAME);
+  expect((await getCampaign(first)).name).toBe(CAMPAIGN_NAME);
 
   // …and switching back works, which is what the menu was there for already.
   await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(CAMPAIGN_NAME) }).click();
@@ -441,7 +448,7 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
-  expect((await api.campaign()).name).toBe(CAMPAIGN_NAME);
+  expect((await getCampaign(api)).name).toBe(CAMPAIGN_NAME);
 
   // --- a chapter, with an id of its own -------------------------------------
   await page.getByRole("button", { name: "Kapitel anlegen" }).last().click();
@@ -460,9 +467,9 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await chapterId.fill("01-salzhafen");
   await chapterDialog.getByRole("button", { name: "Anlegen" }).click();
   await expect(page.getByRole("button", { name: /Erstes Kapitel/ })).toBeVisible();
-  expect(await api.chapterExists("01-salzhafen")).toBe(true);
+  expect(await chapterExists(api, "01-salzhafen")).toBe(true);
   // The derived id was never written — only the one that was typed.
-  expect(await api.chapterExists("erstes-kapitel")).toBe(false);
+  expect(await chapterExists(api, "erstes-kapitel")).toBe(false);
 
   // --- an NPC: the prefix stays in front, only the id is typed -------------
   await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/npcs`);
@@ -481,9 +488,9 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   // The typed id is the npc's id AND in the URL of its own route.
   await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}/npcs/jorna$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
-  expect((await api.npc("jorna")).name).toBe("Hafenmeisterin Jorna");
+  expect((await getNpc(api, "jorna")).name).toBe("Hafenmeisterin Jorna");
   // The derived id was never written — only the one that was typed.
-  expect(await api.npcExists("hafenmeisterin-jorna")).toBe(false);
+  expect(await npcExists(api, "hafenmeisterin-jorna")).toBe(false);
 
   // --- a typed id that is TAKEN: the 409 path is unchanged -----------------
   // No silent `-2` here either: nothing is written, the dialog says what is in
@@ -495,13 +502,13 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await page.getByLabel("Kennung", { exact: true }).fill("jorna");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page.getByText("existiert schon", { exact: false })).toBeVisible();
-  expect(await api.npcExists("jorna-2")).toBe(false);
-  expect((await api.npc("jorna")).name).toBe("Hafenmeisterin Jorna");
+  expect(await npcExists(api, "jorna-2")).toBe(false);
+  expect((await getNpc(api, "jorna")).name).toBe("Hafenmeisterin Jorna");
 
   await page.getByRole("button", { name: /„jorna-2“ verwenden/ }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}/npcs/jorna-2$`));
   // The NAME is the one that was typed; only the id came from the proposal.
-  expect((await api.npc("jorna-2")).name).toBe("Hafenarbeiter Holm");
+  expect((await getNpc(api, "jorna-2")).name).toBe("Hafenarbeiter Holm");
 });
 
 test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server }) => {
@@ -537,5 +544,5 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   await npcId.fill("fischerin");
   await page.getByRole("button", { name: "Anlegen" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs/fischerin$`));
-  expect((await api.npc("fischerin")).name).toBe("Alte Fischerin");
+  expect((await getNpc(api, "fischerin")).name).toBe("Alte Fischerin");
 });

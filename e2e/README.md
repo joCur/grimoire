@@ -23,29 +23,32 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   Glossar und die offenen Fäden liegen daneben als `{ kind, … }` mit ihren
   **Zeilen** (`log` als `{ at, sceneId?, text, reviewed? }` für eine Session,
   `entries` für Ideen, Glossar und Fäden, ein Faden als
-  `{ chapter, text, done? }` — Zeilen, kein Markdown). Ein Test, der Inhalte
-  braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
+  `{ chapter, text, done? }` — Zeilen, kein Markdown).
+- **Ein Test überschreibt die Beispielkampagne je Entität**, in seiner
   eigenen Kopie des Verzeichnisses:
-  `test.use({ seed: { entries: { "scenes/loot-check": { id: "loot-check", … } }, without: ["session-2026-01-15"] } })`.
-  Die Schlüssel sind **Dateinamen ohne `.json`**: ein Name, den
-  `fixtures/beispiel` schon hat, ERSETZT dieses Objekt, jeder andere legt
-  eines dazu; die Kampagne hat den Namen `campaigns/<id>`, ein Kapitel
-  `chapters/<id>`, eine Szene `scenes/<id>`, ein NPC `npcs/<id>`, ein Ort
-  `locations/<id>`. Ohne Überschreibung wird die geteilte pristine Kopie
-  direkt benutzt (niemand schreibt hinein), die meisten Tests kopieren also
-  gar nichts.
+  `test.use({ seed: { scenes: [{ id: "loot-check", … }], without: { sessions: ["2026-01-15"] } } })`.
+  `campaign`, `chapters`, `scenes`, `npcs` und `locations` tragen den Typ
+  der Entität aus `@grimoire/shared/<entität>` (`CampaignSeed`,
+  `ChapterProposal`, `SceneProposal`, `NpcProposal`, `LocationProposal` —
+  die Entität ohne `rev`), `sessions` die Form, die der Seed-Loader liest
+  (`SeedSession` aus `server/src/db/seed.ts`). Ein Objekt, dessen `id` die
+  Beispielkampagne schon hat, ERSETZT es, jedes andere kommt dazu;
+  `without` lässt Objekte je Entität über ihre `id` weg. Ohne Überschreibung
+  wird die geteilte pristine Kopie direkt benutzt (niemand schreibt hinein),
+  die meisten Tests kopieren also gar nichts.
 - **Eine Referenz zeigt auf etwas, das existiert.** Eine Szene, die einen
   Ort oder NPC nennt, den es nicht gibt, lässt den Seed-Lauf
   scheitern (ADR #19) — das ist ein Fehler im Fixture, keine Degradierung.
 - **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
   Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
   (Pfad 10).
-- **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
+- **Zusicherungen laufen über die API** (`api` und die Helfer je Entität,
+  s. u.); wo eine
   Zusicherung wirklich die Speicherung meint, über `db`.
 - **Jede Entität antwortet unter ihrer eigenen Ressource**: die Kampagne
-  unter `/campaigns/<id>` (`api.campaign()`), ein Kapitel unter
-  `…/chapters/<id>` (`api.chapter(id)`), eine Szene unter `…/scenes/<id>`
-  (`api.scene(id)`). Einen allgemeinen Endpunkt gibt es nicht: jede frühere
+  unter `/campaigns/<id>` (`getCampaign(api)`), ein Kapitel unter
+  `…/chapters/<id>` (`getChapter(api, id)`), eine Szene unter `…/scenes/<id>`
+  (`getScene(api, id)`). Einen allgemeinen Endpunkt gibt es nicht: jede frühere
   Adresse unter `…/entries/*` ist ein 404.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion). Ein veraltetes `rev`
   antwortet mit 409 `rev_conflict` und trägt den aktuellen Stand unter dem
@@ -59,17 +62,17 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   und geschrieben wird je `id` (`droppedScenes`, `writtenScenes`), das
   Übernehmen nimmt `scenes: [<id>]`.
 - **Eine Szene hat EINEN Schreibweg**: `PATCH …/scenes/<id>` mit
-  `{ rev, force?, …Teilmenge der Felder }` (`api.patchScene`). Felder und
+  `{ rev, force?, …Teilmenge der Felder }` (`patchScene`). Felder und
   Text zusammen sind **ein** Schreibvorgang gegen **einen** `rev` — ein
   Schritt der Zeilenversion, egal wie viel die Anfrage trug. Ein Feld, das
   eine Szene nicht hat, ist eine 400, die es nennt. Kampagne und Kapitel
-  schreiben genauso über ihre Ressource (`api.patchCampaign`,
-  `api.patchChapter`). Ein Kapitel wird aktiv, indem sein `status` auf
+  schreiben genauso über ihre Ressource (`patchCampaign`,
+  `patchChapter`). Ein Kapitel wird aktiv, indem sein `status` auf
   `active` geht — der Server setzt das bisher aktive im selben Vorgang auf
   `planned`.
 - **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
-  Pfad 9 schreibt über die API (`api.patchScene`, `api.patchChapter`,
-  `api.patchCampaign`), während der
+  Pfad 9 schreibt über die API (`patchScene`, `patchChapter`,
+  `patchCampaign`), während der
   Editor offen steht, danach speichert die UI — und muss die Konfliktzeile
   mit ihren zwei Aktionen zeigen statt still zu überschreiben. Genauso in
   `status-control`, `properties-form` und `block-composer`.
@@ -99,10 +102,10 @@ Liste in der Reihenfolge, die der DM setzt (ADR #27), und der Ort steht mit
 seinem Namen in der Metazeile der Zeile. Für die Suite heißt das vier Dinge:
 
 - **Eine Szene wird über ihre `id` angesprochen**, egal wo sie liegt:
-  `api.scene("lighthouse-arrival")`, `api.sceneExists(id)`,
-  `api.scenePath(id?)` für rohe Aufrufe. Beide Orte der Beispielkampagne
+  `getScene(api, "lighthouse-arrival")`, `sceneExists(api, id)`,
+  `scenePath(api, id?)` für rohe Aufrufe. Beide Orte der Beispielkampagne
   gibt es als eigene Ressource (`…/locations/leuchtturm`, `…/locations/bucht`;
-  `api.location(id)`) — eine Referenz legt nichts an (ADR #19) —, die
+  `getLocation(api, id)`) — eine Referenz legt nichts an (ADR #19) —, die
   Kampagne hat also **zwei** Orte. Frühere Adressen wie
   `…/entries/<kapitel>/…/<id>`, `…/entries/npcs/<id>` und
   `…/entries/locations/<id>` sind ein 404.
@@ -162,6 +165,13 @@ support/global-setup.ts  baut die App, legt die pristine Kopie von
 support/test.ts          das `test` der Suite: eigene Datenbank + eigener
                          Server + `baseURL` pro Test, plus die Fixtures
                          `api`, `db` und `seed`
+support/api.ts           `Api`: der Zugang zum Server eines Tests, an eine
+                         Kampagne gebunden, ohne Wissen über Entitäten
+support/campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts
+                         die Helfer je Entität: lesen, prüfen, schreiben,
+                         Pfade — getippt mit `@grimoire/shared/<entität>`
+support/session.ts, inbox.ts, threads.ts
+                         die Helfer der Sessions und Listen
 support/procs.ts         verwaltete Kindprozesse (Start, Warten, Stoppen)
 fixtures/stub-llm.ts     standalone LLM-Stub (auch einzeln startbar)
 fixtures/replies.ts      die kanonischen Modellantworten
@@ -177,27 +187,36 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
 
 **Die zwei Zusicherungs-Helfer:**
 
-- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.get`/
-  `api.send` für jeden Endpunkt und `api.fetch` für Statuscodes.
+- `api` — der Zugang zum Server dieses Tests (`support/api.ts`), an die
+  Beispielkampagne gebunden: `api.get`/`api.send` für jeden Endpunkt und
+  `api.fetch` für Statuscodes. `api` weiß nichts über Entitäten; ein Spec,
+  der eine eigene Kampagne anlegt, baut sich seinen mit
+  `apiFor(server.url, id)`.
 
-  Die **Kampagne**, ein **Kapitel**, eine **Szene**, ein **NPC** und ein
-  **Ort** sind je eine eigene Ressource (ADR #31) und haben eigene Helfer:
-  `api.campaign()`, `api.chapter(id)`, `api.scene(id)`, `api.npc(id)` bzw.
-  `api.location(id)` (alle Felder flach, `body`, `rev`),
-  `api.chapterExists(id)`/`api.sceneExists(id)`/`api.npcExists(id)`/
-  `api.locationExists(id)`, `api.campaignPath()`/`api.chapterPath(id?)`/
-  `api.scenePath(id?)`/`api.npcPath(id?)`/`api.locationPath(id?)` für rohe
-  Aufrufe, der Schreibweg `api.patchCampaign(…)`/`api.patchChapter(id, …)`/
-  `api.patchScene(id, …)`/`api.patchNpc(id, …)`/
-  `api.patchLocation(id, { rev?, force?, …Felder })` — ohne `rev` holt er
+  Was die Suite über eine Entität weiß, steht im **Modul der Entität** unter
+  `support/`, als Funktionen, die `api` als erstes Argument nehmen. Die
+  **Kampagne**, ein **Kapitel**, eine **Szene**, ein **NPC** und ein **Ort**
+  sind je eine eigene Ressource (ADR #31) und antworten mit ihrem Typ aus
+  `@grimoire/shared/<entität>` (alle Felder flach, `body`, `rev`):
+  `getCampaign(api)`, `getChapter(api, id)`, `getScene(api, id)`,
+  `getNpc(api, id)` bzw. `getLocation(api, id)`, dazu
+  `chapterExists`/`sceneExists`/`npcExists`/`locationExists(api, id)`,
+  `campaignPath(api)`/`chapterPath(api, id?)`/`scenePath(api, id?)`/
+  `npcPath(api, id?)`/`locationPath(api, id?)` für rohe Aufrufe und der
+  Schreibweg `patchCampaign(api, …)`/`patchChapter(api, id, …)`/
+  `patchScene(api, id, …)`/`patchNpc(api, id, …)`/
+  `patchLocation(api, id, { rev?, force?, …Felder })` — ohne `rev` holt er
   sich frisch ein Token und spielt damit den „zweiten Schreiber" — und
-  `api.createNpc({ name, id?, body? })`, das `POST …/npcs`.
+  `createNpc(api, { name, id?, body? })`, das `POST …/npcs`.
 
-  Für die **Listen** gibt es eigene Helfer, weil sie keine Adresse haben
-  (ADR #26): `api.activeSession(includeEnded?)` und `api.sessionId(…)` (die
-  laufende bzw. zuletzt gestartete — `undefined`, wenn nichts läuft; der
-  Endpoint antwortet dafür 200 mit `null`), `api.session(id)`,
-  `api.sessionExists(id)`, `api.sessions()` und `api.inbox()`. Jede
+  Die **Sessions und Listen** haben keine Adresse (ADR #26) und ihre
+  eigenen Module: `getActiveSession(api, includeEnded?)` und
+  `activeSessionId(api, …)` (die laufende bzw. zuletzt gestartete —
+  `undefined`, wenn nichts läuft; der Endpoint antwortet dafür 200 mit
+  `null`), `getSession(api, id)`, `sessionExists(api, id)`,
+  `listSessions(api)` (`support/session.ts`), `getInbox(api)`
+  (`support/inbox.ts`) und `getThreads(api, kapitel)`/
+  `threadsPath(api, kapitel, id?)` (`support/threads.ts`). Jede
   Behauptung über eine Session oder eine Idee liest ein **Feld** —
   `log`, `pauses`, `scenesPlayed`, `entries[].done` —, nie einen gerenderten
   Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
@@ -578,7 +597,7 @@ Zwei Pfade tragen das Kapitel als eigene Ressource.
   der Prüfschritt ist persistent, also ist genau das der Normalfall. Titel
   und id des neuen Kapitels liegen am Job
   (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
-  Spec prüft sie am Kapitel (`api.chapter(id)`) UND in der Übersicht. Die Gliederung
+  Spec prüft sie am Kapitel (`getChapter(api, id)`) UND in der Übersicht. Die Gliederung
   beschreibt das neue Kapitel (der Stub antwortet mit einer Beschreibung,
   sobald der Kontext `neues Kapitel: ja` trägt): „Entwürfe prüfen“ zeigt sie
   als „Beschreibung des Kapitels“, und das Kapitel hat sie danach als

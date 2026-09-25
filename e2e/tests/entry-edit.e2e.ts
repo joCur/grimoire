@@ -40,7 +40,13 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, type Api } from "../support/test";
+import { expect, test } from "../support/test";
+import type { Api } from "../support/api";
+import { campaignPath, getCampaign } from "../support/campaign";
+import { chapterPath, getChapter, patchChapter } from "../support/chapter";
+import { getLocation } from "../support/location";
+import { getNpc, npcExists, patchNpc } from "../support/npc";
+import { getScene, patchScene, scenePath } from "../support/scene";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
@@ -57,18 +63,18 @@ const TEXTAREA = "Markdown-Text von";
  * has to leave alone.
  */
 async function sceneSplit(api: Api, id: string = SCENE) {
-  const { body, rev: _rev, ...fields } = await api.scene(id);
+  const { body, rev: _rev, ...fields } = await getScene(api, id);
   return { fields, body };
 }
 
 /** A scene's text. */
 async function sceneBody(api: Api, id: string = SCENE): Promise<string> {
-  return (await api.scene(id)).body;
+  return (await getScene(api, id)).body;
 }
 
 /** Read the npc: its fields, `body` among them, without its guard. */
 async function npcFields(api: Api) {
-  const { rev: _rev, ...fields } = await api.npc(NPC);
+  const { rev: _rev, ...fields } = await getNpc(api, NPC);
   return fields;
 }
 
@@ -177,8 +183,8 @@ test("a mention in the text stays text — nothing created, no error", async ({ 
   // Rendered as the list item it is, so without the markdown dash.
   await expect(article).toContainText("holm: schuldet ihr noch Hafengeld");
   // …and neither mention brought an npc into existence.
-  expect(await api.npcExists("niemand")).toBe(false);
-  expect(await api.npcExists("holm")).toBe(false);
+  expect(await npcExists(api, "niemand")).toBe(false);
+  expect(await npcExists(api, "holm")).toBe(false);
   const after = await npcFields(api);
   expect(after.body).toContain(mention);
   expect(after.body).toContain(relation);
@@ -193,7 +199,7 @@ test("a scene whose location changed stays at its route and stays editable", asy
   // text saves through it like any other edit.
   // The location has to exist before a scene can name it (ADR #19).
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
-  await api.patchScene(SCENE, { location: "nordbucht" });
+  await patchScene(api, SCENE, { location: "nordbucht" });
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -286,7 +292,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // No race to win — the editing session holds the version it started from
   // until the DM answers the conflict, so the version poll cannot make the
   // app's write succeed silently.
-  await api.patchScene(SCENE, { body: otherBody });
+  await patchScene(api, SCENE, { body: otherBody });
   await textarea.fill(`${before.body}\n${mine}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
@@ -340,7 +346,7 @@ test("a status-only second write conflicts too — reloading adopts it", async (
   page,
   api,
 }) => {
-  const opened = await api.scene(SCENE);
+  const opened = await getScene(api, SCENE);
   const before = { body: opened.body };
   const mine = "Während des Statuswechsels geschrieben.";
 
@@ -353,7 +359,7 @@ test("a status-only second write conflicts too — reloading adopts it", async (
   // The status of THIS scene is set out of band, with a token fetched a moment
   // ago: one field, not one byte of the body — and the row's version moves
   // all the same.
-  const bumped = (await api.patchScene(SCENE, { status: "played" })).rev;
+  const bumped = (await patchScene(api, SCENE, { status: "played" })).rev;
   expect(bumped).toBe(opened.rev + 1);
 
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -396,7 +402,7 @@ test("a forced save writes only the text — the other writer's status survives"
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${mine}\n`);
 
-  await api.patchScene(SCENE, { status: "played" });
+  await patchScene(api, SCENE, { status: "played" });
   await page.getByRole("button", { name: "Speichern" }).click();
 
   const conflicted = conflict(page);
@@ -425,12 +431,12 @@ test("a forced save writes only the text — the other writer's status survives"
 // PATCH, one transaction, ONE step of the version — how much a request carried
 // is not readable from `rev`.
 test("fields and body in ONE write are one version step", async ({ api }) => {
-  const opened = await api.scene(SCENE);
+  const opened = await getScene(api, SCENE);
   const before = await sceneSplit(api);
   const rev = opened.rev;
   const body = `${before.body}\nIn einem Zug mit den Feldern geschrieben.\n`;
 
-  const written = await api.patchScene(SCENE, {
+  const written = await patchScene(api, SCENE, {
     rev,
     status: "played",
     tags: ["social", "travel", "zusammen"],
@@ -450,14 +456,14 @@ test("fields and body in ONE write are one version step", async ({ api }) => {
   });
 
   // A request that names no field is refused rather than counted as a write.
-  const empty = await api.fetch(api.scenePath(SCENE), {
+  const empty = await api.fetch(scenePath(api, SCENE), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: written.rev }),
   });
   expect(empty.status).toBe(400);
   expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
-  expect((await api.scene(SCENE)).rev).toBe(written.rev);
+  expect((await getScene(api, SCENE)).rev).toBe(written.rev);
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
@@ -509,7 +515,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   // so the scene query runs into the abort (retry: 1 -> two attempts, then
   // 'error'). The write goes through the API: only the app's own READ of this
   // scene is blocked, the server stays reachable.
-  await api.patchScene(SCENE, { body: "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n" });
+  await patchScene(api, SCENE, { body: "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n" });
   await expect.poll(() => aborted, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
   // The cached scene is still there, so the PAGE must not swap itself for its
@@ -574,7 +580,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   await expect(page.getByRole("article")).toContainText("knapp, wetterrau, duzt jeden");
   await expect(page.getByRole("article")).toContainText("schuldet Jorna einen Gefallen");
 
-  await expect.poll(async () => (await api.npc(NPC)).body).toContain(added);
+  await expect.poll(async () => (await getNpc(api, NPC)).body).toContain(added);
   // Every other field of the npc is as it was.
   const { body: _before, ...fieldsBefore } = before;
   const { body: _after, ...fieldsAfter } = await npcFields(api);
@@ -601,7 +607,7 @@ test("a chapter's text is edited on its reading view; its other fields stay", as
   page,
   api,
 }) => {
-  const before = await api.chapter("01-salzhafen");
+  const before = await getChapter(api, "01-salzhafen");
   const added = "Wer das Feuer löscht, will nicht gesehen werden.";
 
   await page.goto("/campaigns/beispiel/chapters/01-salzhafen");
@@ -617,7 +623,7 @@ test("a chapter's text is edited on its reading view; its other fields stay", as
   // The editor closes and the reading view renders the new text.
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(added);
-  const after = await api.chapter("01-salzhafen");
+  const after = await getChapter(api, "01-salzhafen");
   expect(after.body).toBe(`${before.body}\n${added}\n`);
   // Only the text was sent: title and status are as they were.
   expect({ title: after.title, status: after.status }).toEqual({
@@ -636,18 +642,18 @@ test("a chapter's text and a second writer: the conflict line, and „Neu laden�
   await textarea.fill("Mein Entwurf.\n");
 
   // The second writer: a status change of the same row, its own fresh rev.
-  await api.patchChapter("01-salzhafen", { status: "done" });
+  await patchChapter(api, "01-salzhafen", { status: "done" });
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
 
   // Nothing written — the draft stays, the conflict line asks.
   await expect(page.getByRole("alert")).toContainText(CONFLICT_LINE);
   await expect(textarea).toHaveValue("Mein Entwurf.\n");
-  expect((await api.chapter("01-salzhafen")).body).not.toContain("Mein Entwurf.");
+  expect((await getChapter(api, "01-salzhafen")).body).not.toContain("Mein Entwurf.");
 
   await page.getByRole("button", { name: "Neu laden" }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(textarea).toHaveValue((await api.chapter("01-salzhafen")).body);
-  expect((await api.chapter("01-salzhafen")).status).toBe("done");
+  await expect(textarea).toHaveValue((await getChapter(api, "01-salzhafen")).body);
+  expect((await getChapter(api, "01-salzhafen")).status).toBe("done");
 });
 
 test("the chapter and the campaign are their own resources; the entry addresses are gone", async ({
@@ -655,19 +661,19 @@ test("the chapter and the campaign are their own resources; the entry addresses 
 }) => {
   // Every field flat, `body` among them, beside the guard — no `kind`, no
   // `path`, no `properties`.
-  const chapter = await api.chapter("01-salzhafen");
+  const chapter = await getChapter(api, "01-salzhafen");
   expect(Object.keys(chapter).sort()).toEqual(["body", "id", "rev", "status", "title"]);
   expect(chapter).toMatchObject({
     id: "01-salzhafen",
     title: "Kapitel 1: Der Leuchtturm von Salzhafen",
     status: "active",
   });
-  const campaign = await api.campaign();
+  const campaign = await getCampaign(api);
   expect(Object.keys(campaign).sort()).toEqual(["body", "description", "id", "name", "rev"]);
   expect(campaign.name).toBe("Der Leuchtturm von Salzhafen");
 
   // A stale rev is 409 with the current state and writes nothing.
-  const staleChapter = await api.fetch(api.chapterPath("01-salzhafen"), {
+  const staleChapter = await api.fetch(chapterPath(api, "01-salzhafen"), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: chapter.rev - 1, title: "Veraltet" }),
@@ -676,30 +682,30 @@ test("the chapter and the campaign are their own resources; the entry addresses 
   expect(((await staleChapter.json()) as { chapter: { title: string } }).chapter.title).toBe(
     chapter.title,
   );
-  const staleCampaign = await api.fetch(api.campaignPath(), {
+  const staleCampaign = await api.fetch(campaignPath(api), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: campaign.rev - 1, name: "Veraltet" }),
   });
   expect(staleCampaign.status).toBe(409);
-  expect((await api.campaign()).name).toBe(campaign.name);
+  expect((await getCampaign(api)).name).toBe(campaign.name);
 
   // A field the entity does not have is a 400 that names it.
-  const unknownChapter = await api.fetch(api.chapterPath("01-salzhafen"), {
+  const unknownChapter = await api.fetch(chapterPath(api, "01-salzhafen"), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: chapter.rev, location: "leuchtturm" }),
   });
   expect(unknownChapter.status).toBe(400);
   expect(await unknownChapter.text()).toContain("location");
-  const unknownCampaign = await api.fetch(api.campaignPath(), {
+  const unknownCampaign = await api.fetch(campaignPath(api), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: campaign.rev, title: "Kein Feld der Kampagne" }),
   });
   expect(unknownCampaign.status).toBe(400);
   expect(await unknownCampaign.text()).toContain("title");
-  expect(await api.chapter("01-salzhafen")).toEqual(chapter);
+  expect(await getChapter(api, "01-salzhafen")).toEqual(chapter);
 
   // There is no general endpoint over several entities: every address the
   // former `…/entries/*` spelled answers 404 — the chapter, the campaign, the
@@ -791,7 +797,7 @@ test("the npc edit surface carries the motivation: set with the text, cleared wi
   await motivationField(page).fill("");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(motivationField(page)).toHaveCount(0);
-  await expect.poll(async () => Object.hasOwn(await api.npc(NPC), "motivation")).toBe(false);
+  await expect.poll(async () => Object.hasOwn(await getNpc(api, NPC), "motivation")).toBe(false);
   await expect(article).not.toContainText("zur Rede stellen");
 });
 
@@ -799,7 +805,7 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
   page,
   api,
 }) => {
-  const before = await api.location("leuchtturm");
+  const before = await getLocation(api, "leuchtturm");
   const mine = "Kaltes Lampenöl, und der Wind pfeift durch die Wendeltreppe.";
 
   await page.goto("/campaigns/beispiel/locations/leuchtturm");
@@ -818,7 +824,7 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(field).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
-  const after = await api.location("leuchtturm");
+  const after = await getLocation(api, "leuchtturm");
   expect(after.atmosphere).toBe(mine);
   // The text was not touched, so it was not sent.
   expect(after.body).toBe(before.body);
@@ -846,14 +852,14 @@ Meine Zeile.
 `);
 
   // Somebody else writes the motivation while the surface stands.
-  await api.patchNpc(NPC, { motivation: theirs });
+  await patchNpc(api, NPC, { motivation: theirs });
   await page.getByRole("button", { name: "Speichern" }).click();
 
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
   // Nothing of the draft was written.
-  expect((await api.npc(NPC)).motivation).toBe(theirs);
-  expect((await api.npc(NPC)).body).toBe(before.body);
+  expect((await getNpc(api, NPC)).motivation).toBe(theirs);
+  expect((await getNpc(api, NPC)).body).toBe(before.body);
 
   // Reloading drops BOTH halves of the draft for the stored state.
   await conflicted.reload.click();
@@ -880,7 +886,7 @@ ${line}
 `);
 
   // A write of another field by a second writer is a conflict all the same.
-  await api.patchNpc(NPC, { status: "missing" });
+  await patchNpc(api, NPC, { status: "missing" });
   await page.getByRole("button", { name: "Speichern" }).click();
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
@@ -889,7 +895,7 @@ ${line}
   await expect(textarea).toHaveCount(0);
   await expect(conflicted.line).toHaveCount(0);
 
-  await expect.poll(async () => (await api.npc(NPC)).motivation).toBe(mine);
+  await expect.poll(async () => (await getNpc(api, NPC)).motivation).toBe(mine);
   const after = await npcFields(api);
   // Only what the surface shows was written: the status set in between stays.
   expect(after).toEqual({

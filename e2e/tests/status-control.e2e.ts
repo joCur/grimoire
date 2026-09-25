@@ -6,6 +6,7 @@
 // cutover that is what "the row moved under the app" means.
 
 import { expect, test } from "../support/test";
+import { getScene, patchScene } from "../support/scene";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
@@ -13,7 +14,7 @@ const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 test("the status control writes the status of the scene", async ({ page, api }) => {
   await page.goto(SCENE_URL);
-  expect((await api.scene(SCENE)).status).toBe("ready");
+  expect((await getScene(api, SCENE)).status).toBe("ready");
 
   // The pill IS the control.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
@@ -27,13 +28,13 @@ test("the status control writes the status of the scene", async ({ page, api }) 
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
 
   await expect(trigger).toHaveText(/Gespielt/);
-  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "played");
+  await expect.poll(() => getScene(api, SCENE)).toHaveProperty("status", "played");
 
   // …and back to "Bereit" — the scene follows every pick.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Bereit" }).click();
   await expect(trigger).toHaveText(/Bereit/);
-  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "ready");
+  await expect.poll(() => getScene(api, SCENE)).toHaveProperty("status", "ready");
 
   // The chapter overview row shows the same control with the same label.
   await page.goto("/campaigns/beispiel");
@@ -60,7 +61,7 @@ test("a second writer: the status pick reports the conflict inline", async ({
   // in between heals the staleness — hence up to three attempts.
   let conflicted = false;
   for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
-    await api.patchScene(SCENE, { body: secondWriter(attempt) });
+    await patchScene(api, SCENE, { body: secondWriter(attempt) });
     await trigger.click();
     await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
     conflicted = await message
@@ -71,7 +72,7 @@ test("a second writer: the status pick reports the conflict inline", async ({
   expect(conflicted, "the 409 conflict message never appeared").toBe(true);
 
   // Nothing was written: the other writer's content stands, unchanged.
-  const stored = await api.scene(SCENE);
+  const stored = await getScene(api, SCENE);
   expect(stored.status).toBe("ready");
   expect(stored.body).toContain("Von einem zweiten Schreiber geändert");
 
@@ -80,5 +81,5 @@ test("a second writer: the status pick reports the conflict inline", async ({
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
   await expect(trigger).toHaveText(/Gespielt/);
   await expect(message).toHaveCount(0);
-  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "played");
+  await expect.poll(() => getScene(api, SCENE)).toHaveProperty("status", "played");
 });

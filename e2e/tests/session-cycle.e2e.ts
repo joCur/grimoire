@@ -29,7 +29,7 @@
 // storage here reads a field, never a rendered text.
 //
 // A session id is an OPAQUE random string, so this spec never spells one out:
-// it always comes from the server (`api.sessionId()`). That is also the
+// it always comes from the server (`activeSessionId(api)`). That is also the
 // honest test — the app itself never derives the session its notes land in
 // either.
 //
@@ -38,7 +38,11 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type Api, type SeedScene } from "../support/test";
+import type { SceneProposal } from "@grimoire/shared/scene";
+import { expect, test } from "../support/test";
+import type { Api } from "../support/api";
+import { patchScene } from "../support/scene";
+import { activeSessionId, getSession, sessionExists } from "../support/session";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
 
@@ -139,7 +143,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await page.goto("/campaigns/beispiel");
 
   // No session running yet — the session row is created by the button.
-  expect(await api.sessionId()).toBeUndefined();
+  expect(await activeSessionId(api)).toBeUndefined();
 
   // ONE session control across ALL states: the offer to start and the running
   // session are the SAME chip in the SAME slot — same height, same right edge,
@@ -153,7 +157,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
 
   // WHICH session the notes land in is the server's answer — the id is
   // opaque and carries no date to reconstruct.
-  const sessionId = (await api.sessionId()) ?? "";
+  const sessionId = (await activeSessionId(api)) ?? "";
   expect(sessionId).not.toBe("");
 
   // The topbar carries ONE session control: the chip, brass, with the running
@@ -206,7 +210,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
     page.getByText("Noch keine Einträge — die Schnellnotiz unten landet hier."),
   ).toBeVisible();
 
-  await expect.poll(async () => (await api.session(sessionId)).scenesPlayed).toEqual([]);
+  await expect.poll(async () => (await getSession(api, sessionId)).scenesPlayed).toEqual([]);
 
   // …and while it is empty, the session menu offers to discard it.
   await expect(await sessionMenuItem(page, "Session verwerfen")).toBeVisible();
@@ -225,7 +229,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // …and the session gained one log ROW plus the played scene id. The row's
   // columns say what the old rendered line had to encode in a grammar: the
   // time, the scene it was taken in, and the note as the DM typed it.
-  await expect.poll(async () => (await api.session(sessionId)).log).toEqual([
+  await expect.poll(async () => (await getSession(api, sessionId)).log).toEqual([
     {
       id: expect.any(String),
       at: expect.stringMatching(/^\d{2}:\d{2}$/),
@@ -235,7 +239,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
     },
   ]);
   await expect
-    .poll(async () => (await api.session(sessionId)).scenesPlayed)
+    .poll(async () => (await getSession(api, sessionId)).scenesPlayed)
     .toEqual(["lighthouse-arrival"]);
 
   // The played checkmark comes from scenesPlayed — never faked client-side.
@@ -310,10 +314,10 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await (await sessionMenuItem(page, "Pause")).click();
   // A pause is ONE thing: an interval on the session, still open (no `to`
   // yet). It writes no log row, so the log is still the single note …
-  await expect.poll(async () => (await api.session(sessionId)).pauses).toEqual([
+  await expect.poll(async () => (await getSession(api, sessionId)).pauses).toEqual([
     { from: expect.stringMatching(/^[\d\-T:]+$/), fromMs: expect.any(Number) },
   ]);
-  expect((await api.session(sessionId)).log).toHaveLength(1);
+  expect((await getSession(api, sessionId)).log).toHaveLength(1);
 
   // … the chip is the same chip, dimmed, and says so.
   const pausedChip = page.getByRole("button", { name: /Session pausiert/ }).first();
@@ -330,7 +334,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // --- weiter: the same menu entry, the other direction ---------------------
   await (await sessionMenuItem(page, "Weiter")).click();
   // The interval is closed (`to` written) …
-  await expect.poll(async () => (await api.session(sessionId)).pauses).toEqual([
+  await expect.poll(async () => (await getSession(api, sessionId)).pauses).toEqual([
     {
       from: expect.stringMatching(/^[\d\-T:]+$/),
       fromMs: expect.any(Number),
@@ -349,7 +353,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // The pause round trip left the LOG alone: the note is still the only row.
   // The pause lives in `pauses`, and putting it in both places would be the
   // same pause twice.
-  const afterPause = await api.session(sessionId);
+  const afterPause = await getSession(api, sessionId);
   expect(afterPause.log.map((row) => row.text)).toEqual([NOTE]);
   expect(afterPause.pauses).toHaveLength(1);
 
@@ -358,7 +362,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
   await expect
-    .poll(async () => (await api.session(sessionId)).ended)
+    .poll(async () => (await getSession(api, sessionId)).ended)
     .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
 
   // The harvest card for the tagged note is waiting there.
@@ -384,16 +388,16 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
   // … it lives in its OWN row, under a DIFFERENT opaque id …
-  const secondId = (await api.sessionId()) ?? "";
+  const secondId = (await activeSessionId(api)) ?? "";
   expect(secondId).not.toBe("");
   expect(secondId).not.toBe(sessionId);
-  const second = await api.session(secondId);
+  const second = await getSession(api, secondId);
   expect(second.ended).toBeUndefined();
   expect(second.pauses).toEqual([]);
   expect(second.log).toEqual([]);
   expect(second.scenesPlayed).toEqual([]);
   // … and the first session is untouched: still ended, log and pauses intact.
-  const first = await api.session(sessionId);
+  const first = await getSession(api, sessionId);
   expect(first.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   expect(first.log.map((row) => row.text)).toEqual([NOTE]);
   expect(first.pauses).toHaveLength(1);
@@ -405,21 +409,21 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await secondNoteField.fill(SECOND_NOTE);
   await secondNoteField.press("Enter");
   await expect
-    .poll(async () => (await api.session(secondId)).log.map((row) => row.text))
+    .poll(async () => (await getSession(api, secondId)).log.map((row) => row.text))
     .toEqual([SECOND_NOTE]);
-  expect((await api.session(sessionId)).log.map((row) => row.text)).toEqual([NOTE]);
+  expect((await getSession(api, sessionId)).log.map((row) => row.text)).toEqual([NOTE]);
   await (await sessionMenuItem(page, "Pause")).click();
-  await expect.poll(async () => (await api.session(secondId)).pauses).toEqual([
+  await expect.poll(async () => (await getSession(api, secondId)).pauses).toEqual([
     { from: expect.stringMatching(/^[\d\-T:]+$/), fromMs: expect.any(Number) },
   ]);
   // The first session's pause list did not grow.
-  expect((await api.session(sessionId)).pauses).toHaveLength(1);
+  expect((await getSession(api, sessionId)).pauses).toHaveLength(1);
 
   // Ending the second one leads to the review of the SECOND session — the
   // harvest works on the LAST STARTED session, which is this one.
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
-  await expect.poll(async () => (await api.session(secondId)).ended).toBeDefined();
+  await expect.poll(async () => (await getSession(api, secondId)).ended).toBeDefined();
   await expect(
     page.getByText("Zweite Runde: die Gruppe bricht zum Leuchtturm auf"),
   ).toBeVisible();
@@ -503,7 +507,7 @@ test("live scene column: If-sections start closed, open one at a time, reset on 
 // the only arrangement that can show that; the reference scenes differ enough
 // for the nodes to be thrown away anyway.
 test.describe("two scenes of the same shape", () => {
-  const branchScene = (id: string, title: string, first: string, second: string): SeedScene => ({
+  const branchScene = (id: string, title: string, first: string, second: string): SceneProposal => ({
     id,
     title,
     type: "planned",
@@ -521,10 +525,10 @@ test.describe("two scenes of the same shape", () => {
 
   test.use({
     seed: {
-      entries: {
-        "scenes/twin-a": branchScene("twin-a", "Zwilling A", "sie zahlen", "sie drohen"),
-        "scenes/twin-b": branchScene("twin-b", "Zwilling B", "sie feilschen", "sie gehen"),
-      },
+      scenes: [
+        branchScene("twin-a", "Zwilling A", "sie zahlen", "sie drohen"),
+        branchScene("twin-b", "Zwilling B", "sie feilschen", "sie gehen"),
+      ],
     },
   });
 
@@ -579,7 +583,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const sessionId = (await api.sessionId()) ?? "";
+  const sessionId = (await activeSessionId(api)) ?? "";
 
   const aside = page.getByRole("complementary");
   // Nothing to remind of yet — the list is not rendered at all.
@@ -605,7 +609,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   // The flag sits on the ROW the review named by its id — the session has no
   // `reviewed` property of its own.
   await expect
-    .poll(async () => (await api.session(sessionId)).log.map((row) => row.reviewed))
+    .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.reviewed))
     .toEqual([true]);
 });
 
@@ -618,8 +622,8 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
   // The start action hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const sessionId = (await api.sessionId()) ?? "";
-  expect(await api.sessionExists(sessionId)).toBe(true);
+  const sessionId = (await activeSessionId(api)) ?? "";
+  expect(await sessionExists(api, sessionId)).toBe(true);
 
   // It asks first — the row is deleted, and that is what the dialog says.
   await (await sessionMenuItem(page, "Session verwerfen")).click();
@@ -630,7 +634,7 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
   // Abbrechen changes nothing at all.
   await dialog.getByRole("button", { name: "Abbrechen" }).click();
   await expect(dialog).toBeHidden();
-  expect(await api.sessionExists(sessionId)).toBe(true);
+  expect(await sessionExists(api, sessionId)).toBe(true);
 
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
@@ -641,7 +645,7 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
   // … no session chip is left over …
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
   // … and the session row is gone.
-  await expect.poll(() => api.sessionExists(sessionId)).toBe(false);
+  await expect.poll(() => sessionExists(api, sessionId)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
   // The new session gets a FRESH id, never the discarded one back: an
@@ -649,11 +653,11 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
   // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const restarted = (await api.sessionId()) ?? "";
+  const restarted = (await activeSessionId(api)) ?? "";
   expect(restarted).not.toBe("");
   expect(restarted).not.toBe(sessionId);
-  expect(await api.sessionExists(restarted)).toBe(true);
-  expect(await api.sessionExists(sessionId)).toBe(false);
+  expect(await sessionExists(api, restarted)).toBe(true);
+  expect(await sessionExists(api, sessionId)).toBe(false);
 });
 
 // The third state of the ONE session control: an unreachable session lookup.
@@ -690,8 +694,8 @@ test.describe("played/dropped scenes in the live nav", () => {
 
   test.use({
     seed: {
-      entries: {
-        "scenes/harbor-office-talk": {
+      scenes: [
+        {
           id: "harbor-office-talk",
           title: "Gespräch im Hafenkontor",
           type: "planned",
@@ -705,7 +709,7 @@ test.describe("played/dropped scenes in the live nav", () => {
             "\n## Aufhänger\n\n" +
             "Der Kontorschreiber hat die Frachtbücher der letzten Woche.\n",
         },
-      },
+      ],
     },
   });
 
@@ -739,7 +743,7 @@ test.describe("played/dropped scenes in the live nav", () => {
 
     // The status is set through the documented API — the same patch the status
     // control writes (critical path 7), here as the precondition.
-    await api.patchScene(SEEDED, { status: "played" });
+    await patchScene(api, SEEDED, { status: "played" });
     await page.reload();
 
     // It is gone from the planned group — the one it now lives in starts
@@ -783,9 +787,9 @@ test.describe("played/dropped scenes in the live nav", () => {
     const quickNote = page.getByLabel("Schnellnotiz");
     await quickNote.fill("Der Kontorschreiber rückt die Bücher heraus #thread");
     await quickNote.press("Enter");
-    const sessionId = (await api.sessionId()) ?? "";
+    const sessionId = (await activeSessionId(api)) ?? "";
     await expect
-      .poll(async () => (await api.session(sessionId)).scenesPlayed)
+      .poll(async () => (await getSession(api, sessionId)).scenesPlayed)
       .toContain("harbor-office-talk");
     await expect(
       nav.getByRole("group", { name: "Gespielt" }).getByText("Gespielt"),
@@ -794,7 +798,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     // Degrade: with EVERY scene played the view stays usable — the planned
     // list says so, the group holds both, and the center column still renders
     // a scene instead of blanking (or crashing on an empty selection).
-    await api.patchScene(ARRIVAL, { status: "dropped" });
+    await patchScene(api, ARRIVAL, { status: "dropped" });
     await page.reload();
     await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");
@@ -864,7 +868,7 @@ test.describe("the session view follows the chapter's order", () => {
   const ARRIVAL = "lighthouse-arrival";
 
   /** One planned scene of this block's chapter, in the seed's shape. */
-  const planned = (id: string, title: string, location: string): SeedScene => ({
+  const planned = (id: string, title: string, location: string): SceneProposal => ({
     id,
     title,
     type: "planned",
@@ -883,10 +887,7 @@ test.describe("the session view follows the chapter's order", () => {
 
   test.use({
     seed: {
-      entries: {
-        "scenes/abendessen": planned("abendessen", DINNER, "bucht"),
-        "scenes/keller": planned("keller", CELLAR, "leuchtturm"),
-      },
+      scenes: [planned("abendessen", DINNER, "bucht"), planned("keller", CELLAR, "leuchtturm")],
     },
   });
 
@@ -905,7 +906,7 @@ test.describe("the session view follows the chapter's order", () => {
     // scene that is still to come: `Ankunft` is behind us, the contingency
     // only fires on its trigger, so the evening starts at `Abendessen`.
     await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
-    await api.patchScene(ARRIVAL, { status: "played" });
+    await patchScene(api, ARRIVAL, { status: "played" });
 
     await startSession(page);
     const nav = liveNav(page);
@@ -952,7 +953,7 @@ test.describe("the session view follows the chapter's order", () => {
 
   test("a rearranged order moves the entry point with it", async ({ page, api }) => {
     await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
-    await api.patchScene(ARRIVAL, { status: "played" });
+    await patchScene(api, ARRIVAL, { status: "played" });
     await startSession(page);
 
     const nav = liveNav(page);
@@ -979,7 +980,7 @@ test.describe("the session view follows the chapter's order", () => {
   }) => {
     await setSceneOrder(api, ["smuggler-captured", "lighthouse-arrival", "abendessen", "keller"]);
     for (const scene of [ARRIVAL, "abendessen", "keller"]) {
-      await api.patchScene(scene, { status: "played" });
+      await patchScene(api, scene, { status: "played" });
     }
 
     await startSession(page);
