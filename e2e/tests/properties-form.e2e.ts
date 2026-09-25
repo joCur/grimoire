@@ -8,19 +8,19 @@
 // control patches ONE key, this form patches any of them. Two things make the
 // form the harder case and are what this spec is about:
 //
-//   1. It is a PATCH, not a write of the whole entry. Only the keys the DM
-//      actually changed may travel — a key the form knows but the DM did not
+//   1. It is a PATCH, not a write of the whole row. Only the fields the DM
+//      actually changed may travel — a field the form knows but the DM did not
 //      touch, and the whole body, have to come out of a save untouched.
 //   2. The conflict is DETERMINISTIC here, unlike the status control: the
 //      dialog freezes the rev it opened with on purpose, so the ~5s version
 //      poll cannot heal the staleness while the DM types. No retry loop.
 //   3. Everything the save uses is frozen at open, so the dialog belongs to
-//      ONE entry: a navigation under the open modal (⌘K works over it) has to
-//      close it, or the next save writes entry A's diff onto entry B. And
+//      ONE row: a navigation under the open modal (⌘K works over it) has to
+//      close it, or the next save writes row A's diff onto row B. And
 //      what is typed does not vanish without a question — neither on Esc nor
 //      in an unfinished quickstat row.
 //
-// Every assertion reads the entry back through the API — what the UI shows
+// Every assertion reads the row back through the API — what the UI shows
 // and what the database holds are checked separately. An external change
 // means a SECOND WRITER through the same API, which is what bumps the row's
 // guard token.
@@ -29,18 +29,21 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
+const SCENE = "lighthouse-arrival";
+const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
 /** The npc of the example campaign the npc cases edit — its own resource (ADR #31). */
 const NPC = "jorna";
 const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
 const CONFLICT_LINE = "Inzwischen geändert";
 
-/** Read the entry: its properties and its text — the two halves every assertion looks at. */
-async function split(api: Api, rel: string) {
-  const { properties, body } = await api.entry(rel);
-  return { properties, body };
+/**
+ * Read the scene: its text, and every other field beside it — a field save has
+ * to leave the text alone, which is what the assertions look at.
+ */
+async function sceneSplit(api: Api) {
+  const { body, rev: _rev, ...fields } = await api.scene(SCENE);
+  return { fields, body };
 }
 
 /**
@@ -63,11 +66,11 @@ async function openProperties(page: Page) {
   return dialog;
 }
 
-test("scene properties: chips, reference and status land in the entry — nothing else moves", async ({
+test("scene properties: chips, reference and status land in the scene — nothing else moves", async ({
   page,
   api,
 }) => {
-  const pristine = await split(api, SCENE);
+  const pristine = await sceneSplit(api);
   // The location the scene is moved into below has to EXIST — a reference
   // names an entry, and nothing is created by naming it (ADR #19). Creating
   // one is the app's own path (tested in create.e2e.ts); here it is one call.
@@ -87,8 +90,7 @@ test("scene properties: chips, reference and status land in the entry — nothin
 
   const dialog = await openProperties(page);
   await expect(dialog).toContainText("Szene: Eigenschaften");
-  // The two values the form does NOT own are context, not fields: the id is
-  // fixed at creation, the kind comes from the path.
+  // The id is context, not a field: it is fixed at creation.
   await expect(dialog).toContainText("lighthouse-arrival");
   await expect(dialog.getByRole("button", { name: "id ändern" })).toHaveCount(0);
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
@@ -148,28 +150,16 @@ test("scene properties: chips, reference and status land in the entry — nothin
   await save.click();
 
   // The dialog closes and the reading view is already on the new values: the
-  // patch answers with the written entry and the mutation seeds it.
+  // patch answers with the written scene and the mutation seeds it.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const article = page.getByRole("article");
   await expect(article).toContainText("#stealth");
   await expect(article).toContainText("#nachtszene");
   await expect(article.getByText("Nordbucht", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
-  // The location IS the group, so the scene MOVED — and the
-  // URL follows it (replace, so a step back does not reach the old address).
-  await expect(page).toHaveURL(
-    /\/campaigns\/beispiel\/entries\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
-  );
-  // The step back must not reach the address the scene just left: the redirect
-  // REPLACES the history entry, so the step back is the page the DM came from
-  // (the chapter overview), never `…/leuchtturm/lighthouse-arrival` — which would reload,
-  // redirect forward again and trap the button.
-  await page.goBack();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
-  await page.goForward();
-  await expect(page).toHaveURL(
-    /\/campaigns\/beispiel\/entries\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
-  );
+  // The scene is reached by its id (ADR #31): a new location is a field, and
+  // the route stays where it is.
+  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
 
   // The chapter overview does NOT re-sort: the location is a word of the row
   // now, not a group over it (ADR #27). So the row keeps its place in the
@@ -181,8 +171,6 @@ test("scene properties: chips, reference and status land in the entry — nothin
   await expect(row).not.toContainText("Leuchtturm von Salzhafen");
   await expect(page.getByText("nordbucht", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 3, name: "Nordbucht" })).toHaveCount(0);
-  // The old address still names the scene and reports the new one.
-  expect((await api.entry(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
   // References resolve over ids, so the session's log rows are untouched — a
   // row still names the scene it was taken in by that id.
   expect((await api.session("2026-01-15")).log.map((row) => row.sceneId)).toContain(
@@ -190,21 +178,21 @@ test("scene properties: chips, reference and status land in the entry — nothin
   );
 
   // Stored: the three changed fields …
-  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "draft");
-  const after = await split(api, SCENE);
-  expect(after.properties.tags).toEqual(["social", "travel", "stealth", "nachtszene"]);
-  expect(after.properties.location).toBe("nordbucht");
+  await expect.poll(() => api.scene(SCENE)).toHaveProperty("status", "draft");
+  const after = await sceneSplit(api);
+  expect(after.fields.tags).toEqual(["social", "travel", "stealth", "nachtszene"]);
+  expect(after.fields.location).toBe("nordbucht");
   // …and the location it names is untouched: a scene references its group, it
   // never writes it.
   expect((await api.location("nordbucht")).name).toBe("Nordbucht");
-  expect(after.properties.status).toBe("draft");
+  expect(after.fields.status).toBe("draft");
   // … the untouched ones with their values …
-  expect(after.properties.id).toBe("lighthouse-arrival");
-  expect(after.properties.title).toBe("Ankunft am Leuchtturm");
-  expect(after.properties.type).toBe("planned");
-  expect(after.properties.chapter).toBe("01-salzhafen");
-  expect(after.properties.npcs).toEqual(["jorna"]);
-  expect(after.properties.handouts).toEqual(["Karte von Salzhafen"]);
+  expect(after.fields).toEqual({
+    ...pristine.fields,
+    tags: ["social", "travel", "stealth", "nachtszene"],
+    location: "nordbucht",
+    status: "draft",
+  });
   // … and the body untouched, byte for byte.
   expect(after.body).toBe(pristine.body);
 });
@@ -213,8 +201,8 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
   page,
   api,
 }) => {
-  // The group a scene sits under IS its `location`, and the column holds an
-  // id — but the DM types a name, and the form reads it as the id it means.
+  // A scene's `location` holds an id — but the DM types a name, and the form
+  // reads it as the id it means.
   // What the save cannot do is invent the entry: a reference names something
   // that exists (ADR #19), so a name no location holds is refused until that
   // location is there — and then the very same save lands.
@@ -239,22 +227,20 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
   await save.click();
 
   // The server refuses it in the UI language, the dialog stays open on what
-  // was typed, and NOTHING was written — neither the scene nor an entry.
+  // was typed, and NOTHING was written — neither the scene nor a location.
   await expect(
     dialog.getByText('Den Ort „der-alte-hafen“ gibt es nicht — bitte zuerst anlegen.'),
   ).toBeVisible();
   await expect(ort).toHaveValue("Der alte Hafen");
   expect(await api.locationExists("der-alte-hafen")).toBe(false);
-  expect((await api.properties(SCENE)).location).toBe("leuchtturm");
+  expect((await api.scene(SCENE)).location).toBe("leuchtturm");
 
-  // With the location created, the same save lands and the scene moves into it.
+  // With the location created, the same save lands and the scene names it.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Der alte Hafen" });
   await save.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page).toHaveURL(
-    /\/campaigns\/beispiel\/entries\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
-  );
-  await expect.poll(() => api.properties(SCENE)).toHaveProperty("location", "der-alte-hafen");
+  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
+  await expect.poll(() => api.scene(SCENE)).toHaveProperty("location", "der-alte-hafen");
 
   // …and the chapter overview's row names it, with the location's name.
   await page.goto("/campaigns/beispiel");
@@ -286,9 +272,9 @@ test("a CLEARED Kapitel blocks the save in the dialog — no round trip", async 
   page,
   api,
 }) => {
-  // A scene's chapter is part of its address, so the server refuses a patch
-  // that removes it. The form says so under the field and the save button
-  // stays disabled, instead of a save that leaves and comes back as a toast.
+  // A scene always belongs to a chapter, so the server refuses a patch that
+  // removes it. The form says so under the field and the save button stays
+  // disabled, instead of a save that leaves and comes back as a toast.
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
   await dialog.getByLabel("Kapitel").fill("");
@@ -307,7 +293,7 @@ test("a CLEARED Kapitel blocks the save in the dialog — no round trip", async 
       "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
     ),
   ).toHaveCount(0);
-  expect(await api.properties(SCENE)).toHaveProperty("chapter", "01-salzhafen");
+  expect(await api.scene(SCENE)).toHaveProperty("chapter", "01-salzhafen");
 });
 
 /**
@@ -329,7 +315,7 @@ test("a second writer: the dialog offers reloading, and it shows what is stored"
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const externalTitle = "Ankunft am Leuchtturm (von Hand)";
   const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
@@ -343,14 +329,11 @@ test("a second writer: the dialog offers reloading, and it shows what is stored"
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toBeVisible();
 
   // A second writer changes title AND body under the open dialog — in ONE
-  // request, because that is what the one write path is (ADR #23). A fresh
+  // request, because that is what the scene's one write path is. A fresh
   // token, so it succeeds; the dialog holds the version its editing session
   // started from, so the version poll cannot make the DM's write succeed
   // silently.
-  await api.patchEntry(SCENE, {
-    properties: { title: externalTitle },
-    body: externalBody,
-  });
+  await api.patchScene(SCENE, { title: externalTitle, body: externalBody });
 
   const save = dialog.getByRole("button", { name: "Speichern", exact: true });
   await save.click();
@@ -364,9 +347,9 @@ test("a second writer: the dialog offers reloading, and it shows what is stored"
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toBeVisible();
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   // Nothing was written: the other writer's content stands, untouched.
-  const stored = await split(api, SCENE);
-  expect(stored.properties.tags).not.toContain("konflikt");
-  expect(stored.properties.title).toBe(externalTitle);
+  const stored = await sceneSplit(api);
+  expect(stored.fields.tags).not.toContain("konflikt");
+  expect(stored.fields.title).toBe(externalTitle);
   expect(stored.body).toBe(externalBody);
 
   // Reloading shows the CURRENT values: the external title is in the field, the
@@ -375,7 +358,7 @@ test("a second writer: the dialog offers reloading, and it shows what is stored"
   await expect(conflicted.line).toHaveCount(0);
   await expect(dialog.getByLabel("Titel")).toHaveValue(externalTitle);
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toHaveCount(0);
-  expect(await split(api, SCENE)).toEqual(stored);
+  expect(await sceneSplit(api)).toEqual(stored);
 
   // From the adopted version the DM's chip saves in one click, and the save is
   // still a patch of the dialog's fields only: the external body survives.
@@ -384,10 +367,10 @@ test("a second writer: the dialog offers reloading, and it shows what is stored"
   await save.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await expect.poll(async () => (await api.properties(SCENE)).tags).toContain("konflikt");
-  const after = await split(api, SCENE);
-  expect(after.properties.tags).toEqual([...(before.properties.tags as string[]), "konflikt"]);
-  expect(after.properties.title).toBe(externalTitle);
+  await expect.poll(async () => (await api.scene(SCENE)).tags).toContain("konflikt");
+  const after = await sceneSplit(api);
+  expect(after.fields.tags).toEqual([...(before.fields.tags as string[]), "konflikt"]);
+  expect(after.fields.title).toBe(externalTitle);
   expect(after.body).toBe(externalBody);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(externalTitle);
   await expect(page.getByRole("article")).toContainText("#konflikt");
@@ -397,7 +380,7 @@ test("a forced save writes the dialog's fields only — a concurrent body surviv
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
   await page.goto(SCENE_URL);
@@ -410,21 +393,21 @@ test("a forced save writes the dialog's fields only — a concurrent body surviv
 
   // The second writer touches only the TEXT — the dialog's own fields are not
   // in its request at all.
-  await api.writeBody(SCENE, externalBody);
+  await api.patchScene(SCENE, { body: externalBody });
 
   await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   const conflicted = conflict(dialog);
   await expect(conflicted.line).toBeVisible();
 
   // Forcing writes the refused fields on top of the row as it stands. This
-  // dialog carries `properties` only, so the body it never saw is untouched.
+  // dialog carries no text, so the body it never saw is untouched.
   await conflicted.force.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await expect.poll(async () => (await api.properties(SCENE)).tags).toContain("erzwungen");
-  const after = await split(api, SCENE);
-  expect(after.properties.tags).toEqual([...(before.properties.tags as string[]), "erzwungen"]);
-  expect(after.properties.title).toBe(before.properties.title);
+  await expect.poll(async () => (await api.scene(SCENE)).tags).toContain("erzwungen");
+  const after = await sceneSplit(api);
+  expect(after.fields.tags).toEqual([...(before.fields.tags as string[]), "erzwungen"]);
+  expect(after.fields.title).toBe(before.fields.title);
   // The assertion this test exists for, read back through the API.
   expect(after.body).toBe(externalBody);
   await expect(page.getByRole("article")).toContainText("#erzwungen");
@@ -541,9 +524,9 @@ test("clearing a field deletes the key instead of writing an empty value", async
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
-  expect(before.properties.location).toBe("leuchtturm");
-  expect(before.properties.handouts).toBeDefined();
+  const before = await sceneSplit(api);
+  expect(before.fields.location).toBe("leuchtturm");
+  expect(before.fields.handouts).toEqual(["Karte von Salzhafen"]);
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -565,16 +548,16 @@ test("clearing a field deletes the key instead of writing an empty value", async
   await expect(article).not.toContainText("Handout:");
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toHaveCount(0);
 
-  // In the stored row both keys are GONE, not emptied: no `location` and no
-  // empty `handouts` left behind. (The dialog closes only after the write
-  // answered, so the entry is settled here.)
-  const after = await split(api, SCENE);
-  expect(after.properties.location).toBeUndefined();
-  expect(after.properties.handouts).toBeUndefined();
+  // In the stored row the location is GONE, not an empty string, and the list
+  // is empty. (The dialog closes only after the write answered, so the scene
+  // is settled here.)
+  const after = await sceneSplit(api);
+  expect(after.fields.location).toBeUndefined();
+  expect(after.fields.handouts).toEqual([]);
   // Everything else stands, the body byte-identical.
-  expect(after.properties.tags).toEqual(["social", "travel"]);
-  expect(after.properties.status).toBe("ready");
-  expect(after.properties.npcs).toEqual(["jorna"]);
+  expect(after.fields.tags).toEqual(["social", "travel"]);
+  expect(after.fields.status).toBe("ready");
+  expect(after.fields.npcs).toEqual(["jorna"]);
   expect(after.body).toBe(before.body);
 });
 
@@ -658,7 +641,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
 });
 
 test("Abbrechen and Esc ask before they throw typed values away", async ({ page, api }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -687,20 +670,20 @@ test("Abbrechen and Esc ask before they throw typed values away", async ({ page,
 
   // The reading view is as it was, and nothing was written.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  expect(await split(api, SCENE)).toEqual(before);
+  expect(await sceneSplit(api)).toEqual(before);
 });
 
-test("navigating away closes the dialog — no diff of entry A lands in entry B", async ({
+test("navigating away closes the dialog — no diff of scene A lands in npc B", async ({
   page,
   api,
 }) => {
-  const scene = await split(api, SCENE);
+  const scene = await sceneSplit(api);
   const role = "Auftraggeberin, nach der ⌘K-Navigation gespeichert";
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // Type into the SCENE's form, then leave the entry WITHOUT closing it: the
+  // Type into the SCENE's form, then leave the scene WITHOUT closing it: the
   // ⌘K hotkey is a window listener, so the palette opens over the modal and
   // navigates the route underneath it — this is a click path, not a theory.
   const sceneDialog = await openProperties(page);
@@ -712,8 +695,8 @@ test("navigating away closes the dialog — no diff of entry A lands in entry B"
   await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
 
-  // The dialog is gone with its entry — it may not stand over another entry's
-  // reading view, holding the frozen values (and the rev) of the one it left.
+  // The dialog is gone with its scene — it may not stand over another reading
+  // view, holding the frozen values (and the rev) of the one it left.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -731,7 +714,7 @@ test("navigating away closes the dialog — no diff of entry A lands in entry B"
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   await expect.poll(async () => (await api.npc(NPC)).role).toBe(role);
-  expect(await split(api, SCENE)).toEqual(scene);
+  expect(await sceneSplit(api)).toEqual(scene);
 });
 
 test("Ort and Kapitel have the form too — the campaign brings its own", async ({
@@ -740,7 +723,7 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
   // The four kinds with typed fields offer it — an npc and a location on
   // their own routes (ADR #31) …
   const withForm: [string, string, string][] = [
-    ["entries/01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
+    ["scenes/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
     ["entries/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
@@ -775,21 +758,18 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
 
 test("a status outside the closed list is refused and writes nothing", async ({ api }) => {
   // The four status columns and the scene type are CHECK constraints of their
-  // columns (ADR #25), so the one write path refuses a foreign value with a
+  // columns (ADR #25), so the scene's write refuses a foreign value with a
   // 400 and its own code instead of letting SQLite fail. The form can only
   // ever offer the allowed positions — this asserts the rule on the endpoint,
   // which is what protects the column against the generator and a direct
   // write as well.
-  const before = await split(api, SCENE);
-  const current = await api.entry(SCENE);
-  const response = await api.fetch(
-    `campaigns/beispiel/entries/${SCENE.split("/").map(encodeURIComponent).join("/")}`,
-    {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: current.rev, properties: { status: "halbfertig" } }),
-    },
-  );
+  const before = await sceneSplit(api);
+  const current = await api.scene(SCENE);
+  const response = await api.fetch(api.scenePath(SCENE), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: current.rev, status: "halbfertig" }),
+  });
   expect(response.status).toBe(400);
   // The body carries what the sentence in the app needs: which column, the
   // value that was written, and the positions in column order.
@@ -799,9 +779,9 @@ test("a status outside the closed list is refused and writes nothing", async ({ 
     value: "halbfertig",
     allowed: ["draft", "ready", "played", "dropped"],
   });
-  // A refusal writes nothing — neither half moved, and the guard token stands.
-  expect(await split(api, SCENE)).toEqual(before);
-  expect((await api.entry(SCENE)).rev).toBe(current.rev);
+  // A refusal writes nothing — no field moved, and the guard token stands.
+  expect(await sceneSplit(api)).toEqual(before);
+  expect((await api.scene(SCENE)).rev).toBe(current.rev);
 });
 
 // Critical path 8: the same form at phone size. The dialog is the only place
@@ -811,7 +791,7 @@ test.describe("at 390px", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test("the properties dialog opens, edits and saves at phone size", async ({ page, api }) => {
-    const before = await split(api, SCENE);
+    const before = await sceneSplit(api);
     const title = "Ankunft am Leuchtturm bei Nacht";
 
     await page.goto(SCENE_URL);
@@ -832,9 +812,9 @@ test.describe("at 390px", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
 
-    await expect.poll(() => api.properties(SCENE)).toHaveProperty("title", title);
-    const after = await split(api, SCENE);
-    expect(after.properties.status).toBe("ready");
+    await expect.poll(() => api.scene(SCENE)).toHaveProperty("title", title);
+    const after = await sceneSplit(api);
+    expect(after.fields.status).toBe("ready");
     expect(after.body).toBe(before.body);
   });
 });

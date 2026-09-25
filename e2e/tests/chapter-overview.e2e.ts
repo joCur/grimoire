@@ -19,7 +19,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
-import { expect, test, todaySessionId, type Api, type SeedEntry } from "../support/test";
+import { expect, test, todaySessionId, type Api, type SeedEntry, type SeedScene } from "../support/test";
 
 /**
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
@@ -79,18 +79,15 @@ const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
  * (ADR #27). The example campaign has none, so the test that needs one
  * seeds it.
  */
-const SCENE_WITHOUT_LOCATION: SeedEntry = {
-  kind: "scene",
-  properties: {
-    id: "ohne-ort-szene",
-    title: "Irgendwo unterwegs",
-    type: "planned",
-    chapter: "01-salzhafen",
-    npcs: [],
-    handouts: [],
-    tags: ["travel"],
-    status: "draft",
-  },
+const SCENE_WITHOUT_LOCATION: SeedScene = {
+  id: "ohne-ort-szene",
+  title: "Irgendwo unterwegs",
+  type: "planned",
+  chapter: "01-salzhafen",
+  npcs: [],
+  handouts: [],
+  tags: ["travel"],
+  status: "draft",
   body: "\n## Flow\n\nDie Gruppe ist auf der Straße, der Ort steht noch nicht fest.\n",
 };
 
@@ -188,16 +185,16 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
     "Wenn: Charaktere werden beim Auskundschaften der Bucht entdeckt",
   );
 
-  // Opening a row is the chapter overview's job — the reading view takes over from here.
+  // Opening a row is the chapter overview's job — the scene's own reading
+  // view takes over from here (ADR #31).
   await planned.click();
-  await expect(page).toHaveURL(
-    /\/campaigns\/beispiel\/entries\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
-  );
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 });
 
 test.describe("a scene without a location", () => {
   test.use({
-    seed: { entries: { "scene-ohne-ort": SCENE_WITHOUT_LOCATION } },
+    seed: { entries: { "scenes/ohne-ort-szene": SCENE_WITHOUT_LOCATION } },
   });
 
   test("a scene that names no location keeps its row, without a location part", async ({
@@ -217,8 +214,8 @@ test.describe("a scene without a location", () => {
     await expect(page.getByRole("link", { name: /Ankunft am Leuchtturm/ })).toContainText(
       "Leuchtturm von Salzhafen · #social #travel",
     );
-    // …and the scene sits at chapter level, address included.
-    await expect(scene).toHaveAttribute("href", "/campaigns/beispiel/entries/01-salzhafen/ohne-ort-szene");
+    // …and it opens on its own route like every scene.
+    await expect(scene).toHaveAttribute("href", "/campaigns/beispiel/scenes/ohne-ort-szene");
   });
 });
 
@@ -311,7 +308,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // --- entry views: same chrome, section marking follows the entity ---------
   // A scene belongs to the chapters section; its hierarchy lives in the page's
   // context line, not in the topbar.
-  await page.goto("/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival");
+  await page.goto("/campaigns/beispiel/scenes/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
   );
@@ -577,12 +574,12 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   // Accepting one part while the run is still running is what fills
-  // `review.written` — the endpoint half of accepting during a run.
+  // `review.writtenScenes` — the endpoint half of accepting during a run.
   const current = await job();
   expect(current.status).toBe("running");
   await api.send("POST", `campaigns/beispiel/generate/job/${started.jobId}/accept`, {
     rev: current.rev,
-    paths: [`01-salzhafen/${THREE_SCENES[0].id}`],
+    scenes: [THREE_SCENES[0].id],
   });
 
   for (const width of TOPBAR_WIDTHS) {
@@ -1204,26 +1201,23 @@ interface OrderTree {
 /** Scene id -> the title its row and its move controls carry. */
 const TITLES: Record<string, string> = {
   "lighthouse-arrival": "Ankunft am Leuchtturm",
-  keller: "Der Keller unter dem Turm",
-  steg: "Nachts am Steg",
+  "order-keller": "Der Keller unter dem Turm",
+  "order-steg": "Nachts am Steg",
   "smuggler-captured": "Von den Schmugglern erwischt",
 };
 
 /** One planned scene for the order fixtures, with a location so the row has a meta line. */
-function plannedScene(id: string, location: string): SeedEntry {
+function plannedScene(id: string, location: string): SeedScene {
   return {
-    kind: "scene",
-    properties: {
-      id,
-      title: TITLES[id],
-      type: "planned",
-      chapter: CHAPTER,
-      location,
-      npcs: [],
-      handouts: [],
-      tags: [],
-      status: "draft",
-    },
+    id,
+    title: TITLES[id]!,
+    type: "planned",
+    chapter: CHAPTER,
+    location,
+    npcs: [],
+    handouts: [],
+    tags: [],
+    status: "draft",
     body: `\n## Flow\n\n${TITLES[id]}.\n`,
   };
 }
@@ -1232,20 +1226,20 @@ function plannedScene(id: string, location: string): SeedEntry {
  * Three planned scenes in the chapter — the example campaign brings one, and
  * an order needs something to arrange.
  *
- * The STEMS set the seeded order: the seed run appends every scene to the end
- * of its chapter, in the order it reads the fixture sources — alphabetically
- * by stem. So these two stand behind `scene-lighthouse-arrival`, and the
- * contingency behind them.
+ * The IDS set the seeded order: the seed run appends every scene to the end
+ * of its chapter, in the order it reads `scenes/` — alphabetically by id. So
+ * these two stand behind `lighthouse-arrival`, and the contingency
+ * (`smuggler-captured`) behind them.
  */
 const ORDER_SEED = {
   entries: {
-    "scene-order-2-keller": plannedScene("keller", "leuchtturm"),
-    "scene-order-3-steg": plannedScene("steg", "bucht"),
+    "scenes/order-keller": plannedScene("order-keller", "leuchtturm"),
+    "scenes/order-steg": plannedScene("order-steg", "bucht"),
   },
 };
 
 /** The seeded order, by id — where every test of this block starts. */
-const SEEDED_ORDER = ["lighthouse-arrival", "keller", "steg", "smuggler-captured"];
+const SEEDED_ORDER = ["lighthouse-arrival", "order-keller", "order-steg", "smuggler-captured"];
 
 /** The chapter node of the tree: its scenes in order and the order's guard. */
 async function orderNode(api: Api): Promise<OrderTree["chapters"][number]> {
@@ -1295,13 +1289,13 @@ test.describe("the scene order of a chapter", () => {
     // nowhere to go at all — its block is one row long.
     await expect(up(page, "lighthouse-arrival")).toBeDisabled();
     await expect(down(page, "lighthouse-arrival")).toBeEnabled();
-    await expect(up(page, "steg")).toBeEnabled();
-    await expect(down(page, "steg")).toBeDisabled();
+    await expect(up(page, "order-steg")).toBeEnabled();
+    await expect(down(page, "order-steg")).toBeDisabled();
     await expect(up(page, "smuggler-captured")).toBeDisabled();
     await expect(down(page, "smuggler-captured")).toBeDisabled();
 
     // One step down swaps the first two rows — visibly …
-    const moved = ["keller", "lighthouse-arrival", "steg", "smuggler-captured"];
+    const moved = ["order-keller", "lighthouse-arrival", "order-steg", "smuggler-captured"];
     await down(page, "lighthouse-arrival").click();
     await expect.poll(() => shownOrder(page)).toEqual(titlesOf(moved));
     // … and in the database, which is what the reload reads back.
@@ -1309,7 +1303,7 @@ test.describe("the scene order of a chapter", () => {
     await page.reload();
     await expect.poll(() => shownOrder(page)).toEqual(titlesOf(moved));
     // The moved row took its ends with it: now IT is the one that cannot go up.
-    await expect(up(page, "keller")).toBeDisabled();
+    await expect(up(page, "order-keller")).toBeDisabled();
     await expect(up(page, "lighthouse-arrival")).toBeEnabled();
   });
 
@@ -1328,7 +1322,7 @@ test.describe("the scene order of a chapter", () => {
     let written: string[] = [];
     for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
       const node = await orderNode(api);
-      const front = attempt % 2 === 1 ? "steg" : "keller";
+      const front = attempt % 2 === 1 ? "order-steg" : "order-keller";
       written = [front, ...node.scenes.map((scene) => scene.id).filter((id) => id !== front)];
       await api.send("PUT", ORDER_PATH, { scenes: written, rev: node.sceneOrderRev });
       await down(page, "lighthouse-arrival").click();
@@ -1353,17 +1347,29 @@ test.describe("the scene order of a chapter", () => {
     await expect(message).toHaveCount(0);
   });
 
+  test("a scene's own write leaves the order's guard alone", async ({ api }) => {
+    // The other direction of the three guards: writing a scene bumps its own
+    // `rev` and nothing of the chapter's order (ADR #27).
+    const node = await orderNode(api);
+    const before = await api.scene("order-keller");
+    const written = await api.patchScene("order-keller", { title: "Der Keller, neu vermessen" });
+    expect(written.rev).not.toBe(before.rev);
+    const after = await orderNode(api);
+    expect(after.sceneOrderRev).toBe(node.sceneOrderRev);
+    expect(after.scenes.map((scene) => scene.id)).toEqual(SEEDED_ORDER);
+  });
+
   test("a reorder is no conflict for an open editor — three writers, three guards", async ({
     page,
     api,
   }) => {
-    const scene = "01-salzhafen/leuchtturm/lighthouse-arrival";
-    const sceneBefore = await api.entry(scene);
+    const scene = "lighthouse-arrival";
+    const sceneBefore = await api.scene(scene);
     const chapterBefore = await api.entry(CHAPTER);
     const addition = "Eine Zeile, die das Umsortieren überlebt.";
 
     // The scene's text editor stands open on the version it started from.
-    await page.goto(`/campaigns/beispiel/entries/${scene}`);
+    await page.goto(`/campaigns/beispiel/scenes/${scene}`);
     await page.getByRole("button", { name: "Bearbeiten" }).click();
     await page.getByRole("button", { name: "Markdown", exact: true }).click();
     const textarea = page.getByRole("textbox", { name: /^Markdown-Text von/ });
@@ -1372,19 +1378,19 @@ test.describe("the scene order of a chapter", () => {
 
     // The order moves underneath — the one write the up/down buttons make.
     const node = await orderNode(api);
-    const reordered = ["keller", "lighthouse-arrival", "steg", "smuggler-captured"];
+    const reordered = ["order-keller", "lighthouse-arrival", "order-steg", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: reordered, rev: node.sceneOrderRev });
 
     // It bumped its OWN guard and nobody else's: neither the scene's row
     // version nor the chapter's moved, so neither editor is stale (ADR #27).
     expect((await orderNode(api)).sceneOrderRev).not.toBe(node.sceneOrderRev);
-    expect((await api.entry(scene)).rev).toBe(sceneBefore.rev);
+    expect((await api.scene(scene)).rev).toBe(sceneBefore.rev);
     expect((await api.entry(CHAPTER)).rev).toBe(chapterBefore.rev);
 
     // So the save lands — no conflict line, the typed text is stored.
     await page.getByRole("button", { name: "Speichern" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Inzwischen geändert" })).toHaveCount(0);
-    await expect.poll(() => api.body(scene)).toContain(addition);
+    await expect.poll(async () => (await api.scene(scene)).body).toContain(addition);
     expect(await storedOrder(api)).toEqual(reordered);
 
     // The chapter's own text holds `chapters.rev`, which the order does not
@@ -1396,7 +1402,7 @@ test.describe("the scene order of a chapter", () => {
     await expect(chapterText).toHaveValue(/Leuchtfeuer/);
     await chapterText.fill("Den Leuchtturm wieder anzünden.");
     const second = await orderNode(api);
-    const again = ["steg", "keller", "lighthouse-arrival", "smuggler-captured"];
+    const again = ["order-steg", "order-keller", "lighthouse-arrival", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });
     await dialog.getByRole("button", { name: "Speichern" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);

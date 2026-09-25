@@ -35,7 +35,7 @@ import {
 /** What GET /api/:campaign/tree answers — only the parts this spec reads. */
 interface TreeResponse {
   campaign: string;
-  chapters: { id: string; title: string; scenes: { path: string; id: string; title: string }[] }[];
+  chapters: { id: string; title: string; scenes: { path?: string; id: string; title: string }[] }[];
   npcs: { id: string; path?: string }[];
   locations: { id: string }[];
   /** A session SUMMARY — id and timestamps, no address (ADR #26). */
@@ -47,7 +47,7 @@ interface GlossaryResponse {
   entries: { term: string; explanation: string }[];
 }
 
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+const SCENE = "lighthouse-arrival";
 
 const COUNTS =
   "SELECT (SELECT count(*) FROM campaigns) AS campaigns, " +
@@ -65,13 +65,9 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.campaign).toBe("beispiel");
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.scenes);
-  // A scene's address is its chapter, its location and its id — the two
-  // scenes name different locations, so the location shows up in both
-  // addresses.
-  expect(scenes.map((s) => s.path).sort()).toEqual([
-    "01-salzhafen/bucht/smuggler-captured",
-    "01-salzhafen/leuchtturm/lighthouse-arrival",
-  ]);
+  // A scene in the tree names itself by its id — it has no address (ADR #31).
+  expect(scenes.map((s) => s.id).sort()).toEqual(["lighthouse-arrival", "smuggler-captured"]);
+  for (const scene of scenes) expect(scene.path).toBeUndefined();
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
   // An npc in the tree names itself by its id — it has no address (ADR #31).
   for (const npc of tree.npcs) expect(npc.path).toBeUndefined();
@@ -102,9 +98,11 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
 
   // --- a scene body, callouts and If-sections included ----------------------
-  const scene = await api.entry(SCENE);
-  expect(scene.properties.id).toBe("lighthouse-arrival");
-  expect(scene.properties.status).toBe("ready");
+  // What `scenes/lighthouse-arrival.json` spells, answered as the scene itself.
+  const scene = await api.scene(SCENE);
+  expect(scene.id).toBe("lighthouse-arrival");
+  expect(scene.status).toBe("ready");
+  expect(scene.location).toBe("leuchtturm");
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
 

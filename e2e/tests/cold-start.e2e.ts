@@ -119,11 +119,12 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const sceneTitle = page.getByLabel("Titel");
   await expect(sceneTitle).toHaveAttribute("placeholder", "Titel der Szene");
   await sceneTitle.fill("Ankunft am Leuchtturm");
-  await expect(page.getByText("01-salzhafen/ankunft-am-leuchtturm", { exact: true })).toBeVisible();
+  await expect(page.getByText("scenes/ankunft-am-leuchtturm", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
-  // A new scene OPENS IN THE EDITOR — an empty scene is there to be written.
-  await expect(page).toHaveURL(/\/01-salzhafen\/ankunft-am-leuchtturm$/);
+  // A new scene OPENS IN THE EDITOR, on its own route — an empty scene is
+  // there to be written.
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/scenes/ankunft-am-leuchtturm$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.getByRole("button", { name: "Speichern" })).toBeVisible();
   // …and it is a draft, as every new scene is.
@@ -139,9 +140,10 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(page.getByRole("article")).toContainText(
     "Der Turm steht schwarz gegen den Abendhimmel.",
   );
-  const sceneDoc = await api.entry("01-salzhafen/ankunft-am-leuchtturm");
+  const sceneDoc = await api.scene("ankunft-am-leuchtturm");
   expect(sceneDoc.body).toContain("[!readaloud]");
-  expect(sceneDoc.properties.status).toBe("draft");
+  expect(sceneDoc.status).toBe("draft");
+  expect(sceneDoc.chapter).toBe("01-salzhafen");
 
   // --- a second scene goes to the END of the chapter ------------------------
   // The order is the DM's, and a new scene is appended to it (ADR #27). This
@@ -151,7 +153,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await page.getByRole("button", { name: "Szene anlegen" }).click();
   await page.getByLabel("Titel").fill("Abendessen bei Jorna");
   await page.getByRole("button", { name: "Anlegen" }).click();
-  await expect(page).toHaveURL(/\/01-salzhafen\/abendessen-bei-jorna$/);
+  await expect(page).toHaveURL(/\/scenes\/abendessen-bei-jorna$/);
 
   await page.goto(`/campaigns/${CAMPAIGN_ID}`);
   await expect
@@ -165,6 +167,29 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
     "ankunft-am-leuchtturm",
     "abendessen-bei-jorna",
   ]);
+
+  // --- a change of chapter goes to the END of the target chapter -----------
+  // A second chapter with a scene of its own; the first chapter's second
+  // scene moves there through its field dialog and lands behind that scene.
+  await api.send("POST", `campaigns/${CAMPAIGN_ID}/chapters`, { title: "Die Bucht", id: "02-bucht" });
+  await api.send("POST", api.scenePath(), { title: "Am Strand", chapter: "02-bucht" });
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/scenes/abendessen-bei-jorna`);
+  await page.getByRole("button", { name: "Eigenschaften" }).click();
+  const fields = page.getByRole("dialog");
+  await fields.getByLabel("Kapitel").fill("02-bucht");
+  await expect(fields.getByRole("paragraph").filter({ hasText: "Die Bucht" })).toBeVisible();
+  await fields.getByRole("button", { name: "Speichern" }).click();
+  await expect(fields).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Kontext" })).toContainText("Die Bucht");
+  const moved = await api.get<{ chapters: { id: string; scenes: { id: string }[] }[] }>(
+    `campaigns/${CAMPAIGN_ID}/tree`,
+  );
+  expect(moved.chapters.map((chapter) => chapter.scenes.map((scene) => scene.id))).toEqual([
+    ["ankunft-am-leuchtturm"],
+    ["am-strand", "abendessen-bei-jorna"],
+  ]);
+  // …and back, so the session below finds the chapter as it was: again the end.
+  await api.patchScene("abendessen-bei-jorna", { chapter: "01-salzhafen" });
 
   // --- start the session, use the scene live --------------------------------
   expect(await api.sessionId()).toBeUndefined();

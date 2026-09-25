@@ -409,8 +409,8 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   await page.getByRole("button", { name: /^Übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  const scene = await api.entry(`01-salzhafen/${SCENE_ID}`);
-  expect(`${JSON.stringify(scene.properties)}\n${scene.body}`).toContain(OLD_NAME);
+  const scene = await api.scene(SCENE_ID);
+  expect(`${scene.title}\n${scene.body}`).toContain(OLD_NAME);
 });
 
 test("without naming conventions nothing is flagged and the prompt is unchanged", async ({

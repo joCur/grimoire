@@ -64,6 +64,42 @@ test("a scene is its own resource: flat on the wire, 404 at its old address", as
   }
 });
 
+test("a scene write: a stale rev is 409, an unknown field 400 naming it", async ({ api }) => {
+  const before = await api.scene("lighthouse-arrival");
+  const patch = (body: Record<string, unknown>) =>
+    api.fetch(api.scenePath("lighthouse-arrival"), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const create = (body: Record<string, unknown>) =>
+    api.fetch(api.scenePath(), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // A second writer moves the row; the first one's rev is stale now.
+  const moved = await api.patchScene("lighthouse-arrival", { status: "played" });
+  const stale = await patch({ rev: before.rev, title: "Zu spät" });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({
+    code: "rev_conflict",
+    rev: moved.rev,
+    scene: { id: "lighthouse-arrival", status: "played" },
+  });
+  expect((await api.scene("lighthouse-arrival")).title).toBe("Ankunft am Leuchtturm");
+
+  // A field a scene does not have is refused, by name — on PATCH and POST.
+  const unknownPatch = await patch({ rev: moved.rev, atmosphere: "Nebel" });
+  expect(unknownPatch.status).toBe(400);
+  expect(((await unknownPatch.json()) as { error: string }).error).toContain("atmosphere");
+  const unknownCreate = await create({ title: "Neu", chapter: "01-salzhafen", roll20Page: "x" });
+  expect(unknownCreate.status).toBe(400);
+  expect(((await unknownCreate.json()) as { error: string }).error).toContain("roll20Page");
+  expect(await api.sceneExists("neu")).toBe(false);
+});
+
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({
   page,
   api,

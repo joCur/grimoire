@@ -1,13 +1,13 @@
-// Critical path 9: editing an entry's markdown body in the app — open → change
-// the body → save → rendered; 409 on a CONCURRENT SECOND WRITE offers the two
-// answers instead of silently overwriting; see CLAUDE.md.
+// Critical path 9: editing a markdown body in the app — open → change the body
+// → save → rendered; 409 on a CONCURRENT SECOND WRITE offers the two answers
+// instead of silently overwriting; see CLAUDE.md.
 //
-// The database is the only truth (ADR #13), so "someone changed the entry
+// The database is the only truth (ADR #13), so "someone changed the scene
 // outside" cannot happen — the conflict this path is about is a second write
-// through the API while the editor stands open. The write goes through the ONE
-// write path of an entry, PATCH /entries/<address> with `rev` (ADR #23); the
-// properties block must come out byte-identical, and every assertion reads the
-// entry back through the API.
+// through the API while the editor stands open. A scene is written through its
+// own resource, PATCH …/scenes/<id> with `rev` (ADR #31); its other fields
+// must come out untouched, and every assertion reads the scene back through
+// the API.
 //
 // Unlike the status control (critical path 7) the conflict is DETERMINISTIC:
 // the editing session holds the version it started from and sends it with every
@@ -15,11 +15,11 @@
 // types. No retry loop.
 //
 // Because fields and text share ONE row and ONE version, a second write that
-// touched only the properties is a conflict just like a text one — a status set
+// touched only the status is a conflict just like a text one — a status set
 // next to the open editor is not adopted behind the DM's back. A refused save
 // keeps the draft and offers exactly two answers, and the spec drives both:
-// reloading adopts the stored entry, forcing writes only the fields this
-// request carries, so the other writer's properties survive a forced text save.
+// reloading adopts the stored scene, forcing writes only the fields this
+// request carries, so the other writer's status survives a forced text save.
 //
 // An npc and a location keep one prose FIELD beside their text —
 // `motivation` and `atmosphere` (ADR #29) — and the edit surface carries it:
@@ -42,8 +42,8 @@ import type { Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
+const SCENE = "lighthouse-arrival";
+const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
 /** The npc the npc cases edit — its own resource and route (ADR #31). */
 const NPC = "jorna";
 const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
@@ -52,10 +52,24 @@ const CONFLICT_LINE = "Inzwischen geändert";
 /** aria-label of the raw-markdown textarea (EntryBodyEditor). */
 const TEXTAREA = "Markdown-Text von";
 
-/** Read the entry: its properties and its text — the two halves every assertion looks at. */
+/** Read the campaign by its address: its properties and its text. */
 async function split(api: Api, rel: string) {
   const { properties, body } = await api.entry(rel);
   return { properties, body };
+}
+
+/**
+ * Read a scene: its text, and every other field beside it — what a text save
+ * has to leave alone.
+ */
+async function sceneSplit(api: Api, id: string = SCENE) {
+  const { body, rev: _rev, ...fields } = await api.scene(id);
+  return { fields, body };
+}
+
+/** A scene's text. */
+async function sceneBody(api: Api, id: string = SCENE): Promise<string> {
+  return (await api.scene(id)).body;
 }
 
 /** Read the npc: its fields, `body` among them, without its guard. */
@@ -101,7 +115,7 @@ test("editing the body: save writes the entry and the reading view shows it", as
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const added = "Am Fuß der Treppe liegt eine angelaufene Messingpfeife im Sand.";
 
   await page.goto(SCENE_URL);
@@ -113,7 +127,7 @@ test("editing the body: save writes the entry and the reading view shows it", as
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
-  // Seeded with the body — WITHOUT the properties, which this editor never
+  // Seeded with the body — WITHOUT the other fields, which this editor never
   // touches (and says so).
   await expect(textarea).toHaveValue(before.body);
   await expect(page.getByText("Nur der Textkörper — die Eigenschaften bleiben unverändert.")).toBeVisible();
@@ -140,10 +154,10 @@ test("editing the body: save writes the entry and the reading view shows it", as
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
 
-  // On disk: properties block byte-identical, body exactly what was typed.
-  await expect.poll(() => api.body(SCENE)).toContain(added);
-  const after = await split(api, SCENE);
-  expect(after.properties).toEqual(before.properties);
+  // Stored: every other field untouched, body exactly what was typed.
+  await expect.poll(() => sceneBody(api)).toContain(added);
+  const after = await sceneSplit(api);
+  expect(after.fields).toEqual(before.fields);
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
@@ -176,25 +190,22 @@ test("a mention in the text stays text — nothing created, no error", async ({ 
   expect(after.body).toContain(relation);
 });
 
-test("a scene that MOVED is still editable under its old address", async ({
+test("a scene whose location changed stays at its route and stays editable", async ({
   page,
   api,
 }) => {
-  // The group segment of a scene address is its `location`, so correcting
-  // the location re-addresses the scene — and every link written down before
-  // that (a bookmark, another tab) names the old address. Opening it has to
-  // land on the scene, replace the URL with the one it has now, and save
-  // through it like any other edit.
+  // A scene is reached by its id (ADR #31): correcting its location changes a
+  // field, not the link — a bookmark written before still opens it, and the
+  // text saves through it like any other edit.
   // The location has to exist before a scene can name it (ADR #19).
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
-  await api.patchProperties(SCENE, { location: "nordbucht" });
-  const moved = "01-salzhafen/nordbucht/lighthouse-arrival";
+  await api.patchScene(SCENE, { location: "nordbucht" });
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/entries/${moved}$`));
+  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
 
-  const before = await split(api, moved);
+  const before = await sceneSplit(api);
   const added = "Der Weg zur Nordbucht ist bei Ebbe trocken.";
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
@@ -203,17 +214,17 @@ test("a scene that MOVED is still editable under its old address", async ({
 
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(added);
-  await expect.poll(() => api.body(moved)).toContain(added);
-  // …and the properties are untouched, the moved `location` included.
-  const after = await split(api, moved);
-  expect(after.properties).toEqual(before.properties);
+  await expect.poll(() => sceneBody(api)).toContain(added);
+  // …and the other fields are untouched, the changed `location` included.
+  const after = await sceneSplit(api);
+  expect(after.fields).toEqual(before.fields);
 });
 
 test("the preview toggle renders the draft through the real markdown pipeline", async ({
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const loot = "> [!loot] Eine angelaufene Messingpfeife, Gravur: „Nordbucht“.";
 
   await page.goto(SCENE_URL);
@@ -256,8 +267,8 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await expect(page.locator("[data-callout='loot']")).toContainText(
     "Eine angelaufene Messingpfeife",
   );
-  const after = await split(api, SCENE);
-  expect(after.properties).toEqual(before.properties);
+  const after = await sceneSplit(api);
+  expect(after.fields).toEqual(before.fields);
   expect(after.body).toContain(loot);
 });
 
@@ -265,9 +276,9 @@ test("a concurrent second write: the save reports the conflict, the second one w
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const mine = "Von der DM im Editor der App ergänzt.";
-  // Same properties, different body — only the row's guard token moves, and
+  // Same fields, different body — only the row's guard token moves, and
   // that is what the server compares against.
   const otherBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
@@ -281,7 +292,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // No race to win — the editing session holds the version it started from
   // until the DM answers the conflict, so the version poll cannot make the
   // app's write succeed silently.
-  await api.writeBody(SCENE, otherBody);
+  await api.patchScene(SCENE, { body: otherBody });
   await textarea.fill(`${before.body}\n${mine}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
@@ -294,9 +305,9 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // The editor stays open and the typed text survives — that is the point.
   await expect(textarea).toHaveValue(`${before.body}\n${mine}\n`);
   // Nothing was written: the other writer's body stands, untouched.
-  const stored = await split(api, SCENE);
+  const stored = await sceneSplit(api);
   expect(stored.body).toBe(otherBody);
-  expect(stored.properties).toEqual(before.properties);
+  expect(stored.fields).toEqual(before.fields);
 
   // Reloading adopts what is stored: the draft is gone and there is nothing
   // left to save. The SURFACE stays as it was — the same textarea is still
@@ -306,7 +317,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
   await expect(textarea).toHaveValue(otherBody);
-  expect(await split(api, SCENE)).toEqual(stored);
+  expect(await sceneSplit(api)).toEqual(stored);
 
   // And from that adopted version the DM's sentence saves in one click —
   // deliberately on top of the other writer's body: they saw it and decided.
@@ -316,14 +327,14 @@ test("a concurrent second write: the save reports the conflict, the second one w
   await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => api.body(SCENE)).toContain(mine);
-  const after = await split(api, SCENE);
-  expect(after.properties).toEqual(before.properties);
+  await expect.poll(() => sceneBody(api)).toContain(mine);
+  const after = await sceneSplit(api);
+  expect(after.fields).toEqual(before.fields);
   expect(after.body).toBe(`${otherBody}${mine}\n`);
 });
 
 // Fields and text are ONE row and ONE version (ADR #23), so a write that
-// touched only the properties makes an open editor's version stale exactly like
+// touched only the status makes an open editor's version stale exactly like
 // a text write does. That is deliberate: there is no "text-neutral" change the
 // editor may adopt on its own, because adopting one means writing the draft
 // against a row the DM has not seen.
@@ -331,12 +342,12 @@ test("a concurrent second write: the save reports the conflict, the second one w
 // The status control right next to the editor is the everyday way this happens,
 // and it is the DM's own click — so the conflict has to be answerable, not just
 // reported. These two tests are the same setup and the two answers.
-test("a properties-only second write conflicts too — reloading adopts it", async ({
+test("a status-only second write conflicts too — reloading adopts it", async ({
   page,
   api,
 }) => {
-  const opened = await api.entry(SCENE);
-  const before = { properties: opened.properties, body: opened.body };
+  const opened = await api.scene(SCENE);
+  const before = { body: opened.body };
   const mine = "Während des Statuswechsels geschrieben.";
 
   await page.goto(SCENE_URL);
@@ -346,9 +357,9 @@ test("a properties-only second write conflicts too — reloading adopts it", asy
   await textarea.fill(`${before.body}\n${mine}\n`);
 
   // The status of THIS scene is set out of band, with a token fetched a moment
-  // ago: one properties key, not one byte of the body — and the row's version
-  // moves all the same.
-  const bumped = await api.patchProperties(SCENE, { status: "played" });
+  // ago: one field, not one byte of the body — and the row's version moves
+  // all the same.
+  const bumped = (await api.patchScene(SCENE, { status: "played" })).rev;
   expect(bumped).toBe(opened.rev + 1);
 
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -360,9 +371,9 @@ test("a properties-only second write conflicts too — reloading adopts it", asy
   await expect(conflicted.force).toBeVisible();
   await expect(textarea).toHaveValue(`${before.body}\n${mine}\n`);
   // Nothing of the draft was written.
-  const stored = await split(api, SCENE);
+  const stored = await sceneSplit(api);
   expect(stored.body).toBe(before.body);
-  expect(stored.properties.status).toBe("played");
+  expect(stored.fields.status).toBe("played");
 
   // Reloading drops the draft and continues from what is stored: the saved
   // text is back in the textarea and the changed status is on the page.
@@ -375,14 +386,14 @@ test("a properties-only second write conflicts too — reloading adopts it", asy
   // Still the same textarea: reseeding keeps the surface.
   await expect(textarea).toHaveValue(before.body);
   // The sentence is gone, as the DM asked — nothing was written at all.
-  expect(await split(api, SCENE)).toEqual(stored);
+  expect(await sceneSplit(api)).toEqual(stored);
 });
 
 test("a forced save writes only the text — the other writer's status survives", async ({
   page,
   api,
 }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const mine = "Trotz des Statuswechsels gespeichert.";
 
   await page.goto(SCENE_URL);
@@ -391,7 +402,7 @@ test("a forced save writes only the text — the other writer's status survives"
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${mine}\n`);
 
-  await api.patchProperties(SCENE, { status: "played" });
+  await api.patchScene(SCENE, { status: "played" });
   await page.getByRole("button", { name: "Speichern" }).click();
 
   const conflicted = conflict(page);
@@ -404,60 +415,59 @@ test("a forced save writes only the text — the other writer's status survives"
   await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => api.body(SCENE)).toContain(mine);
-  const after = await split(api, SCENE);
+  await expect.poll(() => sceneBody(api)).toContain(mine);
+  const after = await sceneSplit(api);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
-  expect(after.properties.status).toBe("played");
-  expect(after.properties).toEqual({ ...before.properties, status: "played" });
+  expect(after.fields).toEqual({ ...before.fields, status: "played" });
   // And the page agrees, without a reload.
   await expect(page.getByRole("button", { name: /^Status ändern, aktuell/ })).toHaveText(
     /Gespielt/,
   );
 });
 
-// The pair in ONE request is asserted here on the write path itself, for a
-// scene (whose edit surface sends `body` alone); the npc's edit surface, which
-// sends text and motivation together, has its own cases below. One PATCH, one
-// transaction, ONE step of the version — how much a request carried is not
-// readable from `rev`.
-test("properties and body in ONE write are one version step", async ({ api }) => {
-  const opened = await api.entry(SCENE);
-  const before = { properties: opened.properties, body: opened.body };
+// Fields and text in ONE request are asserted here on the write path itself,
+// for a scene (whose edit surface sends `body` alone); the npc's edit surface,
+// which sends text and motivation together, has its own cases below. One
+// PATCH, one transaction, ONE step of the version — how much a request carried
+// is not readable from `rev`.
+test("fields and body in ONE write are one version step", async ({ api }) => {
+  const opened = await api.scene(SCENE);
+  const before = await sceneSplit(api);
   const rev = opened.rev;
-  const body = `${before.body}\nIn einem Zug mit den Eigenschaften geschrieben.\n`;
+  const body = `${before.body}\nIn einem Zug mit den Feldern geschrieben.\n`;
 
-  const written = await api.patchEntry(SCENE, {
+  const written = await api.patchScene(SCENE, {
     rev,
-    properties: { status: "played", tags: ["social", "travel", "zusammen"] },
+    status: "played",
+    tags: ["social", "travel", "zusammen"],
     body,
   });
 
   expect(written.rev).toBe(rev + 1);
   expect(written.body).toBe(body);
-  expect(written.properties.status).toBe("played");
+  expect(written.status).toBe("played");
 
-  const after = await split(api, SCENE);
+  const after = await sceneSplit(api);
   expect(after.body).toBe(body);
-  expect(after.properties).toEqual({
-    ...before.properties,
+  expect(after.fields).toEqual({
+    ...before.fields,
     status: "played",
     tags: ["social", "travel", "zusammen"],
   });
 
-  // Neither half alone is a save: a request that changes nothing is refused
-  // rather than counted as a write.
-  const empty = await api.fetch(`campaigns/beispiel/entries/${SCENE}`, {
+  // A request that names no field is refused rather than counted as a write.
+  const empty = await api.fetch(api.scenePath(SCENE), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: written.rev }),
   });
   expect(empty.status).toBe(400);
   expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
-  expect((await api.entry(SCENE)).rev).toBe(written.rev);
+  expect((await api.scene(SCENE)).rev).toBe(written.rev);
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
 
   await page.goto(SCENE_URL);
   await openMarkdownEditor(page);
@@ -477,11 +487,11 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toBeVisible();
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
-  expect(await split(api, SCENE)).toEqual(before);
+  expect(await sceneSplit(api)).toEqual(before);
 });
 
 test("a failing background refetch leaves the open editor standing", async ({ page, api }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
   const draft = `${before.body}\nGeschrieben, während der Server weg war.\n`;
 
   await page.goto(SCENE_URL);
@@ -490,12 +500,10 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(draft);
 
-  // Every further READ of this entry fails — a restarted server, a network
+  // Every further READ of this scene fails — a restarted server, a network
   // blip. Only GET is blocked, so the write endpoint stays reachable.
-  // Counted per entry: the NPC card of this scene reads through the same
-  // endpoint, and its failures say nothing about the scene's query.
   let aborted = 0;
-  await page.route("**/api/campaigns/beispiel/entries/**", (route) => {
+  await page.route("**/api/campaigns/beispiel/scenes/**", (route) => {
     if (route.request().method() !== "GET") {
       void route.fallback();
       return;
@@ -504,23 +512,21 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
     void route.abort();
   });
   // The version poll (~5s) notices the second writer's change and refetches,
-  // so the entry query runs into the abort (retry: 1 -> two attempts, then
+  // so the scene query runs into the abort (retry: 1 -> two attempts, then
   // 'error'). The write goes through the API: only the app's own READ of this
-  // entry is blocked, the server stays reachable.
-  await api.writeBody(SCENE, "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n");
+  // scene is blocked, the server stays reachable.
+  await api.patchScene(SCENE, { body: "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n" });
   await expect.poll(() => aborted, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
-  // The cached entry is still there, so the PAGE must not swap itself for its
-  // error line and take the unsaved text with it. (The status pill next to the
-  // editor reports the entry as unreadable for its own failed read — that is its job
-  // and stays, which is why this looks for the route's full sentence.)
+  // The cached scene is still there, so the PAGE must not swap itself for its
+  // error line and take the unsaved text with it.
   await expect(page.getByText("Eintrag nicht ladbar — Pfad prüfen")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(textarea).toHaveValue(draft);
 });
 
 test("Abbrechen asks before it throws work away", async ({ page, api }) => {
-  const before = await split(api, SCENE);
+  const before = await sceneSplit(api);
 
   await page.goto(SCENE_URL);
 
@@ -553,7 +559,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
   // Nothing was written.
-  expect(await split(api, SCENE)).toEqual(before);
+  expect(await sceneSplit(api)).toEqual(before);
 });
 
 test("the NPC reading view edits its body the same way", async ({ page, api }) => {
@@ -603,13 +609,16 @@ test("location and chapter offer the editor; the list addresses are gone", async
   //
   // An npc and a location have no entry address either: each is its own
   // resource (`…/npcs/:id`, `…/locations/:id`), and `…/entries/npcs/<id>`
-  // and `…/entries/locations/<id>` name nothing.
+  // and `…/entries/locations/<id>` name nothing — and neither does a scene's
+  // former address, chapter and id (`…/scenes/:id`).
   for (const rel of [
     "sessions/2026-01-15",
     "inbox",
     "glossary",
     "npcs/jorna",
     "locations/leuchtturm",
+    "01-salzhafen/lighthouse-arrival",
+    "01-salzhafen/leuchtturm/lighthouse-arrival",
   ]) {
     const address = rel.split("/").map(encodeURIComponent).join("/");
     for (const method of ["GET", "PATCH"] as const) {
