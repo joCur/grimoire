@@ -17,6 +17,7 @@ const CAMPAIGN: Campaign = {
   name: "Salzhafen",
   description: "Küste",
   body: "\nKampagnenweite Notizen.\n",
+  glossaryIntro: "",
   rev: 3,
 };
 const initial = campaignFormValues(CAMPAIGN);

@@ -253,25 +253,22 @@ export const de = {
   // glossary page (/campaigns/:campaign/glossary). Campaign CONTENT, like the
   // npcs and the locations — the instance settings under /settings are a
   // different thing entirely.
-  // Shared by both pages: the row controls, the per-entry
-  // save outcome, the delete confirmation.
-  "entryList.loading": "Lade Liste …",
-  "entryList.loadFailed": "Liste nicht geladen — Seite neu laden.",
-  "entryList.saveFailed": "Nicht gespeichert.",
-  "entryList.saving": "Speichere …",
-  "entryList.saved": "Gespeichert",
-  "entryList.moveUp": "Nach oben",
-  "entryList.moveDown": "Nach unten",
-  "entryList.edit": "„{name}“ bearbeiten",
-  "entryList.remove": "„{name}“ löschen",
-  "entryList.removed": "Eintrag gelöscht",
-  // Re-aiming the draft is offered only when the opened entry is still in the
-  // list that came back (components/EntryListPage.tsx); reloading is the
-  // shared `editConflict.reload`.
-  "entryList.applyDraft": "Entwurf behalten & auf aktuelle Liste anwenden",
-  "entryList.confirmDelete.title": "Eintrag löschen?",
-  "entryList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
-  "entryList.confirmDelete.confirm": "Löschen",
+  // Shared by both pages (components/EditableList.tsx): the row controls,
+  // the save outcome of one row, the delete confirmation. A conflict line
+  // uses the shared `editConflict.*` sentences.
+  "editableList.loading": "Lade Liste …",
+  "editableList.loadFailed": "Liste nicht geladen — Seite neu laden.",
+  "editableList.saveFailed": "Nicht gespeichert.",
+  "editableList.saving": "Speichere …",
+  "editableList.saved": "Gespeichert",
+  "editableList.moveUp": "Nach oben",
+  "editableList.moveDown": "Nach unten",
+  "editableList.edit": "„{name}“ bearbeiten",
+  "editableList.remove": "„{name}“ löschen",
+  "editableList.removed": "Eintrag gelöscht",
+  "editableList.confirmDelete.title": "Eintrag löschen?",
+  "editableList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
+  "editableList.confirmDelete.confirm": "Löschen",
 
   "knowledge.title": "Kampagnenwissen",
   "knowledge.lead":
@@ -325,6 +322,8 @@ export const de = {
     'Die gespielte Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
+  "server.glossary_term_taken":
+    "Den Begriff „{term}“ gibt es im Glossar schon — bitte den vorhandenen bearbeiten.",
   "server.scene_order_mismatch":
     "Die Reihenfolge passt nicht mehr zu den Szenen des Kapitels — bitte neu laden.",
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",

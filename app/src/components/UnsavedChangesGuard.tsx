@@ -1,6 +1,6 @@
 // The "discard changes?" question for views whose save is EXPLICIT.
 //
-// The campaign-content pages (components/EntryListPage.tsx) edit a row inline
+// The campaign-content pages (components/EditableList.tsx) edit a row inline
 // and save it with a button, which means there is a window in which the DM's
 // work lives only in the page. Leaving it — the back row, the campaign
 // switcher, the browser's back button, a reload — would throw that work away

@@ -36,6 +36,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   log_scene_unknown: "server.log_scene_unknown",
   played_scene_unknown: "server.played_scene_unknown",
   glossary_duplicate_term: "server.glossary_duplicate_term",
+  glossary_term_taken: "server.glossary_term_taken",
   scene_order_mismatch: "server.scene_order_mismatch",
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
@@ -134,7 +135,8 @@ function paramsFor(
       const value = text(body.value);
       return value === undefined ? undefined : { value };
     }
-    case "glossary_duplicate_term": {
+    case "glossary_duplicate_term":
+    case "glossary_term_taken": {
       const term = text(body.term);
       return term === undefined ? undefined : { term };
     }
