@@ -85,6 +85,7 @@ export function SceneFields({
       <SelectField
         id={fieldId("type")}
         label={t("properties.scene.type.label")}
+        required
         value={values.type}
         options={SCENE_TYPES.map((type) => ({ value: type, label: t(SCENE_TYPE_LABELS[type]) }))}
         onChange={(value) => {
@@ -103,6 +104,7 @@ export function SceneFields({
       <ReferenceField
         id={fieldId("chapter")}
         label={t("properties.scene.chapter.label")}
+        required
         {...issue("chapter")}
         value={values.chapter}
         options={chapters}
@@ -144,6 +146,7 @@ export function SceneFields({
       <SelectField
         id={fieldId("status")}
         label={t("properties.scene.status.label")}
+        required
         value={values.status}
         options={sceneStatusOptions(t)}
         onChange={(value) => {

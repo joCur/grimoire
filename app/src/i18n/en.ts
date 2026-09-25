@@ -172,7 +172,7 @@ export const en: Messages = {
   "properties.scene.chapter.label": "Chapter",
   "properties.scene.location.label": "Location",
   "properties.scene.location.hint":
-    "A location from the list — the chapter groups the scene under it.",
+    "Pick a location from the list — the scene names it in its meta line, in the reading view and in the session view.",
   "properties.scene.npcs.label": "NPCs",
   "properties.scene.npcs.hint": "Ids only — the npc has to have an entry already.",
   "properties.scene.handouts.label": "Handouts",
@@ -426,7 +426,7 @@ export const en: Messages = {
   "live.scene.none":
     "No scene in the active chapter — create scenes on the chapters page.",
   "live.scene.loading": "Loading scene …",
-  "live.scene.unloadable": "Scene not loadable — check the path.",
+  "live.scene.unloadable": "Scene not loadable — is the server running?",
   "live.scene.locationHeading": "Location",
   "live.scene.npcsHeading": "NPCs",
   "live.scene.noNpcs": "No NPCs in this scene.",

@@ -92,6 +92,16 @@ describe("reference fields", () => {
   });
 });
 
+describe("what a scene cannot be without", () => {
+  test("title, type, chapter and status are marked as needed, the rest is not", () => {
+    const html = render();
+    const needed = [...html.matchAll(/<span class="[^"]*">([^<]+)<span class="[^"]*"> · nötig<\/span>/g)].map(
+      (match) => match[1],
+    );
+    expect(needed).toEqual(["Titel", "Typ", "Kapitel", "Status"]);
+  });
+});
+
 describe("chips and selects", () => {
   test("tags are plain chips with a remove button each", () => {
     const html = render({ tags: ["social", "escape"] });
