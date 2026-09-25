@@ -112,7 +112,12 @@ const RUNNING_SESSION: SeedSession = {
  * id is the example campaign's, so it REPLACES that campaign, and the header
  * has no name to show.
  */
-const NAMELESS_CAMPAIGN: CampaignSeed = { id: "beispiel", name: "beispiel", body: "" };
+const NAMELESS_CAMPAIGN: CampaignSeed = {
+  id: "beispiel",
+  name: "beispiel",
+  body: "",
+  glossaryIntro: "",
+};
 
 test('"/" redirects into the campaign and the chapter overview shows chapter and scenes', async ({
   page,

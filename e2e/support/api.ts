@@ -4,8 +4,9 @@
 // `get`/`send` that parse JSON and throw on a non-2xx answer, and the request
 // path of anything under the bound campaign. What the suite knows about an
 // entity lives in that entity's own module — `campaign.ts`, `chapter.ts`,
-// `scene.ts`, `npc.ts`, `location.ts`, `thread.ts`, `idea.ts` and
-// `session.ts` — as functions that take this handle first:
+// `scene.ts`, `npc.ts`, `location.ts`, `thread.ts`, `idea.ts`,
+// `glossary-term.ts`, `knowledge-item.ts` and `session.ts` — as functions
+// that take this handle first:
 //
 //   const npc = await getNpc(api, "fenn");
 //   await patchScene(api, "lighthouse-arrival", { status: "played" });

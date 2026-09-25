@@ -16,6 +16,7 @@
 // Sessions and ideas are not indexed at all, so no query can produce one.
 
 import { expect, test } from "../support/test";
+import { getGlossaryTerm } from "../support/glossary-term";
 
 test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page, api }) => {
   // On the wire a scene hit is `{ kind: "scene", id, title }` and no `path`.
@@ -244,18 +245,19 @@ test("a glossary hit opens the glossary page — no address, and none needed", a
 }) => {
   const TERM = "smugglers' cove";
 
-  // On the wire: the hit names its row by `kind` and `id`, and carries NO
-  // `path`. An address here would 404 for whoever followed it.
+  // On the wire: the hit names its term by `kind` and `id` — the id of its
+  // resource — and carries NO `path`.
   const { results } = await api.get<{
     results: { kind: string; id: string; path?: string; title: string }[];
   }>("campaigns/beispiel/search?q=smugglers");
-  const glossary = results.filter((hit) => hit.kind === "glossary");
+  const glossary = results.filter((hit) => hit.kind === "glossary-term");
   expect(glossary).toHaveLength(1);
-  expect(glossary[0]?.id).toBe(TERM);
+  expect(glossary[0]).toMatchObject({ id: "smugglers-cove", title: TERM });
   expect(glossary[0]).not.toHaveProperty("path");
+  expect((await getGlossaryTerm(api, "smugglers-cove")).term).toBe(TERM);
 
-  // In the palette: the term shows with its list's label and opens the
-  // glossary page, where the row actually lives.
+  // In the palette: the term shows with the glossary's label and opens the
+  // glossary page, where the terms are kept.
   await page.goto("/campaigns/beispiel");
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByRole("combobox").fill("smugglers");
@@ -277,7 +279,7 @@ test("sessions and ideas are not in the index, so they never turn up", async ({ 
       `campaigns/beispiel/search?q=${encodeURIComponent(query)}`,
     );
     // Every hit is one of the indexed entities — none is a session or an idea.
-    const indexed = ["campaign", "chapter", "scene", "npc", "location", "glossary"];
+    const indexed = ["campaign", "chapter", "scene", "npc", "location", "glossary-term"];
     expect(results.filter((hit) => !indexed.includes(hit.kind))).toEqual([]);
   }
 });

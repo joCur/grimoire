@@ -8,7 +8,7 @@
 //
 //   1. one seed run on a fresh database loads the whole campaign, and it is
 //      then reachable through the API (tree, a scene body, an npc, the
-//      session, the ideas, the glossary);
+//      session, the ideas, the glossary terms);
 //   2. a SECOND run on that same database refuses, because the database
 //      already holds campaigns — nothing is loaded twice, nothing is lost.
 //
@@ -24,6 +24,7 @@ import { openSqlite } from "../../server/src/db/driver";
 import { pristineDir, runDir } from "../support/paths";
 import { dbFor, expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
 import { apiFor, type Api } from "../support/api";
+import { getGlossaryTerms } from "../support/glossary-term";
 import { getIdeas } from "../support/idea";
 import { getLocation } from "../support/location";
 import { getNpc } from "../support/npc";
@@ -40,18 +41,13 @@ interface TreeResponse {
   sessions: { id: string; started: string }[];
 }
 
-/** What GET /api/:campaign/glossary answers. */
-interface GlossaryResponse {
-  entries: { term: string; explanation: string }[];
-}
-
 const SCENE = "lighthouse-arrival";
 
 const COUNTS =
   "SELECT (SELECT count(*) FROM campaigns) AS campaigns, " +
   "(SELECT count(*) FROM scenes) AS scenes, " +
   "(SELECT count(*) FROM npcs) AS npcs, " +
-  "(SELECT count(*) FROM glossary) AS glossary";
+  "(SELECT count(*) FROM glossary_terms) AS glossary_terms";
 
 /**
  * Everything the seeded campaign has to answer — asserted after BOTH runs, so
@@ -180,14 +176,15 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
     },
   ]);
 
-  // --- the glossary: its own TABLE ------------------------------------------
-  const glossary = await api.get<GlossaryResponse>("campaigns/beispiel/glossary");
-  const terms = glossary.entries.map((e) => e.term);
-  expect(terms).toContain("lighthouse keeper");
-  expect(glossary.entries.find((e) => e.term === "lighthouse keeper")?.explanation).toBe(
-    "Leuchtturmwärter",
-  );
-  expect(terms).toContain("smugglers' cove");
+  // --- the glossary terms: each its own resource ----------------------------
+  const terms = await getGlossaryTerms(api);
+  expect(terms.find((term) => term.id === "lighthouse-keeper")).toEqual({
+    id: "lighthouse-keeper",
+    term: "lighthouse keeper",
+    explanation: "Leuchtturmwärter",
+    rev: 1,
+  });
+  expect(terms.map((term) => term.term)).toContain("smugglers' cove");
 }
 
 test("a fresh instance boots EMPTY — nothing is loaded at startup", async ({}, testInfo) => {

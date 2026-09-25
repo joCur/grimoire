@@ -24,17 +24,18 @@
 //   test.use({ seed: { without: { sessions: ["2026-01-15"] } } });
 //
 // An object whose id a fixture already has REPLACES that fixture, any other
-// adds one. The campaign, a chapter, a scene, an npc, a location, a thread and
-// an idea are each their own resource (ADR #31) and have a directory of their
-// own (`campaigns/<id>.json`, `chapters/<id>.json`, …): the fixture is the entity
-// itself, every field flat, without a guard. A session sits in the campaign
-// directory itself as `session-<id>.json`.
+// adds one. The campaign, a chapter, a scene, an npc, a location, a thread, an
+// idea, a glossary term and a knowledge item are each their own resource
+// (ADR #31) and have a directory of their own (`campaigns/<id>.json`,
+// `chapters/<id>.json`, …): the fixture is the entity itself, every field
+// flat, without a guard. A session sits in the campaign directory itself as
+// `session-<id>.json`.
 //
 // What the suite knows about each entity — reading it, writing it, its
 // request paths — lives in that entity's own module next to this one
 // (campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts, thread.ts,
-// idea.ts, session.ts). This file only puts server, seed and fixtures
-// together.
+// idea.ts, glossary-term.ts, knowledge-item.ts, session.ts). This file only
+// puts server, seed and fixtures together.
 //
 // Without overrides the pristine copy from the global setup is used directly
 // (it is never written to), so most tests copy nothing at all.
@@ -66,7 +67,9 @@ import { test as base, expect } from "@playwright/test";
 
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { GlossaryTermSeed } from "@grimoire/shared/glossary-term";
 import type { IdeaSeed } from "@grimoire/shared/idea";
+import type { KnowledgeItemSeed } from "@grimoire/shared/knowledge-item";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
@@ -125,6 +128,8 @@ export interface Seed {
   locations?: LocationProposal[];
   threads?: ThreadSeed[];
   ideas?: IdeaSeed[];
+  glossaryTerms?: GlossaryTermSeed[];
+  knowledgeItems?: KnowledgeItemSeed[];
   sessions?: SeedSession[];
   /** Fixtures to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
   without?: {
@@ -134,6 +139,8 @@ export interface Seed {
     locations?: string[];
     threads?: string[];
     ideas?: string[];
+    glossaryTerms?: string[];
+    knowledgeItems?: string[];
     sessions?: string[];
   };
   /**
@@ -216,6 +223,20 @@ async function overrideFixtures(campaignDir: string, seed: Seed): Promise<void> 
   );
   await overrideEntity(campaignDir, (id) => `threads/${id}.json`, byId, seed.threads, without.threads);
   await overrideEntity(campaignDir, (id) => `ideas/${id}.json`, byId, seed.ideas, without.ideas);
+  await overrideEntity(
+    campaignDir,
+    (id) => `glossary-terms/${id}.json`,
+    byId,
+    seed.glossaryTerms,
+    without.glossaryTerms,
+  );
+  await overrideEntity(
+    campaignDir,
+    (id) => `knowledge-items/${id}.json`,
+    byId,
+    seed.knowledgeItems,
+    without.knowledgeItems,
+  );
   await overrideEntity(
     campaignDir,
     (id) => `session-${id}.json`,
