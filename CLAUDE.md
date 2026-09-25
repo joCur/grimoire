@@ -37,9 +37,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `fixtures/beispiel/chapters/<id>.json`, eine Szene unter
   `fixtures/beispiel/scenes/<id>.json`, ein NPC unter
   `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
-  `fixtures/beispiel/locations/<id>.json`, jede als das Objekt, das ihre
-  Ressource liefert, ohne `rev`; Sessions, Ideen, Glossar und offene Fäden
-  strukturiert. Sie ist
+  `fixtures/beispiel/locations/<id>.json`, ein Faden unter
+  `fixtures/beispiel/threads/<id>.json`, eine Idee unter
+  `fixtures/beispiel/ideas/<id>.json`, jede als das Objekt, das ihre
+  Ressource liefert, ohne `rev`; Sessions und Glossar strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
@@ -59,22 +60,22 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
   (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
   — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
-  `locations`, `sessions`, `inbox`, `glossary`, `knowledge`, `threads` (die
-  offenen Fäden), `generated` (das Übernehmen eines Generator-Laufs) — und
+  `locations`, `threads`, `ideas`, `sessions`, `glossary`, `knowledge`,
+  `generated` (das Übernehmen eines Generator-Laufs) — und
   jedes trägt die
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
   Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
-  `location/`) mit allem, was die App über sie weiß (ADR #31); **Slices
-  importieren einander nicht.** Gemeinsam sind nur UI-Bausteine ohne Wissen
-  über Entitäten (`app/src/components/`, etwa `components/fields/`);
-  gemischte Stellen (Suche, `[[id]]`-Auflösung, Kampagnenbaum) sind reine
-  Verteiler. Eine Seite, die mehrere Entitäten zeigt, setzt sich wie
-  `App.tsx` aus den Slices zusammen und reicht fremde Teile als Slot hinein
-  (die Kapitelübersicht reicht dem Kapitel seine Szenenliste, die Szene
-  bekommt ihre NPC-Karten). Kein Barrel: Aufrufer importieren die konkrete
-  Datei.
+  `location/`, `thread/`, `idea/`) mit allem, was die App über sie weiß
+  (ADR #31); **Slices importieren einander nicht.** Gemeinsam sind nur
+  UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`, etwa
+  `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
+  Kampagnenbaum) sind reine Verteiler. Eine Seite, die mehrere Entitäten
+  zeigt, setzt sich wie `App.tsx` aus den Slices zusammen und reicht fremde
+  Teile als Slot hinein (die Kapitelübersicht reicht dem Kapitel seine Fäden
+  und seine Szenenliste, die Szene bekommt ihre NPC-Karten). Kein Barrel:
+  Aufrufer importieren die konkrete Datei.
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
   siehe design/README.md). Bei Widerspruch zu docs/UI-BRIEF.md gewinnt design/.
@@ -103,22 +104,23 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Kampagne, Kapitel, Szene, NPC und Ort sind jeweils ihre eigene Ressource
-  (ADR #31): `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>`
-  mit `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
-  `…/locations/<id>` mit `Location`, alle Felder nebeneinander, `body`
-  eingeschlossen, ohne `kind` und `path`; die App-Routen sind
+- Kampagne, Kapitel, Szene, NPC, Ort, Faden und Idee sind jeweils ihre
+  eigene Ressource (ADR #31): `/campaigns/<id>` antwortet mit `Campaign`,
+  `…/chapters/<id>` mit `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>`
+  mit `Npc`, `…/locations/<id>` mit `Location`, `…/threads/<id>` mit
+  `Thread`, `…/ideas/<id>` mit `Idea`, alle Felder nebeneinander, `body`
+  eingeschlossen, wo die Entität einen hat, ohne `kind` und `path`; jede Zeile
+  trägt ihr eigenes `rev`. Die App-Routen sind
   `/campaigns/:id` (Kapitelübersicht), `/campaigns/:id/chapters/<id>`,
   `/campaigns/:id/scenes/<id>`, `/campaigns/:id/npcs/<id>` und
-  `/campaigns/:id/locations/<id>`. Eine Szene liegt flach unter ihrer
-  Kampagne, ihr Kapitel ist ein Feld. Welches Kapitel aktiv ist, sagt sein
-  `status`: höchstens eines je Kampagne, und wer eines aktiviert, setzt das
-  bisher aktive im selben Vorgang auf `planned`.
-- Sessions, Ideen, Glossar und die offenen Fäden eines Kapitels sind
-  **Listen, keine Einträge** (ADR #26): sie haben keine Adresse und antworten
-  ihre eigene Form über ihre eigenen Endpoints (`…/session`, `…/sessions`,
-  `…/sessions/<id>`, `…/inbox`, `…/glossary`, `…/chapters/<kapitel>/threads`)
-  — Zeilen mit Spalten, kein `body`, kein `properties`-Map.
+  `/campaigns/:id/locations/<id>`; Fäden pflegt die Kapitelübersicht, Ideen
+  die Nachbereitung und die Mobil-Startfläche. Eine Szene und ein Faden
+  liegen flach unter ihrer Kampagne, ihr Kapitel ist ein Feld. Welches
+  Kapitel aktiv ist, sagt sein `status`: höchstens eines je Kampagne, und wer
+  eines aktiviert, setzt das bisher aktive im selben Vorgang auf `planned`.
+- Sessions und Glossar antworten ihre eigene Form über ihre eigenen
+  Endpoints (`…/session`, `…/sessions`, `…/sessions/<id>`, `…/glossary`) —
+  Zeilen mit Spalten, kein `body`, kein `properties`-Map.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
@@ -239,7 +241,12 @@ Die Pfade:
    Szenenliste in der Reihenfolge des DM (keine Ortsgruppen, der Ort steht
    in der Metazeile), umsortiert über Hoch/Runter — der Schreibweg trägt den
    eigenen Wächter der Reihenfolge (`scene_order_rev`), ein alter Stand ist
-   409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei
+   409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei. Unter dem
+   Kapiteltext stehen die Fäden des Kapitels (`GET …/threads?chapter=<id>`,
+   in der Reihenfolge des Anlegens) und werden dort gepflegt: anlegen,
+   abhaken, umformulieren, löschen — jeder Faden mit seinem eigenen `rev`
+   (`PATCH`/`DELETE …/threads/<id>`, ein alter Stand ist 409 mit dem
+   aktuellen Faden), Kapiteltext und Kapitel-`rev` bleiben unberührt
 2. Szene lesen: aus dieser Liste geöffnet (`/campaigns/:id/scenes/<id>`,
    gelesen über `GET …/scenes/<id>`) — Callouts, If-Sections, NPC-Karten der
    Referenzszenen
@@ -258,14 +265,12 @@ Die Pfade:
    zur folgenden der Reihenfolge → Pause (ein Intervall, keine Log-Zeile) →
    beenden → Nachbereitung. Dazu die Leseseite einer vergangenen Session
    (`/campaigns/:id/sessions/<session-id>`)
-5. Nachbereitung: Handlungsstrang übernehmen → Zeile der Fäden-Liste des
-   Kapitels (`POST …/chapters/<kapitel>/threads`, ohne `rev`; Kapiteltext und
-   Kapitel-`rev` bleiben unberührt); Ideen abhaken. Review, Ideen und Fäden
-   benennen ihre Zeilen per `id` (`review/seen { sessionId, logId }`,
-   `review/inbox-done { id }`, `PATCH`/`DELETE …/threads/<id>` mit dem
-   Listen-`rev` `threads_rev`) — eine unbekannte id ist 404, kein stilles 200,
-   ein alter Listen-Stand 409 mit der aktuellen Liste. Dazu die Fäden in der
-   Kapitelübersicht pflegen: anlegen, abhaken, umformulieren, löschen
+5. Nachbereitung: Handlungsstrang übernehmen → ein Faden des aktiven
+   Kapitels (`POST …/threads { chapter, text }`, ohne `rev`; Kapiteltext und
+   Kapitel-`rev` bleiben unberührt); Idee abhaken → `PATCH …/ideas/<id>
+   { rev, done }`, ein alter `rev` ist 409 mit der aktuellen Idee. Die Review
+   benennt Log-Zeilen per `id` (`review/seen { sessionId, logId }`) — eine
+   unbekannte id ist 404, kein stilles 200
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen →
    Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
    die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
@@ -288,8 +293,8 @@ Die Pfade:
    Ein Kapitel aktiviert der Regler mit `PATCH …/chapters/<id> { rev,
    status: "active" }`; das bisher aktive steht danach auf `planned`, und
    genau ein Kapitel ist aktiv.
-8. Mobil-Startfläche + Ideen-Einwurf bei 390px: die Idee wird eine Zeile der
-   Ideen-Liste (`InboxResponse`), angehängt, nichts abgehakt
+8. Mobil-Startfläche + Ideen-Einwurf bei 390px: die Idee wird eine Idee
+   (`POST …/ideas`, antwortet mit `Idea`), am Ende, nichts abgehakt
 9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe Konfliktzeile
    statt still überschreiben. „Neu laden" verwirft den Entwurf und übernimmt

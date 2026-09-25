@@ -6,11 +6,12 @@ Kapitel, eine Szene, ein NPC oder ein Ort. Jeder Eintrag besteht aus
 **Eigenschaften** — seinen strukturierten Feldern (Titel, Status, Ort, …) —
 und einem **Text** in Markdown.
 
-Dazu kommen fünf **Listen**, die keine Einträge sind und keinen Text haben
-(ADR #26): die **Sessions**, die **Ideen**, das **Glossar**, das
-**Kampagnenwissen** und die **offenen Fäden** eines Kapitels. Sie sind
-Tabellen, werden als Listen gepflegt und haben keine Adresse — jede antwortet
-auf ihren eigenen Endpoints.
+Ein **Faden** — ein Handlungsstrang, den ein Kapitel trägt — und eine
+**Idee** haben keinen Text; jeder ist seine eigene Ressource mit seinen
+eigenen Feldern (ADR #31). Dazu kommen drei **Listen**, die keine Einträge
+sind und keinen Text haben: die **Sessions**, das **Glossar** und das
+**Kampagnenwissen**. Sie sind Tabellen, werden als Listen gepflegt und haben
+keine Adresse — jede antwortet auf ihren eigenen Endpoints.
 
 Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
 README beschreibt, was in den Feldern stehen darf und was der Text
@@ -35,6 +36,8 @@ nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
 | Szene | `GET/PATCH /api/campaigns/<kampagne>/scenes/<id>` | `GET/POST /api/campaigns/<kampagne>/scenes` | `/campaigns/<kampagne>/scenes/<id>` |
 | NPC | `GET/PATCH /api/campaigns/<kampagne>/npcs/<id>` | `GET/POST /api/campaigns/<kampagne>/npcs` | `/campaigns/<kampagne>/npcs/<id>` |
 | Ort | `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>` |
+| Faden | `GET/PATCH/DELETE /api/campaigns/<kampagne>/threads/<id>` | `GET/POST /api/campaigns/<kampagne>/threads` | in der Kapitelübersicht `/campaigns/<kampagne>` |
+| Idee | `GET/PATCH /api/campaigns/<kampagne>/ideas/<id>` | `GET/POST /api/campaigns/<kampagne>/ideas` | in der Nachbereitung und auf der Mobil-Startfläche |
 
 Die Kapitelübersicht bleibt `/campaigns/<kampagne>`; die Liste der Kampagnen
 (`GET /api/campaigns`) antwortet mit ihrer eigenen Form, dem Namen neben der
@@ -58,17 +61,14 @@ Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
 Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
 übernommen werden (ADR #27).
 
-**Sessions, Ideen, Glossar, Kampagnenwissen und offene Fäden** sind Tabellen,
-die als Listen gepflegt werden, und antworten auf ihren eigenen Endpoints
-(ADR #26):
+**Sessions, Glossar und Kampagnenwissen** sind Tabellen, die als Listen
+gepflegt werden, und antworten auf ihren eigenen Endpoints:
 
 | Liste | Lesen | Schreiben |
 | ----- | ----- | --------- |
 | Session | `GET …/session[?includeEnded=1]` (die laufende, sonst `null`), `GET …/sessions`, `GET …/sessions/<id>` | `POST …/session/start`, `/end`, `/pause`, `/continue`, `/discard`, `POST …/log`, `PATCH …/sessions/<id>` |
-| Ideen | `GET …/inbox` | `POST …/inbox`, `POST …/review/inbox-done` |
 | Glossar | `GET …/glossary` | `PUT …/glossary` |
 | Kampagnenwissen | `GET …/knowledge` | `PUT …/knowledge` |
-| Offene Fäden (je Kapitel) | `GET …/chapters/<kapitel>/threads` | `POST …/chapters/<kapitel>/threads`, `PATCH …/threads/<id>`, `DELETE …/threads/<id>` |
 
 Glossar und Kampagnenwissen bekommt der Generator als Kontext; beide werden
 auf ihren eigenen Seiten gepflegt.
@@ -160,8 +160,8 @@ lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint (DECISIONS
 
 Geschrieben wird mit `PATCH …/chapters/<id>` und `{ rev, force?, …Teilmenge
 von title, status, body }`; ein veralteter `rev` ist 409 mit dem aktuellen
-Kapitel. Weder die Szenenreihenfolge noch die offenen Fäden bewegen sich
-dabei — beide haben ihren eigenen Wächter. `POST …/chapters { title, id?,
+Kapitel. Weder die Szenenreihenfolge noch ein Faden des Kapitels bewegt sich
+dabei — jede hat ihren eigenen Wächter. `POST …/chapters { title, id?,
 status?, body? }` legt ein Kapitel an und antwortet mit ihm: die `id` entsteht
 aus dem Titel, wenn die Anfrage keine setzt, der Status ist `planned`, wenn
 sie keinen nennt, und das Kapitel steht am Ende der Kampagne. Der `body` aus
@@ -175,26 +175,10 @@ Die Kapitelübersicht zeigt den Text unter dem Titel, ganz und gerendert wie
 jeder Text, auf wenige Zeilen begrenzt und aufklappbar; ob und welche
 Überschriften er hat, ändert daran nichts (ADR #29).
 
-Die **offenen Fäden** — die Handlungsstränge, die das Kapitel trägt — sind
-kein Text, sondern eine **Liste am Kapitel** (ADR #29). Eine Zeile ist
-`{ id, text, done }`: `id` ist eine opake, stabile Kennung, `text` eine Zeile,
-`done` das Häkchen. Jeder Endpoint der Liste antwortet mit der ganzen Liste in
-ihrer Reihenfolge und ihrem eigenen Wächter-Token:
-`{ entries: [{ id, text, done }], rev }`. Das `rev` ist `chapters.threads_rev`
-— nicht das `rev` des Kapitels: ein Schreibzugriff auf die Liste ändert weder
-den Kapiteltext noch dessen Wächter, und ein Kapitel-Write bewegt die Liste
-nicht.
-
-- Anhängen (`POST …/threads { text }`) setzt die Zeile ans Ende und trägt
-  **kein** `rev` — es kann nichts überschreiben, wie eine Idee oder eine
-  Log-Zeile.
-- Abhaken, Wiederöffnen, Umformulieren (`PATCH …/threads/<id> { rev, text?,
-  done? }`) und Löschen (`DELETE …/threads/<id> { rev }`) benennen die Zeile
-  per `id` und tragen das `rev` der Liste. Ein veraltetes ist 409
-  `rev_conflict` mit der aktuellen Liste unter `threads`; eine `id`, die die
-  Liste nicht hält, ist 404.
-- Ein `## Offene Fäden` im Text eines älteren Kapitels bleibt freier Text;
-  nichts liest ihn als Liste.
+Die **Fäden** — die Handlungsstränge, die das Kapitel trägt — sind weder
+Text noch Feld des Kapitels, sondern jeder seine eigene Ressource, die ihr
+Kapitel nennt (siehe Faden). Ein `## Offene Fäden` im Text eines älteren
+Kapitels bleibt freier Text; nichts liest ihn als Faden.
 
 ### Szene
 
@@ -383,6 +367,84 @@ zeigt die Ort-Karte die Roll20-Seite.
 Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
 `[!readaloud]`), `## Wer ist hier` (Figuren am Ort, mit id als `[[id]]`).
 
+### Faden
+
+Ein Faden ist ein Handlungsstrang, den ein Kapitel trägt, und seine eigene
+Ressource mit seinem eigenen Typ (`Thread`, aus dem zod-Schema in
+`shared/src/thread.ts`, ADR #31). Er liegt flach unter der Kampagne, sein
+Kapitel ist ein Feld: `GET /api/campaigns/<kampagne>/threads/<id>` antwortet
+mit ihm.
+
+```json
+{
+  "id": "wer-bezahlt-die-schmuggler",
+  "chapter": "01-salzhafen",
+  "text": "Wer bezahlt die Schmuggler?",
+  "done": false,
+  "rev": 1
+}
+```
+
+| Feld | Bedeutung |
+| ---- | --------- |
+| `id` | stabil und opak, vergibt der Server beim Anlegen |
+| `chapter` | Kapitel-id, Pflicht; muss existieren (400 `chapter_unknown` sonst) |
+| `text` | der Handlungsstrang, eine Zeile |
+| `done` | abgehakt oder offen |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+
+- `GET …/threads` antwortet mit allen Fäden der Kampagne, `GET
+  …/threads?chapter=<kapitel>` mit denen eines Kapitels — in der Reihenfolge,
+  in der sie angelegt wurden. Umsortiert wird nichts.
+- `POST …/threads { chapter, text }` legt einen offenen Faden am Ende an und
+  antwortet mit ihm (201); er trägt **kein** `rev`, denn ein neuer Faden
+  überschreibt nichts. Der Text ist eine Zeile: getrimmt, Zeilenumbrüche
+  werden zu Leerzeichen, leer ist 400.
+- Abhaken, Wiederöffnen, Umformulieren und der Wechsel des Kapitels sind
+  `PATCH …/threads/<id> { rev, force?, …Teilmenge von chapter, text, done }`;
+  gelöscht wird mit `DELETE …/threads/<id> { rev }` (204). Ein veralteter
+  `rev` ist 409 mit dem aktuellen Faden unter `thread`, eine unbekannte id
+  404, ein Feld, das ein Faden nicht hat, eine 400, die es nennt.
+- Kein Schreibzugriff auf einen Faden berührt Text oder `rev` seines
+  Kapitels, und ein Kapitel-Write bewegt keinen Faden. Gepflegt werden die
+  Fäden in der Kapitelübersicht unter dem Text des Kapitels: anlegen,
+  abhaken, umformulieren, löschen. Die Nachbereitung legt sie an
+  („Als Handlungsstrang übernehmen").
+
+### Idee
+
+Eine Idee ist ein Einfall, den der DM unterwegs einwirft, und ihre eigene
+Ressource mit ihrem eigenen Typ (`Idea`, aus dem zod-Schema in
+`shared/src/idea.ts`, ADR #31). `GET /api/campaigns/<kampagne>/ideas/<id>`
+antwortet mit ihr:
+
+```json
+{
+  "id": "dorfschmied",
+  "text": "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+  "done": false,
+  "rev": 1
+}
+```
+
+| Feld | Bedeutung |
+| ---- | --------- |
+| `id` | stabil und opak, vergibt der Server beim Anlegen |
+| `text` | die Idee, wie sie getippt wurde, Hashtags eingeschlossen; eine Zeile |
+| `done` | abgehakt oder offen |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+
+- `GET …/ideas` antwortet mit allen Ideen in der Reihenfolge, in der sie
+  eingeworfen wurden, abgehakte eingeschlossen; keine Ideen sind eine leere
+  Liste (200).
+- `POST …/ideas { text }` legt eine offene Idee am Ende an und antwortet mit
+  ihr (201), ohne `rev`.
+- Abhaken ist `PATCH …/ideas/<id> { rev, force?, done }`. Der Text einer Idee
+  wird einmal geschrieben: `done` ist das einzige Feld, das ein `PATCH` trägt,
+  jedes andere — `text` eingeschlossen — ist eine 400, die es nennt. Ein
+  veralteter `rev` ist 409 mit der aktuellen Idee unter `idea`, eine
+  unbekannte id 404.
+
 ### Session
 
 Eine Session ist **kein Eintrag**, sondern eine Zeile mit ihren Listen
@@ -535,37 +597,35 @@ kein Kampagneninhalt.
 
 ## Ideen
 
-Die Ideen-Liste ist append-only und sessionunabhängig, mit denselben Hashtags
-wie das Log. Eine Idee ist eine Zeile `{ id, text, done }`; `GET …/inbox`
-antwortet mit der Liste und ihrem eigenen Wächter-Token `rev`. Die
-Nachbereitung zeigt sie zusammen mit dem Log.
+Ideen werden eingeworfen und danach nur noch abgehakt, sessionunabhängig und
+mit denselben Hashtags wie das Log. Jede ist ihre eigene Ressource (siehe
+Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
 
 ## Nachbereitung
 
-- „Als Handlungsstrang übernehmen" hängt eine Zeile an die offenen Fäden des
-  aktiven Kapitels an (`POST …/chapters/<kapitel>/threads`); Text und `rev`
-  des Kapitels bleiben unberührt. Gepflegt wird die Liste in der
-  Kapitelübersicht: abhaken, umformulieren, löschen, von Hand ergänzen.
+- „Als Handlungsstrang übernehmen" legt einen Faden des aktiven Kapitels an
+  (`POST …/threads { chapter, text }`); Text und `rev` des Kapitels bleiben
+  unberührt. Gepflegt werden die Fäden in der Kapitelübersicht: abhaken,
+  umformulieren, löschen, von Hand ergänzen.
 - „NPC anlegen" legt den NPC über `POST …/npcs { name, id, body }` an, mit
   `status: unknown` (die Log-Zeile sagt nichts über seinen Zustand); sein
   Text ist genau der Log-Text, ohne Überschrift. Ein NPC, der unter der id
   nichts hält als seine id, wird gefüllt. Hält er schon etwas, ist das eine
   409 mit Vorschlag: nichts wird geschrieben, die Nachbereitung zeigt den
   Konflikt, und die Log-Zeile bleibt offen.
-- „Idee abhaken" setzt `done` auf der genannten Zeile (`POST
-  …/review/inbox-done { id }`) — die eine Ausnahme vom Append-only der Ideen,
-  damit sie nicht in jeder künftigen Nachbereitung wieder auftauchen.
+- „Idee abhaken" setzt `done` an der Idee (`PATCH …/ideas/<id> { rev, done }`),
+  damit sie nicht in jeder künftigen Nachbereitung wieder auftaucht.
 
 ## Schreibregeln
 
 - Geschrieben wird ausschließlich über die API (jeder Endpoint ist an seiner
   Route dokumentiert, im Modul seiner Ressource
-  `server/src/routes/<ressource>.ts`): Log, Ideen,
-  Nachbereitung, Generator-Entwürfe — und für jede Entität ihr eigener
-  `PATCH` auf ihrer Ressource, der jede Teilmenge ihrer Felder, `body`
-  eingeschlossen, in einem Zug schreibt (ADR #23, ADR #31).
-  Glossar, Kampagnenwissen, Ideen und offene Fäden sind Listen und werden
-  über ihre eigenen Endpoints gepflegt; einen Text nehmen sie nicht an.
+  `server/src/routes/<ressource>.ts`): Log, Nachbereitung,
+  Generator-Entwürfe — und für jede Entität ihr eigener `PATCH` auf ihrer
+  Ressource, der jede Teilmenge ihrer Felder, `body` eingeschlossen, in einem
+  Zug schreibt (ADR #23, ADR #31); Faden und Idee eingeschlossen, die keinen
+  `body` haben. Glossar und Kampagnenwissen sind Listen und werden über ihre
+  eigenen Endpoints gepflegt; einen Text nehmen sie nicht an.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu
@@ -580,9 +640,9 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
   offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
   Konflikt läuft (ADR #27). Dieselbe Bauart haben die Wächter der übrigen
-  Listen (`glossaryRev`, `inboxRev`, `knowledgeRev`, `chapters.threads_rev`).
-- Log und Ideen sind append-only (ADR #4); die eine Ausnahme ist das Abhaken
-  erledigter Ideen.
+  Listen (`glossaryRev`, `knowledgeRev`).
+- Das Log ist append-only (ADR #4). Eine Idee wird einmal geschrieben und
+  danach nur noch abgehakt.
 
 ## Generator
 
@@ -632,16 +692,17 @@ das ihre Ressource liefert, ohne `rev` (ADR #31): die Kampagne unter
 `fixtures/beispiel/campaigns/<id>.json`, ein Kapitel unter
 `fixtures/beispiel/chapters/<id>.json`, eine Szene unter
 `fixtures/beispiel/scenes/<id>.json`, ein NPC unter
-`fixtures/beispiel/npcs/<id>.json` und ein Ort unter
-`fixtures/beispiel/locations/<id>.json`. Ideen, Glossar, offene Fäden und
-Sessions tragen ihre Listen strukturiert, als Zeilen mit ihren Spalten, unter
-`kind`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
-`{ text, done? }`, ein Faden `{ chapter, text, done? }`. Eine Markdown-Zeile
-steht in keiner davon. Sie ist die Referenz für Callouts und die einzige
+`fixtures/beispiel/npcs/<id>.json`, ein Ort unter
+`fixtures/beispiel/locations/<id>.json`, ein Faden unter
+`fixtures/beispiel/threads/<id>.json` und eine Idee unter
+`fixtures/beispiel/ideas/<id>.json`. Glossar und Sessions tragen ihre Listen
+strukturiert, als Zeilen mit ihren Spalten, unter `kind`: eine Log-Zeile ist
+`{ at, sceneId?, text, reviewed? }`. Eine Markdown-Zeile steht in keiner
+davon. Sie ist die Referenz für Callouts und die einzige
 Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
 
 `grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest
 `<dir>/<kampagne>/*.json` samt den Verzeichnissen `campaigns/`, `chapters/`,
-`scenes/`, `npcs/` und `locations/` darunter und
+`scenes/`, `npcs/`, `locations/`, `threads/` und `ideas/` darunter und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

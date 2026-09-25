@@ -150,8 +150,8 @@ Die gesamte Kampagnen-Wahrheit ist **eine Datei**:
 
 ```
 $GRIMOIRE_DATA/
-  grimoire.db        ← Kampagnen, Szenen, NPCs, Orte, Sessions, Log,
-  grimoire.db-wal      Inbox, Glossar, Generator-Jobs, Suchindex
+  grimoire.db        ← Kampagnen, Szenen, NPCs, Orte, Fäden, Sessions, Log,
+  grimoire.db-wal      Ideen, Glossar, Generator-Jobs, Suchindex
   grimoire.db-shm
 ```
 
