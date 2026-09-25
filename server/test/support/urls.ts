@@ -1,9 +1,11 @@
 // URLs of the API scheme (ADR #22): everything campaign-scoped lives under
-// `/api/campaigns/<id>`, and an entry's address is the path behind `entries/`.
+// `/api/campaigns/<id>`. Every entity is its own resource (ADR #31), and no
+// route answers under `entries/`: the cases use this URL to show that an
+// address there names nothing.
 
 /**
- * The request URL of one entry — one encoded segment per address segment, so
- * the separators stay separators. A segment of nothing but dots is encoded
+ * A URL under `entries/` — one encoded segment per address segment, so the
+ * separators stay separators. A segment of nothing but dots is encoded
  * too: the URL parser would resolve `.`/`..` away before the server saw it,
  * and these tests mean to hand the address check exactly what was asked for.
  */
