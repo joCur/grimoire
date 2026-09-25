@@ -54,7 +54,7 @@ function fixture(name: string): { body?: string } {
   return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
 }
 
-/** Every fixture that carries a body — the campaign's own files and its scenes, npcs and locations. */
+/** Every fixture that carries a body — the campaign's own and its scenes, npcs and locations. */
 function fixtureFiles(): string[] {
   const inDir = (dir: string): string[] =>
     readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
@@ -417,7 +417,7 @@ describe("what blocks a save", () => {
   test("a heading child that would end the section is named too", () => {
     const blocks = parseBlocks("## If: sie lügen\n\n### Detail\n");
     const child = at(section(blocks, 0).children, 0);
-    // The picker never offers level 2 inside a section, but the regler shows a
+    // The picker never offers level 2 inside a section, but the depth control shows a
     // level the BODY brought — the guard sits behind the UI, not in it.
     expect(composerIssues(setHeadingDepth(blocks, child.id, 2), t)).not.toEqual({});
     expect(composerIssues(setHeadingDepth(blocks, child.id, 4), t)).toEqual({});

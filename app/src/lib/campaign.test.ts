@@ -52,7 +52,7 @@ describe("pickLastCampaign", () => {
     expect(pickLastCampaign([c("zeta", ""), c("alpha", "")])).toBe("alpha");
   });
 
-  test("two sessions of the SAME DAY order by their TIME, not by their id (#58)", () => {
+  test("two sessions of the SAME DAY order by their TIME, not by their id", () => {
     // The ids say nothing about the order — the evening's second session
     // simply started later, and only the start time says so.
     expect(
