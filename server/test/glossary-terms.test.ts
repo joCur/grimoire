@@ -49,6 +49,12 @@ async function json<T>(res: Response | Promise<Response>, status = 200): Promise
 const listTerms = () => json<GlossaryTerm[]>(app.request(TERMS));
 const readTerm = (url = KEEPER_URL) => json<GlossaryTerm>(app.request(url));
 
+async function version(): Promise<number> {
+  const res = await app.request(`/api/campaigns/${CAMPAIGN}/version`);
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { version: number }).version;
+}
+
 async function searchHits(q: string): Promise<SearchResponse["results"]> {
   const res = await app.request(`/api/campaigns/${CAMPAIGN}/search?q=${encodeURIComponent(q)}`);
   return ((await res.json()) as SearchResponse).results;
@@ -252,5 +258,57 @@ describe("the prompt block (store/glossary-terms.ts glossaryText)", () => {
       without: { glossaryTerms: (await listTerms()).map((term) => term.id) },
     });
     expect(await glossaryText(CAMPAIGN)).toBeUndefined();
+  });
+});
+
+describe("glossary terms — rows, each with its own guard", () => {
+  test("an emptied glossary is an empty list (200), and the DM can type it back in", async () => {
+    for (const term of await listTerms()) {
+      expect((await send("DELETE", `${TERMS}/${term.id}`, { rev: term.rev })).status).toBe(204);
+    }
+    expect(await listTerms()).toEqual([]);
+    const res = await send("POST", TERMS, { term: "tide pool", explanation: "Gezeitentümpel" });
+    expect(res.status).toBe(201);
+    expect((await listTerms()).map(({ term, explanation }) => ({ term, explanation }))).toEqual([
+      { term: "tide pool", explanation: "Gezeitentümpel" },
+    ]);
+  });
+
+  test("a multi-line explanation keeps its line breaks through a save", async () => {
+    // Nothing flattens an explanation on the way in or out: it is one column
+    // and travels as one string.
+    const explanation = "Zeile eins\nZeile zwei";
+    const res = await send("POST", TERMS, { term: "Ton", explanation });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as GlossaryTerm;
+    expect(created.explanation).toBe(explanation);
+    expect((await listTerms()).find((term) => term.id === created.id)?.explanation).toBe(
+      explanation,
+    );
+  });
+
+  test("an unrelated write does not invalidate an open term edit", async () => {
+    // A term's guard is its own row version, not `campaigns.version`, which
+    // any write — a quick note during a running session — moves.
+    const [open] = await listTerms();
+    expect((await send("POST", "/api/campaigns/beispiel/session/start", {})).status).toBe(200);
+    expect((await send("POST", "/api/campaigns/beispiel/log", { text: "Etwas passiert" })).status).toBe(200);
+    expect((await send("POST", "/api/campaigns/beispiel/ideas", { text: "Idee #idee" })).status).toBe(201);
+    expect(await version()).toBeGreaterThan(1);
+
+    const saved = await send("PATCH", `${TERMS}/${open!.id}`, {
+      rev: open!.rev,
+      explanation: "Gezeitentümpel",
+    });
+    expect(saved.status).toBe(200);
+    // Its own writes DO move it: the same guard again is a 409 with the term.
+    const stale = await send("PATCH", `${TERMS}/${open!.id}`, {
+      rev: open!.rev,
+      explanation: "Überschrieben",
+    });
+    expect(stale.status).toBe(409);
+    const conflict = (await stale.json()) as { code: string; glossaryTerm: GlossaryTerm };
+    expect(conflict.code).toBe("rev_conflict");
+    expect(conflict.glossaryTerm.explanation).toBe("Gezeitentümpel");
   });
 });

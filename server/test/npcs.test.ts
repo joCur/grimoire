@@ -11,6 +11,7 @@ import { entriesUrl } from "./support/urls";
 
 const NPCS = "/api/campaigns/beispiel/npcs";
 const JORNA = `${NPCS}/jorna`;
+const FENN = `${NPCS}/fenn`;
 
 async function getNpc(url = JORNA): Promise<Npc> {
   const res = await app.request(url);
@@ -28,6 +29,13 @@ async function send(method: string, url: string, body: unknown): Promise<Respons
 
 const patchNpc = (body: Record<string, unknown>, url = JORNA): Promise<Response> =>
   send("PATCH", url, body);
+
+/** A PATCH of fenn that has to go through; answers the npc it wrote. */
+async function patchNpcOk(body: Record<string, unknown>): Promise<Npc> {
+  const res = await patchNpc(body, FENN);
+  expect(res.status).toBe(200);
+  return (await res.json()) as Npc;
+}
 const createNpc = (body: Record<string, unknown>): Promise<Response> => send("POST", NPCS, body);
 
 beforeEach(async () => {
@@ -283,5 +291,51 @@ describe("creating an npc", () => {
     expect((await createNpc({ body: "Nur eine Notiz." })).status).toBe(400);
     expect((await createNpc({ name: "   " })).status).toBe(400);
     expect((await createNpc({ name: "Holm", id: "Kein Slug" })).status).toBe(400);
+  });
+});
+
+describe("an npc's `## Beziehungen` keeps what became no row", () => {
+  test("prose and a duplicate counterpart survive the save", async () => {
+    const before = await getNpc(FENN);
+    expect(before.body).toContain("- [[jorna]]: alte Bekannte");
+
+    // Three things under the heading: one relation line (a row), one prose
+    // line (no row), and a SECOND line for jorna (the composite key allows
+    // only one row per counterpart). Only the first is a relation.
+    const body =
+      "\n## Beziehungen\n\n- jorna: alte Bekannte\n" +
+      "Beide kennen sich aus der Zeit vor dem Leuchtturm.\n" +
+      "- jorna: und schuldet ihr Geld\n\n## Notizen\n";
+    const after = await patchNpcOk({ rev: before.rev, body });
+
+    // the relation is a row and comes back rendered …
+    expect(after.body).toContain("- jorna: alte Bekannte");
+    // … and NEITHER of the two lines that could not become a row is gone
+    expect(after.body).toContain("Beide kennen sich aus der Zeit vor dem Leuchtturm.");
+    expect(after.body).toContain("- jorna: und schuldet ihr Geld");
+    // one heading, in its original place — not a second one appended
+    expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
+    expect(after.body.indexOf("## Beziehungen")).toBeLessThan(after.body.indexOf("## Notizen"));
+    expect(await getNpc(FENN)).toEqual(after);
+  });
+
+  test("saving the rendered body again is a fixed point", async () => {
+    const before = await getNpc(FENN);
+    const body =
+      "\n## Beziehungen\n\n- jorna: alte Bekannte\nEin Satz, der keine Beziehung ist.\n";
+    const first = await patchNpcOk({ rev: before.rev, body });
+    const second = await patchNpcOk({ rev: first.rev, body: first.body });
+    expect(second.body).toBe(first.body);
+    const third = await patchNpcOk({ rev: second.rev, body: second.body });
+    expect(third.body).toBe(first.body);
+  });
+
+  test("a section that is ONLY relations still renders once, at the end", async () => {
+    const before = await getNpc(FENN);
+    const body = "\n## Will\n\nRaus aus dem Geschäft.\n\n## Beziehungen\n\n- jorna: Ex-Kollegin\n";
+    const after = await patchNpcOk({ rev: before.rev, body });
+    expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
+    expect(after.body).toContain("- jorna: Ex-Kollegin");
+    expect(after.body).toContain("Raus aus dem Geschäft.");
   });
 });
