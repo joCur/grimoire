@@ -185,9 +185,9 @@ export const de = {
   "properties.issue.chapterRequired":
     "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
 
-  // Field labels/hints/placeholders — a scene's and a chapter's
-  // (lib/properties-form.ts), an npc's (npc/NpcFields.tsx) and a location's
-  // (location/LocationFields.tsx)
+  // Field labels/hints/placeholders — a scene's (scene/SceneFields.tsx), a
+  // chapter's (chapter/ChapterFields.tsx), an npc's (npc/NpcFields.tsx) and a
+  // location's (location/LocationFields.tsx)
   "properties.scene.title.label": "Titel",
   "properties.scene.type.label": "Typ",
   "properties.scene.type.planned": "Geplante Szene",
@@ -382,6 +382,7 @@ export const de = {
   "editConflict.force": "Trotzdem speichern",
   "status.change.aria": "Status ändern, aktuell {current}",
   "status.sceneUnloadable": "Szene nicht ladbar",
+  "status.chapterUnloadable": "Dieses Kapitel ließ sich nicht laden.",
 
   // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
   "chapterOverview.loading": "Lade Szenen …",
@@ -394,8 +395,8 @@ export const de = {
   "chapterOverview.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "chapterOverview.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // --- chapter actions in the chapter overview -----------------------------
-  // The chapter's status control (the active option sets `active` and takes it
-  // off the chapter that held it — one server call, one transaction) carries its
+  // The chapter's status control (the active option sets `active`, and the
+  // server takes it off the chapter that held it in the same write) carries its
   // labels under `properties.chapter.status.*`.
   "chapterOverview.chapter.properties": "Kapitel-Eigenschaften",
   "chapterOverview.chapter.edit": "Kapitel bearbeiten",
@@ -446,7 +447,7 @@ export const de = {
   "browse.empty.npcs": "Noch keine NPCs.",
   "browse.empty.locations": "Noch keine Orte.",
 
-  // --- the reading view ("/campaigns/:campaign/entries/*", routes/scene.tsx) -------------
+  // --- the reading views (scene/, chapter/, npc/, location/) ----------------
   "scene.loading": "Lade Eintrag …",
   "scene.notLoadable": "Eintrag nicht ladbar — Pfad prüfen oder Server starten.",
   "scene.npcs.heading": "NPCs dieser Szene",
@@ -605,16 +606,18 @@ export const de = {
   "update.available": "Neue Version verfügbar — neu laden",
   "update.reload": "Neu laden",
 
-  // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
-  "campaignMeta.title": "Kampagne bearbeiten",
-  "campaignMeta.description":
-    "Name und Beschreibung der Kampagne. Die Kennung bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
-  "campaignMeta.field.name": "Name",
-  "campaignMeta.field.description": "Beschreibung",
-  "campaignMeta.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",
-  "campaignMeta.unreachable": "Kampagne nicht ladbar — Server prüfen",
+  // --- campaign edit dialog (campaign/CampaignEditAction.tsx) --------------
+  "campaignEdit.title": "Kampagne bearbeiten",
+  "campaignEdit.description":
+    "Name, Beschreibung und Text der Kampagne. Die Kapitelübersicht zeigt den Text unter der Beschreibung. Die Kennung der Kampagne bleibt, wie sie ist.",
+  "campaignEdit.field.name": "Name",
+  "campaignEdit.field.description": "Beschreibung",
+  "campaignEdit.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",
+  "campaignEdit.field.body": "Text",
+  "campaignEdit.field.body.placeholder": "Was für die ganze Kampagne gilt",
+  "campaignEdit.unreachable": "Kampagne nicht ladbar — Server prüfen",
 
-  // --- body editor (components/EntryBodyEditor.tsx) -------------------------
+  // --- body editor (components/BodyEditor.tsx) ------------------------------
   "bodyEditor.markdown.aria": "Markdown-Text von {path}",
   "bodyEditor.hint": "Nur der Textkörper — die Eigenschaften bleiben unverändert.",
   "bodyEditor.hint.withFields":
@@ -626,7 +629,7 @@ export const de = {
 
   // --- entity-kind labels ---------------------------------------------------
   // ONE set for every place a kind is named to the DM: the ⌘K result rows
-  // (lib/search.ts) and the properties dialog's title (lib/properties-form.ts).
+  // (lib/search.ts) and the title of an entity's dialog.
   // An unknown kind is shown verbatim — the wire value is the truth.
   "kind.scene": "Szene",
   "kind.npc": "NPC",
@@ -664,7 +667,7 @@ export const de = {
   "generate.input.chapterIdLabel": "Kapitel-Kennung",
   "generate.input.chapterIdPlaceholder": "z. B. 03-schmugglerbucht",
   "generate.input.chapterIdSuggested": "wird aus dem Titel vorgeschlagen",
-  "generate.input.chapterIdPreview": "wird angelegt als: {id}/",
+  "generate.input.chapterIdPreview": "wird angelegt als: chapters/{id}",
   "generate.input.chapterExists": "Kapitel existiert — Szenen werden dort angelegt",
   "generate.input.sourceLabel": "Quelltext (EN)",
   "generate.input.sourcePlaceholder":
@@ -692,8 +695,6 @@ export const de = {
   "generate.input.chapterId.leadingDot": "Kein Punkt am Anfang.",
   "generate.input.chapterId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.chapterId.charset": "Nur Kleinbuchstaben, Ziffern und Bindestriche.",
-  "generate.input.chapterId.reserved":
-    '„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.',
   "generate.input.npcId.slash": "Keine Schrägstriche — die Kennung ist ein einzelnes Segment.",
   "generate.input.npcId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.npcId.charset":

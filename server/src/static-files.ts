@@ -40,9 +40,9 @@ const CONTENT_TYPES: Record<string, string> = {
  * Extensions that must never fall back to index.html: a missing .js/.css/font
  * is a build problem, and answering it with HTML only produces a confusing
  * MIME error in the browser. `.html` is NOT in this set (a missing page is a
- * client route). An entry address carries no extension at all
- * (`/campaigns/:campaign/entries/<chapter>/<location>/<scene>`), so those
- * routes never come near this set.
+ * client route). A route of the app carries no extension at all
+ * (`/campaigns/:campaign/scenes/<id>`), so those routes never come near this
+ * set.
  */
 const HARD_404_EXTENSIONS = new Set(
   Object.keys(CONTENT_TYPES).filter((ext) => ext !== ".html" && ext !== ".txt"),

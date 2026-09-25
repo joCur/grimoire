@@ -11,8 +11,8 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import type {
   CampaignTree,
+  Chapter,
   ChapterNode,
-  EntryResponse,
   Scene,
   SceneOrderResponse,
 } from "@grimoire/shared";
@@ -42,10 +42,11 @@ async function sceneIds(id = CHAPTER): Promise<string[]> {
   return (await chapterNode(id)).scenes.map((s) => s.id);
 }
 
-async function entry(address: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/campaigns/${CAMPAIGN}/entries/${address}`);
+/** One chapter, from its own resource. */
+async function chapter(id: string): Promise<Chapter> {
+  const res = await app.request(`/api/campaigns/${CAMPAIGN}/chapters/${id}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
+  return (await res.json()) as Chapter;
 }
 
 /** One scene, from its own resource. */
@@ -96,14 +97,14 @@ async function createScene(title: string, chapter = CHAPTER): Promise<Scene> {
   return (await res.json()) as Scene;
 }
 
-async function createChapter(title: string): Promise<EntryResponse> {
+async function createChapter(title: string): Promise<Chapter> {
   const res = await app.request(`/api/campaigns/${CAMPAIGN}/chapters`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ title }),
   });
   expect(res.status).toBe(201);
-  return (await res.json()) as EntryResponse;
+  return (await res.json()) as Chapter;
 }
 
 beforeEach(async () => {
@@ -222,13 +223,13 @@ describe("the guard", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.code).toBe("rev_conflict");
     expect(body.rev).toBe(2);
-    // The order is a list, not an entry — no `entry` rides along (ADR #26).
-    expect(body.entry).toBeUndefined();
+    // The order is no field of the chapter — no chapter rides along.
+    expect(body.chapter).toBeUndefined();
     expect(await sceneIds()).toEqual([CAPTURED, ARRIVAL]);
   });
 
-  test("reordering moves NEITHER the scenes' `rev` NOR the chapter entry's", async () => {
-    const chapterBefore = await entry(CHAPTER);
+  test("reordering moves NEITHER the scenes' `rev` NOR the chapter's", async () => {
+    const chapterBefore = await chapter(CHAPTER);
     const arrivalBefore = await scene(ARRIVAL);
     const capturedBefore = await scene(CAPTURED);
 
@@ -238,16 +239,16 @@ describe("the guard", () => {
     // the reorder is a write of neither (ADR #23).
     expect((await scene(ARRIVAL)).rev).toBe(arrivalBefore.rev);
     expect((await scene(CAPTURED)).rev).toBe(capturedBefore.rev);
-    expect((await entry(CHAPTER)).rev).toBe(chapterBefore.rev);
+    expect((await chapter(CHAPTER)).rev).toBe(chapterBefore.rev);
   });
 
   test("editing the chapter's text does not invalidate an open reorder", async () => {
     const orderToken = (await chapterNode()).sceneOrderRev!;
-    const chapter = await entry(CHAPTER);
-    const patched = await app.request(`/api/campaigns/${CAMPAIGN}/entries/${CHAPTER}`, {
+    const before = await chapter(CHAPTER);
+    const patched = await app.request(`/api/campaigns/${CAMPAIGN}/chapters/${CHAPTER}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: chapter.rev, body: "Etwas Neues.\n" }),
+      body: JSON.stringify({ rev: before.rev, body: "Etwas Neues.\n" }),
     });
     expect(patched.status).toBe(200);
 

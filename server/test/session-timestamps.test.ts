@@ -12,8 +12,8 @@ import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bu
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { EntryResponse, SessionResponse } from "@grimoire/shared";
-import { readFixtureSources, seedCampaign } from "../src/db/seed";
+import type { SessionResponse } from "@grimoire/shared";
+import { readFixtureCampaign, seedCampaign } from "../src/db/seed";
 import { closeStore, initStore } from "../src/store/handle";
 import { app } from "../src/server";
 import { dropStore, seedStore, FIXTURES } from "./support/store";
@@ -215,11 +215,7 @@ describe("every stored timestamp is one the reader reads", () => {
     try {
       closeStore();
       const db = await initStore({ dbFile: dbPath });
-      const sources = await readFixtureSources(path.join(FIXTURES, "beispiel"));
-      seedCampaign(
-        db,
-        sources.map((source) => source.entry),
-      );
+      seedCampaign(db, await readFixtureCampaign(path.join(FIXTURES, "beispiel")));
 
       setSystemTime(new Date(2026, 2, 3, 19, 30, 41));
       const started = await app.request("/api/campaigns/beispiel/session/start", {

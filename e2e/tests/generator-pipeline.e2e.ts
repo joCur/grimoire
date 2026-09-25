@@ -27,7 +27,9 @@ import type { Page } from "@playwright/test";
 
 import { FAILING_SCENE_ID, THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
-import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
+import { expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
+import { apiFor, type Api } from "../support/api";
+import { getScene, sceneExists } from "../support/scene";
 
 const CHAPTER = "01-salzhafen";
 
@@ -78,7 +80,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
 
   // --- (2) a finished part is acceptable while one is still open ----------
   const firstId = THREE_SCENES[0].id;
-  expect(await api.sceneExists(firstId)).toBe(false);
+  expect(await sceneExists(api, firstId)).toBe(false);
   await page
     .locator("div")
     .filter({ hasText: sceneLabel(firstId) })
@@ -90,7 +92,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
     "href",
     `/campaigns/beispiel/scenes/${firstId}`,
   );
-  expect(await api.sceneExists(firstId)).toBe(true);
+  expect(await sceneExists(api, firstId)).toBe(true);
   // The job is still there — the failed part is not settled.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(200);
 
@@ -120,7 +122,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   for (const scene of THREE_SCENES) {
-    const stored = await api.scene(scene.id);
+    const stored = await getScene(api, scene.id);
     expect(stored.title).toBe(scene.title);
     expect(stored.status).toBe("draft");
   }
@@ -217,7 +219,7 @@ test("a finished part is acceptable while the run is still running", async ({
   };
   expect(before.status).toBe("running");
 
-  expect(await api.sceneExists(firstId)).toBe(false);
+  expect(await sceneExists(api, firstId)).toBe(false);
   await page
     .locator("div")
     .filter({ hasText: sceneLabel(firstId) })
@@ -225,7 +227,7 @@ test("a finished part is acceptable while the run is still running", async ({
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
   await expect(page.getByRole("link", { name: sceneLabel(firstId) })).toBeVisible();
-  expect(await api.sceneExists(firstId)).toBe(true);
+  expect(await sceneExists(api, firstId)).toBe(true);
 
   // …and the run is STILL running: accepting a part does not end it, and the
   // open rest keeps the job alive.
@@ -351,7 +353,7 @@ test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, t
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
   // Nothing of the abandoned run lands afterwards.
   for (const scene of THREE_SCENES) {
-    expect(await api.sceneExists(scene.id)).toBe(false);
+    expect(await sceneExists(api, scene.id)).toBe(false);
   }
 });
 
@@ -446,7 +448,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     expect(retried.status).toBe("running");
     expect(parts(retried).map((part) => part.status)).toEqual(["done", "done", "running"]);
     // Nothing was written by any of it — only „Übernehmen“ writes.
-    expect(await api.sceneExists(THREE_SCENES[0].id)).toBe(false);
+    expect(await sceneExists(api, THREE_SCENES[0].id)).toBe(false);
   } finally {
     await second.proc.stop();
   }

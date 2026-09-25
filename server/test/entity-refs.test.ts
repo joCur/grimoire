@@ -13,10 +13,12 @@ import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { expandBodyRefs, referrersOf } from "../src/store/refs";
 import { dropStore, seedStore } from "./support/store";
-import { entriesUrl } from "./support/urls";
 
 /** A scene of the example campaign we overwrite with reference prose — its own resource. */
 const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
+/** The example chapter and the campaign, each its own resource too. */
+const CHAPTER = "/api/campaigns/beispiel/chapters/01-salzhafen";
+const CAMPAIGN = "/api/campaigns/beispiel";
 
 /**
  * The seed's OWN reference to jorna: fenn's `## Beziehungen` names her as
@@ -34,24 +36,19 @@ afterEach(() => {
   dropStore();
 });
 
-/** The URL of what a case writes: the scene's resource, or an entry's address. */
-function urlOf(target: string): string {
-  return target.startsWith("/api/") ? target : entriesUrl("beispiel", target);
-}
-
-async function readEntry(target: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(urlOf(target));
+async function readBody(url: string): Promise<{ rev: number; body: string }> {
+  const res = await app.request(url);
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
 
-/** Write the text of a scene or an entry — a `{ rev, body }` PATCH either way. */
-async function writeBody(target: string, body: string): Promise<void> {
-  const entry = await readEntry(target);
-  const res = await app.request(urlOf(target), {
+/** Write the text of a scene, a chapter or the campaign — a `{ rev, body }` PATCH on its resource. */
+async function writeBody(url: string, body: string): Promise<void> {
+  const current = await readBody(url);
+  const res = await app.request(url, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: entry.rev, body }),
+    body: JSON.stringify({ rev: current.rev, body }),
   });
   expect(res.status).toBe(200);
 }
@@ -129,7 +126,7 @@ describe("the index resolves references", () => {
   test("a scene that only holds the slug is findable under the name", async () => {
     await writeBody(SCENE, "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n");
     // The stored body keeps the SLUG — the format never stores names.
-    expect((await readEntry(SCENE)).body).toContain("[[jorna]]");
+    expect((await readBody(SCENE)).body).toContain("[[jorna]]");
     expect(findsScene(await search("Hafenmeisterin"))).toBe(true);
   });
 
@@ -145,7 +142,7 @@ describe("the index resolves references", () => {
     await patchNpc("jorna", { name: "Jorna Salzhand" });
 
     // The scene's own row never changed — only what its indexed text says.
-    expect((await readEntry(SCENE)).body).toContain("[[jorna]]");
+    expect((await readBody(SCENE)).body).toContain("[[jorna]]");
     expect(findsScene(await search("Salzhand"))).toBe(true);
     expect(findsScene(await search("Hafenmeisterin"))).toBe(false);
   });
@@ -165,7 +162,7 @@ describe("referrersOf", () => {
   test("finds every body kind that mentions the slug", async () => {
     await writeBody(SCENE, "## Flow\n\n[[jorna]] wartet.\n");
     await patchLocation("leuchtturm", { body: "[[jorna]] hat den Schl\u00fcssel.\n" });
-    await writeBody("01-salzhafen", "## Ziel\n\n[[jorna]] zahlt.\n");
+    await writeBody(CHAPTER, "## Ziel\n\n[[jorna]] zahlt.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
       { kind: "scene", id: "lighthouse-arrival" },
@@ -212,7 +209,7 @@ describe("referrersOf", () => {
   });
 
   test("the campaign body is a full reference site", async () => {
-    await writeBody("campaign", "Notiz: [[jorna]] ist bestechlich.\n");
+    await writeBody(CAMPAIGN, "Notiz: [[jorna]] ist bestechlich.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
       FENN_REFERS_TO_JORNA,
@@ -227,26 +224,23 @@ describe("referrersOf", () => {
 
 describe("the seed expands references (second pass)", () => {
   test("a seeded body is findable under the referenced NAME", async () => {
-    // The seed writes one index row per entry AS IT GOES, and a body can
-    // reference an entry whose row does not exist yet at that moment — so the
+    // The seed writes one index row per object AS IT GOES, and a body can
+    // reference a row that does not exist yet at that moment — so the
     // expansion is a second pass at the end of the load (db/seed.ts). This
     // case is what exercises it: the scene's body names jorna by reference,
     // and the search has to find it under her display name.
     await seedStore({
-      entries: [
+      scenes: [
         {
-          kind: "scene",
-          scene: {
-            id: "seeded-ref",
-            title: "Referenz aus dem Seed",
-            type: "planned",
-            chapter: "01-salzhafen",
-            npcs: [],
-            handouts: [],
-            tags: [],
-            status: "draft",
-            body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
-          },
+          id: "seeded-ref",
+          title: "Referenz aus dem Seed",
+          type: "planned",
+          chapter: "01-salzhafen",
+          npcs: [],
+          handouts: [],
+          tags: [],
+          status: "draft",
+          body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
         },
       ],
     });

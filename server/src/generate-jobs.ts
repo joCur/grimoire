@@ -1146,9 +1146,10 @@ export async function deleteJob(campaign: string): Promise<boolean> {
 }
 
 // Discarding the job an apply came from is NOT here: it belongs to the same
-// transaction as the writes, so it lives in store/drafts.ts `applyDrafts`.
-// A separate "delete if current" call after the write left a
-// window in which a crash kept a done job whose proposals were already stored.
+// transaction as the writes, so it lives in store/generated.ts
+// `writeGenerated`. A separate "delete if current" call after the write would
+// leave a window in which a crash kept a done job whose proposals were
+// already stored.
 
 // --- review state ------------------------------------------------------------
 
@@ -1295,8 +1296,8 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
 
 /**
  * Record a partial accept on the job — called INSIDE the write transaction
- * (store/drafts.ts `applyDrafts`), so the job and the rows it produced can
- * never disagree after a crash: either both landed or neither did (the same
+ * (store/generated.ts `writeGenerated`), so the job and the rows it produced
+ * can never disagree after a crash: either both landed or neither did (the same
  * rule the whole-run apply follows).
  *
  * `sceneStart` is the start this accept TOOK — given only by the run's first

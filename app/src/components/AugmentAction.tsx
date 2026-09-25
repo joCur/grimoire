@@ -1,5 +1,5 @@
 // The augment action — the third quiet action in a reading view's header,
-// next to the edit and the properties action. Same vocabulary, same size, no
+// next to the edit and the dialog action. Same vocabulary, same size, no
 // new chrome: the topbar does not grow, and the reading view gains one word.
 //
 // Every reading view builds its trigger from the parts exported here, over
@@ -48,7 +48,7 @@ import {
   alignBlocks,
   assembleBody,
   defaultAccepted,
-  formatPropertyValue,
+  formatFieldValue,
   lineDiff,
   type BlockChange,
   type BlockChangeKind,
@@ -115,7 +115,7 @@ export interface ApplySession {
 // --- the triggers -------------------------------------------------------------------
 
 /**
- * The trigger and its open state. Open-BY-ROW, like the properties dialog: the
+ * The trigger and its open state. Open-BY-ROW, like the fields dialog: the
  * reading route stays mounted across a navigation, and a dialog holding row A
  * while the route already shows B would send A's decisions to B.
  */
@@ -682,7 +682,7 @@ function PropertyRow({
   onDecide: (take: boolean) => void;
   t: Translate;
 }) {
-  const current = formatPropertyValue(field.current);
+  const current = formatFieldValue(field.current);
   return (
     <li className="rounded-md border border-border bg-card px-3 py-2.5">
       <div className="mb-1.5 flex items-center gap-2">
@@ -696,7 +696,7 @@ function PropertyRow({
           {current === "" ? t("augment.field.empty") : current}
         </dd>
         <dt className="text-[11.5px] text-muted-foreground">{t("augment.field.proposed")}</dt>
-        <dd className="text-foreground">{formatPropertyValue(field.proposed)}</dd>
+        <dd className="text-foreground">{formatFieldValue(field.proposed)}</dd>
       </dl>
     </li>
   );

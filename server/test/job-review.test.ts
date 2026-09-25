@@ -7,8 +7,8 @@
 // is the primary key.
 //
 // What is asserted is the promise: nothing the DM does in the review is lost. The state is a ROW (so it comes back after a restart), a
-// second tab loses the race with a 409 instead of overwriting, „Diesen
-// übernehmen" writes exactly one part and leaves the rest reviewable, and
+// second tab loses the race with a 409 instead of overwriting, accepting
+// one part writes exactly that part and leaves the rest reviewable, and
 // the job disappears by itself the moment nothing is open.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -19,7 +19,6 @@ import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
 import { dropStore, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
-import { entriesUrl } from "./support/urls";
 
 // --- fixtures -----------------------------------------------------------------
 
@@ -127,7 +126,7 @@ async function exists(id: string): Promise<boolean> {
 }
 
 async function chapterExists(id: string): Promise<boolean> {
-  const res = await app.request(entriesUrl("beispiel", id));
+  const res = await app.request(`/api/campaigns/beispiel/chapters/${id}`);
   return res.status === 200;
 }
 
@@ -299,7 +298,7 @@ test("an npc edit for an npc the run did not propose, or with a foreign field, i
 
 // --- partial accept -------------------------------------------------------------
 
-test('„Diesen übernehmen" writes only the selection and marks it on the job', async () => {
+test('accepting one part writes only the selection and marks it on the job', async () => {
   const job = await runJob();
   const res = await accept(job, { scenes: [SCENE_A] });
   expect(res.status).toBe(200);
@@ -393,7 +392,7 @@ test("accepting the same part twice answers 200 with nothing written", async () 
 });
 
 test("a bulk accept with nothing open left stays a 400", async () => {
-  // Everything dropped or rejected: „Alle übernehmen" names nothing and
+  // Everything dropped or rejected: accept-all names nothing and
   // there is nothing — a client bug, and still an error.
   const job = await patch(await runJob(), {
     droppedScenes: [SCENE_A, SCENE_B],
@@ -422,7 +421,7 @@ test("the job deletes itself when every part is written, dropped or rejected", a
   expect(await npcExists(NPC_ID)).toBe(false);
 });
 
-test('„Alle übernehmen" writes the open rest — never a dropped or rejected part', async () => {
+test('accept-all writes the open rest — never a dropped or rejected part', async () => {
   let job = await runJob();
   job = await patch(job, { npcs: { [NPC_ID]: "rejected" } });
   expect((await accept(job, { scenes: [SCENE_A] })).status).toBe(200);
@@ -439,7 +438,7 @@ test('„Alle übernehmen" writes the open rest — never a dropped or rejected 
 
 test("a bulk accept skips an UNDECIDED proposed npc, an explicit one writes it", async () => {
   const job = await runJob();
-  // Nothing decided about the npc: „Alle übernehmen" writes the scenes and
+  // Nothing decided about the npc: accept-all writes the scenes and
   // leaves it alone — the earlier rule, and the reason the job stays.
   const bulk = (await (await accept(job, {})).json()) as {
     scenes: string[];
@@ -450,7 +449,7 @@ test("a bulk accept skips an UNDECIDED proposed npc, an explicit one writes it",
   expect(bulk.jobDeleted).toBe(false);
   expect(await npcExists(NPC_ID)).toBe(false);
 
-  // Naming it is the decision: „Diesen übernehmen" on its row writes it, and
+  // Naming it is the decision: the accept on its row writes it, and
   // then nothing is open.
   const rest = (await fetchJob()) as GenerateJob;
   const one = (await (await accept(rest, { npcs: [NPC_ID] })).json()) as {
@@ -460,7 +459,7 @@ test("a bulk accept skips an UNDECIDED proposed npc, an explicit one writes it",
   expect(await npcExists(NPC_ID)).toBe(true);
 });
 
-test('„Verwerfen" removes only the open rest — what was written stays', async () => {
+test('discarding removes only the open rest — what was written stays', async () => {
   const job = await runJob();
   expect((await accept(job, { scenes: [SCENE_A] })).status).toBe(200);
 
@@ -499,7 +498,7 @@ test("an accept without a rev is a 400 — a defaulted guard is no guard", async
 
 test("a job that disappears mid-accept rolls the whole write back", async () => {
   const job = await runJob();
-  // „Verwerfen" in another tab: the row is gone before the accept starts.
+  // Discarded in another tab: the row is gone before the accept starts.
   expect((await send("DELETE", "/api/campaigns/beispiel/generate/job")).status).toBe(200);
   const res = await accept(job, { scenes: [SCENE_A] });
   expect(res.status).toBe(404);
@@ -534,7 +533,7 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
 // row are invisible — the overview lists chapters from the chapter table
 // and would show neither the chapter nor its scenes.
 //
-// „Reload" is modelled exactly as it reaches the server: an accept with NO
+// A reload is modelled exactly as it reaches the server: an accept with NO
 // chapter fields in the body. Nothing else about these cases is special — same
 // run, same accept endpoint.
 
@@ -552,7 +551,7 @@ const NEW_CHAPTER_REPLY = JSON.stringify({
   warnings: [],
 });
 
-/** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
+/** Start a new-chapter run and wait for it, like `runJob`. */
 async function runNewChapterJob(
   title?: string,
   provider: PipelineFake = new PipelineFake([NEW_CHAPTER_REPLY]),
@@ -653,7 +652,7 @@ test("accepting only the proposed npc already creates the run's chapter", async 
 
 // --- the chapter description of a new-chapter run ------------------------------
 //
-// The outline of a „Neues Kapitel" run describes the chapter it creates, and
+// The outline of a new-chapter run describes the chapter it creates, and
 // that description is the chapter's text once the run is accepted. A run into
 // an existing chapter never touches that chapter's text, whatever its outline
 // says.
@@ -666,7 +665,7 @@ function describedReply(description: string): string {
 }
 
 async function chapterBody(chapter: string): Promise<string> {
-  const res = await app.request(entriesUrl("beispiel", chapter));
+  const res = await app.request(`/api/campaigns/beispiel/chapters/${chapter}`);
   expect(res.status).toBe(200);
   return ((await res.json()) as { body: string }).body;
 }
@@ -721,7 +720,7 @@ test("a chapter that exists by the time of the accept keeps its own text", async
   const created = await send("POST", "/api/campaigns/beispiel/chapters", {
     title: "Die Drachenbrut",
     id: NEW_CHAPTER,
-    description: "Von Hand geschrieben.",
+    body: "Von Hand geschrieben.",
   });
   expect(created.status).toBe(201);
 

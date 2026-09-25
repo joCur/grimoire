@@ -1,7 +1,7 @@
 // Review actions against the database stack.
 //
 // Same setup as the write-API tests: one fresh in-memory database per case,
-// seeded from the committed JSON entries by the real loader
+// seeded from the committed JSON fixtures by the real loader
 // (test/support/store.ts). Every assertion reads the API's answer or the
 // structured endpoint behind it.
 //
@@ -17,7 +17,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type {
-  EntryResponse,
   InboxResponse,
   Npc,
   SessionLogEntry,
@@ -27,7 +26,6 @@ import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { seedCampaign } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
-import { entriesUrl } from "./support/urls";
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
@@ -35,29 +33,6 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
     headers: { "content-type": "application/json" },
     body: body === undefined ? "{}" : JSON.stringify(body),
   });
-}
-
-async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
-  const res = await postJson(url, body);
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
-}
-
-async function getEntry(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
-  const res = await app.request(entriesUrl(campaign, rel));
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
-}
-
-async function patchBody(rel: string, body: string): Promise<EntryResponse> {
-  const before = await getEntry(rel);
-  const res = await app.request(entriesUrl("beispiel", rel), {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: before.rev, body }),
-  });
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
 }
 
 /** The documented short hash: first 8 hex chars of SHA-256 over a string. */
@@ -293,9 +268,7 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
   test("404 when the campaign has no inbox at all", async () => {
     // GET answers 200 with an empty list, but there is still no such idea to
     // check off — hence 404 here.
-    seedCampaign(await getDb(), [
-      { kind: "campaign", properties: { id: "frischling" }, body: "" },
-    ]);
+    seedCampaign(await getDb(), { campaign: { id: "frischling", name: "", body: "" } });
     const res = await postJson("/api/campaigns/frischling/review/inbox-done", { id: "0" });
     expect(res.status).toBe(404);
   });

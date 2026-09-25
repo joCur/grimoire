@@ -1,19 +1,30 @@
-// Chapters, and the order of the scenes in them.
+// Chapters: the chapter resource, the campaign tree, and the order of the
+// scenes in a chapter.
 //
-// This module builds the campaign tree, creates chapters, holds the
-// one-active-chapter rule and writes the order of a chapter's scenes — the
-// chapter's statement about its scenes, with its own guard (ADR #27). A
-// scene itself is its own resource (./scenes.ts), and a chapter's open
-// threads are a list of their own (./threads.ts).
+// The chapter is its own resource with its own type (ADR #31,
+// @grimoire/shared/chapter): read, listed, written, created and taken over
+// from a proposal here, typed by its one zod schema, and this module holds
+// the one-active-chapter rule every write that sets `active` runs. Beside it
+// stand the campaign tree — a shape that shows several entities and belongs
+// to its endpoint — and the order of a chapter's scenes: the chapter's
+// statement about its scenes, with its own guard (ADR #27). A scene itself
+// is its own resource (./scenes.ts), and a chapter's open threads are a list
+// of their own (./threads.ts).
 
 import { and, asc, eq } from "drizzle-orm";
 import {
+  chapterCreateSchema,
+  chapterPatchSchema,
+  chapterProposalSchema,
   ENTITY_SLUG,
   freeSlug,
   type CampaignTree,
+  type Chapter,
+  type ChapterCreate,
   type ChapterNode,
+  type ChapterPatch,
+  type ChapterProposal,
   type ChapterStatus,
-  type EntryResponse,
   type LocationSummary,
   type NpcStatus,
   type NpcSummary,
@@ -29,32 +40,29 @@ import { chapters, locations, npcs, scenes } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
 import { chapterRowOf, indexChapter, refNpcs, refTags } from "./entity-rows";
 import { getDb } from "./handle";
-import { chapterPath, RESERVED_SEGMENTS } from "./paths";
-import {
-  renderChapter,
-  type ChapterRow,
-  type LocationRow,
-  type NpcRow,
-  type SceneRow,
-} from "./render";
+import type { ChapterRow, LocationRow, NpcRow, SceneRow } from "./render";
 import { sessionSummaries } from "./session-rows";
 import {
+  assertChapterStatus,
   assertSafeChapterId,
   guardRev,
   nextPos,
+  normalizeBody,
+  parseRequest,
   resolveNewId,
-  slugReserved,
+  revConflict,
   slugTaken,
 } from "./shared";
 
-// --- chapter status ----------------------------------------------------------
+// --- the one active chapter ---------------------------------------------------
 
 /**
  * The ONE chapter status the app acts on (the overview's control, the session
  * view's "which chapter is running"). There is at most one per campaign, and
- * every write that sets it clears the previous one in the same transaction.
+ * every write that sets it takes it off the previous one in the same
+ * transaction.
  */
-export const CHAPTER_ACTIVE = "active";
+const CHAPTER_ACTIVE = "active";
 
 /**
  * Where a chapter starts, and where the swap puts the one it takes `active`
@@ -66,16 +74,16 @@ export const CHAPTER_ACTIVE = "active";
 const CHAPTER_PLANNED = "planned";
 
 /**
- * Take `active` off every OTHER chapter of the campaign — the swap half of
- * "exactly one active chapter".
+ * Take `active` off every OTHER chapter of the campaign and put it back to
+ * `planned` — the swap half of "at most one active chapter". Each of those
+ * chapters is written, so its `rev` moves with it: an editor open on it sees
+ * that it changed.
  *
- * Both writes that can set `active` call this inside their own transaction:
- * `POST /chapters/:id/active` (the overview's status control) and an entry
- * PATCH whose status ends up `active` (the chapter properties dialog). The
- * invariant belongs to the COLUMN, not to one endpoint — otherwise the
- * dialog is a second door past it.
+ * Every write that can make a chapter active calls this inside its own
+ * transaction — the PATCH, the create, and taking over a chapter proposal —
+ * because the rule belongs to the COLUMN, not to one endpoint.
  */
-export function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string): void {
+function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string): void {
   const previous = tx
     .select()
     .from(chapters)
@@ -261,20 +269,184 @@ export async function writeSceneOrder(
   });
 }
 
-// --- reading a chapter entry --------------------------------------------------
+// --- rendering a row ----------------------------------------------------------
 
 /**
- * The chapter entry an address names; 404 when the campaign has no chapter
- * with that id.
+ * The chapter of a row. An empty title falls back to the id — the same
+ * display-name rule as everywhere — and a status that holds nothing is a
+ * field the chapter does not carry. The body travels exactly as it is
+ * stored.
  */
-export function readChapterEntry(
+export function renderChapter(row: ChapterRow): Chapter {
+  return {
+    id: row.id,
+    title: row.title === "" ? row.id : row.title,
+    // The column is a CHECK constraint over the shared list (ADR #25), so the
+    // stored text is one of its values — the narrowing the row type cannot
+    // express.
+    ...(row.status === null ? {} : { status: row.status as ChapterStatus }),
+    body: row.body,
+    rev: row.rev,
+  };
+}
+
+// --- reading ------------------------------------------------------------------
+
+/** One chapter, inside a handle; 404 when the campaign has none with that id. */
+export function chapterIn(tx: GrimoireDb, campaign: string, id: string): Chapter {
+  const row = chapterRowOf(tx, campaign, id);
+  if (row === undefined) throw new ApiError(404, "chapter not found");
+  return renderChapter(row);
+}
+
+/** GET /api/campaigns/:campaign/chapters/:id */
+export async function readChapter(campaign: string, id: string): Promise<Chapter> {
+  await requireCampaign(campaign);
+  return chapterIn(await getDb(), campaign, id);
+}
+
+/**
+ * GET /api/campaigns/:campaign/chapters — every chapter of the campaign in
+ * the campaign's order (`pos`, the id as the tie-break).
+ */
+export async function listChapters(campaign: string): Promise<Chapter[]> {
+  await requireCampaign(campaign);
+  const db = await getDb();
+  return (
+    db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.campaignId, campaign))
+      .orderBy(asc(chapters.pos), asc(chapters.id))
+      .all() as ChapterRow[]
+  ).map(renderChapter);
+}
+
+// --- writing ------------------------------------------------------------------
+
+/**
+ * The body of a chapter PATCH, checked against the chapter's schema: the
+ * guard, `force` and any subset of the fields, `body` among them — a key that
+ * is none of these, or a value of the wrong shape, is a 400 that names it. A
+ * `status` outside the three comes first, with the code the app has a
+ * sentence for (`status_not_allowed`, ADR #25).
+ */
+export function readChapterPatch(raw: unknown): ChapterPatch {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    assertChapterStatus(raw as Record<string, unknown>);
+  }
+  return parseRequest(chapterPatchSchema, raw, "chapter patch");
+}
+
+/**
+ * PATCH /api/campaigns/:campaign/chapters/:id — THE write of one chapter
+ * (ADR #23): any subset of its fields in one row update against one `rev`.
+ */
+export async function patchChapter(campaign: string, id: string, raw: unknown): Promise<Chapter> {
+  const patch = readChapterPatch(raw);
+  return mutate(campaign, (tx) => patchChapterIn(tx, campaign, id, patch));
+}
+
+/**
+ * The write itself, INSIDE the caller's transaction.
+ *
+ * Only the fields the patch names are touched; `null` clears the status.
+ * `force` replaces the guard by the row's current rev — the DM's answer to
+ * the conflict dialog, which writes only what this request carries. The id
+ * never changes (ADR #21): a patch may echo it, never alter it. A patch that
+ * names no field is a 400 `nothing_to_write`.
+ *
+ * A patch that makes the chapter `active` takes `active` off the chapter that
+ * held it, in this transaction (`clearOtherActiveChapters`). Neither the
+ * scene order's guard nor the thread list's moves: both are the chapter's
+ * lists, not its fields (ADR #27, ADR #29).
+ */
+export function patchChapterIn(
   tx: GrimoireDb,
   campaign: string,
   id: string,
-): EntryResponse {
+  patch: ChapterPatch,
+): Chapter {
+  const { rev, force, id: patchedId, ...fields } = patch;
+  const named = Object.values(fields).some((value) => value !== undefined);
+  if (!named && patchedId === undefined) {
+    throw new ApiError(400, "nothing to write — send at least one field", {
+      code: "nothing_to_write",
+    });
+  }
   const row = chapterRowOf(tx, campaign, id);
-  if (row === undefined) throw new ApiError(404, "entry not found");
-  return renderChapter(row);
+  if (row === undefined) throw new ApiError(404, "chapter not found");
+  const guard = force === true ? row.rev : rev;
+  if (row.rev !== guard) {
+    throw revConflict(row.rev, "chapter changed", { chapter: renderChapter(row) });
+  }
+  if (patchedId !== undefined && patchedId !== row.id) {
+    throw new ApiError(400, "id is the primary key — it is set at creation and never changes");
+  }
+  const next: ChapterRow = {
+    ...row,
+    title: fields.title ?? row.title,
+    status: fields.status === undefined ? row.status : fields.status,
+    body: fields.body === undefined ? row.body : normalizeBody(fields.body),
+    rev: row.rev + 1,
+  };
+  if (next.status === CHAPTER_ACTIVE) clearOtherActiveChapters(tx, campaign, row.id);
+  tx.update(chapters)
+    .set({ title: next.title, status: next.status, body: next.body, rev: next.rev })
+    .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+    .run();
+  indexChapter(tx, campaign, next);
+  return renderChapter(next);
+}
+
+// --- taking over a proposal ---------------------------------------------------
+
+/**
+ * A chapter without its guard — a fixture or the chapter a new-chapter
+ * run creates — checked against the chapter's schema. A key a chapter does
+ * not have, or a value of the wrong shape, is refused with the message `what`
+ * introduces.
+ */
+export function readChapterProposal(raw: unknown, what: string): ChapterProposal {
+  return parseRequest(chapterProposalSchema, raw, what);
+}
+
+/** True when a proposal would land on a chapter that already exists. */
+export function chapterTaken(tx: GrimoireDb, campaign: string, id: string): boolean {
+  return chapterRowOf(tx, campaign, id) !== undefined;
+}
+
+/** The `pos` a chapter appended to the campaign gets: one past the last. */
+function nextChapterPos(tx: GrimoireDb, campaign: string): number {
+  return nextPos(
+    tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
+  );
+}
+
+/**
+ * Write one chapter proposal into the campaign, at its end, INSIDE the
+ * caller's transaction — the seed and the generator's accept both end here.
+ * The caller has checked for conflicts. An `active` proposal takes `active`
+ * off the chapter that held it.
+ */
+export function insertChapterProposal(
+  tx: GrimoireDb,
+  campaign: string,
+  proposal: ChapterProposal,
+): void {
+  if (proposal.status === CHAPTER_ACTIVE) clearOtherActiveChapters(tx, campaign, proposal.id);
+  tx.insert(chapters)
+    .values({
+      campaignId: campaign,
+      id: proposal.id,
+      title: proposal.title,
+      status: proposal.status ?? null,
+      body: proposal.body,
+      pos: nextChapterPos(tx, campaign),
+    })
+    .run();
+  const row = chapterRowOf(tx, campaign, proposal.id);
+  if (row !== undefined) indexChapter(tx, campaign, row);
 }
 
 // --- GET /api/campaigns/:campaign/tree ----------------------------------------
@@ -353,12 +525,9 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,
       scenes: own.map((scene) => sceneSummaryRow(db, scene, locationNames)),
-      // A chapter row always exists, so its address is always there; the app
-      // uses it to open the chapter entry.
-      path: chapterPath(chapter.id),
       // The order's guard token rides along so the overview can reorder
       // straight from the tree it already has, without reading the chapter
-      // entry first for a token that is not even on it.
+      // first for a token that is not even on it.
       sceneOrderRev: chapter.sceneOrderRev,
     };
     if (chapter.status !== null) node.status = chapter.status as ChapterStatus;
@@ -416,110 +585,65 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 }
 
 /**
- * The text a new chapter starts with: the description it was given, verbatim,
+ * The text a new chapter starts with: the body it was given, verbatim,
  * trimmed and ending in one newline — no heading around it, because nothing
  * reads a chapter's text by its headings (ADR #29). Blank or absent is the
  * empty text.
  *
- * Both ways a chapter comes into being with a description use it: the create
- * dialog and a „Neues Kapitel" generator run (generator.ts `newChapterTarget`).
+ * Both ways a chapter comes into being with a text use it: the create dialog
+ * and a new-chapter generator run (generator.ts `newChapterTarget`).
  */
-export function newChapterBody(description?: string): string {
-  const trimmed = description?.trim() ?? "";
+export function newChapterBody(body?: string): string {
+  const trimmed = body?.trim() ?? "";
   return trimmed === "" ? "" : `${trimmed}\n`;
 }
 
 /**
- * POST /api/campaigns/:campaign/chapters { title, description? } -> the chapter entry.
- *
- * `description` is optional and becomes the chapter's text as it was typed
- * (`newChapterBody`); the chapter overview shows that text under the title.
+ * The body of a chapter POST, checked against the chapter's create form — a
+ * key that is none of its fields, or a value of the wrong shape, is a 400
+ * that names it. A `status` outside the three comes first, with the code the
+ * app has a sentence for (`status_not_allowed`, ADR #25).
  */
-export async function createChapter(
-  campaign: string,
-  title: string,
-  description?: string,
-  explicitId?: string,
-): Promise<EntryResponse> {
-  const id = resolveNewId(explicitId, title, "chapter", "title");
-  assertSafeChapterId(id);
-  // A reserved id would create an unreachable chapter (store/shared.ts).
-  // Both guards share one "is this id available" predicate, so the proposal
-  // cannot land on a reserved id either.
-  return mutate(campaign, (tx) => {
-    const unavailable = (candidate: string): boolean =>
-      RESERVED_SEGMENTS.has(candidate) || chapterRowOf(tx, campaign, candidate) !== undefined;
-    if (RESERVED_SEGMENTS.has(id)) {
-      throw slugReserved("chapter", id, freeSlug(id, unavailable));
-    }
-    if (chapterRowOf(tx, campaign, id) !== undefined) {
-      throw slugTaken("chapter", id, freeSlug(id, unavailable), chapterPath(id));
-    }
-    const body = newChapterBody(description);
-    tx.insert(chapters)
-      .values({
-        campaignId: campaign,
-        id,
-        title: title.trim(),
-        // A chapter is born `planned`, like the one `ensureChapterRow`
-        // creates: the status has three positions now, and every chapter
-        // should start at one the DM can read instead of at none at all.
-        status: CHAPTER_PLANNED,
-        body,
-        pos: nextPos(
-          tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
-        ),
-      })
-      .run();
-    const row = chapterRowOf(tx, campaign, id);
-    if (row === undefined) throw new ApiError(500, "chapter could not be created");
-    indexChapter(tx, campaign, row);
-    return renderChapter(row);
-  });
+export function readChapterCreate(raw: unknown): ChapterCreate {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    assertChapterStatus(raw as Record<string, unknown>);
+  }
+  return parseRequest(chapterCreateSchema, raw, "chapter");
 }
 
 /**
- * POST /api/campaigns/:campaign/chapters/:id/active -> the chapter entry.
+ * POST /api/campaigns/:campaign/chapters { title, id?, status?, body? } ->
+ * the chapter. The three rules every create endpoint follows are in
+ * store/shared.ts.
  *
- * The active state in the overview's status control. ONE call, ONE transaction,
- * because it is ONE decision about two chapters: the one named here becomes
- * `active` and whatever was active before goes back to `planned`. Two
- * requests from the app would have a window in which the campaign has two
- * active chapters — and the session view picks the FIRST one it finds, so
- * that window is a wrong session view, not a cosmetic race.
- *
- * The swap itself is `clearOtherActiveChapters`, which an entry PATCH
- * setting `active` runs too: the rule belongs to the column, not to this
- * endpoint. Every other status a chapter carries is left alone — this action
- * decides which chapter is active, nothing else.
- *
- * NO rev guard, deliberately, and it is the one write here without one: there
- * is nothing to overwrite. The overview shows no rev (the tree carries none),
- * the action sets a value rather than editing text, and its whole point is
- * that it also changes a chapter the caller never read. Two racing callers end
- * with one active chapter either way — which is the rule that matters.
- * The entry PATCH of a chapter keeps its rev guard, so the properties
- * dialog is a guarded write that happens to also swap.
- *
- * 404 for a chapter that does not exist; idempotent for one that is already
- * active.
+ * `title` arrives trimmed and non-empty, `id` trimmed or absent. The chapter
+ * starts at `status`, `planned` when the request names none; `active` makes
+ * it THE active chapter and takes `active` off the one that held it, in the
+ * same transaction. `body` becomes the chapter's text as it was typed
+ * (`newChapterBody`); the chapter overview shows that text under the title.
+ * The chapter goes to the end of the campaign.
  */
-export async function setActiveChapter(campaign: string, id: string): Promise<EntryResponse> {
+export async function createChapter(
+  campaign: string,
+  request: ChapterCreate,
+): Promise<Chapter> {
+  const id = resolveNewId(request.id, request.title, "chapter", "title");
   assertSafeChapterId(id);
   return mutate(campaign, (tx) => {
-    const target = chapterRowOf(tx, campaign, id);
-    if (target === undefined) throw new ApiError(404, `unknown chapter: ${id}`);
-    clearOtherActiveChapters(tx, campaign, id);
-    if (target.status !== CHAPTER_ACTIVE) {
-      tx.update(chapters)
-        .set({ status: CHAPTER_ACTIVE, rev: target.rev + 1 })
-        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, id)))
-        .run();
+    if (chapterRowOf(tx, campaign, id) !== undefined) {
+      const suggestion = freeSlug(id, (candidate) => chapterRowOf(tx, campaign, candidate) !== undefined);
+      throw slugTaken("chapter", id, suggestion);
     }
-    const row = chapterRowOf(tx, campaign, id);
-    if (row === undefined) throw new ApiError(500, "chapter could not be updated");
-    indexChapter(tx, campaign, row);
-    return renderChapter(row);
+    insertChapterProposal(tx, campaign, {
+      id,
+      title: request.title,
+      // A chapter is born `planned` unless the DM says otherwise: the status
+      // has three positions, and every chapter should start at one the DM can
+      // read instead of at none at all.
+      status: request.status ?? CHAPTER_PLANNED,
+      body: newChapterBody(request.body),
+    });
+    return chapterIn(tx, campaign, id);
   });
 }
 
@@ -535,8 +659,7 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  *
  * Idempotent and quiet: false when the chapter is already there, and false
  * for an id that is no entity slug — `assertChapterRef` then answers for it.
- * `planned` like every other creation path: a chapter the run brought is
- * upcoming, never the active one.
+ * `planned`: a chapter the run brought is upcoming, never the active one.
  */
 export function ensureChapterRow(
   tx: GrimoireDb,
@@ -553,9 +676,7 @@ export function ensureChapterRow(
       id,
       title: display === undefined || display === "" ? id : display,
       status: CHAPTER_PLANNED,
-      pos: nextPos(
-        tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
-      ),
+      pos: nextChapterPos(tx, campaign),
     })
     .run();
   const row = chapterRowOf(tx, campaign, id);

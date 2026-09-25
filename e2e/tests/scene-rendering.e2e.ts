@@ -15,12 +15,16 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { E2E_FIXTURES_DIR } from "../support/paths";
-import { expect, test, type SeedScene } from "../support/test";
+import { expect, test } from "../support/test";
+import { locationExists } from "../support/location";
+import { createNpc, getNpc, npcExists } from "../support/npc";
+import { getScene, patchScene, sceneExists, scenePath } from "../support/scene";
 
 /** Reads one of the suite's own scene fixtures. */
-function scene(name: string): SeedScene {
-  return JSON.parse(readFileSync(path.join(E2E_FIXTURES_DIR, name), "utf8")) as SeedScene;
+function scene(name: string): SceneProposal {
+  return JSON.parse(readFileSync(path.join(E2E_FIXTURES_DIR, name), "utf8")) as SceneProposal;
 }
 
 /** The scene with the [!loot] callout — the example campaign has none. */
@@ -39,7 +43,7 @@ const CAPTURED = "/campaigns/beispiel/scenes/smuggler-captured";
 test("a scene is its own resource: flat on the wire, 404 at its old address", async ({ api }) => {
   // Every field of the scene flat, beside its guard — no `kind`, no `path`,
   // no `properties` map.
-  const arrival = await api.scene("lighthouse-arrival");
+  const arrival = await getScene(api, "lighthouse-arrival");
   expect(arrival).toMatchObject({
     id: "lighthouse-arrival",
     title: "Ankunft am Leuchtturm",
@@ -65,22 +69,22 @@ test("a scene is its own resource: flat on the wire, 404 at its old address", as
 });
 
 test("a scene write: a stale rev is 409, an unknown field 400 naming it", async ({ api }) => {
-  const before = await api.scene("lighthouse-arrival");
+  const before = await getScene(api, "lighthouse-arrival");
   const patch = (body: Record<string, unknown>) =>
-    api.fetch(api.scenePath("lighthouse-arrival"), {
+    api.fetch(scenePath(api, "lighthouse-arrival"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
   const create = (body: Record<string, unknown>) =>
-    api.fetch(api.scenePath(), {
+    api.fetch(scenePath(api), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
 
   // A second writer moves the row; the first one's rev is stale now.
-  const moved = await api.patchScene("lighthouse-arrival", { status: "played" });
+  const moved = await patchScene(api, "lighthouse-arrival", { status: "played" });
   const stale = await patch({ rev: before.rev, title: "Zu spät" });
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({
@@ -88,7 +92,7 @@ test("a scene write: a stale rev is 409, an unknown field 400 naming it", async 
     rev: moved.rev,
     scene: { id: "lighthouse-arrival", status: "played" },
   });
-  expect((await api.scene("lighthouse-arrival")).title).toBe("Ankunft am Leuchtturm");
+  expect((await getScene(api, "lighthouse-arrival")).title).toBe("Ankunft am Leuchtturm");
 
   // A field a scene does not have is refused, by name — on PATCH and POST.
   const unknownPatch = await patch({ rev: moved.rev, atmosphere: "Nebel" });
@@ -97,7 +101,7 @@ test("a scene write: a stale rev is 409, an unknown field 400 naming it", async 
   const unknownCreate = await create({ title: "Neu", chapter: "01-salzhafen", roll20Page: "x" });
   expect(unknownCreate.status).toBe(400);
   expect(((await unknownCreate.json()) as { error: string }).error).toContain("roll20Page");
-  expect(await api.sceneExists("neu")).toBe(false);
+  expect(await sceneExists(api, "neu")).toBe(false);
 });
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({
@@ -160,7 +164,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText("Will");
   await expect(aside).toContainText("Das Leuchtfeuer muss wieder brennen");
   // …and it can only have come from the field: the text does not say it.
-  expect((await api.npc("jorna")).body).not.toContain("Das Leuchtfeuer");
+  expect((await getNpc(api, "jorna")).body).not.toContain("Das Leuchtfeuer");
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 
@@ -226,10 +230,10 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   // An npc created and not filled in: the aside shows it like any other
   // card — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
   // "Stub anlegen" detour, and the card opens the (equally thin) page.
-  expect(await api.npcExists("holm")).toBe(false);
-  await api.createNpc({ name: "holm" });
-  await api.patchScene("lighthouse-arrival", { npcs: ["jorna", "holm"] });
-  expect(await api.npcExists("holm")).toBe(true);
+  expect(await npcExists(api, "holm")).toBe(false);
+  await createNpc(api, { name: "holm" });
+  await patchScene(api, "lighthouse-arrival", { npcs: ["jorna", "holm"] });
+  expect(await npcExists(api, "holm")).toBe(true);
 
   await page.goto(ARRIVAL);
   const aside = page.getByRole("complementary").filter({ hasText: "NPCs dieser Szene" });
@@ -248,21 +252,21 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   // `location` is always an id or absent — and the id has to name a location
   // that exists (ADR #19).
   const patchLocation = async (value: string, rev: number): Promise<Response> =>
-    api.fetch(api.scenePath("smuggler-captured"), {
+    api.fetch(scenePath(api, "smuggler-captured"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rev, location: value }),
     });
 
   // An id nothing holds: refused, and no location appears for it.
-  const before = await api.scene("smuggler-captured");
+  const before = await getScene(api, "smuggler-captured");
   const unknown = await patchLocation("nordbucht", before.rev);
   expect(unknown.status).toBe(400);
   expect(await unknown.json()).toMatchObject({
     code: "location_unknown",
     value: "nordbucht",
   });
-  expect(await api.locationExists("nordbucht")).toBe(false);
+  expect(await locationExists(api, "nordbucht")).toBe(false);
 
   // Free text is refused too, with the slug it would have used — the
   // README's free-text exception is gone.
@@ -272,19 +276,19 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
     code: "location_not_an_id",
     suggestion: "der-alte-hafen",
   });
-  expect(await api.locationExists("der-alte-hafen")).toBe(false);
+  expect(await locationExists(api, "der-alte-hafen")).toBe(false);
 
   // With the location created, the patch lands — and the scene stays at its
   // own route, whatever its location says.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
-  await api.patchScene("smuggler-captured", { location: "nordbucht" });
-  expect((await api.scene("smuggler-captured")).location).toBe("nordbucht");
+  await patchScene(api, "smuggler-captured", { location: "nordbucht" });
+  expect((await getScene(api, "smuggler-captured")).location).toBe("nordbucht");
   await page.goto(CAPTURED);
   await expect(page.getByRole("article")).toContainText("Nordbucht");
 });
 
 test.describe("with a seeded loot scene", () => {
-  test.use({ seed: { entries: { "scenes/loot-check": LOOT_SCENE } } });
+  test.use({ seed: { scenes: [LOOT_SCENE] } });
 
   test("the loot callout renders, an unknown kind degrades to a blockquote", async ({
     page,
@@ -327,7 +331,7 @@ test("the reference scene's W6 table renders as a table inside the note callout"
 test.describe("the table at 390px", () => {
   test.use({
     viewport: { width: 390, height: 844 },
-    seed: { entries: { "scenes/wide-table": WIDE_TABLE_SCENE } },
+    seed: { scenes: [WIDE_TABLE_SCENE] },
   });
 
   test("a table too wide for the phone scrolls in its own box, the page does not", async ({

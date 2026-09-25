@@ -8,7 +8,7 @@
 // So every error body a HUMAN reads now carries a stable `code` next to its
 // `error` text:
 //
-//     { code: "slug_taken", error: "npc \"holm\" already exists …", id, suggestion, path }
+//     { code: "slug_taken", error: "npc \"holm\" already exists …", kind, id, suggestion }
 //
 //   * `code` is the contract. The app renders the sentence from its own
 //     catalog (app/src/i18n, keys `server.<code>`), with the body's extra
@@ -19,18 +19,23 @@
 //     degrades to a readable sentence, never to a blank toast).
 //
 // Codes are append-only: an old one keeps its meaning and its parameters.
-// Parameters that are pure ADDRESSING (`path`, `rev`, `conflicts`) are not
-// listed here — they are part of the individual endpoint contracts in
-// server/src/routes/api.ts and are consumed as data, not as copy.
+// Parameters that are pure ADDRESSING (`rev`, the ids of a generator 409) are
+// not listed here — they are part of the individual endpoint contracts in
+// server/src/routes/ and are consumed as data, not as copy.
 
 /**
  * Every code the server may send. The app has a catalog entry per code; a
  * code missing there falls back to the body's English `error` text.
  */
 export const ERROR_CODES = [
-  /** 409, create: the derived id is taken. `{ kind, id, suggestion, path }` */
+  /** 409, create: the derived id is taken. `{ kind, id, suggestion }` */
   "slug_taken",
-  /** 409, create: the derived id is a reserved address segment. `{ kind, id, suggestion }` */
+  /**
+   * NO LONGER SENT. It was the 409 for a chapter id that collided with a
+   * segment of the entry addresses; every entity is its own resource
+   * (ADR #31), so no id collides with a path. The string stays because codes
+   * are APPEND-ONLY.
+   */
   "slug_reserved",
   /** 400, create: the typed name yields no id at all. `{ kind, field }` */
   "slug_empty",
@@ -85,18 +90,19 @@ export const ERROR_CODES = [
   /**
    * 409, any rev-checked write: what was written changed underneath.
    * `{ rev }` always, plus the CURRENT state where there is one to hand back,
-   * so the app can show what is in the way instead of fetching it again:
-   * `{ entry }` for the write of an entry, `{ scene }`, `{ npc }` or
-   * `{ location }` for the write of one of those, `{ session }` for
+   * so the app can show what is in the way instead of fetching it again,
+   * under the key of what was written: `{ campaign }`, `{ chapter }`,
+   * `{ scene }`, `{ npc }` or `{ location }` for the write of one of those,
+   * `{ session }` for
    * `PATCH /sessions/:id`, `{ threads }` for a write of a chapter's thread
    * list. A whole-list write (the glossary, the campaign knowledge, the
    * scene order) carries none of them — the page reloads its own list.
    */
   "rev_conflict",
   /**
-   * 400, a patch that names nothing to change: an entry write without
-   * `properties` and `body`, a session patch without a timestamp, a thread
-   * patch without `text` and `done`. No parameters.
+   * 400, a patch that names nothing to change: a campaign, chapter, scene,
+   * npc or location patch without a field, a session patch without a
+   * timestamp, a thread patch without `text` and `done`. No parameters.
    */
   "nothing_to_write",
   /**
@@ -123,7 +129,8 @@ export const ERROR_CODES = [
   /** 422, generator: the reply failed mechanical validation after the retries. */
   "llm_invalid",
   /**
-   * 400, entry write: `status` carries a value the column does not accept.
+   * 400, a chapter, scene or npc write: `status` carries a value the column
+   * does not accept.
    * The four status columns are CLOSED (ADR #25), so a value outside the list
    * can only be a typo. `{ kind, value, allowed }` — `allowed` is the list in
    * order, so the app can name the positions without knowing the kind.
@@ -155,7 +162,7 @@ export function isErrorCode(value: unknown): value is ErrorCode {
 
 /**
  * The entity kinds a create error can name. Stable TOKENS, not labels: the
- * app turns them into „NPC" / „Ort" / "location" itself.
+ * app turns them into the words of its UI language itself.
  */
 export const ERROR_KINDS = ["campaign", "chapter", "scene", "npc", "location"] as const;
 

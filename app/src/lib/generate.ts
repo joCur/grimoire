@@ -1,13 +1,6 @@
 // Pure helpers for the generator view. Everything here is
 // derivation and formatting — no fetching, no state:
 //
-//   - the new-chapter flow needs a chapter id BEFORE anything exists:
-//     the next free numeric prefix from the tree plus a kebab slug of the
-//     title (the path preview shows exactly what apply will create). Since
-//     that preview is an editable field: the suggestion is only a
-//     suggestion, the DM may name the directory freely — so the id also
-//     needs a client-side check (chapterIdError) and the rule for when the
-//     suggestion still follows the title (chapterIdValue).
 //   - the edits the review keeps on the job: one change per proposed scene
 //     and per proposed npc, by id, field by field — merged here exactly the
 //     way the server merges them.
@@ -29,108 +22,6 @@ import type {
 } from "@grimoire/shared/types";
 
 import type { Translate } from "@/i18n";
-
-/** German umlauts/ß first — NFKD would strip them to bare vowels. */
-const UMLAUTS: Array<[RegExp, string]> = [
-  [/ä/g, "ae"],
-  [/ö/g, "oe"],
-  [/ü/g, "ue"],
-  [/ß/g, "ss"],
-];
-
-/**
- * Kebab-case slug of a chapter title, mirroring the ids in the data format
- * (README: `01-salzhafen`): lowercase ASCII words joined by single dashes.
- * Returns "" when the title has no usable characters.
- */
-export function slugify(title: string): string {
-  let text = title.toLowerCase();
-  for (const [pattern, replacement] of UMLAUTS) text = text.replace(pattern, replacement);
-  return text
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "") // combining marks of decomposed accents
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/**
- * Next free chapter prefix: max numeric prefix of the existing chapter ids
- * plus one, zero-padded to the widest existing prefix (at least two
- * digits). Chapters without a numeric prefix are ignored; no chapters at
- * all -> "01".
- */
-export function nextChapterPrefix(chapterIds: readonly string[]): string {
-  let max = 0;
-  let width = 2;
-  for (const id of chapterIds) {
-    const match = /^(\d+)/.exec(id);
-    if (match === null) continue;
-    const digits = match[1] as string;
-    max = Math.max(max, Number(digits));
-    width = Math.max(width, digits.length);
-  }
-  return String(max + 1).padStart(width, "0");
-}
-
-/**
- * The directory name a new chapter would get: `<next prefix>-<slug>`.
- * Undefined while the title yields no slug — then there is nothing honest
- * to preview yet.
- */
-export function newChapterId(title: string, chapterIds: readonly string[]): string | undefined {
-  const slug = slugify(title);
-  if (slug === "") return undefined;
-  return `${nextChapterPrefix(chapterIds)}-${slug}`;
-}
-
-/**
- * Directories under a campaign that can never be a chapter — mirrors the
- * server's RESERVED_DIRS (server/src/generator.ts), which answers 404 for
- * them. Checking client-side only saves the round trip; the server stays the
- * last instance.
- */
-const RESERVED_CHAPTER_IDS = new Set(["npcs", "locations", "sessions"]);
-
-/**
- * Is this string usable as a chapter directory name? Returns the error text
- * for the field in the UI language, or undefined when the id is fine.
- *
- * The bar is the server's: a chapter id is ONE safe, non-hidden path segment
- * (assertSafeChapterId) and not a reserved directory. On top of that the
- * data format's ids are kebab (README: `01-salzhafen`), so uppercase,
- * umlauts and underscores are rejected here as well — deliberately as an
- * error, never as a silent rewrite: a manually typed id is the DM's
- * decision, and an id is a stable reference that must not change under them.
- * (A number prefix is optional — `schmugglerbucht` is as valid as
- * `03-schmugglerbucht`.)
- *
- * Order of the checks is by specificity: the most precise complaint wins,
- * the charset rule is the catch-all.
- */
-export function chapterIdError(id: string, t: Translate): string | undefined {
-  if (id === "") return t("generate.input.chapterId.missing");
-  if (id.includes("/") || id.includes("\\")) return t("generate.input.chapterId.slash");
-  if (id.includes("..")) return t("generate.input.chapterId.dots");
-  if (id.startsWith(".")) return t("generate.input.chapterId.leadingDot");
-  if (/\s/.test(id)) return t("generate.input.chapterId.space");
-  if (!/^[a-z0-9-]+$/.test(id)) return t("generate.input.chapterId.charset");
-  if (RESERVED_CHAPTER_IDS.has(id)) return t("generate.input.chapterId.reserved");
-  return undefined;
-}
-
-/**
- * What the chapter-id field shows: the manually entered
- * value once the DM has touched the field, the derived suggestion until
- * then. `manual === undefined` IS the untouched state — and because the view
- * maps an emptied field back to undefined, clearing the field lets the
- * suggestion follow the title again.
- */
-export function chapterIdValue(
-  suggestion: string | undefined,
-  manual: string | undefined,
-): string {
-  return manual ?? suggestion ?? "";
-}
 
 /**
  * Summary inside the apply button: "2 Szenen · 1 vorgeschlagener Eintrag".

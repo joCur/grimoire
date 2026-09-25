@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 
 import { fetchTree } from "@/api";
-import { EntryBodyEditAction } from "@/components/EntryBodyEditor";
+import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
@@ -63,7 +63,7 @@ export function LocationRoute() {
   const editing = editingId === data.id;
   const actions = (
     <>
-      {editing ? null : <EntryBodyEditAction onEdit={() => setEditingId(data.id)} />}
+      {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
       <LocationFieldsAction campaign={campaign} location={data} tree={tree.data} />
       {editing ? null : <LocationAugmentAction campaign={campaign} location={data} />}
     </>

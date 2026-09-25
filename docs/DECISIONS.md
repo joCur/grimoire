@@ -715,6 +715,16 @@ gibt es in keinem Schema mehr, das der Server öffnet.
 
 ## 18. Das Kapitel entsteht aus dem Lauf, sein Status ist ein Enum
 
+> **Teilweise überholt (ADR #31):** Den Tausch-Endpoint `POST
+> /chapters/:id/active` und `PATCH /properties` gibt es nicht: aktiviert wird
+> mit `PATCH …/chapters/:id { rev, status: "active" }` auf der Ressource des
+> Kapitels, mit Wächter wie jeder Schreibzugriff, oder beim Anlegen mit
+> `POST …/chapters` und `status: "active"`. Was GILT: das Kapitel entsteht aus
+> dem Lauf, der Status ist das Enum `planned | active | done`, ein neues
+> Kapitel startet auf `planned`, und „genau ein aktives Kapitel" gehört dem
+> Feld — jeder Schreibweg, der `active` setzt, stellt das bisher aktive
+> Kapitel im selben Vorgang zurück.
+
 **Entscheidung (a): Das Kapitel eines „Neues Kapitel"-Laufs entsteht aus dem
 Zustand des Laufs, nicht aus dem des Browsers.** Der Titel wird beim **Start**
 am Job vermerkt (`generate_jobs.new_chapter_title`, Migration 0013), und die
@@ -934,10 +944,11 @@ kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
 > `PATCH …/entries/<adresse>` und die Form `{ rev, properties?, body?, force? }`:
 > jede Entität wird über `PATCH` auf ihrer eigenen Ressource geschrieben, mit
 > `{ rev, force?, …Teilmenge ihrer Felder }`, `body` eines dieser Felder
-> — keine Trennung in Eigenschaften und Text. Was GILT: ein Schreibweg je
-> Ressource, eine Transaktion, ein `rev`, die 409 mit dem aktuellen Stand,
-> `force` schreibt nur die mitgeschickten Felder, und eine Anfrage ohne Feld
-> ist 400 `nothing_to_write`.
+> — keine Trennung in Eigenschaften und Text. `POST /api/campaigns`
+> antwortet wie jedes Anlegen mit dem Typ seiner Entität (`Campaign`). Was
+> GILT: ein Schreibweg je Ressource, eine Transaktion, ein `rev`, die 409 mit
+> dem aktuellen Stand, `force` schreibt nur die mitgeschickten Felder, und
+> eine Anfrage ohne Feld ist 400 `nothing_to_write`.
 
 **Kontext:** Ein Eintrag wurde über zwei Endpoints geschrieben: `PATCH
 /properties` für die Felder und `PUT /entries/<adresse>` für den Text, jeder
@@ -1689,6 +1700,12 @@ genannt ist.
 
 ### Nachtrag 2026-09-23: Kapitel und Kampagne zeigen ihren ganzen Text
 
+> **Teilweise überholt (ADR #31):** Der Text eines neuen Kapitels heißt auf der
+> Leitung wie sein Feld, `body` (`POST …/chapters { title, id?, status?,
+> body? }`); ein Feld `description` hat das Anlegen nicht. Was GILT: der
+> Text wird getrimmt, mit einem abschließenden Zeilenumbruch und ohne
+> Überschrift davor gespeichert, und alles Übrige unten.
+
 Vierte Anwendung des Grundsatzes, und die letzte Stelle, die eine Überschrift
 per Text suchte. Die Kapitelübersicht zeigte als „Ziel: …“ den ersten Absatz
 unter `## Ziel des Kapitels`; was der DM anders schrieb, fehlte.
@@ -1786,6 +1803,12 @@ Die API-Pfade stehen unter `/api` (ADR #22).
   eingeschlossen. Typen, Code und Doku beschreiben jede Entität mit ihren
   eigenen Feldern; es gibt keine Hälften einer Entität und keine gemeinsame
   Form, die mehrere Entitäten vertritt.
+- **Ein Zustand ist ein Feld, kein Aktions-Endpunkt.** Welches Kapitel aktiv
+  ist, sagt sein `status`, und je Kampagne ist höchstens ein Kapitel aktiv.
+  `PATCH …/chapters/:id { rev, status: "active" }` und `POST …/chapters` mit
+  `status: "active"` aktivieren ein Kapitel; der Server setzt das bisher
+  aktive Kapitel in derselben Transaktion auf `planned`, und dessen `rev`
+  bewegt sich mit. Jeder Schreibweg, der `active` setzt, hält diese Regel.
 - **Schreiben:** `PATCH` nimmt `{ rev, force?, …Teilmenge der Felder }` und
   prüft sie gegen das Schema der Entität. `null` löscht ein optionales Feld;
   ein Feld, das die Entität nicht hat, oder ein Wert der falschen Form ist

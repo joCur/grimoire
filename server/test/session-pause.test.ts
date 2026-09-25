@@ -13,7 +13,7 @@
 // log row, because the `— Pause` line was the same pause written a second
 // time (ADR #26). So the log is asserted to stay EMPTY, which is what says
 // the marker rows are gone. Each case gets a fresh in-memory database seeded
-// from the JSON entries in `fixtures/` (test/support/store.ts), and the
+// from the JSON fixtures in `fixtures/` (test/support/store.ts), and the
 // system time is faked per case.
 //
 // Pause timestamps are stored VERBATIM in the `LOCAL_DATE_TIME_SECONDS` shape,
@@ -84,7 +84,7 @@ async function seedWithPauses(
   pauses: Array<{ from: string; to?: string }>,
 ): Promise<void> {
   await seedStore({
-    entries: [
+    sessions: [
       {
         kind: "session",
         properties: {
@@ -170,8 +170,8 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
     await ok("/api/campaigns/beispiel/session/pause");
     setSystemTime(new Date(2026, 7, 19, 21, 31, 0));
     const again = await ok("/api/campaigns/beispiel/session/pause");
-    // The pause is unchanged — same `from` (second-precise as written, no
-    // YAML roundtrip to drop the `:00` any more) and no second entry.
+    // The pause is unchanged — the same `from`, second-precise as written,
+    // and no second interval.
     expect(intervals(again)).toEqual([{ from: "2026-08-19T21:30:00" }]);
     expect(again.log).toEqual([]);
 

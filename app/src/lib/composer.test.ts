@@ -1,10 +1,9 @@
-// The composer's rules (phase 2). Two things must hold or the UI is
-// dangerous:
+// The composer's rules. Two things must hold or the UI is dangerous:
 //
-//   1. The mode switch is lossless. Blöcke → Roh → Blöcke over every fixture
+//   1. The mode switch is lossless. Blocks → markdown → blocks over every fixture
 //      body must give back the same bytes — the DM has to be able to peek
 //      at the raw markdown without paying for it.
-//   2. Every edit goes through the phase-1 helpers. The observable proof is
+//   2. Every edit goes through the block helpers. The observable proof is
 //      `source`: the edited block loses it (it is rendered from its fields from
 //      now on) and every sibling keeps it (it stays byte-identical). A
 //      hand-rolled spread would keep a stale source and silently drop the edit.
@@ -49,18 +48,23 @@ const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 const ARRIVAL = "scenes/lighthouse-arrival.json";
 const SMUGGLERS = "scenes/smuggler-captured.json";
 
-/** The fixture entry as it is stored: the shape the API speaks. */
+/** A fixture as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
   return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
 }
 
-/** Every fixture that carries a body — the campaign's own and its scenes, npcs and locations. */
+/**
+ * Every fixture that carries a body — the session in the campaign directory
+ * itself, and the campaign, its chapters, scenes, npcs and locations, each in
+ * its own directory.
+ */
 function fixtureFiles(): string[] {
   const inDir = (dir: string): string[] =>
     readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
       .filter((name) => name.endsWith(".json"))
       .map((name) => `${dir}${name}`);
-  return [...inDir(""), ...inDir("scenes/"), ...inDir("npcs/"), ...inDir("locations/")]
+  return ["", "campaigns/", "chapters/", "scenes/", "npcs/", "locations/"]
+    .flatMap(inDir)
     .filter((name) => fixture(name).body !== undefined)
     .sort();
 }
@@ -109,7 +113,7 @@ describe("the draft and its two surfaces", () => {
   test("switching to the mode already on screen changes nothing at all", () => {
     const draft = composerDraft(fixtureBody(ARRIVAL));
     // Same object: a re-parse would hand out new block ids and collapse the
-    // open form for a click that meant „stay here".
+    // open form for a click that meant "stay here".
     expect(withDraftMode(draft, "blocks")).toBe(draft);
     const raw = withDraftText("## Flow\n");
     expect(withDraftMode(raw, "markdown")).toBe(raw);
@@ -386,7 +390,7 @@ describe("what blocks a save", () => {
 
   test("…because the next parse really does pull it out of the section", () => {
     const { blocks } = withChild("## Flow\n\nnoch mehr");
-    // This is the damage the issue prevents: the composer shows one section
+    // This is the damage the check prevents: the composer shows one section
     // with one child, the body comes back with a heading and a paragraph
     // OUTSIDE the branch.
     const reparsed = parseBlocks(serializeBlocks(blocks));

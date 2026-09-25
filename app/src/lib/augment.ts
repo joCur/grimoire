@@ -3,7 +3,7 @@
 // Two levels, and which is which matters:
 //
 //   DECISION UNIT = the BLOCK. The proposal arrives as two whole bodies
-//   (current + proposed) and is cut here into the Block-Composer's own blocks
+//   (current + proposed) and is cut here into the block composer's own blocks
 //   (lib/blocks.ts) — paragraph, callout, `## If:` section, heading, raw. The
 //   DM accepts or keeps each one; nothing else is a choice.
 //
@@ -383,7 +383,7 @@ export function assembleBody(
   return serializeBlocks(blocks);
 }
 
-// --- the fields half --------------------------------------------------------------
+// --- field by field ----------------------------------------------------------------
 
 /**
  * One field of a proposal, as the review renders it: the stored value and the
@@ -408,12 +408,12 @@ export interface FieldProposal {
  * as text, and a list or a mapping has to read as one line rather than as
  * `[object Object]`.
  */
-export function formatPropertyValue(value: unknown): string {
+export function formatFieldValue(value: unknown): string {
   if (value === undefined || value === null) return "";
-  if (Array.isArray(value)) return value.map((item) => formatPropertyValue(item)).join(", ");
+  if (Array.isArray(value)) return value.map((item) => formatFieldValue(item)).join(", ");
   if (typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
-      .map(([key, item]) => `${key}: ${formatPropertyValue(item)}`)
+      .map(([key, item]) => `${key}: ${formatFieldValue(item)}`)
       .join(", ");
   }
   return String(value);

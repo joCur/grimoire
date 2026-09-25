@@ -4,7 +4,7 @@
 // `{ id, text, done }` in the chapter's order, answered as ThreadsResponse
 // `{ entries, rev }` by every endpoint below. `rev` is the LIST's guard
 // token (`chapters.threads_rev`). None of them reads or writes the chapter's
-// text or moves the chapter entry's `rev` — a thread adopted in the review
+// text or moves the chapter's `rev` — a thread adopted in the review
 // does not 409 an open chapter editor, and a text save does not invalidate
 // the list. An unknown chapter is 404, an unsafe chapter id 400.
 

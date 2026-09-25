@@ -28,7 +28,10 @@ import {
   TRIGGER,
 } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
-import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
+import { expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
+import { apiFor, type Api } from "../support/api";
+import { getNpc } from "../support/npc";
+import { getScene, sceneExists } from "../support/scene";
 
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
@@ -117,7 +120,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
       "the server was restarted while the job was running — start the job again",
     );
     // Nothing was written, and a new run may start right away (no stuck gate).
-    expect(await api.sceneExists(SCENE_ID)).toBe(false);
+    expect(await sceneExists(api, SCENE_ID)).toBe(false);
     expect((await api.fetch("campaigns/beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
   } finally {
     await second.proc.stop();
@@ -154,7 +157,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
       },
     });
     // Still nothing written — the review has not been applied.
-    expect(await api.sceneExists(SCENE_ID)).toBe(false);
+    expect(await sceneExists(api, SCENE_ID)).toBe(false);
   } finally {
     await first.proc.stop();
   }
@@ -199,8 +202,8 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(written.scenes).toEqual([SCENE_ID]);
     expect(written.npcs).toEqual([NPC_STUB_ID]);
     expect(written.locations).toEqual([LOCATION_STUB_ID]);
-    expect((await api.npc(NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
-    const stored = await api.scene(SCENE_ID);
+    expect((await getNpc(api, NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
+    const stored = await getScene(api, SCENE_ID);
     // The field and the text as the DM left them before the restart.
     expect(stored.title).toBe(EDITED_TITLE);
     expect(stored.body).toContain(edited.trim());

@@ -1,7 +1,7 @@
 // The POST-RUN naming check.
 //
 // A naming convention says "write <from> as <to>". The prompt asks the model
-// to apply it, and this module checks afterwards whether the finished draft
+// to apply it, and this module checks afterwards whether the finished proposal
 // still carries the OLD spelling — because a prompt is a request, not a
 // guarantee, and finding out during the session is the expensive way.
 //
@@ -29,7 +29,7 @@
 // target. Both are `findRuleHits`.
 //
 // `from`/`to` arrive here ALREADY ref-expanded (store/knowledge.ts namingRules):
-// the DM may write a rule as "[[fenn]]", and the drafts contain the name.
+// the DM may write a rule as "[[fenn]]", and the proposals contain the name.
 //
 // The check looks at the BODY and at the properties that hold PROSE the DM
 // reads out or shows (title, role, voice, appearance, trigger, name, …). It
@@ -45,8 +45,8 @@ import type { NamingHint } from "@grimoire/shared";
  *
  * `name` and `title` are both here because a scene has a title and an npc or
  * a location a name, and a run produces all three. One consequence worth
- * knowing: a draft whose display name is missing carries its id there
- * instead (the validators fill it in), so such a draft is checked against
+ * knowing: a proposal whose display name is missing carries its id there
+ * instead (the validators fill it in), so such a proposal is checked against
  * its id. That is not a bug to guard against — the id is then literally what
  * the chapter overview shows the DM.
  */
@@ -81,7 +81,7 @@ function isWordChar(ch: string | undefined): boolean {
 /**
  * Every word-boundary, case-insensitive occurrence of `needle` in `haystack`,
  * as start offsets. An empty or blank needle matches nothing — a rule the DM
- * has not finished typing must not flag every draft.
+ * has not finished typing must not flag every proposal.
  *
  * `toLowerCase()` on both sides rather than a case-insensitive regex, because
  * the needle is USER TEXT and would have to be escaped for a regex anyway;
@@ -182,23 +182,25 @@ function excerpt(line: string): string {
 }
 
 /**
- * One text as the check reads it: a scene, an npc or a location by its id,
- * the fields to check and its body.
+ * One proposal as the check reads it: a scene, an npc or a location, named by
+ * its id under the key of its entity, with its fields and its body.
  */
-export type CheckedDraft =
+export type CheckedProposal =
   | { scene: string; fields: Record<string, unknown>; body: string }
   | { npc: string; fields: Record<string, unknown>; body: string }
   | { location: string; fields: Record<string, unknown>; body: string };
 
 /** Where a finding sits — the key of the proposal's own kind. */
-function placeOf(draft: CheckedDraft): { scene: string } | { npc: string } | { location: string } {
-  if ("npc" in draft) return { npc: draft.npc };
-  if ("location" in draft) return { location: draft.location };
-  return { scene: draft.scene };
+function placeOf(
+  proposal: CheckedProposal,
+): { scene: string } | { npc: string } | { location: string } {
+  if ("npc" in proposal) return { npc: proposal.npc };
+  if ("location" in proposal) return { location: proposal.location };
+  return { scene: proposal.scene };
 }
 
 /**
- * Check ONE draft against the campaign's naming conventions.
+ * Check ONE proposal against the campaign's naming conventions.
  *
  * The proposal arrives as the fields the review shows and apply writes, so
  * the check can never disagree with what the DM is looking at.
@@ -207,10 +209,13 @@ function placeOf(draft: CheckedDraft): { scene: string } | { npc: string } | { l
  * one sentence is one thing to fix, and three identical rows in the review
  * would only bury the other hints.
  */
-export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule[]): NamingHint[] {
+export function checkProposalNaming(
+  proposal: CheckedProposal,
+  rules: readonly NamingRule[],
+): NamingHint[] {
   if (rules.length === 0) return [];
-  const where = placeOf(draft);
-  const { fields } = draft;
+  const where = placeOf(proposal);
+  const { fields } = proposal;
   const hints: NamingHint[] = [];
 
   for (const rule of rules) {
@@ -221,7 +226,7 @@ export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule
       if (findRuleHits(value, rule).length === 0) continue;
       hints.push({ from: rule.from, to: rule.to, ...where, field: key, excerpt: excerpt(value) });
     }
-    const lines = draft.body.split("\n");
+    const lines = proposal.body.split("\n");
     for (const [index, line] of lines.entries()) {
       if (findRuleHits(line, rule).length === 0) continue;
       hints.push({
@@ -238,13 +243,13 @@ export function checkDraftNaming(draft: CheckedDraft, rules: readonly NamingRule
 }
 
 /**
- * Check a whole run's drafts. Order is draft order, then rule order, then
- * position inside the draft — stable, so the review list does not reshuffle
- * between two polls of the same job.
+ * Check a whole run's proposals. Order is proposal order, then rule order,
+ * then position inside the proposal — stable, so the review list does not
+ * reshuffle between two polls of the same job.
  */
-export function checkDraftsNaming(
-  drafts: readonly CheckedDraft[],
+export function checkProposalsNaming(
+  proposals: readonly CheckedProposal[],
   rules: readonly NamingRule[],
 ): NamingHint[] {
-  return drafts.flatMap((draft) => checkDraftNaming(draft, rules));
+  return proposals.flatMap((proposal) => checkProposalNaming(proposal, rules));
 }

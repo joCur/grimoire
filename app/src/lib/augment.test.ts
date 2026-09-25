@@ -1,4 +1,4 @@
-// The review's arithmetic (issue #36): word diff, line diff, block alignment
+// The review's arithmetic: word diff, line diff, block alignment
 // and the body an accept assembles.
 
 import { describe, expect, test } from "bun:test";
@@ -7,7 +7,7 @@ import {
   alignBlocks,
   assembleBody,
   defaultAccepted,
-  formatPropertyValue,
+  formatFieldValue,
   lineDiff,
   similarity,
   tokenizeWords,
@@ -149,7 +149,7 @@ describe("alignBlocks", () => {
     expect(changes.filter((c) => c.kind === "removed")).toHaveLength(1);
     const added = changes.filter((c) => c.kind === "added");
     expect(added.length).toBeGreaterThan(0);
-    // The addition keeps its „übernehmen" default, the removal has none.
+    // The addition is taken by default, the removal is not.
     expect(defaultAccepted(changes)).toEqual(new Set(added.map((c) => c.id)));
   });
 
@@ -218,10 +218,10 @@ describe("assembleBody", () => {
   });
 });
 
-describe("formatPropertyValue", () => {
+describe("formatFieldValue", () => {
   test("lists and mappings read as one line", () => {
-    expect(formatPropertyValue(["social", "travel"])).toBe("social, travel");
-    expect(formatPropertyValue({ wis: "+2" })).toBe("wis: +2");
-    expect(formatPropertyValue(undefined)).toBe("");
+    expect(formatFieldValue(["social", "travel"])).toBe("social, travel");
+    expect(formatFieldValue({ wis: "+2" })).toBe("wis: +2");
+    expect(formatFieldValue(undefined)).toBe("");
   });
 });

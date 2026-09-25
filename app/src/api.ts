@@ -2,13 +2,13 @@
 // its route, in its resource's module server/src/routes/<resource>.ts). All
 // response shapes come from @grimoire/shared — the format contract exists
 // exactly once. An entity with a slice of its own keeps its client there
-// (scene/scene-api.ts, npc/npc-api.ts, location/location-api.ts), built from
-// the HTTP helpers exported here.
+// (campaign/campaign-api.ts, chapter/chapter-api.ts, scene/scene-api.ts,
+// npc/npc-api.ts, location/location-api.ts), built from the HTTP helpers
+// exported here.
 
 import type {
   CampaignSummary,
   CampaignTree,
-  EntryResponse,
   GenerateJob,
   GenerateJobStarted,
   GlossaryEntry,
@@ -26,16 +26,14 @@ import type {
   ThreadsResponse,
 } from "@grimoire/shared/types";
 
-import { encodeAddress } from "@/lib/address";
-
 export class ApiError extends Error {
   readonly status: number;
   /**
    * The server's JSON error body when there was one — the endpoints answer
    * `{ error, … }` and put the interesting parts next to it (`code`,
    * `validationErrors`/`rawReply`/`usage` on the generator's 422, and on a
-   * write conflict the current `rev` plus the current `entry` — read out by
-   * `revConflict` below).
+   * write conflict the current `rev` plus the current row under the name of
+   * its entity — read out by the conflict reader in that entity's slice).
    */
   readonly details: Record<string, unknown>;
 
@@ -115,15 +113,6 @@ export async function putSettings(patch: InstanceSettings): Promise<InstanceSett
 
 export function fetchTree(campaign: string): Promise<CampaignTree> {
   return getJson<CampaignTree>(`/campaigns/${encodeURIComponent(campaign)}/tree`);
-}
-
-export function fetchEntry(campaign: string, path: string): Promise<EntryResponse> {
-  return getJson<EntryResponse>(entriesUrl(campaign, path));
-}
-
-/** The request path of one entry: its address is the URL path. */
-function entriesUrl(campaign: string, path: string): string {
-  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodeAddress(path)}`;
 }
 
 /**
@@ -206,7 +195,7 @@ export function putKnowledge(
  *
  * `scenes` must name exactly the chapter's scenes; anything else is
  * 400 `scene_order_mismatch` and writes nothing. `rev` is the order's own
- * guard token, `ChapterNode.sceneOrderRev` — not the chapter entry's and not
+ * guard token, `ChapterNode.sceneOrderRev` — not the chapter's and not
  * a scene's, so an open editor neither causes nor suffers a conflict here. A
  * stale token is 409 and writes nothing either.
  */
@@ -232,7 +221,7 @@ function threadsUrl(campaign: string, chapter: string, id?: string): string {
 
 /**
  * The chapter's open threads as ROWS plus the list's own guard token — a
- * list beside the chapter entry, never a checklist in its text (ADR #29).
+ * list beside the chapter, never a checklist in its text (ADR #29).
  */
 export function fetchThreads(campaign: string, chapter: string): Promise<ThreadsResponse> {
   return getJson<ThreadsResponse>(threadsUrl(campaign, chapter));
@@ -289,90 +278,6 @@ export function threadsConflict(error: unknown): ThreadsResponse | undefined {
   return Array.isArray(candidate.entries) && typeof candidate.rev === "number"
     ? (candidate as ThreadsResponse)
     : undefined;
-}
-
-// --- the one write path of an entry ----------------------------------------
-
-/**
- * What one guarded write carries. Only the fields that are present are
- * written, so the same request serves a properties-only patch, a text-only
- * one and a dialog that edits both in one transaction.
- *
- * `properties` is flat — a value sets the key, `null` deletes it, an unknown
- * key is a 400. `body` is the markdown GET hands out — the entry's text, with
- * its properties beside it. Neither field present is a 400
- * `nothing_to_write`.
- *
- * `rev` is the optimistic-concurrency token of the entry the editing session
- * started from. When the row moved since, the server writes NOTHING and
- * answers 409 with its current version AND the current entry — `revConflict`
- * reads both out. `force: true` writes the given fields on top of the current
- * row instead, which is the deliberate force action of the conflict UI.
- *
- * Defined here rather than in @grimoire/shared until the shared package
- * carries the request type.
- */
-export interface PatchEntryRequest {
-  rev: number;
-  properties?: Record<string, unknown>;
-  body?: string;
-  force?: boolean;
-}
-
-/** The single write path of one entry. */
-export async function patchEntry(
-  campaign: string,
-  path: string,
-  request: PatchEntryRequest,
-): Promise<EntryResponse> {
-  const url = entriesUrl(campaign, path);
-  const response = await fetch(`/api${url}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) throw await failure(`PATCH /api${url}`, response);
-  return (await response.json()) as EntryResponse;
-}
-
-/** The server's state at the moment it refused the write. */
-export interface RevConflict {
-  /** The row's current version — what a retry would have to carry. */
-  rev: number;
-  /**
-   * The current entry, so the UI can show and adopt what is stored without a
-   * second request. Undefined when the 409 body did not carry one (an older
-   * server, or a write path that only reports the version) — the caller then
-   * degrades to re-reading the entry itself.
-   */
-  entry?: EntryResponse;
-}
-
-/**
- * Read a write conflict out of a rejection: the 409 of every guarded write,
- * with the version and entry the server answered with. `undefined` for
- * anything else, so a caller can branch on it without knowing the status.
- *
- * Degrades per the house rule: a 409 whose body is missing or shaped
- * differently still counts as a conflict, just without the details.
- */
-export function revConflict(error: unknown): RevConflict | undefined {
-  if (!(error instanceof ApiError) || error.status !== 409) return undefined;
-  const { rev, entry } = error.details;
-  return {
-    rev: typeof rev === "number" ? rev : Number.NaN,
-    ...(isEntryResponse(entry) ? { entry } : {}),
-  };
-}
-
-function isEntryResponse(value: unknown): value is EntryResponse {
-  if (value === null || typeof value !== "object") return false;
-  const candidate = value as Partial<EntryResponse>;
-  return (
-    typeof candidate.path === "string" &&
-    typeof candidate.body === "string" &&
-    typeof candidate.rev === "number"
-  );
 }
 
 /** POST an optional JSON body and parse the JSON answer; a non-2xx becomes an ApiError. */
@@ -568,59 +473,6 @@ export function markInboxLineDone(campaign: string, id: string): Promise<InboxRe
   });
 }
 
-// --- creating content --------------------------------------------------------
-//
-// The create POSTs share one shape (the npc's and the location's included,
-// in their slices): the DM types a NAME, the server derives the id
-// (the shared slug rule, `@grimoire/shared/slug`) and answers with what it
-// created — so the caller can navigate straight into it. `id` is optional and
-// exists for exactly one flow: taking the `slug_taken` 409's `suggestion` in
-// one click. Errors arrive as ApiError; a 409 carries
-// `{ code: "slug_taken", id, suggestion }` in `details` (lib/create.ts turns
-// that into the sentence the dialogs show).
-
-/** The campaign the cold start creates — `id` is what the app navigates to. */
-export function createCampaign(input: {
-  name: string;
-  description?: string;
-  id?: string;
-}): Promise<CampaignSummary> {
-  return postJson<CampaignSummary>("/campaigns", {
-    name: input.name,
-    ...(input.description === undefined ? {} : { description: input.description }),
-    ...(input.id === undefined ? {} : { id: input.id }),
-  });
-}
-
-/**
- * Setting a chapter active from its status control — ONE call, because it is one
- * decision about two chapters: this one becomes `active` and the one that was
- * active goes back to `planned`. Doing it as two properties patches from here
- * would leave a window in which the campaign has two active chapters, and the
- * session view picks the first it finds.
- *
- * No rev: there is nothing to overwrite (the overview carries no rev at all),
- * and the action deliberately also changes a chapter the caller never read.
- * Answers the chapter's entry.
- */
-export function setChapterActive(campaign: string, chapter: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(
-    `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
-  );
-}
-
-/** A new chapter; `description`, when given, becomes its text as typed. */
-export function createChapter(
-  campaign: string,
-  input: { title: string; description?: string; id?: string },
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/chapters`, {
-    title: input.title,
-    ...(input.description === undefined ? {} : { description: input.description }),
-    ...(input.id === undefined ? {} : { id: input.id }),
-  });
-}
-
 // --- generator ---------------------------------------------------------------
 
 /**
@@ -717,9 +569,11 @@ export async function patchJobReview(
  * Accept PART of a finished run: one proposed scene (`scenes`), npc (`npcs` —
  * the NPC run's one npc among them) or location (`locations`), each by id, or
  * all of them when nothing is selected. Answers the ids it wrote, per entity,
- * and whether the job is gone because nothing is open any more. `rev` is the review rev as the caller read it: a
- * 409 `rev_conflict` means another tab decided in between and nothing was
- * written. A 409 with `details.conflicts` is the ordinary write conflict.
+ * and whether the job is gone because nothing is open any more. `rev` is the
+ * review rev as the caller read it: a 409 `rev_conflict` means another tab
+ * decided in between and nothing was written. A 409 with
+ * `details.chapters`/`scenes`/`npcs`/`locations` is the ordinary write
+ * conflict — the rows that already exist, per entity.
  */
 export interface AcceptedParts {
   scenes: string[];

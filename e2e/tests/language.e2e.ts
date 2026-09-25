@@ -26,6 +26,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
+import { npcExists } from "../support/npc";
 
 /**
  * The switch, wherever it is: native radios in a group. Clicked, never
@@ -360,7 +361,7 @@ test("a server error is read in the selected language", async ({
     page.getByText('NPC „jorna“ existiert schon — Vorschlag: „jorna-2“'),
   ).toBeVisible();
   // …and the 409 wrote nothing.
-  expect(await api.npcExists("jorna-2")).toBe(false);
+  expect(await npcExists(api, "jorna-2")).toBe(false);
   await page.getByRole("button", { name: "Abbrechen" }).click();
 
   // --- the same collision in English ----------------------------------------
@@ -377,7 +378,7 @@ test("a server error is read in the selected language", async ({
   await expect(page.getByText("existiert schon", { exact: false })).toHaveCount(
     0,
   );
-  expect(await api.npcExists("jorna-2")).toBe(false);
+  expect(await npcExists(api, "jorna-2")).toBe(false);
 
   // Back to German for the rest of the suite.
   await api.send("PUT", "settings", { locale: null });

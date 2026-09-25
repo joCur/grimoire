@@ -55,6 +55,9 @@
     "e2e": {
       "name": "@grimoire/e2e",
       "version": "0.8.0",
+      "dependencies": {
+        "@grimoire/shared": "workspace:*",
+      },
       "devDependencies": {
         "@playwright/test": "^1.57.0",
         "@types/bun": "^1.3.14",

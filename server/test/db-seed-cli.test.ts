@@ -45,8 +45,8 @@ describe("grimoire seed", () => {
   test("loads a given directory into GRIMOIRE_DATA/grimoire.db", async () => {
     const { code, out } = await runCli(["seed", FIXTURES]);
     expect(code).toBe(0);
-    // One line per campaign, with the number of entries it brought.
-    expect(out.trim()).toBe("seeded: beispiel (11 entries)");
+    // One line per campaign, with the number of fixtures it brought.
+    expect(out.trim()).toBe("seeded: beispiel (12 fixtures)");
     // The database really landed in GRIMOIRE_DATA.
     expect(await readdir(dataDir)).toContain("grimoire.db");
   });
@@ -67,14 +67,14 @@ describe("grimoire seed", () => {
 
     // `--force` is for a scratch database: rows are ADDED, nothing deleted.
     const extra = path.join(dataDir, "extra");
-    await mkdir(path.join(extra, "zweite"), { recursive: true });
+    await mkdir(path.join(extra, "zweite", "campaigns"), { recursive: true });
     await writeFile(
-      path.join(extra, "zweite", "campaign.json"),
-      JSON.stringify({ kind: "campaign", properties: { id: "zweite", name: "Zweite" }, body: "" }),
+      path.join(extra, "zweite", "campaigns", "zweite.json"),
+      JSON.stringify({ id: "zweite", name: "Zweite", body: "" }),
     );
     const forced = await runCli(["seed", "--force", extra]);
     expect(forced.code).toBe(0);
-    expect(forced.out.trim()).toBe("seeded: zweite (1 entry)");
+    expect(forced.out.trim()).toBe("seeded: zweite (1 fixture)");
   });
 
   test("an unreadable directory exits 1 with a message", async () => {

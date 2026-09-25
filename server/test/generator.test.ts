@@ -26,7 +26,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type {
-  EntryResponse,
+  Chapter,
   GenerateJob,
   GenerateResult,
   GenerateUsage,
@@ -57,7 +57,6 @@ import {
   type ScriptedEntry,
   type ScriptedReply,
 } from "./support/pipeline-fake";
-import { entriesUrl } from "./support/urls";
 
 /**
  * Whether a scene is there, on its own resource (ADR #31). A proposal that
@@ -69,9 +68,9 @@ async function exists(id: string): Promise<boolean> {
   return res.status === 200;
 }
 
-/** Whether a chapter is there — an entry, reached by its address. */
+/** Whether a chapter is there — its own resource (ADR #31). */
 async function chapterExists(id: string): Promise<boolean> {
-  const res = await app.request(entriesUrl("beispiel", id));
+  const res = await app.request(`/api/campaigns/beispiel/chapters/${id}`);
   return res.status === 200;
 }
 
@@ -105,11 +104,11 @@ async function read(id: string): Promise<Scene> {
   return (await res.json()) as Scene;
 }
 
-/** GET of a chapter entry — a chapter still has an address. */
-async function readChapter(id: string): Promise<EntryResponse> {
-  const res = await app.request(entriesUrl("beispiel", id));
+/** GET of a chapter — its own resource (ADR #31). */
+async function readChapter(id: string): Promise<Chapter> {
+  const res = await app.request(`/api/campaigns/beispiel/chapters/${id}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
+  return (await res.json()) as Chapter;
 }
 
 beforeAll(async () => {
@@ -1188,13 +1187,6 @@ describe("POST /api/campaigns/:campaign/generate", () => {
 
   test("newChapter does not weaken the other chapter checks", async () => {
     const fake = useFake([]);
-    // reserved dirs are never chapters, not even new ones
-    expect(
-      (await generate({ ...generateBody, chapter: "npcs", newChapter: true }))
-        .status,
-    ).toBe(404);
-    // What guards the chapter id is the reserved-name check above and the
-    // traversal check below.
     // traversal stays a 400, and the flag itself is type-checked
     expect(
       (await generate({ ...generateBody, chapter: "..", newChapter: true }))
@@ -1412,12 +1404,15 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     // the chapter row carries the title the app sent, and the `planned`
     // status the generator gives a chapter it created (never `active`)
     const written = await readChapter(chapter);
-    expect(written.kind).toBe("chapter");
-    expect(written.properties.id).toBe(chapter);
-    expect(written.properties.title).toBe("Kapitel 3: Die Schmugglerbucht");
-    expect(written.properties.status).toBe("planned");
+    expect(written).toEqual({
+      id: chapter,
+      title: "Kapitel 3: Die Schmugglerbucht",
+      status: "planned",
+      body: "",
+      rev: written.rev,
+    });
 
-    // second apply into the SAME chapter: the existing chapter entry is left
+    // second apply into the SAME chapter: the existing chapter is left
     // untouched (not a conflict, not rewritten) — only the new scene lands
     res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: [sceneItem(sceneDraft({ id: "zweite-szene", chapter }))],
@@ -1427,7 +1422,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ scenes: ["zweite-szene"], npcs: [], locations: [] });
     const again = await readChapter(chapter);
-    expect(again.properties.title).toBe(written.properties.title);
+    expect(again.title).toBe(written.title);
     expect(again.rev).toBe(written.rev); // not even a rev bump
   });
 
@@ -1464,16 +1459,6 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     for (const b of bad) {
       expect((await postJson("/api/campaigns/beispiel/generate/apply", b)).status).toBe(400);
     }
-    // reserved dirs are not chapters
-    expect(
-      (
-        await postJson("/api/campaigns/beispiel/generate/apply", {
-          scenes: [scene],
-          chapter: "npcs",
-          chapterTitle: "X",
-        })
-      ).status,
-    ).toBe(404);
     expect(await exists("neu")).toBe(false);
     expect(await chapterExists("05-halb")).toBe(false);
   });
@@ -2172,11 +2157,10 @@ describe("a proposed scene whose chapter has no row", () => {
     expect(res.status).toBe(200);
 
     const chapter = await readChapter("03-drachenbrut");
-    expect(chapter.kind).toBe("chapter");
     // No title was known here, so the chapter is called by its slug — which
     // is at least readable in the overview, where an unreachable chapter was not.
-    expect(chapter.properties.title).toBe("03-drachenbrut");
-    expect(chapter.properties.status).toBe("planned");
+    expect(chapter.title).toBe("03-drachenbrut");
+    expect(chapter.status).toBe("planned");
 
     // …and the scene really hangs in it.
     const tree = (await (await app.request("/api/campaigns/beispiel/tree")).json()) as {
@@ -2197,7 +2181,7 @@ describe("a proposed scene whose chapter has no row", () => {
     expect(res.status).toBe(400);
     expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
     // Nothing was written — not the scene, and not a chapter either.
-    expect((await app.request(entriesUrl("beispiel", "Kapitel_1"))).status).toBe(404);
+    expect(await chapterExists("Kapitel_1")).toBe(false);
   });
 
   test("a DIALOG still refuses an unknown chapter — ADR #19 stands", async () => {

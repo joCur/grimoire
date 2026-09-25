@@ -5,7 +5,7 @@
 // same list is kept by hand, where the design reference puts it — under the
 // chapter's text: add a thread, tick it, reword it, delete it. Every one
 // of those writes answers the whole list and moves only the list's own guard
-// (`chapters.threads_rev`); the chapter ENTRY — its text and its `rev` —
+// (`chapters.threads_rev`); the CHAPTER — its text and its `rev` —
 // stays exactly as it was, so an open chapter editor never runs into a
 // conflict over a thread.
 //
@@ -15,7 +15,11 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, type Api, type ApiThreads } from "../support/test";
+import type { ThreadsResponse } from "@grimoire/shared/types";
+import { expect, test } from "../support/test";
+import type { Api } from "../support/api";
+import { getChapter } from "../support/chapter";
+import { getThreads, threadsPath } from "../support/threads";
 
 const CHAPTER = "01-salzhafen";
 const SEEDED = "Wer bezahlt die Schmuggler?";
@@ -25,14 +29,14 @@ function threadList(page: Page) {
 }
 
 async function stored(api: Api): Promise<Array<[string, boolean]>> {
-  return (await api.threads(CHAPTER)).entries.map((row) => [row.text, row.done]);
+  return (await getThreads(api, CHAPTER)).entries.map((row) => [row.text, row.done]);
 }
 
-test("the chapter overview keeps the list: add, tick, reword, delete — the chapter entry never moves", async ({
+test("the chapter overview keeps the list: add, tick, reword, delete — the chapter never moves", async ({
   page,
   api,
 }) => {
-  const chapterBefore = await api.entry(CHAPTER);
+  const chapterBefore = await getChapter(api, CHAPTER);
   await page.goto("/campaigns/beispiel");
 
   // The seeded thread is a row under the chapter's text, open.
@@ -93,11 +97,11 @@ test("the chapter overview keeps the list: add, tick, reword, delete — the cha
   await expect(list.getByRole("listitem")).toHaveText([SEEDED]);
   await expect.poll(() => stored(api)).toEqual([[SEEDED, false]]);
 
-  // Five writes to the list, none to the chapter entry.
-  const chapterAfter = await api.entry(CHAPTER);
+  // Five writes to the list, none to the chapter.
+  const chapterAfter = await getChapter(api, CHAPTER);
   expect(chapterAfter.body).toBe(chapterBefore.body);
   expect(chapterAfter.rev).toBe(chapterBefore.rev);
-  expect((await api.threads(CHAPTER)).rev).toBe(6);
+  expect((await getThreads(api, CHAPTER)).rev).toBe(6);
 });
 
 test("a second writer changed the list: the save is refused, „Neu laden“ takes the stored state", async ({
@@ -113,9 +117,9 @@ test("a second writer changed the list: the save is refused, „Neu laden“ tak
   await field.fill("Mein Entwurf");
 
   // Meanwhile another tab ticks the very same thread.
-  const before = await api.threads(CHAPTER);
+  const before = await getThreads(api, CHAPTER);
   const id = before.entries[0]!.id;
-  await api.send<ApiThreads>("PATCH", api.threadsPath(CHAPTER, id), { rev: before.rev, done: true });
+  await api.send<ThreadsResponse>("PATCH", threadsPath(api, CHAPTER, id), { rev: before.rev, done: true });
 
   // The save carries the token the row was opened with: 409, nothing written.
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
@@ -148,14 +152,14 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
   await chapterText.fill("Den Leuchtturm wieder anzünden.");
 
   // A thread is appended underneath — the write „Handlungsstrang übernehmen" makes.
-  const chapterRev = (await api.entry(CHAPTER)).rev;
-  await api.send<ApiThreads>("POST", api.threadsPath(CHAPTER), { text: "Nebenbei notiert" });
-  expect((await api.entry(CHAPTER)).rev).toBe(chapterRev);
+  const chapterRev = (await getChapter(api, CHAPTER)).rev;
+  await api.send<ThreadsResponse>("POST", threadsPath(api, CHAPTER), { text: "Nebenbei notiert" });
+  expect((await getChapter(api, CHAPTER)).rev).toBe(chapterRev);
 
   // So the chapter save lands, and the thread stands beside it.
   await dialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect.poll(() => api.body(CHAPTER)).toContain("Den Leuchtturm wieder anzünden.");
+  await expect.poll(async () => (await getChapter(api, CHAPTER)).body).toContain("Den Leuchtturm wieder anzünden.");
   expect((await stored(api)).map(([text]) => text)).toEqual([SEEDED, "Nebenbei notiert"]);
   await expect(threadList(page).getByRole("listitem")).toHaveText([SEEDED, "Nebenbei notiert"]);
 });

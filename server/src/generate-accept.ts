@@ -18,11 +18,11 @@ import { getJob, markWrittenInTx, outlineSceneNumbers } from "./generate-jobs";
 import { applyLocationItem, applyNpcItem, applySceneItem, jobChapterTarget } from "./generator";
 import { requireCampaign } from "./store/campaigns";
 import { sceneRunPos, takeSceneRunStart, type SceneRunStart } from "./store/chapters";
-import { applyDrafts, type ScenePlacement } from "./store/drafts";
+import { writeGenerated, type ScenePlacement } from "./store/generated";
 
 /**
- * Accept PART of a finished run — „Diesen übernehmen" per scene, npc and
- * location, and „Alle übernehmen" for whatever is left.
+ * Accept PART of a finished run — the accept of one scene, npc or location,
+ * and accept-all for whatever is left.
  *
  * The whole-run apply (`applyGenerated`) stays exactly as it was; this is
  * the same write with a selection in front of it and different job
@@ -46,7 +46,7 @@ import { applyDrafts, type ScenePlacement } from "./store/drafts";
  *               they exist; what the DM threw away stays thrown away, and
  *               the write is then refused and names it.
  *   transaction one, with the conflict checks of the ordinary generator write
- *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
+ *               (`writeGenerated`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
  *   placement   a scene of a pipelined run goes to the run's start plus its
  *               outline number (ADR #27), so the run keeps its outline order
@@ -56,8 +56,8 @@ import { applyDrafts, type ScenePlacement } from "./store/drafts";
  *               the same commit.
  *   job         the written parts are recorded ON the job in that same
  *               commit, and the row is deleted the moment nothing is left
- *               open. „Verwerfen" (DELETE …/job) therefore removes only the
- *               open rest — what was written is an entry now, not a job.
+ *               open. Discarding (DELETE …/job) therefore removes only the
+ *               open rest — what was written is a row now, not a job.
  */
 export async function acceptJobParts(
   campaign: string,
@@ -214,7 +214,8 @@ export async function acceptJobParts(
    * does not depend on the order the review happened to name its scenes in.
    *
    * The npcs and locations a selected scene carries along are written ahead
-   * of every scene by `applyDrafts`, so they cannot shift a scene's position.
+   * of every scene by `writeGenerated`, so they cannot shift a scene's
+   * position.
    */
   const scenes = [...sceneParts]
     .filter(([id]) => chosenScenes.has(id))
@@ -236,7 +237,7 @@ export async function acceptJobParts(
   // Decided from the JOB and not from the body: the review state is
   // persistent, so the accept regularly happens in a browser that never saw
   // the start form. The body fields remain an override.
-  const chapterDraft = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
+  const newChapter = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
   /**
    * The run's start, stored or — at the first scene accept — taken inside
    * the write transaction. Reading the stored one off the pre-read job is
@@ -263,7 +264,8 @@ export async function acceptJobParts(
   const writtenNpcs = npcs.map((npc) => npc.id);
   const writtenLocations = locations.map((location) => location.id);
   let jobDeleted = false;
-  await applyDrafts(campaign, chapterDraft === null ? [] : [chapterDraft], {
+  await writeGenerated(campaign, {
+    ...(newChapter === null ? {} : { chapter: newChapter }),
     scenes,
     npcs,
     locations,

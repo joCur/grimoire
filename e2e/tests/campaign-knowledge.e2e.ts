@@ -25,6 +25,7 @@ import type { Page } from "@playwright/test";
 
 import { CONTEXT_ECHO, OLD_NAME, SCENE_ID, TRIGGER } from "../fixtures/replies";
 import { expect, test } from "../support/test";
+import { getScene } from "../support/scene";
 
 const SOURCE = "The party watches the quay at low tide.";
 
@@ -409,7 +410,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   await page.getByRole("button", { name: /^Übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  const scene = await api.scene(SCENE_ID);
+  const scene = await getScene(api, SCENE_ID);
   expect(`${scene.title}\n${scene.body}`).toContain(OLD_NAME);
 });
 

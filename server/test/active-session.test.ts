@@ -5,7 +5,7 @@
 // A session lives in `sessions` + `session_pauses` + `log_entries`, and the
 // picking rule is a query (store/session-rows.ts `pickSession`) — that rule is
 // this file pins. Each case gets a fresh in-memory database seeded from the
-// committed JSON entries (test/support/store.ts); the system time is faked
+// committed JSON fixtures (test/support/store.ts); the system time is faked
 // per case (setSystemTime).
 //
 // Everything here reads a `SessionResponse`: a session is a TABLE, not an
@@ -31,7 +31,7 @@ import { sessions as sessionsTable } from "../src/db/schema";
 import { pickSession } from "../src/store/session-rows";
 import { sessionOrderKey } from "../src/store/shared";
 import type { SessionRow } from "../src/store/render";
-import type { SeedEntry } from "../src/db/seed";
+import type { SeedSession } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
 
 let db: GrimoireDb;
@@ -61,7 +61,7 @@ function session(properties: {
   started?: string;
   ended?: string;
   scenes_played?: string[];
-}): SeedEntry {
+}): SeedSession {
   return {
     kind: "session",
     properties: { scenes_played: [], ...properties },
@@ -75,13 +75,13 @@ function session(properties: {
  * shapes below are what a campaign written before today's session rules
  * carries — they have no create endpoint, so the seed is where they come from.
  */
-async function seedWithSessions(...sessions: SeedEntry[]): Promise<void> {
-  db = await seedStore({ entries: sessions });
+async function seedWithSessions(...sessions: SeedSession[]): Promise<void> {
+  db = await seedStore({ sessions });
 }
 
 /** Re-seed the campaign with NO sessions at all. */
 async function seedWithoutSessions(): Promise<void> {
-  db = await seedStore({ without: ["session-2026-01-15"] });
+  db = await seedStore({ without: { sessions: ["2026-01-15"] } });
 }
 
 /**

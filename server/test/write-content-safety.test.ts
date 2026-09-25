@@ -18,7 +18,7 @@ import type {
 } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
-import { applyDrafts } from "../src/store/drafts";
+import { writeGenerated } from "../src/store/generated";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
@@ -253,7 +253,7 @@ describe("guard tokens of the two lists", () => {
   });
 });
 
-describe("applyDrafts — the conflict check is IN the insert transaction", () => {
+describe("writeGenerated — the conflict check is IN the insert transaction", () => {
   /** A proposed scene, as the generator hands it over — the scene without its guard. */
   function proposal(id: string): SceneProposal {
     return {
@@ -275,7 +275,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     // and then the documented answer became a primary-key violation.
     let thrown: unknown;
     try {
-      await applyDrafts("beispiel", [], { scenes: [proposal("lighthouse-arrival")] });
+      await writeGenerated("beispiel", { scenes: [proposal("lighthouse-arrival")] });
     } catch (error) {
       thrown = error;
     }
@@ -289,7 +289,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
   test("all or nothing: a conflict late in the batch writes none of it", async () => {
     const before = await tree();
     await expect(
-      applyDrafts("beispiel", [], {
+      writeGenerated("beispiel", {
         scenes: [proposal("ganz-neu"), proposal("smuggler-captured")],
       }),
     ).rejects.toThrow();

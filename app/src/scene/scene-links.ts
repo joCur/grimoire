@@ -4,8 +4,8 @@
 
 import type { CampaignTree } from "@grimoire/shared/types";
 
+import type { ContextCrumb } from "@/components/PageContext";
 import { locationName } from "@/lib/campaign";
-import type { ContextCrumb } from "@/lib/page-context";
 
 /** The reading view of one scene. */
 export function sceneHref(campaign: string, id: string): string {

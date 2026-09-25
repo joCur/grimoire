@@ -21,14 +21,15 @@
 // The source chip of a log row names the SCENE by its title (resolved via
 // the tree), not by the row's `sceneId`.
 
-import {
-  expect,
-  test,
-  todaySessionId,
-  type Api,
-  type ApiThreads,
-  type SeedEntry,
-} from "../support/test";
+import type { ThreadsResponse } from "@grimoire/shared/types";
+import { expect, test } from "../support/test";
+import type { SeedSession } from "../../server/src/db/seed";
+import type { Api } from "../support/api";
+import { getChapter } from "../support/chapter";
+import { getInbox } from "../support/inbox";
+import { createNpc, getNpc, npcExists } from "../support/npc";
+import { getSession, sessionExists, todaySessionId } from "../support/session";
+import { getThreads, threadsPath } from "../support/threads";
 
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
@@ -39,7 +40,7 @@ const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
 const PC_TEXT = "Geburtstags-Item für Kaela vorbereiten";
 
 /** Today's session with the three tagged log rows the review harvests. */
-function sessionEntry(id: string): SeedEntry {
+function reviewedSession(id: string): SeedSession {
   return {
     kind: "session",
     properties: {
@@ -62,7 +63,7 @@ function sessionEntry(id: string): SeedEntry {
   };
 }
 
-test.use({ seed: { entries: { "session-today": sessionEntry(todaySessionId()) } } });
+test.use({ seed: { sessions: [reviewedSession(todaySessionId())] } });
 
 /**
  * The evening of YESTERDAY, ENDED after midnight: `ended` sits on yesterday's
@@ -73,7 +74,7 @@ const PAST_MIDNIGHT = (() => {
   const d = new Date(`${today}T12:00:00`);
   d.setDate(d.getDate() - 1);
   const yesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const entry: SeedEntry = {
+  const session: SeedSession = {
     kind: "session",
     properties: {
       id: yesterday,
@@ -84,15 +85,15 @@ const PAST_MIDNIGHT = (() => {
     log: [{ at: "22:40", text: `${THREAD_TEXT} #thread` }],
     body: "",
   };
-  return { id: yesterday, entry };
+  return { id: yesterday, session };
 })();
 
 test("adopting a thread lands in the chapter's list, the inbox line gets ticked off", async ({
   page,
   api,
 }) => {
-  const chapterBefore = await api.entry("01-salzhafen");
-  const threadsBefore = await api.threads("01-salzhafen");
+  const chapterBefore = await getChapter(api, "01-salzhafen");
+  const threadsBefore = await getThreads(api, "01-salzhafen");
   await page.goto("/campaigns/beispiel/review");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
 
@@ -121,30 +122,30 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   // Stored: the chapter's thread list gained a ROW at its end …
   await expect
     .poll(async () =>
-      (await api.threads("01-salzhafen")).entries.map((row) => [row.text, row.done]),
+      (await getThreads(api, "01-salzhafen")).entries.map((row) => [row.text, row.done]),
     )
     .toEqual([
       ["Wer bezahlt die Schmuggler?", false],
       [THREAD_TEXT, false],
     ]);
-  // … and the chapter ENTRY did not move: not its text, not its guard.
-  const chapterAfter = await api.entry("01-salzhafen");
+  // … and the CHAPTER did not move: not its text, not its guard.
+  const chapterAfter = await getChapter(api, "01-salzhafen");
   expect(chapterAfter.body).toBe(chapterBefore.body);
   expect(chapterAfter.rev).toBe(chapterBefore.rev);
   // The list's own guard moved instead.
-  expect((await api.threads("01-salzhafen")).rev).toBe(threadsBefore.rev + 1);
+  expect((await getThreads(api, "01-salzhafen")).rev).toBe(threadsBefore.rev + 1);
 
   // The adopted thread is a row with an id, and ticking it names that id.
-  const list = await api.threads("01-salzhafen");
+  const list = await getThreads(api, "01-salzhafen");
   const adopted = list.entries.at(-1)!;
-  const ticked = await api.send<ApiThreads>("PATCH", api.threadsPath("01-salzhafen", adopted.id), {
+  const ticked = await api.send<ThreadsResponse>("PATCH", threadsPath(api, "01-salzhafen", adopted.id), {
     rev: list.rev,
     done: true,
   });
   expect(ticked.entries.at(-1)).toEqual({ ...adopted, done: true });
-  expect((await api.entry("01-salzhafen")).rev).toBe(chapterBefore.rev);
+  expect((await getChapter(api, "01-salzhafen")).rev).toBe(chapterBefore.rev);
   const patchThread = (id: string, body: unknown) =>
-    api.fetch(api.threadsPath("01-salzhafen", id), {
+    api.fetch(threadsPath(api, "01-salzhafen", id), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -154,13 +155,13 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   // A stale token is 409, writes nothing and hands back the current list.
   const stale = await patchThread(adopted.id, { rev: list.rev, done: false });
   expect(stale.status).toBe(409);
-  expect(((await stale.json()) as { threads: ApiThreads }).threads).toEqual(ticked);
-  expect(await api.threads("01-salzhafen")).toEqual(ticked);
+  expect(((await stale.json()) as { threads: ThreadsResponse }).threads).toEqual(ticked);
+  expect(await getThreads(api, "01-salzhafen")).toEqual(ticked);
   // … and the source ROW carries the flag: the review named it by the `id`
   // the log handed out, so exactly that row is marked and no other.
   await expect
     .poll(async () =>
-      (await api.session(todaySessionId())).log
+      (await getSession(api, todaySessionId())).log
         .filter((row) => row.reviewed)
         .map((row) => row.text),
     )
@@ -175,7 +176,7 @@ test("adopting a thread lands in the chapter's list, the inbox line gets ticked 
   await expect(progress).toHaveText("2 von 4 gesichtet");
   // `done` is a column of the row, not a checkbox marker in a text.
   await expect
-    .poll(async () => (await api.inbox()).entries.map((row) => [row.done, row.text]))
+    .poll(async () => (await getInbox(api)).entries.map((row) => [row.done, row.text]))
     .toEqual([[true, expect.stringContaining(INBOX_TEXT)]]);
 
   // "Fertig" goes back to the chapters.
@@ -198,7 +199,7 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   // The idea arrives as its own row, appended to the list.
   await expect
-    .poll(async () => (await api.inbox()).entries.map((row) => row.text))
+    .poll(async () => (await getInbox(api)).entries.map((row) => row.text))
     .toContain(NOTE_TEXT);
 
   // At the desk it shows up in the session review — in its own untagged-entries
@@ -223,7 +224,7 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   // The ROW is ticked off — and only that one.
   await expect
     .poll(async () =>
-      (await api.inbox()).entries.filter((row) => row.done).map((row) => row.text),
+      (await getInbox(api)).entries.filter((row) => row.done).map((row) => row.text),
     )
     .toEqual([NOTE_TEXT]);
 
@@ -276,7 +277,7 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   // The ROW is ticked off, hashtags and all — the text is stored as typed.
   await expect
     .poll(async () =>
-      (await api.inbox()).entries.filter((row) => row.done).map((row) => row.text),
+      (await getInbox(api)).entries.filter((row) => row.done).map((row) => row.text),
     )
     .toEqual([`${PC_TEXT} #pc #kaela`]);
 
@@ -294,7 +295,7 @@ const NPC_DIALOG_DESCRIPTION =
 
 /** The `reviewed` flag of today's `#npc` log row, read from the session. */
 async function npcRowReviewed(api: Api): Promise<boolean | undefined> {
-  const { log } = await api.session(todaySessionId());
+  const { log } = await getSession(api, todaySessionId());
   return log.find((row) => row.text === `${NPC_TEXT} #npc`)?.reviewed;
 }
 
@@ -320,7 +321,7 @@ test("creating an NPC from a #npc log row", async ({ page, api }) => {
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
   // The npc's own resource answers it — flat, no kind, no path, no
   // properties map (ADR #31).
-  const npc = await api.npc("old-metta");
+  const npc = await getNpc(api, "old-metta");
   expect(npc.id).toBe("old-metta");
   expect(npc.name).toBe("Old Metta");
   for (const key of ["kind", "path", "properties"]) {
@@ -345,7 +346,7 @@ test("creating an NPC from a #npc log row", async ({ page, api }) => {
 test("an EMPTY npc under the id gets the note", async ({ page, api }) => {
   // An npc created with nothing but its id — the DM prepared the name and
   // left it at that. The note fills it instead of colliding.
-  const empty = await api.createNpc({ name: "old-metta" });
+  const empty = await createNpc(api, { name: "old-metta" });
   expect(empty.body).toBe("");
   await page.goto("/campaigns/beispiel/review");
 
@@ -357,7 +358,7 @@ test("an EMPTY npc under the id gets the note", async ({ page, api }) => {
 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  const filled = await api.npc("old-metta");
+  const filled = await getNpc(api, "old-metta");
   expect(filled.name).toBe("Old Metta");
   expect(filled.body).toBe(`${NPC_TEXT}\n`);
   expect(filled.rev).toBe(empty.rev + 1);
@@ -368,7 +369,7 @@ test("an id whose npc has content is refused — nothing written, the note stays
   page,
   api,
 }) => {
-  const before = await api.npc("fenn");
+  const before = await getNpc(api, "fenn");
   await page.goto("/campaigns/beispiel/review");
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
   await expect(progress).toHaveText("0 von 4 gesichtet");
@@ -388,9 +389,9 @@ test("an id whose npc has content is refused — nothing written, the note stays
 
   // The server wrote nothing: the npc stands exactly as it was, and no
   // other npc appeared.
-  const after = await api.npc("fenn");
+  const after = await getNpc(api, "fenn");
   expect(after).toEqual(before);
-  expect(await api.npcExists("fenn-2")).toBe(false);
+  expect(await npcExists(api, "fenn-2")).toBe(false);
   // …and the note is still OPEN: the row is not reviewed.
   expect(await npcRowReviewed(api)).toBe(false);
 
@@ -405,7 +406,7 @@ test("an id whose npc has content is refused — nothing written, the note stays
 });
 
 test.describe("with yesterday's session, ended after midnight", () => {
-  test.use({ seed: { entries: { "session-past-midnight": PAST_MIDNIGHT.entry } } });
+  test.use({ seed: { sessions: [PAST_MIDNIGHT.session] } });
 
   test("a session that ran past midnight is still the session review's session", async ({
     page,
@@ -426,11 +427,11 @@ test.describe("with yesterday's session, ended after midnight", () => {
     // The `reviewed` flag lands on the row of YESTERDAY's session — the one
     // the server named — and no session was invented for today.
     await expect
-      .poll(async () => (await api.session(yesterday)).log.map((row) => row.reviewed))
+      .poll(async () => (await getSession(api, yesterday)).log.map((row) => row.reviewed))
       .toEqual([true]);
-    expect(await api.sessionExists(todaySessionId())).toBe(false);
+    expect(await sessionExists(api, todaySessionId())).toBe(false);
     await expect
-      .poll(async () => (await api.threads("01-salzhafen")).entries.map((row) => row.text))
+      .poll(async () => (await getThreads(api, "01-salzhafen")).entries.map((row) => row.text))
       .toContain(THREAD_TEXT);
   });
 });

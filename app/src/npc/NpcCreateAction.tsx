@@ -12,12 +12,13 @@ import { useT } from "@/i18n";
 
 import { createNpc } from "./npc-api";
 import { npcHref } from "./npc-links";
+import { npcsKey } from "./npc-query";
 
 export function NpcCreateAction({ campaign }: { campaign: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const afterCreate = useAfterCreate(campaign);
+  const afterCreate = useAfterCreate(campaign, npcsKey(campaign));
   if (campaign === "") return null;
 
   return (

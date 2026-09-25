@@ -47,6 +47,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CALLOUT_KINDS,
+  type ChapterProposal,
   type GenerateNpcResult,
   type GenerateUsage,
   type LocationProposal,
@@ -59,7 +60,7 @@ import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import type { LocationReply } from "./location-reply";
 import { npcReplyRequest, parseNpcReply, type NpcReply } from "./npc-reply";
-import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
+import { checkProposalsNaming, type CheckedProposal, type NamingRule } from "./naming-check";
 import type { SceneReply } from "./scene-reply";
 // The generator reads its context and writes its proposals through the store —
 // nothing else is a data source.
@@ -67,11 +68,11 @@ import { requireCampaign } from "./store/campaigns";
 import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
-import { applyDrafts, type EntityDraft } from "./store/drafts";
+import { writeGenerated } from "./store/generated";
 import { readLocationProposal } from "./store/locations";
 import { npcHoldsContent, readNpcProposal } from "./store/npcs";
-import { chapterPath } from "./store/paths";
 import { readSceneProposal } from "./store/scenes";
+import { assertSafeChapterId } from "./store/shared";
 import {
   createProvider,
   type CompletionResult,
@@ -115,9 +116,6 @@ export function parseCorrectionTurns(env: NodeJS.ProcessEnv = process.env): numb
  * WHERE a reply broke off, small enough to stay a JSON error body.
  */
 export const RAW_REPLY_LIMIT = 4000;
-
-/** Directories under a campaign that can never be chapters. */
-const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
 
 // --- provider resolution ---------------------------------------------------
 
@@ -269,34 +267,17 @@ export interface CampaignContext {
 export interface SceneContext extends CampaignContext {
   chapter: string;
   /**
-   * The run creates its chapter (a „Neues Kapitel" run): the outline then
+   * The run creates its chapter (a new-chapter run): the outline then
    * also describes that chapter. False for a run into an existing chapter.
    */
   newChapter: boolean;
 }
 
-/** A chapter id is a single, non-hidden path segment. */
-function assertSafeChapterId(chapter: string): void {
-  if (
-    chapter.length === 0 ||
-    chapter.startsWith(".") ||
-    chapter.includes("/") ||
-    chapter.includes("\\") ||
-    chapter.includes("\0") ||
-    chapter.includes("..")
-  ) {
-    throw new ApiError(400, "invalid chapter");
-  }
-  // npcs/locations/sessions exist as directories but are not chapters.
-  if (RESERVED_DIRS.has(chapter)) throw new ApiError(404, "chapter not found");
-}
-
 /**
  * The cheap request-level checks of a generate target, without touching the
- * LLM: unsafe campaign/chapter id -> 400, unknown campaign/chapter or a
- * reserved dir -> 404. `allowMissingChapter` is the "new chapter" flow:
- * the target directory does not exist yet — it is created on
- * apply, so generating into it must not 404.
+ * LLM: unsafe campaign/chapter id -> 400, unknown campaign/chapter -> 404.
+ * `allowMissingChapter` is the "new chapter" flow: the chapter does not exist
+ * yet — it is created on apply, so generating into it must not 404.
  *
  * Exported because POST /generate runs these BEFORE it creates a background
  * job: a 400/404 is a request error and must stay a synchronous
@@ -347,7 +328,7 @@ async function collectNpcContext(campaign: string, npcId?: string): Promise<Camp
  * again (they are cheap and the pipeline must never depend on a caller having
  * done them); the chapter contributes only its id — and, for a new-chapter
  * run, that fact — to the context, so nothing else changes when the chapter
- * (and its chapter entry) is still missing.
+ * is still missing.
  */
 export async function collectSceneContext(
   campaign: string,
@@ -481,7 +462,7 @@ export function validateLocationProposal(
  * ones the run's OUTLINE decided. The reply is one part of the run and the
  * other ids come from the outline, so the sets are a parameter.
  *
- * `npcIds`/`locationIds` are what a scene's `npcs`/`location` properties may
+ * `npcIds`/`locationIds` are what a scene's `npcs`/`location` fields may
  * name; `refIds` is what a `[[id]]` in any body of the run may name — every
  * npc, location and scene of the campaign and of the outline.
  */
@@ -717,10 +698,10 @@ export function truncationMessage(maxTokens: number | undefined): string {
  */
 export function withNamingHints<T extends { namingHints?: NamingHint[] }>(
   result: T,
-  drafts: readonly CheckedDraft[],
+  proposals: readonly CheckedProposal[],
   rules: readonly NamingRule[],
 ): T {
-  const namingHints = checkDraftsNaming(drafts, rules);
+  const namingHints = checkProposalsNaming(proposals, rules);
   return namingHints.length === 0 ? result : { ...result, namingHints };
 }
 
@@ -911,7 +892,7 @@ export async function jobChapterTarget(
   },
   bodyChapter: unknown,
   bodyChapterTitle: unknown,
-): Promise<EntityDraft | null> {
+): Promise<ChapterProposal | null> {
   // The description is the OUTLINE's (it read the source material) and only
   // a new-chapter run's outline has one, so it comes from the job on either
   // path: the override names the chapter, it does not describe it.
@@ -932,13 +913,12 @@ export async function jobChapterTarget(
 }
 
 /**
- * The new-chapter flow: `chapter` + `chapterTitle` mean "the
- * scenes go into a chapter that does not exist yet". Returns the
- * chapter entry to create in the same batch, or null when the
- * chapter is already there (idempotent — an existing chapter is not a
- * conflict, and its text is never touched). Minimal properties per the format
- * (id/title/status: planned — a generator-created chapter is upcoming,
- * never the active one); the text is the run's chapter description, or empty
+ * The new-chapter flow: `chapter` + `chapterTitle` mean "the scenes go into
+ * a chapter that does not exist yet". Returns the chapter to create in the
+ * same batch, or null when the chapter is already there (idempotent — an
+ * existing chapter is not a conflict, and its text is never touched). The
+ * chapter is `planned` — a generator-created chapter is upcoming, never the
+ * active one —, and its `body` is the run's chapter description, or empty
  * when there is none.
  */
 export async function newChapterTarget(
@@ -946,22 +926,17 @@ export async function newChapterTarget(
   chapter: unknown,
   chapterTitle: unknown,
   description?: string,
-): Promise<EntityDraft | null> {
+): Promise<ChapterProposal | null> {
   if (chapter === undefined && chapterTitle === undefined) return null;
   if (typeof chapter !== "string" || typeof chapterTitle !== "string") {
     throw new ApiError(400, "chapter and chapterTitle must be sent together as strings");
   }
   const title = chapterTitle.replace(/\s*\r?\n\s*/g, " ").trim();
   if (title === "") throw new ApiError(400, "chapterTitle must be a non-empty string");
-  assertSafeChapterId(chapter); // 400 unsafe id, 404 reserved dirs
-  const rel = chapterPath(chapter);
-  // An existing chapter is not a conflict — idempotent, as before.
+  assertSafeChapterId(chapter); // 400 unsafe id
+  // An existing chapter is not a conflict — idempotent.
   if (await chapterExists(campaign, chapter)) return null;
-  return {
-    rel,
-    properties: { id: chapter, title, status: "planned" },
-    body: newChapterBody(description),
-  };
+  return { id: chapter, title, status: "planned", body: newChapterBody(description) };
 }
 
 /**
@@ -1010,12 +985,13 @@ export async function applyGenerated(
   }
 
   // The chapter comes first — the scenes live inside it. The conflict check
-  // runs in the SAME transaction as the inserts (store/drafts.ts
-  // `applyDrafts`): asking here first would leave a window between "free"
+  // runs in the SAME transaction as the inserts (store/generated.ts
+  // `writeGenerated`): asking here first would leave a window between "free"
   // and "inserted" in which a target could appear, and the documented
   // `409 { scenes }` would become a primary-key violation (a 500).
-  const chapterDraft = await newChapterTarget(campaign, chapter, chapterTitle);
-  await applyDrafts(campaign, chapterDraft === null ? [] : [chapterDraft], {
+  const newChapter = await newChapterTarget(campaign, chapter, chapterTitle);
+  await writeGenerated(campaign, {
+    ...(newChapter === null ? {} : { chapter: newChapter }),
     scenes,
     npcs,
     locations,

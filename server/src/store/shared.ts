@@ -1,11 +1,10 @@
 // The helpers of the store that have no domain of their own.
 //
-// Value coercions for hand-editable properties, the 400 of a request a kind's
+// Value coercions for hand-edited timestamps, the 400 of a request a kind's
 // zod schema refuses, the closed-field and reference 400s, the `rev` guard's
 // 409, the stored form of a body, the chronological order of two sessions and
-// the ids a create endpoint hands out. Every one of them is needed by two or
-// more domain modules and none of them touches the database, so this module
-// imports nothing from the store.
+// the ids a create endpoint hands out. None of them touches the database, so
+// this module imports nothing from the store.
 
 import type { z } from "zod";
 import {
@@ -52,23 +51,13 @@ export function normalizeBody(markdown: string): string {
   return markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
 }
 
-// --- defensive coercions (properties is hand-edited) ------------------------
+// --- defensive coercions (a session's timestamps are hand-edited) -----------
 
 export function asOptStr(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return null;
-}
-
-export function asStr(value: unknown, fallback = ""): string {
-  return asOptStr(value) ?? fallback;
-}
-
-export function asStrArray(value: unknown): string[] {
-  if (value === undefined || value === null) return [];
-  const list = Array.isArray(value) ? value : [value];
-  return list.filter((v) => v !== undefined && v !== null).map((v) => String(v));
 }
 
 export function asMap(value: unknown): Record<string, unknown> {
@@ -87,8 +76,7 @@ export function nextPos(rows: Array<{ pos: number }>): number {
 
 /**
  * A CLOSED field a write may carry: one of the shared list, or nothing
- * (`null` deletes the key — which for a chapter removes the status and for a
- * scene or an npc falls back to the column's default).
+ * (`null` clears the field — which for a chapter removes the status).
  *
  * These are the fields the format's degrade rule does not extend to on the
  * API. A value outside the list is still RENDERED verbatim wherever an older
@@ -116,8 +104,10 @@ export function assertClosedValue(
   });
 }
 
-/** The chapter's one closed field. That at most ONE chapter holds `active` is
- * a rule across rows, so it lives with the chapters (./chapters.ts). */
+/**
+ * The chapter's one closed field. That at most ONE chapter holds `active` is
+ * a rule across rows, so it lives with the chapters (./chapters.ts).
+ */
 export function assertChapterStatus(fields: Record<string, unknown>): void {
   assertClosedValue(fields, "status", CHAPTER_STATUSES, "status_not_allowed", { kind: "chapter" });
 }
@@ -153,9 +143,8 @@ export function unknownRef(code: ErrorCode, kind: string, value: string): ApiErr
  * The body carries `code: "rev_conflict"` — `what` names WHICH row moved
  * and stays English, as the technical fallback next to it. `current` is the
  * token to retry with, and `stored` is that row as it stands now, under the
- * key of its kind (`{ entry }` for an entry address, `{ npc }` for an npc,
- * `{ location }` for a location), so the conflict dialog can show what is in
- * the way without a second request.
+ * key of its kind (`{ chapter }` for a chapter, `{ npc }` for an npc, …), so
+ * the conflict dialog can show what is in the way without a second request.
  */
 export function revConflict(
   current: number,
@@ -252,13 +241,13 @@ export function compareSessionsNewestFirst(
 //   2. A TAKEN ID IS A 409 WITH A FREE PROPOSAL. Not an automatic `-2`: the
 //      id is the permanent reference key, so the DM decides — either the
 //      proposal or another name. The body carries `code: "slug_taken"`, the
-//      entity `kind` as a stable token, the colliding `id`, its `path` (so the
-//      app can link to what is there) and `suggestion`. The SENTENCE the DM
-//      reads is the app's — what is here is its English fallback.
+//      entity `kind` as a stable token, the colliding `id` (so the app can
+//      link to what is there) and `suggestion`. The SENTENCE the DM reads is
+//      the app's — what is here is its English fallback.
 //   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
 //      default, so scaffolding nobody asked for (a heading, an empty section)
-//      cannot appear. A chapter's optional description is typed, too: it
-//      becomes the chapter's text as it stands, without a heading around it.
+//      cannot appear. A chapter's optional `body` is typed, too: it becomes
+//      the chapter's text as it stands, without a heading around it.
 //
 // AN EMPTY NPC OR LOCATION IS FILLED, NOT COLLIDED WITH — the two entities
 // that have an empty state at all. One that holds nothing but its id is one
@@ -273,13 +262,6 @@ export function compareSessionsNewestFirst(
 // an empty `holm-2` proposes `holm-3` — while typing "Holm 2" still fills
 // `holm-2`.
 //
-// RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are
-// reserved segments of the address schema (store/paths, RESERVED_SEGMENTS),
-// so a chapter with one of those ids would be a row whose address names
-// nothing — created, then unreachable forever. It is
-// answered like a collision (same 409 shape, same one-click proposal) under its
-// own code `slug_reserved`, because from the dialog's side it is the same
-// situation — only the reason differs, and the reason is what the app says.
 
 /**
  * The `slug_taken` 409 — see rule 2 above.
@@ -287,41 +269,15 @@ export function compareSessionsNewestFirst(
  * `kind` is a stable TOKEN (`@grimoire/shared/error-codes`, ErrorKind), not a
  * label: the sentence the DM reads is built by the app from its own catalog in
  * the UI language. The `error` text here is the English technical
- * fallback that curl, the log and an unknown-code client get. `path` is the
- * address of what is in the way, where it has one; a scene, an npc or a
- * location, each its own resource (ADR #31), is named by `kind` and `id`
- * alone.
+ * fallback that curl, the log and an unknown-code client get. What is in the
+ * way is named by `kind` and `id`: each entity is its own resource (ADR #31).
  */
-export function slugTaken(
-  kind: ErrorKind,
-  id: string,
-  suggestion: string,
-  path?: string,
-): ApiError {
+export function slugTaken(kind: ErrorKind, id: string, suggestion: string): ApiError {
   return new ApiError(409, `${kind} "${id}" already exists — suggestion: "${suggestion}"`, {
     code: "slug_taken",
     kind,
     id,
     suggestion,
-    ...(path === undefined ? {} : { path }),
-  });
-}
-
-/**
- * The reserved-id 409. Its own code — the app's collision
- * handling (lib/create.ts) treats it exactly like a taken id (one sentence
- * plus the free proposal as one click), but the SENTENCE is a different one
- * (the id is a reserved name), and a catalog cannot say that from a code
- * that also means "somebody else has it". `path` is "" because nothing is in
- * the way; there is no entry to link to.
- */
-export function slugReserved(kind: ErrorKind, id: string, suggestion: string): ApiError {
-  return new ApiError(409, `"${id}" is a reserved name — suggestion: "${suggestion}"`, {
-    code: "slug_reserved",
-    kind,
-    id,
-    suggestion,
-    path: "",
   });
 }
 
@@ -334,8 +290,7 @@ export function slugReserved(kind: ErrorKind, id: string, suggestion: string): A
  * An EXPLICIT id serves two callers, and it means the same thing to both: the
  * DM decided this id, so nothing derives one for them.
  *
- *   - the `slug_taken` / `slug_reserved` 409 hands the app a free
- *     `suggestion`, and taking that proposal is one click rather than "now
+ *   - the `slug_taken` 409 hands the app a free `suggestion`, and taking that proposal is one click rather than "now
  *     think of a different name".
  *   - the create dialog's id field, where the DM sets the id instead of
  *     accepting the one the name yields. This is the only moment an id is

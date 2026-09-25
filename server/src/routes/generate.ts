@@ -212,7 +212,7 @@ generateRoutes.patch("/campaigns/:campaign/generate/job/:id/review", async (c) =
 // written ids.
 //
 // One transaction with the ordinary generator write: the conflict check
-// lives inside it (409 { conflicts, scenes, npcs, locations }), FTS and
+// lives inside it (409 { chapters, scenes, npcs, locations }), FTS and
 // reference rows follow, and the job records what was written in that same
 // commit. The job row disappears the moment nothing is left open
 // (`jobDeleted`). `rev` is the review rev the client read and is re-checked
@@ -301,17 +301,17 @@ generateRoutes.delete("/campaigns/:campaign/generate/job", async (c) => {
 // and the DM waits for its result. A proposed scene, npc or location is the
 // entity without its guard, checked against its schema and re-validated
 // server-side (a scene is a draft) — a scene run's npcs and the NPC run's
-// one npc alike. 409 { conflicts, scenes, npcs, locations } when any target
+// one npc alike. 409 { chapters, scenes, npcs, locations } when any target
 // holds something — then nothing is written at all. chapter +
-// chapterTitle (both or neither) additionally create the chapter entry
-// when it is missing, in the same all-or-nothing batch (the app's
-// new-chapter flow).
+// chapterTitle (both or neither) additionally create the chapter when it
+// is missing, in the same all-or-nothing batch (the app's new-chapter
+// flow).
 // `jobId` ties the apply to the background job it came from: a
 // SUCCESSFUL apply discards that job — the proposals are stored, there is
 // nothing left to restore. A stale id (a newer run started meanwhile) is
 // ignored rather than dropping the wrong job. That discard is
-// part of the write TRANSACTION (store/drafts.ts applyDrafts), so the written
-// rows and the job can never disagree after a crash.
+// part of the write TRANSACTION (store/generated.ts writeGenerated), so the
+// written rows and the job can never disagree after a crash.
 generateRoutes.post("/campaigns/:campaign/generate/apply", async (c) => {
   const body = await jsonBody(c, [
     "scenes",

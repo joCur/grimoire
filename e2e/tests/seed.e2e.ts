@@ -22,15 +22,13 @@ import path from "node:path";
 
 import { openSqlite } from "../../server/src/db/driver";
 import { pristineDir, runDir } from "../support/paths";
-import {
-  apiFor,
-  dbFor,
-  expect,
-  seedCampaigns,
-  startGrimoireServer,
-  test,
-  type Api,
-} from "../support/test";
+import { dbFor, expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
+import { apiFor, type Api } from "../support/api";
+import { getInbox } from "../support/inbox";
+import { getLocation } from "../support/location";
+import { getNpc } from "../support/npc";
+import { getScene } from "../support/scene";
+import { getSession } from "../support/session";
 
 /** What GET /api/:campaign/tree answers — only the parts this spec reads. */
 interface TreeResponse {
@@ -79,7 +77,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // What says the location was SEEDED rather than conjured: it carries the
   // name, the chapter and the Roll20 page its fixture
   // (`locations/bucht.json`) spells, which a synthesized stub would not have.
-  const bucht = await api.location("bucht");
+  const bucht = await getLocation(api, "bucht");
   expect(bucht.name).toBe("Die Nordbucht");
   expect(bucht.chapter).toBe("01-salzhafen");
   expect(bucht.roll20Page).toBe("Nordbucht");
@@ -99,7 +97,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
 
   // --- a scene body, callouts and If-sections included ----------------------
   // What `scenes/lighthouse-arrival.json` spells, answered as the scene itself.
-  const scene = await api.scene(SCENE);
+  const scene = await getScene(api, SCENE);
   expect(scene.id).toBe("lighthouse-arrival");
   expect(scene.status).toBe("ready");
   expect(scene.location).toBe("leuchtturm");
@@ -108,7 +106,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
 
   // --- an npc: its typed fields (voice, quickstats, motivation) and its prose,
   // as its fixture (`npcs/jorna.json`) spells them
-  const npc = await api.npc("jorna");
+  const npc = await getNpc(api, "jorna");
   expect(npc.name).toBe("Hafenmeisterin Jorna");
   expect(npc.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(npc.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
@@ -133,7 +131,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   ]);
 
   // --- the session: its own TABLE, read through its own endpoint ------------
-  const session = await api.session("2026-01-15");
+  const session = await getSession(api, "2026-01-15");
   expect(session.started).toBe("2026-01-15T19:30:00");
   expect(session.ended).toBe("2026-01-15T22:45:00");
   expect(session.scenesPlayed).toEqual(["lighthouse-arrival"]);
@@ -173,7 +171,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   ]);
 
   // --- the inbox: its own TABLE too -----------------------------------------
-  const inbox = await api.inbox();
+  const inbox = await getInbox(api);
   expect(inbox.entries).toEqual([
     {
       id: expect.any(String),

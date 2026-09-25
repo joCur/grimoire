@@ -12,14 +12,22 @@
 // (ADR #27), and both halves of that promise are checked below.
 //
 // The campaign chrome lives on this path as well: a scene row resolves its
-// location to the location's NAME, the topbar carries the npc and location navigation
-// (the chapter overview's own footer line is gone), and the campaign's
-// name/description are editable from the header.
+// location to the location's NAME, the topbar carries the npc and location
+// navigation, and the campaign's name, description and text are editable from
+// the header — the campaign's route IS the chapter overview (ADR #31).
 
 import type { Locator, Page } from "@playwright/test";
 
+import type { CampaignSeed } from "@grimoire/shared/campaign";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
-import { expect, test, todaySessionId, type Api, type SeedEntry, type SeedScene } from "../support/test";
+import { expect, test } from "../support/test";
+import type { SeedSession } from "../../server/src/db/seed";
+import type { Api } from "../support/api";
+import { getCampaign, patchCampaign } from "../support/campaign";
+import { chapterPath, getChapter, patchChapter } from "../support/chapter";
+import { getScene, patchScene } from "../support/scene";
+import { todaySessionId } from "../support/session";
 
 /**
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
@@ -79,7 +87,7 @@ const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
  * (ADR #27). The example campaign has none, so the test that needs one
  * seeds it.
  */
-const SCENE_WITHOUT_LOCATION: SeedScene = {
+const SCENE_WITHOUT_LOCATION: SceneProposal = {
   id: "ohne-ort-szene",
   title: "Irgendwo unterwegs",
   type: "planned",
@@ -92,7 +100,7 @@ const SCENE_WITHOUT_LOCATION: SeedScene = {
 };
 
 /** Today's session, started at 19:30 and never ended. */
-const RUNNING_SESSION: SeedEntry = {
+const RUNNING_SESSION: SeedSession = {
   kind: "session",
   properties: { id: todaySessionId(), started: `${todaySessionId()}T19:30:00`, scenes_played: [] },
   log: [],
@@ -100,14 +108,11 @@ const RUNNING_SESSION: SeedEntry = {
 };
 
 /**
- * A campaign entry with nothing but its id — the stem REPLACES the example
- * campaign's own entry, so the header has no name to show.
+ * The campaign without a name of its own — a name that equals the id. Its
+ * id is the example campaign's, so it REPLACES that campaign, and the header
+ * has no name to show.
  */
-const NAMELESS_CAMPAIGN: SeedEntry = {
-  kind: "campaign",
-  properties: { id: "beispiel" },
-  body: "",
-};
+const NAMELESS_CAMPAIGN: CampaignSeed = { id: "beispiel", name: "beispiel", body: "" };
 
 test('"/" redirects into the campaign and the chapter overview shows chapter and scenes', async ({
   page,
@@ -117,7 +122,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   // The redirect target comes from the server (lastSession per campaign).
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 
-  // Campaign header from the campaign entry.
+  // Campaign header from the campaign.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -148,8 +153,8 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toContainText(
     "Aktiv",
   );
-  // Open by default (status: active) — the text is the chapter entry's, all of
-  // it and nothing prefixed, so no „Mehr anzeigen" either.
+  // Open by default (status: active) — the text is the chapter's, all of it
+  // and nothing prefixed, so no „Mehr anzeigen" either.
   await expect(
     page.getByText("Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.", {
       exact: true,
@@ -194,7 +199,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
 
 test.describe("a scene without a location", () => {
   test.use({
-    seed: { entries: { "scenes/ohne-ort-szene": SCENE_WITHOUT_LOCATION } },
+    seed: { scenes: [SCENE_WITHOUT_LOCATION] },
   });
 
   test("a scene that names no location keeps its row, without a location part", async ({
@@ -369,7 +374,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
  */
 test.describe("with a session running since 19:30, pressing the gear", () => {
   test.use({
-    seed: { entries: { "session-running": RUNNING_SESSION } },
+    seed: { sessions: [RUNNING_SESSION] },
   });
 
   test("keeps the whole chrome where it was", async ({ page }) => {
@@ -449,7 +454,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
  */
 test.describe("with a session running since 19:30", () => {
   test.use({
-    seed: { entries: { "session-running": RUNNING_SESSION } },
+    seed: { sessions: [RUNNING_SESSION] },
   });
 
   test("the topbar does not overflow at medium widths while a session runs", async ({
@@ -613,7 +618,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
   }
 });
 
-test("editing the campaign metadata updates header, switcher and the entry", async ({
+test("„Kampagne bearbeiten“ writes name, description and text — header, switcher and the campaign follow", async ({
   page,
   api,
 }) => {
@@ -624,44 +629,46 @@ test("editing the campaign metadata updates header, switcher and the entry", asy
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kampagne bearbeiten");
-  // Prefilled from the values currently on screen.
+  await expect(dialog).toContainText("Name, Beschreibung und Text der Kampagne.");
+  // Prefilled from the campaign as it is stored.
   await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue(
     "Der Leuchtturm von Salzhafen",
   );
   await expect(dialog.getByLabel("Beschreibung")).toHaveValue(
     /Eine Küstenkampagne um einen erloschenen Leuchtturm/,
   );
+  const text = dialog.getByRole("textbox", { name: "Text" });
+  await expect(text).toHaveValue(/Kampagnenweite Notizen:/);
 
-  await dialog
-    .getByLabel("Name", { exact: true })
-    .fill("Salzhafen, zweite Fassung");
-  await dialog
-    .getByLabel("Beschreibung")
-    .fill("Jetzt mit mehr Schmuggel und weniger Möwen.");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  // Nothing typed, nothing to save.
+  const save = dialog.getByRole("button", { name: "Speichern" });
+  await expect(save).toBeDisabled();
+
+  await dialog.getByLabel("Name", { exact: true }).fill("Salzhafen, zweite Fassung");
+  await dialog.getByLabel("Beschreibung").fill("Jetzt mit mehr Schmuggel und weniger Möwen.");
+  await text.fill("## Ton\n\nBodenständig, salzig, **ohne** hohe Magie.");
+  await save.click();
 
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // Chapter overview header, subtitle …
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Salzhafen, zweite Fassung",
-  );
-  await expect(
-    page.getByText("Jetzt mit mehr Schmuggel und weniger Möwen."),
-  ).toBeVisible();
+  // Chapter overview header, subtitle and the text under it, rendered …
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen, zweite Fassung");
+  await expect(page.getByText("Jetzt mit mehr Schmuggel und weniger Möwen.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Ton" })).toBeVisible();
+  await expect(page.getByText("Kampagnenweite Notizen", { exact: false })).toHaveCount(0);
   // … and the switcher label, which reads the campaign list.
   await expect(
     page.getByRole("button", { name: "Kampagne: Salzhafen, zweite Fassung" }),
   ).toBeVisible();
 
-  // Stored: the properties changed, the text did not.
-  const campaign = await api.entry("campaign");
-  expect(campaign.properties.name).toBe("Salzhafen, zweite Fassung");
-  expect(campaign.properties.description).toBe("Jetzt mit mehr Schmuggel und weniger Möwen.");
-  expect(campaign.body).toContain("Kampagnenweite Notizen:");
+  // Stored, through the campaign's own resource.
+  const campaign = await getCampaign(api);
+  expect(campaign.name).toBe("Salzhafen, zweite Fassung");
+  expect(campaign.description).toBe("Jetzt mit mehr Schmuggel und weniger Möwen.");
+  expect(campaign.body).toBe("## Ton\n\nBodenständig, salzig, **ohne** hohe Magie.\n");
 });
 
 test.describe("a campaign without a name", () => {
-  test.use({ seed: { entries: { campaign: NAMELESS_CAMPAIGN } } });
+  test.use({ seed: { campaign: NAMELESS_CAMPAIGN } });
 
   test("a campaign without a name still names itself and is editable", async ({
     page,
@@ -672,65 +679,60 @@ test.describe("a campaign without a name", () => {
     // this case too.
     await page.goto("/campaigns/beispiel");
     // Without a name the header degrades to the id.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "beispiel",
-    );
-    const nameless = await api.entry("campaign");
-    expect(nameless.properties).toEqual({ id: "beispiel", name: "beispiel" });
-    expect(nameless.body).toBe("");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
+    const nameless = await getCampaign(api);
+    expect(nameless).toEqual({ id: "beispiel", name: "beispiel", body: "", rev: nameless.rev });
 
     await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("Kampagne bearbeiten");
+    // The id is the placeholder, never a proposed name.
+    await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("");
     await expect(dialog.getByLabel("Beschreibung")).toHaveValue("");
 
     await dialog.getByLabel("Name", { exact: true }).fill("Salzhafen von vorn");
-    await dialog
-      .getByLabel("Beschreibung")
-      .fill("Frisch angelegt aus der App.");
+    await dialog.getByLabel("Beschreibung").fill("Frisch angelegt aus der App.");
     await dialog.getByRole("button", { name: "Speichern" }).click();
 
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Salzhafen von vorn",
-    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen von vorn");
     // The id does not move — the server sets it, never the client.
-    const campaign = await api.properties("campaign");
+    const campaign = await getCampaign(api);
     expect(campaign.id).toBe("beispiel");
     expect(campaign.name).toBe("Salzhafen von vorn");
     expect(campaign.description).toBe("Frisch angelegt aus der App.");
+    expect(campaign.body).toBe("");
   });
 });
 
-test("the campaign reading view carries the same dialog, under its properties name", async ({
+test("„Kampagne bearbeiten“ and a second writer: the conflict line, and „Trotzdem speichern“ writes only the dialog's changes", async ({
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel/entries/campaign");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Der Leuchtturm von Salzhafen",
-  );
-
-  // Same dialog, same write — only the trigger is named after what else stands
-  // in that header: there the edit action belongs to the body, so the
-  // name/description half takes the properties name.
-  await page.getByRole("button", { name: "Eigenschaften" }).click();
+  await page.goto("/campaigns/beispiel");
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Kampagne bearbeiten");
-  await dialog.getByLabel("Name", { exact: true }).fill("Aus der Leseansicht");
+  const name = dialog.getByLabel("Name", { exact: true });
+  await expect(name).toHaveValue("Der Leuchtturm von Salzhafen");
+  await name.fill("Salzhafen im Nebel");
+
+  // The second writer changes the TEXT while the dialog stands.
+  await patchCampaign(api, { body: "Von der API geschrieben.\n" });
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Aus der Leseansicht",
-  );
-  await expect.poll(() => api.properties("campaign")).toHaveProperty("name", "Aus der Leseansicht");
+  // Nothing written: the typed name stays, the conflict line asks.
+  await expect(dialog.getByRole("alert")).toContainText("Inzwischen geändert");
+  await expect(name).toHaveValue("Salzhafen im Nebel");
+  expect((await getCampaign(api)).name).toBe("Der Leuchtturm von Salzhafen");
+
+  // Forcing writes the one field the DM changed — the other writer's text
+  // survives.
+  await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen im Nebel");
+  const stored = await getCampaign(api);
+  expect(stored.name).toBe("Salzhafen im Nebel");
+  expect(stored.body).toBe("Von der API geschrieben.\n");
 });
-// The dialog's 409 path is the SAME write flow as the status control's
-// (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> the inline
-// stale-revision notice + refetch, nothing written). Critical
-// path 7 covers that mechanism against the real server; the dialog's own
-// branch is unit-tested in app/src/lib/campaign-meta.test.ts. Reproducing it
-// here would need the same "beat the 5s version poll" loop — and a retry that
-// closes the dialog on success, which makes the loop unrepeatable.
 
 test("the chapter overview header is ONE row: the actions right beside the title, never under it", async ({
   page,
@@ -811,7 +813,7 @@ test("a long chapter text is clamped, opens and closes; a link in the cut-off pa
   page,
   api,
 }) => {
-  await api.writeBody("01-salzhafen", `${LONG_TEXT}\n`);
+  await patchChapter(api, "01-salzhafen", { body: `${LONG_TEXT}\n` });
   await page.goto("/campaigns/beispiel");
 
   // Rendered through the one renderer: the heading, the callout, the reference.
@@ -849,7 +851,7 @@ test("the campaign's text stands under its description, clamped the same way", a
   page,
   api,
 }) => {
-  await api.writeBody("campaign", `${LONG_TEXT}\n`);
+  await patchCampaign(api, { body: `${LONG_TEXT}\n` });
   // The chapter's own text is short, so the one toggle is the header's.
   await page.goto("/campaigns/beispiel");
   await expect(page.getByText("Seit drei Nächten brennt das Leuchtfeuer", { exact: false })).toBeVisible();
@@ -862,7 +864,7 @@ test("the campaign's text stands under its description, clamped the same way", a
   await expect(box).not.toHaveAttribute("data-clamped", "");
 
   // An empty campaign text shows nothing extra — the description stays.
-  await api.writeBody("campaign", "");
+  await patchCampaign(api, { body: "" });
   await page.reload();
   await expect(
     page.getByText("Eine Küstenkampagne um einen erloschenen Leuchtturm", { exact: false }),
@@ -876,9 +878,9 @@ test("the campaign's text stands under its description, clamped the same way", a
 // Creating a chapter is not the only moment its title and text can be
 // said: a chapter created without a description gets its text here, and a
 // chapter a generator run created under its slug is renamed here — otherwise
-// the overview would list a heading nobody can correct. Both halves go through
-// the documented endpoints with their rev guard: the title is a PROPERTY (the
-// shared properties dialog), the description is the TEXT.
+// the overview would list a heading nobody can correct. Both go through the
+// chapter's own resource with its rev guard: the title in the chapter's
+// dialog, the text in the text dialog.
 test("a chapter's title and text are editable from the chapter overview", async ({
   page,
   api,
@@ -888,7 +890,7 @@ test("a chapter's title and text are editable from the chapter overview", async 
   const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
   await expect(properties).toBeVisible();
 
-  // --- the title, through the shared properties dialog ---
+  // --- the title, through the chapter's dialog ---
   await properties.click();
   let dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kapitel: Eigenschaften");
@@ -926,8 +928,8 @@ test("a chapter's title and text are editable from the chapter overview", async 
   // The overview shows the whole text, rendered.
   await expect(page.getByRole("heading", { level: 2, name: "Worum es geht" })).toBeVisible();
   await expect(page.getByText("Den Leuchtturm wieder anzünden.", { exact: true })).toBeVisible();
-  const stored = await api.entry("01-salzhafen");
-  expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
+  const stored = await getChapter(api, "01-salzhafen");
+  expect(stored.title).toBe("Kapitel 1: Salzhafen");
   expect(stored.body).toContain("Den Leuchtturm wieder anzünden.");
 });
 
@@ -943,7 +945,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
 
   // A SECOND WRITER while the dialog stands (there is no "external edit" any
   // more — e2e/README.md): the API writes with a fresh token.
-  await api.writeBody("01-salzhafen", "Von der API.\n");
+  await patchChapter(api, "01-salzhafen", { body: "Von der API.\n" });
 
   await body.fill("Aus dem Dialog.");
   await dialog.getByRole("button", { name: "Speichern" }).click();
@@ -952,7 +954,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   // there.
   await expect(dialog.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
   await expect(body).toHaveValue("Aus dem Dialog.");
-  expect((await api.entry("01-salzhafen")).body).toContain("Von der API.");
+  expect((await getChapter(api, "01-salzhafen")).body).toContain("Von der API.");
 
   // Forcing writes the same field on top of the row as it stands. The save
   // label is addressed exactly: the conflict line's force action contains it.
@@ -961,21 +963,43 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   await expect(page.getByText("Aus dem Dialog.", { exact: true })).toBeVisible();
 });
 
-// The chapter status control (critical path 1). The overview decides which
-// chapter the session is in, and the status DISPLAY is that control.
+// The chapter status control (critical paths 1 and 7). The overview decides
+// which chapter the session is in, and the status DISPLAY is that control.
 //
-// The active value is the interesting one: ONE server call for ONE decision about TWO
-// chapters, so there is never a moment with two active chapters. The other two
-// are an ordinary properties patch.
-test("the chapter status control shows the German labels and swaps the active chapter", async ({
+// Every value is ONE write of the chapter it names — `PATCH …/chapters/<id>
+// { rev, status }` —, `active` included: at most one chapter is active, so
+// the server puts the one that held it back to `planned` in the same
+// transaction. There is never a moment with two active chapters.
+
+/** The chapter writes a page sends: PATCHes of a chapter's own resource. */
+function chapterPatches(page: Page): string[] {
+  const writes: string[] = [];
+  page.on("request", (request) => {
+    const url = request.url();
+    if (request.method() === "PATCH" && /\/api\/campaigns\/[^/]+\/chapters\/[^/]+$/.test(url)) {
+      writes.push(`${url.replace(/^.*\/api\//, "")} ${request.postData() ?? ""}`);
+    }
+  });
+  return writes;
+}
+
+/** The ids of the campaign's active chapters, as the tree lists them. */
+async function activeChapters(api: Api): Promise<string[]> {
+  const tree = await api.get<{ chapters: { id: string; status?: string }[] }>(
+    "campaigns/beispiel/tree",
+  );
+  return tree.chapters.filter((chapter) => chapter.status === "active").map((chapter) => chapter.id);
+}
+
+test("the chapter status control shows the German labels and makes another chapter the active one", async ({
   page,
   api,
 }) => {
-  // A second chapter to move the flag TO — the example campaign has one.
-  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
+  // A second chapter to move the status TO — the example campaign has one.
+  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
     title: "Kapitel 2: Die Bucht",
   });
-  const secondPath = created.path;
+  expect(created.id).toBe("kapitel-2-die-bucht");
 
   await page.goto("/campaigns/beispiel");
 
@@ -992,71 +1016,89 @@ test("the chapter status control shows the German labels and swaps the active ch
   await expect(menu.getByRole("menuitemradio")).toHaveText(["Geplant", "Aktiv", "Abgeschlossen"]);
   await page.keyboard.press("Escape");
 
-  // --- the swap, from the OTHER chapter's control ---
-  // From here on every swap call is counted: ONE decision about two chapters
-  // is ONE request. A second one bounces the flag straight back to the
-  // chapter the DM had just left — the control reads active on both rows for
-  // a moment, and re-asserting it for the previously active chapter is a swap
-  // of its own.
-  const swaps: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "POST" && request.url().includes("/active")) {
-      swaps.push(request.url().replace(/^.*\/api\//, ""));
-    }
-  });
-
+  // --- activating B, from B's own control ---
+  const writes = chapterPatches(page);
   const second = page.getByRole("button", { name: /Kapitel 2: Die Bucht/ });
   await expect(second).toBeVisible();
   await page.getByRole("button", { name: "Status ändern, aktuell Geplant" }).click();
   await page.getByRole("menuitemradio", { name: "Aktiv" }).click();
 
-  // The flag moved in BOTH directions, in one call.
+  // B is active, A went back to planned — in one write.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
-  await expect.poll(async () => (await api.entry("01-salzhafen")).properties.status).toBe("planned");
-  expect((await api.entry(secondPath)).properties.status).toBe("active");
+  await expect.poll(async () => (await getChapter(api, "01-salzhafen")).status).toBe("planned");
+  expect((await getChapter(api, created.id)).status).toBe("active");
+  expect(await activeChapters(api)).toEqual([created.id]);
 
-  // Exactly ONE call, and it named the chapter the DM picked — no second one
-  // from the row that lost the flag.
-  expect(swaps).toEqual([`campaigns/beispiel/chapters/${secondPath}/active`]);
+  // Exactly ONE write, and it named the chapter the DM picked, with its rev.
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatch(new RegExp(`^campaigns/beispiel/chapters/${created.id} `));
+  expect(JSON.parse(writes[0]!.replace(/^\S+ /, ""))).toMatchObject({ status: "active" });
+  expect(JSON.parse(writes[0]!.replace(/^\S+ /, ""))).toHaveProperty("rev");
 
   // …and it stays that way with the invalidation and a version poll behind
-  // it: the tree shows the second chapter active and the first planned two
-  // seconds later, still one call.
+  // it: still one write, B active and A planned.
   await page.waitForTimeout(2_000);
-  expect(swaps).toHaveLength(1);
+  expect(writes).toHaveLength(1);
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
-  await expect(second).toBeVisible();
   // Per CHAPTER row (the control beside its h2) — the scene rows in the open
   // accordion carry controls of their own.
   const rows = await page
     .locator('xpath=//h2/ancestor::div[1]//button[starts-with(@aria-label,"Status ändern")]')
     .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
   expect(rows).toEqual(["Status ändern, aktuell Geplant", "Status ändern, aktuell Aktiv"]);
-  expect((await api.entry("01-salzhafen")).properties.status).toBe("planned");
-  expect((await api.entry(secondPath)).properties.status).toBe("active");
+  expect(await activeChapters(api)).toEqual([created.id]);
 });
 
-// The control is a RADIO group, so the checked option is the state — selecting
-// it is nothing to write. Selecting active on the chapter that already holds
-// the flag would call the swap endpoint anyway, which is how a stray select on
-// the row that was active (its control still reads active until the
-// invalidation lands) could take the flag back.
-//
-// Both writes the row can see are counted: the active-flag swap and the one
-// entry PATCH that carries properties (ADR #23).
-test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
-  await api.send("POST", "campaigns/beispiel/chapters", { title: "Kapitel 2: Die Bucht" });
-
-  const writes: string[] = [];
-  page.on("request", (request) => {
-    const url = request.url();
-    if (
-      (request.method() === "POST" || request.method() === "PATCH") &&
-      (url.includes("/active") || url.includes("/entries/"))
-    ) {
-      writes.push(`${request.method()} ${url.replace(/^.*\/api\//, "")}`);
-    }
+test("a second writer: the chapter status pick reports the conflict inline, the next pick works", async ({
+  page,
+  api,
+}) => {
+  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
+    title: "Kapitel 2: Die Bucht",
   });
+  await page.goto("/campaigns/beispiel");
+  const trigger = page.getByRole("button", { name: "Status ändern, aktuell Geplant" });
+  const message = page.getByText("Inzwischen geändert — neu laden");
+
+  // The control reads the chapter when its menu opens; a write between that
+  // read and the pick makes the pick stale. The version poll (~5s) can heal
+  // it in between — hence up to three attempts.
+  let conflicted = false;
+  for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
+    await trigger.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.waitForTimeout(300);
+    await patchChapter(api, created.id, { body: `Von einem zweiten Schreiber (${attempt}).\n` });
+    await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
+    conflicted = await message
+      .waitFor({ state: "visible", timeout: 4000 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  expect(conflicted, "the 409 conflict message never appeared").toBe(true);
+
+  // Nothing was written: the other writer's text stands, the status too — and
+  // the control has no conflict actions of its own.
+  const stored = await getChapter(api, created.id);
+  expect(stored.status).toBe("planned");
+  expect(stored.body).toContain("Von einem zweiten Schreiber");
+  await expect(page.getByRole("button", { name: "Trotzdem speichern" })).toHaveCount(0);
+
+  // The control re-read the chapter, so the SAME pick works now.
+  await trigger.click();
+  await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
+  await expect(
+    page.getByRole("button", { name: "Status ändern, aktuell Abgeschlossen" }),
+  ).toBeVisible();
+  await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
+  expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
+});
+
+// The control is a RADIO group, so the checked option is the state —
+// selecting it is nothing to write.
+test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
+  await api.send("POST", chapterPath(api), { title: "Kapitel 2: Die Bucht" });
+  const writes = chapterPatches(page);
 
   await page.goto("/campaigns/beispiel");
   const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
@@ -1066,16 +1108,15 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
 
   expect(writes).toEqual([]);
   await expect(activeMenu).toBeVisible();
-  expect((await api.entry("01-salzhafen")).properties.status).toBe("active");
+  expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
 });
 
-// The completed value is the other branch: a rev-guarded properties patch on the
-// chapter entry, which must NOT touch the active chapter.
-test("picking Abgeschlossen patches that chapter and leaves the active one alone", async ({
+// A value other than `active` moves only the chapter it names.
+test("picking Abgeschlossen writes that chapter and leaves the active one alone", async ({
   page,
   api,
 }) => {
-  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
+  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
     title: "Kapitel 2: Die Bucht",
   });
 
@@ -1086,18 +1127,17 @@ test("picking Abgeschlossen patches that chapter and leaves the active one alone
   await expect(
     page.getByRole("button", { name: "Status ändern, aktuell Abgeschlossen" }),
   ).toBeVisible();
-  await expect.poll(async () => (await api.entry(created.path)).properties.status).toBe("done");
+  await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
   // The evening's chapter is untouched.
-  expect((await api.entry("01-salzhafen")).properties.status).toBe("active");
+  expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
 });
 
-// The dialog is a FORM over the same value, and a form sends its DIFF: a
+// The dialog is a FORM over the same value, and a form sends what CHANGED: a
 // status field the DM never touched must not be written, no matter what the
-// cache behind the dialog happened to hold when it opened. That is the other
-// half of the bounce-back: the app's copy of a chapter entry goes stale the
-// moment another writer moves the flag (up to one version poll), and an
-// untouched active value in the form would put it back — from a dialog that was
-// only opened to fix a title.
+// cache behind the dialog happened to hold when it opened. The app's copy of
+// a chapter goes stale the moment another writer activates a different one
+// (up to one version poll), and an untouched active value in the form would
+// put it back — from a dialog that was only opened to fix a title.
 test("an untouched status field is not written, not even a stale Aktiv", async ({ page, api }) => {
   const patches: string[] = [];
   page.on("request", (request) => {
@@ -1105,19 +1145,19 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   });
 
   await page.goto("/campaigns/beispiel");
-  // The active chapter is open by default: its entry is in the app's cache
-  // now, with `status: active`.
+  // The active chapter is open by default: it is in the app's cache now, with
+  // `status: active`.
   const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
   await expect(properties).toBeVisible();
 
-  // Another writer moves the flag. The app does not know yet — the version
-  // poll is what tells it, and the dialog opens before that.
-  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
+  // Another writer activates a second chapter. The app does not know yet —
+  // the version poll is what tells it, and the dialog opens before that.
+  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
     title: "Kapitel 2: Die Bucht",
     id: "02",
   });
-  await api.send("POST", "campaigns/beispiel/chapters/02/active");
-  expect((await api.entry("01-salzhafen")).properties.status).toBe("planned");
+  await patchChapter(api, "02", { status: "active" });
+  expect((await getChapter(api, "01-salzhafen")).status).toBe("planned");
 
   await properties.click();
   const dialog = page.getByRole("dialog");
@@ -1127,20 +1167,20 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   // Only the title is touched.
   await dialog.getByLabel("Titel").fill("Kapitel 1: Salzhafen");
   await dialog.getByRole("button", { name: "Speichern" }).click();
-  // The other writer moved the chapter entry, so the frozen rev is stale:
-  // the first attempt is the 409 of ADR #4, nothing written. The typed title
-  // stays and the next attempt writes on top of what is stored — with the
-  // status STILL untouched, which is the point of this test.
+  // The other writer moved the chapter, so the frozen rev is stale: the first
+  // attempt is the 409 of ADR #4, nothing written. The typed title stays and
+  // the next attempt writes on top of what is stored — with the status STILL
+  // untouched, which is the point of this test.
   await expect(dialog).toContainText("Inzwischen geändert");
   await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The title is written, the status is not even mentioned — and the chapter
-  // the other writer activated keeps the flag.
-  const stored = await api.entry("01-salzhafen");
-  expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
-  expect(stored.properties.status).toBe("planned");
-  expect((await api.entry(created.path)).properties.status).toBe("active");
+  // the other writer activated keeps it.
+  const stored = await getChapter(api, "01-salzhafen");
+  expect(stored.title).toBe("Kapitel 1: Salzhafen");
+  expect(stored.status).toBe("planned");
+  expect((await getChapter(api, created.id)).status).toBe("active");
   // Both attempts sent the title and nothing else — the status field never
   // appears on the wire, so no stale active value can ride along.
   expect(patches).toHaveLength(2);
@@ -1150,10 +1190,13 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   }
 });
 
-// The chapter properties dialog is the second door onto the same value — and
-// it must not be a way past the one-active rule.
-test("the properties dialog offers the enum and its Aktiv swaps too", async ({ page, api }) => {
-  const created = await api.send<{ path: string }>("POST", "campaigns/beispiel/chapters", {
+// The chapter's dialog is the second door onto the same value — and it must
+// not be a way past the one-active rule.
+test("the chapter's dialog offers the enum and its Aktiv makes the chapter the active one", async ({
+  page,
+  api,
+}) => {
+  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
     title: "Kapitel 2: Die Bucht",
   });
 
@@ -1172,10 +1215,10 @@ test("the properties dialog offers the enum and its Aktiv swaps too", async ({ p
   await dialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // The swap happened server-side: exactly one active chapter, and it is this
-  // one.
-  await expect.poll(async () => (await api.entry(created.path)).properties.status).toBe("active");
-  await expect.poll(async () => (await api.entry("01-salzhafen")).properties.status).toBe("planned");
+  // The server kept the rule: exactly one active chapter, and it is this one.
+  await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("active");
+  await expect.poll(async () => (await getChapter(api, "01-salzhafen")).status).toBe("planned");
+  expect(await activeChapters(api)).toEqual([created.id]);
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
 });
 
@@ -1192,7 +1235,7 @@ const ORDER_CONFLICT = "Reihenfolge inzwischen geändert — der aktuelle Stand 
 interface OrderTree {
   chapters: {
     id: string;
-    /** The order's OWN guard token; the entry's `rev` is a different one. */
+    /** The order's OWN guard token; the chapter's `rev` is a different one. */
     sceneOrderRev: number;
     scenes: { id: string; title: string }[];
   }[];
@@ -1207,7 +1250,7 @@ const TITLES: Record<string, string> = {
 };
 
 /** One planned scene for the order fixtures, with a location so the row has a meta line. */
-function plannedScene(id: string, location: string): SeedScene {
+function plannedScene(id: string, location: string): SceneProposal {
   return {
     id,
     title: TITLES[id]!,
@@ -1232,10 +1275,7 @@ function plannedScene(id: string, location: string): SeedScene {
  * (`smuggler-captured`) behind them.
  */
 const ORDER_SEED = {
-  entries: {
-    "scenes/order-keller": plannedScene("order-keller", "leuchtturm"),
-    "scenes/order-steg": plannedScene("order-steg", "bucht"),
-  },
+  scenes: [plannedScene("order-keller", "leuchtturm"), plannedScene("order-steg", "bucht")],
 };
 
 /** The seeded order, by id — where every test of this block starts. */
@@ -1351,8 +1391,8 @@ test.describe("the scene order of a chapter", () => {
     // The other direction of the three guards: writing a scene bumps its own
     // `rev` and nothing of the chapter's order (ADR #27).
     const node = await orderNode(api);
-    const before = await api.scene("order-keller");
-    const written = await api.patchScene("order-keller", { title: "Der Keller, neu vermessen" });
+    const before = await getScene(api, "order-keller");
+    const written = await patchScene(api, "order-keller", { title: "Der Keller, neu vermessen" });
     expect(written.rev).not.toBe(before.rev);
     const after = await orderNode(api);
     expect(after.sceneOrderRev).toBe(node.sceneOrderRev);
@@ -1364,8 +1404,8 @@ test.describe("the scene order of a chapter", () => {
     api,
   }) => {
     const scene = "lighthouse-arrival";
-    const sceneBefore = await api.scene(scene);
-    const chapterBefore = await api.entry(CHAPTER);
+    const sceneBefore = await getScene(api, scene);
+    const chapterBefore = await getChapter(api, CHAPTER);
     const addition = "Eine Zeile, die das Umsortieren überlebt.";
 
     // The scene's text editor stands open on the version it started from.
@@ -1384,13 +1424,13 @@ test.describe("the scene order of a chapter", () => {
     // It bumped its OWN guard and nobody else's: neither the scene's row
     // version nor the chapter's moved, so neither editor is stale (ADR #27).
     expect((await orderNode(api)).sceneOrderRev).not.toBe(node.sceneOrderRev);
-    expect((await api.scene(scene)).rev).toBe(sceneBefore.rev);
-    expect((await api.entry(CHAPTER)).rev).toBe(chapterBefore.rev);
+    expect((await getScene(api, scene)).rev).toBe(sceneBefore.rev);
+    expect((await getChapter(api, CHAPTER)).rev).toBe(chapterBefore.rev);
 
     // So the save lands — no conflict line, the typed text is stored.
     await page.getByRole("button", { name: "Speichern" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Inzwischen geändert" })).toHaveCount(0);
-    await expect.poll(async () => (await api.scene(scene)).body).toContain(addition);
+    await expect.poll(async () => (await getScene(api, scene)).body).toContain(addition);
     expect(await storedOrder(api)).toEqual(reordered);
 
     // The chapter's own text holds `chapters.rev`, which the order does not
@@ -1406,7 +1446,9 @@ test.describe("the scene order of a chapter", () => {
     await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });
     await dialog.getByRole("button", { name: "Speichern" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect.poll(() => api.body(CHAPTER)).toContain("Den Leuchtturm wieder anzünden.");
+    await expect
+      .poll(async () => (await getChapter(api, CHAPTER)).body)
+      .toContain("Den Leuchtturm wieder anzünden.");
     // …and the chapter write left the order where the other writer put it.
     expect(await storedOrder(api)).toEqual(again);
   });

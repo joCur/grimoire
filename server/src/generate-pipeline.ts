@@ -57,7 +57,7 @@ import {
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
 import { ApiError } from "./api-error";
-import { checkDraftsNaming, type CheckedDraft } from "./naming-check";
+import { checkProposalsNaming, type CheckedProposal } from "./naming-check";
 import {
   ASSET_FILES,
   campaignRefIds,
@@ -924,7 +924,7 @@ export async function runScenePart(
                 "zuordnen — diese Szene wurde aus dem ganzen Quelltext geschrieben.",
             ]),
       ],
-      namingHints: checkDraftsNaming([sceneChecked(result.scene)], plan.ctx.namingRules),
+      namingHints: checkProposalsNaming([sceneChecked(result.scene)], plan.ctx.namingRules),
       ...(cut.matched ? {} : { excerptFallback: true }),
     },
     usage: usageOf(result.usage, counter.count()),
@@ -932,7 +932,7 @@ export async function runScenePart(
 }
 
 /** A proposed scene as the naming check reads it: its id, its fields and its body. */
-function sceneChecked(scene: SceneProposal): CheckedDraft {
+function sceneChecked(scene: SceneProposal): CheckedProposal {
   const { body, ...fields } = scene;
   return { scene: scene.id, fields, body };
 }
@@ -968,7 +968,7 @@ export async function runNpcPart(
     outcome: {
       npc: result.npc,
       warnings: result.warnings,
-      namingHints: checkDraftsNaming([{ npc: result.npc.id, fields, body }], plan.ctx.namingRules),
+      namingHints: checkProposalsNaming([{ npc: result.npc.id, fields, body }], plan.ctx.namingRules),
     },
     usage: usageOf(result.usage, counter.count()),
   };
@@ -1011,7 +1011,7 @@ export async function runLocationPart(
     outcome: {
       location: result.location,
       warnings: result.warnings,
-      namingHints: checkDraftsNaming(
+      namingHints: checkProposalsNaming(
         [{ location: result.location.id, fields, body }],
         plan.ctx.namingRules,
       ),

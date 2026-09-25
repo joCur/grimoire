@@ -6,7 +6,7 @@
 
 import type { CampaignTree, Npc } from "@grimoire/shared/types";
 
-import { BodyEditor, useBodyDraft } from "@/components/EntryBodyEditor";
+import { BodyEditor, useBodyDraft } from "@/components/BodyEditor";
 import { FieldsDialog, FieldsDialogAction, useFieldsForm } from "@/components/fields/FieldsDialog";
 import { useT } from "@/i18n";
 

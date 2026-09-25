@@ -21,28 +21,28 @@ Grundprinzip: **Das Format degradiert, es validiert nicht.** Eine unbekannte
 Überschrift oder ein unbekannter Callout im Text wird als normaler Text
 gezeigt; nichts bricht.
 
-## Adressen
+## Ressourcen
 
-Jeder Eintrag hat eine **Adresse** — die Kennung, unter der API und URL ihn
-ansprechen. Sie setzt sich aus der Art des Eintrags und seiner `id`
-zusammen und steht genau einmal in `server/src/store/paths.ts`:
+Jede Entität ist ihre eigene **Ressource** mit ihrem eigenen Typ aus genau
+einem zod-Schema in `shared/src/<entität>.ts` (ADR #31). Die URL nennt die
+Entität und ihre `id`; eine Antwort trägt alle Felder der Entität
+nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
 
-| Eintrag | Adresse |
-| ------- | ------- |
-| Kampagne | `campaign` |
-| Kapitel | `<kapitel-id>` |
+| Entität | Lesen/Ändern | Anlegen/Liste | App-Route |
+| ------- | ------------ | ------------- | --------- |
+| Kampagne | `GET/PATCH /api/campaigns/<kampagne>` | `POST /api/campaigns` | `/campaigns/<kampagne>` |
+| Kapitel | `GET/PATCH /api/campaigns/<kampagne>/chapters/<id>` | `GET/POST /api/campaigns/<kampagne>/chapters` | `/campaigns/<kampagne>/chapters/<id>` |
+| Szene | `GET/PATCH /api/campaigns/<kampagne>/scenes/<id>` | `GET/POST /api/campaigns/<kampagne>/scenes` | `/campaigns/<kampagne>/scenes/<id>` |
+| NPC | `GET/PATCH /api/campaigns/<kampagne>/npcs/<id>` | `GET/POST /api/campaigns/<kampagne>/npcs` | `/campaigns/<kampagne>/npcs/<id>` |
+| Ort | `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>` |
 
-Eine **Szene**, ein **NPC** und ein **Ort** haben keine Adresse: jede ist
-ihre eigene Ressource unter `/api/campaigns/<kampagne>/scenes/<id>`,
-`/api/campaigns/<kampagne>/npcs/<id>` bzw.
-`/api/campaigns/<kampagne>/locations/<id>`, in der App
-`/campaigns/<kampagne>/scenes/<id>`, `/campaigns/<kampagne>/npcs/<id>` bzw.
-`/campaigns/<kampagne>/locations/<id>` (ADR #31, siehe „Szene“, „NPC“ und
-„Ort“ unten).
+Die Kapitelübersicht bleibt `/campaigns/<kampagne>`; die Liste der Kampagnen
+(`GET /api/campaigns`) antwortet mit ihrer eigenen Form, dem Namen neben der
+jüngsten Session.
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
-Referenz-Schlüssel in Adressen, Links und `[[id]]`-Referenzen und ändert sich
+Referenz-Schlüssel in URLs, Links und `[[id]]`-Referenzen und ändert sich
 danach nie mehr (ADR #21). Der Eigenschaften-Dialog zeigt sie, bietet aber
 keine Änderung.
 
@@ -50,7 +50,7 @@ Die Kapitelübersicht ist eine durchgehende Liste der Szenen eines Kapitels
 in der **Reihenfolge, die der DM setzt** (ADR #27); der Ort steht mit
 seinem Namen in der Metazeile der einzelnen Szene — hat eine Szene keinen,
 fehlt dort schlicht der Ortsteil —, Eventualszenen stehen als eigener Block
-am Ende. Diese Reihenfolge ist **keine Eigenschaft** — sie ist
+am Ende. Diese Reihenfolge ist **kein Feld** — sie ist
 eine Aussage des Kapitels über seine Szenen, nicht einer Szene über sich
 selbst, und steht deshalb in keiner Feldtabelle dieses Dokuments. Gepflegt
 wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
@@ -58,9 +58,9 @@ Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
 Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
 übernommen werden (ADR #27).
 
-**Sessions, Ideen, Glossar, Kampagnenwissen und offene Fäden haben keine
-Adresse** — sie sind Tabellen, die als Listen gepflegt werden, und antworten
-auf ihren eigenen Endpoints (ADR #26):
+**Sessions, Ideen, Glossar, Kampagnenwissen und offene Fäden** sind Tabellen,
+die als Listen gepflegt werden, und antworten auf ihren eigenen Endpoints
+(ADR #26):
 
 | Liste | Lesen | Schreiben |
 | ----- | ----- | --------- |
@@ -71,68 +71,109 @@ auf ihren eigenen Endpoints (ADR #26):
 | Offene Fäden (je Kapitel) | `GET …/chapters/<kapitel>/threads` | `POST …/chapters/<kapitel>/threads`, `PATCH …/threads/<id>`, `DELETE …/threads/<id>` |
 
 Glossar und Kampagnenwissen bekommt der Generator als Kontext; beide werden
-auf ihren eigenen Seiten gepflegt. Die Segmente `sessions`, `inbox` und
-`glossary` bleiben trotzdem **reserviert**, damit kein Kapitel eine dieser ids
-belegt und mit dem Pfad seiner Liste kollidiert. Die Fäden liegen unter
-`…/chapters/<kapitel>/threads`, außerhalb der Eintrags-Pfade, und reservieren
-nichts.
+auf ihren eigenen Seiten gepflegt.
 
 Alles Kampagnenabhängige hängt unter der Kampagne — in der API
 `/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` (ADR #22).
-Die Adresse steht dabei im Pfad: `GET
-/api/campaigns/beispiel/entries/01-salzhafen` liest dieses Kapitel, `GET
-/api/campaigns/beispiel` den Kampagnen-Eintrag.
 Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
-## Eigenschaften
+## Felder
 
-Die Eigenschaften eines Eintrags sind seine strukturierten Felder — alle
-außer dem Text (`body`). Jede Entität hat ihren eigenen Typ aus genau
-einem zod-Schema (ADR #31). **Szene**, **NPC** und **Ort** sind jeweils ihre
-eigene Ressource mit ihren eigenen Feldern (siehe „Szene“, „NPC“ und „Ort“
-unten); bei Kampagne und Kapitel reisen die Felder gesammelt unter
-`properties`.
-Die App zeigt sie im Eigenschaften-Dialog, und `PATCH
-/api/campaigns/<kampagne>/entries/<adresse>` ändert genau die Felder, die der
-DM angefasst hat; `null` löscht ein optionales Feld. Ein Feld, das die
-Entität nicht kennt, legt die API nicht an (400).
+Was eine Ansicht als Daten braucht, ist ein Feld einer Entität oder eine
+Zeile einer Liste, nie ein Abschnitt, der über seine Überschrift gefunden
+wird (ADR #29).
 
-Was eine Ansicht als Daten braucht, ist eine Eigenschaft oder eine Zeile einer
-Liste, nie ein Abschnitt, der über seine Überschrift gefunden wird (ADR #29).
+Geschrieben wird jede Entität mit `PATCH` auf ihrer Ressource und
+`{ rev, force?, …Teilmenge der Felder }`: nur die genannten Felder ändern
+sich, `null` löscht ein optionales Feld, und ein Feld, das die Entität nicht
+kennt, oder ein Wert der falschen Form ist eine 400, die das Feld nennt. Ein
+veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource.
 
 ### Kampagne
 
+Die Kampagne ist ihre eigene Ressource mit ihrem eigenen Typ (`Campaign`, aus
+dem zod-Schema in `shared/src/campaign.ts`, ADR #31). `GET
+/api/campaigns/<kampagne>` antwortet mit ihr:
+
+```json
+{
+  "id": "beispiel",
+  "name": "Der Leuchtturm von Salzhafen",
+  "description": "Eine Küstenkampagne um einen erloschenen Leuchtturm, …",
+  "body": "\nKampagnenweite Notizen: …",
+  "rev": 1
+}
+```
+
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | stabil |
+| `id` | stabil, der Schlüssel in jeder URL |
 | `name` | Anzeigename in der UI; fehlt er, ist der Anzeigename die id |
-| `description` | Kurzbeschreibung, eine Zeile |
+| `description` | Kurzbeschreibung, eine Zeile; optional |
+| `body` | Markdown der Kampagne: freier Notizraum für Kampagnenweites |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
-Der Text ist freier Notizraum für Kampagnenweites. Der Kopf der
-Kapitelübersicht zeigt ihn unter der Kurzbeschreibung: ganz und gerendert, auf
-wenige Zeilen begrenzt und aufklappbar. Ohne Text steht dort nichts.
+Geschrieben wird mit `PATCH /api/campaigns/<kampagne>` und `{ rev, force?,
+…Teilmenge von name, description, body }` — `null` löscht die
+Beschreibung, ein veralteter `rev` ist 409 mit der aktuellen Kampagne.
+`POST /api/campaigns { name, description?, id? }` legt eine Kampagne an und
+antwortet mit ihr: die `id` entsteht aus dem Namen, wenn die Anfrage keine
+setzt, und eine vergebene ist eine 409 `slug_taken` mit Vorschlag. Die
+Fixture ist die Kampagne ohne `rev`.
+
+Der Kopf der Kapitelübersicht zeigt den Text unter der Kurzbeschreibung:
+ganz und gerendert, auf wenige Zeilen begrenzt und aufklappbar. Ohne Text
+steht dort nichts.
 
 ### Kapitel
 
+Ein Kapitel ist seine eigene Ressource mit seinem eigenen Typ (`Chapter`, aus
+dem zod-Schema in `shared/src/chapter.ts`, ADR #31). `GET
+/api/campaigns/<kampagne>/chapters/<id>` antwortet mit ihm:
+
+```json
+{
+  "id": "01-salzhafen",
+  "title": "Kapitel 1: Der Leuchtturm von Salzhafen",
+  "status": "active",
+  "body": "Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.\n",
+  "rev": 1
+}
+```
+
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | stabil; das Feld `chapter` einer Szene nennt es |
-| `title` | Anzeigename |
-| `status` | `planned`, `active` oder `done` |
+| `id` | stabil; das Feld `chapter` einer Szene, eines NPC und eines Orts nennt es |
+| `title` | Anzeigename; ohne eigenen Titel zeigt das Kapitel seine id |
+| `status` | `planned`, `active` oder `done`; optional |
+| `body` | Markdown des Kapitels: worum es geht und was die Gruppe erreichen soll |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
-`active` markiert das **eine** Kapitel, das die Session-Ansicht öffnet: der
-Server setzt es in einem Vorgang und stellt das bisher aktive Kapitel zurück
-auf `planned`. Die API schreibt nur diese drei Werte (400 sonst), und die
-Spalte selbst lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint
-(DECISIONS #25), kein degradierendes Freitextfeld.
+`active` markiert das **eine** Kapitel, das die Session-Ansicht öffnet: je
+Kampagne ist höchstens ein Kapitel aktiv. Aktiviert wird mit `PATCH
+…/chapters/<id> { rev, status: "active" }` oder mit `POST …/chapters` und
+`status: "active"`; der Server setzt das bisher aktive Kapitel im selben
+Vorgang auf `planned`, und dessen `rev` bewegt sich mit. Die API schreibt nur
+diese drei Werte (400 `status_not_allowed` sonst), und die Spalte selbst
+lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint (DECISIONS
+#25), kein degradierendes Freitextfeld. `null` löscht den Status.
 
-Der Text ist die Beschreibung des Kapitels — worum es geht und was die Gruppe
-erreichen soll. Die Kapitelübersicht zeigt ihn unter dem Titel, ganz und
-gerendert wie jeder Text, auf wenige Zeilen begrenzt und aufklappbar; ob und
-welche Überschriften er hat, ändert daran nichts (ADR #29). Die Beschreibung
-aus „Kapitel anlegen“ wird der Text so, wie sie getippt wurde, ohne Überschrift
-davor; ein Lauf „Neues Kapitel“ legt sein Kapitel mit der Beschreibung aus
-seiner Gliederung an (siehe Generator).
+Geschrieben wird mit `PATCH …/chapters/<id>` und `{ rev, force?, …Teilmenge
+von title, status, body }`; ein veralteter `rev` ist 409 mit dem aktuellen
+Kapitel. Weder die Szenenreihenfolge noch die offenen Fäden bewegen sich
+dabei — beide haben ihren eigenen Wächter. `POST …/chapters { title, id?,
+status?, body? }` legt ein Kapitel an und antwortet mit ihm: die `id` entsteht
+aus dem Titel, wenn die Anfrage keine setzt, der Status ist `planned`, wenn
+sie keinen nennt, und das Kapitel steht am Ende der Kampagne. Der `body` aus
+„Kapitel anlegen“ wird der Text so, wie er getippt wurde — getrimmt, mit
+einem abschließenden Zeilenumbruch, ohne Überschrift davor. Eine vergebene
+`id` ist eine 409 `slug_taken` mit Vorschlag. Die Fixture ist das Kapitel
+ohne `rev`; ein Lauf „Neues Kapitel“ legt sein Kapitel als `planned` mit der
+Beschreibung aus seiner Gliederung als `body` an (siehe Generator).
+
+Die Kapitelübersicht zeigt den Text unter dem Titel, ganz und gerendert wie
+jeder Text, auf wenige Zeilen begrenzt und aufklappbar; ob und welche
+Überschriften er hat, ändert daran nichts (ADR #29).
 
 Die **offenen Fäden** — die Handlungsstränge, die das Kapitel trägt — sind
 kein Text, sondern eine **Liste am Kapitel** (ADR #29). Eine Zeile ist
@@ -140,9 +181,9 @@ kein Text, sondern eine **Liste am Kapitel** (ADR #29). Eine Zeile ist
 `done` das Häkchen. Jeder Endpoint der Liste antwortet mit der ganzen Liste in
 ihrer Reihenfolge und ihrem eigenen Wächter-Token:
 `{ entries: [{ id, text, done }], rev }`. Das `rev` ist `chapters.threads_rev`
-— nicht das `rev` des Kapitel-Eintrags: ein Schreibzugriff auf die Liste
-ändert weder den Kapiteltext noch dessen Wächter, und ein Kapitel-Write bewegt
-die Liste nicht.
+— nicht das `rev` des Kapitels: ein Schreibzugriff auf die Liste ändert weder
+den Kapiteltext noch dessen Wächter, und ein Kapitel-Write bewegt die Liste
+nicht.
 
 - Anhängen (`POST …/threads { text }`) setzt die Zeile ans Ende und trägt
   **kein** `rev` — es kann nichts überschreiben, wie eine Idee oder eine
@@ -520,11 +561,9 @@ Nachbereitung zeigt sie zusammen mit dem Log.
 - Geschrieben wird ausschließlich über die API (jeder Endpoint ist an seiner
   Route dokumentiert, im Modul seiner Ressource
   `server/src/routes/<ressource>.ts`): Log, Ideen,
-  Nachbereitung, Generator-Entwürfe — und für einen Eintrag der eine
-  Schreibweg `PATCH /api/campaigns/<kampagne>/entries/<adresse>`, der
-  Eigenschaften, Text oder beides in einem Zug schreibt (ADR #23); eine
-  Szene, ein NPC und ein Ort haben je ihren eigenen `PATCH` auf ihrer
-  Ressource.
+  Nachbereitung, Generator-Entwürfe — und für jede Entität ihr eigener
+  `PATCH` auf ihrer Ressource, der jede Teilmenge ihrer Felder, `body`
+  eingeschlossen, in einem Zug schreibt (ADR #23, ADR #31).
   Glossar, Kampagnenwissen, Ideen und offene Fäden sind Listen und werden
   über ihre eigenen Endpoints gepflegt; einen Text nehmen sie nicht an.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
@@ -537,7 +576,7 @@ Nachbereitung zeigt sie zusammen mit dem Log.
   `{ scenes, rev }`, wobei `scenes` die vollständige Liste der Szenen-ids
   dieses Kapitels ist (sonst 400). Das `rev` ist `scene_order_rev`, das der
   Kapitel-Knoten mitliefert — nicht der `rev` einer Szene und nicht der des
-  Kapitel-Eintrags; passt es nicht, ist das 409. Geschrieben wird nur die
+  Kapitels; passt es nicht, ist das 409. Geschrieben wird nur die
   Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
   offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
   Konflikt läuft (ADR #27). Dieselbe Bauart haben die Wächter der übrigen
@@ -586,21 +625,23 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 
 ## Fixtures
 
-Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
-je Datei, genau in der Form, die die API spricht: `kind`, die
-strukturierten Felder und der Text als ein String unter `body`. Eine Szene,
-ein NPC und ein Ort liegen in eigenen Dateien unter
-`fixtures/beispiel/scenes/<id>.json`, `fixtures/beispiel/npcs/<id>.json` bzw.
-`fixtures/beispiel/locations/<id>.json`, genau als das Objekt, das ihre
-Ressource liefert, ohne `rev` (ADR #31); Kampagne und Kapitel tragen ihre
-Felder unter `properties`. Ideen, Glossar
-und Sessions tragen ihre Listen ebenso strukturiert,
-als Zeilen mit ihren Spalten, und ein Kapitel seine offenen Fäden unter
-`threads`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
-wie ein Faden `{ text, done? }`. Eine Markdown-Zeile steht in keiner davon.
-Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
-die Bodies werden deshalb nie umformatiert.
+Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/`, ein Objekt je
+Datei, genau in der Form, die die API spricht. Jede Entität mit eigener
+Ressource liegt in ihrem eigenen Verzeichnis, jede Datei genau das Objekt,
+das ihre Ressource liefert, ohne `rev` (ADR #31): die Kampagne unter
+`fixtures/beispiel/campaigns/<id>.json`, ein Kapitel unter
+`fixtures/beispiel/chapters/<id>.json`, eine Szene unter
+`fixtures/beispiel/scenes/<id>.json`, ein NPC unter
+`fixtures/beispiel/npcs/<id>.json` und ein Ort unter
+`fixtures/beispiel/locations/<id>.json`. Ideen, Glossar, offene Fäden und
+Sessions tragen ihre Listen strukturiert, als Zeilen mit ihren Spalten, unter
+`kind`: eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`, eine Idee
+`{ text, done? }`, ein Faden `{ chapter, text, done? }`. Eine Markdown-Zeile
+steht in keiner davon. Sie ist die Referenz für Callouts und die einzige
+Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` samt `<dir>/<kampagne>/scenes/*.json`, `<dir>/<kampagne>/npcs/*.json` und `<dir>/<kampagne>/locations/*.json` und
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest
+`<dir>/<kampagne>/*.json` samt den Verzeichnissen `campaigns/`, `chapters/`,
+`scenes/`, `npcs/` und `locations/` darunter und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

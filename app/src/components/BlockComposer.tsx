@@ -1,23 +1,23 @@
-// The Block-Composer (issue #43, phase 2): a scene as a vertical list of
-// editable blocks instead of a wall of markdown syntax. This is the DEFAULT
-// edit mode of the reading view; „Markdown" (the textarea from issue #39) stays one
-// click away for everything a form cannot express.
+// The block composer: a text as a vertical list of editable blocks instead of
+// a wall of markdown syntax. This is the DEFAULT edit mode of the reading
+// view; the markdown surface (the raw textarea) stays one click away for
+// everything a form cannot express.
 //
-// The shape follows the job (UI-BRIEF: „die nächste Information in unter drei
-// Sekunden"): a block is a quiet card with its TYPE LABEL — the same vocabulary
-// the reading view uses (blockLabel: Vorlesetext, Check, Geheim, …) — and two
-// lines of its content, so the DM reads the scene's skeleton in one glance and
-// opens exactly the one card they came for.
+// The shape follows the job (UI-BRIEF: the next piece of information in under
+// three seconds): a block is a quiet card with its TYPE LABEL — the same
+// vocabulary the reading view uses (blockLabel: read-aloud, check, secret, …)
+// — and two lines of its content, so the DM reads the skeleton of the text in
+// one glance and opens exactly the one card they came for.
 //
-// Every control is a real button, because AK 4 of the ticket is explicit:
-// moving and deleting must work with keyboard AND touch, so there is no
-// drag-and-drop anywhere here. Reordering happens by re-render, not by
-// animation — nothing to gate behind prefers-reduced-motion.
+// Every control is a real button: moving and deleting must work with keyboard
+// AND touch, so there is no drag-and-drop anywhere here. Reordering happens by
+// re-render, not by animation — nothing to gate behind prefers-reduced-motion.
 //
 // No state that could diverge from the draft: the forms are CONTROLLED and
 // write straight into the block list through lib/composer.ts (which routes
-// every change through the phase-1 helpers). The only local state is which card
-// is expanded and where the type picker is open — pure view state, safe to lose.
+// every change through the block helpers of lib/blocks.ts). The only local
+// state is which card is expanded and where the type picker is open — pure
+// view state, safe to lose.
 //
 // A scene is 10–30 blocks and every keystroke hands down a NEW list, so the
 // cards are memoized: the props of a card are its own block plus booleans, the
@@ -52,7 +52,7 @@ const ICON_BUTTON_CLASS =
   "size-8 flex-none rounded-md p-0 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30 [&_svg]:size-[15px]";
 
 /**
- * „Blöcke" ⇄ „Markdown" — the mode switch of edit mode. A two-button group with
+ * Blocks ⇄ markdown — the mode switch of edit mode. A two-button group with
  * aria-pressed instead of a select: both surfaces stay visible and one tap
  * away, which is what a fallback has to be.
  */
@@ -95,7 +95,7 @@ export function ComposerModeToggle({
 }
 
 /**
- * The type picker of the „+" slot. All options are on screen at once (a wrap of
+ * The type picker of the "+" slot. All options are on screen at once (a wrap of
  * buttons, not a menu): nine names fit a 390px card in three rows, and a picker
  * that needs a popover is one interaction more on the surface that is supposed
  * to make phone editing possible in the first place.
@@ -270,7 +270,7 @@ function textareaRows(text: string): number {
 
 /**
  * The composer. `blocks` and `onChange` are the draft: every edit hands back a
- * new list, the caller (EntryBodyEditor) owns it and serializes it for the save.
+ * new list, the caller (BodyEditor) owns it and serializes it for the save.
  */
 export function BlockComposer({
   blocks,
@@ -287,7 +287,7 @@ export function BlockComposer({
   label: string;
   /**
    * What blocks a save, per block id (lib/composer.ts, composerIssues) — the
-   * card says it, the editor's „Speichern" waits for it. Computed by the caller
+   * card says it, the editor's save button waits for it. Computed by the caller
    * for exactly that reason: one truth for the line and for the button.
    */
   issues: Record<string, string>;
@@ -315,7 +315,7 @@ export function BlockComposer({
         latest.current.onChange(insertAt(latest.current.blocks, at, block));
         setPicker(undefined);
         // A fresh block is empty — it opens in its form, otherwise the DM's next
-        // click would have to be „bearbeiten" on an empty card.
+        // click would have to be "edit" on an empty card.
         setOpenId(block.id);
       },
       setText: (id, text) =>
@@ -325,7 +325,7 @@ export function BlockComposer({
       move: (id, delta) => latest.current.onChange(moveBy(latest.current.blocks, id, delta)),
       remove: (id) => {
         // No per-block confirm: the editor's discard dialog guards the session,
-        // and „Abbrechen" throws the whole draft away unsaved.
+        // and cancelling throws the whole draft away unsaved.
         latest.current.onChange(removeAt(latest.current.blocks, id));
         setOpenId((current) => (current === id ? undefined : current));
       },
@@ -446,7 +446,7 @@ function BlockList({
 }
 
 /**
- * The „+" between two blocks. Always visible (a hover-only affordance is
+ * The "+" between two blocks. Always visible (a hover-only affordance is
  * invisible on a touch screen) but quiet: a hairline with a small plus, which
  * turns into the type picker in place.
  *
@@ -482,8 +482,8 @@ export const InsertSlot = memo(function InsertSlot({
       </div>
     );
   }
-  // Two whole sentences instead of a glued-in fragment: which list the „+"
-  // inserts into changes the word order in other languages (i18n, issue #69).
+  // Two whole sentences instead of a glued-in fragment: which list the "+"
+  // inserts into changes the word order in other languages (ADR #15).
   const position = at.index + 1;
   return (
     <button
@@ -535,8 +535,8 @@ export const BlockCard = memo(function BlockCard({
 }) {
   const t = useT();
   const label = blockLabel(block, t);
-  // „Vorlesetext 2" — the position makes the label of the second Vorlesetext in
-  // a scene distinguishable for screen readers and for the E2E suite.
+  // "Read-aloud 2" — the position makes the label of the second read-aloud
+  // block of a text distinguishable for screen readers and for the E2E suite.
   const name = t("composer.card.name", { label, position: index + 1 });
 
   return (
@@ -613,7 +613,7 @@ export const BlockCard = memo(function BlockCard({
         )}
         {/* What a save would break, at the block that carries it. The text is
             never corrected away — a `##` may be exactly what was meant, so the
-            hint offers the two ways out and „Speichern" waits. */}
+            hint offers the two ways out and the save button waits. */}
         {issue !== undefined && (
           <p aria-live="polite" className="mt-1 text-[11.5px] text-destructive">
             {issue}
@@ -627,8 +627,8 @@ export const BlockCard = memo(function BlockCard({
 /**
  * What a collapsed card shows: the first two lines of the block's own text —
  * plain, not rendered. The composer is a structure view; the rendered text
- * lives one click away in „Markdown" → „Vorschau" and, after saving, in the reading
- * view itself.
+ * lives one click away in the markdown surface's preview and, after saving,
+ * in the reading view itself.
  */
 function BlockSummary({ block }: { block: SceneBlock }) {
   const t = useT();

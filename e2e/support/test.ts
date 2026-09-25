@@ -6,8 +6,8 @@
 //   - its OWN server process on its own port, serving the built app and /api,
 //     with LLM_PROVIDER=openai pointing at the run's stub endpoint
 //   - `baseURL` wired to that server, so page.goto("/") hits it
-//   - an `api` helper against that server, and a `db` helper that opens the
-//     test's `grimoire.db` with the server's own driver layer
+//   - an `api` handle on that server (api.ts), and a `db` helper that opens
+//     the test's `grimoire.db` with the server's own driver layer
 //
 // The database is the only truth (ADR #13): nothing writes campaign content
 // to disk, so there is nothing next to the server to read an assertion back
@@ -15,19 +15,26 @@
 // really means storage, through `db`.
 //
 // The FIXTURES are therefore only an INPUT, read exactly once per test — by
-// that seed run. `fixtures/beispiel/*.json` holds one entry per fixture file in the
+// that seed run. `fixtures/beispiel/` holds one object per fixture in the
 // shape the API speaks, and a test that needs content the example campaign
-// does not have overrides the fixtures in its own copy of that directory:
+// does not have overrides the fixtures in its own copy of that directory,
+// entity by entity:
 //
-//   test.use({ seed: { entries: { "scenes/loot": { id: "loot", … } } } });
-//   test.use({ seed: { without: ["session-2026-01-15"] } });
+//   test.use({ seed: { scenes: [{ id: "loot", … }] } });
+//   test.use({ seed: { without: { sessions: ["2026-01-15"] } } });
 //
-// The keys are FIXTURE FILE STEMS, not addresses: a stem that already exists
-// in `fixtures/beispiel` REPLACES that entry, any other stem adds one. A
-// scene, an npc and a location are each their own resource (ADR #31): their
-// stems are `scenes/<id>`, `npcs/<id>` and `locations/<id>`, and the fixture
-// is the scene, the npc or the location itself, every field flat, without a
-// guard.
+// An object whose id a fixture already has REPLACES that fixture, any other
+// adds one. The campaign, a chapter, a scene, an npc and a location are each
+// their own resource (ADR #31) and have a directory of their own
+// (`campaigns/<id>.json`, `chapters/<id>.json`, …): the fixture is the entity
+// itself, every field flat, without a guard. A session sits in the campaign
+// directory itself as `session-<id>.json`.
+//
+// What the suite knows about each entity — reading it, writing it, its
+// request paths — lives in that entity's own module next to this one
+// (campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts, session.ts,
+// inbox.ts, threads.ts). This file only puts server, seed and fixtures
+// together.
 //
 // Without overrides the pristine copy from the global setup is used directly
 // (it is never written to), so most tests copy nothing at all.
@@ -57,7 +64,15 @@ import { promisify } from "node:util";
 
 import { test as base, expect } from "@playwright/test";
 
+import type { CampaignSeed } from "@grimoire/shared/campaign";
+import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { LocationProposal } from "@grimoire/shared/location";
+import type { NpcProposal } from "@grimoire/shared/npc";
+import type { SceneProposal } from "@grimoire/shared/scene";
+
 import { openSqlite, type SqliteClient } from "../../server/src/db/driver";
+import type { SeedSession } from "../../server/src/db/seed";
+import { apiFor, type Api } from "./api";
 import {
   APP_DIST,
   BUN,
@@ -92,99 +107,29 @@ export interface ServerHandle {
 }
 
 /**
- * One entry as a fixture file holds it — the shape `grimoire seed` reads and
- * the shape the API speaks. Structural on purpose: the suite drives the
- * server as a process and never imports its types.
+ * What a test changes about the fixtures its database is seeded from, entity
+ * by entity. Each list ADDS its objects, and one whose id a fixture already
+ * has REPLACES that fixture. Every entity with its own resource (ADR #31) is
+ * typed with its own type from `@grimoire/shared/<entity>` — the entity as its
+ * resource answers it, without the guard. A session is the fixture the seed
+ * loader reads (`SeedSession`, server/src/db/seed.ts).
  */
-export type SeedEntry =
-  | {
-      kind: "campaign";
-      properties: Record<string, unknown>;
-      body?: string;
-    }
-  | {
-      kind: "chapter";
-      properties: Record<string, unknown>;
-      body?: string;
-      /** The chapter's open threads — ROWS beside the entry, never text in it. */
-      threads?: { text: string; done?: boolean }[];
-    }
-  | {
-      kind: "session";
-      properties: Record<string, unknown>;
-      /** Log ROWS — time, scene and text as columns, never a markdown line. */
-      log?: { at: string; sceneId?: string; text: string; reviewed?: boolean }[];
-      body?: string;
-    }
-  | {
-      kind: "inbox";
-      entries: { text: string; done?: boolean }[];
-    }
-  | {
-      kind: "glossary";
-      intro?: string;
-      entries: { term: string; explanation: string }[];
-    };
-
-/**
- * One scene as its fixture holds it (`scenes/<id>.json`) — every field flat,
- * `body` among them, no guard (ADR #31).
- */
-export interface SeedScene {
-  id: string;
-  title: string;
-  type: "planned" | "contingency";
-  trigger?: string;
-  chapter: string;
-  location?: string;
-  npcs: string[];
-  handouts: string[];
-  tags: string[];
-  status: "draft" | "ready" | "played" | "dropped";
-  body: string;
-}
-
-/**
- * One location as its fixture holds it (`locations/<id>.json`) — every field
- * flat, `body` among them, no guard (ADR #31).
- */
-export interface SeedLocation {
-  id: string;
-  name: string;
-  chapter?: string;
-  roll20Page?: string;
-  atmosphere?: string;
-  body: string;
-}
-
-/**
- * One npc as its fixture holds it (`npcs/<id>.json`) — every field flat,
- * `body` among them, no guard (ADR #31).
- */
-export interface SeedNpc {
-  id: string;
-  name: string;
-  role?: string;
-  chapter?: string;
-  status: "alive" | "dead" | "missing" | "unknown";
-  statblock?: string;
-  quickstats?: Record<string, string | number>;
-  voice?: string;
-  appearance?: string;
-  motivation?: string;
-  body: string;
-}
-
-/** What a test changes about the fixtures its database is seeded from. */
 export interface Seed {
-  /**
-   * fixture file stem -> entry; a stem that exists in fixtures/beispiel
-   * REPLACES it. A scene's stem is `scenes/<id>`, an npc's `npcs/<id>`, a
-   * location's `locations/<id>`.
-   */
-  entries?: Record<string, SeedEntry | SeedScene | SeedNpc | SeedLocation>;
-  /** fixture file stems to leave out, e.g. "session-2026-01-15" */
-  without?: string[];
+  /** Replaces the example campaign's own fixture. */
+  campaign?: CampaignSeed;
+  chapters?: ChapterProposal[];
+  scenes?: SceneProposal[];
+  npcs?: NpcProposal[];
+  locations?: LocationProposal[];
+  sessions?: SeedSession[];
+  /** Fixtures to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
+  without?: {
+    chapters?: string[];
+    scenes?: string[];
+    npcs?: string[];
+    locations?: string[];
+    sessions?: string[];
+  };
   /**
    * NO SEED AT ALL — `test.use({ seed: { skip: true } })`.
    *
@@ -195,238 +140,10 @@ export interface Seed {
    * helpers work, they just have nothing to look at until the test creates
    * it.
    *
-   * `entries`/`without` are meaningless with it and are ignored: there is no
-   * seed run for them to feed.
+   * Every other field is meaningless with it and is ignored: there is no
+   * seed run for it to feed.
    */
   skip?: boolean;
-}
-
-/** One entry as GET /api/campaigns/:campaign/entries/<address> answers it. */
-export interface ApiEntry {
-  path: string;
-  kind: string;
-  properties: Record<string, unknown>;
-  body: string;
-  /** The row version (`rev`) — an opaque guard token. */
-  rev: number;
-}
-
-/**
- * One scene as GET /api/campaigns/:campaign/scenes/:id answers it — its own
- * resource (ADR #31): every field flat, `body` among them, beside its guard.
- */
-export interface ApiScene extends SeedScene {
-  rev: number;
-}
-
-/**
- * One location as GET /api/campaigns/:campaign/locations/:id answers it —
- * its own resource (ADR #31): every field flat, `body` among them, beside
- * its guard.
- */
-export interface ApiLocation {
-  id: string;
-  name: string;
-  chapter?: string;
-  roll20Page?: string;
-  atmosphere?: string;
-  body: string;
-  rev: number;
-}
-
-/**
- * One npc as GET /api/campaigns/:campaign/npcs/:id answers it — its own
- * resource (ADR #31): every field flat, `body` among them, beside its guard.
- */
-export interface ApiNpc {
-  id: string;
-  name: string;
-  role?: string;
-  chapter?: string;
-  status: string;
-  statblock?: string;
-  quickstats?: Record<string, string | number>;
-  voice?: string;
-  appearance?: string;
-  motivation?: string;
-  body: string;
-  rev: number;
-}
-
-/** One log row of a session — columns, never a markdown line (ADR #26). */
-export interface ApiLogEntry {
-  /** The row's stable id — what `POST /review/seen` names the line by. */
-  id: string;
-  at: string;
-  sceneId?: string;
-  text: string;
-  reviewed: boolean;
-}
-
-/**
- * ONE SESSION as every session endpoint answers it. A session has no address
- * and no `properties` map: it is a table, so its log, its pauses and its
- * played scenes come back as rows and lists.
- */
-export interface ApiSession {
-  id: string;
-  started: string;
-  startedMs?: number;
-  ended?: string;
-  endedMs?: number;
-  pauses: { from: string; fromMs?: number; to?: string; toMs?: number }[];
-  log: ApiLogEntry[];
-  scenesPlayed: string[];
-  /** Guard token of the session row. */
-  rev: number;
-}
-
-/** The identifying head of a session, as `GET …/sessions` lists it. */
-export interface ApiSessionSummary {
-  id: string;
-  started: string;
-  startedMs?: number;
-  ended?: string;
-  endedMs?: number;
-}
-
-/** The ideas as `GET …/inbox` answers them: rows plus the list's guard token. */
-export interface ApiInbox {
-  entries: { id: string; text: string; done: boolean }[];
-  rev: number;
-}
-
-/**
- * A chapter's open threads as `GET …/chapters/:chapter/threads` answers them:
- * rows plus the LIST's guard token — not the chapter entry's `rev`.
- */
-export interface ApiThreads {
-  entries: { id: string; text: string; done: boolean }[];
-  rev: number;
-}
-
-/**
- * Typed access to the test's own server: the database is the truth, and the
- * API is how one looks at it — the same way the app does.
- */
-export interface Api {
-  /** Absolute URL of an API path (`/api/campaigns/beispiel/tree` or just `tree`). */
-  url(apiPath: string): string;
-  /** Raw fetch — for status-code assertions (409, 400, 404). */
-  fetch(apiPath: string, init?: RequestInit): Promise<Response>;
-  /** GET, parsed as JSON; throws with the body on a non-2xx answer. */
-  get<T>(apiPath: string): Promise<T>;
-  /** POST/PATCH/PUT with a JSON body, parsed as JSON; throws on non-2xx. */
-  send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
-  /** GET the entry at an address; throws when it is unknown. */
-  entry(rel: string): Promise<ApiEntry>;
-  /** The markdown text of an entry. */
-  body(rel: string): Promise<string>;
-  /** The properties of an entry. */
-  properties(rel: string): Promise<Record<string, unknown>>;
-  /** Whether the address names an existing row (404 = no). */
-  exists(rel: string): Promise<boolean>;
-  /** GET one scene from its own resource; throws when it is unknown. */
-  scene(id: string): Promise<ApiScene>;
-  /** Whether the campaign has a scene with that id (404 = no). */
-  sceneExists(id: string): Promise<boolean>;
-  /** The request path of a scene (or, without an id, of the scene list). */
-  scenePath(id?: string): string;
-  /**
-   * The ONE write of a scene: PATCH its resource with `rev` and any subset of
-   * its fields, `body` among them. Omitted, `rev` is read first — the helper
-   * then plays the second writer.
-   */
-  patchScene(
-    id: string,
-    change: { rev?: number; force?: boolean } & Record<string, unknown>,
-  ): Promise<ApiScene>;
-  /** GET one npc from its own resource; throws when it is unknown. */
-  npc(id: string): Promise<ApiNpc>;
-  /** Whether the campaign has an npc with that id (404 = no). */
-  npcExists(id: string): Promise<boolean>;
-  /** The request path of an npc (or, without an id, of the npc list). */
-  npcPath(id?: string): string;
-  /**
-   * Create an npc: POST the list with `{ name, id?, body? }`; throws on a
-   * non-2xx answer (a taken id is a 409 — `api.fetch` asserts that one).
-   */
-  createNpc(request: { name: string; id?: string; body?: string }): Promise<ApiNpc>;
-  /**
-   * The ONE write of an npc: PATCH its resource with `rev` and any subset of
-   * its fields, `body` among them. Omitted, `rev` is read first — the helper
-   * then plays the second writer.
-   */
-  patchNpc(
-    id: string,
-    change: { rev?: number; force?: boolean } & Record<string, unknown>,
-  ): Promise<ApiNpc>;
-  /** GET one location from its own resource; throws when it is unknown. */
-  location(id: string): Promise<ApiLocation>;
-  /** Whether the campaign has a location with that id (404 = no). */
-  locationExists(id: string): Promise<boolean>;
-  /** The request path of a location (or, without an id, of the location list). */
-  locationPath(id?: string): string;
-  /**
-   * The ONE write of a location: PATCH its resource with `rev` and any subset
-   * of its fields, `body` among them. Omitted, `rev` is read first — the
-   * helper then plays the second writer.
-   */
-  patchLocation(
-    id: string,
-    change: { rev?: number; force?: boolean } & Record<string, unknown>,
-  ): Promise<ApiLocation>;
-  /**
-   * The ACTIVE session — or, with `includeEnded`, the last started one.
-   * `undefined` when the campaign has no such session: the endpoint answers
-   * 200 with a `null` body, because "nothing runs" is an ordinary state.
-   *
-   * A session id the app starts is an opaque random string, so no spec can
-   * spell one out: "the session the app just started" is a question only the
-   * server can answer, and this asks it.
-   */
-  activeSession(includeEnded?: boolean): Promise<ApiSession | undefined>;
-  /** Id of the active session (see `activeSession`), or undefined. */
-  sessionId(includeEnded?: boolean): Promise<string | undefined>;
-  /** ONE session by its id; throws when the id names none (404). */
-  session(id: string): Promise<ApiSession>;
-  /** Whether a session with that id exists (404 = no). */
-  sessionExists(id: string): Promise<boolean>;
-  /** Every session of the campaign, newest first. */
-  sessions(): Promise<ApiSessionSummary[]>;
-  /** The ideas with the list's guard token. */
-  inbox(): Promise<ApiInbox>;
-  /** A chapter's open threads with the list's guard token. */
-  threads(chapter: string): Promise<ApiThreads>;
-  /** The request path of a chapter's thread list, or of one row in it. */
-  threadsPath(chapter: string, id?: string): string;
-  /**
-   * The ONE write path of an entry: PATCH the address with `rev` and at least
-   * one of `properties` and `body` (ADR #23). Fields and text together are one
-   * write against one `rev`. `force` writes the given fields on top of the row
-   * as it stands instead of refusing a stale `rev`.
-   *
-   * Pass `rev` to write against a token the spec already holds — that is how a
-   * test writes with the SAME token an editing surface is holding. Omitted, the
-   * helper reads the current token first and so plays the second writer.
-   */
-  patchEntry(
-    rel: string,
-    change: {
-      rev?: number;
-      properties?: Record<string, unknown>;
-      body?: string;
-      force?: boolean;
-    },
-  ): Promise<ApiEntry>;
-  /**
-   * Replace the body with a FRESH guard token: a second writer, not a race.
-   * Returns the new token. This is how a spec provokes the app's 409 — an entry
-   * only ever changes through the API.
-   */
-  writeBody(rel: string, body: string): Promise<number>;
-  /** Set properties with a fresh guard token; returns the new token. */
-  patchProperties(rel: string, patch: Record<string, unknown>): Promise<number>;
 }
 
 /** Read access to the test's database, with the server's own driver. */
@@ -446,6 +163,58 @@ interface Fixtures {
   server: ServerHandle;
   api: Api;
   db: Db;
+}
+
+/**
+ * Apply one entity's overrides to a campaign directory: drop the fixtures
+ * `without` names, then write each object to the fixture path of its id —
+ * which replaces a fixture of the same id and adds any other.
+ */
+async function overrideEntity<T>(
+  campaignDir: string,
+  fixturePath: (id: string) => string,
+  idOf: (value: T) => string,
+  objects: T[] = [],
+  without: string[] = [],
+): Promise<void> {
+  for (const id of without) await rm(path.join(campaignDir, fixturePath(id)), { force: true });
+  for (const value of objects) {
+    const target = path.join(campaignDir, fixturePath(idOf(value)));
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  }
+}
+
+const byId = (value: { id: string }): string => value.id;
+
+/** Apply a test's `seed` to its own copy of the example campaign's directory. */
+async function overrideFixtures(campaignDir: string, seed: Seed): Promise<void> {
+  const without = seed.without ?? {};
+  const campaigns = seed.campaign === undefined ? [] : [seed.campaign];
+  await overrideEntity(campaignDir, (id) => `campaigns/${id}.json`, byId, campaigns);
+  await overrideEntity(
+    campaignDir,
+    (id) => `chapters/${id}.json`,
+    byId,
+    seed.chapters,
+    without.chapters,
+  );
+  await overrideEntity(campaignDir, (id) => `scenes/${id}.json`, byId, seed.scenes, without.scenes);
+  await overrideEntity(campaignDir, (id) => `npcs/${id}.json`, byId, seed.npcs, without.npcs);
+  await overrideEntity(
+    campaignDir,
+    (id) => `locations/${id}.json`,
+    byId,
+    seed.locations,
+    without.locations,
+  );
+  await overrideEntity(
+    campaignDir,
+    (id) => `session-${id}.json`,
+    (session) => String(session.properties.id),
+    seed.sessions,
+    without.sessions,
+  );
 }
 
 /**
@@ -520,185 +289,6 @@ export async function startGrimoireServer(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-/**
- * The date-shaped id of a session a spec SEEDS itself.
- *
- * NOT the id of a session the app starts: those are opaque random strings and
- * only the server knows them (`api.sessionId`). A date-shaped id stays
- * perfectly legal, which is why a seeded session may spell one.
- */
-export function todaySessionId(d = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/**
- * The API path of one entry: the address sits in the path, one encoded
- * segment per address segment (ADR #22).
- */
-function entriesPath(campaign: string, rel: string): string {
-  const address = rel.split("/").map(encodeURIComponent).join("/");
-  return `campaigns/${encodeURIComponent(campaign)}/entries/${address}`;
-}
-
-/** The API path of ONE session — its own endpoint, not an entry address. */
-function sessionsPath(campaign: string, id: string): string {
-  return `campaigns/${encodeURIComponent(campaign)}/sessions/${encodeURIComponent(id)}`;
-}
-
-/** The `api` helper for any server URL (the fixture is this, bound). */
-export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
-  const url = (apiPath: string) =>
-    apiPath.startsWith("http")
-      ? apiPath
-      : `${baseUrl}/api/${apiPath.replace(/^\/?api\//, "").replace(/^\//, "")}`;
-
-  const fetchApi = (apiPath: string, init?: RequestInit) => fetch(url(apiPath), init);
-
-  async function json<T>(response: Response, what: string): Promise<T> {
-    const text = await response.text();
-    if (!response.ok) throw new Error(`${what}: HTTP ${response.status} — ${text}`);
-    return JSON.parse(text) as T;
-  }
-
-  const api: Api = {
-    url,
-    fetch: fetchApi,
-    async get<T>(apiPath: string) {
-      return json<T>(await fetchApi(apiPath), `GET ${apiPath}`);
-    },
-    async send<T>(
-      method: "POST" | "PATCH" | "PUT" | "DELETE",
-      apiPath: string,
-      body?: unknown,
-    ) {
-      const response = await fetchApi(apiPath, {
-        method,
-        headers: { "content-type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      return json<T>(response, `${method} ${apiPath}`);
-    },
-    entry(rel) {
-      return api.get<ApiEntry>(entriesPath(campaign, rel));
-    },
-    async body(rel) {
-      return (await api.entry(rel)).body;
-    },
-    async properties(rel) {
-      return (await api.entry(rel)).properties;
-    },
-    async exists(rel) {
-      const response = await fetchApi(entriesPath(campaign, rel));
-      if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
-      return true;
-    },
-    scene(id) {
-      return api.get<ApiScene>(api.scenePath(id));
-    },
-    async sceneExists(id) {
-      const response = await fetchApi(api.scenePath(id));
-      if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET scene ${id}: HTTP ${response.status}`);
-      return true;
-    },
-    scenePath(id) {
-      const base = `campaigns/${encodeURIComponent(campaign)}/scenes`;
-      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-    },
-    async patchScene(id, change) {
-      const rev = change.rev ?? (await api.scene(id)).rev;
-      return api.send<ApiScene>("PATCH", api.scenePath(id), { ...change, rev });
-    },
-    npc(id) {
-      return api.get<ApiNpc>(api.npcPath(id));
-    },
-    async npcExists(id) {
-      const response = await fetchApi(api.npcPath(id));
-      if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET npc ${id}: HTTP ${response.status}`);
-      return true;
-    },
-    npcPath(id) {
-      const base = `campaigns/${encodeURIComponent(campaign)}/npcs`;
-      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-    },
-    createNpc(request) {
-      return api.send<ApiNpc>("POST", api.npcPath(), request);
-    },
-    async patchNpc(id, change) {
-      const rev = change.rev ?? (await api.npc(id)).rev;
-      return api.send<ApiNpc>("PATCH", api.npcPath(id), { ...change, rev });
-    },
-    location(id) {
-      return api.get<ApiLocation>(api.locationPath(id));
-    },
-    async locationExists(id) {
-      const response = await fetchApi(api.locationPath(id));
-      if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET location ${id}: HTTP ${response.status}`);
-      return true;
-    },
-    locationPath(id) {
-      const base = `campaigns/${encodeURIComponent(campaign)}/locations`;
-      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-    },
-    async patchLocation(id, change) {
-      const rev = change.rev ?? (await api.location(id)).rev;
-      return api.send<ApiLocation>("PATCH", api.locationPath(id), { ...change, rev });
-    },
-    async activeSession(includeEnded = false) {
-      const path = `campaigns/${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`;
-      // "Nothing runs" is a null body, not a status — so it is read as a
-      // value here, exactly as the app reads it.
-      return (await api.get<ApiSession | null>(path)) ?? undefined;
-    },
-    async sessionId(includeEnded = false) {
-      return (await api.activeSession(includeEnded))?.id;
-    },
-    session(id) {
-      return api.get<ApiSession>(sessionsPath(campaign, id));
-    },
-    async sessionExists(id) {
-      const response = await fetchApi(sessionsPath(campaign, id));
-      if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET session ${id}: HTTP ${response.status}`);
-      return true;
-    },
-    sessions() {
-      return api.get<ApiSessionSummary[]>(`campaigns/${encodeURIComponent(campaign)}/sessions`);
-    },
-    inbox() {
-      return api.get<ApiInbox>(`campaigns/${encodeURIComponent(campaign)}/inbox`);
-    },
-    threads(chapter) {
-      return api.get<ApiThreads>(api.threadsPath(chapter));
-    },
-    threadsPath(chapter, id) {
-      const base = `campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/threads`;
-      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-    },
-    async patchEntry(rel, change) {
-      const rev = change.rev ?? (await api.entry(rel)).rev;
-      const { properties, body, force } = change;
-      return api.send<ApiEntry>("PATCH", entriesPath(campaign, rel), {
-        rev,
-        ...(properties === undefined ? {} : { properties }),
-        ...(body === undefined ? {} : { body }),
-        ...(force === undefined ? {} : { force }),
-      });
-    },
-    async writeBody(rel, body) {
-      return (await api.patchEntry(rel, { body })).rev;
-    },
-    async patchProperties(rel, patch) {
-      return (await api.patchEntry(rel, { properties: patch })).rev;
-    },
-  };
-  return api;
-}
-
 /** The `db` helper for an already-open client (the fixture is this, bound). */
 export function dbFor(client: SqliteClient): Db {
   const db: Db = {
@@ -723,9 +313,8 @@ export const test = base.extend<Fixtures>({
   // the run's pristine copy, shared and never written — fixtures/ itself is
   // read-only for the suite anyway (CLAUDE.md: the format is a contract).
   fixturesDir: async ({ seed }, use, testInfo) => {
-    const entries = seed.entries ?? {};
-    const without = seed.without ?? [];
-    if (seed.skip === true || (Object.keys(entries).length === 0 && without.length === 0)) {
+    const overridden = Object.keys(seed).some((key) => key !== "skip");
+    if (seed.skip === true || !overridden) {
       await use(pristineDir());
       return;
     }
@@ -733,21 +322,7 @@ export const test = base.extend<Fixtures>({
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     await cp(pristineDir(), dir, { recursive: true });
-    const campaignDir = path.join(dir, CAMPAIGN);
-    // One entry per fixture file, `<stem>.json` — so a stem the pristine copy already
-    // has is overwritten, and any other stem adds an entry.
-    for (const stem of without) {
-      await rm(path.join(campaignDir, `${stem}.json`), { force: true });
-    }
-    for (const [stem, entry] of Object.entries(entries)) {
-      // A stem may name a resource's own directory (`npcs/<id>`, `locations/<id>`).
-      await mkdir(path.dirname(path.join(campaignDir, `${stem}.json`)), { recursive: true });
-      await writeFile(
-        path.join(campaignDir, `${stem}.json`),
-        `${JSON.stringify(entry, null, 2)}\n`,
-        "utf8",
-      );
-    }
+    await overrideFixtures(path.join(dir, CAMPAIGN), seed);
     await use(dir);
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   },

@@ -17,8 +17,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { campaignHref } from "@/campaign/campaign-links";
+import { chapterHref } from "@/chapter/chapter-links";
 import type { MessageKey, Translate } from "@/i18n";
-import { encodeAddress } from "@/lib/address";
 import { locationHref } from "@/location/location-links";
 import { npcHref } from "@/npc/npc-links";
 import { sceneHref } from "@/scene/scene-links";
@@ -26,8 +27,8 @@ import { sceneHref } from "@/scene/scene-links";
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
  * catalog, with the translator PASSED IN (the lib layer never decides the
- * language) — and from the SAME `kind.*` keys the properties dialog's title
- * uses, so each kind name is one string in one place.
+ * language) — and from the SAME `kind.*` keys the dialog titles use, so each
+ * kind name is one string in one place.
  *
  * Unknown kinds pass through verbatim (degrade, README).
  */
@@ -66,9 +67,8 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
     // volume, a chapter is a page in it.
     case "campaign":
       return BookMarked;
-    // The three that are lists rather than entries: a session is what was
-    // written down that evening, the inbox what was thrown in on the go, the
-    // glossary the campaign's words.
+    // A session is what was written down that evening, the inbox what was
+    // thrown in on the go, the glossary the campaign's words.
     case "session":
       return NotebookPen;
     case "inbox":
@@ -92,25 +92,20 @@ export function contingencyScenes(tree: CampaignTree | undefined): Set<string> {
 }
 
 /**
- * Route for a picked result. A scene, an npc and a location open their own
- * reading views by their id — the route their slice names (ADR #31); a
- * chapter opens by its address (/campaigns/:campaign/entries/<path>); the
- * lists open the page that HOLDS the row — a session its reading page, an
- * idea the review it is waiting in, a term the glossary page — and the
- * campaign itself opens the chapter overview.
+ * Route for a picked result. The campaign, a chapter, a scene, an npc and a
+ * location open their own routes by their id — the route their slice names
+ * (ADR #31), the campaign's being the chapter overview; the lists open the
+ * page that HOLDS the row — a session its reading page, an idea the review it
+ * is waiting in, a term the glossary page.
  *
- * A chapter hit without a `path`, or a kind nobody knows, falls back to the
- * chapter overview rather than building an address out of nothing (degrade,
- * README).
+ * A kind nobody knows falls back to the chapter overview rather than building
+ * a route out of nothing (degrade, README).
  */
-export function resultHref(
-  campaign: string,
-  result: Pick<SearchResult, "kind" | "id" | "path">,
-): string {
-  const scope = `/campaigns/${encodeURIComponent(campaign)}`;
+export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "id">): string {
+  const scope = campaignHref(campaign);
   switch (result.kind) {
-    case "campaign":
-      return scope;
+    case "chapter":
+      return chapterHref(encodeURIComponent(campaign), result.id);
     case "scene":
       return sceneHref(encodeURIComponent(campaign), result.id);
     case "npc":
@@ -124,8 +119,6 @@ export function resultHref(
     case "glossary":
       return `${scope}/glossary`;
     default:
-      return result.path === undefined
-        ? scope
-        : `${scope}/entries/${encodeAddress(result.path)}`;
+      return scope;
   }
 }

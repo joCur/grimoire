@@ -1,9 +1,0 @@
-{
-  "kind": "campaign",
-  "properties": {
-    "id": "beispiel",
-    "name": "Der Leuchtturm von Salzhafen",
-    "description": "Eine Küstenkampagne um einen erloschenen Leuchtturm, Schmuggler und die Frage, wer im Hafen wirklich das Sagen hat."
-  },
-  "body": "\nKampagnenweite Notizen: Ton ist bodenständige Küstenfantasy, keine hohe\nMagie. Die Gruppe startet in Salzhafen und kennt niemanden vor Ort.\n"
-}

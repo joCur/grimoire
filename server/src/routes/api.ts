@@ -1,6 +1,7 @@
 // The API: assembles the route modules, one per resource (./<resource>.ts).
 // Mounted under /api in server.ts. Response shapes are the contracts in
-// @grimoire/shared (types.ts). THE ROUTE MODULES ARE THE API's documentation:
+// @grimoire/shared: each entity's type from its own module, the other shapes
+// in types.ts. THE ROUTE MODULES ARE THE API's documentation:
 // every endpoint is described right above its route, and there is no second
 // list anywhere that could drift away from it. HTTP helpers several modules
 // share live in ./http.ts.
@@ -16,12 +17,11 @@
 // CREATING CONTENT: five POSTs, one shape (campaigns, chapters, scenes, npcs,
 // locations): the DM types a NAME, the server derives the id with
 // the shared slug rule (@grimoire/shared/slug) and answers with what it
-// created in the shape its kind's GET answers — an `EntryResponse`, or a
+// created in the shape its kind's GET answers — a `Campaign`, a `Chapter`, a
 // `Scene`, an `Npc` or a `Location` — so the app can navigate straight into
-// it. A taken id is `409 { code: "slug_taken", id, suggestion, path }` (a
-// scene's, an npc's and a location's without `path`); a name that yields no
-// slug at all is a 400 that says so (store/shared.ts explains why neither is
-// silently resolved). Every one of them also accepts an explicit `id` — that
+// it. A taken id is `409 { code: "slug_taken", kind, id, suggestion }`; a
+// name that yields no slug at all is a 400 that says so (store/shared.ts
+// explains why neither is silently resolved). Every one of them also accepts an explicit `id` — that
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of
 // making the DM invent another name.
 
@@ -31,7 +31,6 @@ import { getBuildId } from "../config";
 import { ApiError } from "../api-error";
 import { campaignRoutes } from "./campaigns";
 import { chapterRoutes } from "./chapters";
-import { entryRoutes } from "./entries";
 import { generateRoutes } from "./generate";
 import { glossaryRoutes } from "./glossary";
 import { inboxRoutes } from "./inbox";
@@ -73,22 +72,16 @@ api.use("*", async (c, next) => {
 // the build-id middleware above is registered first and wraps them all.
 api.route("/", settingsRoutes);
 api.route("/", campaignRoutes);
-api.route("/", entryRoutes);
 api.route("/", chapterRoutes);
 api.route("/", sceneRoutes);
 api.route("/", npcRoutes);
 api.route("/", locationRoutes);
 api.route("/", knowledgeRoutes);
 
-// LISTS ARE NOT ENTRIES (ADR #26). A session, the inbox, the glossary and a
-// chapter's open threads are tables, and they answer their OWN shapes on
-// their own endpoints — `SessionResponse`, `InboxResponse`,
-// `GlossaryResponse`, `ThreadsResponse`, rows all the way down. None of them
-// has an address, so an entry path reaching for one answers 404 like any
-// other address the schema does not describe. `inbox`, `glossary` and
-// `sessions` stay RESERVED segments all the same, so no chapter can claim one
-// and collide with its list's endpoint; the threads live under
-// `/chapters/:chapter/threads`, outside the entry paths, and reserve nothing.
+// LISTS (ADR #26). A session, the inbox, the glossary and a chapter's open
+// threads are tables, and they answer their OWN shapes on their own
+// endpoints — `SessionResponse`, `InboxResponse`, `GlossaryResponse`,
+// `ThreadsResponse`, rows all the way down.
 api.route("/", sessionRoutes);
 api.route("/", inboxRoutes);
 api.route("/", glossaryRoutes);

@@ -4,10 +4,12 @@
 // Mobile is search, reading view and inbox (UI-BRIEF) — exactly that, checked
 // at 390×844 (iPhone size), including what the server stored.
 
-import { expect, test, type SeedEntry } from "../support/test";
+import { expect, test } from "../support/test";
+import type { SeedSession } from "../../server/src/db/seed";
+import { getInbox } from "../support/inbox";
 
 /** A session that started YESTERDAY and was never ended. */
-const OPEN_SESSION: SeedEntry = (() => {
+const OPEN_SESSION: SeedSession = (() => {
   const d = new Date(Date.now() - 24 * 3600_000);
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -59,7 +61,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   // The idea is a ROW of the inbox list, appended at the end, and the list
   // answers with its own guard token. Append-only: the row that was already
   // there survives, and nothing is ticked off.
-  await expect.poll(() => api.inbox()).toEqual({
+  await expect.poll(() => getInbox(api)).toEqual({
     rev: expect.any(Number),
     entries: [
       {
@@ -91,7 +93,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 // A running session must be visible on EVERY route, mobile included — where
 // the topbar is not the chrome, the indicator is its own row.
 test.describe("with a session open since yesterday", () => {
-  test.use({ seed: { entries: { "session-open": OPEN_SESSION } } });
+  test.use({ seed: { sessions: [OPEN_SESSION] } });
 
   test("mobile: a running session shows its own live row with the way back", async ({
     page,

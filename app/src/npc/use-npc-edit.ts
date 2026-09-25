@@ -1,5 +1,5 @@
 // One editing session over ONE npc (ADR #31), with the rules every editing
-// session in the app follows (lib/use-entry-edit.ts):
+// session in the app follows:
 //
 //   the write       ONE PATCH of the npc per interaction — any subset of its
 //                  fields, `body` among them.

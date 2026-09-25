@@ -154,13 +154,13 @@ describe("reference queries", () => {
     // replaced Fuse's fuzziness.
     const results = await search("leucht");
     const byKind = new Map(results.map((r) => [r.kind, r]));
+    // Every entity is its own resource (ADR #31): a hit names its kind and id
+    // and carries no address.
     expect(byKind.get("chapter")).toMatchObject({
       id: "01-salzhafen",
       title: "Kapitel 1: Der Leuchtturm von Salzhafen",
-      path: "01-salzhafen",
     });
-    // A location is its own resource (ADR #31): its hit names its kind and id
-    // and carries no address.
+    expect(Object.hasOwn(byKind.get("chapter")!, "path")).toBe(false);
     expect(byKind.get("location")).toMatchObject({
       id: "leuchtturm",
       title: "Der Leuchtturm von Salzhafen",
@@ -169,9 +169,9 @@ describe("reference queries", () => {
     expect(byKind.get("campaign")).toMatchObject({
       id: "beispiel",
       title: "Der Leuchtturm von Salzhafen",
-      path: "campaign",
     });
-    // and the scene, its own resource too (ADR #31): no address either.
+    expect(Object.hasOwn(byKind.get("campaign")!, "path")).toBe(false);
+    // and the scene: no address either.
     const scene = results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival");
     expect(scene).toMatchObject({ id: "lighthouse-arrival", title: "Ankunft am Leuchtturm" });
     expect(Object.hasOwn(scene!, "path")).toBe(false);
@@ -201,14 +201,9 @@ describe("reference queries", () => {
     // opaque markdown body.
     const results = await search("lighthouse keeper");
     const entry = results.find((r) => r.kind === "glossary");
-    // A LIST row carries `kind` and `id` and NO `path`: it has no address
-    // (ADR #26), and one that named nothing would 404 the moment somebody
-    // followed it. The app opens such a hit through its list.
+    // A LIST row carries `kind` and `id` like every hit (ADR #26); the app
+    // opens such a hit through its list.
     expect(entry).toMatchObject({ id: "lighthouse keeper", title: "lighthouse keeper" });
-    expect(entry?.path).toBeUndefined();
-    // An ENTRY hit, by contrast, carries its address — asserted on a query
-    // that finds one.
-    expect((await search("Leuchtturm")).find((r) => r.kind === "chapter")?.path).toBeDefined();
     // the explanation is the body, so it is searchable from the German side
     expect(
       (await search("Leuchtturmwärter")).some((r) => r.kind === "glossary"),

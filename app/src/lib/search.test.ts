@@ -92,60 +92,52 @@ describe("contingencyScenes", () => {
 });
 
 describe("resultHref", () => {
-  test("routes every entry kind to the reading view", () => {
-    expect(
-      resultHref("beispiel", { kind: "chapter", id: "01-salzhafen", path: "01-salzhafen" }),
-    ).toBe("/campaigns/beispiel/entries/01-salzhafen");
+  test("a chapter hit opens the chapter's own route by its id", () => {
+    expect(resultHref("beispiel", { kind: "chapter", id: "01-salzhafen" })).toBe(
+      "/campaigns/beispiel/chapters/01-salzhafen",
+    );
+    expect(resultHref("beispiel", { kind: "chapter", id: "höhle" })).toBe(
+      "/campaigns/beispiel/chapters/h%C3%B6hle",
+    );
   });
 
-  test("the campaign itself opens the chapter overview, not the reading view", () => {
-    expect(resultHref("beispiel", { kind: "campaign", id: "campaign", path: "campaign" })).toBe(
+  test("the campaign hit opens the campaign's route, the chapter overview", () => {
+    expect(resultHref("beispiel", { kind: "campaign", id: "beispiel" })).toBe(
       "/campaigns/beispiel",
     );
-    expect(
-      resultHref("höhlen kampagne", { kind: "campaign", id: "campaign", path: "campaign" }),
-    ).toBe("/campaigns/h%C3%B6hlen%20kampagne");
+    expect(resultHref("höhlen kampagne", { kind: "campaign", id: "höhlen kampagne" })).toBe(
+      "/campaigns/h%C3%B6hlen%20kampagne",
+    );
   });
 
-  test("encodes the chapter's address", () => {
-    const result = { kind: "chapter", id: "höhle", path: "höhle" } as const;
-    expect(resultHref("beispiel", result)).toBe("/campaigns/beispiel/entries/h%C3%B6hle");
-  });
-
-  // The three kinds that have no entry address any more: they open the page
-  // that holds them, named by their id where there is one.
+  // The kinds without a reading view of their own open the page that holds
+  // them, named by their id where there is one.
   test("a session opens its reading page", () => {
     expect(resultHref("beispiel", { kind: "session", id: "s-42" })).toBe(
       "/campaigns/beispiel/sessions/s-42",
     );
   });
 
-  test("an idea opens the wrap-up, a term the glossary page", () => {
+  test("an idea opens the review, a term the glossary page", () => {
     expect(resultHref("beispiel", { kind: "inbox", id: "i-1" })).toBe("/campaigns/beispiel/review");
     expect(resultHref("beispiel", { kind: "glossary", id: "salzhafen" })).toBe(
       "/campaigns/beispiel/glossary",
     );
   });
 
-  test("a chapter hit without a path falls back to the chapter overview", () => {
-    expect(resultHref("beispiel", { kind: "chapter", id: "01-salzhafen" })).toBe(
-      "/campaigns/beispiel",
-    );
-  });
-
-  test("a scene hit opens the scene's own route by its id — no address needed", () => {
+  test("a scene hit opens the scene's own route by its id", () => {
     expect(resultHref("beispiel", { kind: "scene", id: "späh trupp" })).toBe(
       "/campaigns/beispiel/scenes/sp%C3%A4h%20trupp",
     );
   });
 
-  test("an npc hit opens the npc's own route by its id — no address needed", () => {
+  test("an npc hit opens the npc's own route by its id", () => {
     expect(resultHref("beispiel", { kind: "npc", id: "fenn" })).toBe(
       "/campaigns/beispiel/npcs/fenn",
     );
   });
 
-  test("a location hit opens the location's own route by its id — no address needed", () => {
+  test("a location hit opens the location's own route by its id", () => {
     expect(resultHref("beispiel", { kind: "location", id: "leuchtturm" })).toBe(
       "/campaigns/beispiel/locations/leuchtturm",
     );

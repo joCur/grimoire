@@ -1,5 +1,5 @@
 // One editing session over ONE location (ADR #31), with the rules every
-// editing session in the app follows (lib/use-entry-edit.ts):
+// editing session in the app follows:
 //
 //   the write       ONE PATCH of the location per interaction — any subset of
 //                  its fields, `body` among them.

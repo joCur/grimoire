@@ -1,21 +1,20 @@
-// Pure half of the create surfaces — what the five create dialogs compute
-// before and after the POST. No react, no query imports.
+// Pure half of the create surfaces — what the create dialogs compute before
+// and after the POST. No react, no query imports.
 //
-// The dialogs themselves only ever ask a NAME (plus a chapter for a scene and
-// an optional description for a chapter). The id the format needs is DERIVED from
-// that name with the one slug rule (`@grimoire/shared/slug`), and it is shown
-// while typing: an id is the permanent reference key, so the DM sees the one
-// they are about to create rather than discovering it later in an address.
-// Overriding that derivation by hand is the id line's own business
-// (lib/id-field.ts).
+// The dialogs only ever ask a NAME (plus, for a chapter and a campaign, an
+// optional description). The id the format needs is DERIVED from that name
+// with the one slug rule (`@grimoire/shared/slug`), and it is shown while
+// typing: an id is the permanent reference key, so the DM sees the one they
+// are about to create rather than discovering it later. Overriding that
+// derivation by hand is the id line's own business (lib/id-field.ts).
 //
 // The interesting case is the collision. The server answers
-// `409 { code: "slug_taken" | "slug_reserved", kind, id, suggestion, path }`
-// and writes nothing — deliberately not an automatic `-2`, because the id is
-// permanent. So the dialog says what is in the way and offers the free
-// proposal as ONE click: taking it re-sends the same name with an explicit
-// `id`. The SENTENCE comes from the app's catalog via the code
-// (i18n/server-errors.ts) — the server is language-free.
+// `409 { code: "slug_taken", kind, id, suggestion }` and writes nothing —
+// deliberately not an automatic `-2`, because the id is permanent. So the
+// dialog says what is in the way and offers the free proposal as ONE click:
+// taking it re-sends the same name with an explicit `id`. The SENTENCE comes
+// from the app's catalog via the code (i18n/server-errors.ts) — the server is
+// language-free.
 
 import { toSlug } from "@grimoire/shared/slug";
 
@@ -28,11 +27,10 @@ export function derivedId(name: string): string {
   return toSlug(name);
 }
 
-/** What a slug 409 carries — the taken id, a free one, and its path. */
+/** What a slug 409 carries — the taken id and a free one. */
 export interface CreateConflict {
   id: string;
   suggestion: string;
-  path: string;
 }
 
 /**
@@ -42,27 +40,24 @@ export interface CreateConflict {
  */
 export function createConflict(error: unknown): CreateConflict | undefined {
   if (!(error instanceof ApiError) || error.status !== 409) return undefined;
-  const { code, id, suggestion, path } = error.details;
-  // Both slug 409s offer the same interaction — a sentence plus one click on
-  // the free proposal. Only the sentence differs, and that is the catalog's
-  // job (i18n/server-errors.ts), not this function's.
-  if (code !== "slug_taken" && code !== "slug_reserved") return undefined;
+  const { code, id, suggestion } = error.details;
+  if (code !== "slug_taken") return undefined;
   if (typeof id !== "string" || typeof suggestion !== "string" || suggestion === "") {
     return undefined;
   }
-  return { id, suggestion, path: typeof path === "string" ? path : "" };
+  return { id, suggestion };
 }
 
 /**
  * The sentence a failed create shows, in the UI language — the translator is
  * PASSED IN, so this module holds no copy of its own.
  *
- * The cases where the SERVER knows more than the client — the collision, the
- * reserved name, the 400 for a name that yields no id — are rendered from its
+ * The cases where the SERVER knows more than the client — the collision and
+ * the 400 for a name that yields no id — are rendered from its
  * error `code` through the catalog (i18n/server-errors.ts), which also carries
  * the degrade to the body's English text for a code this app does not know.
- * A 500 or a dead socket gets the generic „Nicht angelegt": a stack detail in
- * a dialog helps nobody.
+ * A 500 or a dead socket gets the generic "not created" sentence: a stack
+ * detail in a dialog helps nobody.
  */
 export function createErrorMessage(error: unknown, t: Translate): string {
   if (!(error instanceof ApiError)) return t("create.failed");

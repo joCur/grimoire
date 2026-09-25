@@ -89,6 +89,11 @@ const EXCEPTIONS: readonly Exception[] = [
     reason: "the fixture entries are files on disk and are addressed as such",
   },
   {
+    path: "server/test/db-seed-cli.test.ts",
+    rule: "campaigns-dir",
+    reason: "the fixture of a campaign sits in its `campaigns/` directory, which the seed reads",
+  },
+  {
     phrase: "/api/campaigns/",
     rule: "campaigns-dir",
     reason: "`campaigns` is a URL segment of the API, not a data directory",
@@ -218,12 +223,12 @@ const RULES: readonly Rule[] = [
   {
     id: "parsed-file",
     pattern: /\bParsedFile\b/,
-    meaning: "`EntryResponse` replaced it — an entry was never a parsed file",
+    meaning: "each entity's own type replaced it — a row was never a parsed file",
   },
   {
     id: "read-parsed-file",
     pattern: /\breadParsedFile\b/,
-    meaning: "the store reads a ROW, through server/src/store/entries.ts",
+    meaning: "the store reads a ROW, through the domain module of its entity",
   },
   {
     id: "parse-glossary-body",

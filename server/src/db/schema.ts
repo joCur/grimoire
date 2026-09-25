@@ -7,8 +7,7 @@
 //      Everything README.md names for an entity gets its own column; a key
 //      the contract does not name has no field behind it and is refused
 //      (a PATCH answers 400, and so does a seed). The contract is the
-//      entity's zod schema (ADR #31) — for the campaign and the chapter
-//      still the lists in store/properties.ts `PROPERTY_CONTRACT`.
+//      entity's zod schema (ADR #31).
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
@@ -23,10 +22,10 @@
 //      TWO CONSEQUENCES, and they are the point. A write that names an
 //      entry which does not exist is refused (400) instead of storing a
 //      hole, and NOTHING creates an entry because something mentioned it.
-//      The creation paths are: the create endpoints (the review's „NPC
-//      anlegen" from a log line among them), accepting a generator
+//      The creation paths are: the create endpoints (the review's create-npc
+//      action from a log line among them), accepting a generator
 //      proposal — and, inside that
-//      accept, the chapter a „Neues Kapitel" run decided on. Nowhere else.
+//      accept, the chapter a new-chapter run decided on. Nowhere else.
 //      A `[[slug]]` in prose is not a
 //      reference in this sense: it is body text, it stays visible text, and
 //      it constrains nothing — which is also why an npc's `## Beziehungen`
@@ -70,7 +69,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { NPC_STATUSES } from "@grimoire/shared/npc";
 import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
-import { CHAPTER_STATUSES } from "@grimoire/shared/types";
+import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -109,7 +108,7 @@ export const campaigns = sqliteTable("campaigns", {
   /** Display name; empty string when none was authored (the id is then shown). */
   name: text("name").notNull().default(""),
   description: text("description"),
-  /** Free note space — the campaign entry's markdown body. */
+  /** Free note space — the campaign's markdown body. */
   body: text("body").notNull().default(""),
   /** Bumped on every write; the app polls it to invalidate its queries. */
   version: integer("version").notNull().default(1),
@@ -176,14 +175,14 @@ export const chapters = sqliteTable(
      * chapter-text edit unsaveable the moment somebody rearranges the scenes.
      * The other direction holds too, which is the one that bites: reordering
      * must not 409 an editor it has nothing to do with. So the order counts
-     * only its own writes, and `rev` counts only the entry's.
+     * only its own writes, and `rev` counts only the chapter's.
      */
     sceneOrderRev: integer("scene_order_rev").notNull().default(1),
     /**
      * Guard token of the chapter's THREAD LIST (`threads` below) — the
      * fourth list counter of its kind, for the reason `scene_order_rev` has
      * its own: the open threads are a list with a lifetime of their own, and
-     * `rev` guards the chapter ENTRY (properties and text, ADR #23). A thread
+     * `rev` guards the chapter's fields (`body` among them, ADR #23). A thread
      * adopted in the review must not 409 an open chapter-text editor, and a
      * text save must not invalidate a tick in the overview. So the list
      * counts only its own writes.
@@ -836,8 +835,8 @@ export const generateJobs = sqliteTable(
     locationId: text("location_id"),
     /**
      * Target chapter of a scene run; NULL for an npc run. The one reference
-     * WITHOUT a foreign key (rule 3): a run with „Neues Kapitel" names the
-     * chapter it is going to create, so the entry exists only once the
+     * WITHOUT a foreign key (rule 3): a new-chapter run names the
+     * chapter it is going to create, so the chapter exists only once the
      * proposal is accepted.
      */
     chapter: text("chapter"),
@@ -895,10 +894,10 @@ export const generateJobs = sqliteTable(
      * restart, when nothing but the row is left. Only a scene run stores it.
      */
     sourceText: text("source_text"),
-    /** The run's „Neues Kapitel" flag — a retry must not 404 on it. */
+    /** The run's new-chapter flag — a retry must not 404 on it. */
     newChapter: integer("new_chapter").notNull().default(0),
     /**
-     * TITLE of the chapter a „Neues Kapitel" run creates. It belongs to the
+     * TITLE of the chapter a new-chapter run creates. It belongs to the
      * run, not to the browser: the review state is persistent, a browser's
      * copy of the start form is not, so a title taken from that copy would be
      * missing after a navigation or a reload — and the chapter with it. It is
