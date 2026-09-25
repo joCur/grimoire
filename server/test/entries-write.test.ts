@@ -14,13 +14,9 @@
 //   * `rev` IS THE ROW VERSION — a small integer that starts at 1 and grows
 //     by one per write, and a deliberately opaque guard token.
 //     "nothing was written" is "the rev did not move".
-//   * A SCENE'S PATH SEGMENT IS ITS ID (store/paths.ts), so the reference
-//     scenes are addressed as `01-salzhafen/leuchtturm/lighthouse-arrival`
-//     and `01-salzhafen/bucht/smuggler-captured`.
-//   * `raw` IS A DETERMINISTIC RENDERING (YAML block + body) of the row, not
-//     a stored byte sequence. Byte assertions about it are meaningful — the
-//     rendering is a pure function of the row — but they say "this is what
-//     the editor is shown".
+//   * A CHAPTER'S ADDRESS IS ITS ID (store/paths.ts), so the fixture chapter
+//     is addressed as `01-salzhafen`. A scene, an npc and a location have no
+//     address: each is written through its own resource.
 //
 // The system time is faked per case (setSystemTime) for deterministic dates.
 
@@ -88,37 +84,26 @@ afterEach(() => {
 });
 
 describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () => {
-  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const SCENE = "01-salzhafen";
 
   test("happy path: only named keys change, key order stable, body untouched", async () => {
     const before = await getEntry(SCENE);
 
-    const after = await patchOk(SCENE, { rev: before.rev, properties: { status: "played" } });
-    expect(after.properties.status).toBe("played");
+    const after = await patchOk(SCENE, { rev: before.rev, properties: { status: "done" } });
+    expect(after.properties.status).toBe("done");
 
     // Key order: the contract order of the kind, nothing added or removed.
     // The columns produce it (store/render.ts rule 1), which is the same
     // order the fixture has.
-    expect(Object.keys(after.properties)).toEqual([
-      "id",
-      "title",
-      "type",
-      "chapter",
-      "location",
-      "npcs",
-      "handouts",
-      "tags",
-      "status",
-    ]);
-    expect(after.properties.id).toBe("lighthouse-arrival");
-    expect(after.properties.npcs).toEqual(["jorna"]);
+    expect(Object.keys(after.properties)).toEqual(["id", "title", "status"]);
+    expect(after.properties.id).toBe("01-salzhafen");
     // The body is not a patch's business — unchanged, character for character.
     expect(after.body).toBe(before.body);
-    expect(after.properties).toEqual({ ...before.properties, status: "played" });
+    expect(after.properties).toEqual({ ...before.properties, status: "done" });
     // Fresh guard token (exactly one write) and a subsequent GET sees both.
     expect(after.rev).toBe(before.rev + 1);
     const again = await getEntry(SCENE);
-    expect(again.properties.status).toBe("played");
+    expect(again.properties.status).toBe("done");
     expect(again.rev).toBe(after.rev);
   });
 
@@ -147,10 +132,10 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
     // "send the form back unchanged" looks like.
     const same = await patchOk(SCENE, {
       rev: before.rev,
-      properties: { id: "lighthouse-arrival", status: "played" },
+      properties: { id: "01-salzhafen", status: "done" },
     });
-    expect(same.properties.id).toBe("lighthouse-arrival");
-    expect(same.properties.status).toBe("played");
+    expect(same.properties.id).toBe("01-salzhafen");
+    expect(same.properties.status).toBe("done");
   });
 
   // A row always renders its properties (store/render.ts). The 400 for the
@@ -191,7 +176,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
     const before = await getEntry(SCENE);
     const res = await patchEntry(SCENE, {
       rev: before.rev - 1,
-      properties: { status: "ready" },
+      properties: { status: "done" },
     });
     expect(res.status).toBe(409);
     const body = (await res.json()) as {
@@ -215,7 +200,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
       {}, // missing everything
       { rev: before.rev }, // neither properties nor body
       { rev: before.rev, properties: {} }, // an empty patch writes nothing
-      { rev: "later", properties: { status: "ready" } }, // rev not a number
+      { rev: "later", properties: { status: "done" } }, // rev not a number
       { rev: before.rev, properties: ["status"] }, // properties not an object
       { rev: before.rev, body: 42 }, // body not a string
       { rev: before.rev, body: "x", force: "yes" }, // force not a boolean
@@ -236,7 +221,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
   });
 
   test("address safety and missing rows behave like the read API", async () => {
-    const field = { rev: 1, properties: { status: "ready" } };
+    const field = { rev: 1, properties: { status: "done" } };
     // A `..` segment never reaches the store: every URL parser on the way
     // resolves it away, so what arrives is a different, ordinary address
     // nobody has. The probe uses a neutral traversal target — only the `..`
@@ -245,10 +230,10 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the properties half", () 
     // An address the schema does not describe is simply not there.
     expect((await patchEntry("notes.txt", field)).status).toBe(404);
     expect((await patchEntry("01-salzhafen/nope", field)).status).toBe(404);
-    // An address naming the WRONG chapter for an existing scene id is a
-    // stale link: 404, exactly as GET answers it (store/entries.ts
-    // readByLocator).
-    expect((await patchEntry("02-nebel/lighthouse-arrival.md", field)).status).toBe(404);
+    // A scene has no address: what used to name one names nothing now.
+    expect((await patchEntry("01-salzhafen/leuchtturm/lighthouse-arrival", field)).status).toBe(
+      404,
+    );
   });
 });
 
@@ -331,14 +316,11 @@ describe("naming a campaign that has none", () => {
 // write — the properties of the row come back unchanged, key for key and
 // value for value.
 describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
-  const REFERENCE = "01-salzhafen/bucht/smuggler-captured";
-  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const REFERENCE = "01-salzhafen";
+  const SCENE = "01-salzhafen";
 
   test("roundtrip: writing the read body back changes nothing but the token", async () => {
     const before = await getEntry(REFERENCE);
-    // the reference scene carries callouts and `## If:` sections
-    expect(before.body).toContain("> [!check] Charisma (Deception)");
-    expect(before.body).toContain("## If: sie lügen");
 
     const after = await patchOk(REFERENCE, { rev: before.rev, body: before.body });
     expect(after.body).toBe(before.body);
@@ -366,7 +348,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
 
     const after = await patchOk(SCENE, { rev: before.rev, body });
     expect(after.path).toBe(SCENE);
-    expect(after.kind).toBe("scene");
+    expect(after.kind).toBe("chapter");
     expect(after.body).toBe(body);
     // properties untouched — same keys, same values, same order
     expect(after.properties).toEqual(before.properties);
@@ -432,9 +414,8 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
     // the address that arrives is an ordinary one nobody has — 404, like the
     // read side, and nothing is written either way.
     expect((await patchEntry("01-salzhafen/../../beispiel/inbox", text)).status).toBe(404);
-    // A stale link — right scene id, wrong chapter — is 404 on write just as
-    // it is on read (store/entries.ts readByLocator).
-    expect((await patchEntry("02-nebel/lighthouse-arrival.md", text)).status).toBe(404);
+    // A scene has no address, on write just as on read.
+    expect((await patchEntry("01-salzhafen/lighthouse-arrival", text)).status).toBe(404);
   });
 
   test("404 for an unknown campaign", async () => {
@@ -451,7 +432,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — the body half", () => {
 // dialog both save through, and the refusals that keep a no-op from looking
 // like a save.
 describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () => {
-  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const SCENE = "01-salzhafen";
 
   async function campaignVersion(): Promise<number> {
     const res = await app.request("/api/campaigns/beispiel/version");
@@ -464,11 +445,11 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
     const versionBefore = await campaignVersion();
     const after = await patchOk(SCENE, {
       rev: before.rev,
-      properties: { status: "played", trigger: "Sie betreten den Turm" },
+      properties: { status: "done", title: "Kapitel 1: Salzhafen" },
       body: "\n## Flow\n\nEin Satz.\n",
     });
-    expect(after.properties.status).toBe("played");
-    expect(after.properties.trigger).toBe("Sie betreten den Turm");
+    expect(after.properties.status).toBe("done");
+    expect(after.properties.title).toBe("Kapitel 1: Salzhafen");
     expect(after.body).toBe("\n## Flow\n\nEin Satz.\n");
     // ONE write: the rev steps exactly once, however much the request
     // carried. Two steps would leak the two statements this used to be.
@@ -493,7 +474,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
     // The second tab changes a field; the first tab still holds `read.rev`.
     const other = await patchEntry(SCENE, {
       rev: read.rev,
-      properties: { status: "played" },
+      properties: { status: "done" },
     });
     expect(other.status).toBe(200);
 
@@ -504,7 +485,7 @@ describe("PATCH /api/campaigns/:campaign/entries/* — both halves at once", () 
     });
     expect(forced.body).toBe("\n## Flow\n\nTrotzdem gespeichert.\n");
     // Only what the request carried was written — the status survived.
-    expect(forced.properties.status).toBe("played");
+    expect(forced.properties.status).toBe("done");
     expect(await getEntry(SCENE)).toEqual(forced);
   });
 });

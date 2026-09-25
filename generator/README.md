@@ -1,6 +1,7 @@
 # Generator
 
-Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → Platte.
+Pipeline: Quelltext (EN) → LLM → vorgeschlagene Szenen (DE) → Review-Vorschau
+→ Datenbank.
 
 ## Antwortformate
 
@@ -19,31 +20,32 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
   fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
   abzuschalten.
 
-**Szenen-Antworten.** Szenen-Teil und das Ergänzen einer Szene antworten mit
-dem Objekt, das die gespeicherte Szene **spiegelt**: die Eigenschaften unter
-`properties`, den ganzen Text als **ein** String unter `body`, die Hinweise
-für den DM unter `warnings`. NPC und Ort antworten als sie selbst, siehe
-unten.
+**Szenen-, NPC- und Orts-Antworten.** Szene, NPC und Ort sind jeweils ihre
+eigene Ressource mit eigenem Typ (ADR #31). Szenen-Teil und Szenen-Ergänzung
+antworten mit der Szene selbst ohne `rev`, NPC-Teil, NPC-Lauf und
+NPC-Ergänzung mit dem NPC, Orts-Teil und Orts-Ergänzung mit dem Ort — alle
+Felder nebeneinander, `body` eines davon — und daneben `warnings`. Eine
+Szene:
 
 ```json
 {
-  "properties": {
-    "id": "night-watch-quay",
-    "title": "Nachtwache am Kai",
-    "type": "planned",
-    "status": "draft"
-  },
+  "id": "night-watch-quay",
+  "title": "Nachtwache am Kai",
+  "type": "planned",
+  "trigger": null,
+  "chapter": "01-salzhafen",
+  "location": null,
+  "npcs": [],
+  "handouts": [],
+  "tags": ["social"],
+  "status": "draft",
   "body": "## Flow\n\nDie Wache murrt: „Wer nachts hier steht, hat was zu verbergen.“\n",
   "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."]
 }
 ```
 
-**NPC- und Orts-Antworten.** NPC und Ort sind jeweils ihre eigene Ressource
-mit eigenem Typ (ADR #31). NPC-Teil, NPC-Lauf und NPC-Ergänzung antworten mit
-dem NPC selbst ohne `rev`, Orts-Teil und Orts-Ergänzung mit dem Ort selbst
-ohne `rev` — alle Felder nebeneinander, `body` eines davon — und daneben
-`warnings`. Beim NPC reist `quickstats` als **Liste** von
-`{ "key": …, "value": … }`, der Wert immer ein String:
+Beim NPC reist `quickstats` als **Liste** von `{ "key": …, "value": … }`,
+der Wert immer ein String:
 
 ```json
 {
@@ -79,60 +81,57 @@ Ein Ort:
 Die Felder sind **je Entität** getypt — ein Modell kann genau die Felder
 schreiben, die der DM auch bearbeiten kann, und keins mehr. Nichts setzt aus
 einer Antwort einen Markdown-Text zusammen und nichts liest einen zurück,
-also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Bei der
-Szene bleibt der **Entwurf** das Paar aus Eigenschaften und `body` von der
-Antwort bis in die Zeile (ADR #24). Ein vorgeschlagener NPC ist der NPC ohne
-`rev` (`NpcProposal`), ein vorgeschlagener Ort der Ort ohne `rev`
-(`LocationProposal`); ein Job listet sie unter `result.npcs` bzw.
-`result.locations`, getrennt von den Szenen, und Prüfen, Entscheiden und
-Übernehmen laufen für sie über ihre `id`. Ändert der DM einen
-vorgeschlagenen NPC im Review, liegt die Änderung als `npcEdits[<id>]` neben
-dem Vorschlag und wird beim Übernehmen darübergelegt.
+also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Eine
+vorgeschlagene Szene ist die Szene ohne `rev` (`SceneProposal`), ein
+vorgeschlagener NPC der NPC ohne `rev` (`NpcProposal`), ein vorgeschlagener
+Ort der Ort ohne `rev` (`LocationProposal`); ein Job listet sie unter
+`result.scenes`, `result.npcs` und `result.locations`, und Prüfen,
+Entscheiden und Übernehmen laufen für jede über ihre `id`. Ändert der DM
+eine vorgeschlagene Szene oder einen vorgeschlagenen NPC im Review, liegt
+die Änderung als `sceneEdits[<id>]` bzw. `npcEdits[<id>]` neben dem
+Vorschlag und wird beim Übernehmen darübergelegt.
 
-Die Antwort-Schemata von NPC und Ort haben **genau eine Quelle**: ihr
-zod-Schema (`shared/src/npc.ts`, `shared/src/location.ts`). Daraus leitet
-jede Entität ihre Generator-Form selbst ab, mit der API von zod
-(`npcReplySchema`, `locationReplySchema`: die Entität ohne `rev`, die
-optionalen Felder `null`-fähig statt optional, beim NPC `quickstats` als
-Liste von Paaren, dazu `warnings`, nichts Zusätzliches erlaubt), und
-`npcReplyRequest` in `server/src/npc-reply.ts` bzw. `locationReplyRequest` in
-`server/src/location-reply.ts` gibt sie per `z.toJSONSchema` an den Provider
-— je Lauf unter eigenem Namen (`npc`, `augmented_npc`, `location`,
-`augmented_location`). Das Schema trägt keine `description`: was das Modell
-über die Felder wissen muss (die id-Regel, welche Kapitel-id `chapter`
-nennen darf, was `motivation` oder `atmosphere` ist, die Form von
-`quickstats`, `body` und `warnings`), steht im Prompt der Entität unter
-„## Die Felder des NPC“ bzw. „## Die Felder des Orts“, und der Ergänzen-Lauf
-bekommt genau diesen Abschnitt mit. Die Szene lädt ihre Schemata als
-**lesbares JSON** aus `shared/schema/`, eines je Lauf (`scene.schema.json`,
-`augmented-scene.schema.json`), dazu `outline.schema.json`;
-`shared/test/entry-schema.test.ts` prüft deren
-Schlüssel und Wertelisten gegen die Feldliste
-(`shared/src/property-fields.ts`) und für **jedes** Schema, abgeleitet oder
-geladen, die Regeln des strict mode. Der Unterschied zwischen den Läufen
-steht in den Schemata selbst: eine bestehende Szene behält den Status, den
-der DM ihr gegeben hat, während eine **neue** Szene nur `draft` sein kann.
+Die Antwort-Schemata von Szene, NPC und Ort haben **genau eine Quelle**: ihr
+zod-Schema (`shared/src/scene.ts`, `shared/src/npc.ts`,
+`shared/src/location.ts`). Daraus leitet jede Entität ihre Generator-Form
+selbst ab, mit der API von zod (`sceneReplySchema`, `npcReplySchema`,
+`locationReplySchema`: die Entität ohne `rev`, die optionalen Felder
+`null`-fähig statt optional, beim NPC `quickstats` als Liste von Paaren,
+dazu `warnings`, nichts Zusätzliches erlaubt), und `sceneReplyRequest` in
+`server/src/scene-reply.ts`, `npcReplyRequest` in `server/src/npc-reply.ts`
+bzw. `locationReplyRequest` in `server/src/location-reply.ts` gibt sie per
+`z.toJSONSchema` an den Provider — je Lauf unter eigenem Namen (`scene`,
+`augmented_scene`, `npc`, `augmented_npc`, `location`,
+`augmented_location`). Bei der Szene unterscheiden sich die Läufe auch in
+der Form: eine **neue** Szene kann nur `draft` sein (`newSceneReplySchema`),
+eine bestehende behält den Status, den der DM ihr gegeben hat. Das Schema
+trägt keine `description`: was das Modell über die Felder wissen muss (die
+id-Regel, welche Kapitel-id `chapter` nennen darf, was `motivation` oder
+`atmosphere` ist, die Form von `quickstats`, `body` und `warnings`), steht
+im Prompt der Entität unter „## Die Felder der Szene“, „## Die Felder des
+NPC“ bzw. „## Die Felder des Orts“, und der Ergänzen-Lauf bekommt genau
+diesen Abschnitt mit. Die Gliederung lädt ihr Schema als lesbares JSON aus
+`shared/schema/outline.schema.json`; `shared/test/reply-schema.test.ts`
+prüft für **jedes** Schema, abgeleitet oder geladen, die Regeln des strict
+mode.
 
 **Die Prompts zeigen genau dieses Objekt.** Der Formatabschnitt jedes
-Create-Prompts — „## Eigenschaften und Text des Eintrags“ bei der Szene,
-„## Die Felder des NPC“ beim NPC, „## Die Felder des Orts“ beim Ort — führt
-ein ```json-Beispiel des Antwort-Objekts: die Felder in derselben Reihenfolge
-wie das Schema der Entität (ein Feld ohne Quelle als `null`) — bei der Szene
-unter `properties`, bei NPC und Ort nebeneinander —, `body` als **ein**
-String — dessen
-Aufbau, `## Flow`, `## If:`, die sechs Callouts und `[[id]]`-Verweise, steht
-als Beschreibung dieses Strings darunter — und `warnings` als Liste von
-Strings. Prompt, Schema und Few-Shot zeigen damit Feld für Feld dieselbe
-Form.
+Create-Prompts — „## Die Felder der Szene“, „## Die Felder des NPC“, „## Die
+Felder des Orts“ — führt ein ```json-Beispiel des Antwort-Objekts: die
+Felder nebeneinander in derselben Reihenfolge wie das Schema der Entität
+(ein optionales Feld ohne Quelle als `null`), `body` als **ein** String —
+dessen Aufbau, `## Flow`, `## If:`, die sechs Callouts und
+`[[id]]`-Verweise, steht als Beschreibung dieses Strings darunter — und
+`warnings` als Liste von Strings. Prompt, Schema und Few-Shot zeigen damit
+Feld für Feld dieselbe Form.
 
 Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
 und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
 Prozess):
 
 * kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
-  nicht sagen kann, steht in einer `description` (bei der Szene) bzw. im
-  Prompt der Entität (bei NPC und Ort) und wird dort geprüft, wo es immer
-  geprüft wurde
+  nicht sagen kann, steht im Prompt der Entität (bei der Gliederung in einer
+  `description`) und wird dort geprüft, wo es immer geprüft wurde
   (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
 * **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
   stattdessen `null`-fähig, und der Server liest `null` als „nicht
@@ -141,10 +140,10 @@ Prozess):
   ausdrücken, also reist sie als **Liste** von `{ key, value }`, und
   `npcFromReply` faltet sie zurück in die Kurzwerte des NPC.
 
-Warum nicht den Eintrag als **einen** Markdown-Text als Antwort? Weil damit
+Warum nicht eine Szene als **einen** Markdown-Text als Antwort? Weil damit
 die JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum,
 ein Satz davor, ein Abschiedssatz danach, zwei waagerechte Linien, die wie
-Eigenschaften aussehen. Diese Hälfte kann keine API garantieren, sie
+Felder davor aussehen. Diese Hälfte kann keine API garantieren, sie
 müsste also von Hand toleriert werden — und jeder Fehlgriff ist eine
 Korrekturrunde oder stiller Datenverlust. Ein erzwungenes Objekt kann das
 alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht ein
@@ -152,7 +151,7 @@ alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht ein
 für Zeichen.
 
 **Der tolerante Leser** bleibt als Netz für Endpoints, die das Feld annehmen
-und ignorieren (`parseJsonReply` in `server/src/entry-reply.ts`, von allen
+und ignorieren (`parseJsonReply` in `server/src/json-reply.ts`, von allen
 Antworten benutzt): der ganze Text, dann ein ```json-Zaun, dann die Spanne von
 der ersten `{` bis zur letzten `}` — und **eine** deterministische Reparatur
 (`jsonrepair`, exakt gepinnt) für Komma am Ende oder einfache
@@ -174,7 +173,7 @@ der Szenenliste, der Liste neuer NPCs (`npcs`), der Liste neuer Orte
 (`locations`) und, für ein neues Kapitel, dessen Beschreibung.
 Die **semantischen** Prüfungen bleiben auch
 dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
-Durchlauf nur einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER
+Durchlauf nur einmal vor“, „dieser Verweis in `refs` ist eine Szene DIESER
 Gliederung“ oder „das Kapitel kommt aus dem Kontext“.
 
 **Die Few-Shots sind Antworten**: `example-output.json`,
@@ -191,7 +190,7 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    `outline-example-output.json`): kleines JSON, per Schema erzwungen (siehe
    „Antwortformate“) — mit der Szenenliste: `id`,
    `title`, `type`, `location`, Querverweise (`refs`) — und je einer Liste
-   neuer NPCs (`npcs`) und neuer Orte (`locations`), jeder Eintrag darin
+   neuer NPCs (`npcs`) und neuer Orte (`locations`), jeder darin
    `{ id, name, summary }`. Jede Szene nennt zusätzlich den **ersten und
    letzten Satz ihres Quelltext-Abschnitts wörtlich** (`sourceExcerpt`); der
    Server schneidet den Abschnitt damit aus dem Quelltext. Findet er die
@@ -272,8 +271,8 @@ Szenen-Aufruf, jeden NPC- und Orts-Aufruf und die Ein-Aufruf-Läufe:
    „Antwortformate“ oben.
 4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
    Inhalt):
-   - nur bekannte Eigenschaften, kebab-`id`? `type`/`status` gültig?
-     `status == draft`?
+   - nur bekannte Felder, kebab-`id`? `type`/`status` gültig? Neue Szene:
+     `status == draft`, das Schema erzwingt es; `chapter` das des Laufs?
      NPC: `status` einer der vier Werte (Normalfall `alive`), das Schema
      erzwingt ihn; ein Ort hat kein `status`-Feld, sein Schema kennt keins.
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Vorschlag
@@ -290,7 +289,7 @@ Szenen-Aufruf, jeden NPC- und Orts-Aufruf und die Ein-Aufruf-Läufe:
    nicht an den Nutzer. Ausnahme: eine vom Modell abgeschnittene Antwort
    (finish_reason/stop_reason) bricht sofort ab — Korrektur-Turns können
    ein Token-Limit nicht heilen, sie kosten nur.
-5. Server prüft den fertigen Draft gegen die **Namenskonventionen** des
+5. Server prüft den fertigen Vorschlag gegen die **Namenskonventionen** des
    Kampagnenwissens (Wortgrenzen, Groß/Klein-unabhängig, keine Heuristik)
    und legt Treffer als `namingHints` ins Job-Ergebnis.
 6. App zeigt Review-Vorschau: Szenen editierbar, vorgeschlagene NPCs und
@@ -312,21 +311,20 @@ unter einer bindenden Überschrift:
 - Stilregel: Keine Würfelwerte im Read-Aloud-Text.
 ```
 
-`[[slug]]`-Referenzen in Einträgen werden vorher aufgelöst (der Modell-Text
-soll Namen enthalten, keine Slugs). Ohne Einträge fehlt der Abschnitt ganz —
+`[[slug]]`-Referenzen im Kampagnenwissen werden vorher aufgelöst (der
+Modell-Text soll Namen enthalten, keine Slugs). Ohne Zeilen fehlt der Abschnitt ganz —
 der Prompt sieht dann genauso aus wie vorher.
 
 ## Deutsche Orthografie
 
 Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
-`location-system-prompt.md`, `augment-system-prompt.md`,
-`location-augment-system-prompt.md` und `outline-system-prompt.md`) tragen
-**dieselbe**
-Regel „Deutsche Orthografie“: jeder echte Text — Fließtext, Read-Alouds,
-Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
-Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
-`appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß als genau
-diese Zeichen. **Einzige Ausnahme**: `id`-Werte (und
+`location-system-prompt.md`, `scene-augment-system-prompt.md`,
+`npc-augment-system-prompt.md`, `location-augment-system-prompt.md` und
+`outline-system-prompt.md`) tragen **dieselbe** Regel „Deutsche
+Orthografie“: jeder echte Text — Fließtext, Read-Alouds, Callouts,
+`## If:`-Bedingungen, Überschriften, `warnings` und jedes Feld, das Text ist
+(`title`, `name`, `role`, `voice`, `appearance`, `trigger`, `statblock` …) —
+nutzt ä/ö/ü/ß als genau diese Zeichen. **Einzige Ausnahme**: `id`-Werte (und
 `location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
 dem Quelltext bleiben unverändert.
 
@@ -345,7 +343,10 @@ Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
 zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
 nur den Formatabschnitt einschneidet (`formatContract` in
-`server/src/generator-augment.ts`; beim NPC „## Die Felder des NPC“ aus
+`server/src/generator-augment.ts`; bei der Szene „## Die Felder der Szene“
+aus `system-prompt.md` unter den Szenen-Ergänzen-Prompt
+`scene-augment-system-prompt.md`, `server/src/scene-augment.ts`, beim NPC
+„## Die Felder des NPC“ aus
 `npc-system-prompt.md` unter den NPC-Ergänzen-Prompt
 `npc-augment-system-prompt.md`, `server/src/npc-augment.ts`, beim Ort
 „## Die Felder des Orts“ aus `location-system-prompt.md` unter den
@@ -357,7 +358,7 @@ Prompt.
 ## Tabellen
 
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
-„Tabellen“** in allen System-Prompts, die Einträge schreiben — der
+„Tabellen“** in allen System-Prompts, die Szenen, NPCs oder Orte schreiben — der
 Gliederungs-Prompt trägt sie nicht, weil er allein die Gliederung ausgibt
 (die Orthografie-Regel steht dort trotzdem, weil Titel, Einzeiler und
 `warnings` Text sind) — in den drei Create-Prompts unter
@@ -417,27 +418,26 @@ Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
 antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
 docs/DEPLOYMENT.md Abschnitt 2.
 
-## Adressen bildet der Server
+## Szenen ergänzen
 
-Das Modell liefert **Szenen, NPCs und Orte**, und der Server bildet die
-Adresse einer Szene:
+Eine bestehende Szene wird an ihrer Ressource ergänzt (`POST
+…/scenes/<id>/augment`, übernommen mit `POST …/scenes/<id>/augment/apply`):
+`scene-augment-system-prompt.md` trägt die Ergänzungsregel, der Abschnitt
+„## Die Felder der Szene“ aus `system-prompt.md` die Felder, und die
+bestehende Szene steht im Prompt in der Antwort-Form.
 
-* Szenen: `<kapitel>/<id>` — Kapitel aus dem Kontext des Laufs, `id` aus
-  den Eigenschaften. Die **Gruppe** kommt aus `location`, also lautet die
-  gespeicherte Adresse `<kapitel>/<location>/<id>` (ohne `location`:
-  Kapitelebene).
-* Vorgeschlagene NPCs und Orte haben keine Adresse: sie stehen als NPCs bzw.
-  Orte ohne `rev` unter `result.npcs` und `result.locations` und werden über
-  ihre `id` geprüft, entschieden und übernommen (`accept { npcs: [<id>],
-  locations: [<id>] }`; die Antwort nennt die geschriebenen unter `npcs` und
+## Vorschläge tragen keine Adresse
+
+Das Modell liefert **Szenen, NPCs und Orte**, jede als ihre Entität ohne
+`rev`, und keine davon hat eine Adresse:
+
+* Vorgeschlagene Szenen stehen unter `result.scenes`, jede mit dem Kapitel
+  des Laufs in `chapter`, vorgeschlagene NPCs und Orte unter `result.npcs`
+  und `result.locations`. Geprüft, entschieden und übernommen wird jede über
+  ihre `id` (`accept { scenes: [<id>], npcs: [<id>], locations: [<id>] }`;
+  die Antwort nennt die geschriebenen unter `scenes`, `npcs` und
   `locations`).
-* NPC-Lauf und Ergänzen-Lauf: ein Objekt ohne `path`; beim Ergänzen steht
-  das Ziel ohnehin serverseitig fest — bei NPC und Ort ist es die Ressource,
-  an der der Lauf hängt (`POST …/npcs/<id>/augment`, `POST
+* NPC-Lauf und Ergänzen-Lauf: beim Ergänzen steht das Ziel ohnehin
+  serverseitig fest — es ist die Ressource, an der der Lauf hängt (`POST
+  …/scenes/<id>/augment`, `POST …/npcs/<id>/augment`, `POST
   …/locations/<id>/augment`, übernommen mit `…/augment/apply`).
-
-Der Prüfschritt adressiert die Teile eines Laufs weiterhin über die vom
-Server gebildete Adresse (`GenerateResult.scenes[].path` = `<kapitel>/<id>`);
-beim Übernehmen kann die tatsächlich geschriebene Adresse davon abweichen,
-wenn die Szene eine `location` nennt — genau dafür meldet die Antwort
-`written: { <prüfschritt-adresse>: <geschriebene adresse> }`.

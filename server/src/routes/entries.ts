@@ -3,8 +3,7 @@
 // WHAT `path` MEANS: an ADDRESS, not a path on disk — no `.md`, no extension at
 // all. The complete schema is in ../store/paths.ts:
 //
-//   campaign · <chapter> ·
-//   <chapter>/<scene-id> · <chapter>/<group>/<scene-id>
+//   campaign · <chapter>
 //
 // The wire vocabulary follows from that: an entry's fields are `properties`,
 // its markdown is `body`, and its optimistic-concurrency token is `rev` (the
@@ -38,9 +37,9 @@ function entryAddress(c: Context): string {
 
 // GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
 // (properties, body, rev). The address IS the path — the schema is in
-// store/paths.ts, and it describes the campaign, its chapters and scenes. An
-// address that names an npc or a location is a 404: see the npc and location
-// routes.
+// store/paths.ts, and it describes the campaign and its chapters. A scene, an
+// npc and a location have no address, so reaching for one here is a 404: see
+// the scene, npc and location routes.
 entryRoutes.get("/campaigns/:campaign/entries/*", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), entryAddress(c))),
 );
@@ -60,13 +59,7 @@ entryRoutes.get("/campaigns/:campaign/entries/*", async (c) =>
 // { code: "nothing_to_write" }: a request that changes nothing is a bug in
 // the caller, not a save.
 //
-// A reference in `properties` — `chapter`, `location`, an `npcs` entry — has
-// to name an entry that exists: 400 with the code the app turns into its
-// create-this-first hint, never a new entry as a side effect. A scene's
-// `chapter` may be SET that way but never REMOVED (400): a scene belongs to
-// a chapter and must not fall out of the tree. A key the entry's kind has no
-// field for is a 400 as well; a key that is not part of the kind but sits on
-// the row may still be changed or deleted with null.
+// A key the entry's kind has no field for is a 400.
 //
 // A stale `rev` is 409 { code: "rev_conflict", rev, entry } and writes
 // nothing — `entry` is the entry as it stands now, so the conflict dialog
@@ -77,9 +70,10 @@ entryRoutes.get("/campaigns/:campaign/entries/*", async (c) =>
 //
 // 404 for an entry that does not exist — including for an address that reaches
 // for one of the three LISTS, which have none (ADR #26), and for one that
-// names an npc or a location, each written through its own resource. The lists are
-// written through their own endpoints: PUT /glossary, POST /inbox, POST /log,
-// the session verbs, PATCH /sessions/:id and the review actions.
+// reaches for a scene, an npc or a location, each written through its own
+// resource. The lists are written through their own endpoints: PUT /glossary,
+// POST /inbox, POST /log, the session verbs, PATCH /sessions/:id and the
+// review actions.
 entryRoutes.patch("/campaigns/:campaign/entries/*", async (c) => {
   const body = await jsonBody(c, ["rev", "properties", "body", "force"]);
   const properties = body.properties;

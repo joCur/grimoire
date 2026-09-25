@@ -9,11 +9,10 @@
 // exception (generator/README.md step 4).
 //
 // EVERY request carries the schema of the object it wants
-// back — the outline its own (shared/outline-schema), a scene call the
-// object that mirrors the stored row (shared/entry-schema), an npc or a
-// location call the entity's own reply schema (shared/npc, shared/location)
-// — and the transports force it, because that is the one guarantee an API
-// can give:
+// back — the outline its own (shared/outline-schema), a scene, an npc or a
+// location call the entity's own reply schema (shared/scene, shared/npc,
+// shared/location) — and the transports force it, because that is the one
+// guarantee an API can give:
 //
 //   Claude — the schema travels as a TOOL and `tool_choice` forces the call,
 //       so the reply cannot be prose, cannot miss a required key and cannot
@@ -33,8 +32,15 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
-import type { GeneratedEntryKind, LocationProposal, NpcReplyFields } from "@grimoire/shared";
+import type { LocationProposal, NpcReplyFields, SceneReplyFields } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
+
+/**
+ * Which run a reply schema is for: `create` writes something new, `augment`
+ * completes something that exists. The runs of one entity share its fields
+ * and differ in the schema's name, and a scene in what its status may be.
+ */
+export type RunMode = "create" | "augment";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
@@ -54,7 +60,7 @@ export interface GenerateRequest {
     newChapter?: boolean;
     npcs: Array<{ id: string; name: string }>;
     locations: Array<{ id: string; name: string }>;
-    /** Id the DM pinned for the generated entry (NPC run) — absent: free choice. */
+    /** Id the DM pinned for the generated npc (NPC run) — absent: free choice. */
     targetId?: string;
   };
   sourceText: string; // English source text ("" when a run has none)
@@ -76,25 +82,16 @@ export interface GenerateRequest {
    * per-part marker inside it would make every part's prefix a different
    * one — which is exactly the saving prompt caching is for.
    *
-   * Absent for the entry calls (their `vorgegebene id` already says it) and
-   * for the single-call runs.
+   * Absent for the npc and location calls (their `vorgegebene id` already
+   * says it) and for the single-call runs.
    */
   assignment?: string;
   /**
-   * The scene an AUGMENT run works on: its address, its kind and its two
-   * halves, the properties and the body, exactly as the store holds them.
-   * Absent for every other run — and then the prompt has no such section.
-   *
-   * The transport decides how it LOOKS in the prompt
-   * (`formatExistingEntry`): the scene travels as data here, and turning it
-   * into prompt text is formatting, not a storage format.
+   * The scene a SCENE augment run works on, every field of it in its reply
+   * form (`sceneToReply`, @grimoire/shared/scene) — shown as the very object
+   * the reply is forced into. Absent for every other run.
    */
-  existingEntry?: {
-    path: string;
-    kind: GeneratedEntryKind;
-    properties: Record<string, unknown>;
-    body: string;
-  };
+  existingScene?: SceneReplyFields;
   /**
    * The npc an NPC augment run works on, every field of it in its reply form
    * (`npcToReply`, @grimoire/shared/npc) — shown as the very object the reply
@@ -114,10 +111,10 @@ export interface GenerateRequest {
    */
   instruction?: string;
   /**
-   * The JSON schema the reply must satisfy. Every call sets it —
-   * the outline its own, an entry call its kind's. It stays OPTIONAL in the
-   * type so a caller that forces nothing (and a test that wants the unforced
-   * transport) is still a legal request.
+   * The JSON schema the reply must satisfy. Every call sets it — the
+   * outline its own, a scene, npc or location call its entity's. It stays
+   * OPTIONAL in the type so a caller that forces nothing (and a test that
+   * wants the unforced transport) is still a legal request.
    */
   jsonSchema?: ReplySchema;
 }
@@ -254,7 +251,7 @@ export const KNOWLEDGE_HEADING =
  * A constant for the same reason KNOWLEDGE_HEADING is one: the prompt test
  * asserts on it, and the E2E stub reads the prompt by it.
  */
-export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
+export const EXISTING_SCENE_HEADING = "## Bestehende Szene — ergänzen, nicht ersetzen";
 
 /** The same block of an npc augment run. */
 export const EXISTING_NPC_HEADING = "## Bestehender NPC — ergänzen, nicht ersetzen";
@@ -292,23 +289,6 @@ export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
  */
 export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
 
-/**
- * The existing scene of an augment run, as PROMPT TEXT: the `properties` and
- * `body` pair as pretty-printed JSON — the very shape the reply is forced
- * into, so the model reads the scene the way it has to write it back.
- *
- * This is formatting and nothing else. Nothing parses this text again: the
- * proposal is validated against the scene's own halves
- * (generator-augment.ts), and the store never sees it.
- */
-export function formatExistingEntry(entry: {
-  kind: GeneratedEntryKind;
-  properties: Record<string, unknown>;
-  body: string;
-}): string {
-  return JSON.stringify({ properties: entry.properties, body: entry.body }, null, 2);
-}
-
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
@@ -320,7 +300,7 @@ export function formatExistingEntry(entry: {
  *             few-shot and the run's outline. It stands FIRST, so an
  *             OpenAI-compatible endpoint's implicit prefix caching sees the
  *             same prefix on every part of a run without being told.
- *   variable  what this ONE call is about: the entry an augment run works on,
+ *   variable  what this ONE call is about: what an augment run works on,
  *             the DM's instruction, the source text (for a pipeline part: its
  *             excerpt).
  *
@@ -350,12 +330,12 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       `locations: ${locList || "(keine)"}`,
       ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),
     ].join("\n"),
-    "## Referenz-Zieleintrag (Few-Shot)",
+    "## Referenz-Beispiel (Few-Shot)",
     // The few-shot is a REPLY: every prompt's example is the JSON object its
     // schema describes, so the fence says json and the model sees the shape
-    // it will be forced into. The augment run's „Bestehender Eintrag" below
-    // is shown in that same shape, so the model reads the entry the way it
-    // has to answer about it.
+    // it will be forced into. What an augment run works on is shown below in
+    // that same shape, so the model reads it the way it has to answer about
+    // it.
     "```json",
     req.fewShotTarget,
     "```",
@@ -374,13 +354,13 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       : [ASSIGNMENT_HEADING, req.assignment]),
     // The augment run's two extra sections. They stand BELOW the
     // few-shot (which is the FORMAT reference) and ABOVE the source text: the
-    // model has to know what the entry is before it reads what to add to it.
-    ...(req.existingEntry === undefined
+    // model has to know what stands there before it reads what to add to it.
+    ...(req.existingScene === undefined
       ? []
       : [
-          `${EXISTING_ENTRY_HEADING} (${req.existingEntry.path})`,
+          `${EXISTING_SCENE_HEADING} (${req.existingScene.id})`,
           "```json",
-          formatExistingEntry(req.existingEntry),
+          JSON.stringify(req.existingScene, null, 2),
           "```",
         ]),
     ...(req.existingNpc === undefined
@@ -541,8 +521,8 @@ export class ClaudeProvider implements LLMProvider {
 /**
  * The Messages API request body. Split out of `complete` because the two
  * reply shapes differ HERE and nowhere else: a schema request
- * carries the schema as a forced tool, an entry request carries nothing
- * extra at all.
+ * carries the schema as a forced tool, a request without one carries
+ * nothing extra at all.
  */
 export function claudeBody(
   req: GenerateRequest,
@@ -752,7 +732,7 @@ export class OpenAICompatProvider implements LLMProvider {
    * the schema form, and nothing at all for a request without one.
    *
    * `LLM_FORCE_JSON=0` turns it off for endpoints that reject the field
-   * altogether; the tolerant reader in ./entry-reply (fence, brace span,
+   * altogether; the tolerant reader in ./json-reply (fence, brace span,
    * one `jsonrepair` pass) stays the safety net for endpoints that accept the
    * field and ignore it.
    */

@@ -6,8 +6,9 @@
 //   1. CONTRACT FIELDS ARE COLUMNS, and there is nothing beside them.
 //      Everything README.md names for an entity gets its own column; a key
 //      the contract does not name has no field behind it and is refused
-//      (the entry PATCH answers 400, and so does a seed). The contract
-//      lists live once, in store/properties.ts `PROPERTY_CONTRACT`.
+//      (a PATCH answers 400, and so does a seed). The contract is the
+//      entity's zod schema (ADR #31) — for the campaign and the chapter
+//      still the lists in store/properties.ts `PROPERTY_CONTRACT`.
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
@@ -68,7 +69,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { NPC_STATUSES } from "@grimoire/shared/npc";
-import { CHAPTER_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/types";
+import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
+import { CHAPTER_STATUSES } from "@grimoire/shared/types";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -254,8 +256,8 @@ export const scenes = sqliteTable(
     id: text("id").notNull(),
     /**
      * Owning chapter — NOT NULL and a foreign key (rule 3). A scene belongs
-     * to a chapter: the chapter is part of the scene's address, so a scene
-     * without one has nowhere to be read.
+     * to a chapter: the chapter lists it, so a scene without one would be
+     * listed nowhere. It may change; it is never cleared.
      */
     chapterId: text("chapter_id").notNull(),
     title: text("title").notNull().default(""),
@@ -264,12 +266,8 @@ export const scenes = sqliteTable(
     /** Free-text firing condition — only meaningful for contingency scenes. */
     trigger: text("trigger"),
     /**
-     * The scene's location — a foreign key to an existing location entry, or
-     * null when the scene sits at chapter level. Never free text.
-     *
-     * It is part of the scene's ADDRESS — `<chapter>/<location>/<id>` is
-     * derived from this column, which is why there is no independent
-     * group column (ADR #17). It does not order
+     * The scene's location — a foreign key to an existing location, or null
+     * when the scene names none. Never free text. It does not order
      * anything: `pos` below does that.
      */
     location: text("location"),
@@ -295,12 +293,12 @@ export const scenes = sqliteTable(
      * (store/chapters.ts `sceneRunPos`), and
      * `PUT /chapters/:chapter/scene-order` hands out the whole chapter's
      * positions from the order the DM dragged them into. Nothing reads an
-     * ordering out of the title, the address or the location any more.
+     * ordering out of the title or the location.
      *
-     * It is not a property either (store/properties.ts `SCENE_KEYS`): the
+     * It is not a field of the scene either (@grimoire/shared/scene): the
      * position of a scene among its siblings is a statement about the
-     * chapter, so it is written where the chapter is guarded, not in the
-     * scene's own properties dialog.
+     * chapter, so it is written where the chapter is guarded, not with the
+     * scene's own fields.
      */
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
@@ -650,7 +648,7 @@ export const sessionScenesPlayed = sqliteTable(
   {
     campaignId: text("campaign_id").notNull(),
     sessionId: text("session_id").notNull(),
-    /** The scene — a foreign key to an existing entry (rule 3). */
+    /** The scene — a foreign key to an existing scene (rule 3). */
     sceneId: text("scene_id").notNull(),
     pos: integer("pos").notNull(),
   },
@@ -797,7 +795,7 @@ export const campaignKnowledge = sqliteTable(
  * The generate job of a campaign (ADR #10 addendum), at most one per
  * campaign and persisted so it survives a restart. The
  * result/error/edit payloads stay JSON: they are the API's own shapes
- * (`GenerateResult`, `GenerateJobError`, `draftEdits`) and nothing queries
+ * (`GenerateResult`, `GenerateJobError`, `sceneEdits`) and nothing queries
  * inside them.
  *
  * "At most one per campaign" is a CONSTRAINT, not a convention: the unique
@@ -812,24 +810,26 @@ export const generateJobs = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** "scene" | "npc" | "augment" | "npc-augment" | "location-augment". */
+    /** "scene" | "npc" | "scene-augment" | "npc-augment" | "location-augment". */
     kind: text("kind").notNull().default("scene"),
     /**
-     * Address of the scene an `augment` run targets; NULL for every other
-     * run. Stored from the start of the run, so a job that is still going can
-     * already name what it works on.
+     * The id of the scene a `scene-augment` run works on; NULL for every
+     * other run. Stored from the start of the run, so a job that is still
+     * going can already name what it works on. No foreign key: a job is a
+     * cache of a run, and deleting the scene leaves a proposal that simply
+     * can no longer be accepted.
      */
-    targetPath: text("target_path"),
+    sceneId: text("scene_id"),
     /**
      * The id of the npc an `npc-augment` run works on; NULL for every other
-     * run. Stored from the start of the run, like `target_path`. No foreign
+     * run. Stored from the start of the run, like `scene_id`. No foreign
      * key: a job is a cache of a run, and deleting the npc leaves a proposal
      * that simply can no longer be accepted.
      */
     npcId: text("npc_id"),
     /**
      * The id of the location a `location-augment` run works on; NULL for
-     * every other run. Stored from the start of the run, like `target_path`.
+     * every other run. Stored from the start of the run, like `scene_id`.
      * No foreign key: a job is a cache of a run, and deleting the location
      * leaves a proposal that simply can no longer be accepted.
      */
@@ -849,13 +849,18 @@ export const generateJobs = sqliteTable(
     result: text("result"),
     npcResult: text("npc_result"),
     /**
-     * The augment PROPOSAL — JSON: an `AugmentResult` for an `augment` run,
-     * an `NpcAugmentResult` for an `npc-augment` run, a
+     * The augment PROPOSAL — JSON: a `SceneAugmentResult` for a
+     * `scene-augment` run, an `NpcAugmentResult` for an `npc-augment` run, a
      * `LocationAugmentResult` for a `location-augment` run.
      */
     augmentResult: text("augment_result"),
     error: text("error"),
-    draftEdits: text("draft_edits").notNull().default("{}"),
+    /**
+     * The DM's changes to the proposed scenes — JSON, one `SceneChange` per
+     * scene id (`GenerateJob.sceneEdits`), applied on top of the proposal
+     * when it is accepted.
+     */
+    sceneEdits: text("scene_edits").notNull().default("{}"),
     /**
      * The DM's changes to the proposed npcs — JSON, one `NpcChange` per npc
      * id (`GenerateJob.npcEdits`), applied on top of the proposal when it is

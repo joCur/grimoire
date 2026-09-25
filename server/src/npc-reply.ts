@@ -14,15 +14,14 @@ import {
   npcFromReply,
   npcProposalSchema,
   npcReplySchema,
-  type EntryMode,
   type NpcProposal,
 } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
-import { parseJsonReply, REPAIRED_ENTRY_WARNING } from "./entry-reply";
-import type { ReplySchema } from "./llm-provider";
+import { parseJsonReply, REPAIRED_OBJECT_WARNING } from "./json-reply";
+import type { ReplySchema, RunMode } from "./llm-provider";
 
 /** The tool (Claude) or `json_schema` (OpenAI) name an npc call travels under, per run. */
-const NPC_REPLY_NAMES: Record<EntryMode, string> = {
+const NPC_REPLY_NAMES: Record<RunMode, string> = {
   create: "npc",
   augment: "augmented_npc",
 };
@@ -33,7 +32,7 @@ const NPC_REPLY_NAMES: Record<EntryMode, string> = {
  * a request carries the schema as data. Built on every call, so no request
  * can reach into the next one's payload.
  */
-export function npcReplyRequest(mode: EntryMode): ReplySchema {
+export function npcReplyRequest(mode: RunMode): ReplySchema {
   const { $schema: _dialect, ...schema } = z.toJSONSchema(npcReplySchema) as JsonSchema;
   return { name: NPC_REPLY_NAMES[mode], schema };
 }
@@ -84,7 +83,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function parseNpcReply(
   raw: string,
-  mode: EntryMode = "create",
+  mode: RunMode = "create",
 ): { ok: true; reply: NpcReply } | { ok: false; errors: string[] } {
   const parsed = parseJsonReply(raw);
   if (parsed === null || !isRecord(parsed.value)) {
@@ -136,7 +135,7 @@ export function parseNpcReply(
         // lines and exactly one trailing newline.
         body: `${npc.body.replace(/^\n+/, "").trimEnd()}\n`,
       },
-      warnings: parsed.repaired ? [...notes, REPAIRED_ENTRY_WARNING] : notes,
+      warnings: parsed.repaired ? [...notes, REPAIRED_OBJECT_WARNING] : notes,
       ignored,
     },
   };

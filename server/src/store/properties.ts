@@ -5,8 +5,9 @@
 // seed naming one is refused. Applying a flat patch to a rendered properties
 // mapping is the other half, `null` deleting a key.
 //
-// The npc and the location have no list here: each one's zod schema is the
-// contract (ADR #31, @grimoire/shared/npc, @grimoire/shared/location).
+// The scene, the npc and the location have no list here: each one's zod
+// schema is the contract (ADR #31, @grimoire/shared/scene,
+// @grimoire/shared/npc, @grimoire/shared/location).
 
 import { ApiError } from "../api-error";
 
@@ -16,18 +17,6 @@ import { ApiError } from "../api-error";
  * is not on its kind's list has no field behind it, so a patch naming one is
  * a 400 and a seed naming one is refused.
  */
-export const SCENE_KEYS = [
-  "id",
-  "title",
-  "type",
-  "trigger",
-  "chapter",
-  "location",
-  "npcs",
-  "handouts",
-  "tags",
-  "status",
-] as const;
 export const CHAPTER_KEYS = ["id", "title", "status"] as const;
 export const CAMPAIGN_KEYS = ["id", "name", "description"] as const;
 /**
@@ -42,7 +31,6 @@ const SESSION_KEYS = ["id", "started", "ended", "scenes_played", "pauses"] as co
 export const PROPERTY_CONTRACT = {
   campaign: CAMPAIGN_KEYS,
   chapter: CHAPTER_KEYS,
-  scene: SCENE_KEYS,
   session: SESSION_KEYS,
 } as const satisfies Record<string, readonly string[]>;
 

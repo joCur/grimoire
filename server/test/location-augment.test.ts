@@ -16,7 +16,7 @@ import {
 import { parseLocationReply } from "../src/location-reply";
 import {
   buildPrompt,
-  EXISTING_ENTRY_HEADING,
+  EXISTING_SCENE_HEADING,
   EXISTING_LOCATION_HEADING,
   type CompletionResult,
   type CorrectionTurn,
@@ -136,7 +136,7 @@ describe("the prompt", () => {
     });
     expect(prompt).toContain(`${EXISTING_LOCATION_HEADING} (leuchtturm)`);
     expect(prompt).toContain('"name": "Leuchtturm"');
-    expect(prompt).not.toContain(EXISTING_ENTRY_HEADING);
+    expect(prompt).not.toContain(EXISTING_SCENE_HEADING);
     expect(prompt.indexOf("FEWSHOT")).toBeLessThan(prompt.indexOf(EXISTING_LOCATION_HEADING));
     expect(prompt.indexOf(EXISTING_LOCATION_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
   });
@@ -164,7 +164,7 @@ describe("the run", () => {
 
     const req = fake.calls[0]!.req;
     expect(req.existingLocation).toEqual(current);
-    expect(req.existingEntry).toBeUndefined();
+    expect(req.existingScene).toBeUndefined();
     expect(req.jsonSchema?.name).toBe("augmented_location");
     expect(req.systemPrompt).toContain("System-Prompt: Ort ergänzen");
     expect(req.fewShotTarget).toContain('"id": "leuchtturm"');

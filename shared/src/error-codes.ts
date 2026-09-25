@@ -52,9 +52,9 @@ export const ERROR_CODES = [
   /** A `chapter` — of a scene, an npc or a location — names no chapter. */
   "chapter_unknown",
   /**
-   * 400, scene write: the `chapter` was CLEARED. A scene's chapter is part of
-   * its address, so it can be moved but never removed. No parameters — there
-   * is no value to name.
+   * 400, scene write: the `chapter` was CLEARED. A scene always belongs to a
+   * chapter, so it can be moved but never removed. No parameters — there is
+   * no value to name.
    */
   "chapter_required",
   /** The scene of a quick note names no scene entry. */
@@ -86,7 +86,8 @@ export const ERROR_CODES = [
    * 409, any rev-checked write: what was written changed underneath.
    * `{ rev }` always, plus the CURRENT state where there is one to hand back,
    * so the app can show what is in the way instead of fetching it again:
-   * `{ entry }` for the write of an entry, `{ session }` for
+   * `{ entry }` for the write of an entry, `{ scene }`, `{ npc }` or
+   * `{ location }` for the write of one of those, `{ session }` for
    * `PATCH /sessions/:id`, `{ threads }` for a write of a chapter's thread
    * list. A whole-list write (the glossary, the campaign knowledge, the
    * scene order) carries none of them — the page reloads its own list.

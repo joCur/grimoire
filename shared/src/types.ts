@@ -8,19 +8,19 @@
 // properties keys are preserved, and nothing in shared/ ever throws on
 // odd input.
 //
-// The three CLOSED lists below — scene status and type, chapter status — are
-// the exception, and only on the way IN: since ADR #25 they are CHECK
-// constraints of their columns and the API answers 400 for anything else.
-// The types stay widened all the same, because a READER still has to render
-// whatever an older database hands it. The npc status is a closed list too;
-// it stands with the npc's schema (./npc.ts).
+// The chapter status below is the exception, and only on the way IN: since
+// ADR #25 it is a CHECK constraint of its column and the API answers 400 for
+// anything else. The type stays widened all the same, because a READER still
+// has to render whatever an older database hands it. The scene's and the
+// npc's closed lists stand with their schemas (./scene.ts, ./npc.ts).
 //
 // An entity with its own resource (ADR #31) has its type from its zod schema
-// in its own module — the location in ./location.ts and the npc in ./npc.ts,
-// re-exported here.
+// in its own module — the location in ./location.ts, the npc in ./npc.ts and
+// the scene in ./scene.ts, re-exported here.
 
 import type { LocationProposal } from "./location";
 import type { NpcChange, NpcProposal, NpcStatus } from "./npc";
+import type { SceneChange, SceneProposal, SceneStatus, SceneType } from "./scene";
 
 export type {
   Location,
@@ -43,13 +43,17 @@ export type {
   QuickstatPair,
 } from "./npc";
 
-/** A scene's lifecycle states. A CHECK constraint holds the column to them. */
-export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
-export type SceneStatus = (typeof SCENE_STATUSES)[number];
-
-/** A scene's two kinds. CHECKed, like the status. */
-export const SCENE_TYPES = ["planned", "contingency"] as const;
-export type SceneType = (typeof SCENE_TYPES)[number];
+export type {
+  Scene,
+  SceneChange,
+  SceneCreate,
+  ScenePatch,
+  SceneProposal,
+  SceneReplyFields,
+  SceneReplyObject,
+  SceneStatus,
+  SceneType,
+} from "./scene";
 
 /**
  * A chapter's lifecycle states, in that order. `active` is the ONE the app
@@ -78,25 +82,6 @@ export type CalloutKind = (typeof CALLOUT_KINDS)[number];
 /** Widens a literal union to string while keeping literal autocomplete. */
 type OrString<T extends string> = T | (string & {});
 
-/** `id` is the stable reference key and must never change once assigned. */
-export interface SceneProperties {
-  id: string;
-  title: string;
-  type?: OrString<SceneType>;
-  /** Only meaningful for `type: contingency` — free-text firing condition. */
-  trigger?: string;
-  chapter?: string;
-  /** A location id from locations/ OR a free string. */
-  location?: string;
-  /** Npc ids from npcs/. */
-  npcs?: string[];
-  /** Roll20 handout names — references only, never copies. */
-  handouts?: string[];
-  tags?: string[];
-  status?: OrString<SceneStatus>;
-  [key: string]: unknown;
-}
-
 /**
  * Properties of a campaign's `campaign` (README, the campaign section). The
  * entry is optional — without it the UI shows the campaign's
@@ -121,21 +106,22 @@ export interface ChapterProperties {
 
 /**
  * The kinds that are ENTRIES: a row with an address, properties and a text
- * (server/src/store/paths.ts). An npc and a location are not among them —
- * each is its own resource with its own type (ADR #31) — and neither are a
- * session, the inbox and the glossary, which are lists with their own
+ * (server/src/store/paths.ts). A scene, an npc and a location are not among
+ * them — each is its own resource with its own type (ADR #31) — and neither
+ * are a session, the inbox and the glossary, which are lists with their own
  * endpoints (ADR #26).
  */
-export type EntryKind = "campaign" | "chapter" | "scene";
+export type EntryKind = "campaign" | "chapter";
 
 /**
- * Everything the SEARCH INDEX holds: the entry kinds, the npc, the location
- * and the LIST kinds. An npc, a location and a glossary hit have no entry
- * address to offer (see SearchResult) — each names its kind and id.
- * `unknown` is what an address the schema does not describe reads as.
+ * Everything the SEARCH INDEX holds: the entry kinds, the scene, the npc, the
+ * location and the LIST kinds. A scene, an npc, a location and a glossary hit
+ * have no entry address to offer (see SearchResult) — each names its kind and
+ * id. `unknown` is what an address the schema does not describe reads as.
  */
 export type EntityKind =
   | EntryKind
+  | "scene"
   | "npc"
   | "location"
   | "session"
@@ -179,8 +165,11 @@ export interface CampaignSummary {
   description?: string;
 }
 
+/**
+ * A scene in the campaign tree. No address: a scene is its own resource,
+ * `…/scenes/:id` (ADR #31).
+ */
 export interface SceneSummary {
-  path: string;
   id: string;
   title: string;
   type: SceneType;
@@ -418,11 +407,11 @@ export interface SceneOrderResponse {
  * its kind, its properties, its markdown body and the guard token a PATCH
  * sends back.
  *
- * A location is not answered this way: it has its own resource and type,
- * `GET …/locations/:id` -> `Location` (ADR #31). A session, the inbox and
- * the glossary have no entry address at all (ADR #26) — they answer
- * `SessionResponse`, `InboxResponse` and `GlossaryResponse` on their own
- * endpoints, and the epoch readings a session needs travel there.
+ * A scene, an npc and a location are not answered this way: each has its own
+ * resource and type (ADR #31). A session, the inbox and the glossary have no
+ * entry address at all (ADR #26) — they answer `SessionResponse`,
+ * `InboxResponse` and `GlossaryResponse` on their own endpoints, and the
+ * epoch readings a session needs travel there.
  */
 export interface EntryResponse {
   /** The entry's address within the campaign (server/src/store/paths.ts). */
@@ -476,10 +465,10 @@ export interface SearchResult {
   title: string;
   /**
    * The entry's address — present only for the kinds reached through
-   * `…/entries/<address>`. An npc or a location hit carries none: each is
-   * opened by `kind` and `id` as its own resource (ADR #31). A glossary, inbox or
-   * session hit names a row of a LIST (ADR #26) and is opened through its
-   * list, by `kind` and `id`, too.
+   * `…/entries/<address>`. A scene, an npc or a location hit carries none:
+   * each is opened by `kind` and `id` as its own resource (ADR #31). A
+   * glossary, inbox or session hit names a row of a LIST (ADR #26) and is
+   * opened through its list, by `kind` and `id`, too.
    */
   path?: string;
   /** Fuse.js score: 0 is a perfect match, values grow toward 1. */
@@ -496,19 +485,6 @@ export interface SearchResponse {
 // --- generator (POST /api/:campaign/generate, see generator/README.md) -----
 
 /**
- * One generated scene draft in the review preview. Nothing is stored yet —
- * writing happens only via POST /api/:campaign/generate/apply.
- */
-export interface GeneratedSceneDraft {
-  /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured". */
-  path: string;
-  /** The draft's properties (always `status: draft`). */
-  properties: Record<string, unknown>;
-  /** The draft's markdown body. */
-  body: string;
-}
-
-/**
  * Token spend of ONE generator run, summed over every provider call (the
  * initial one plus each correction turn). Absent when the endpoint reports
  * no usage at all — the UI then simply shows nothing. The generator's 422
@@ -523,13 +499,17 @@ export interface GenerateUsage {
 }
 
 /**
- * The generator's review preview. Mechanically validated (properties
- * parses, status is draft, references resolve, only known callouts);
- * `warnings` are the LLM's own review notes for the DM. Carried by a
- * finished job (see GenerateJob) — POST /generate itself only starts one.
+ * The generator's review preview. Mechanically validated (every scene is a
+ * draft, references resolve, only known callouts); `warnings` are the LLM's
+ * own review notes for the DM. Carried by a finished job (see GenerateJob) —
+ * POST /generate itself only starts one.
  */
 export interface GenerateResult {
-  scenes: GeneratedSceneDraft[];
+  /**
+   * The scenes the run proposes, each a scene without its guard and always a
+   * draft — accepted or dropped one by one, by id (`review.droppedScenes`).
+   */
+  scenes: SceneProposal[];
   /**
    * The npcs the run proposes, each an npc without its guard — accepted or
    * rejected one by one, by id (`review.npcs`).
@@ -571,68 +551,26 @@ export interface GenerateNpcResult {
   usage?: GenerateUsage;
 }
 
-// --- augmenting an EXISTING entry -------------------------------------------
+// --- augmenting an EXISTING scene, npc or location -------------------------
 
 /**
- * The kinds AI augmentation works on through `POST …/generate/augment { path }`.
- * Deliberately its own list and not `EntityKind`: a chapter, a session or the
- * campaign entry has no augment prompt, and a kind without one must not even
- * reach the pipeline. An npc and a location are augmented on their own
- * resources instead, `POST …/npcs/:id/augment` (`NpcAugmentResult`) and
- * `POST …/locations/:id/augment` (`LocationAugmentResult`).
- */
-export const AUGMENT_KINDS = ["scene"] as const;
-
-export type AugmentKind = (typeof AUGMENT_KINDS)[number];
-
-export function isAugmentKind(value: unknown): value is AugmentKind {
-  return typeof value === "string" && (AUGMENT_KINDS as readonly string[]).includes(value);
-}
-
-/**
- * One properties field of an augment proposal, as the review renders it:
- * current value and proposal side by side.
+ * The result of augmenting a SCENE (`POST …/scenes/:id/augment`): the scene
+ * as the run read it and as the model proposes it, both without their guard.
+ * Nothing is written — `POST …/scenes/:id/augment/apply` is the only write,
+ * and it carries the fields the DM took.
  *
- * `state` is what the DEFAULT decision hangs off (never
- * silently overwrite): `new` means the entry has no value for the key (absent,
- * null, empty string, empty list) and the proposal is preselected; `changed`
- * means the entry HAS a value and the model wants a different one — the
- * default there is to keep the current value.
- *
- * Fields the proposal leaves alone are not listed at all; `current` is absent
- * exactly when the key does not exist on the entry.
+ * The review compares the two field by field; `body` is reviewed block by
+ * block, cut in the app with the Block-Composer's own block model.
  */
-export interface AugmentPropertyProposal {
-  key: string;
-  current?: unknown;
-  proposed: unknown;
-  state: "new" | "changed";
-}
-
-/**
- * The result of an augment run: a PROPOSAL for one existing
- * entry. Nothing is written — POST …/generate/augment/apply is the only
- * write, and it carries the DM's per-field/per-block decisions.
- *
- * The body travels as two whole markdown strings rather than as a block list:
- * the block model lives in the app (app/src/lib/blocks.ts) and is the same
- * one the Block-Composer edits, so splitting the proposal into blocks in the
- * app is the only way the review's decision units are guaranteed to be the
- * units the DM already knows. The server stays the authority for what is
- * WRITTEN (rev guard, one transaction), not for how the diff is cut.
- */
-export interface AugmentResult {
-  /** Address of the augmented entry, e.g. `01-salzhafen/ankunft-leuchtturm`. */
-  path: string;
-  kind: AugmentKind;
+export interface SceneAugmentResult {
+  /** The scene the run is about. */
+  id: string;
   /** The `rev` the run READ. Informational — the write sends the UI's rev. */
   rev: number;
-  /** Only the keys the proposal adds or changes (see AugmentPropertyProposal). */
-  properties: AugmentPropertyProposal[];
-  /** The entry's body as the run read it — the BEFORE side of the diff. */
-  currentBody: string;
-  /** The model's proposed body, complete (not a patch). */
-  proposedBody: string;
+  /** The scene as the run read it. */
+  current: SceneProposal;
+  /** The scene as the model proposes it, complete. */
+  proposed: SceneProposal;
   /** The LLM's own review notes for the DM. */
   warnings: string[];
   /** The naming check's findings — see GenerateResult.namingHints. */
@@ -699,8 +637,8 @@ export interface NpcAugmentResult {
  * ONE part of a pipelined scene run as the client sees it.
  *
  * A run is no longer one call that stands or falls whole: an OUTLINE call
- * decides which scenes exist, and then every scene and every suggested entry
- * is a call of its own. Each of those is a PART with a status, so a form
+ * decides which scenes exist, and then every scene, every proposed npc and
+ * every proposed location is a call of its own. Each of those is a PART with a status, so a form
  * error costs that part and nothing else — and a finished part is reviewable
  * while its siblings are still running.
  *
@@ -713,7 +651,7 @@ export interface GenerateJobPart {
   /** Stable key of the part; the retry endpoint addresses it (`scene:<id>`). */
   key: string;
   kind: "scene" | "npc" | "location";
-  /** The id the outline gave this part — the scene/entry id. */
+  /** The id the outline gave this part — the id of its scene, npc or location. */
   id: string;
   /** Display title of the part; the id when the outline named none. */
   title: string;
@@ -757,16 +695,16 @@ export const GENERATE_JOB_STATUSES = ["running", "done", "failed"] as const;
 export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
 
 /**
- * What a generator job produces: scene drafts for a chapter, one proposed
- * npc, a PROPOSAL for a scene that already exists (`augment`), or one for an
- * existing npc (`npc-augment`) or location (`location-augment`). There is
- * still exactly ONE job per campaign; the kind only tells the client which
- * result field to read and which mode to restore.
+ * What a generator job produces: proposed scenes for a chapter, one proposed
+ * npc, or a PROPOSAL for an existing scene (`scene-augment`), npc
+ * (`npc-augment`) or location (`location-augment`). There is still exactly
+ * ONE job per campaign; the kind only tells the client which result field to
+ * read and which mode to restore.
  */
 export const GENERATE_JOB_KINDS = [
   "scene",
   "npc",
-  "augment",
+  "scene-augment",
   "npc-augment",
   "location-augment",
 ] as const;
@@ -785,21 +723,6 @@ export interface GenerateJobError {
 }
 
 /**
- * What the DM changed about ONE draft in the review — kept on the job and
- * sent by PATCH …/generate/job/:id/review, keyed by the draft's path.
- *
- * A draft is properties plus body, and an edit carries whichever half
- * changed: `properties` REPLACES the draft's whole properties object (the
- * fields card edits every field at once), `body` replaces its whole body.
- * The half that is absent keeps the model's own value, so a text edit cannot
- * silently reset a field and a field edit cannot reset the text.
- */
-export interface DraftEdit {
-  properties?: Record<string, unknown>;
-  body?: string;
-}
-
-/**
  * GET /api/:campaign/generate/job — the one generate job of a campaign.
  * The run outlives the browser tab: POST /generate answers
  * `202 { jobId }` and the result waits here until it is applied, discarded
@@ -807,7 +730,7 @@ export interface DraftEdit {
  *
  * A ROW on the server (`generate_jobs`), so the run outlives
  * the process too: `done` and `failed` come back after a restart whole —
- * result, error body and `draftEdits` — and stay applyable. Only a `running`
+ * result, error body and the DM's edits — and stay applyable. Only a `running`
  * job cannot survive, because its provider call died with the process: the
  * boot rewrites it to `failed` with a German message saying to start the run
  * again, which the client shows instead of polling forever.
@@ -832,43 +755,43 @@ export interface GenerateJob {
   result?: GenerateResult;
   /** Present iff status is "done" and kind is "npc". */
   npcResult?: GenerateNpcResult;
-  /** Present iff status is "done" and kind is "augment". */
-  augmentResult?: AugmentResult;
+  /** Present iff status is "done" and kind is "scene-augment". */
+  sceneAugmentResult?: SceneAugmentResult;
   /** Present iff status is "done" and kind is "npc-augment". */
   npcAugmentResult?: NpcAugmentResult;
   /** Present iff status is "done" and kind is "location-augment". */
   locationAugmentResult?: LocationAugmentResult;
   /**
-   * Address of the scene an `augment` run targets. Present for
-   * that kind from the moment the job STARTS, so the app can show which scene
-   * is being worked on while the run is still going.
+   * The id of the scene a `scene-augment` run works on. Present for that
+   * kind from the moment the job STARTS, so the app can show which scene is
+   * being worked on while the run is still going.
    */
-  target?: string;
+  scene?: string;
   /**
    * The id of the npc an `npc-augment` run works on — present from the
-   * moment the job STARTS, like `target` for the scene augment run.
+   * moment the job STARTS, like `scene` for the scene augment run.
    */
   npc?: string;
   /**
    * The id of the location a `location-augment` run works on — present from
-   * the moment the job STARTS, like `target` for the other augment runs.
+   * the moment the job STARTS, like `scene` for the scene augment run.
    */
   location?: string;
   /** Present iff status is "failed". */
   error?: GenerateJobError;
   /**
-   * Review edits of the scene drafts kept server-side, keyed by the draft's
-   * campaign-relative path (PATCH …/generate/job/:id/review) — so an edited
-   * draft survives a reload as well. Empty until the DM edits something;
-   * applied ON TOP of `result.scenes` by the review UI, half by half (see
-   * DraftEdit).
+   * The DM's changes to a proposed scene, by its id — `result.scenes`. A
+   * change names the fields it sets, `null` clears an optional one, and every
+   * other field keeps the model's value (`withSceneChange`). Kept on the job
+   * so an edited scene survives a reload, and applied on top of the proposal
+   * when it is accepted.
    */
-  draftEdits: Record<string, DraftEdit>;
+  sceneEdits: Record<string, SceneChange>;
   /**
    * The DM's changes to a proposed npc, by its id — `result.npcs` or the
    * NPC run's `npcResult.npc`. A change names the fields it sets, `null`
    * clears an optional one, and every other field keeps the model's value
-   * (`withNpcChange`). Kept on the job like `draftEdits`, and applied on top
+   * (`withNpcChange`). Kept on the job like `sceneEdits`, and applied on top
    * of the proposal when it is accepted.
    */
   npcEdits: Record<string, NpcChange>;
@@ -883,9 +806,9 @@ export interface GenerateJob {
   /**
    * Everything the DM DID in the review, kept on the job, so a
    * navigation, a reload, a second tab and a server restart all show the
-   * same state. `draftEdits` holds the edited HALVES of a draft; this holds
-   * the decisions. Absent on a payload from an older server — the UI treats
-   * that as "nothing decided yet".
+   * same state. `sceneEdits` and `npcEdits` hold the changed fields; this
+   * holds the decisions. Absent on a payload from an older server — the UI
+   * treats that as "nothing decided yet".
    */
   review?: GenerateJobReview;
   /**
@@ -903,8 +826,8 @@ export interface GenerateJob {
  * the model's output, this is what the DM did with it.
  */
 export interface GenerateJobReview {
-  /** Scene draft paths the DM dropped from the run — never written. */
-  dropped: string[];
+  /** The ids of the proposed scenes the DM dropped from the run — never written. */
+  droppedScenes: string[];
   /**
    * Augment run only: decision per PROPERTY key. `true` accepts the
    * proposal, `false` keeps the current value; an absent key keeps the
@@ -915,12 +838,11 @@ export interface GenerateJobReview {
   /** Augment run only: the same per body BLOCK id. */
   blocks: Record<string, boolean>;
   /**
-   * The scenes a PARTIAL accept already wrote: draft path -> the ADDRESS the
-   * scene actually landed at. A written part is read-only in the review and
-   * links to what it became; the job disappears once every part is written,
-   * dropped or rejected.
+   * The ids of the proposed scenes a PARTIAL accept already wrote. A written
+   * part is read-only in the review and links to what it became; the job
+   * disappears once every part is written, dropped or rejected.
    */
-  written: Record<string, string>;
+  writtenScenes: string[];
   /**
    * Decision per proposed NPC, keyed by its id. A key that is absent is OPEN
    * — the review's third state, which is why "open" is not a value here.
@@ -1047,15 +969,15 @@ export interface KnowledgeResponse {
  * looked and lets the DM decide; the sentence around it is built by the app
  * from its own catalog, because the server stays language-free.
  *
- * WHAT the hit sits in is named by its kind: a scene draft by its `path`, a
- * proposed or augmented npc by its id under `npc`, a proposed or augmented
- * location by its id under `location`.
+ * WHAT the hit sits in is named by its kind: a proposed or augmented scene
+ * by its id under `scene`, an npc by its id under `npc`, a location by its id
+ * under `location`.
  */
 export type NamingHint = NamingHintAt &
   (
-    | { path: string; npc?: never; location?: never }
-    | { npc: string; path?: never; location?: never }
-    | { location: string; path?: never; npc?: never }
+    | { scene: string; npc?: never; location?: never }
+    | { npc: string; scene?: never; location?: never }
+    | { location: string; scene?: never; npc?: never }
   );
 
 /** Where a naming hint sits and what it found — see `NamingHint`. */

@@ -1,13 +1,13 @@
 // An entry, read and written through its address.
 //
-// Three kinds are reached this way — campaign, chapter, scene — and they
-// share exactly one read (`readEntry`) and exactly one write (`patchEntry`,
+// Two kinds are reached this way — campaign and chapter — and they share
+// exactly one read (`readEntry`) and exactly one write (`patchEntry`,
 // ADR #23): fields, text, or both, in ONE transaction against ONE `rev`. The
 // property contract per kind is its own module (./properties.ts), because the
 // seed reads it too.
 //
-// An npc and a location are each their own resource (ADR #31, ./npcs.ts,
-// ./locations.ts): an address that names one answers 404 here. Lists have no
+// A scene, an npc and a location are each their own resource (ADR #31,
+// ./scenes.ts, ./npcs.ts, ./locations.ts) and have no address. Lists have no
 // address and no case in either switch (ADR #26).
 
 import { and, eq } from "drizzle-orm";
@@ -15,7 +15,7 @@ import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import { campaigns, chapters, generateJobs, packJson, scenes } from "../db/schema";
+import { campaigns, chapters, generateJobs } from "../db/schema";
 import {
   campaignRow,
   indexCampaign,
@@ -24,26 +24,8 @@ import {
   requireCampaign,
   requireCampaignRow,
 } from "./campaigns";
-import {
-  CHAPTER_ACTIVE,
-  clearOtherActiveChapters,
-  nextScenePos,
-  readChapterEntry,
-  readSceneEntry,
-  replaceSceneRefs,
-  sceneLocation,
-} from "./chapters";
-import {
-  assertChapterRef,
-  assertLocationRef,
-  assertNpcRefs,
-  chapterRowOf,
-  indexChapter,
-  indexScene,
-  refNpcs,
-  refTags,
-  sceneRowAt,
-} from "./entity-rows";
+import { CHAPTER_ACTIVE, clearOtherActiveChapters, readChapterEntry } from "./chapters";
+import { chapterRowOf, indexChapter } from "./entity-rows";
 import { getDb } from "./handle";
 import { locatorFromPath, type Locator } from "./paths";
 import {
@@ -52,25 +34,9 @@ import {
   CHAPTER_KEYS,
   rejectIdPatch,
   rejectUnknownKeys,
-  SCENE_KEYS,
 } from "./properties";
-import {
-  renderCampaign,
-  renderChapter,
-  renderScene,
-  type CampaignRow,
-  type ChapterRow,
-  type SceneRow,
-} from "./render";
-import {
-  asOptStr,
-  asStr,
-  asStrArray,
-  assertChapterStatus,
-  assertSceneClosedFields,
-  normalizeBody,
-  revConflict,
-} from "./shared";
+import { renderCampaign, renderChapter, type CampaignRow, type ChapterRow } from "./render";
+import { asOptStr, asStr, assertChapterStatus, normalizeBody, revConflict } from "./shared";
 
 // --- reading one entry --------------------------------------------------------
 
@@ -79,10 +45,10 @@ import {
  * the domain module that owns the kind. Each of them answers the same 404
  * when the campaign has no row with that id.
  *
- * A session, the inbox and the glossary have no address (ADR #26), so
+ * A session, the inbox and the glossary have no address (ADR #26), and a
+ * scene, an npc and a location are each their own resource (ADR #31), so
  * `locatorFromPath` already answered 404 for them and this switch has no case
- * to spend on a list. An npc and a location are each their own resource
- * (ADR #31), so an address that names one is a 404 too.
+ * to spend on one.
  */
 export function readByLocator(
   db: GrimoireDb,
@@ -95,8 +61,6 @@ export function readByLocator(
       return readCampaignEntry(campaignRowValue);
     case "chapter":
       return readChapterEntry(db, campaign, locator.id);
-    case "scene":
-      return readSceneEntry(db, campaign, locator.id);
   }
 }
 
@@ -139,10 +103,8 @@ function guardEntryRev(
  * however much it carries: `rev + 1` is not a client's business, but two
  * steps for one save would leak the two statements this used to be and make
  * the row's history claim a write that never happened. The answer carries
- * the new token, and a properties patch that MOVES the entry (a scene whose
- * `chapter` changes lands under another address) is already resolved in the
- * `path` that comes back. A refusal anywhere rolls the whole request back,
- * so nothing is half-written.
+ * the new token. A refusal anywhere rolls the whole request back, so nothing
+ * is half-written.
  *
  * `force` replaces the guard by the row's CURRENT rev, read inside this
  * transaction. It is the DM's answer to the conflict dialog and writes only
@@ -153,8 +115,8 @@ function guardEntryRev(
  * transaction (drafts and job can never disagree after a crash). A stale id
  * matches nothing and is ignored.
  *
- * An address that names an npc or a location is a 404: each is written
- * through its own resource (ADR #31).
+ * A scene, an npc and a location have no address, so there is nothing here
+ * to reach them: each is written through its own resource (ADR #31).
  */
 export async function patchEntry(
   campaign: string,
@@ -269,80 +231,6 @@ function patchLocator(
       indexChapter(tx, campaign, next);
       return renderChapter(next);
     }
-    case "scene": {
-      const row = sceneRowAt(tx, campaign, locator);
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "scene changed");
-      rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, SCENE_KEYS);
-      // Only the known values may be WRITTEN; what is already stored is still
-      // shown verbatim.
-      assertSceneClosedFields(patch);
-      const before = renderScene(
-        row,
-        refNpcs(tx, campaign, row.id),
-        refTags(tx, campaign, row.id),
-      );
-      const props = applyPatch(before.properties, patch);
-      const npcRefs = asStrArray(props.npcs);
-      const tags = asStrArray(props.tags);
-      // The chapter a scene belongs to is part of its ADDRESS (the path), so
-      // a patch may MOVE the scene — but only into a chapter that exists. It
-      // cannot be removed: a scene without a chapter has no address.
-      const declared: string | null = asOptStr(props.chapter);
-      if (declared === null) {
-        throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter", {
-          code: "chapter_required",
-        });
-      }
-      // Every reference first, so a save that names something unknown is
-      // refused before anything is written.
-      assertChapterRef(tx, campaign, declared);
-      const nextLocation = sceneLocation(props.location);
-      assertLocationRef(tx, campaign, nextLocation);
-      assertNpcRefs(tx, campaign, npcRefs);
-      // A scene that CHANGES chapter lands at the end of the new one: its
-      // old position counted among other siblings and means nothing here,
-      // and the target chapter's order is the DM's — a scene arriving in the
-      // middle of it would move without anybody saying where. Staying in the
-      // chapter leaves `pos` untouched, so an ordinary save does not
-      // reshuffle anything.
-      const nextPosValue =
-        declared === row.chapterId ? row.pos : nextScenePos(tx, campaign, declared);
-      const next: SceneRow = {
-        ...row,
-        title: asStr(props.title, row.id),
-        type: asStr(props.type, "planned"),
-        trigger: asOptStr(props.trigger),
-        chapterId: declared,
-        location: nextLocation,
-        status: asStr(props.status, "draft"),
-        handouts: packJson(asStrArray(props.handouts)),
-        body: body ?? row.body,
-        pos: nextPosValue,
-        rev: row.rev + 1,
-      };
-      tx.update(scenes)
-        .set({
-          title: next.title,
-          type: next.type,
-          trigger: next.trigger,
-          chapterId: next.chapterId,
-          location: next.location,
-          status: next.status,
-          handouts: next.handouts,
-          body: next.body,
-          pos: next.pos,
-          rev: next.rev,
-        })
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
-        .run();
-      // `location` is also the scene's GROUP, so this is the write that MOVES
-      // the scene: the address in the response is built from the new value
-      // and the app follows it.
-      replaceSceneRefs(tx, campaign, row.id, npcRefs, tags);
-      indexScene(tx, campaign, next, tags);
-      return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
-    }
   }
 }
 
@@ -384,18 +272,6 @@ function writeBodyIn(
         .run();
       indexChapter(tx, campaign, next);
       return renderChapter(next);
-    }
-    case "scene": {
-      const row = sceneRowAt(tx, campaign, locator);
-      guardEntryRev(tx, campaign, locator, row.rev, rev, "scene changed");
-      const next: SceneRow = { ...row, body, rev: row.rev + 1 };
-      tx.update(scenes)
-        .set({ body: next.body, rev: next.rev })
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
-        .run();
-      const tags = refTags(tx, campaign, row.id);
-      indexScene(tx, campaign, next, tags);
-      return renderScene(next, refNpcs(tx, campaign, row.id), tags);
     }
   }
 }

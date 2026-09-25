@@ -5,12 +5,12 @@
 //   3. call the LLM provider
 //   4. read the reply and validate it MECHANICALLY. EVERY call answers a
 //      JSON object whose shape the provider forces: the outline
-//      its own small object (shared/outline-schema), a scene call the
-//      object that mirrors the stored row — `properties`, `body`,
-//      `warnings` (shared/entry-schema, read by ./entry-reply), an npc call
-//      every field of the npc plus `warnings` (shared/npc, read by
-//      ./npc-reply), a location call every field of the location plus
-//      `warnings` (shared/location, read by ./location-reply). Errors
+//      its own small object (shared/outline-schema), a scene call every
+//      field of the scene plus `warnings` (shared/scene, read by
+//      ./scene-reply), an npc call every field of the npc plus `warnings`
+//      (shared/npc, read by ./npc-reply), a location call every field of the
+//      location plus `warnings` (shared/location, read by ./location-reply).
+//      Errors
 //      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
 //      default 1, max 2), never to the user; exhausted retries
 //      -> 422.
@@ -22,10 +22,9 @@
 //      NOTHING; only POST /generate/apply stores anything, and it
 //      re-validates server-side instead of trusting the client.
 //
-// A scene DRAFT IS `{ properties, body }` from the reply to the store
-// (ADR #24), and a proposed npc or location is an `NpcProposal` or a
-// `LocationProposal` — the entity without its guard (ADR #31): nothing here
-// renders one into one markdown text and nothing parses one back.
+// A proposed scene, npc or location is a `SceneProposal`, an `NpcProposal`
+// or a `LocationProposal` — the entity without its guard (ADR #31): nothing
+// here renders one into one markdown text and nothing parses one back.
 //
 // Steps 1-4 run in the BACKGROUND: POST /generate starts a
 // job (./generate-jobs) and answers 202, the result waits in the job store
@@ -48,39 +47,31 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CALLOUT_KINDS,
-  SCENE_TYPES,
-  kindFromAddress,
   type GenerateNpcResult,
   type GenerateUsage,
-  type GeneratedSceneDraft,
   type LocationProposal,
   type NamingHint,
   type NpcProposal,
+  type SceneProposal,
 } from "@grimoire/shared";
 import { bodyEntityRefSlugs, entityRefSource } from "@grimoire/shared/refs";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
-import { assertSafeAddress } from "./addressing";
-import type { EntryReply } from "./entry-reply";
 import type { LocationReply } from "./location-reply";
 import { npcReplyRequest, parseNpcReply, type NpcReply } from "./npc-reply";
 import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
-// The generator reads its context and writes its drafts through the store —
+import type { SceneReply } from "./scene-reply";
+// The generator reads its context and writes its proposals through the store —
 // nothing else is a data source.
 import { requireCampaign } from "./store/campaigns";
 import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge";
 import { glossaryText } from "./store/glossary";
-import { applyDrafts } from "./store/drafts";
+import { applyDrafts, type EntityDraft } from "./store/drafts";
 import { readLocationProposal } from "./store/locations";
 import { npcHoldsContent, readNpcProposal } from "./store/npcs";
-import {
-  addressHead,
-  addressIdentity,
-  addressSegments,
-  chapterPath,
-  scenePath,
-} from "./store/paths";
+import { chapterPath } from "./store/paths";
+import { readSceneProposal } from "./store/scenes";
 import {
   createProvider,
   type CompletionResult,
@@ -169,7 +160,13 @@ export interface PromptAssets {
  * read; the augment runs and the single-scene mode carry a prompt alone.
  */
 export const ASSET_FILES = {
+  // A scene run writes every scene of its outline with this pair, and the
+  // scene augment run takes the field section of the prompt and the
+  // few-shot from here.
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
+  // The scene augment run's own augmentation rule; the scene pair above
+  // brings the fields and the few-shot.
+  sceneAugment: { systemPrompt: "scene-augment-system-prompt.md" },
   // An npc has a single-call run of its own (the NPC run), and a scene run
   // loads this pair for every npc its outline proposes; the npc augment run
   // takes the field section of the prompt and the few-shot from here.
@@ -195,27 +192,22 @@ export const ASSET_FILES = {
   },
   // The output-schema section that turns the scene prompt into
   // single-scene-from-outline mode. No few-shot of its own — the
-  // per-scene call sends the scene example asset — so, like `augment`, this
-  // entry carries a system prompt alone.
+  // per-scene call sends the scene example asset — so, like the augment
+  // rules, this carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
-  // The augment run's OWN system prompt. It has no few-shot of
-  // its own — the run sends the TARGET KIND's example asset — so this entry
-  // carries the system prompt alone and `loadPromptAssets` is not the right
-  // shape for it; see loadAsset below.
-  augment: { systemPrompt: "augment-system-prompt.md" },
 } as const;
 
 const promptAssets = new Map<string, PromptAssets>();
 
 /**
- * The kinds that have a prompt PAIR. `augment`, `npcAugment`,
+ * The kinds that have a prompt PAIR. `sceneAugment`, `npcAugment`,
  * `locationAugment` and `sceneSingle` do not: the augment runs send the
- * target's example asset, and `sceneSingle` is only an output schema spliced
+ * entity's example asset, and `sceneSingle` is only an output schema spliced
  * into the scene prompt.
  */
 type PromptPairKind = Exclude<
   keyof typeof ASSET_FILES,
-  "augment" | "npcAugment" | "locationAugment" | "sceneSingle"
+  "sceneAugment" | "npcAugment" | "locationAugment" | "sceneSingle"
 >;
 
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
@@ -396,10 +388,9 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 // --- reading a reply --------------------------------------------------------
 //
 // There is nothing left to extract here. Every reply is a JSON object the
-// provider was forced into, and the one tolerant reader both the
-// outline and the entries share — fence, brace span, ONE `jsonrepair`
-// attempt — lives in ./entry-reply (`parseJsonReply`), next to the
-// entry shape it is mostly used for.
+// provider was forced into, and the one tolerant reader every call shares —
+// fence, brace span, ONE `jsonrepair` attempt — lives in ./json-reply
+// (`parseJsonReply`).
 
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
@@ -426,8 +417,8 @@ export function campaignRefIds(ctx: CampaignContext): Set<string> {
 }
 
 /**
- * The reference rule of a generated body: every `[[id]]` names an entry the
- * campaign has or one the same run proposes (`known`). A reference to nothing
+ * The reference rule of a generated body: every `[[id]]` names a scene, npc
+ * or location the campaign has or one the same run proposes (`known`). A reference to nothing
  * would reach the DM as bracketed text instead of a name, so it is a
  * correction turn like every other mechanical error.
  *
@@ -441,7 +432,7 @@ export function unknownRefErrors(body: string, known: ReadonlySet<string>): stri
     .filter((slug) => !known.has(slug))
     .map(
       (slug) =>
-        `${entityRefSource(slug)} nennt keinen Eintrag — weder die Kampagne noch dieser ` +
+        `${entityRefSource(slug)} nennt nichts — weder die Kampagne noch dieser ` +
         "Durchlauf hat diese id; nenne eine id aus dem Kontext oder schreibe den Namen als Text",
     );
 }
@@ -451,28 +442,6 @@ export function unknownRefErrors(body: string, known: ReadonlySet<string>): stri
  * the ONLY thing a model decides about addressing.
  */
 const ENTITY_ID_PATTERN = ENTITY_SLUG;
-
-/** The `id` a reply DECLARED, or undefined — the schema's `null` read as what it means. */
-function declaredId(properties: Record<string, unknown>): string | undefined {
-  const id = properties.id;
-  return typeof id === "string" && id !== "" ? id : undefined;
-}
-
-/**
- * The properties of a scene draft as the review and the store read them: the
- * `id` spelled out, and the title fallen back to it.
- *
- * The fallback is the format's (README: a scene that names no title is shown
- * under its id). It is applied HERE, once, where the draft is built — a reply
- * may legitimately omit the title, and everything downstream reads the
- * properties as they are.
- */
-function draftProperties(properties: Record<string, unknown>, id: string): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...properties, id };
-  const title = out.title;
-  if (typeof title !== "string" || title === "") out.title = id;
-  return out;
-}
 
 /**
  * Validate one proposed NPC of a scene run, read by the npc's reply schema
@@ -508,7 +477,7 @@ export function validateLocationProposal(
 }
 
 /**
- * Which ids an entry of a scene run may REFERENCE: the campaign's plus the
+ * Which ids a proposal of a scene run may REFERENCE: the campaign's plus the
  * ones the run's OUTLINE decided. The reply is one part of the run and the
  * other ids come from the outline, so the sets are a parameter.
  *
@@ -523,109 +492,67 @@ export interface AllowedRefs {
 }
 
 /**
- * Mechanical validation of ONE scene entry, the rules of the
- * data contract in one place: the pipeline's per-scene call and the apply
- * re-validation have to judge a scene by exactly the same rules, and the one
- * way to guarantee that is one function.
+ * Mechanical validation of ONE proposed scene of a scene run, read by the
+ * scene's reply schema (./scene-reply.ts): its id is the one the OUTLINE
+ * assigned and a kebab slug, its chapter is the run's, the npcs and the
+ * location it names exist in the campaign or the outline, and its body uses
+ * known callouts and references that resolve. A NEW scene's reply can only
+ * be a draft — its schema says so.
  *
- * `label` is how the entry is named in an error message; `seenIds` is the
- * duplicate guard of the surrounding run (the single-scene reply shares the
- * set with the outline's ids).
- *
- * Returns the draft, or null with the errors pushed onto `errors`.
+ * Returns the scene, or null with the errors pushed onto `errors`.
  */
-export function validateSceneEntry(input: {
-  reply: EntryReply;
-  label: string;
+export function validateSceneProposal(input: {
+  reply: SceneReply;
   chapter: string;
   allowed: AllowedRefs;
-  seenIds: Set<string>;
   errors: string[];
   /** The id the OUTLINE assigned — a pipeline part may not change its own. */
-  expectedId?: string;
-}): GeneratedSceneDraft | null {
-  const { reply, chapter, allowed, seenIds, errors } = input;
-  // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
-  // taken from the run's CONTEXT and never from the model. The
-  // id is the one thing the model decides here, so it is the one thing
-  // validated as an address would be.
-  const props = reply.properties;
-  const propsId = declaredId(props);
-  if (propsId === undefined) {
-    errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
+  expectedId: string;
+}): SceneProposal | null {
+  const { reply, chapter, allowed, errors, expectedId } = input;
+  const { scene } = reply;
+  if (!ENTITY_ID_PATTERN.test(scene.id)) {
+    errors.push(`scene "${expectedId}": "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
     return null;
   }
-  if (!ENTITY_ID_PATTERN.test(propsId)) {
-    errors.push(`${input.label}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
-    return null;
-  }
-  const label = `scene "${propsId}"`;
-  if (input.expectedId !== undefined && propsId !== input.expectedId) {
+  const label = `scene "${scene.id}"`;
+  if (scene.id !== expectedId) {
     errors.push(
-      `${label}: die id muss "${input.expectedId}" bleiben — sie kommt aus der Gliederung ` +
+      `${label}: die id muss "${expectedId}" bleiben — sie kommt aus der Gliederung ` +
         "und andere Szenen verweisen darauf",
     );
     return null;
   }
-  if (seenIds.has(propsId)) {
-    errors.push(`${label}: duplicate id`);
-    return null;
-  }
-  seenIds.add(propsId);
-
-  if (!(SCENE_TYPES as readonly string[]).includes(String(props.type))) {
-    errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
-  }
-  if (props.status !== "draft") {
-    errors.push(`${label}: "status" must be "draft"`);
-  }
-  // The `chapter` key and the scene's ADDRESS have to say the same thing. The
-  // address is the run's (`<chapter>/<id>`, never the model's), so a reply
-  // that names a different chapter would produce an entry sitting in one
-  // chapter while claiming another — the chapter overview groups by the key, the entry
-  // tree by the address, and the two would disagree forever after. Cheaper as
-  // a correction turn than as a scene the DM has to find and fix by hand.
-  if (typeof props.chapter === "string" && props.chapter !== "" && props.chapter !== chapter) {
+  // The chapter is the run's, never the model's: a reply that names another
+  // would produce a scene sitting in one chapter while the run was about
+  // another. Cheaper as a correction turn than as a scene the DM has to find
+  // and move by hand.
+  if (scene.chapter !== chapter) {
     errors.push(
       `${label}: "chapter" muss "${chapter}" sein — das Kapitel kommt aus dem Kontext ` +
         "dieses Durchlaufs, nicht aus der Antwort",
     );
   }
-
-  if (props.npcs !== undefined && props.npcs !== null) {
-    if (!Array.isArray(props.npcs) || props.npcs.some((n) => typeof n !== "string")) {
-      errors.push(`${label}: "npcs" must be an array of npc ids`);
-    } else {
-      for (const npc of props.npcs as string[]) {
-        if (!allowed.npcIds.has(npc)) {
-          errors.push(
-            `${label}: npc "${npc}" does not exist in the campaign and the outline does not propose it`,
-          );
-        }
-      }
-    }
-  }
-  if (typeof props.location === "string" && props.location !== "") {
-    if (!allowed.locationIds.has(props.location)) {
+  for (const npc of scene.npcs) {
+    if (!allowed.npcIds.has(npc)) {
       errors.push(
-        `${label}: location "${props.location}" does not exist in the campaign and ` +
-          `the outline does not propose it`,
+        `${label}: npc "${npc}" does not exist in the campaign and the outline does not propose it`,
       );
     }
   }
-
-  for (const kind of unknownCallouts(reply.body)) {
+  if (scene.location !== undefined && !allowed.locationIds.has(scene.location)) {
+    errors.push(
+      `${label}: location "${scene.location}" does not exist in the campaign and ` +
+        `the outline does not propose it`,
+    );
+  }
+  for (const kind of unknownCallouts(scene.body)) {
     errors.push(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
   }
-  for (const msg of unknownRefErrors(reply.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
-
-  return {
-    path: scenePath(chapter, "", propsId),
-    properties: draftProperties(props, propsId),
-    body: reply.body,
-  };
+  for (const msg of unknownRefErrors(scene.body, allowed.refIds)) errors.push(`${label}: ${msg}`);
+  return errors.length > 0 ? null : scene;
 }
 
 // --- mechanical validation of an NPC reply -----------------------------------
@@ -693,9 +620,9 @@ export function validateNpcReply(
  *
  * `schemaName` is the schema the reply is forced into — it is
  * NAMED here so the model corrects inside the shape it was given instead of
- * starting a new one. Every call has one now, so the instruction is the same
- * sentence for the outline and for an entry; an absent name (a provider
- * that forces nothing) simply leaves the reference out.
+ * starting a new one. Every call has one, so the instruction is the same
+ * sentence for the outline and for a scene, npc or location; an absent name
+ * (a provider that forces nothing) simply leaves the reference out.
  */
 export function buildCorrectionMessage(
   errors: string[],
@@ -914,78 +841,21 @@ export async function runGenerateNpc(
 
 // --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
 
-const SCENE_ITEM_KEYS = new Set(["path", "properties", "body"]);
-
-/** One validated entry ready to be written. */
-export interface ApplyTarget {
-  rel: string;
-  properties: Record<string, unknown>;
-  body: string;
-}
-
 /**
- * The `properties`/`body` pair of one scene item. A scene draft is those two
- * halves and nothing else, so this is the whole shape check — no text is
- * parsed on the way in, and a body is allowed to be empty.
+ * Deep-validate one proposed scene of the apply body: a scene without its
+ * guard, checked against the scene's schema — a key a scene does not have (a
+ * `path`, a `properties`) is a 400 that names it —, a kebab id, and a draft:
+ * apply is a separate request and never trusts the client.
  */
-function itemHalves(
-  item: Record<string, unknown>,
-  label: string,
-): { properties: Record<string, unknown>; body: string } {
-  const properties = item.properties;
-  if (!isPlainObject(properties)) {
-    throw new ApiError(400, `${label}.properties must be an object`);
-  }
-  const body = item.body;
-  if (typeof body !== "string") throw new ApiError(400, `${label}.body must be a string`);
-  return { properties, body };
-}
-
-function assertKnownKeys(item: Record<string, unknown>, allowed: Set<string>, label: string): void {
-  for (const key of Object.keys(item)) {
-    if (!allowed.has(key)) throw new ApiError(400, `${label}: unknown key "${key}"`);
-  }
-}
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return v !== null && typeof v === "object" && !Array.isArray(v);
-}
-
-/** Deep-validate one scene item of the apply body -> write target. */
-export function applySceneTarget(item: unknown, index: number): ApplyTarget {
+export function applySceneItem(item: unknown, index: number): SceneProposal {
   const label = `scenes[${index}]`;
-  if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
-  assertKnownKeys(item, SCENE_ITEM_KEYS, label);
-  const rel = item.path;
-  if (typeof rel !== "string") throw new ApiError(400, `${label}.path must be a string`);
-  const { properties, body } = itemHalves(item, label);
-  assertSafeAddress(rel); // 400 on traversal/absolute/hidden
-  // `<chapter>/<id>` and nothing else: the group segment of
-  // a scene address is its `location`, which the SERVER derives on the way in
-  // (`draftAddress`). A client that still sends a three-segment path is
-  // naming a group of its own, and that is exactly the contradiction between
-  // address and `location` that the two-segment rule rules out.
-  const segments = addressSegments(rel);
-  if (segments.length !== 2 || RESERVED_DIRS.has(segments[0]!)) {
-    throw new ApiError(400, `${label}.path must be "<chapter>/<scene-id>"`);
+  const scene = readSceneProposal(item, label);
+  if (!ENTITY_ID_PATTERN.test(scene.id)) {
+    throw new ApiError(400, `${label}.id must be a kebab-case slug`);
   }
-  // The last segment is the SCENE ID whenever the properties carry none
-  // (`draftAddress` only overrides it when there is one, and `insertDraft`
-  // falls back to the locator id). So it has to obey the same address
-  // contract as an explicit `id` does — otherwise `01-x/foo.md` inserts a
-  // row whose id contradicts the addressing and cannot be opened again.
-  if (!ENTITY_ID_PATTERN.test(segments[1]!)) {
-    throw new ApiError(400, `${label}.path: "${segments[1]!}" is not a scene id`);
-  }
-  // Re-validation (apply is a separate request — never trust the client):
-  // the draft must still be a draft.
-  if (properties.status !== "draft") {
-    throw new ApiError(400, `${label}: "status" must be "draft"`);
-  }
-  return { rel, properties, body };
+  if (scene.status !== "draft") throw new ApiError(400, `${label}: "status" must be "draft"`);
+  return scene;
 }
-
-
 
 /**
  * Deep-validate one proposed npc of the apply body: an npc without its
@@ -1041,7 +911,7 @@ export async function jobChapterTarget(
   },
   bodyChapter: unknown,
   bodyChapterTitle: unknown,
-): Promise<ApplyTarget | null> {
+): Promise<EntityDraft | null> {
   // The description is the OUTLINE's (it read the source material) and only
   // a new-chapter run's outline has one, so it comes from the job on either
   // path: the override names the chapter, it does not describe it.
@@ -1063,7 +933,7 @@ export async function jobChapterTarget(
 
 /**
  * The new-chapter flow: `chapter` + `chapterTitle` mean "the
- * drafts go into a chapter that does not exist yet". Returns the
+ * scenes go into a chapter that does not exist yet". Returns the
  * chapter entry to create in the same batch, or null when the
  * chapter is already there (idempotent — an existing chapter is not a
  * conflict, and its text is never touched). Minimal properties per the format
@@ -1076,7 +946,7 @@ export async function newChapterTarget(
   chapter: unknown,
   chapterTitle: unknown,
   description?: string,
-): Promise<ApplyTarget | null> {
+): Promise<EntityDraft | null> {
   if (chapter === undefined && chapterTitle === undefined) return null;
   if (typeof chapter !== "string" || typeof chapterTitle !== "string") {
     throw new ApiError(400, "chapter and chapterTitle must be sent together as strings");
@@ -1095,24 +965,23 @@ export async function newChapterTarget(
 }
 
 /**
- * Write the reviewed run (as ROWS). Validates ALL scene drafts, npcs and
- * locations first (400), then checks ALL targets for conflicts (409 with the
- * conflicting scene paths, npc ids and location ids, nothing partially
- * written), then inserts them in ONE transaction — which is what "all or
- * nothing" means literally. Returns the written scene addresses, npc ids and
- * location ids.
+ * Write the reviewed run (as ROWS). Validates ALL scenes, npcs and locations
+ * first (400), then checks ALL targets for conflicts (409 with the
+ * conflicting scene, npc and location ids, nothing partially written), then
+ * inserts them in ONE transaction — which is what "all or nothing" means
+ * literally. Returns the written scene, npc and location ids.
  *
- * `chapter`/`chapterTitle` (both or neither) add the chapter's chapter entry
- * to the SAME all-or-nothing batch when it does not exist yet — the app's
- * new-chapter flow.
+ * `chapter`/`chapterTitle` (both or neither) add the chapter to the SAME
+ * all-or-nothing batch when it does not exist yet — the app's new-chapter
+ * flow.
  *
  * `npcs` are proposed npcs, each an npc without its guard — a scene run's
  * and the NPC run's one npc alike: conflict handling, atomic writes and the
- * job cleanup are identical.
+ * job cleanup are identical. The same holds for `scenes` and `locations`.
  *
- * `jobId` is the background job the drafts came from: a
+ * `jobId` is the background job the proposals came from: a
  * successful apply discards it — in the SAME transaction as the writes,
- * so a crash can never leave a finished job behind whose drafts are
+ * so a crash can never leave a finished job behind whose proposals are
  * already stored. A stale id is ignored rather than dropping the wrong job.
  */
 export async function applyGenerated(
@@ -1125,133 +994,36 @@ export async function applyGenerated(
     chapterTitle?: unknown;
   },
   jobId?: string,
-): Promise<{ written: string[]; npcs: string[]; locations: string[] }> {
+): Promise<{ scenes: string[]; npcs: string[]; locations: string[] }> {
   await requireCampaign(campaign);
-  const { scenes, chapter, chapterTitle } = body;
-
-  if (scenes !== undefined && !Array.isArray(scenes)) {
-    throw new ApiError(400, "scenes must be an array");
+  const { chapter, chapterTitle } = body;
+  for (const key of ["scenes", "npcs", "locations"] as const) {
+    if (body[key] !== undefined && !Array.isArray(body[key])) {
+      throw new ApiError(400, `${key} must be an array`);
+    }
   }
-  if (body.npcs !== undefined && !Array.isArray(body.npcs)) {
-    throw new ApiError(400, "npcs must be an array");
-  }
-  if (body.locations !== undefined && !Array.isArray(body.locations)) {
-    throw new ApiError(400, "locations must be an array");
-  }
-  const targets: ApplyTarget[] = ((scenes as unknown[] | undefined) ?? []).map(applySceneTarget);
+  const scenes = ((body.scenes as unknown[] | undefined) ?? []).map(applySceneItem);
   const npcs = ((body.npcs as unknown[] | undefined) ?? []).map(applyNpcItem);
   const locations = ((body.locations as unknown[] | undefined) ?? []).map(applyLocationItem);
-  if (targets.length === 0 && npcs.length === 0 && locations.length === 0) {
+  if (scenes.length === 0 && npcs.length === 0 && locations.length === 0) {
     throw new ApiError(400, "nothing to apply");
   }
 
-  // The chapter entry comes first — the drafts live inside it.
-  const chapterEntry = await newChapterTarget(campaign, chapter, chapterTitle);
-  if (chapterEntry !== null) targets.unshift(chapterEntry);
-
-  const drafts = targets.map((t) => {
-    const properties = storedDraftProperties(t.properties, t.rel);
-    // The ADDRESS the entity will have (store/paths) — for a scene that is
-    // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because
-    // that is the key `insertDraft` writes under. The model's last segment is
-    // not part of the addressing, so it must not decide anything
-    // here either: checking the path-derived id while inserting the
-    // properties id would let a colliding draft past the 409 and into a
-    // primary-key violation.
-    return {
-      rel: t.rel,
-      address: draftAddress(t.rel, properties),
-      properties,
-      body: t.body,
-    };
+  // The chapter comes first — the scenes live inside it. The conflict check
+  // runs in the SAME transaction as the inserts (store/drafts.ts
+  // `applyDrafts`): asking here first would leave a window between "free"
+  // and "inserted" in which a target could appear, and the documented
+  // `409 { scenes }` would become a primary-key violation (a 500).
+  const chapterDraft = await newChapterTarget(campaign, chapter, chapterTitle);
+  await applyDrafts(campaign, chapterDraft === null ? [] : [chapterDraft], {
+    scenes,
+    npcs,
+    locations,
+    jobId,
   });
-
-  // By IDENTITY, not by address: a scene's address carries its `location`, so
-  // two drafts with the same id under different locations
-  // are two addresses for ONE row — and the row is what the insert claims.
-  const seen = new Set<string>();
-  for (const draft of drafts) {
-    const key = addressIdentity(draft.address);
-    if (seen.has(key)) throw new ApiError(400, `duplicate target path: ${draft.rel}`);
-    seen.add(key);
-  }
-
-  // The conflict check runs in the SAME transaction as the inserts — see
-  // store/drafts.ts `applyDrafts`. Asking here first would leave a window
-  // between "free" and "inserted" in which a target could appear, and the
-  // documented `409 { conflicts }` would become a primary-key violation (a
-  // 500). It asks by ADDRESS, i.e. by id, which is the key — so a draft that
-  // collides with an existing entity is caught even when the model chose a
-  // different last segment for it; the conflict is REPORTED under the path
-  // the client sent, which is the draft it has to fix.
-  await applyDrafts(campaign, drafts, { npcs, locations, jobId });
   return {
-    written: drafts.map((draft) => draft.address),
+    scenes: scenes.map((scene) => scene.id),
     npcs: npcs.map((npc) => npc.id),
     locations: locations.map((location) => location.id),
   };
-}
-
-/**
- * The properties a draft is STORED with, checked and degraded in one step.
- *
- * The `id` BECOMES THE PRIMARY KEY of the inserted row (and, for a scene, the
- * id segment of its address). It arrives from a client payload and was taken
- * on trust: `id: "a/b"` inserted a row whose address parses as a different
- * path — unreachable through `GET /entries`, i.e. content written and lost in
- * the same request. So an `id` that is THERE has to be usable.
- *
- * A BLANK one is not there: it is dropped here, and the store then falls the
- * id back to the address's last segment — the only stable identity such a
- * draft has, and an address the validation has already constrained.
- */
-export function storedDraftProperties(
-  properties: Record<string, unknown>,
-  rel: string,
-): Record<string, unknown> {
-  const id = properties.id;
-  if (typeof id === "string" && id.trim() === "") {
-    const rest = { ...properties };
-    delete rest.id;
-    return rest;
-  }
-  assertDraftId(id, rel);
-  return properties;
-}
-
-/**
- * The id rule itself — 422 like the generator's other content rejections: the
- * payload is well-formed, its CONTENT is unusable.
- */
-export function assertDraftId(id: unknown, rel: string): void {
-  if (id === undefined) return;
-  if (typeof id !== "string" || !ENTITY_ID_PATTERN.test(id.trim())) {
-    throw new ApiError(
-      422,
-      `${rel}: "id" must be a kebab-case slug (a-z, 0-9, single dashes) — ` +
-        `"${String(id)}" cannot be addressed`,
-    );
-  }
-}
-
-/**
- * Where a draft will live: its address. For a SCENE that is
- * `<chapter>/<location>/<id>` — the chapter from the draft's own path (the
- * run's chapter), the id from the properties, and the GROUP from the
- * properties `location`. Nothing about the group is taken from the path:
- * taking it from there would make a corrected `location` and the stored
- * address disagree. For a chapter the address is the path — its id IS the
- * first segment.
- *
- * An unusable `location` is NOT rejected here — `insertDraft` does that, in
- * the transaction, with the code the app has a sentence for.
- */
-export function draftAddress(rel: string, properties: Record<string, unknown>): string {
-  if (kindFromAddress(rel) !== "scene") return rel;
-  const segments = addressSegments(rel);
-  const chapterId = addressHead(rel);
-  const propsId = typeof properties.id === "string" ? properties.id.trim() : "";
-  const id = propsId === "" ? (segments[segments.length - 1] ?? "") : propsId;
-  const location = typeof properties.location === "string" ? properties.location.trim() : "";
-  return scenePath(chapterId, ENTITY_ID_PATTERN.test(location) ? location : "", id);
 }

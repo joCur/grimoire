@@ -9,7 +9,13 @@
 // conflict by it.
 
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, ChapterNode, EntryResponse, SceneOrderResponse } from "@grimoire/shared";
+import type {
+  CampaignTree,
+  ChapterNode,
+  EntryResponse,
+  Scene,
+  SceneOrderResponse,
+} from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 
@@ -42,11 +48,21 @@ async function entry(address: string): Promise<EntryResponse> {
   return (await res.json()) as EntryResponse;
 }
 
-/** The address of a scene, as the tree currently reports it. */
-async function addressOf(sceneId: string, chapter = CHAPTER): Promise<string> {
-  const scene = (await chapterNode(chapter)).scenes.find((s) => s.id === sceneId);
-  expect(scene).toBeDefined();
-  return scene!.path;
+/** One scene, from its own resource. */
+async function scene(id: string): Promise<Scene> {
+  const res = await app.request(`/api/campaigns/${CAMPAIGN}/scenes/${id}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as Scene;
+}
+
+/** Patch one scene on its own resource against the rev it holds now. */
+async function patchScene(id: string, fields: Record<string, unknown>): Promise<Response> {
+  const before = await scene(id);
+  return app.request(`/api/campaigns/${CAMPAIGN}/scenes/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: before.rev, ...fields }),
+  });
 }
 
 async function putOrder(
@@ -70,14 +86,14 @@ async function reorder(order: string[], chapter = CHAPTER): Promise<SceneOrderRe
 }
 
 /** Create a scene through the ordinary create endpoint. */
-async function createScene(title: string, chapter = CHAPTER): Promise<EntryResponse> {
+async function createScene(title: string, chapter = CHAPTER): Promise<Scene> {
   const res = await app.request(`/api/campaigns/${CAMPAIGN}/scenes`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ title, chapter }),
   });
   expect(res.status).toBe(201);
-  return (await res.json()) as EntryResponse;
+  return (await res.json()) as Scene;
 }
 
 async function createChapter(title: string): Promise<EntryResponse> {
@@ -213,15 +229,15 @@ describe("the guard", () => {
 
   test("reordering moves NEITHER the scenes' `rev` NOR the chapter entry's", async () => {
     const chapterBefore = await entry(CHAPTER);
-    const arrivalBefore = await entry(await addressOf(ARRIVAL));
-    const capturedBefore = await entry(await addressOf(CAPTURED));
+    const arrivalBefore = await scene(ARRIVAL);
+    const capturedBefore = await scene(CAPTURED);
 
     await reorder([CAPTURED, ARRIVAL]);
 
     // An open scene editor and an open chapter-text editor both still save:
-    // the reorder is not a write of either entry (ADR #23).
-    expect((await entry(await addressOf(ARRIVAL))).rev).toBe(arrivalBefore.rev);
-    expect((await entry(await addressOf(CAPTURED))).rev).toBe(capturedBefore.rev);
+    // the reorder is a write of neither (ADR #23).
+    expect((await scene(ARRIVAL)).rev).toBe(arrivalBefore.rev);
+    expect((await scene(CAPTURED)).rev).toBe(capturedBefore.rev);
     expect((await entry(CHAPTER)).rev).toBe(chapterBefore.rev);
   });
 
@@ -247,14 +263,14 @@ describe("moving a scene between chapters", () => {
     await createScene("Die Erste Dort", "zweites-kapitel");
     await createScene("Die Zweite Dort", "zweites-kapitel");
 
-    const address = await addressOf(ARRIVAL);
-    const before = await entry(address);
-    const res = await app.request(`/api/campaigns/${CAMPAIGN}/entries/${address}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: before.rev, properties: { chapter: "zweites-kapitel" } }),
-    });
+    const tokens = async (): Promise<unknown[]> => [
+      (await chapterNode()).sceneOrderRev,
+      (await chapterNode("zweites-kapitel")).sceneOrderRev,
+    ];
+    const tokensBefore = await tokens();
+    const res = await patchScene(ARRIVAL, { chapter: "zweites-kapitel" });
     expect(res.status).toBe(200);
+    expect(((await res.json()) as Scene).chapter).toBe("zweites-kapitel");
 
     expect(await sceneIds("zweites-kapitel")).toEqual([
       "die-erste-dort",
@@ -262,19 +278,15 @@ describe("moving a scene between chapters", () => {
       ARRIVAL,
     ]);
     expect(await sceneIds()).toEqual([CAPTURED]);
+    // Moving a scene writes the scene, not either chapter's order.
+    expect(await tokens()).toEqual(tokensBefore);
   });
 
   test("a patch that leaves the chapter alone leaves the order alone", async () => {
     await createScene("Der Dritte");
     await reorder(["der-dritte", ARRIVAL, CAPTURED]);
 
-    const address = await addressOf(ARRIVAL);
-    const before = await entry(address);
-    const res = await app.request(`/api/campaigns/${CAMPAIGN}/entries/${address}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: before.rev, properties: { status: "played" } }),
-    });
+    const res = await patchScene(ARRIVAL, { status: "played" });
     expect(res.status).toBe(200);
     expect(await sceneIds()).toEqual(["der-dritte", ARRIVAL, CAPTURED]);
   });
