@@ -14,6 +14,8 @@ import { useEffect, useRef } from "react";
 
 import { fetchVersion } from "@/api";
 import { reportServerBuild } from "@/lib/build-id";
+import { LOCATION_QUERY_ROOTS } from "@/location/location-query";
+import { NPC_QUERY_ROOTS } from "@/npc/npc-query";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -47,11 +49,11 @@ export function useCampaignVersion(campaign: string): void {
     last.current = { campaign, version: data.version };
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
-    // Something changed on the server — refetch everything read from this campaign.
-    // "npc"/"npcs" and "location"/"locations" are the npc and location
-    // resources (ADR #31), read beside the entries. "active-session" rides along: a session ended in another
-    // tab, a hand-edited `ended`, or simply midnight passing must reach the
-    // global live indicator without a reload.
+    // Something changed on the server — refetch everything read from this
+    // campaign. The npc's and the location's reads name their own key roots
+    // in their slices (ADR #31). "active-session" rides along: a session
+    // ended in another tab, a hand-edited `ended`, or simply midnight passing
+    // must reach the global live indicator without a reload.
     // "last-session" is the review's session (ended or not) — same reasoning,
     // and "session"/"sessions"/"inbox" are the reads of one evening, the list
     // of evenings and the ideas thrown in from the phone.
@@ -66,10 +68,8 @@ export function useCampaignVersion(campaign: string): void {
     for (const key of [
       "tree",
       "entry",
-      "npc",
-      "npcs",
-      "location",
-      "locations",
+      ...NPC_QUERY_ROOTS,
+      ...LOCATION_QUERY_ROOTS,
       "search",
       "active-session",
       "last-session",

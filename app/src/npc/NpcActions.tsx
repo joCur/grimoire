@@ -18,6 +18,7 @@ import {
   npcFormIssues,
   npcFormValues,
 } from "./npc-form";
+import { npcsKey } from "./npc-query";
 import { useNpcEdit } from "./use-npc-edit";
 
 /**
@@ -30,7 +31,7 @@ function staleAfterWrite(campaign: string) {
   return [
     ["tree", campaign],
     ["search", campaign],
-    ["npcs", campaign],
+    npcsKey(campaign),
   ];
 }
 

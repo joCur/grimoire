@@ -6,7 +6,6 @@
 import { npcChangeSchema } from "@grimoire/shared/npc";
 import type { GenerateJob, Npc } from "@grimoire/shared/types";
 
-import { applyNpcAugment, startNpcAugmentJob } from "@/api";
 import {
   AugmentDialog,
   AugmentReview,
@@ -16,7 +15,9 @@ import {
   type ProposalView,
 } from "@/components/AugmentAction";
 
+import { applyNpcAugment, startNpcAugmentJob } from "./npc-api";
 import { npcFieldProposals } from "./npc-augment";
+import { npcsKey } from "./npc-query";
 import { useNpcEdit } from "./use-npc-edit";
 
 export function NpcAugmentAction({ campaign, npc }: { campaign: string; npc: Npc }) {
@@ -77,7 +78,7 @@ function NpcAugmentReview({
     write: ({ force: _force, id: _id, ...request }) =>
       applyNpcAugment(campaign, npc.id, { ...request, jobId: job.id }),
     canForce: false,
-    invalidateOnSuccess: [...staleAfterApply(campaign), ["npcs", campaign]],
+    invalidateOnSuccess: [...staleAfterApply(campaign), npcsKey(campaign)],
     onSaved: onDone,
     onReload: (stored) => state.recut(stored.body),
   });

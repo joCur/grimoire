@@ -28,7 +28,7 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { appendThread, createNpc, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
+import { appendThread, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
@@ -43,7 +43,8 @@ import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
 import { seedSession } from "@/lib/use-session";
 import { threadsKey, useThreads } from "@/lib/use-threads";
 import { NpcFromNoteDialog } from "@/npc/NpcFromNoteDialog";
-import { npcKey } from "@/npc/npc-query";
+import { createNpc } from "@/npc/npc-api";
+import { npcKey, npcsKey } from "@/npc/npc-query";
 
 type ActionKind = ReviewActionKind;
 
@@ -182,7 +183,7 @@ export function ReviewRoute() {
       // A new npc changes the tree, the npc list and ⌘K.
       if (vars.action === "npc") {
         void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-        void queryClient.invalidateQueries({ queryKey: ["npcs", campaign] });
+        void queryClient.invalidateQueries({ queryKey: npcsKey(campaign) });
         void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
       }
       remember(campaign, vars.entry.key, vars.action, result.threads?.adoptedId);

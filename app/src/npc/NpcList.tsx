@@ -5,18 +5,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { User } from "lucide-react";
 
-import { fetchNpcs } from "@/api";
 import { ListRow } from "@/components/ListRow";
 import { useT } from "@/i18n";
 
 import { npcHref } from "./npc-links";
+import { npcsQuery } from "./npc-query";
 
 export function NpcList({ campaign }: { campaign: string }) {
   const t = useT();
-  const { data: npcs } = useQuery({
-    queryKey: ["npcs", campaign],
-    queryFn: () => fetchNpcs(campaign),
-  });
+  const { data: npcs } = useQuery(npcsQuery(campaign));
   if (npcs === undefined) return null;
   if (npcs.length === 0) {
     return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.npcs")}</p>;

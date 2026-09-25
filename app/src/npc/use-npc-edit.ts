@@ -17,11 +17,11 @@ import type { Npc, NpcChange, NpcPatch } from "@grimoire/shared/types";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { npcConflict, patchNpc, type NpcConflict } from "@/api";
 import { useT, type MessageKey } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { WRITE_FAILED_MESSAGE } from "@/lib/write-with-rev";
 
+import { npcConflict, patchNpc, type NpcConflict } from "./npc-api";
 import { npcKey } from "./npc-query";
 
 export interface NpcEdit {

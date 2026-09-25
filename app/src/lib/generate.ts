@@ -20,7 +20,6 @@
 //   - which of the view's states the server's job puts us in,
 //     and the error body of a failed job.
 
-import { withNpcChange } from "@grimoire/shared/npc";
 import type {
   DraftEdit,
   GenerateJob,
@@ -28,7 +27,6 @@ import type {
   GenerateJobReview,
   GenerateReviewDecision,
   NpcChange,
-  NpcProposal,
 } from "@grimoire/shared/types";
 
 import type { Translate } from "@/i18n";
@@ -118,27 +116,6 @@ export function chapterIdError(id: string, t: Translate): string | undefined {
   if (/\s/.test(id)) return t("generate.input.chapterId.space");
   if (!/^[a-z0-9-]+$/.test(id)) return t("generate.input.chapterId.charset");
   if (RESERVED_CHAPTER_IDS.has(id)) return t("generate.input.chapterId.reserved");
-  return undefined;
-}
-
-/**
- * Is this string usable as an npc id? The npc generator's `id`
- * field is OPTIONAL — an empty field means "the model chooses" and is
- * therefore not an error. Everything else follows the same bar as a chapter
- * id (the server's kebab pattern) plus the one check only the client can do
- * cheaply: an id that already exists would be a 409, and saying so
- * before the run costs nothing.
- */
-export function npcIdError(
-  id: string,
-  existingIds: readonly string[],
-  t: Translate,
-): string | undefined {
-  if (id === "") return undefined;
-  if (id.includes("/") || id.includes("\\")) return t("generate.input.npcId.slash");
-  if (/\s/.test(id)) return t("generate.input.npcId.space");
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return t("generate.input.npcId.charset");
-  if (existingIds.includes(id)) return t("generate.input.npcId.exists");
   return undefined;
 }
 
@@ -461,22 +438,6 @@ export function mergeNpcEdits(
   return out;
 }
 
-/**
- * What the review shows for one proposed npc: the npc the run proposed with
- * every change laid on top, in order — the job's stored change first, the
- * buffer the DM is typing in last (`withNpcChange`).
- */
-export function npcOf(
-  proposed: NpcProposal,
-  ...changes: Array<NpcChange | undefined>
-): NpcProposal {
-  let out = proposed;
-  for (const change of changes) {
-    if (change === undefined) continue;
-    out = withNpcChange(out, change) as NpcProposal;
-  }
-  return out;
-}
 
 /** Merge boolean decisions; `null` deletes the key (the server does this). */
 function mergeFlags(

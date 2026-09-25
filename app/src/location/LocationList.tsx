@@ -6,18 +6,15 @@ import type { CampaignTree } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 
-import { fetchLocations } from "@/api";
 import { ListRow } from "@/components/ListRow";
 import { useT } from "@/i18n";
 
 import { locationHref } from "./location-links";
+import { locationsQuery } from "./location-query";
 
 export function LocationList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
   const t = useT();
-  const { data: locations } = useQuery({
-    queryKey: ["locations", campaign],
-    queryFn: () => fetchLocations(campaign),
-  });
+  const { data: locations } = useQuery(locationsQuery(campaign));
   if (locations === undefined) return null;
   if (locations.length === 0) {
     return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.locations")}</p>;

@@ -17,9 +17,10 @@
 // source material). Both run through the same four states, the same
 // background job (there is one generator job per campaign, whatever its kind)
 // and the same accept endpoint — the NPC mode only asks for less (source text
-// plus an optional id) and reviews exactly one card. The mode is not local
-// trivia: a restored job decides it (job.kind), so a reload during an NPC run
-// comes back in NPC mode.
+// plus an optional id) and reviews exactly one card; its form and its review
+// live in the npc's slice (npc/NpcRun.tsx), and this route only picks the
+// mode. The mode is not local trivia: a restored job decides it (job.kind),
+// so a reload during an NPC run comes back in NPC mode.
 //
 // The run is a background JOB on the server and this route
 // is only its window: on mount it asks GET …/generate/job and restores
@@ -48,7 +49,6 @@ import type {
   GenerateResult,
   LocationProposal,
   NamingHint,
-  NpcChange,
   NpcProposal,
 } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,7 +74,6 @@ import {
   fetchTree,
   retryJobPart,
   startGenerateJob,
-  startGenerateNpcJob,
 } from "@/api";
 import { DraftEditor } from "@/components/DraftEditor";
 import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
@@ -101,8 +100,6 @@ import {
   draftOf,
   locationState,
   newChapterId,
-  npcIdError,
-  npcOf,
   npcState,
   openLocations,
   openNpcs,
@@ -125,10 +122,12 @@ import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
 import { LocationProposalRow } from "@/location/LocationProposalRow";
 import { locationLabel } from "@/location/location-links";
+import { locationsKey } from "@/location/location-query";
 import { Markdown } from "@/markdown/Markdown";
-import { NpcProposalCard } from "@/npc/NpcProposalCard";
 import { NpcProposalRow } from "@/npc/NpcProposalRow";
-import { npcHref, npcLabel } from "@/npc/npc-links";
+import { NpcRunFields, NpcRunReview, NpcRunWrittenAction, useNpcRunForm } from "@/npc/NpcRun";
+import { npcLabel } from "@/npc/npc-links";
+import { npcsKey } from "@/npc/npc-query";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
 type Target = { kind: "chapter"; id: string } | { kind: "new" };
@@ -218,19 +217,13 @@ export function GenerateRoute() {
   // on its own.
   const showIdError = newIdError !== undefined && newIdInput !== "";
 
-  // The NPC mode's own two fields: its own source buffer, so
-  // switching modes never eats what the DM pasted, and the optional id.
-  const [npcSource, setNpcSource] = useState("");
-  const [npcId, setNpcId] = useState("");
-  const npcIds = (tree.data?.npcs ?? []).map((npc) => npc.id);
-  const trimmedNpcId = npcId.trim();
-  const npcIdMessage = npcIdError(trimmedNpcId, npcIds, t);
+  // The NPC mode's form — its own buffers, in the npc's slice.
+  const npcRun = useNpcRunForm(tree.data);
 
   // The TYPING overlay, nothing more: the saved edits live on the job
   // (`job.draftEdits`) and this only keeps the fields from lagging behind the
   // keystroke while the debounced patch is on its way.
   const [edits, setEdits] = useState<Record<string, DraftEdit>>({});
-  const [npcEdits, setNpcEdits] = useState<Record<string, NpcChange>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [written, setWritten] = useState<string[]>();
   // The npc an NPC run's accept wrote — what the open action opens once the job
@@ -273,7 +266,6 @@ export function GenerateRoute() {
     const previous = seeded?.campaign === campaign ? seeded.jobId : undefined;
     setSeeded({ campaign, jobId });
     setEdits({});
-    setNpcEdits({});
     setEditing({});
     // A restored run decides the mode — its result belongs to its
     // kind. No job leaves the DM's choice alone.
@@ -315,17 +307,6 @@ export function GenerateRoute() {
     setEdits((previous) => ({ ...previous, [path]: { ...previous[path], ...edit } }));
     review.edit(path, edit);
   };
-  /**
-   * One proposed npc as the review shows it: what the run proposed, with the
-   * job's stored change and then the local buffer laid over it.
-   */
-  const npcFor = (proposed: NpcProposal): NpcProposal =>
-    npcOf(proposed, job?.npcEdits?.[proposed.id], npcEdits[proposed.id]);
-  /** Fields of a proposed npc changed: local first, then debounced into the job. */
-  const editNpc = (id: string, change: NpcChange): void => {
-    setNpcEdits((previous) => ({ ...previous, [id]: { ...previous[id], ...change } }));
-    review.editNpc(id, change);
-  };
   /** What is still reviewable — the accept-all and discard actions work on it. */
   const rest = openParts(job);
   const progress = jobProgress(job);
@@ -340,7 +321,7 @@ export function GenerateRoute() {
   const start = useMutation({
     mutationFn: () =>
       mode === "npc"
-        ? startGenerateNpcJob(campaign, { sourceText: npcSource, id: trimmedNpcId })
+        ? npcRun.start(campaign)
         : startGenerateJob(campaign, {
             chapter: chapterId as string,
             sourceText,
@@ -442,8 +423,8 @@ export function GenerateRoute() {
       // The scenes, npcs and locations exist now — the chapter overview and
       // the lists have to show them.
       void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-      void queryClient.invalidateQueries({ queryKey: ["npcs", campaign] });
-      void queryClient.invalidateQueries({ queryKey: ["locations", campaign] });
+      void queryClient.invalidateQueries({ queryKey: npcsKey(campaign) });
+      void queryClient.invalidateQueries({ queryKey: locationsKey(campaign) });
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
   });
@@ -661,7 +642,7 @@ export function GenerateRoute() {
     campaign !== "" &&
     !starting &&
     (mode === "npc"
-      ? npcSource.trim() !== "" && npcIdMessage === undefined
+      ? npcRun.ready
       : chapterId !== undefined && !titleMissing && sourceText.trim() !== "");
 
   return (
@@ -703,62 +684,7 @@ export function GenerateRoute() {
               ))}
             </div>
 
-            {mode === "npc" && (
-              <>
-                <label htmlFor="gen-npc-source" className={cn(OVERLINE, "mb-2 block")}>
-                  {t("generate.input.npc.sourceLabel")}
-                </label>
-                <textarea
-                  id="gen-npc-source"
-                  rows={12}
-                  value={npcSource}
-                  onChange={(e) => setNpcSource(e.target.value)}
-                  placeholder={t("generate.input.npc.sourcePlaceholder")}
-                  className={cn(FIELD, "resize-y leading-[1.6] text-body")}
-                />
-
-                <label
-                  htmlFor="gen-npc-id"
-                  className="mt-3.5 mb-1.5 block text-[12px] text-muted-foreground"
-                >
-                  {t("generate.input.npc.idLabel")}
-                </label>
-                <input
-                  id="gen-npc-id"
-                  type="text"
-                  value={npcId}
-                  onChange={(e) => setNpcId(e.target.value)}
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  aria-invalid={npcIdMessage !== undefined}
-                  aria-describedby="gen-npc-id-note"
-                  placeholder={t("generate.input.npc.idPlaceholder")}
-                  className={cn(
-                    FIELD,
-                    "max-w-[320px] py-2.5 font-mono text-[12.5px]",
-                    npcIdMessage !== undefined && "border-destructive focus-visible:border-destructive",
-                  )}
-                />
-                <p
-                  id="gen-npc-id-note"
-                  aria-live="polite"
-                  className={cn(
-                    "mt-[7px] text-[11.5px] leading-[1.5]",
-                    npcIdMessage !== undefined
-                      ? "text-destructive"
-                      : trimmedNpcId === ""
-                        ? "text-muted-foreground"
-                        : "font-mono text-faint",
-                  )}
-                >
-                  {npcIdMessage ??
-                    (trimmedNpcId === ""
-                      ? t("generate.input.npc.idHint")
-                      : t("generate.input.npc.idPreview", { id: trimmedNpcId }))}
-                </p>
-              </>
-            )}
+            {mode === "npc" && <NpcRunFields form={npcRun} />}
 
             {mode === "scene" && (
               <>
@@ -1268,107 +1194,31 @@ export function GenerateRoute() {
           </>
         )}
 
-        {/* The NPC review: one card, the same warnings/usage/cost
-            lines and the same two actions — there is nothing to decide per
-            item, so no proposal rows and no count in the apply button. */}
-        {phase === "review" && npcResult !== undefined && (
-          <>
-            <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
-              <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-                {t("generate.review.titleNpc")}
-              </h1>
-              <span className="text-[13px] text-muted-foreground">
-                {t("generate.review.pendingNpc")}
-              </span>
-              <ReviewSaveStatus status={review.status} />
-            </div>
-            <p
-              className={cn(
-                "text-[14px] leading-[1.6] text-body-secondary",
-                resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
-              )}
-            >
-              {t("generate.review.leadNpc")}
-            </p>
-            {resultUsage !== undefined && (
-              <p className="mb-[22px] text-[12px] text-faint">{resultUsage}</p>
-            )}
-
-            {npcResult.warnings.map((warning) => (
-              <div
-                key={warning}
-                className="mb-2 flex items-start gap-2.5 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
-              >
-                <StickyNote aria-hidden size={15} className="mt-px flex-none text-primary" />
-                <p className="text-[13px] leading-[1.55] text-soft">{warning}</p>
-              </div>
-            ))}
-
-            <NamingHints hints={npcResult.namingHints} t={t} />
-
-            <NpcProposalCard
-              npc={npcFor(npcResult.npc)}
-              tree={tree.data}
-              editing={editing[npcLabel(npcResult.npc.id)] === true}
-              onToggleEditing={() =>
-                setEditing((prev) => {
-                  const key = npcLabel(npcResult.npc.id);
-                  return { ...prev, [key]: prev[key] !== true };
-                })
-              }
-              onChange={(change) => editNpc(npcResult.npc.id, change)}
-              onFlush={review.flush}
-            />
-
-            {conflicts.length > 0 && (
-              <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
-                <p className="mb-1.5 text-[13px] text-foreground">
-                  {t("generate.review.conflictsNpc")}
-                </p>
-                <ul className="flex flex-col gap-1">
-                  {conflicts.map((path) => (
-                    <li key={path} className="font-mono text-[11.5px] text-body-secondary">
-                      {path}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {apply.isError && conflicts.length === 0 && (
-              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                {t(
-                  apply.error instanceof ApiError && apply.error.status === 409
-                    ? "generate.review.applyStale"
-                    : "generate.review.applyFailed",
-                )}
-              </p>
-            )}
-            {discard.isError && (
-              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                {t("generate.review.discardFailed")}
-              </p>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
-              <Button
-                type="button"
-                disabled={apply.isPending}
-                onClick={() => apply.mutate(undefined)}
-                className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
-              >
-                {t("generate.review.applyNpc")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={apply.isPending || discard.isPending}
-                onClick={() => discard.mutate()}
-                className="h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-              >
-                {t("common.discard")}
-              </Button>
-            </div>
-          </>
+        {/* The NPC run's review lives in the npc's slice; mounted per job,
+            so a new run starts with a clean typing buffer. */}
+        {phase === "review" && npcResult !== undefined && job !== null && (
+          <NpcRunReview
+            key={job.id}
+            job={job}
+            result={npcResult}
+            tree={tree.data}
+            review={review}
+            usage={resultUsage}
+            hints={<NamingHints hints={npcResult.namingHints} t={t} />}
+            conflicts={conflicts}
+            applyProblem={
+              apply.isError && conflicts.length === 0
+                ? apply.error instanceof ApiError && apply.error.status === 409
+                  ? "stale"
+                  : "failed"
+                : undefined
+            }
+            discardFailed={discard.isError}
+            applying={apply.isPending}
+            discarding={discard.isPending}
+            onApply={() => apply.mutate(undefined)}
+            onDiscard={() => discard.mutate()}
+          />
         )}
 
         {phase === "done" && written !== undefined && (
@@ -1389,17 +1239,7 @@ export function GenerateRoute() {
             </p>
             <div className="mt-2 flex flex-wrap gap-2.5">
               {mode === "npc" && writtenNpc !== undefined && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-                    void navigate(npcHref(campaign, writtenNpc));
-                  }}
-                  className="h-auto border-input bg-transparent px-4 py-2.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-                >
-                  {t("generate.written.openNpc")}
-                </Button>
+                <NpcRunWrittenAction campaign={campaign} id={writtenNpc} />
               )}
               <Button
                 type="button"

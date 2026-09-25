@@ -18,6 +18,7 @@ import {
   locationFormDirty,
   locationFormValues,
 } from "./location-form";
+import { locationsKey } from "./location-query";
 import { useLocationEdit } from "./use-location-edit";
 
 /** The queries a location write makes stale beside the location itself. */
@@ -25,7 +26,7 @@ function staleAfterWrite(campaign: string) {
   return [
     ["tree", campaign],
     ["search", campaign],
-    ["locations", campaign],
+    locationsKey(campaign),
   ];
 }
 

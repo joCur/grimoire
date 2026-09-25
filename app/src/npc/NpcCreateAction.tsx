@@ -6,11 +6,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { createNpc } from "@/api";
 import { CreateTrigger, useAfterCreate } from "@/components/CreateActions";
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { useT } from "@/i18n";
 
+import { createNpc } from "./npc-api";
 import { npcHref } from "./npc-links";
 
 export function NpcCreateAction({ campaign }: { campaign: string }) {

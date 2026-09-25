@@ -17,11 +17,11 @@ import type { Location, LocationChange, LocationPatch } from "@grimoire/shared/t
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { locationConflict, patchLocation, type LocationConflict } from "@/api";
 import { useT, type MessageKey } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { WRITE_FAILED_MESSAGE } from "@/lib/write-with-rev";
 
+import { locationConflict, patchLocation, type LocationConflict } from "./location-api";
 import { locationKey } from "./location-query";
 
 export interface LocationEdit {

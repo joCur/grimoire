@@ -6,11 +6,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { createLocation } from "@/api";
 import { CreateTrigger, useAfterCreate } from "@/components/CreateActions";
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { useT } from "@/i18n";
 
+import { createLocation } from "./location-api";
 import { locationHref } from "./location-links";
 
 export function LocationCreateAction({ campaign }: { campaign: string }) {

@@ -6,7 +6,6 @@
 import { locationChangeSchema } from "@grimoire/shared/location";
 import type { GenerateJob, Location } from "@grimoire/shared/types";
 
-import { applyLocationAugment, startLocationAugmentJob } from "@/api";
 import {
   AugmentDialog,
   AugmentReview,
@@ -16,7 +15,9 @@ import {
   type ProposalView,
 } from "@/components/AugmentAction";
 
+import { applyLocationAugment, startLocationAugmentJob } from "./location-api";
 import { locationFieldProposals } from "./location-augment";
+import { locationsKey } from "./location-query";
 import { useLocationEdit } from "./use-location-edit";
 
 export function LocationAugmentAction({
@@ -83,7 +84,7 @@ function LocationAugmentReview({
     write: ({ force: _force, id: _id, ...request }) =>
       applyLocationAugment(campaign, location.id, { ...request, jobId: job.id }),
     canForce: false,
-    invalidateOnSuccess: [...staleAfterApply(campaign), ["locations", campaign]],
+    invalidateOnSuccess: [...staleAfterApply(campaign), locationsKey(campaign)],
     onSaved: onDone,
     onReload: (stored) => state.recut(stored.body),
   });

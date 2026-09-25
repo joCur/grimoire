@@ -50,6 +50,8 @@ import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
 import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
+import { locationsKey } from "@/location/location-query";
+import { npcsKey } from "@/npc/npc-query";
 
 /** Queries that go stale when anything is created. */
 function invalidationKeys(campaign: string) {
@@ -57,8 +59,8 @@ function invalidationKeys(campaign: string) {
     ["tree", campaign],
     ["campaigns"],
     ["search", campaign],
-    ["npcs", campaign],
-    ["locations", campaign],
+    npcsKey(campaign),
+    locationsKey(campaign),
   ];
 }
 

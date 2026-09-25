@@ -38,8 +38,6 @@ import {
   mergeDraftEdits,
   newChapterId,
   nextChapterPrefix,
-  npcIdError,
-  npcOf,
   npcState,
   openNpcs,
   restoredMode,
@@ -500,32 +498,6 @@ describe("restoredMode", () => {
   });
 });
 
-describe("npcIdError", () => {
-  test("an empty field is not an error — it means 'the model chooses'", () => {
-    expect(npcIdError("", [], t)).toBeUndefined();
-  });
-
-  test("accepts kebab ids", () => {
-    expect(npcIdError("grella", [], t)).toBeUndefined();
-    expect(npcIdError("die-graue-witwe", [], t)).toBeUndefined();
-    expect(npcIdError("wache-2", [], t)).toBeUndefined();
-  });
-
-  test("rejects what the server would reject", () => {
-    expect(npcIdError("Grella", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("die graue", [], t)).toContain("Leerzeichen");
-    expect(npcIdError("npcs/grella", [], t)).toContain("Schrägstriche");
-    expect(npcIdError("grella_2", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("-grella", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("gräfin", [], t)).toContain("Kleinbuchstaben");
-  });
-
-  test("an id whose entry exists is named as such — the server would 409", () => {
-    expect(npcIdError("fenn", ["fenn", "jorna"], t)).toContain("existiert schon");
-    expect(npcIdError("grella", ["fenn", "jorna"], t)).toBeUndefined();
-  });
-});
-
 // --- the review state on the job -------------------------------------------
 
 describe("review state mapping", () => {
@@ -591,18 +563,10 @@ describe("review state mapping", () => {
     expect(next.review?.fields).toEqual({});
   });
 
-  test("an npc change merges field by field, and `null` clears a field of the proposal", () => {
+  test("an npc change merges field by field", () => {
     let next = mergeReviewPatch(job(), { npcEdits: { grella: { role: "Fischerin" } } });
     next = mergeReviewPatch(next, { npcEdits: { grella: { body: "Neu.\n" } } });
     expect(next.npcEdits).toEqual({ grella: { role: "Fischerin", body: "Neu.\n" } });
-    const proposed = { id: "grella", name: "Grella", status: "unknown" as const, body: "s", voice: "leise" };
-    expect(npcOf(proposed, next.npcEdits.grella, { voice: null })).toEqual({
-      id: "grella",
-      name: "Grella",
-      status: "unknown",
-      role: "Fischerin",
-      body: "Neu.\n",
-    });
   });
 
   test("`dropped` is a set sent whole, not a merge", () => {
