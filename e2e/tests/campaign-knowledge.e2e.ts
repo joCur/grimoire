@@ -17,15 +17,32 @@
 //      the draft.
 //
 // Plus what the PAGES have to do: be reached from four entry points, filter,
-// open ONE entry at a time with fields that fit the content, save that entry
-// on its own, confirm a deletion — and the 409 that a whole-list PUT still
-// needs underneath.
+// open ONE row at a time with fields that fit the content, save that row on
+// its own against its own guard, confirm a deletion — and the 409 of a row
+// and of the order of the knowledge items. Each glossary term and each
+// knowledge item is its own resource (ADR #31).
 
 import type { Page } from "@playwright/test";
 
 import { CONTEXT_ECHO, OLD_NAME, SCENE_ID, TRIGGER } from "../fixtures/replies";
-import { expect, test } from "../support/test";
+import { underCampaign } from "../support/api";
+import { getCampaign, patchCampaign } from "../support/campaign";
+import {
+  deleteGlossaryTerm,
+  getGlossaryTerm,
+  getGlossaryTerms,
+  glossaryTermPath,
+  patchGlossaryTerm,
+} from "../support/glossary-term";
+import {
+  createKnowledgeItem,
+  getKnowledgeItemOrder,
+  getKnowledgeItems,
+  knowledgeItemPath,
+  knowledgeItemOrderPath,
+} from "../support/knowledge-item";
 import { getScene } from "../support/scene";
+import { expect, test } from "../support/test";
 
 const SOURCE = "The party watches the quay at low tide.";
 
@@ -59,9 +76,90 @@ async function deleteRow(page: Page, name: RegExp): Promise<void> {
   await expect(dialog).toHaveCount(0);
 }
 
+// --- the resources underneath -------------------------------------------------
+
+/** A glossary term or a knowledge item without the fields the server hands out. */
+function content<T extends { id: string; rev: number }>(row: T): Omit<T, "id" | "rev"> {
+  const { id: _id, rev: _rev, ...fields } = row;
+  return fields;
+}
+
+test("the former list addresses name nothing; every term and item answers flat", async ({ api }) => {
+  // No list is swapped as a whole any more: GET and PUT on the old addresses
+  // are 404, without a redirect.
+  for (const list of ["glossary", "knowledge"]) {
+    expect((await api.fetch(underCampaign(api, list))).status).toBe(404);
+    const put = await api.fetch(underCampaign(api, list), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries: [], rev: 1 }),
+    });
+    expect(put.status).toBe(404);
+  }
+
+  // A term is its own resource: every field flat, its own guard.
+  const keeper = await getGlossaryTerm(api, "lighthouse-keeper");
+  expect(keeper).toEqual({
+    id: "lighthouse-keeper",
+    term: "lighthouse keeper",
+    explanation: "Leuchtturmwärter",
+    rev: 1,
+  });
+  // A stale rev is 409 with the term as it stands; an unknown field is 400.
+  await patchGlossaryTerm(api, keeper.id, { explanation: "Leuchtturmwärterin" });
+  const stale = await api.fetch(glossaryTermPath(api, keeper.id), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: keeper.rev, explanation: "Überschrieben" }),
+  });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({
+    code: "rev_conflict",
+    glossaryTerm: { id: keeper.id, explanation: "Leuchtturmwärterin", rev: 2 },
+  });
+  const unknownTermField = await api.fetch(glossaryTermPath(api, keeper.id), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: 2, kind: "fact" }),
+  });
+  expect(unknownTermField.status).toBe(400);
+  expect(await unknownTermField.text()).toContain("kind");
+
+  // The same for a knowledge item.
+  const item = await createKnowledgeItem(api, { kind: "fact", text: "Der Turm ist leer." });
+  expect(item).toEqual({
+    id: item.id,
+    kind: "fact",
+    from: "",
+    to: "",
+    text: "Der Turm ist leer.",
+    rev: 1,
+  });
+  const unknownItemField = await api.fetch(knowledgeItemPath(api, item.id), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: 1, term: "x" }),
+  });
+  expect(unknownItemField.status).toBe(400);
+  expect(await unknownItemField.text()).toContain("term");
+});
+
+test("the glossary intro is a field of the campaign, written with the campaign", async ({ api }) => {
+  const before = await getCampaign(api);
+  expect(before.glossaryIntro).toBe("");
+  const after = await patchCampaign(api, { glossaryIntro: "Begriffe aus dem Modul." });
+  expect(after).toEqual({
+    ...before,
+    glossaryIntro: "Begriffe aus dem Modul.\n",
+    rev: before.rev + 1,
+  });
+  // The terms did not move: the intro is no term.
+  expect((await getGlossaryTerms(api)).every((term) => term.rev === 1)).toBe(true);
+});
+
 // --- the pages themselves ----------------------------------------------------
 
-test("the knowledge page: add, edit, reorder, delete — one entry at a time", async ({
+test("the knowledge page: add, edit, reorder, delete — one item at a time", async ({
   page,
   api,
 }) => {
@@ -78,7 +176,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
   await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzmarsch");
   await saveEntry(page);
-  // The form CLOSED — the entry is stored, and the row is back to one line.
+  // The form CLOSED — the item is stored, and the row is back to one line.
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveCount(0);
 
   // --- anlegen: a style rule; switching the kind swaps the fields -----------
@@ -89,24 +187,28 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
     .fill("Keine Würfelwerte im Read-Aloud.");
   await saveEntry(page);
 
-  // Stored on the SERVER, in the order they were typed (quality floor: no
-  // localStorage — the list has to be visible through the API).
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("campaigns/beispiel/knowledge");
-  expect(stored.entries).toEqual([
+  // Stored on the SERVER, each item its own resource, in the order they were
+  // typed (quality floor: no localStorage).
+  const stored = await getKnowledgeItems(api);
+  expect(stored.map(content)).toEqual([
     { kind: "naming", from: OLD_NAME, to: "Salzmarsch", text: "" },
     { kind: "style", from: "", to: "", text: "Keine Würfelwerte im Read-Aloud." },
   ]);
 
   // --- umsortieren: the order IS the order of the prompt --------------------
+  const orderBefore = await getKnowledgeItemOrder(api);
   await page.getByRole("button", { name: "Nach oben" }).nth(1).click();
   await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
-  const reordered = await api.get<{ entries: Array<{ kind: string }> }>("campaigns/beispiel/knowledge");
-  expect(reordered.entries.map((e) => e.kind)).toEqual(["style", "naming"]);
+  const reordered = await getKnowledgeItems(api);
+  expect(reordered.map((item) => item.kind)).toEqual(["style", "naming"]);
+  // The order has its own guard: it moved, and no item's `rev` did.
+  expect((await getKnowledgeItemOrder(api)).rev).toBe(orderBefore.rev + 1);
+  expect(reordered.map((item) => item.rev)).toEqual([1, 1]);
   // The buttons at the ends are disabled — there is nowhere to move.
   await expect(page.getByRole("button", { name: "Nach oben" }).first()).toBeDisabled();
   await expect(page.getByRole("button", { name: "Nach unten" }).last()).toBeDisabled();
 
-  // --- bearbeiten: the ROW opens the entry ---------------------------------
+  // --- bearbeiten: the ROW opens the item ----------------------------------
   await page.getByRole("button", { name: /Keine Würfelwerte.*bearbeiten/ }).click();
   const rule = page.getByLabel("Stilregel für generierte Texte");
   await expect(rule).toBeFocused();
@@ -119,8 +221,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
 
   // --- deleting, with a confirmation ----------------------------------------
   await deleteRow(page, /Read-Aloud ohne Zahlen.*löschen/);
-  const afterDelete = await api.get<{ entries: Array<{ kind: string }> }>("campaigns/beispiel/knowledge");
-  expect(afterDelete.entries.map((e) => e.kind)).toEqual(["naming"]);
+  expect((await getKnowledgeItems(api)).map((item) => item.kind)).toEqual(["naming"]);
   await expect(page.getByText("Read-Aloud ohne Zahlen.")).toHaveCount(0);
 });
 
@@ -129,14 +230,12 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   api,
 }) => {
   await openGlossary(page);
-  const before = await api.get<{ entries: Array<{ term: string }>; rev: number }>(
-    "campaigns/beispiel/glossary",
-  );
-  expect(before.entries.length).toBeGreaterThan(0);
+  const before = await getGlossaryTerms(api);
+  expect(before.length).toBeGreaterThan(0);
 
-  // Alphabetical, not stored order — a glossary is looked things up in.
+  // Every term has its row.
   const shown = await page.getByRole("button", { name: /löschen$/ }).count();
-  expect(shown).toBe(before.entries.length);
+  expect(shown).toBe(before.length);
 
   // --- anlegen, with an explanation that is a PARAGRAPH ---------------------
   // An explanation is a paragraph, not a 120px box: the textarea grows, and
@@ -154,16 +253,21 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   expect(box?.height ?? 0).toBeGreaterThan(60);
   await saveEntry(page);
 
-  const after = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
-    "campaigns/beispiel/glossary",
-  );
-  expect(after.entries.map((e) => e.term)).toEqual([
-    ...before.entries.map((e) => e.term),
-    "tidal flat",
-  ]);
-  expect(after.entries.at(-1)?.explanation).toBe(LONG);
-  // The list's own guard token moved — the glossary is one entry.
-  expect(after.rev).toBe(before.rev + 1);
+  const after = await getGlossaryTerms(api);
+  expect(after.map((term) => term.term)).toEqual([...before.map((term) => term.term), "tidal flat"]);
+  expect(after.at(-1)?.explanation).toBe(LONG);
+  // A new term is a row of its own: nothing else moved.
+  expect(after.slice(0, -1)).toEqual(before);
+
+  // --- a term stands in the glossary once -----------------------------------
+  await page.getByRole("button", { name: "Neuer Begriff" }).click();
+  await page.getByLabel("Begriff", { exact: true }).fill("tidal flat");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(
+    page.getByText("Den Begriff „tidal flat“ gibt es im Glossar schon — bitte den vorhandenen bearbeiten."),
+  ).toBeVisible();
+  expect(await getGlossaryTerms(api)).toEqual(after);
+  await page.getByRole("button", { name: "Abbrechen" }).click();
 
   // --- the filter hides rows, and the row it leaves is the right one -------
   await page.getByPlaceholder("Begriff filtern").fill("tidal");
@@ -175,63 +279,102 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   // --- and deleting the FILTERED row deletes that row, not the first one ---
   await page.getByPlaceholder("Begriff filtern").fill("tidal");
   await deleteRow(page, /tidal flat.*löschen/);
-  const afterDelete = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
-  expect(afterDelete.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
+  expect(await getGlossaryTerms(api)).toEqual(before);
 });
 
-test("„Abbrechen“ throws the open entry away and leaves the stored one alone", async ({
+test("„Abbrechen“ throws the open row away and leaves the stored one alone", async ({
   page,
   api,
 }) => {
   await openGlossary(page);
-  const before = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
-  const first = before.entries[0]!.term;
+  const before = await getGlossaryTerms(api);
+  const first = before[0]!.term;
 
   await page.getByRole("button", { name: new RegExp(`${first}.*löschen`) }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
   // The confirmation was declined — nothing was written.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const after = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
-  expect(after.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
+  expect(await getGlossaryTerms(api)).toEqual(before);
 });
 
-test("a competing write is a conflict, not a silent overwrite", async ({ page, api }) => {
+test("a competing write is a conflict, not a silent overwrite — for an item and for the order", async ({
+  page,
+  api,
+}) => {
+  const first = await createKnowledgeItem(api, { kind: "naming", from: "Alt", to: "Neu" });
+  const second = await createKnowledgeItem(api, { kind: "fact", text: "Der Turm ist leer." });
+  const third = await createKnowledgeItem(api, { kind: "style", text: "Kurz halten." });
   await openKnowledge(page);
 
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
-  await page.getByLabel("Alt (im Quellmaterial)").fill("Alt");
-  await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
-
-  // Somebody else saves first (another tab, the same endpoint).
-  const current = await api.get<{ rev: number }>("campaigns/beispiel/knowledge");
-  await api.send("PUT", "campaigns/beispiel/knowledge", {
-    entries: [{ kind: "fact", from: "", to: "", text: "Von woanders." }],
-    rev: current.rev,
-  });
+  // --- the item: the DM changes one field, somebody else another ------------
+  await page.getByRole("button", { name: /Alt → Neu.*bearbeiten/ }).click();
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Mein Neu");
+  await api.send("PATCH", knowledgeItemPath(api, first.id), { rev: first.rev, from: "Fremd" });
 
   await page.getByRole("button", { name: "Speichern" }).click();
-  // Nothing was written, and the DM is told instead of losing the other list.
+  // Nothing was written, and the DM is told instead of losing the other write.
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  const after = await api.get<{ entries: Array<{ text: string }> }>("campaigns/beispiel/knowledge");
-  expect(after.entries.map((e) => e.text)).toEqual(["Von woanders."]);
-  // What the DM typed is still on screen — theirs to keep or to discard.
-  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
+  expect(content((await getKnowledgeItems(api))[0]!)).toEqual({
+    kind: "naming",
+    from: "Fremd",
+    to: "Neu",
+    text: "",
+  });
+  // What the DM typed is still on screen, and retrying blindly is not offered.
+  await expect(page.getByLabel("Neu (in dieser Kampagne)")).toHaveValue("Mein Neu");
+  await expect(page.getByRole("button", { name: "Speichern", exact: true })).toBeDisabled();
 
-  // Retrying blindly is not offered: saving is off until the DM decides.
-  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
-
-  // Reloading is their decision — and it costs the draft, so it asks first
-  // instead of discarding the typing without a word.
+  // Reloading costs the draft, so it asks first.
   await page.getByRole("button", { name: "Neu laden" }).click();
   const discard = page.getByRole("dialog");
   await expect(discard).toContainText("Änderungen verwerfen?");
   await discard.getByRole("button", { name: "Weiter bearbeiten" }).click();
-  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
+  await expect(page.getByLabel("Neu (in dieser Kampagne)")).toHaveValue("Mein Neu");
 
+  // Writing anyway writes only the field the DM changed: the other writer's
+  // field stays.
+  await page.getByRole("button", { name: "Trotzdem speichern" }).click();
+  await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
+  expect(content((await getKnowledgeItems(api))[0]!)).toEqual({
+    kind: "naming",
+    from: "Fremd",
+    to: "Mein Neu",
+    text: "",
+  });
+
+  // --- the order: somebody else rearranged it in between --------------------
+  // The other writer's PUT and the DM's click run in ONE browser task: the
+  // click follows the PUT's answer in the same continuation, so the version
+  // poll cannot bring the fresh order — and its guard — into the page in
+  // between. The page still holds the guard it read, and the move is a 409.
+  const stale = await getKnowledgeItemOrder(api);
+  const written = await page.evaluate(
+    async ({ url, order }) => {
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(order),
+      });
+      // The first row's „Nach unten" — the list on screen is still the one
+      // before the PUT.
+      document.querySelector<HTMLButtonElement>('button[aria-label="Nach unten"]')?.click();
+      return res.status;
+    },
+    {
+      url: api.url(knowledgeItemOrderPath(api)),
+      order: { items: [third.id, first.id, second.id], rev: stale.rev },
+    },
+  );
+  expect(written).toBe(200);
+  await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
+  // Nothing was written: the order is the other writer's.
+  expect((await getKnowledgeItemOrder(api)).items).toEqual([third.id, first.id, second.id]);
+  // Reloading brings the order that is stored, and the conflict line goes.
   await page.getByRole("button", { name: "Neu laden" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
-  await expect(page.getByText("Von woanders.")).toBeVisible();
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /bearbeiten$/ }).first()).toHaveAccessibleName(
+    /Kurz halten/,
+  );
 });
 
 test("leaving with an unsaved entry asks first — and only then", async ({ page }) => {
@@ -283,8 +426,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
   // travels along invisibly.
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzhafen");
   await saveEntry(page);
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("campaigns/beispiel/knowledge");
-  expect(stored.entries).toEqual([
+  expect((await getKnowledgeItems(api)).map(content)).toEqual([
     { kind: "naming", from: "Salt Harbour → Salzhafen", to: "Salzhafen", text: "" },
   ]);
 });
@@ -435,80 +577,49 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
 
 // --- what an OPEN row survives ------------------------------------------------
 //
-// The version poller refetches both lists every ~5s (app/src/lib/use-campaign-
+// The version poller refetches the terms every ~5s (app/src/lib/use-campaign-
 // version.ts), so the list under an open row really does change in production
-// — which is why these are E2E and not unit tests: the poll, the guard token
-// and the whole-list PUT only line up in the real stack.
+// — which is why this is E2E and not a unit test: the poll and the guard of
+// each row only line up in the real stack.
 
-test("an open row is its ENTRY, not a position — and the guard token is the one it was opened with", async ({
+test("an open row is its TERM, not a position — a change elsewhere is no conflict for it", async ({
   page,
   api,
 }) => {
   await openGlossary(page);
-  const before = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
-    "campaigns/beispiel/glossary",
-  );
+  const before = await getGlossaryTerms(api);
   // Two terms that are not the same row: one is edited, the other is deleted
   // from underneath by a second writer, standing in for another tab.
-  const edited = before.entries.at(-1)!;
-  const deleted = before.entries[0]!;
-  expect(edited.term).not.toBe(deleted.term);
+  const edited = before.at(-1)!;
+  const deleted = before[0]!;
+  expect(edited.id).not.toBe(deleted.id);
 
-  // The DM opens the LAST entry and types into it.
+  // The DM opens the LAST created term and types into it.
   await page.getByRole("button", { name: new RegExp(`${edited.term}.*bearbeiten`) }).click();
   const explanation = page.getByLabel("Erklärung");
   await explanation.fill("Von mir bearbeitet.");
 
-  // While that draft is open, nothing else may rewrite the list under it:
-  // delete and move are off (the draft's row is a position in the PUT).
-  await expect(page.getByRole("button", { name: /löschen$/ }).first()).toBeDisabled();
-
-  // Somebody else deletes the FIRST entry — every stored position below it
-  // shifts by one, and the poller brings that list into this page.
-  await api.send("PUT", "campaigns/beispiel/glossary", {
-    entries: before.entries.filter((entry) => entry.term !== deleted.term),
-    rev: before.rev,
-  });
+  // Somebody else deletes the FIRST term, and the poller brings that list
+  // into this page.
+  await deleteGlossaryTerm(api, deleted.id);
   await expect(page.getByRole("button", { name: new RegExp(`${deleted.term}.*löschen`) })).toHaveCount(
     0,
     { timeout: 20_000 },
   );
-
-  // Saving now is a CONFLICT, not a write: the draft was written against the
-  // list as it was. Nothing reached the server.
-  await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  const afterConflict = await api.get<{
-    entries: Array<{ term: string; explanation: string }>;
-    rev: number;
-  }>("campaigns/beispiel/glossary");
-  expect(afterConflict.entries.map((e) => e.explanation)).not.toContain("Von mir bearbeitet.");
-
-  // And saving is OFF until the DM decides — retrying against a list
-  // that moved is exactly how a draft lands on a neighbouring entry.
-  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
   await expect(explanation).toHaveValue("Von mir bearbeitet.");
 
-  // Keeping the draft re-aims it at the list that came back — offered because
-  // the opened entry is still there, unchanged.
-  await page.getByRole("button", { name: /Entwurf behalten/ }).click();
+  // Saving writes THIS term against its own guard — nobody touched it, so
+  // there is nothing to be in conflict with.
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
 
-  // THE POINT: the text landed on the entry it was typed into, and the entry
-  // that moved into its old position is untouched.
-  const after = await api.get<{ entries: Array<{ term: string; explanation: string }> }>(
-    "campaigns/beispiel/glossary",
+  // THE POINT: the text landed on the term it was typed into, and every
+  // other term is untouched.
+  const after = await getGlossaryTerms(api);
+  expect(after.find((term) => term.id === edited.id)?.explanation).toBe("Von mir bearbeitet.");
+  expect(after.filter((term) => term.id !== edited.id)).toEqual(
+    before.filter((term) => term.id !== edited.id && term.id !== deleted.id),
   );
-  const written = after.entries.find((entry) => entry.term === edited.term);
-  expect(written?.explanation).toBe("Von mir bearbeitet.");
-  for (const entry of after.entries) {
-    if (entry.term !== edited.term) {
-      expect(entry.explanation).toBe(
-        before.entries.find((old) => old.term === entry.term)?.explanation,
-      );
-    }
-  }
 });
 
 test("a dirty draft is never thrown away by a click — moving on asks first", async ({ page }) => {

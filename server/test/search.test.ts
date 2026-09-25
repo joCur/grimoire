@@ -197,16 +197,14 @@ describe("reference queries", () => {
   });
 
   test("glossary terms are indexed too: 'lighthouse keeper'", async () => {
-    // The glossary is a TABLE, so a term is a searchable row instead of one
-    // opaque markdown body.
+    // A glossary term is its own entity (ADR #31), so a hit names it by its
+    // kind and its id like every other hit; the app opens the glossary page.
     const results = await search("lighthouse keeper");
-    const entry = results.find((r) => r.kind === "glossary");
-    // A LIST row carries `kind` and `id` like every hit (ADR #26); the app
-    // opens such a hit through its list.
-    expect(entry).toMatchObject({ id: "lighthouse keeper", title: "lighthouse keeper" });
+    const entry = results.find((r) => r.kind === "glossary-term");
+    expect(entry).toMatchObject({ id: "lighthouse-keeper", title: "lighthouse keeper" });
     // the explanation is the body, so it is searchable from the German side
     expect(
-      (await search("Leuchtturmwärter")).some((r) => r.kind === "glossary"),
+      (await search("Leuchtturmwärter")).some((r) => r.kind === "glossary-term"),
     ).toBe(true);
   });
 });

@@ -47,6 +47,7 @@ import { chapterPath, getChapter, patchChapter } from "../support/chapter";
 import { getLocation } from "../support/location";
 import { getNpc, npcExists, patchNpc } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
+import { createGlossaryTerm, getGlossaryTerms } from "../support/glossary-term";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
@@ -669,7 +670,14 @@ test("the chapter and the campaign are their own resources; the entry addresses 
     status: "active",
   });
   const campaign = await getCampaign(api);
-  expect(Object.keys(campaign).sort()).toEqual(["body", "description", "id", "name", "rev"]);
+  expect(Object.keys(campaign).sort()).toEqual([
+    "body",
+    "description",
+    "glossaryIntro",
+    "id",
+    "name",
+    "rev",
+  ]);
   expect(campaign.name).toBe("Der Leuchtturm von Salzhafen");
 
   // A stale rev is 409 with the current state and writes nothing.
@@ -733,22 +741,14 @@ test("the chapter and the campaign are their own resources; the entry addresses 
   }
 });
 
-test("the glossary is written as a list, on its own page", async ({ page, api }) => {
-  // The glossary is a LIST with its own endpoint and its own guard token, and
-  // it has no entry address to edit as text. Its own page is where the DM
-  // keeps it — row by row, never as markdown.
-  type Glossary = { entries: { term: string; explanation: string }[]; rev: number };
-  const before = await api.get<Glossary>("campaigns/beispiel/glossary");
-  expect(before.entries.map((e) => e.term)).toContain("lighthouse keeper");
+test("a glossary term is a row of its own, kept on the glossary page", async ({ page, api }) => {
+  // A glossary term is its own resource (ADR #31) and has no text to edit as
+  // markdown. The glossary page is where the DM keeps the terms — row by
+  // row, never as markdown.
+  const created = await createGlossaryTerm(api, { term: "tide flat", explanation: "Gezeitenwatt" });
+  expect((await getGlossaryTerms(api)).map((term) => term.id)).toContain(created.id);
 
-  await api.send("PUT", "campaigns/beispiel/glossary", {
-    rev: before.rev,
-    entries: [{ term: "tide flat", explanation: "Gezeitenwatt" }],
-  });
-  const after = await api.get<Glossary>("campaigns/beispiel/glossary");
-  expect(after.entries.map((e) => e.term)).toEqual(["tide flat"]);
-
-  // The glossary page shows that list, and carries no markdown editor.
+  // The glossary page shows the term, and carries no markdown editor.
   await page.goto("/campaigns/beispiel/glossary");
   await expect(page.getByText("Gezeitenwatt")).toBeVisible();
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);

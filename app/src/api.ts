@@ -4,18 +4,16 @@
 // exactly once. An entity with a slice of its own keeps its client there
 // (campaign/campaign-api.ts, chapter/chapter-api.ts, scene/scene-api.ts,
 // npc/npc-api.ts, location/location-api.ts, thread/thread-api.ts,
-// idea/idea-api.ts), built from the HTTP helpers exported here.
+// idea/idea-api.ts, glossary-term/glossary-term-api.ts,
+// knowledge-item/knowledge-item-api.ts), built from the HTTP helpers exported
+// here.
 
 import type {
   CampaignSummary,
   CampaignTree,
   GenerateJob,
   GenerateJobStarted,
-  GlossaryEntry,
-  GlossaryResponse,
   InstanceSettings,
-  KnowledgeEntry,
-  KnowledgeResponse,
   NpcChange,
   SceneChange,
   SceneOrderResponse,
@@ -149,52 +147,6 @@ export interface VersionResponse {
 
 export function fetchVersion(campaign: string): Promise<VersionResponse> {
   return getJson<VersionResponse>(`/campaigns/${encodeURIComponent(campaign)}/version`);
-}
-
-/**
- * The campaign's glossary as a LIST of terms: it is a table, not a markdown
- * blob, and this is the only way to read it.
- */
-export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
-  return getJson<GlossaryResponse>(`/campaigns/${encodeURIComponent(campaign)}/glossary`);
-}
-
-/**
- * Replace the whole glossary. The list is short and is edited as a whole, so
- * the ARRAY ORDER is the stored order — that is also how the settings page
- * reorders — and `rev` is the guard token of the list, read from
- * the `fetchGlossary` the editor is showing. A stale one answers 409.
- */
-export function putGlossary(
-  campaign: string,
-  entries: GlossaryEntry[],
-  rev: number,
-): Promise<GlossaryResponse> {
-  return putJson<GlossaryResponse>(`/campaigns/${encodeURIComponent(campaign)}/glossary`, {
-    entries,
-    rev,
-  });
-}
-
-/**
- * The campaign's KNOWLEDGE the generator has to apply — naming
- * conventions, facts, style rules. Same whole-list-plus-`rev` contract as the
- * glossary, on purpose: the DM edits both on the same page.
- */
-export function fetchKnowledge(campaign: string): Promise<KnowledgeResponse> {
-  return getJson<KnowledgeResponse>(`/campaigns/${encodeURIComponent(campaign)}/knowledge`);
-}
-
-/** Replace the whole knowledge list; see putGlossary for the `rev` rule. */
-export function putKnowledge(
-  campaign: string,
-  entries: KnowledgeEntry[],
-  rev: number,
-): Promise<KnowledgeResponse> {
-  return putJson<KnowledgeResponse>(`/campaigns/${encodeURIComponent(campaign)}/knowledge`, {
-    entries,
-    rev,
-  });
 }
 
 /**

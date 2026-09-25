@@ -233,7 +233,7 @@ const RULES: readonly Rule[] = [
   {
     id: "parse-glossary-body",
     pattern: /\bparseGlossaryBody\b/,
-    meaning: "the glossary is a list of rows, not a text to parse",
+    meaning: "a glossary term is a row of its own, not a line of a text to parse",
   },
   {
     id: "parse-relations-section",
@@ -319,14 +319,13 @@ const RULES: readonly Rule[] = [
     only: ["app/src"],
   },
   {
-    // The three LISTS lost their entry address (ADR #26): a session, the
-    // inbox and the glossary are tables with their own endpoints, so these
-    // addresses name nothing and answer 404 like any other unknown one. A
-    // reader that still reaches for one is reaching for the parse that is
-    // gone.
+    // A session, the ideas and the glossary terms have no entry address:
+    // each answers on its own endpoints (ADR #31), so these addresses name
+    // nothing and answer 404 like any other unknown one. A reader that still
+    // reaches for one is reaching for the parse that is gone.
     id: "list-entry-address",
     pattern: /entries\/(?:glossary|inbox|sessions)/,
-    meaning: "a list has no entry address — it answers its own endpoint (ADR #26)",
+    meaning: "no entry address — every entity answers its own endpoint (ADR #31)",
   },
   {
     // The 400 that refused a `body` for one of those three addresses. With

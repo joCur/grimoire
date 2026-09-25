@@ -11,3 +11,5 @@ export * from "./npc";
 export * from "./scene";
 export * from "./thread";
 export * from "./idea";
+export * from "./glossary-term";
+export * from "./knowledge-item";

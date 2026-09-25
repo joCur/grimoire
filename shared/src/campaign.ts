@@ -16,14 +16,16 @@ import { z } from "zod";
  * A campaign, exactly as `GET /api/campaigns/:c` answers it: `id` its stable
  * key — the one in every URL —, `name` the display name (the id stands in
  * for a campaign that has none), `description` a one-line summary, `body`
- * its markdown — free notes for the whole campaign —, and `rev` the row
- * version a PATCH sends back as its guard.
+ * its markdown — free notes for the whole campaign —, `glossaryIntro` the
+ * markdown the glossary page shows above its terms (empty when there is
+ * none), and `rev` the row version a PATCH sends back as its guard.
  */
 export const campaignSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
   description: z.string().optional(),
   body: z.string(),
+  glossaryIntro: z.string(),
   rev: z.number(),
 });
 

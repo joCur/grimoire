@@ -1,12 +1,14 @@
 // Shared API types of Grimoire: the shapes that are no entity of their own —
-// the campaign list, the campaign tree, the lists, search and the generator
-// job — plus the instance settings.
+// the campaign list, the campaign tree, the sessions, search and the
+// generator job — plus the instance settings.
 //
 // An entity with its own resource (ADR #31) has its type from its zod schema
 // in its own module — the campaign in ./campaign.ts, the chapter in
 // ./chapter.ts, the scene in ./scene.ts, the npc in ./npc.ts and the
 // location in ./location.ts, whose types are re-exported here, and the
-// thread in ./thread.ts and the idea in ./idea.ts, imported from there.
+// thread in ./thread.ts, the idea in ./idea.ts, the glossary term in
+// ./glossary-term.ts and the knowledge item in ./knowledge-item.ts, imported
+// from there.
 
 import type { ChapterStatus } from "./chapter";
 import type { LocationProposal } from "./location";
@@ -75,8 +77,7 @@ export const CALLOUT_KINDS = [
 export type CalloutKind = (typeof CALLOUT_KINDS)[number];
 
 /**
- * Everything the SEARCH INDEX holds, and the list kinds beside them: a hit
- * names its entity by `kind` and `id` (see SearchResult).
+ * The entities a search hit can name, by `kind` and `id` (see SearchResult).
  */
 export type EntityKind =
   | "campaign"
@@ -85,7 +86,7 @@ export type EntityKind =
   | "npc"
   | "location"
   | "session"
-  | "glossary";
+  | "glossary-term";
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
 
@@ -313,7 +314,8 @@ export interface SceneOrderResponse {
  * campaign, the chapters, the scenes, the npcs, the locations and the
  * glossary terms — see server/src/store/fts.ts. The search is truly mixed, so
  * a hit names its entity by `kind` and `id`, and the app opens the resource
- * of that entity — or, for a glossary term, the glossary (ADR #31).
+ * of that entity — or, for a glossary term, the glossary page, where the
+ * terms are kept (ADR #31).
  */
 export interface SearchResult {
   kind: EntityKind;
@@ -742,69 +744,6 @@ export function isUiLocale(value: unknown): value is UiLocale {
  */
 export interface InstanceSettings {
   locale: UiLocale | null;
-}
-
-// --- glossary & campaign knowledge -----------------------------------------
-
-/**
- * One glossary term. The glossary answers the TRANSLATION question ("what do
- * we call a `lighthouse keeper` in this campaign?") and is quoted to the
- * model as `term → explanation` lines.
- */
-export interface GlossaryEntry {
-  term: string;
-  explanation: string;
-}
-
-/**
- * GET/PUT /api/:campaign/glossary. `rev` is the guard token of the WHOLE
- * list (`campaigns.glossary_rev`) — the glossary is one entry that is
- * edited as a whole, so there is no per-entry version to hold, and the
- * ORDER of `entries` is the stored order (that is what reordering writes).
- */
-export interface GlossaryResponse {
-  entries: GlossaryEntry[];
-  rev: number;
-}
-
-/**
- * The three kinds of campaign knowledge:
- *
- *   naming  a NAMING CONVENTION — `from` is the spelling the source material
- *           uses, `to` the one this campaign uses. The only kind the server
- *           can CHECK after a run, which is why it is a pair and not prose.
- *   fact    a campaign fact that outranks the source material.
- *   style   a style rule for the generated prose.
- *
- * `fact` and `style` carry `text`; `naming` carries `from` + `to`. The unused
- * fields are empty strings rather than absent — one row shape, and a kind
- * switched in the UI keeps what was already typed instead of dropping it.
- */
-export const KNOWLEDGE_KINDS = ["naming", "fact", "style"] as const;
-export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
-
-export function isKnowledgeKind(value: unknown): value is KnowledgeKind {
-  return typeof value === "string" && (KNOWLEDGE_KINDS as readonly string[]).includes(value);
-}
-
-/** One campaign-knowledge entry. See KNOWLEDGE_KINDS for which fields apply. */
-export interface KnowledgeEntry {
-  kind: KnowledgeKind;
-  /** `naming`: the source material's spelling. Empty for the other kinds. */
-  from: string;
-  /** `naming`: the spelling this campaign uses. Empty for the other kinds. */
-  to: string;
-  /** `fact`/`style`: the sentence. Empty for `naming`. */
-  text: string;
-}
-
-/**
- * GET/PUT /api/:campaign/knowledge — same whole-list shape and the same
- * guard rule as the glossary (`campaigns.knowledge_rev`).
- */
-export interface KnowledgeResponse {
-  entries: KnowledgeEntry[];
-  rev: number;
 }
 
 /**

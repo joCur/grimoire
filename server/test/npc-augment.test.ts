@@ -11,6 +11,7 @@ import {
   type NpcProposal,
 } from "@grimoire/shared";
 import { app } from "../src/server";
+import { setKnowledge } from "./support/knowledge-items";
 import { clearJobsForTests } from "../src/generate-jobs";
 import {
   ASSET_FILES,
@@ -90,17 +91,6 @@ async function runJob(body: Record<string, unknown>): Promise<GenerateJob> {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("job never finished");
-}
-
-async function setKnowledge(entries: unknown[]): Promise<void> {
-  const current = await app.request(`/api/campaigns/${CAMPAIGN}/knowledge`);
-  const { rev } = (await current.json()) as { rev: number };
-  const res = await app.request(`/api/campaigns/${CAMPAIGN}/knowledge`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ entries, rev }),
-  });
-  expect(res.status).toBe(200);
 }
 
 beforeAll(async () => {

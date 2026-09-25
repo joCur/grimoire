@@ -21,7 +21,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { GlossaryTermSeed } from "@grimoire/shared/glossary-term";
 import type { IdeaSeed } from "@grimoire/shared/idea";
+import type { KnowledgeItemSeed } from "@grimoire/shared/knowledge-item";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
@@ -54,6 +56,8 @@ export interface SeedOverrides {
   locations?: LocationProposal[];
   threads?: ThreadSeed[];
   ideas?: IdeaSeed[];
+  glossaryTerms?: GlossaryTermSeed[];
+  knowledgeItems?: KnowledgeItemSeed[];
   sessions?: SeedSession[];
   /** Fixture objects to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
   without?: {
@@ -63,6 +67,8 @@ export interface SeedOverrides {
     locations?: string[];
     threads?: string[];
     ideas?: string[];
+    glossaryTerms?: string[];
+    knowledgeItems?: string[];
     sessions?: string[];
   };
 }
@@ -103,6 +109,18 @@ export async function seedStore(overrides: SeedOverrides = {}): Promise<Grimoire
     locations: merged(fixture.locations, overrides.locations, without.locations, byId),
     threads: merged(fixture.threads, overrides.threads, without.threads, byId),
     ideas: merged(fixture.ideas, overrides.ideas, without.ideas, byId),
+    glossaryTerms: merged(
+      fixture.glossaryTerms,
+      overrides.glossaryTerms,
+      without.glossaryTerms,
+      byId,
+    ),
+    knowledgeItems: merged(
+      fixture.knowledgeItems,
+      overrides.knowledgeItems,
+      without.knowledgeItems,
+      byId,
+    ),
     sessions: merged(
       fixture.sessions,
       overrides.sessions,

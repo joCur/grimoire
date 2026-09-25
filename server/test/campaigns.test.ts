@@ -62,15 +62,16 @@ describe("reading the campaign", () => {
       description:
         "Eine Küstenkampagne um einen erloschenen Leuchtturm, Schmuggler und die Frage, wer im Hafen wirklich das Sagen hat.",
       body: campaign.body,
+      glossaryIntro: "",
       rev: campaign.rev,
     });
     expect(campaign.body).toContain("Kampagnenweite Notizen");
   });
 
   test("a campaign without a name of its own shows its id, like the list", async () => {
-    seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "" } });
+    seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "", glossaryIntro: "" } });
     const campaign = await getCampaign(`/api/campaigns/${FRESH}`);
-    expect(campaign).toEqual({ id: FRESH, name: FRESH, body: "", rev: campaign.rev });
+    expect(campaign).toEqual({ id: FRESH, name: FRESH, body: "", glossaryIntro: "", rev: campaign.rev });
     expect((await listed(FRESH))?.name).toBe(FRESH);
   });
 
@@ -114,6 +115,17 @@ describe("writing the campaign", () => {
     expect(await getCampaign()).toEqual(after);
   });
 
+  test("the glossary intro is a field of the campaign, written like the body", async () => {
+    const before = await getCampaign();
+    const after = await patchOk({ rev: before.rev, glossaryIntro: "Begriffe aus dem Modul." });
+    expect(after).toEqual({
+      ...before,
+      glossaryIntro: "Begriffe aus dem Modul.\n",
+      rev: before.rev + 1,
+    });
+    expect(await getCampaign()).toEqual(after);
+  });
+
   test("`null` clears the description", async () => {
     const before = await getCampaign();
     const after = await patchOk({ rev: before.rev, description: null });
@@ -134,7 +146,7 @@ describe("writing the campaign", () => {
     const before = await getCampaign();
     for (const [key, value] of [
       ["system", "5e"],
-      ["glossaryIntro", "x"],
+      ["glossaryIntro", 7],
       ["name", 7],
       ["description", ["x"]],
     ] as const) {

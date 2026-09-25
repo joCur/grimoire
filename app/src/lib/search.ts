@@ -18,6 +18,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { campaignHref } from "@/campaign/campaign-links";
 import { chapterHref } from "@/chapter/chapter-links";
+import { glossaryHref } from "@/glossary-term/glossary-term-links";
 import type { MessageKey, Translate } from "@/i18n";
 import { locationHref } from "@/location/location-links";
 import { npcHref } from "@/npc/npc-links";
@@ -38,7 +39,7 @@ const KIND_KEYS: Record<string, MessageKey> = {
   chapter: "kind.chapter",
   campaign: "kind.campaign",
   session: "kind.session",
-  glossary: "kind.glossary",
+  "glossary-term": "kind.glossary",
 };
 
 export function kindLabel(kind: string, t: Translate): string {
@@ -65,11 +66,11 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
     // volume, a chapter is a page in it.
     case "campaign":
       return BookMarked;
-    // A session is what was written down that evening, the glossary the
-    // campaign's words.
+    // A session is what was written down that evening, a glossary term one
+    // of the campaign's words.
     case "session":
       return NotebookPen;
-    case "glossary":
+    case "glossary-term":
       return BookA;
     default:
       return FileText;
@@ -109,8 +110,8 @@ export function resultHref(campaign: string, result: Pick<SearchResult, "kind" |
       return locationHref(encodeURIComponent(campaign), result.id);
     case "session":
       return `${scope}/sessions/${encodeURIComponent(result.id)}`;
-    case "glossary":
-      return `${scope}/glossary`;
+    case "glossary-term":
+      return glossaryHref(encodeURIComponent(campaign));
     default:
       return scope;
   }

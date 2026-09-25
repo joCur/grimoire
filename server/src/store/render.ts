@@ -26,10 +26,10 @@ export interface CampaignRow {
   body: string;
   version: number;
   rev: number;
-  /** Guard token of the glossary, which has no row of its own. */
-  glossaryRev: number;
-  /** Guard token of the campaign-knowledge list. */
-  knowledgeRev: number;
+  /** Markdown above the glossary terms — a field of the campaign. */
+  glossaryIntro: string;
+  /** Guard token of the knowledge-item ORDER, separate from `rev`. */
+  knowledgeItemOrderRev: number;
 }
 
 export interface ChapterRow {
@@ -115,13 +115,6 @@ export interface LogRow {
   text: string;
   hash: string;
   reviewed: number;
-}
-
-export interface GlossaryRow {
-  term: string;
-  explanation: string;
-  pos: number;
-  rev: number;
 }
 
 // --- sessions ---------------------------------------------------------------

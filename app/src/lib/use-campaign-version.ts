@@ -15,7 +15,9 @@ import { useEffect, useRef } from "react";
 import { fetchVersion } from "@/api";
 import { CAMPAIGN_QUERY_ROOTS } from "@/campaign/campaign-query";
 import { CHAPTER_QUERY_ROOTS } from "@/chapter/chapter-query";
+import { GLOSSARY_TERM_QUERY_ROOTS } from "@/glossary-term/glossary-term-query";
 import { IDEA_QUERY_ROOTS } from "@/idea/idea-query";
+import { KNOWLEDGE_ITEM_QUERY_ROOTS } from "@/knowledge-item/knowledge-item-query";
 import { reportServerBuild } from "@/lib/build-id";
 import { LOCATION_QUERY_ROOTS } from "@/location/location-query";
 import { NPC_QUERY_ROOTS } from "@/npc/npc-query";
@@ -63,13 +65,11 @@ export function useCampaignVersion(campaign: string): void {
     // and "session"/"sessions" are the reads of one evening and the list of
     // evenings. The ideas and each chapter's threads name their key roots in
     // their slices too; the threads are keyed per chapter below the campaign,
-    // and the prefix reaches all of them.
-    // "knowledge"/"glossary" are campaign reads like the rest:
-    // the two content pages have to learn about a write from another tab.
-    // NOTE what that means for an OPEN row there: the list under it changes.
-    // components/EntryListPage.tsx therefore addresses its save by the row's
-    // CONTENT and sends the `rev` that applied when the row was opened — a
-    // fresh list must not turn into a silent overwrite.
+    // and the prefix reaches all of them. The glossary terms, the knowledge
+    // items and their order name theirs in their slices as well. An OPEN row
+    // on their pages keeps the `rev` it was opened with
+    // (components/EditableList.tsx), so a fresh list never turns into a
+    // silent overwrite.
     for (const key of [
       "tree",
       ...CAMPAIGN_QUERY_ROOTS,
@@ -84,8 +84,8 @@ export function useCampaignVersion(campaign: string): void {
       "sessions",
       ...THREAD_QUERY_ROOTS,
       ...IDEA_QUERY_ROOTS,
-      "knowledge",
-      "glossary",
+      ...GLOSSARY_TERM_QUERY_ROOTS,
+      ...KNOWLEDGE_ITEM_QUERY_ROOTS,
     ]) {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }

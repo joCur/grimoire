@@ -38,8 +38,7 @@ export function applySummary(sceneCount: number, proposed: number, t: Translate)
  * with the prompt (generator/README.md step 1).
  *
  * Only the two COUNTS that come from the tree. The campaign knowledge and the
- * glossary used to be part of the same ICU sentence; since they are pages of
- * their own page they are LINKS, and a link
+ * glossary are pages of their own, so they are LINKS, and a link
  * cannot live inside a formatted string without either splitting the pattern
  * or rendering markup out of the catalog. The view composes the line from this
  * half and the two below (routes/generate.tsx).
@@ -49,13 +48,12 @@ export function contextHint(npcCount: number, locationCount: number, t: Translat
 }
 
 /**
- * The knowledge half of that line: how many entries travel.
+ * The knowledge half of that line: how many knowledge items travel.
  *
  * The COUNT and not a yes/no like the glossary: the DM comes back here right
- * after writing a rule, and the number of knowledge entries is what confirms
- * it arrived.
- * Count with `promptKnowledgeCount` (lib/entry-list.ts) — a half-typed
- * convention is stored but skipped by the prompt.
+ * after writing a rule, and the number of items is what confirms it arrived.
+ * Count with `promptKnowledgeCount` (knowledge-item/knowledge-item-draft.ts) —
+ * a half-typed convention is stored but skipped by the prompt.
  */
 export function knowledgeHint(knowledgeCount: number, t: Translate): string {
   return t("generate.input.knowledgeCount", { count: knowledgeCount });

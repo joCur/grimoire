@@ -27,7 +27,7 @@ describe("kindLabel", () => {
     expect(kindLabel("chapter", t)).toBe("Kapitel");
     expect(kindLabel("campaign", t)).toBe("Kampagne");
     expect(kindLabel("session", t)).toBe("Session");
-    expect(kindLabel("glossary", t)).toBe("Glossar");
+    expect(kindLabel("glossary-term", t)).toBe("Glossar");
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
@@ -47,7 +47,7 @@ describe("kindIcon", () => {
     expect(kindIcon("chapter")).toBe(BookOpen);
     expect(kindIcon("campaign")).toBe(BookMarked);
     expect(kindIcon("session")).toBe(NotebookPen);
-    expect(kindIcon("glossary")).toBe(BookA);
+    expect(kindIcon("glossary-term")).toBe(BookA);
   });
 
   test("contingency scenes get the fork; the flag is ignored for other kinds", () => {
@@ -115,7 +115,7 @@ describe("resultHref", () => {
   });
 
   test("a term opens the glossary page", () => {
-    expect(resultHref("beispiel", { kind: "glossary", id: "salzhafen" })).toBe(
+    expect(resultHref("beispiel", { kind: "glossary-term", id: "salzhafen" })).toBe(
       "/campaigns/beispiel/glossary",
     );
   });

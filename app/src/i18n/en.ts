@@ -225,20 +225,19 @@ export const en: Messages = {
   "settings.language.hint": "Language of the interface. Applies to this instance, not to the campaign data.",
 
   // --- the two campaign-content pages --------------------------------------
-  "entryList.loading": "Loading the list …",
-  "entryList.loadFailed": "List not loaded — reload the page.",
-  "entryList.saveFailed": "Not saved.",
-  "entryList.saving": "Saving …",
-  "entryList.saved": "Saved",
-  "entryList.moveUp": "Move up",
-  "entryList.moveDown": "Move down",
-  "entryList.edit": "Edit “{name}”",
-  "entryList.remove": "Delete \u201c{name}\u201d",
-  "entryList.removed": "Entry deleted",
-  "entryList.applyDraft": "Keep the draft and apply it to the current list",
-  "entryList.confirmDelete.title": "Delete this entry?",
-  "entryList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
-  "entryList.confirmDelete.confirm": "Delete",
+  "editableList.loading": "Loading the list …",
+  "editableList.loadFailed": "List not loaded — reload the page.",
+  "editableList.saveFailed": "Not saved.",
+  "editableList.saving": "Saving …",
+  "editableList.saved": "Saved",
+  "editableList.moveUp": "Move up",
+  "editableList.moveDown": "Move down",
+  "editableList.edit": "Edit “{name}”",
+  "editableList.remove": "Delete \u201c{name}\u201d",
+  "editableList.removed": "Entry deleted",
+  "editableList.confirmDelete.title": "Delete this entry?",
+  "editableList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
+  "editableList.confirmDelete.confirm": "Delete",
 
   "knowledge.title": "Campaign knowledge",
   "knowledge.lead":
@@ -289,6 +288,8 @@ export const en: Messages = {
     'Played scene “{value}” does not exist — create it first.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
+  "server.glossary_term_taken":
+    "The glossary already has the term “{term}” — please edit that one instead.",
   "server.scene_order_mismatch":
     "The order no longer matches the chapter's scenes — please reload.",
   "server.session_running": "An older session is still running — end it first.",

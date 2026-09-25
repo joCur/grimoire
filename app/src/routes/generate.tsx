@@ -59,14 +59,15 @@ import {
   ApiError,
   acceptJobParts,
   deleteGenerateJob,
-  fetchGlossary,
-  fetchKnowledge,
   fetchTree,
   retryJobPart,
   startGenerateJob,
 } from "@/api";
 import { chapterLabel } from "@/chapter/chapter-links";
 import { chapterIdError, chapterIdValue, newChapterId } from "@/chapter/chapter-run";
+import { glossaryTermsQuery } from "@/glossary-term/glossary-term-query";
+import { promptKnowledgeCount } from "@/knowledge-item/knowledge-item-draft";
+import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
@@ -98,7 +99,6 @@ import {
   usageLabel,
   type GenerateMode,
 } from "@/lib/generate";
-import { promptKnowledgeCount } from "@/lib/entry-list";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
@@ -140,22 +140,19 @@ export function GenerateRoute() {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  // Only for the context hint: the server sends the glossary along with the
-  // prompt when there is one (generator/README.md step 1). An empty list means
+  // Only for the context hint: the server sends the glossary terms along with
+  // the prompt when there are any (generator/README.md step 1). None means
   // "no glossary" — not an error worth retrying.
-  const glossary = useQuery({
-    queryKey: ["glossary", campaign],
-    queryFn: () => fetchGlossary(campaign),
+  const glossaryTerms = useQuery({
+    ...glossaryTermsQuery(campaign),
     enabled: campaign !== "",
     retry: false,
   });
-  // Same purpose for the campaign knowledge — the hint names
-  // the NUMBER of entries, so this reads the list, not an entry. The same
-  // query key the settings editor writes, so a rule saved there shows up here
-  // without a reload.
-  const knowledge = useQuery({
-    queryKey: ["knowledge", campaign],
-    queryFn: () => fetchKnowledge(campaign),
+  // Same purpose for the campaign knowledge — the hint names the NUMBER of
+  // items that reach the prompt. The same query key the knowledge page
+  // writes, so a rule saved there shows up here without a reload.
+  const knowledgeItems = useQuery({
+    ...knowledgeItemsQuery(campaign),
     enabled: campaign !== "",
     retry: false,
   });
@@ -832,12 +829,12 @@ export function GenerateRoute() {
               </span>
               <span aria-hidden>·</span>
               <Link to={`/campaigns/${campaign}/knowledge`} className={CONTEXT_LINK}>
-                {knowledgeHint(promptKnowledgeCount(knowledge.data?.entries ?? []), t)}
+                {knowledgeHint(promptKnowledgeCount(knowledgeItems.data ?? []), t)}
               </Link>
               <span aria-hidden>·</span>
               <Link to={`/campaigns/${campaign}/glossary`} className={CONTEXT_LINK}>
                 {t(
-                  (glossary.data?.entries.length ?? 0) > 0
+                  (glossaryTerms.data?.length ?? 0) > 0
                     ? "generate.input.glossary"
                     : "generate.input.noGlossary",
                 )}

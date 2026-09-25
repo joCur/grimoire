@@ -114,29 +114,23 @@ export const campaigns = sqliteTable("campaigns", {
   version: integer("version").notNull().default(1),
   rev: revColumn(),
   /**
-   * The glossary's PROSE PREAMBLE — text above the first term that belongs
-   * to no term. It has no row of its own, so it lives here and is rendered
-   * back in front of the term list. Nothing writes it any more (the glossary
-   * is edited as a list, ADR #23); what an older instance stored is still
-   * shown. Empty for the usual glossary.
+   * The markdown the glossary page shows above the terms — prose that belongs
+   * to no single term. A field of the campaign (`glossaryIntro`), written
+   * with the campaign's own PATCH; empty for the usual glossary.
    */
   glossaryIntro: text("glossary_intro").notNull().default(""),
   /**
-   * Guard token of the GLOSSARY, which is written as a whole list. It is no
-   * single row that could carry a `rev`, and `version` — which every
-   * unrelated write bumps — would make an open glossary edit unsaveable
-   * during a running session. It counts only the glossary's writes, so it
-   * behaves exactly like an entity's `rev`.
+   * Guard token of the campaign's KNOWLEDGE-ITEM ORDER — the `pos` values of
+   * `knowledge_items`, which `PUT /knowledge-item-order` writes as a whole.
+   *
+   * Its own counter, like `chapters.scene_order_rev`: the order is a statement
+   * of the campaign about its knowledge items, and neither `rev` — which every
+   * write of the campaign's fields bumps — nor an item's `rev` may move when
+   * the items are rearranged, or reordering would turn an open editor into a
+   * conflict. It moves with every change of the order: a reorder, a new item
+   * at the end, an item removed.
    */
-  glossaryRev: integer("glossary_rev").notNull().default(1),
-  /**
-   * Guard token of the CAMPAIGN KNOWLEDGE list, of the same kind as the one
-   * above and for the same reason: `campaign_knowledge` is a whole list, so
-   * the version belongs to the LIST and not to a row — and
-   * `campaigns.version`, which every unrelated write bumps, would make an
-   * open knowledge edit unsaveable during a running session.
-   */
-  knowledgeRev: integer("knowledge_rev").notNull().default(1),
+  knowledgeItemOrderRev: integer("knowledge_item_order_rev").notNull().default(1),
 });
 
 // --- chapters ---------------------------------------------------------------
@@ -168,8 +162,8 @@ export const chapters = sqliteTable(
      * scenes below it, which `PUT /chapters/:chapter/scene-order` writes as a
      * whole.
      *
-     * Its own counter, for the reason the two list guards on `campaigns`
-     * have theirs: the order is a list that lives on its own, and `rev` —
+     * Its own counter, for the reason `campaigns.knowledge_item_order_rev`
+     * has its own: the order lives on its own, and `rev` —
      * which every unrelated write of the chapter bumps — would make an open
      * chapter-text edit unsaveable the moment somebody rearranges the scenes.
      * The other direction holds too, which is the one that bites: reordering
@@ -692,64 +686,70 @@ export const ideas = sqliteTable(
   ],
 );
 
-// --- glossary ---------------------------------------------------------------
+// --- glossary terms ---------------------------------------------------------
 
 /**
- * The translation glossary as a STRUCTURED table: term → explanation
- * instead of one markdown blob. The generator's
- * knowledge base builds on exactly this table.
+ * One GLOSSARY TERM (ADR #31): a term of the source material and how the
+ * campaign says it. The generator quotes the terms to the model as
+ * `term → explanation` lines, and the search index holds them.
+ *
+ * `id` is an OPAQUE random string (store/glossary-terms.ts), unique per
+ * campaign — the term's key on the wire, so a term keeps its identity when
+ * the DM rewords it. The TERM is unique per campaign as well: a glossary
+ * names a term once, and the unique index is what says so. `pos` is the
+ * order of creation, one past the highest of the campaign; nothing reorders
+ * it. `rev` is the term's own guard (rule 4).
  */
-export const glossary = sqliteTable(
-  "glossary",
+export const glossaryTerms = sqliteTable(
+  "glossary_terms",
   {
     campaignId: text("campaign_id").notNull(),
+    /** Opaque random id — the term's identity on the wire. */
+    id: text("id").notNull(),
     term: text("term").notNull(),
     explanation: text("explanation").notNull().default(""),
-    /** Stable display order — the order the terms were written in. */
     pos: integer("pos").notNull(),
     rev: revColumn(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.term] }),
+    primaryKey({ columns: [t.campaignId, t.id] }),
+    uniqueIndex("glossary_terms_term_unique").on(t.campaignId, t.term),
     foreignKey({
       columns: [t.campaignId],
       foreignColumns: [campaigns.id],
-      name: "glossary_campaign_fk",
+      name: "glossary_terms_campaign_fk",
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
   ],
 );
 
-// --- campaign knowledge -----------------------------------------------------
+// --- knowledge items ----------------------------------------------------------
 
 /**
- * The campaign's KNOWLEDGE BASE for the generator: naming
- * conventions, facts and style rules the model has to apply even when the
- * source material says something else.
+ * One KNOWLEDGE ITEM (ADR #31): a naming convention, fact or style rule the
+ * model has to apply even when the source material says something else.
  *
- * Its own table next to `glossary`, per PO decision, because it answers a
- * different question: the glossary translates a TERM, an entry here overrides
- * the source. `kind` decides which columns carry the content (`naming`:
- * `from_text`/`to_text`, otherwise `text`) — the unused ones stay empty
- * strings rather than NULL, so nothing has to distinguish "not set" from
- * "cleared" and a kind switched in the UI keeps what was typed.
+ * Its own table next to `glossary_terms`, per PO decision, because it answers
+ * a different question: a glossary term translates a TERM, an item here
+ * overrides the source. `kind` decides which columns carry the content
+ * (`naming`: `from_text`/`to_text`, otherwise `text`) — the unused ones stay
+ * empty strings rather than NULL, so nothing has to distinguish "not set"
+ * from "cleared" and a kind switched in the UI keeps what was typed.
  *
- * THE KEY IS (campaign, pos), not the content. The list is short, ordered and
- * REPLACED AS A WHOLE (like the glossary), so `pos` is both the display order
- * — which is authored information (schema rule 2) — and the only identity an
- * entry needs. A content key would also forbid two identical style rules,
- * which is a rule nobody asked for.
- *
- * `rev` is on the row for schema rule 4's sake; the guard the API actually
- * checks is the LIST's `campaigns.knowledge_rev` (see there).
+ * `id` is an OPAQUE random string (store/knowledge-items.ts), unique per
+ * campaign. `pos` is the ORDER of the prompt, which the DM sets: a new item
+ * gets one past the highest of the campaign, and
+ * `PUT /knowledge-item-order` hands out the positions of all of them, guarded
+ * by `campaigns.knowledge_item_order_rev`. `rev` is the item's own guard
+ * (rule 4) and does not move when the order does.
  */
-export const campaignKnowledge = sqliteTable(
-  "campaign_knowledge",
+export const knowledgeItems = sqliteTable(
+  "knowledge_items",
   {
     campaignId: text("campaign_id").notNull(),
-    /** Position in the list — the display order AND the key (see above). */
-    pos: integer("pos").notNull(),
+    /** Opaque random id — the item's identity on the wire. */
+    id: text("id").notNull(),
     /** "naming" | "fact" | "style" (shared KNOWLEDGE_KINDS). */
     kind: text("kind").notNull().default("fact"),
     /**
@@ -762,14 +762,16 @@ export const campaignKnowledge = sqliteTable(
     toText: text("to_text").notNull().default(""),
     /** `fact`/`style`: the sentence. */
     text: text("text").notNull().default(""),
+    /** The order of the prompt — see above. */
+    pos: integer("pos").notNull(),
     rev: revColumn(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.pos] }),
+    primaryKey({ columns: [t.campaignId, t.id] }),
     foreignKey({
       columns: [t.campaignId],
       foreignColumns: [campaigns.id],
-      name: "campaign_knowledge_campaign_fk",
+      name: "knowledge_items_campaign_fk",
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
@@ -991,8 +993,8 @@ export const schema = {
   logEntries,
   sessionScenesPlayed,
   ideas,
-  glossary,
-  campaignKnowledge,
+  glossaryTerms,
+  knowledgeItems,
   generateJobs,
   meta,
 };

@@ -6,12 +6,11 @@ Kapitel, eine Szene, ein NPC oder ein Ort. Jeder Eintrag besteht aus
 **Eigenschaften** — seinen strukturierten Feldern (Titel, Status, Ort, …) —
 und einem **Text** in Markdown.
 
-Ein **Faden** — ein Handlungsstrang, den ein Kapitel trägt — und eine
-**Idee** haben keinen Text; jeder ist seine eigene Ressource mit seinen
-eigenen Feldern (ADR #31). Dazu kommen drei **Listen**, die keine Einträge
-sind und keinen Text haben: die **Sessions**, das **Glossar** und das
-**Kampagnenwissen**. Sie sind Tabellen, werden als Listen gepflegt und haben
-keine Adresse — jede antwortet auf ihren eigenen Endpoints.
+Ein **Faden** — ein Handlungsstrang, den ein Kapitel trägt —, eine
+**Idee**, ein **Glossar-Begriff** und das **Kampagnenwissen** — jede
+Namenskonvention, jeder Fakt, jede Stilregel für sich — haben keinen Text; jeder ist seine eigene Ressource mit
+seinen eigenen Feldern (ADR #31). Dazu kommen die **Sessions**: Zeilen mit
+ihren Listen, ohne Adresse, auf ihren eigenen Endpoints.
 
 Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
 README beschreibt, was in den Feldern stehen darf und was der Text
@@ -38,6 +37,8 @@ nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
 | Ort | `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>` |
 | Faden | `GET/PATCH/DELETE /api/campaigns/<kampagne>/threads/<id>` | `GET/POST /api/campaigns/<kampagne>/threads` | in der Kapitelübersicht `/campaigns/<kampagne>` |
 | Idee | `GET/PATCH /api/campaigns/<kampagne>/ideas/<id>` | `GET/POST /api/campaigns/<kampagne>/ideas` | in der Nachbereitung und auf der Mobil-Startfläche |
+| Glossar-Begriff | `GET/PATCH/DELETE /api/campaigns/<kampagne>/glossary-terms/<id>` | `GET/POST /api/campaigns/<kampagne>/glossary-terms` | auf der Glossar-Seite `/campaigns/<kampagne>/glossary` |
+| Kampagnenwissen | `GET/PATCH/DELETE /api/campaigns/<kampagne>/knowledge-items/<id>` | `GET/POST /api/campaigns/<kampagne>/knowledge-items` | auf der Wissens-Seite `/campaigns/<kampagne>/knowledge` |
 
 Die Kapitelübersicht bleibt `/campaigns/<kampagne>`; die Liste der Kampagnen
 (`GET /api/campaigns`) antwortet mit ihrer eigenen Form, dem Namen neben der
@@ -61,17 +62,14 @@ Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
 Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
 übernommen werden (ADR #27).
 
-**Sessions, Glossar und Kampagnenwissen** sind Tabellen, die als Listen
-gepflegt werden, und antworten auf ihren eigenen Endpoints:
+**Sessions** antworten auf ihren eigenen Endpoints:
 
-| Liste | Lesen | Schreiben |
-| ----- | ----- | --------- |
-| Session | `GET …/session[?includeEnded=1]` (die laufende, sonst `null`), `GET …/sessions`, `GET …/sessions/<id>` | `POST …/session/start`, `/end`, `/pause`, `/continue`, `/discard`, `POST …/log`, `PATCH …/sessions/<id>` |
-| Glossar | `GET …/glossary` | `PUT …/glossary` |
-| Kampagnenwissen | `GET …/knowledge` | `PUT …/knowledge` |
+| Lesen | Schreiben |
+| ----- | --------- |
+| `GET …/session[?includeEnded=1]` (die laufende, sonst `null`), `GET …/sessions`, `GET …/sessions/<id>` | `POST …/session/start`, `/end`, `/pause`, `/continue`, `/discard`, `POST …/log`, `PATCH …/sessions/<id>` |
 
-Glossar und Kampagnenwissen bekommt der Generator als Kontext; beide werden
-auf ihren eigenen Seiten gepflegt.
+Glossar-Begriffe und Kampagnenwissen bekommt der Generator als Kontext; beide
+werden auf ihren eigenen Seiten gepflegt.
 
 Alles Kampagnenabhängige hängt unter der Kampagne — in der API
 `/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` (ADR #22).
@@ -101,6 +99,7 @@ dem zod-Schema in `shared/src/campaign.ts`, ADR #31). `GET
   "name": "Der Leuchtturm von Salzhafen",
   "description": "Eine Küstenkampagne um einen erloschenen Leuchtturm, …",
   "body": "\nKampagnenweite Notizen: …",
+  "glossaryIntro": "",
   "rev": 1
 }
 ```
@@ -111,11 +110,15 @@ dem zod-Schema in `shared/src/campaign.ts`, ADR #31). `GET
 | `name` | Anzeigename in der UI; fehlt er, ist der Anzeigename die id |
 | `description` | Kurzbeschreibung, eine Zeile; optional |
 | `body` | Markdown der Kampagne: freier Notizraum für Kampagnenweites |
+| `glossaryIntro` | Markdown über den Glossar-Begriffen, das zu keinem Begriff gehört; leer, wenn es keines gibt |
 | `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
 Geschrieben wird mit `PATCH /api/campaigns/<kampagne>` und `{ rev, force?,
-…Teilmenge von name, description, body }` — `null` löscht die
+…Teilmenge von name, description, body, glossaryIntro }` — `null` löscht die
 Beschreibung, ein veralteter `rev` ist 409 mit der aktuellen Kampagne.
+`glossaryIntro` wird gespeichert wie `body`. Die Reihenfolge des
+Kampagnenwissens hat ihren eigenen Wächter an der Kampagne (siehe
+Kampagnenwissen); ein Schreibzugriff auf die Kampagne bewegt ihn nicht.
 `POST /api/campaigns { name, description?, id? }` legt eine Kampagne an und
 antwortet mit ihr: die `id` entsteht aus dem Namen, wenn die Anfrage keine
 setzt, und eine vergebene ist eine 409 `slug_taken` mit Vorschlag. Die
@@ -445,6 +448,93 @@ antwortet mit ihr:
   veralteter `rev` ist 409 mit der aktuellen Idee unter `idea`, eine
   unbekannte id 404.
 
+### Glossar-Begriff
+
+Ein Glossar-Begriff ist ein Begriff des Quellmaterials und die Schreibweise
+dieser Kampagne, seine eigene Ressource mit seinem eigenen Typ
+(`GlossaryTerm`, aus dem zod-Schema in `shared/src/glossary-term.ts`,
+ADR #31). `GET /api/campaigns/<kampagne>/glossary-terms/<id>` antwortet mit
+ihm:
+
+```json
+{
+  "id": "lighthouse-keeper",
+  "term": "lighthouse keeper",
+  "explanation": "Leuchtturmwärter",
+  "rev": 1
+}
+```
+
+| Feld | Bedeutung |
+| ---- | --------- |
+| `id` | stabil und opak, vergibt der Server beim Anlegen |
+| `term` | der Begriff, wie das Quellmaterial ihn schreibt; je Kampagne einmal |
+| `explanation` | wie diese Kampagne ihn sagt; darf mehrere Zeilen haben |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+
+- `GET …/glossary-terms` antwortet mit allen Begriffen in der Reihenfolge, in
+  der sie angelegt wurden; umsortiert wird nichts. Die Glossar-Seite zeigt sie
+  alphabetisch.
+- `POST …/glossary-terms { term, explanation? }` legt einen Begriff am Ende an
+  und antwortet mit ihm (201), ohne `rev`. `term` wird getrimmt, leer ist 400.
+  Einen Begriff, den das Glossar schon hat, beantwortet der Server mit 409
+  `glossary_term_taken` und schreibt nichts — auch beim Umformulieren.
+- Geändert wird mit `PATCH …/glossary-terms/<id> { rev, force?, …Teilmenge
+  von term, explanation }`, gelöscht mit `DELETE …/glossary-terms/<id>
+  { rev }` (204). Ein veralteter `rev` ist 409 mit dem aktuellen Begriff unter
+  `glossaryTerm`, eine unbekannte id 404, ein Feld, das ein Begriff nicht
+  hat, eine 400, die es nennt.
+- Die Suche findet jeden Begriff; der Treffer nennt sich mit `kind:
+  "glossary-term"` und seiner `id` und öffnet die Glossar-Seite. Der Text über
+  den Begriffen ist kein Begriff, sondern das Feld `glossaryIntro` der
+  Kampagne.
+
+### Kampagnenwissen
+
+Das Kampagnenwissen sind die Namenskonventionen, Fakten und Stilregeln, die
+der Generator verbindlich anwendet, auch wenn das Quellmaterial etwas anderes
+sagt. Jedes Stück davon ist seine eigene Ressource mit seinem eigenen Typ
+(`KnowledgeItem`, aus dem zod-Schema in `shared/src/knowledge-item.ts`,
+ADR #31). `GET /api/campaigns/<kampagne>/knowledge-items/<id>` antwortet mit
+ihm:
+
+```json
+{
+  "id": "7c1f…",
+  "kind": "naming",
+  "from": "Salt Harbour",
+  "to": "Salzhafen",
+  "text": "",
+  "rev": 1
+}
+```
+
+| Feld | Bedeutung |
+| ---- | --------- |
+| `id` | stabil und opak, vergibt der Server beim Anlegen |
+| `kind` | `naming` (Namenskonvention), `fact` (Fakt) oder `style` (Stilregel) |
+| `from` / `to` | bei `naming`: die Schreibweise des Quellmaterials und die dieser Kampagne; sonst leer |
+| `text` | bei `fact` und `style`: der Satz; sonst leer |
+| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+
+- `GET …/knowledge-items` antwortet mit allem Kampagnenwissen in seiner
+  Reihenfolge — der Reihenfolge im Prompt.
+- `POST …/knowledge-items { kind, from?, to?, text? }` legt ein Stück am Ende
+  an und antwortet mit ihm (201), ohne `rev`; ein weggelassenes Feld ist leer.
+  Eine halbe Namenskonvention wird gespeichert, der Prompt überspringt sie.
+- Geändert wird mit `PATCH …/knowledge-items/<id> { rev, force?, …Teilmenge
+  der Felder }`, gelöscht mit `DELETE …/knowledge-items/<id> { rev }` (204).
+  Jedes Textfeld ist eine Zeile (400 sonst). Ein veralteter `rev` ist 409 mit
+  dem aktuellen Stand unter `knowledgeItem`, eine unbekannte id 404.
+- Die **Reihenfolge** setzt der DM (Hoch/Runter auf der Wissens-Seite). Sie
+  ist kein Feld eines Stücks, sondern hat ihren eigenen Schreibweg: `GET`/`PUT
+  /api/campaigns/<kampagne>/knowledge-item-order` mit `{ items, rev }`, wobei
+  `items` jede id des Kampagnenwissens genau einmal nennt (400 sonst). Das
+  `rev` ist der Wächter der Reihenfolge an der Kampagne; ein alter Stand ist
+  409 mit der aktuellen Reihenfolge unter `knowledgeItemOrder`. Weder das
+  `rev` eines Stücks noch das der Kampagne bewegt sich dabei. Anlegen und
+  Löschen ändern die Reihenfolge mit und bewegen ihren Wächter.
+
 ### Session
 
 Eine Session ist **kein Eintrag**, sondern eine Zeile mit ihren Listen
@@ -623,9 +713,9 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
   `server/src/routes/<ressource>.ts`): Log, Nachbereitung,
   Generator-Entwürfe — und für jede Entität ihr eigener `PATCH` auf ihrer
   Ressource, der jede Teilmenge ihrer Felder, `body` eingeschlossen, in einem
-  Zug schreibt (ADR #23, ADR #31); Faden und Idee eingeschlossen, die keinen
-  `body` haben. Glossar und Kampagnenwissen sind Listen und werden über ihre
-  eigenen Endpoints gepflegt; einen Text nehmen sie nicht an.
+  Zug schreibt (ADR #23, ADR #31); Faden, Idee, Glossar-Begriff und
+  Kampagnenwissen eingeschlossen, die keinen `body` haben. Keine Liste wird
+  als Ganzes getauscht.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu
@@ -639,8 +729,9 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
   Kapitels; passt es nicht, ist das 409. Geschrieben wird nur die
   Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
   offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
-  Konflikt läuft (ADR #27). Dieselbe Bauart haben die Wächter der übrigen
-  Listen (`glossaryRev`, `knowledgeRev`).
+  Konflikt läuft (ADR #27). Dieselbe Bauart hat die Reihenfolge des
+  Kampagnenwissens (`PUT …/knowledge-item-order { items, rev }`, siehe
+  Kampagnenwissen).
 - Das Log ist append-only (ADR #4). Eine Idee wird einmal geschrieben und
   danach nur noch abgehakt.
 
@@ -694,15 +785,18 @@ das ihre Ressource liefert, ohne `rev` (ADR #31): die Kampagne unter
 `fixtures/beispiel/scenes/<id>.json`, ein NPC unter
 `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
 `fixtures/beispiel/locations/<id>.json`, ein Faden unter
-`fixtures/beispiel/threads/<id>.json` und eine Idee unter
-`fixtures/beispiel/ideas/<id>.json`. Glossar und Sessions tragen ihre Listen
-strukturiert, als Zeilen mit ihren Spalten, unter `kind`: eine Log-Zeile ist
-`{ at, sceneId?, text, reviewed? }`. Eine Markdown-Zeile steht in keiner
+`fixtures/beispiel/threads/<id>.json`, eine Idee unter
+`fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
+`fixtures/beispiel/glossary-terms/<id>.json` und ein Stück Kampagnenwissen
+unter `fixtures/beispiel/knowledge-items/<id>.json`. Eine Session trägt ihre
+Listen strukturiert, als Zeilen mit ihren Spalten, unter `kind: "session"`:
+eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`. Eine Markdown-Zeile steht in keiner
 davon. Sie ist die Referenz für Callouts und die einzige
 Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
 
 `grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest
 `<dir>/<kampagne>/*.json` samt den Verzeichnissen `campaigns/`, `chapters/`,
-`scenes/`, `npcs/`, `locations/`, `threads/` und `ideas/` darunter und
+`scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`, `glossary-terms/` und
+`knowledge-items/` darunter und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

@@ -1360,13 +1360,11 @@ Eigenschaften und Text, die sich einen Wächter teilen (ADR #23), und die
 Reihenfolge ist keins von beidem. Sie ist eine eigene Liste mit eigener
 Lebensdauer, also bekommt sie `chapters.scene_order_rev`.
 
-Das ist kein neues Muster, sondern das vierte seiner Art: `glossaryRev`,
-`inboxRev` und `knowledgeRev` stehen neben `campaigns.version` aus exakt
-demselben Grund. Eine Liste hat keine Zeile, die einen `rev` tragen könnte,
-und ein Zähler, den jeder unbeteiligte Write hochdreht, macht eine offene
-Bearbeitung unspeicherbar — am härtesten während einer laufenden Session, wo
-ständig geschrieben wird. Ein Wächter zählt deshalb nur die Writes, gegen die
-er schützt.
+Dasselbe Muster hat die Reihenfolge des Kampagnenwissens
+(`campaigns.knowledge_item_order_rev`, ADR #31). Ein Zähler, den jeder
+unbeteiligte Write hochdreht, macht eine offene Bearbeitung unspeicherbar —
+am härtesten während einer laufenden Session, wo ständig geschrieben wird.
+Ein Wächter zählt deshalb nur die Writes, gegen die er schützt.
 
 Am Kapitel stehen damit **drei Schreibwege mit drei Wächtern**, und keiner
 stört den anderen: der Szenen-Eintrag mit `scenes.rev` (Eigenschaften und
@@ -1812,6 +1810,8 @@ Die Ressourcen der bisher erfassten Entitäten:
 | Ort | `GET/PATCH /campaigns/:c/locations/:id` | `GET/POST /campaigns/:c/locations` | `/campaigns/:c/locations/:id` |
 | Faden | `GET/PATCH/DELETE /campaigns/:c/threads/:id` | `GET/POST /campaigns/:c/threads` | in der Kapitelübersicht |
 | Idee | `GET/PATCH /campaigns/:c/ideas/:id` | `GET/POST /campaigns/:c/ideas` | in Nachbereitung und Mobil-Startfläche |
+| Glossar-Begriff | `GET/PATCH/DELETE /campaigns/:c/glossary-terms/:id` | `GET/POST /campaigns/:c/glossary-terms` | auf der Glossar-Seite `/campaigns/:c/glossary` |
+| Kampagnenwissen | `GET/PATCH/DELETE /campaigns/:c/knowledge-items/:id` | `GET/POST /campaigns/:c/knowledge-items` | auf der Wissens-Seite `/campaigns/:c/knowledge` |
 
 Die API-Pfade stehen unter `/api` (ADR #22). URL-Segmente sind der
 englische Plural der Entität.
@@ -1824,7 +1824,10 @@ englische Plural der Entität.
 - **Stabile Schlüssel.** Jede Entität hat eine stabile `id`, und über sie —
   nie über ihre Position und nie über einen änderbaren Text — nennen URL,
   Leitung und Verweise sie. Setzt der DM die id nicht selbst (ein Faden, eine
-  Idee), vergibt der Server beim Anlegen eine opake.
+  Idee, ein Glossar-Begriff, ein Stück Kampagnenwissen), vergibt der Server
+  beim Anlegen eine opake. Ein Text, der je Kampagne nur einmal stehen darf
+  (der Begriff eines Glossar-Begriffs), ist ein Feld mit eindeutigem Index,
+  kein Schlüssel.
 - **Flach oder verschachtelt.** Eine Entität, die zwischen Eltern wandern
   kann, liegt flach unter der Kampagne, und ihr Elternteil ist ein Feld: eine
   Szene unter `…/scenes/:id`, ein Faden unter `…/threads/:id`, jeweils mit
@@ -1851,7 +1854,7 @@ englische Plural der Entität.
   ein Feld, das die Entität nicht hat, oder ein Wert der falschen Form ist
   eine 400, die das Feld nennt. Die `id` wird nie geändert (ADR #21). Ein
   veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource unter dem
-  Namen der Entität (`{ thread }`, `{ idea }` …); `force` und
+  Namen der Entität (`{ thread }`, `{ idea }`, `{ glossaryTerm }` …); `force` und
   `nothing_to_write` gelten wie in ADR #23. Anlegen antwortet mit dem Typ der
   Entität und trägt kein `rev`, denn eine neue Zeile überschreibt nichts.
   `DELETE` trägt `{ rev }` wie jeder Schreibzugriff mit Wächter.
@@ -1859,10 +1862,15 @@ englische Plural der Entität.
   Schreibzugriff bewegt nur das der Zeile, die er schreibt. Einen Zähler über
   alle Zeilen einer Art gibt es nicht.
 - **Reihenfolge.** Wo der DM eine Reihenfolge setzt, schreibt sie ein
-  eigener Endpunkt mit eigenem Wächter, und kein `rev` einer Entität bewegt
-  sich dabei — die Szenen eines Kapitels (`…/chapters/:id/scene-order`,
-  ADR #27). Wo die App nicht sortiert, gilt die Reihenfolge des Anlegens, und
-  es gibt keinen Reihenfolge-Endpunkt (Faden, Idee).
+  eigener Endpunkt mit eigenem Wächter an dem, dem die Reihenfolge gehört,
+  und kein `rev` einer Entität bewegt sich dabei — die Szenen eines Kapitels
+  (`…/chapters/:id/scene-order`, ADR #27), das Kampagnenwissen einer
+  Kampagne (`…/knowledge-item-order { items, rev }`). Ein alter Stand ist 409
+  mit der aktuellen Reihenfolge. Wo die Reihenfolge alle Zeilen einer
+  Kampagne nennt, bewegt auch Anlegen und Löschen ihren Wächter, denn beide
+  ändern, was sie aufzählt. Wo die App nicht sortiert, gilt die Reihenfolge
+  des Anlegens, und es gibt keinen Reihenfolge-Endpunkt (Faden, Idee,
+  Glossar-Begriff).
 - **Eine Quelle je Entität: ein zod-Schema** in `shared/src/<entität>.ts`.
   Aus ihm kommen der TypeScript-Typ (`z.infer`), die Prüfung von `PATCH`,
   `POST` und Seed und das Antwort-Schema des Generators. Keine dieser Formen
