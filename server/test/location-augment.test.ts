@@ -151,8 +151,8 @@ describe("the run", () => {
     expect(job.status).toBe("done");
     expect(job.kind).toBe("location-augment");
     expect(job.location).toBe("leuchtturm");
-    expect(job.target).toBeUndefined();
-    expect(job.augmentResult).toBeUndefined();
+    expect(job.scene).toBeUndefined();
+    expect(job.sceneAugmentResult).toBeUndefined();
     const result = job.locationAugmentResult!;
     expect(result.id).toBe("leuchtturm");
     expect(result.rev).toBe(stored.rev);

@@ -70,8 +70,8 @@ hat.
    für Fließtext, Read-Alouds, alle Callouts, `## If:`-Bedingungen,
    Überschriften, `warnings` und für jedes Feld, das Text ist (`title`,
    `trigger`, `body`). **Einzige Ausnahme**: `id`-Werte — die bleiben
-   kebab-case ASCII. Eigennamen aus dem Quelltext bleiben genau so
-   geschrieben, wie sie dort stehen. **Anführungszeichen**: deutsche
+   kebab-case ASCII. Eigennamen aus dem Quelltext bleiben genau
+   so geschrieben, wie sie dort stehen. **Anführungszeichen**: deutsche
    typografische Anführungszeichen „…“ (unten öffnend U+201E, oben
    schließend U+201C), einfach ‚…‘, als Apostroph ’.
 14. **Tabellen**: Tabellen aus dem Quellmaterial — Zufallstabellen, Begegnungs-

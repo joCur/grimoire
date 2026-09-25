@@ -183,8 +183,8 @@ describe("the run", () => {
     expect(job.status).toBe("done");
     expect(job.kind).toBe("npc-augment");
     expect(job.npc).toBe("jorna");
-    expect(job.target).toBeUndefined();
-    expect(job.augmentResult).toBeUndefined();
+    expect(job.scene).toBeUndefined();
+    expect(job.sceneAugmentResult).toBeUndefined();
     const result = job.npcAugmentResult!;
     expect(result.id).toBe("jorna");
     expect(result.rev).toBe(stored.rev);

@@ -338,7 +338,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(fake.calls[1]!.corrections).toHaveLength(1);
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     const correction = fake.calls[1]!.corrections[0]!.correction;
-    expect(correction).toContain("[[niemand]] nennt keinen Eintrag");
+    expect(correction).toContain("[[niemand]] nennt nichts");
     // ONE error, not a cascade
     expect(correction.match(/^- /gm)).toHaveLength(1);
     expect(await exists("grella")).toBe(false);
@@ -355,7 +355,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     for (const body of bodies) {
       expect(
         await firstValidationError([npcReply({ content: { ...npcDraft(), body } })]),
-      ).toContain("[[niemand]] nennt keinen Eintrag");
+      ).toContain("[[niemand]] nennt nichts");
     }
   });
 
@@ -773,7 +773,7 @@ describe("npc generate jobs", () => {
 
     const job = await fetchJob();
     expect(job!.npcEdits).toEqual({ "job-drafts": { body: edited } });
-    expect(job!.draftEdits).toEqual({});
+    expect(job!.sceneEdits).toEqual({});
     // the result itself is untouched — the edit sits next to it
     expect(job!.npcResult!.npc.body).not.toBe(edited);
   });
@@ -796,7 +796,7 @@ describe("accept the npc of an NPC run", () => {
   test("the whole-run apply writes the npc and discards the job", async () => {
     const res = await runAndApply("apply-happy");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: [], npcs: ["apply-happy"], locations: [] });
+    expect(await res.json()).toEqual({ scenes: [], npcs: ["apply-happy"], locations: [] });
     // the npc is stored — nothing left to restore
     expect(await fetchJob()).toBeNull();
 
@@ -840,7 +840,7 @@ describe("accept the npc of an NPC run", () => {
     const res = await postJson(`/api/campaigns/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      written: {},
+      scenes: [],
       npcs: ["accept-edit"],
       locations: [],
       jobDeleted: true,
@@ -865,8 +865,9 @@ describe("accept the npc of an NPC run", () => {
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
-      error: "target entries already exist",
+      error: "target rows already exist",
       conflicts: [],
+      scenes: [],
       npcs: ["apply-happy"],
       locations: [],
     });
