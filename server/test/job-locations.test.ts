@@ -193,6 +193,6 @@ test("a location that already holds content is a conflict, reported by id", asyn
 
   const res = await accept(job, { locations: ["alte-mole"] });
   expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ conflicts: [], scenes: [], locations: ["alte-mole"] });
+  expect(await res.json()).toMatchObject({ chapters: [], scenes: [], locations: ["alte-mole"] });
   expect((await readLocation("alte-mole"))?.body).toBe("Schon beschrieben.\n");
 });

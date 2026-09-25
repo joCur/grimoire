@@ -19,7 +19,6 @@ import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
 import { dropStore, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
-import { entriesUrl } from "./support/urls";
 
 // --- fixtures -----------------------------------------------------------------
 
@@ -127,7 +126,7 @@ async function exists(id: string): Promise<boolean> {
 }
 
 async function chapterExists(id: string): Promise<boolean> {
-  const res = await app.request(entriesUrl("beispiel", id));
+  const res = await app.request(`/api/campaigns/beispiel/chapters/${id}`);
   return res.status === 200;
 }
 
@@ -666,7 +665,7 @@ function describedReply(description: string): string {
 }
 
 async function chapterBody(chapter: string): Promise<string> {
-  const res = await app.request(entriesUrl("beispiel", chapter));
+  const res = await app.request(`/api/campaigns/beispiel/chapters/${chapter}`);
   expect(res.status).toBe(200);
   return ((await res.json()) as { body: string }).body;
 }
@@ -721,7 +720,7 @@ test("a chapter that exists by the time of the accept keeps its own text", async
   const created = await send("POST", "/api/campaigns/beispiel/chapters", {
     title: "Die Drachenbrut",
     id: NEW_CHAPTER,
-    description: "Von Hand geschrieben.",
+    body: "Von Hand geschrieben.",
   });
   expect(created.status).toBe(201);
 

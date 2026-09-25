@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bu
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { EntryResponse, SessionResponse } from "@grimoire/shared";
+import type { SessionResponse } from "@grimoire/shared";
 import { readFixtureSources, seedCampaign } from "../src/db/seed";
 import { closeStore, initStore } from "../src/store/handle";
 import { app } from "../src/server";

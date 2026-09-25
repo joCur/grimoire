@@ -28,7 +28,6 @@ import { readFixtureSources, seedCampaign } from "../src/db/seed";
 import { closeStore, getDb, initStore } from "../src/store/handle";
 import { dropStore, FIXTURES, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
-import { entriesUrl } from "./support/urls";
 
 const CAMPAIGN = "beispiel";
 /** The chapter the example campaign brings, with its two fixture scenes. */
@@ -172,9 +171,8 @@ async function reorder(chapter: string, order: string[]): Promise<void> {
   expect(res.status).toBe(200);
 }
 
-/** The `rev` of the chapter entry, or of a scene on its own resource. */
-async function entryRev(target: string): Promise<number> {
-  const url = target.startsWith("/api/") ? target : entriesUrl(CAMPAIGN, target);
+/** The `rev` of a chapter or of a scene, each on its own resource. */
+async function revOf(url: string): Promise<number> {
   const res = await app.request(url);
   expect(res.status).toBe(200);
   return ((await res.json()) as { rev: number }).rev;
@@ -390,16 +388,16 @@ test("no accept moves the order guard, the chapter's rev or an existing scene's 
   const arrival = `/api/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival`;
   const before = {
     order: (await chapterNode(EXISTING_CHAPTER)).sceneOrderRev,
-    chapter: await entryRev(EXISTING_CHAPTER),
-    scene: await entryRev(arrival),
+    chapter: await revOf(`/api/campaigns/${CAMPAIGN}/chapters/${EXISTING_CHAPTER}`),
+    scene: await revOf(arrival),
   };
 
   await runJob(EXISTING_CHAPTER);
   await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene", "erste-szene"]);
   const after = {
     order: (await chapterNode(EXISTING_CHAPTER)).sceneOrderRev,
-    chapter: await entryRev(EXISTING_CHAPTER),
-    scene: await entryRev(arrival),
+    chapter: await revOf(`/api/campaigns/${CAMPAIGN}/chapters/${EXISTING_CHAPTER}`),
+    scene: await revOf(arrival),
   };
   expect(after).toEqual(before);
 });

@@ -3,17 +3,16 @@
 // suite (see test/support/store.ts). The Hono app runs in-process via
 // app.request(), so no live port is needed.
 //
-// Two addressing facts to know while reading:
-//   - `rev` is the ROW VERSION, an opaque guard token that starts at 1;
-//   - a scene's path segment is its ID (store/paths.ts), so the example
-//     scene is addressed as 01-salzhafen/leuchtturm/lighthouse-arrival.
+// Each entity with its own resource has its own test module
+// (campaigns.test.ts, chapters.test.ts, scenes.test.ts, …); this one covers
+// the shapes that show several of them — the campaign list and the tree —
+// and the empty boot.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignSummary, CampaignTree, EntryResponse } from "@grimoire/shared";
+import type { CampaignSummary, CampaignTree } from "@grimoire/shared";
 import { app } from "../src/server";
 import { seedCampaign, type SeedEntry } from "../src/db/seed";
 import { dropStore, emptyStore, seedStore } from "./support/store";
-import { entriesUrl } from "./support/urls";
 
 describe("GET /api/campaigns", () => {
   const campaigns = async (): Promise<CampaignSummary[]> => {
@@ -57,7 +56,7 @@ describe("GET /api/campaigns", () => {
       expect(beispiel?.lastSessionStarted).toBe("2026-01-15T19:30:00");
     });
 
-    test("name/description come from the campaign entry", async () => {
+    test("name/description come from the campaign", async () => {
       const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
       expect(beispiel?.name).toBe("Der Leuchtturm von Salzhafen");
       expect(beispiel?.description).toContain("Leuchtturm");
@@ -67,11 +66,11 @@ describe("GET /api/campaigns", () => {
   describe("several campaigns side by side", () => {
     /** A campaign's entries: its own, plus one session per id given. */
     function campaign(
-      properties: Record<string, unknown>,
+      fields: { id: string; name?: string; description?: string },
       sessionIds: string[] = [],
     ): SeedEntry[] {
       return [
-        { kind: "campaign", properties, body: "" },
+        { kind: "campaign", campaign: { name: "", ...fields, body: "" } },
         ...sessionIds.map(
           (id): SeedEntry => ({
             kind: "session",
@@ -101,8 +100,8 @@ describe("GET /api/campaigns", () => {
     test("newest session id wins; no sessions → no lastSession field", async () => {
       const body = await campaigns();
       // `name` is the DISPLAY name and is always there: a campaign with no
-      // authored name is listed under its id, exactly as the campaign ENTRY
-      // renders it (GET /entry?path=campaign).
+      // authored name is listed under its id, exactly as `GET /campaigns/:c`
+      // answers it.
       expect(body).toEqual([
         { id: "meta-ohne-name", name: "meta-ohne-name" },
         { id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." },
@@ -127,15 +126,15 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     return (await res.json()) as CampaignTree;
   };
 
-  test("chapter 01-salzhafen with title from chapter entry", async () => {
+  test("chapter 01-salzhafen with the chapter's title and status", async () => {
     const t = await tree();
     expect(t.campaign).toBe("beispiel");
     const chapter = t.chapters.find((c) => c.id === "01-salzhafen");
     expect(chapter).toBeDefined();
     expect(chapter!.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
     expect(chapter!.status).toBe("active");
-    // A chapter's address is its id (store/chapters.ts buildTree).
-    expect(chapter!.path).toBe("01-salzhafen");
+    // No address: a chapter is its own resource (ADR #31).
+    expect(Object.hasOwn(chapter!, "path")).toBe(false);
   });
 
   test("a chapter lists its scenes as ONE ordered list", async () => {
@@ -187,13 +186,11 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(ids).toEqual([...ids].sort().reverse());
   });
 
-  test("root-level entries (incl. campaign) never appear in the tree", async () => {
+  test("the campaign and the lists never appear among the chapters", async () => {
     const t = await tree();
-    // The tree has no slot for campaign metadata;
-    // the campaign row is addressed by campaign and by nothing in here.
+    // The tree has no slot for the campaign's own fields; the campaign is
+    // read at its own resource.
     expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
-    const paths = t.chapters.flatMap((c) => (c.path === undefined ? [] : [c.path]));
-    for (const rootEntry of ["campaign", "inbox", "glossary"]) expect(paths).not.toContain(rootEntry);
   });
 
   test("404 for unknown campaign", async () => {
@@ -210,113 +207,6 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // any handler runs -> 404 from the router, also safe.
     const res2 = await app.request("/api/campaigns/%2e%2e/tree");
     expect([400, 404]).toContain(res2.status);
-  });
-});
-
-describe("GET /api/campaigns/:campaign/entries", () => {
-  beforeEach(async () => {
-    await seedStore();
-  });
-  afterEach(() => {
-    dropStore();
-  });
-
-  test("returns properties, body and the rev", async () => {
-    const rel = "01-salzhafen";
-    const res = await app.request(entriesUrl("beispiel", rel));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as EntryResponse;
-    expect(body.path).toBe(rel);
-    expect(body.kind).toBe("chapter");
-    expect(body.properties.id).toBe("01-salzhafen");
-    expect(body.properties.status).toBe("active");
-    expect(body.body).toContain("Leuchtfeuer");
-    expect(body.body).not.toContain("id: 01-salzhafen");
-    // `rev` is the ROW VERSION (store/render.ts rule 3): an opaque
-    // guard token the client only ever sends back. A freshly imported row is
-    // at 1 — that it INCREASES per write is pinned in write-api.test.ts.
-    expect(typeof body.rev).toBe("number");
-    expect(body.rev).toBe(1);
-  });
-
-  test("serves campaign as kind campaign (no new endpoint needed)", async () => {
-    const res = await app.request(entriesUrl("beispiel", "campaign"));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as EntryResponse;
-    expect(body.kind).toBe("campaign");
-    expect(body.properties.id).toBe("beispiel");
-    expect(body.properties.name).toBe("Der Leuchtturm von Salzhafen");
-  });
-
-  test("the three LIST addresses are 404 — they are not entries", async () => {
-    // A session, the inbox and the glossary have their own endpoints and no
-    // address at all (ADR #26), so these read like any other address the
-    // schema does not describe. `inbox`, `glossary` and `sessions` stay
-    // RESERVED all the same, so no chapter can claim one.
-    for (const rel of ["inbox", "glossary", "sessions/2026-01-15", "sessions"]) {
-      expect((await app.request(entriesUrl("beispiel", rel))).status).toBe(404);
-    }
-  });
-
-  test("404 for unknown entry and unknown campaign", async () => {
-    expect((await app.request(entriesUrl("beispiel", "01-salzhafen/nope"))).status).toBe(404);
-    expect((await app.request(entriesUrl("nope", "campaign"))).status).toBe(404);
-  });
-
-  test("a scene has no address — what used to name one is a 404", async () => {
-    // A scene is its own resource, `…/scenes/:id` (ADR #31): no address
-    // under its chapter reaches it, with or without its location.
-    for (const address of [
-      "01-salzhafen/lighthouse-arrival",
-      "01-salzhafen/leuchtturm/lighthouse-arrival",
-      "scenes/lighthouse-arrival",
-    ]) {
-      expect((await app.request(entriesUrl("beispiel", address))).status).toBe(404);
-    }
-  });
-
-  test("400 without an address", async () => {
-    expect((await app.request("/api/campaigns/beispiel/entries/")).status).toBe(400);
-  });
-
-  test("400 on traversal attempts", async () => {
-    const cases = [
-      "/etc/passwd",
-      "C:\\windows\\system32",
-      "01-salzhafen\\..\\..\\secret.md",
-      ".hidden/x",
-    ];
-    for (const address of cases) {
-      const res = await app.request(entriesUrl("beispiel", address));
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string };
-      expect(typeof body.error).toBe("string");
-    }
-  });
-
-  test("a `..` segment never reaches the address — the URL resolves it away", async () => {
-    // With the address in the path, every URL parser on the way normalizes
-    // `.` and `..` segments (percent-encoded ones included) before the server
-    // sees them. What arrives is a different, ordinary address, so the honest
-    // answer is 404 and not the 400 of the address guard. The probe uses a
-    // neutral traversal target; only the `..` segments matter here.
-    for (const address of ["../../vertraulich/notizen", "01-salzhafen/../../beispiel/inbox"]) {
-      expect((await app.request(entriesUrl("beispiel", address))).status).toBe(404);
-    }
-  });
-
-  test("400 for hidden segments, 404 for an address the schema has no row for", async () => {
-    // Hidden segments stay a 400 — that is a hostile value, not an address.
-    expect((await app.request(entriesUrl("beispiel", ".hidden"))).status).toBe(400);
-    expect((await app.request(entriesUrl("beispiel", ".hidden.md"))).status).toBe(400);
-    // An address the schema describes but no row answers is honestly a 404 —
-    // "there is no such entry" — not a 400 about its shape.
-    expect((await app.request(entriesUrl("beispiel", "kein-kapitel"))).status).toBe(404);
-    expect((await app.request(entriesUrl("beispiel", "notes.txt"))).status).toBe(404);
-    // …including the OLD `.md` form: no compatibility, by decision.
-    expect(
-      (await app.request(entriesUrl("beispiel", "npcs/jorna.md"))).status,
-    ).toBe(404);
   });
 });
 
@@ -342,7 +232,8 @@ describe("a fresh database (nothing loaded at boot)", () => {
     for (const p of [
       "/api/campaigns/beispiel/tree",
       "/api/campaigns/beispiel/version",
-      entriesUrl("beispiel", "campaign"),
+      "/api/campaigns/beispiel",
+      "/api/campaigns/beispiel/chapters",
       "/api/campaigns/beispiel/session",
     ]) {
       expect((await app.request(p)).status).toBe(404);

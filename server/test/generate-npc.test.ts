@@ -866,7 +866,7 @@ describe("accept the npc of an NPC run", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: "target rows already exist",
-      conflicts: [],
+      chapters: [],
       scenes: [],
       npcs: ["apply-happy"],
       locations: [],

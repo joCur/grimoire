@@ -45,7 +45,7 @@ async function getInbox(campaign = "beispiel"): Promise<InboxResponse> {
 const FRESH = "frischling";
 
 async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
-  seedCampaign(await getDb(), [{ kind: "campaign", properties: { id: FRESH }, body: "" }]);
+  seedCampaign(await getDb(), [{ kind: "campaign", campaign: { id: FRESH, name: "", body: "" } }]);
   await fn();
 }
 

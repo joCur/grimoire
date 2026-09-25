@@ -24,7 +24,7 @@ import type {
   SessionResponse,
 } from "@grimoire/shared";
 import { app } from "../src/server";
-import { applyDrafts } from "../src/store/drafts";
+import { writeGenerated } from "../src/store/generated";
 import { dropStore, seedStore } from "./support/store";
 
 const SCENE = "lighthouse-arrival";
@@ -334,7 +334,7 @@ describe("the generator's apply step", () => {
   test("a proposed scene and the npc it needs land in one batch", async () => {
     // The batch is inserted in REFERENCE order, not in the order the review
     // lists it: the npc and the location the scene names go in first.
-    await applyDrafts("beispiel", [], {
+    await writeGenerated("beispiel", {
       scenes: [neueSzene({ npcs: ["holm"], location: "alte-mole" })],
       npcs: [holm("\nSeine Netze zurück.\n")],
       locations: [
@@ -353,7 +353,7 @@ describe("the generator's apply step", () => {
 
   test("a scene that names an npc the batch does not bring is refused", async () => {
     await expect(
-      applyDrafts("beispiel", [], { scenes: [neueSzene({ npcs: ["holm"] })] }),
+      writeGenerated("beispiel", { scenes: [neueSzene({ npcs: ["holm"] })] }),
     ).rejects.toThrow(/unknown npc/);
     // Nothing of the batch was written.
     expect(await sceneStatus("neue-szene")).toBe(404);
@@ -362,7 +362,7 @@ describe("the generator's apply step", () => {
 
   test("an EMPTY npc is filled by the proposal for its id", async () => {
     await createEmptyNpc("holm");
-    await applyDrafts("beispiel", [], { npcs: [holm("\nSeine Netze zurück.\n")] });
+    await writeGenerated("beispiel", { npcs: [holm("\nSeine Netze zurück.\n")] });
     const npc = await getNpc("holm");
     expect(npc.name).toBe("Holm");
     expect(npc.body).toContain("Seine Netze zurück.");
@@ -371,7 +371,7 @@ describe("the generator's apply step", () => {
   test("an npc that holds CONTENT is still a 409 conflict, named by its id", async () => {
     const before = await getNpc("fenn");
     await expect(
-      applyDrafts("beispiel", [], {
+      writeGenerated("beispiel", {
         npcs: [{ id: "fenn", name: "Anders", status: "alive", body: "\nAnderes.\n" }],
       }),
     ).rejects.toMatchObject({ status: 409, extra: { npcs: ["fenn"] } });
@@ -385,7 +385,7 @@ describe("the generator's apply step", () => {
     await patchNpc("holm", { status: "dead" });
 
     await expect(
-      applyDrafts("beispiel", [], { npcs: [holm("\nEtwas.\n")] }),
+      writeGenerated("beispiel", { npcs: [holm("\nEtwas.\n")] }),
     ).rejects.toThrow(/already exist/);
     const untouched = await getNpc("holm");
     expect(untouched.status).toBe("dead");
@@ -394,7 +394,7 @@ describe("the generator's apply step", () => {
 
   test("a scene that already exists is the documented 409, named by its id", async () => {
     await expect(
-      applyDrafts("beispiel", [], {
+      writeGenerated("beispiel", {
         scenes: [neueSzene({ id: "lighthouse-arrival", title: "Noch eine Ankunft" })],
       }),
     ).rejects.toMatchObject({ status: 409, extra: { scenes: ["lighthouse-arrival"] } });
@@ -405,7 +405,7 @@ describe("the generator's apply step", () => {
   test("TWO proposals for one target are a 409, not last-write-win", async () => {
     let conflicts: unknown;
     try {
-      await applyDrafts("beispiel", [], {
+      await writeGenerated("beispiel", {
         scenes: [neueSzene(), neueSzene({ title: "Neue Szene anders" })],
         npcs: [holm("\nDas erste.\n"), holm("\nDas zweite.\n", { name: "Holm anders" })],
       });

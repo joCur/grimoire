@@ -4,18 +4,17 @@
 // The point of these cases is the ANSWER, not the constraint. The constraint
 // alone would answer "CHECK constraint failed" as a 500, which tells the app
 // nothing and the DM less; the store checks first and names the field, the
-// value and the list, so the app can print a sentence and the entry stays as
+// value and the list, so the app can print a sentence and the row stays as
 // it was.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { EntryResponse, Npc, Scene } from "@grimoire/shared";
+import type { Chapter, Npc, Scene } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
-import { entriesUrl } from "./support/urls";
 
-/** A scene and an npc are their own resources (ADR #31): their fields travel flat. */
+/** A chapter, a scene and an npc are their own resources (ADR #31): their fields travel flat. */
 const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
-const CHAPTER = entriesUrl("beispiel", "01-salzhafen");
+const CHAPTER = "/api/campaigns/beispiel/chapters/01-salzhafen";
 const NPC_URL = "/api/campaigns/beispiel/npcs/jorna";
 
 async function read(url: string): Promise<{ rev: number }> {
@@ -40,14 +39,10 @@ interface Refusal {
   kind?: string;
 }
 
-/**
- * PATCH one field to a foreign value and read the refusal — flat on a
- * resource, under `properties` on an entry address.
- */
+/** PATCH one field to a foreign value and read the refusal. */
 async function refusal(url: string, fields: Record<string, unknown>): Promise<Refusal> {
   const before = await read(url);
-  const body = url === CHAPTER ? { rev: before.rev, properties: fields } : { rev: before.rev, ...fields };
-  const res = await patch(url, body);
+  const res = await patch(url, { rev: before.rev, ...fields });
   expect(res.status).toBe(400);
   // Nothing was written — the guard token has not moved.
   expect((await read(url)).rev).toBe(before.rev);
@@ -109,8 +104,8 @@ describe("a foreign status or type is a 400", () => {
 
     // `null` is not a foreign value: on a chapter it clears the status.
     const chapter = await read(CHAPTER);
-    const next = await patch(CHAPTER, { rev: chapter.rev, properties: { status: null } });
+    const next = await patch(CHAPTER, { rev: chapter.rev, status: null });
     expect(next.status).toBe(200);
-    expect(((await next.json()) as EntryResponse).properties.status).toBeUndefined();
+    expect(Object.hasOwn((await next.json()) as Chapter, "status")).toBe(false);
   });
 });
