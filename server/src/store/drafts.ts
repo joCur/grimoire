@@ -18,7 +18,6 @@ import { chapters, generateJobs } from "../db/schema";
 import { campaignRow, mutate } from "./campaigns";
 import { ensureChapterRow } from "./chapters";
 import { chapterRowOf, indexChapter } from "./entity-rows";
-import { getDb } from "./handle";
 import { insertLocationProposal, locationTaken } from "./locations";
 import { insertNpcProposal, npcTaken } from "./npcs";
 import { locatorFromPath, type Locator } from "./paths";
@@ -106,6 +105,12 @@ export async function applyDrafts(
     locations?: LocationProposal[];
     jobId?: string;
     /**
+     * The chapters the run decided on (ADR #18): each is written here if it
+     * is not there yet — the net under a new-chapter run, whose chapter draft
+     * usually comes along. Any other chapter a scene names has to exist.
+     */
+    runChapters?: readonly string[];
+    /**
      * A PARTIAL accept does not discard the job — it records what
      * it wrote on it and deletes the row only when nothing is left open. That
      * bookkeeping belongs in THIS transaction for the same reason the discard
@@ -117,7 +122,15 @@ export async function applyDrafts(
     placeScene?: ScenePlacement;
   } = {},
 ): Promise<void> {
-  const { scenes = [], npcs = [], locations = [], jobId, onWritten, placeScene } = options;
+  const {
+    scenes = [],
+    npcs = [],
+    locations = [],
+    jobId,
+    runChapters = [],
+    onWritten,
+    placeScene,
+  } = options;
   try {
     await mutate(campaign, (tx) => {
       // TWO proposals for ONE row are a conflict too. An empty npc or
@@ -169,11 +182,9 @@ export async function applyDrafts(
       }
       // A chapter goes in before everything that names it, and an npc and a
       // location before the scene that lists them: the constraints are
-      // checked per statement. The chapter a scene names is written here if
-      // the run brought it and it is not there yet (ADR #18) — the net under
-      // a new-chapter run, whose chapter draft usually comes along.
+      // checked per statement.
       for (const draft of drafts) insertDraft(tx, campaign, draft);
-      for (const scene of scenes) ensureChapterRow(tx, campaign, scene.chapter);
+      for (const chapter of runChapters) ensureChapterRow(tx, campaign, chapter);
       for (const location of locations) insertLocationProposal(tx, campaign, location);
       for (const npc of npcs) insertNpcProposal(tx, campaign, npc);
       for (const scene of scenes) {
@@ -226,12 +237,7 @@ function isConstraintViolation(error: unknown): boolean {
   return /(UNIQUE|PRIMARY KEY) constraint failed/i.test(message);
 }
 
-/** True when a generated chapter already exists (the apply step's 409). */
-export async function draftTargetExists(campaign: string, rel: string): Promise<boolean> {
-  return draftTargetExistsIn(await getDb(), campaign, rel);
-}
-
-/** The same question inside a transaction — synchronous, so it can be. */
+/** True when a chapter draft's target already exists (the apply step's 409). */
 function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boolean {
   let locator: Locator;
   try {

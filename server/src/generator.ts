@@ -1019,6 +1019,9 @@ export async function applyGenerated(
     scenes,
     npcs,
     locations,
+    // Without a job, the chapters the run decided on are the ones its scenes
+    // name (ADR #18).
+    runChapters: [...new Set(scenes.map((scene) => scene.chapter))],
     jobId,
   });
   return {

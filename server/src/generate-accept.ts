@@ -267,6 +267,7 @@ export async function acceptJobParts(
     scenes,
     npcs,
     locations,
+    runChapters: job.chapter === undefined ? [] : [job.chapter],
     placeScene,
     onWritten: (tx) => {
       jobDeleted = markWrittenInTx(

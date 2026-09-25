@@ -43,7 +43,7 @@ export function formatContract(doc: string, heading: string): string {
  * list/mapping all count; `false` and `0` do NOT — those are values the DM
  * chose.
  */
-export function isEmptyValue(value: unknown): boolean {
+function isEmptyValue(value: unknown): boolean {
   if (value === undefined || value === null) return true;
   if (typeof value === "string") return value.trim() === "";
   if (Array.isArray(value)) return value.length === 0;

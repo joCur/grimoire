@@ -347,6 +347,19 @@ test("a scene edit is stored by id, field by field, and is what the accept write
   expect(Object.hasOwn(stored, "location")).toBe(false);
 });
 
+test("a scene edited into a chapter that does not exist is refused, and no chapter appears", async () => {
+  // Only the chapter the RUN decided on is written by an accept (ADR #18); a
+  // chapter the DM typed into a proposed scene has to exist, like anywhere
+  // else (ADR #19).
+  let job = await runJob();
+  job = await patch(job, { sceneEdits: { [SCENE_A]: { chapter: "99-vertippt" } } });
+  const res = await accept(job, { scenes: [SCENE_A] });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ code: "chapter_unknown", value: "99-vertippt" });
+  expect(await exists(SCENE_A)).toBe(false);
+  expect(await chapterExists("99-vertippt")).toBe(false);
+});
+
 test("a scene edit for a scene the run did not propose, or with a foreign field, is a 400", async () => {
   const job = await runJob();
   const url = `/api/campaigns/beispiel/generate/job/${job.id}/review`;
