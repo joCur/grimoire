@@ -41,16 +41,17 @@ function fixture(name: string): { body?: string } {
 }
 
 /**
- * Every fixture that carries a body, sorted — the campaign, its chapters,
- * scenes, npcs and locations, each in its own directory
- * (`campaigns/<id>.json`, `chapters/<id>.json`, `scenes/<id>.json`, …).
+ * Every fixture that carries a body, sorted — the session in the campaign
+ * directory itself, and the campaign, its chapters, scenes, npcs and
+ * locations, each in its own directory (`campaigns/<id>.json`,
+ * `chapters/<id>.json`, `scenes/<id>.json`, …).
  */
 function fixtureFiles(): string[] {
   const inDir = (dir: string): string[] =>
     readdirSync(new URL(dir, FIXTURES), { encoding: "utf8" })
       .filter((name) => name.endsWith(".json"))
       .map((name) => `${dir}${name}`);
-  return ["campaigns/", "chapters/", "scenes/", "npcs/", "locations/"]
+  return ["", "campaigns/", "chapters/", "scenes/", "npcs/", "locations/"]
     .flatMap(inDir)
     .filter((name) => fixture(name).body !== undefined)
     .sort();
