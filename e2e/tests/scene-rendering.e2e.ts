@@ -7,36 +7,62 @@
 // All six callout kinds appear: readaloud/check/secret/note in
 // lighthouse-arrival, check/note/outcome in smuggler-captured — and
 // [!loot], which the example campaign does not contain, through an extra
-// entry this test seeds into ITS OWN copy of the fixtures.
+// scene this test seeds into ITS OWN copy of the fixtures.
+//
+// A scene is its own resource (ADR #31): its reading view is
+// `/campaigns/:c/scenes/:id`, read through `GET …/scenes/:id`.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { E2E_FIXTURES_DIR } from "../support/paths";
-import { expect, test, type SeedEntry } from "../support/test";
+import { expect, test, type SeedScene } from "../support/test";
 
-/** Reads one of the suite's own entry fixtures. */
-function entry(name: string): SeedEntry {
-  return JSON.parse(
-    readFileSync(path.join(E2E_FIXTURES_DIR, name), "utf8"),
-  ) as SeedEntry;
+/** Reads one of the suite's own scene fixtures. */
+function scene(name: string): SeedScene {
+  return JSON.parse(readFileSync(path.join(E2E_FIXTURES_DIR, name), "utf8")) as SeedScene;
 }
 
 /** The scene with the [!loot] callout — the example campaign has none. */
-const LOOT_SCENE = entry("loot-scene.json");
-/** Its address: chapter, location and the scene's id from its properties. */
-const LOOT_SCENE_PATH = "01-salzhafen/leuchtturm/loot-check";
+const LOOT_SCENE = scene("loot-scene.json");
 
 /**
  * A scene whose table CANNOT fit 390px — seven columns of long, unbreakable
  * words. The reference scene's W6 table is narrow enough to fit, so it cannot
  * prove that the box overflows instead of the page; this one can.
  */
-const WIDE_TABLE_SCENE = entry("wide-table-scene.json");
-const WIDE_TABLE_SCENE_PATH = "01-salzhafen/leuchtturm/wide-table";
+const WIDE_TABLE_SCENE = scene("wide-table-scene.json");
 
-const ARRIVAL = "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival";
-const CAPTURED = "/campaigns/beispiel/entries/01-salzhafen/bucht/smuggler-captured";
+const ARRIVAL = "/campaigns/beispiel/scenes/lighthouse-arrival";
+const CAPTURED = "/campaigns/beispiel/scenes/smuggler-captured";
+
+test("a scene is its own resource: flat on the wire, 404 at its old address", async ({ api }) => {
+  // Every field of the scene flat, beside its guard — no `kind`, no `path`,
+  // no `properties` map.
+  const arrival = await api.scene("lighthouse-arrival");
+  expect(arrival).toMatchObject({
+    id: "lighthouse-arrival",
+    title: "Ankunft am Leuchtturm",
+    type: "planned",
+    chapter: "01-salzhafen",
+    location: "leuchtturm",
+    npcs: ["jorna"],
+    handouts: ["Karte von Salzhafen"],
+    tags: ["social", "travel"],
+    status: "ready",
+  });
+  expect(typeof arrival.rev).toBe("number");
+  expect(arrival.body).toContain("## Flow");
+  for (const key of ["kind", "path", "properties"]) expect(arrival).not.toHaveProperty(key);
+
+  // The address a scene used to have names nothing any more.
+  for (const address of [
+    "01-salzhafen/leuchtturm/lighthouse-arrival",
+    "01-salzhafen/lighthouse-arrival",
+  ]) {
+    expect((await api.fetch(`campaigns/beispiel/entries/${address}`)).status).toBe(404);
+  }
+});
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({
   page,
@@ -166,9 +192,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   // "Stub anlegen" detour, and the card opens the (equally thin) page.
   expect(await api.npcExists("holm")).toBe(false);
   await api.createNpc({ name: "holm" });
-  await api.patchProperties("01-salzhafen/leuchtturm/lighthouse-arrival", {
-    npcs: ["jorna", "holm"],
-  });
+  await api.patchScene("lighthouse-arrival", { npcs: ["jorna", "holm"] });
   expect(await api.npcExists("holm")).toBe(true);
 
   await page.goto(ARRIVAL);
@@ -185,18 +209,17 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
 });
 
 test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ page, api }) => {
-  // `location` is the scene's group, so it is always an id or empty — and
-  // the id has to have an entry (ADR #19).
-  const scene = "01-salzhafen/bucht/smuggler-captured";
+  // `location` is always an id or absent — and the id has to name a location
+  // that exists (ADR #19).
   const patchLocation = async (value: string, rev: number): Promise<Response> =>
-    api.fetch(`campaigns/beispiel/entries/${scene}`, {
+    api.fetch(api.scenePath("smuggler-captured"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev, properties: { location: value } }),
+      body: JSON.stringify({ rev, location: value }),
     });
 
-  // An id nothing holds: refused, and no entry appears for it.
-  const before = await api.entry(scene);
+  // An id nothing holds: refused, and no location appears for it.
+  const before = await api.scene("smuggler-captured");
   const unknown = await patchLocation("nordbucht", before.rev);
   expect(unknown.status).toBe(400);
   expect(await unknown.json()).toMatchObject({
@@ -215,25 +238,24 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
   });
   expect(await api.locationExists("der-alte-hafen")).toBe(false);
 
-  // With the location created, the patch lands and the scene MOVES with it.
+  // With the location created, the patch lands — and the scene stays at its
+  // own route, whatever its location says.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
-  await api.patchProperties(scene, { location: "nordbucht" });
-  const moved = await api.entry(scene);
-  expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
-  await page.goto(`/campaigns/beispiel/entries/${moved.path}`);
+  await api.patchScene("smuggler-captured", { location: "nordbucht" });
+  expect((await api.scene("smuggler-captured")).location).toBe("nordbucht");
+  await page.goto(CAPTURED);
   await expect(page.getByRole("article")).toContainText("Nordbucht");
 });
 
 test.describe("with a seeded loot scene", () => {
-  test.use({ seed: { entries: { "scene-loot": LOOT_SCENE } } });
+  test.use({ seed: { entries: { "scenes/loot-check": LOOT_SCENE } } });
 
   test("the loot callout renders, an unknown kind degrades to a blockquote", async ({
     page,
   }) => {
     // [!loot] is missing from the reference scenes, so the sixth kind is
     // checked on a scene this test seeds into its own copy of the fixtures.
-    // Its last address segment is the scene's id, like every scene address.
-    await page.goto(`/campaigns/beispiel/entries/${LOOT_SCENE_PATH}`);
+    await page.goto(`/campaigns/beispiel/scenes/${LOOT_SCENE.id}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Beutezug in der Räucherkammer",
     );
@@ -269,13 +291,13 @@ test("the reference scene's W6 table renders as a table inside the note callout"
 test.describe("the table at 390px", () => {
   test.use({
     viewport: { width: 390, height: 844 },
-    seed: { entries: { "scene-wide-table": WIDE_TABLE_SCENE } },
+    seed: { entries: { "scenes/wide-table": WIDE_TABLE_SCENE } },
   });
 
   test("a table too wide for the phone scrolls in its own box, the page does not", async ({
     page,
   }) => {
-    await page.goto(`/campaigns/beispiel/entries/${WIDE_TABLE_SCENE_PATH}`);
+    await page.goto(`/campaigns/beispiel/scenes/${WIDE_TABLE_SCENE.id}`);
 
     // Overflowing, so the box IS a named region: the tab stop and the
     // landmark only appear once there is something to scroll.

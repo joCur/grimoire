@@ -19,16 +19,15 @@
 // shape the API speaks, and a test that needs content the example campaign
 // does not have overrides the fixtures in its own copy of that directory:
 //
-//   test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } } } });
+//   test.use({ seed: { entries: { "scenes/loot": { id: "loot", … } } } });
 //   test.use({ seed: { without: ["session-2026-01-15"] } });
 //
 // The keys are FIXTURE FILE STEMS, not addresses: a stem that already exists
-// in `fixtures/beispiel` REPLACES that entry, any other stem adds one. The
-// address an entry gets is the server's decision (`server/src/store/paths.ts`
-// — a scene's segments are its chapter, its location and its id). An npc and
-// a location are each their own resource (ADR #31): their stems are
-// `npcs/<id>` and `locations/<id>`, and the fixture is the npc or the
-// location itself, every field flat, without a guard.
+// in `fixtures/beispiel` REPLACES that entry, any other stem adds one. A
+// scene, an npc and a location are each their own resource (ADR #31): their
+// stems are `scenes/<id>`, `npcs/<id>` and `locations/<id>`, and the fixture
+// is the scene, the npc or the location itself, every field flat, without a
+// guard.
 //
 // Without overrides the pristine copy from the global setup is used directly
 // (it is never written to), so most tests copy nothing at all.
@@ -99,7 +98,7 @@ export interface ServerHandle {
  */
 export type SeedEntry =
   | {
-      kind: "campaign" | "scene";
+      kind: "campaign";
       properties: Record<string, unknown>;
       body?: string;
     }
@@ -126,6 +125,24 @@ export type SeedEntry =
       intro?: string;
       entries: { term: string; explanation: string }[];
     };
+
+/**
+ * One scene as its fixture holds it (`scenes/<id>.json`) — every field flat,
+ * `body` among them, no guard (ADR #31).
+ */
+export interface SeedScene {
+  id: string;
+  title: string;
+  type: "planned" | "contingency";
+  trigger?: string;
+  chapter: string;
+  location?: string;
+  npcs: string[];
+  handouts: string[];
+  tags: string[];
+  status: "draft" | "ready" | "played" | "dropped";
+  body: string;
+}
 
 /**
  * One location as its fixture holds it (`locations/<id>.json`) — every field
@@ -162,9 +179,10 @@ export interface SeedNpc {
 export interface Seed {
   /**
    * fixture file stem -> entry; a stem that exists in fixtures/beispiel
-   * REPLACES it. An npc's stem is `npcs/<id>`, a location's `locations/<id>`.
+   * REPLACES it. A scene's stem is `scenes/<id>`, an npc's `npcs/<id>`, a
+   * location's `locations/<id>`.
    */
-  entries?: Record<string, SeedEntry | SeedNpc | SeedLocation>;
+  entries?: Record<string, SeedEntry | SeedScene | SeedNpc | SeedLocation>;
   /** fixture file stems to leave out, e.g. "session-2026-01-15" */
   without?: string[];
   /**
@@ -190,6 +208,14 @@ export interface ApiEntry {
   properties: Record<string, unknown>;
   body: string;
   /** The row version (`rev`) — an opaque guard token. */
+  rev: number;
+}
+
+/**
+ * One scene as GET /api/campaigns/:campaign/scenes/:id answers it — its own
+ * resource (ADR #31): every field flat, `body` among them, beside its guard.
+ */
+export interface ApiScene extends SeedScene {
   rev: number;
 }
 
@@ -300,6 +326,21 @@ export interface Api {
   properties(rel: string): Promise<Record<string, unknown>>;
   /** Whether the address names an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
+  /** GET one scene from its own resource; throws when it is unknown. */
+  scene(id: string): Promise<ApiScene>;
+  /** Whether the campaign has a scene with that id (404 = no). */
+  sceneExists(id: string): Promise<boolean>;
+  /** The request path of a scene (or, without an id, of the scene list). */
+  scenePath(id?: string): string;
+  /**
+   * The ONE write of a scene: PATCH its resource with `rev` and any subset of
+   * its fields, `body` among them. Omitted, `rev` is read first — the helper
+   * then plays the second writer.
+   */
+  patchScene(
+    id: string,
+    change: { rev?: number; force?: boolean } & Record<string, unknown>,
+  ): Promise<ApiScene>;
   /** GET one npc from its own resource; throws when it is unknown. */
   npc(id: string): Promise<ApiNpc>;
   /** Whether the campaign has an npc with that id (404 = no). */
@@ -552,6 +593,23 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       if (response.status === 404) return false;
       if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
       return true;
+    },
+    scene(id) {
+      return api.get<ApiScene>(api.scenePath(id));
+    },
+    async sceneExists(id) {
+      const response = await fetchApi(api.scenePath(id));
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error(`GET scene ${id}: HTTP ${response.status}`);
+      return true;
+    },
+    scenePath(id) {
+      const base = `campaigns/${encodeURIComponent(campaign)}/scenes`;
+      return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+    },
+    async patchScene(id, change) {
+      const rev = change.rev ?? (await api.scene(id)).rev;
+      return api.send<ApiScene>("PATCH", api.scenePath(id), { ...change, rev });
     },
     npc(id) {
       return api.get<ApiNpc>(api.npcPath(id));

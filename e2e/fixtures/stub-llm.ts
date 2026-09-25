@@ -22,12 +22,12 @@
 // Which reply comes back is decided by the PROMPT, never by hidden state, so
 // the stub stays stateless and can serve several test workers at once:
 //
-//   - a "## Bestehender Eintrag" section in the prompt        -> scene augment run
+//   - a "## Bestehende Szene" section in the prompt           -> scene augment run
 //   - a "## Bestehender NPC" section in the prompt            -> npc augment run
 //   - a "## Bestehender Ort" section in the prompt            -> location augment run
 //     (the reply echoes that scene, npc or location and adds to it)
 //   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
-//     (the reply's scene path uses exactly that chapter)
+//     (the reply's scene names exactly that chapter)
 //   - no chapter line                                            -> npc run
 //     (a `vorgegebene id: <id>` line pins the id of the npc)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
@@ -67,9 +67,9 @@
 //     have to arrive verbatim.
 //
 // REPLY SHAPE: every reply is an OBJECT and is serialized as
-// JSON into the message content — the outline its own, a scene call
-// `{ properties, body, warnings }`, an npc or a location call its fields flat
-// beside `warnings` (replies.ts assembles them). A reply that is a plain
+// JSON into the message content — the outline its own, a scene, an npc or a
+// location call its fields flat beside `warnings` (replies.ts assembles
+// them). A reply that is a plain
 // STRING is one a spec wrote to be unreadable, and it travels verbatim.
 //
 // The stub is an OpenAI-compatible endpoint and simply IGNORES the
@@ -80,7 +80,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import {
-  EXISTING_ENTRY_HEADING,
+  EXISTING_SCENE_HEADING,
   EXISTING_LOCATION_HEADING,
   EXISTING_NPC_HEADING,
   FAILING_SCENE_ID,
@@ -108,8 +108,8 @@ import {
   unknownRefNpcAugmentReply,
   unknownRefNpcReply,
   type ExistingLocation,
-  type ExistingScene,
   type NpcFields,
+  type SceneFields,
 } from "./replies";
 
 /** Fake token counts — the UI shows them, so they must look plausible. */
@@ -183,32 +183,27 @@ const ASSIGNED_SCENE = /## Diese Szene schreibst du jetzt\n+([a-z0-9-]+) /;
 const partCalls = new Map<string, number>();
 
 /**
- * The scene a SCENE augment run works on, out of the fenced JSON block right
- * below the „Bestehender Eintrag" heading — the `{ properties, body }` pair,
- * which is the very shape the reply is forced into (ADR #24). Returns null
- * when the prompt has no such section — which is every create run, and then
- * nothing about the stub changes.
+ * The scene a SCENE augment run works on, out of the fenced JSON below the
+ * „Bestehende Szene" heading — every field of the scene in its reply form (an
+ * absent field `null`), the very object the reply is forced into (ADR #31).
+ * Null for every other prompt — which is every create run, and then nothing
+ * about the stub changes.
  */
-function existingScene(prompt: string): ExistingScene | null {
-  const start = prompt.indexOf(EXISTING_ENTRY_HEADING);
+function existingScene(prompt: string): SceneFields | null {
+  const start = prompt.indexOf(EXISTING_SCENE_HEADING);
   if (start === -1) return null;
   const fence = /```json\n([\s\S]*?)```/.exec(prompt.slice(start));
   if (fence === null) return null;
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(fence[1]!);
+    const parsed: unknown = JSON.parse(fence[1]!);
+    if (!isRecord(parsed) || typeof parsed.id !== "string") return null;
+    return parsed as unknown as SceneFields;
   } catch {
     // Not readable as a scene, so not an augment prompt as far as the stub
     // is concerned: it falls through to the create branches, which fails a
     // spec visibly instead of answering half an augment.
     return null;
   }
-  if (!isRecord(parsed)) return null;
-  const { properties, body } = parsed;
-  return {
-    properties: isRecord(properties) ? properties : {},
-    body: typeof body === "string" ? body : "",
-  };
 }
 
 /**
@@ -347,7 +342,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       // a polled update.
       pauseMs: latePart,
       reply: invalid
-        ? invalidAugmentReply()
+        ? invalidAugmentReply(existing)
         : unknownRef
           ? unknownRefAugmentReply(existing)
           : augmentReply(existing, knowledge),

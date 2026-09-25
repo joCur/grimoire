@@ -38,7 +38,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type Api, type SeedEntry } from "../support/test";
+import { expect, test, type Api, type SeedScene } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
 
@@ -116,6 +116,21 @@ async function sessionMenuItem(page: Page, name: string) {
   await page.getByRole("button", { name: /Session (läuft|pausiert)/ }).first().click();
   return page.getByRole("menuitem", { name });
 }
+
+test("a scene's reading view offers the session start, like every reading view", async ({
+  page,
+}) => {
+  // The scene's own route is a reading view: the chip in the topbar offers
+  // the start there too, and the chapter trio marks „Kapitel“.
+  await page.goto("/campaigns/beispiel/scenes/lighthouse-arrival");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("link", { name: "Kapitel", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+});
 
 test("session start, quick note, pause, end — log and session row follow", async ({
   page,
@@ -474,7 +489,7 @@ test("live scene column: If-sections start closed, open one at a time, reset on 
   ).toBeHidden();
 
   // Critical path 2, same scene: the reading view is untouched by all this.
-  await page.goto("/campaigns/beispiel/entries/01-salzhafen/bucht/smuggler-captured");
+  await page.goto("/campaigns/beispiel/scenes/smuggler-captured");
   const reading = page.locator("details[data-if-section]");
   await expect(reading).toHaveCount(2);
   await expect(reading.first()).toHaveAttribute("open", "");
@@ -488,18 +503,16 @@ test("live scene column: If-sections start closed, open one at a time, reset on 
 // the only arrangement that can show that; the reference scenes differ enough
 // for the nodes to be thrown away anyway.
 test.describe("two scenes of the same shape", () => {
-  const branchScene = (id: string, title: string, first: string, second: string) => ({
-    kind: "scene" as const,
-    properties: {
-      id,
-      title,
-      type: "planned",
-      chapter: "01-salzhafen",
-      location: "bucht",
-      npcs: [],
-      tags: ["social"],
-      status: "ready",
-    },
+  const branchScene = (id: string, title: string, first: string, second: string): SeedScene => ({
+    id,
+    title,
+    type: "planned",
+    chapter: "01-salzhafen",
+    location: "bucht",
+    npcs: [],
+    handouts: [],
+    tags: ["social"],
+    status: "ready",
     body:
       "\n## Aufhänger\n\nDie Gruppe steht vor der Tür.\n\n" +
       `## If: ${first}\n\nDann redet der Wirt.\n\n` +
@@ -509,8 +522,8 @@ test.describe("two scenes of the same shape", () => {
   test.use({
     seed: {
       entries: {
-        "scene-twin-a": branchScene("twin-a", "Zwilling A", "sie zahlen", "sie drohen"),
-        "scene-twin-b": branchScene("twin-b", "Zwilling B", "sie feilschen", "sie gehen"),
+        "scenes/twin-a": branchScene("twin-a", "Zwilling A", "sie zahlen", "sie drohen"),
+        "scenes/twin-b": branchScene("twin-b", "Zwilling B", "sie feilschen", "sie gehen"),
       },
     },
   });
@@ -668,28 +681,26 @@ test("an unreachable session lookup dims the chip instead of offering a start", 
 // otherwise "the played scene is no longer the default selection" has nothing
 // to fall through to.
 test.describe("played/dropped scenes in the live nav", () => {
-  const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const ARRIVAL = "lighthouse-arrival";
   // The seeded scene names a location that EXISTS — a reference creates
-  // nothing (ADR #19). Where it STANDS is not the location's business any
-  // more: the test arranges the order itself, the arrival scene first, so the
-  // default selection has something to fall through to.
-  const SEEDED = "01-salzhafen/bucht/harbor-office-talk";
+  // nothing (ADR #19). Where it STANDS is the chapter's order: the test
+  // arranges it itself, the arrival scene first, so the default selection has
+  // something to fall through to.
+  const SEEDED = "harbor-office-talk";
 
   test.use({
     seed: {
       entries: {
-        "scene-harbor-office-talk": {
-          kind: "scene",
-          properties: {
-            id: "harbor-office-talk",
-            title: "Gespräch im Hafenkontor",
-            type: "planned",
-            chapter: "01-salzhafen",
-            location: "bucht",
-            npcs: [],
-            tags: ["social"],
-            status: "ready",
-          },
+        "scenes/harbor-office-talk": {
+          id: "harbor-office-talk",
+          title: "Gespräch im Hafenkontor",
+          type: "planned",
+          chapter: "01-salzhafen",
+          location: "bucht",
+          npcs: [],
+          handouts: [],
+          tags: ["social"],
+          status: "ready",
           body:
             "\n## Aufhänger\n\n" +
             "Der Kontorschreiber hat die Frachtbücher der letzten Woche.\n",
@@ -728,7 +739,7 @@ test.describe("played/dropped scenes in the live nav", () => {
 
     // The status is set through the documented API — the same patch the status
     // control writes (critical path 7), here as the precondition.
-    await api.patchProperties(SEEDED, { status: "played" });
+    await api.patchScene(SEEDED, { status: "played" });
     await page.reload();
 
     // It is gone from the planned group — the one it now lives in starts
@@ -783,7 +794,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     // Degrade: with EVERY scene played the view stays usable — the planned
     // list says so, the group holds both, and the center column still renders
     // a scene instead of blanking (or crashing on an empty selection).
-    await api.patchProperties(ARRIVAL, { status: "dropped" });
+    await api.patchScene(ARRIVAL, { status: "dropped" });
     await page.reload();
     await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");
@@ -814,10 +825,10 @@ test("the session page shows a past evening's rows; the old address is gone", as
   await expect(log).toContainText("19:52");
   await expect(log).toContainText("Spuren gefunden, Gruppe will sofort zur Bucht");
   await expect(log).toContainText("Improvisiert: Fischerin „Old Metta“ am Steg");
-  // The scene is a LINK into its entry — the row's `sceneId` never shows.
+  // The scene is a LINK onto its own route — the row's `sceneId` never shows.
   await expect(log.getByRole("link", { name: "Ankunft am Leuchtturm" }).first()).toHaveAttribute(
     "href",
-    "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival",
+    "/campaigns/beispiel/scenes/lighthouse-arrival",
   );
   await expect(log).not.toContainText("lighthouse-arrival");
   // The third row names no scene, so it stands with its text alone.
@@ -827,9 +838,11 @@ test("the session page shows a past evening's rows; the old address is gone", as
   const pauses = page.getByRole("region", { name: "Pausen" });
   await expect(pauses).toContainText("0:40:00");
 
-  // The PLAYED SCENES, as links into their entries.
+  // The PLAYED SCENES, as links onto their own routes; one opens its scene.
   const scenes = page.getByRole("region", { name: "Gespielte Szenen" });
-  await expect(scenes.getByRole("link", { name: "Ankunft am Leuchtturm" })).toBeVisible();
+  await scenes.getByRole("link", { name: "Ankunft am Leuchtturm" }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
   // The old ENTRY address of the same session answers 404 — no redirect, no
   // alias (ADR #26). Assembled from its segments rather than spelled out: a
@@ -848,22 +861,19 @@ test("the session page shows a past evening's rows; the old address is gone", as
 // step — even when the order puts it ahead of the first planned scene that is
 // still to come. That is the case this block is built around.
 test.describe("the session view follows the chapter's order", () => {
-  const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
+  const ARRIVAL = "lighthouse-arrival";
 
   /** One planned scene of this block's chapter, in the seed's shape. */
-  const planned = (id: string, title: string, location: string): SeedEntry => ({
-    kind: "scene",
-    properties: {
-      id,
-      title,
-      type: "planned",
-      chapter: CHAPTER,
-      location,
-      npcs: [],
-      handouts: [],
-      tags: [],
-      status: "draft",
-    },
+  const planned = (id: string, title: string, location: string): SeedScene => ({
+    id,
+    title,
+    type: "planned",
+    chapter: CHAPTER,
+    location,
+    npcs: [],
+    handouts: [],
+    tags: [],
+    status: "draft",
     body: `\n## Flow\n\n${title}.\n`,
   });
 
@@ -874,8 +884,8 @@ test.describe("the session view follows the chapter's order", () => {
   test.use({
     seed: {
       entries: {
-        "scene-order-dinner": planned("abendessen", DINNER, "bucht"),
-        "scene-order-cellar": planned("keller", CELLAR, "leuchtturm"),
+        "scenes/abendessen": planned("abendessen", DINNER, "bucht"),
+        "scenes/keller": planned("keller", CELLAR, "leuchtturm"),
       },
     },
   });
@@ -895,7 +905,7 @@ test.describe("the session view follows the chapter's order", () => {
     // scene that is still to come: `Ankunft` is behind us, the contingency
     // only fires on its trigger, so the evening starts at `Abendessen`.
     await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
-    await api.patchProperties(ARRIVAL, { status: "played" });
+    await api.patchScene(ARRIVAL, { status: "played" });
 
     await startSession(page);
     const nav = liveNav(page);
@@ -942,7 +952,7 @@ test.describe("the session view follows the chapter's order", () => {
 
   test("a rearranged order moves the entry point with it", async ({ page, api }) => {
     await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
-    await api.patchProperties(ARRIVAL, { status: "played" });
+    await api.patchScene(ARRIVAL, { status: "played" });
     await startSession(page);
 
     const nav = liveNav(page);
@@ -968,8 +978,8 @@ test.describe("the session view follows the chapter's order", () => {
     api,
   }) => {
     await setSceneOrder(api, ["smuggler-captured", "lighthouse-arrival", "abendessen", "keller"]);
-    for (const scene of [ARRIVAL, "01-salzhafen/bucht/abendessen", "01-salzhafen/leuchtturm/keller"]) {
-      await api.patchProperties(scene, { status: "played" });
+    for (const scene of [ARRIVAL, "abendessen", "keller"]) {
+      await api.patchScene(scene, { status: "played" });
     }
 
     await startSession(page);

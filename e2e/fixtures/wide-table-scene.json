@@ -1,15 +1,14 @@
 {
-  "kind": "scene",
-  "properties": {
-    "id": "wide-table",
-    "title": "Die Ladeliste der Seemöwe",
-    "type": "planned",
-    "chapter": "01-salzhafen",
-    "location": "leuchtturm",
-    "tags": [
-      "tabelle"
-    ],
-    "status": "draft"
-  },
+  "id": "wide-table",
+  "title": "Die Ladeliste der Seemöwe",
+  "type": "planned",
+  "chapter": "01-salzhafen",
+  "location": "leuchtturm",
+  "npcs": [],
+  "handouts": [],
+  "tags": [
+    "tabelle"
+  ],
+  "status": "draft",
   "body": "\n## Flow\n\nNur als Überlauf-Prüfung da: die Referenzszene trägt eine schmale W6-Tabelle,\ndie auf 390px noch passt. Diese hier kann es nicht — sieben Spalten mit\nlangen, unumbrechbaren Wörtern. Genau dafür ist die Scroll-Box da.\n\n| Posten | Herkunftshafen | Zollvermerk | Empfaenger | Frachtbriefnummer | Versicherungssumme | Bemerkung |\n| --- | --- | --- | --- | --- | --- | --- |\n| Schmuggeltabak | Nordwestkuestenhafen | Unverzollt | Hafenmeisterkontor | FB-1938-XZ-004471 | 1200 Goldstuecke | Brandzeichen unleserlich |\n| Silberbarren | Suedmeerhandelsposten | Beschlagnahmt | Muenzpraegeanstalt | FB-1938-XZ-004472 | 8400 Goldstuecke | Siegel aufgebrochen |\n"
 }

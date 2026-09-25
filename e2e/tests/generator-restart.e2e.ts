@@ -30,12 +30,6 @@ import {
 import { pristineDir, runDir } from "../support/paths";
 import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
 
-/**
- * How the review addresses the draft (`<chapter>/<id>`) and where it LIVES
- * once accepted — the group segment is its `location`.
- */
-const DRAFT_PATH = `01-salzhafen/${SCENE_ID}`;
-const SCENE_PATH = `01-salzhafen/${LOCATION_STUB_ID}/${SCENE_ID}`;
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn.`;
@@ -43,18 +37,11 @@ mole while Fenn's crew shifts a cargo before dawn.`;
 /** A title no reply fixture spells, so only the DM's edit can produce it. */
 const EDITED_TITLE = "Nachtwache am Kai, nach dem Neustart";
 
-/** One scene draft on the wire: the two halves and the address (ADR #24). */
-interface SceneDraft {
-  path: string;
-  properties: Record<string, unknown>;
-  body: string;
-}
+/** One proposed scene on the wire: the scene without its guard (ADR #31). */
+type SceneProposal = Record<string, unknown> & { id: string; body: string };
 
-/** One stored edit: the halves the DM replaced, each of them whole. */
-interface DraftEdit {
-  properties?: Record<string, unknown>;
-  body?: string;
-}
+/** One stored change of a proposed scene: the fields the DM set. */
+type SceneEdit = Record<string, unknown>;
 
 /** GET …/generate/job — null on the 404 "there is none". */
 async function job(api: Api): Promise<Record<string, unknown> | null> {
@@ -130,7 +117,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
       "the server was restarted while the job was running — start the job again",
     );
     // Nothing was written, and a new run may start right away (no stuck gate).
-    expect(await api.exists(SCENE_PATH)).toBe(false);
+    expect(await api.sceneExists(SCENE_ID)).toBe(false);
     expect((await api.fetch("campaigns/beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
   } finally {
     await second.proc.stop();
@@ -155,22 +142,19 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     before = await waitForFinish(api);
     expect(before.status).toBe("done");
 
-    const result = before.result as { scenes: SceneDraft[] };
-    expect(result.scenes.map((s) => s.path)).toEqual([DRAFT_PATH]);
+    const result = before.result as { scenes: SceneProposal[] };
+    expect(result.scenes.map((s) => s.id)).toEqual([SCENE_ID]);
     // The review PATCH is the one way an edit reaches the job, and it carries
-    // the halves of a draft one by one (ADR #24) — here both, so the restart
-    // has something of each to bring back.
+    // the scene's change by its id — here a field and the text, so the
+    // restart has something of each to bring back.
     await api.send("PATCH", `campaigns/beispiel/generate/job/${before.id as string}/review`, {
       rev: (before.rev as number | undefined) ?? 0,
-      edits: {
-        [DRAFT_PATH]: {
-          properties: { ...result.scenes[0]!.properties, title: EDITED_TITLE },
-          body: `${result.scenes[0]!.body}${edited}`,
-        },
+      sceneEdits: {
+        [SCENE_ID]: { title: EDITED_TITLE, body: `${result.scenes[0]!.body}${edited}` },
       },
     });
     // Still nothing written — the review has not been applied.
-    expect(await api.exists(SCENE_PATH)).toBe(false);
+    expect(await api.sceneExists(SCENE_ID)).toBe(false);
   } finally {
     await first.proc.stop();
   }
@@ -187,18 +171,22 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(after.startedAt).toBe(before.startedAt);
     expect(after.finishedAt).toBe(before.finishedAt);
     expect(after.result).toEqual(before.result);
-    // The DM's own edit came back with it, per half and in the current shape.
-    const edit = (after.draftEdits as Record<string, DraftEdit>)[DRAFT_PATH]!;
-    expect(edit.properties).toMatchObject({ title: EDITED_TITLE });
+    // The DM's own change came back with it, field by field.
+    const edit = (after.sceneEdits as Record<string, SceneEdit>)[SCENE_ID]!;
+    expect(edit).toMatchObject({ title: EDITED_TITLE });
     expect(edit.body).toContain(edited.trim());
 
     // The scene AND the npc and location it references: a proposal is
     // applied as one batch, because a scene cannot name anything that does
-    // not exist (ADR #19). The payload is the run's drafts with the stored
-    // edits folded in, plus the run's proposed npcs and locations as they
-    // stand — which is what the review screen sends.
-    const result = after.result as { scenes: SceneDraft[]; npcs: unknown[]; locations: unknown[] };
-    const written = await api.send<{ written: string[]; npcs: string[]; locations: string[] }>(
+    // not exist (ADR #19). The payload is the run's scenes with the stored
+    // change laid on top, plus the run's proposed npcs and locations as they
+    // stand.
+    const result = after.result as {
+      scenes: SceneProposal[];
+      npcs: unknown[];
+      locations: unknown[];
+    };
+    const written = await api.send<{ scenes: string[]; npcs: string[]; locations: string[] }>(
       "POST",
       "campaigns/beispiel/generate/apply",
       {
@@ -208,15 +196,15 @@ test("a finished job survives a restart whole and is still applyable", async ({}
         jobId: after.id,
       },
     );
-    expect(written.written).toContain(SCENE_PATH);
+    expect(written.scenes).toEqual([SCENE_ID]);
     expect(written.npcs).toEqual([NPC_STUB_ID]);
     expect(written.locations).toEqual([LOCATION_STUB_ID]);
     expect((await api.npc(NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
-    const stored = await api.entry(SCENE_PATH);
-    // Both halves as the DM left them before the restart.
-    expect(stored.properties.title).toBe(EDITED_TITLE);
+    const stored = await api.scene(SCENE_ID);
+    // The field and the text as the DM left them before the restart.
+    expect(stored.title).toBe(EDITED_TITLE);
     expect(stored.body).toContain(edited.trim());
-    expect(stored.properties.status).toBe("draft");
+    expect(stored.status).toBe("draft");
     // Applied means done: the job is discarded, as after any successful apply.
     expect(await job(api)).toBeNull();
   } finally {

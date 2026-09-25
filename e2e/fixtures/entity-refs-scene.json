@@ -1,18 +1,16 @@
 {
-  "kind": "scene",
-  "properties": {
-    "id": "entity-refs",
-    "title": "Referenzen am Kai",
-    "type": "planned",
-    "chapter": "01-salzhafen",
-    "location": "leuchtturm",
-    "npcs": [
-      "jorna"
-    ],
-    "tags": [
-      "social"
-    ],
-    "status": "ready"
-  },
+  "id": "entity-refs",
+  "title": "Referenzen am Kai",
+  "type": "planned",
+  "chapter": "01-salzhafen",
+  "location": "leuchtturm",
+  "npcs": [
+    "jorna"
+  ],
+  "handouts": [],
+  "tags": [
+    "social"
+  ],
+  "status": "ready",
   "body": "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot, und über der Bucht liegt [[leuchtturm]]\ndunkel. Nach [[niemand]] hat hier noch keiner gefragt.\n\nWer [[fenn]] zu nahe kommt, landet in [[smuggler-captured]].\n\n> [!readaloud] [[jorna]] wartet am Kai, im Rohtext `[[jorna]]`.\n\nDie Syntax selbst steht als Code da: `[[jorna]]` bleibt unangetastet.\n\n## If: [[jorna]] gewarnt wurde\n\nDann liegt das Boot leer am Kai.\n"
 }

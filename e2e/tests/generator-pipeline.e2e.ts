@@ -35,8 +35,8 @@ const SOURCE = `The party watches the quay at low tide. Two lanterns move along 
 mole while Fenn's crew shifts a cargo before dawn. At dawn the characters slip
 away through the mudflats.`;
 
-/** The review's address of one part — `<chapter>/<id>`. */
-const draftPath = (id: string) => `${CHAPTER}/${id}`;
+/** How the review names one proposed scene — its resource segment and id. */
+const sceneLabel = (id: string) => `scenes/${id}`;
 
 /**
  * A source text that makes the run three scenes and breaks the middle one's
@@ -70,21 +70,27 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   const failedTitle = THREE_SCENES.find((s) => s.id === FAILING_SCENE_ID)!.title;
   const failedCard = page.locator("section").filter({ hasText: failedTitle }).last();
   await expect(failedCard).toContainText("nicht geschrieben");
-  await expect(failedCard.getByText('"status" must be "draft"', { exact: false })).toBeVisible();
+  await expect(
+    failedCard.getByText('"status": Ungültige Eingabe: erwartet "draft"', { exact: false }),
+  ).toBeVisible();
   // The cost of the whole run is one quiet line, counting CALLS.
   await expect(page.getByText(/~[\d.]+ Tokens · \d+ Aufrufe?/)).toBeVisible();
 
   // --- (2) a finished part is acceptable while one is still open ----------
   const firstId = THREE_SCENES[0].id;
-  expect(await api.exists(draftPath(firstId))).toBe(false);
+  expect(await api.sceneExists(firstId)).toBe(false);
   await page
     .locator("div")
-    .filter({ hasText: draftPath(firstId) })
+    .filter({ hasText: sceneLabel(firstId) })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByRole("link", { name: draftPath(firstId) })).toBeVisible();
-  expect(await api.exists(draftPath(firstId))).toBe(true);
+  // Written, the card links to the scene it became, on the scene's own route.
+  await expect(page.getByRole("link", { name: sceneLabel(firstId) })).toHaveAttribute(
+    "href",
+    `/campaigns/beispiel/scenes/${firstId}`,
+  );
+  expect(await api.sceneExists(firstId)).toBe(true);
   // The job is still there — the failed part is not settled.
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(200);
 
@@ -114,7 +120,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   for (const scene of THREE_SCENES) {
-    const stored = await api.properties(draftPath(scene.id));
+    const stored = await api.scene(scene.id);
     expect(stored.title).toBe(scene.title);
     expect(stored.status).toBe("draft");
   }
@@ -156,12 +162,12 @@ test("scenes accepted one by one in reverse stand in outline order", async ({ pa
   for (const [index, scene] of reversed.entries()) {
     await page
       .locator("div")
-      .filter({ hasText: draftPath(scene.id) })
+      .filter({ hasText: sceneLabel(scene.id) })
       .last()
       .getByRole("button", { name: "Diesen übernehmen" })
       .click();
     if (index < reversed.length - 1) {
-      await expect(page.getByRole("link", { name: draftPath(scene.id) })).toBeVisible();
+      await expect(page.getByRole("link", { name: sceneLabel(scene.id) })).toBeVisible();
     } else {
       await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
     }
@@ -211,15 +217,15 @@ test("a finished part is acceptable while the run is still running", async ({
   };
   expect(before.status).toBe("running");
 
-  expect(await api.exists(draftPath(firstId))).toBe(false);
+  expect(await api.sceneExists(firstId)).toBe(false);
   await page
     .locator("div")
-    .filter({ hasText: draftPath(firstId) })
+    .filter({ hasText: sceneLabel(firstId) })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByRole("link", { name: draftPath(firstId) })).toBeVisible();
-  expect(await api.exists(draftPath(firstId))).toBe(true);
+  await expect(page.getByRole("link", { name: sceneLabel(firstId) })).toBeVisible();
+  expect(await api.sceneExists(firstId)).toBe(true);
 
   // …and the run is STILL running: accepting a part does not end it, and the
   // open rest keeps the job alive.
@@ -311,11 +317,12 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   expect(early.pipeline.parts.map((part) => part.status)).not.toContain("done");
   expect(early.result?.scenes ?? []).toEqual([]);
   // …and the two late parts arrive afterwards, into the same review: their
-  // DRAFTS, addressed by path — the part's own title is on its status card
-  // while it is still open, so only the path says the draft is there.
+  // PROPOSED SCENES, named by their label — the part's own title is on its
+  // status card while it is still open, so only the label says the scene is
+  // there.
   for (const scene of THREE_SCENES) {
     if (scene.id === FAILING_SCENE_ID) continue;
-    await expect(page.getByText(draftPath(scene.id), { exact: false }).first()).toBeVisible({
+    await expect(page.getByText(sceneLabel(scene.id), { exact: false }).first()).toBeVisible({
       timeout: 30_000,
     });
   }
@@ -344,7 +351,7 @@ test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, t
   expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
   // Nothing of the abandoned run lands afterwards.
   for (const scene of THREE_SCENES) {
-    expect(await api.exists(draftPath(scene.id))).toBe(false);
+    expect(await api.sceneExists(scene.id)).toBe(false);
   }
 });
 
@@ -420,10 +427,10 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     expect(parts(after)[2]!.error).toBe(
       "the server was restarted while the job was running — start the job again",
     );
-    const result = after.result as { scenes: Array<{ path: string }> };
-    expect(result.scenes.map((s) => s.path)).toEqual([
-      draftPath(THREE_SCENES[0].id),
-      draftPath(THREE_SCENES[1].id),
+    const result = after.result as { scenes: Array<{ id: string }> };
+    expect(result.scenes.map((s) => s.id)).toEqual([
+      THREE_SCENES[0].id,
+      THREE_SCENES[1].id,
     ]);
 
     // And the part is retryable on the NEW process — the outline came back
@@ -439,7 +446,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     expect(retried.status).toBe("running");
     expect(parts(retried).map((part) => part.status)).toEqual(["done", "done", "running"]);
     // Nothing was written by any of it — only „Übernehmen“ writes.
-    expect(await api.exists(draftPath(THREE_SCENES[0].id))).toBe(false);
+    expect(await api.sceneExists(THREE_SCENES[0].id)).toBe(false);
   } finally {
     await second.proc.stop();
   }
