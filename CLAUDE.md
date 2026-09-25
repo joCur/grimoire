@@ -41,8 +41,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `fixtures/beispiel/threads/<id>.json`, eine Idee unter
   `fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
   `fixtures/beispiel/glossary-terms/<id>.json`, Kampagnenwissen unter
-  `fixtures/beispiel/knowledge-items/<id>.json`, jede als das Objekt, das
-  ihre Ressource liefert, ohne `rev`; Sessions strukturiert. Sie ist
+  `fixtures/beispiel/knowledge-items/<id>.json`, eine Session samt Pausen,
+  Log-Zeilen und gespielten Szenen unter
+  `fixtures/beispiel/sessions/<id>.json`, jede als das Objekt, das ihre
+  Ressource liefert, ohne `rev`. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
@@ -62,7 +64,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
   (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
   — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
-  `locations`, `threads`, `ideas`, `sessions`, `glossary-terms`,
+  `locations`, `threads`, `ideas`, `sessions` (mit `session-rows`, der
+  Session-Zeile, die ihre Kinder nachschlagen), `pauses`, `log-entries`,
+  `played-scenes`, `glossary-terms`,
   `knowledge-items` (mit ihrer Reihenfolge),
   `generated` (das Übernehmen eines Generator-Laufs) — und
   jedes trägt die
@@ -108,13 +112,16 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Kampagne, Kapitel, Szene, NPC, Ort, Faden, Idee, Glossar-Begriff und
-  Kampagnenwissen sind jeweils ihre eigene Ressource (ADR #31):
+- Kampagne, Kapitel, Szene, NPC, Ort, Faden, Idee, Glossar-Begriff,
+  Kampagnenwissen und Session samt Pause, Log-Zeile und gespielter Szene sind
+  jeweils ihre eigene Ressource (ADR #31):
   `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>` mit
   `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
   `…/locations/<id>` mit `Location`, `…/threads/<id>` mit `Thread`,
   `…/ideas/<id>` mit `Idea`, `…/glossary-terms/<id>` mit `GlossaryTerm`,
-  `…/knowledge-items/<id>` mit `KnowledgeItem`, alle Felder nebeneinander,
+  `…/knowledge-items/<id>` mit `KnowledgeItem`, `…/sessions/<id>` mit
+  `Session` (Pausen, Log-Zeilen und gespielte Szenen eingebettet), alle
+  Felder nebeneinander,
   `body` eingeschlossen, wo die Entität einen hat, ohne `kind` und `path`;
   jede Zeile trägt ihr eigenes `rev`. Die App-Routen sind
   `/campaigns/:id` (Kapitelübersicht), `/campaigns/:id/chapters/<id>`,
@@ -126,9 +133,16 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   ein Feld. Welches
   Kapitel aktiv ist, sagt sein `status`: höchstens eines je Kampagne, und wer
   eines aktiviert, setzt das bisher aktive im selben Vorgang auf `planned`.
-- Sessions antworten ihre eigene Form über ihre eigenen Endpoints
-  (`…/session`, `…/sessions`, `…/sessions/<id>`) — Zeilen mit Spalten, kein
-  `body`, kein `properties`-Map.
+- Die Kinder einer Session hängen unter ihr und werden nur dort geschrieben:
+  `POST …/sessions/<id>/pauses` beginnt eine Pause, `PATCH
+  …/pauses/<pause-id> { rev, toMs }` beendet sie; `POST …/sessions/<id>/log`
+  legt eine Log-Zeile an, `PATCH …/log/<log-id> { rev, reviewed }` sichtet
+  sie; `POST …/sessions/<id>/played-scenes { sceneId }` ist „Nächste Szene".
+  Die laufende Session liefert `GET …/sessions?running=true` (eine oder
+  keine), die Liste steht neueste zuerst. `POST …/sessions` startet,
+  `PATCH …/sessions/<id> { rev, endedMs }` beendet, `DELETE` verwirft eine
+  leere. Einen Zeitpunkt schreibt der Client als Epochen-Wert (`…Ms`); die
+  zonenlose Lokalzeit daraus bildet der Server.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
@@ -268,17 +282,23 @@ Die Pfade:
    (`kind: "glossary-term"`, die `id` des Begriffs) `/campaigns/:id/glossary`;
    Sessions und Ideen sind nicht indexiert
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
-   weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →
-   Log-**Zeile** (mit `sceneId`) + `scenesPlayed` → „Nächste Szene" führt
-   zur folgenden der Reihenfolge → Pause (ein Intervall, keine Log-Zeile) →
-   beenden → Nachbereitung. Dazu die Leseseite einer vergangenen Session
-   (`/campaigns/:id/sessions/<session-id>`)
+   weder `played` noch `dropped` ist, sonst die erste; die laufende Session
+   liefert `GET …/sessions?running=true`) → Schnellnotiz → Log-**Zeile** mit
+   `sceneId` (`POST …/sessions/<id>/log`) → „Nächste Szene" führt zur
+   folgenden der Reihenfolge und legt eine gespielte Szene an (`POST
+   …/sessions/<id>/played-scenes`) → Pause (`POST …/pauses`, ein Intervall,
+   keine Log-Zeile; beendet mit `PATCH …/pauses/<id> { rev, toMs }`) →
+   beenden (`PATCH …/sessions/<id> { rev, endedMs }`) → Nachbereitung. Jedes
+   Kind trägt sein eigenes `rev`, keines bewegt das der Session. Dazu die
+   Leseseite einer vergangenen Session (`/campaigns/:id/sessions/<session-id>`)
 5. Nachbereitung: Handlungsstrang übernehmen → ein Faden des aktiven
    Kapitels (`POST …/threads { chapter, text }`, ohne `rev`; Kapiteltext und
    Kapitel-`rev` bleiben unberührt); Idee abhaken → `PATCH …/ideas/<id>
-   { rev, done }`, ein alter `rev` ist 409 mit der aktuellen Idee. Die Review
-   benennt Log-Zeilen per `id` (`review/seen { sessionId, logId }`) — eine
-   unbekannte id ist 404, kein stilles 200
+   { rev, done }`, ein alter `rev` ist 409 mit der aktuellen Idee. Die
+   Nachbereitung nimmt die erste Session der Liste (die zuletzt gestartete,
+   auch über Mitternacht) und sichtet eine Log-Zeile mit `PATCH
+   …/sessions/<id>/log/<log-id> { rev, reviewed }` — eine unbekannte id ist
+   404, ein alter `rev` 409 mit der aktuellen Zeile
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen →
    Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
    die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
