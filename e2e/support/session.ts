@@ -1,8 +1,9 @@
-// The sessions in the suite: `…/session` (the active one), `…/sessions` and
-// `…/sessions/:id`. A session is a table, not an entity with a text (ADR
-// #26): its log, its pauses and its played scenes come back as rows and lists.
+// A session in the suite: its resource `…/sessions/:id` (ADR #31), every
+// field flat, its pauses, log entries and played scenes embedded — each child
+// with its own id and rev. Its type is the one `@grimoire/shared/session`
+// derives from the session's schema.
 
-import type { SessionResponse, SessionSummary } from "@grimoire/shared/types";
+import type { Session } from "@grimoire/shared/session";
 import { exists, underCampaign, type Api } from "./api";
 
 /** The request path of one session, or, without an id, of the session list. */
@@ -10,36 +11,41 @@ export function sessionPath(api: Api, id?: string): string {
   return id === undefined ? underCampaign(api, "sessions") : underCampaign(api, "sessions", id);
 }
 
+/** Every session of the campaign, newest first, each with its children. */
+export function listSessions(api: Api): Promise<Session[]> {
+  return api.get<Session[]>(sessionPath(api));
+}
+
 /**
- * The ACTIVE session — or, with `includeEnded`, the last started one.
- * `undefined` when the campaign has no such session: the endpoint answers
- * 200 with a `null` body, because "nothing runs" is an ordinary state.
+ * The RUNNING session (`?running=true`), or undefined when none runs — which
+ * is an ordinary state, not an error.
  *
  * A session id the app starts is an opaque random string, so no spec can
  * spell one out: "the session the app just started" is a question only the
  * server can answer, and this asks it.
  */
-export async function getActiveSession(
-  api: Api,
-  includeEnded = false,
-): Promise<SessionResponse | undefined> {
-  const path = `${underCampaign(api, "session")}${includeEnded ? "?includeEnded=1" : ""}`;
-  // "Nothing runs" is a null body, not a status — so it is read as a value
-  // here, exactly as the app reads it.
-  return (await api.get<SessionResponse | null>(path)) ?? undefined;
+export async function getRunningSession(api: Api): Promise<Session | undefined> {
+  const [running] = await api.get<Session[]>(`${sessionPath(api)}?running=true`);
+  return running;
 }
 
-/** Id of the active session (see `getActiveSession`), or undefined. */
-export async function activeSessionId(
-  api: Api,
-  includeEnded = false,
-): Promise<string | undefined> {
-  return (await getActiveSession(api, includeEnded))?.id;
+/** Id of the running session (see `getRunningSession`), or undefined. */
+export async function runningSessionId(api: Api): Promise<string | undefined> {
+  return (await getRunningSession(api))?.id;
+}
+
+/**
+ * The last STARTED session, ended or not — the first of the list, and the
+ * one the review harvests. Undefined when the campaign has no session.
+ */
+export async function getLastStartedSession(api: Api): Promise<Session | undefined> {
+  const [last] = await listSessions(api);
+  return last;
 }
 
 /** ONE session by its id; throws when the id names none (404). */
-export function getSession(api: Api, id: string): Promise<SessionResponse> {
-  return api.get<SessionResponse>(sessionPath(api, id));
+export function getSession(api: Api, id: string): Promise<Session> {
+  return api.get<Session>(sessionPath(api, id));
 }
 
 /** Whether a session with that id exists (404 = no). */
@@ -47,16 +53,11 @@ export function sessionExists(api: Api, id: string): Promise<boolean> {
   return exists(api, sessionPath(api, id));
 }
 
-/** Every session of the campaign, newest first. */
-export function listSessions(api: Api): Promise<SessionSummary[]> {
-  return api.get<SessionSummary[]>(sessionPath(api));
-}
-
 /**
  * The date-shaped id of a session a spec SEEDS itself.
  *
  * NOT the id of a session the app starts: those are opaque random strings and
- * only the server knows them (`activeSessionId`). A date-shaped id stays
+ * only the server knows them (`runningSessionId`). A date-shaped id stays
  * perfectly legal, which is why a seeded session may spell one.
  */
 export function todaySessionId(d = new Date()): string {

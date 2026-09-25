@@ -25,11 +25,11 @@
 //
 // An object whose id a fixture already has REPLACES that fixture, any other
 // adds one. The campaign, a chapter, a scene, an npc, a location, a thread, an
-// idea, a glossary term and a knowledge item are each their own resource
-// (ADR #31) and have a directory of their own (`campaigns/<id>.json`,
-// `chapters/<id>.json`, …): the fixture is the entity itself, every field
-// flat, without a guard. A session sits in the campaign directory itself as
-// `session-<id>.json`.
+// idea, a glossary term, a knowledge item and a session are each their own
+// resource (ADR #31) and have a directory of their own
+// (`campaigns/<id>.json`, `chapters/<id>.json`, …, `sessions/<id>.json`): the
+// fixture is the entity itself, every field flat, without a guard — a session
+// with its pauses, log entries and played scenes embedded.
 //
 // What the suite knows about each entity — reading it, writing it, its
 // request paths — lives in that entity's own module next to this one
@@ -73,10 +73,10 @@ import type { KnowledgeItemSeed } from "@grimoire/shared/knowledge-item";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { SessionSeed } from "@grimoire/shared/session";
 import type { ThreadSeed } from "@grimoire/shared/thread";
 
 import { openSqlite, type SqliteClient } from "../../server/src/db/driver";
-import type { SeedSession } from "../../server/src/db/seed";
 import { apiFor, type Api } from "./api";
 import {
   APP_DIST,
@@ -116,8 +116,7 @@ export interface ServerHandle {
  * by entity. Each list ADDS its objects, and one whose id a fixture already
  * has REPLACES that fixture. Every entity with its own resource (ADR #31) is
  * typed with its own type from `@grimoire/shared/<entity>` — the entity as its
- * resource answers it, without the guard. A session is the fixture the seed
- * loader reads (`SeedSession`, server/src/db/seed.ts).
+ * resource answers it, without the guard.
  */
 export interface Seed {
   /** Replaces the example campaign's own fixture. */
@@ -130,7 +129,7 @@ export interface Seed {
   ideas?: IdeaSeed[];
   glossaryTerms?: GlossaryTermSeed[];
   knowledgeItems?: KnowledgeItemSeed[];
-  sessions?: SeedSession[];
+  sessions?: SessionSeed[];
   /** Fixtures to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
   without?: {
     chapters?: string[];
@@ -239,8 +238,8 @@ async function overrideFixtures(campaignDir: string, seed: Seed): Promise<void> 
   );
   await overrideEntity(
     campaignDir,
-    (id) => `session-${id}.json`,
-    (session) => String(session.properties.id),
+    (id) => `sessions/${id}.json`,
+    byId,
     seed.sessions,
     without.sessions,
   );
