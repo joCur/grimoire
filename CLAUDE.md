@@ -39,8 +39,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
   `fixtures/beispiel/locations/<id>.json`, ein Faden unter
   `fixtures/beispiel/threads/<id>.json`, eine Idee unter
-  `fixtures/beispiel/ideas/<id>.json`, jede als das Objekt, das ihre
-  Ressource liefert, ohne `rev`; Sessions und Glossar strukturiert. Sie ist
+  `fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
+  `fixtures/beispiel/glossary-terms/<id>.json`, Kampagnenwissen unter
+  `fixtures/beispiel/knowledge-items/<id>.json`, jede als das Objekt, das
+  ihre Ressource liefert, ohne `rev`; Sessions strukturiert. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
   umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
@@ -60,14 +62,16 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
   (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
   — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
-  `locations`, `threads`, `ideas`, `sessions`, `glossary`, `knowledge`,
+  `locations`, `threads`, `ideas`, `sessions`, `glossary-terms`,
+  `knowledge-items` (mit ihrer Reihenfolge),
   `generated` (das Übernehmen eines Generator-Laufs) — und
   jedes trägt die
   **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
   der Domäne, die er braucht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
   Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
-  `location/`, `thread/`, `idea/`) mit allem, was die App über sie weiß
+  `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`) mit
+  allem, was die App über sie weiß
   (ADR #31); **Slices importieren einander nicht.** Gemeinsam sind nur
   UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`, etwa
   `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
@@ -104,23 +108,27 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Kampagne, Kapitel, Szene, NPC, Ort, Faden und Idee sind jeweils ihre
-  eigene Ressource (ADR #31): `/campaigns/<id>` antwortet mit `Campaign`,
-  `…/chapters/<id>` mit `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>`
-  mit `Npc`, `…/locations/<id>` mit `Location`, `…/threads/<id>` mit
-  `Thread`, `…/ideas/<id>` mit `Idea`, alle Felder nebeneinander, `body`
-  eingeschlossen, wo die Entität einen hat, ohne `kind` und `path`; jede Zeile
-  trägt ihr eigenes `rev`. Die App-Routen sind
+- Kampagne, Kapitel, Szene, NPC, Ort, Faden, Idee, Glossar-Begriff und
+  Kampagnenwissen sind jeweils ihre eigene Ressource (ADR #31):
+  `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>` mit
+  `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
+  `…/locations/<id>` mit `Location`, `…/threads/<id>` mit `Thread`,
+  `…/ideas/<id>` mit `Idea`, `…/glossary-terms/<id>` mit `GlossaryTerm`,
+  `…/knowledge-items/<id>` mit `KnowledgeItem`, alle Felder nebeneinander,
+  `body` eingeschlossen, wo die Entität einen hat, ohne `kind` und `path`;
+  jede Zeile trägt ihr eigenes `rev`. Die App-Routen sind
   `/campaigns/:id` (Kapitelübersicht), `/campaigns/:id/chapters/<id>`,
   `/campaigns/:id/scenes/<id>`, `/campaigns/:id/npcs/<id>` und
   `/campaigns/:id/locations/<id>`; Fäden pflegt die Kapitelübersicht, Ideen
-  die Nachbereitung und die Mobil-Startfläche. Eine Szene und ein Faden
-  liegen flach unter ihrer Kampagne, ihr Kapitel ist ein Feld. Welches
+  die Nachbereitung und die Mobil-Startfläche, Glossar-Begriffe die Seite
+  `/campaigns/:id/glossary` und Kampagnenwissen `/campaigns/:id/knowledge`.
+  Eine Szene und ein Faden liegen flach unter ihrer Kampagne, ihr Kapitel ist
+  ein Feld. Welches
   Kapitel aktiv ist, sagt sein `status`: höchstens eines je Kampagne, und wer
   eines aktiviert, setzt das bisher aktive im selben Vorgang auf `planned`.
-- Sessions und Glossar antworten ihre eigene Form über ihre eigenen
-  Endpoints (`…/session`, `…/sessions`, `…/sessions/<id>`, `…/glossary`) —
-  Zeilen mit Spalten, kein `body`, kein `properties`-Map.
+- Sessions antworten ihre eigene Form über ihre eigenen Endpoints
+  (`…/session`, `…/sessions`, `…/sessions/<id>`) — Zeilen mit Spalten, kein
+  `body`, kein `properties`-Map.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
@@ -257,8 +265,8 @@ Die Pfade:
    Szenen-Treffer `/campaigns/:id/scenes/<id>`, ein
    NPC-Treffer `/campaigns/:id/npcs/<id>`, ein Orts-Treffer
    `/campaigns/:id/locations/<id>` und ein Glossar-Treffer
-   `/campaigns/:id/glossary`; Sessions und
-   Ideen sind nicht indexiert
+   (`kind: "glossary-term"`, die `id` des Begriffs) `/campaigns/:id/glossary`;
+   Sessions und Ideen sind nicht indexiert
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste) → Schnellnotiz →
    Log-**Zeile** (mit `sceneId`) + `scenesPlayed` → „Nächste Szene" führt
@@ -276,8 +284,16 @@ Die Pfade:
    die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
    Felder und ihren Text, gespeichert werden die geänderten Felder je Szene
    (`sceneEdits`), und „Übernehmen" schreibt sie über dem Vorschlag des
-   Modells; geprüft, verworfen und übernommen wird je `id`. Dazu Kampagnenwissen und Glossar auf ihren eigenen Seiten (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen —
-   anlegen, bearbeiten, löschen, umsortieren, 409 — und der Lauf danach:
+   Modells; geprüft, verworfen und übernommen wird je `id`. Dazu
+   Kampagnenwissen und Glossar auf ihren eigenen Seiten
+   (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen — anlegen,
+   bearbeiten, löschen, jede Zeile mit ihrem eigenen `rev`
+   (`…/knowledge-items/<id>`, `…/glossary-terms/<id>`, ein alter Stand ist 409
+   mit der aktuellen Zeile), das Kampagnenwissen umsortieren über seinen
+   eigenen Wächter (`PUT …/knowledge-item-order`, ein alter Stand ist 409 mit
+   der aktuellen Reihenfolge, kein `rev` einer Zeile bewegt sich); die alten
+   Listen-Adressen `…/glossary` und `…/knowledge` antworten 404 — und der
+   Lauf danach:
    Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
    Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
    Server-Neustart (fertiger Job übersteht ihn und bleibt übernehmbar,

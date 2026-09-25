@@ -15,15 +15,16 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   nichts).
 - **Die Fixtures sind EINGABE**, einmal pro Test gelesen. `fixtures/beispiel`
   hält die Beispielkampagne als **ein JSON pro Objekt**, genau in der Form,
-  die die API spricht. Die Kampagne, ein Kapitel, eine Szene, ein NPC und ein
-  Ort sind je eine eigene Ressource (ADR #31) und liegen als
+  die die API spricht. Die Kampagne, ein Kapitel, eine Szene, ein NPC, ein
+  Ort, ein Faden, eine Idee, ein Glossar-Begriff und ein Stück
+  Kampagnenwissen sind je eine eigene Ressource (ADR #31) und liegen als
   `campaigns/<id>.json`, `chapters/<id>.json`, `scenes/<id>.json`,
-  `npcs/<id>.json` bzw. `locations/<id>.json`: die Entität selbst, alle Felder
-  flach, `body` eines davon, ohne `kind` und ohne `rev`. Sessions, Ideen,
-  Glossar und die offenen Fäden liegen daneben als `{ kind, … }` mit ihren
-  **Zeilen** (`log` als `{ at, sceneId?, text, reviewed? }` für eine Session,
-  `entries` für Ideen, Glossar und Fäden, ein Faden als
-  `{ chapter, text, done? }` — Zeilen, kein Markdown).
+  `npcs/<id>.json`, `locations/<id>.json`, `threads/<id>.json`,
+  `ideas/<id>.json`, `glossary-terms/<id>.json` bzw.
+  `knowledge-items/<id>.json`: die Entität selbst, alle Felder flach, ohne
+  `kind` und ohne `rev`. Eine Session liegt daneben als `{ kind: "session",
+  … }` mit ihren **Zeilen** (`log` als `{ at, sceneId?, text, reviewed? }` —
+  Zeilen, kein Markdown).
 - **Ein Test überschreibt die Beispielkampagne je Entität**, in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { scenes: [{ id: "loot-check", … }], without: { sessions: ["2026-01-15"] } } })`.
@@ -168,7 +169,7 @@ support/test.ts          das `test` der Suite: eigene Datenbank + eigener
 support/api.ts           `Api`: der Zugang zum Server eines Tests, an eine
                          Kampagne gebunden, ohne Wissen über Entitäten
 support/campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts,
-support/thread.ts, idea.ts
+support/thread.ts, idea.ts, glossary-term.ts, knowledge-item.ts
                          die Helfer je Entität: lesen, prüfen, schreiben,
                          Pfade — getippt mit `@grimoire/shared/<entität>`
 support/session.ts       die Helfer der Sessions
@@ -373,14 +374,13 @@ mehrere Schreibwege auf ihm liegen:
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Nachbereitung    | `tests/review.e2e.ts`, `tests/threads.e2e.ts`                  |
-| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
+| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts`, `tests/campaign-knowledge.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/chapter-overview.e2e.ts` (das aktive Kapitel) |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`, `tests/chapter-overview.e2e.ts` („Kampagne bearbeiten") |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
-Die Pfade 3, 4, 5 und 8 arbeiten auf den **Listen-Endpoints** (ADR #26) und
-lesen darum Zeilen statt Texte:
+Die Pfade 3, 4, 5 und 8 lesen Zeilen statt Texte:
 
 - **Pfad 3** (`search.e2e.ts`): indexiert sind Kampagne, Kapitel, Szenen,
   NPCs, Orte und die Glossar-Begriffe. Jeder Treffer trägt `kind` + `id` und
@@ -388,8 +388,9 @@ lesen darum Zeilen statt Texte:
   in der Palette: der Kampagnen-Treffer öffnet `/campaigns/beispiel`, die
   anderen `/campaigns/beispiel/chapters/<id>`,
   `/campaigns/beispiel/scenes/<id>`, `/campaigns/beispiel/npcs/<id>`,
-  `/campaigns/beispiel/locations/<id>` bzw. `/campaigns/beispiel/glossary`. Sessions und Ideen sind nicht
-  indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
+  `/campaigns/beispiel/locations/<id>` bzw. — ein Glossar-Treffer mit `kind:
+  "glossary-term"` und der `id` des Begriffs — `/campaigns/beispiel/glossary`.
+  Sessions und Ideen sind nicht indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
   erwartet keinen Treffer.
 - **Pfad 4** (`session-cycle.e2e.ts`): die Schnellnotiz wird eine Log-**Zeile**
   mit `at`, `sceneId` und dem Text, wie der DM ihn getippt hat; `scenesPlayed`
@@ -425,6 +426,23 @@ lesen darum Zeilen statt Texte:
 - **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Idee am Ende;
   der Spec vergleicht alle Ideen samt `rev`, womit „die vorhandene Idee
   bleibt unberührt" und „nichts abgehakt" in einer Zusicherung stehen.
+
+`tests/campaign-knowledge.e2e.ts` ist die Hälfte von Pfad 6, in der der DM
+Kampagnenwissen und Glossar auf ihren Seiten pflegt: jeder Glossar-Begriff
+und jedes Stück Kampagnenwissen ist eine eigene Ressource mit eigenem `rev`.
+Der Spec prüft auf der Leitung die flache Antwort, 409 mit dem aktuellen
+Stand, 400 für ein fremdes Feld und 404 auf den alten Adressen `…/glossary`
+und `…/knowledge`, dazu die Glossar-Einleitung als Feld der Kampagne. Auf
+den Seiten: anlegen, bearbeiten, löschen, der doppelte Begriff (409 mit
+Satz), das Umsortieren des Kampagnenwissens über den eigenen Wächter der
+Reihenfolge — kein `rev` einer Zeile bewegt sich — und zwei Zweitschreiber:
+einer ändert die offene Zeile (Konfliktzeile mit „Neu laden" und „Trotzdem
+speichern", das nur das geänderte Feld schreibt), einer die Reihenfolge
+(Konfliktzeile, „Neu laden" holt sie). Ein Zweitschreiber an einer ANDEREN
+Zeile ist kein Konflikt: der offene Begriff wird gespeichert, wo er getippt
+wurde. Danach der Lauf: das Wissen steht im mitgeschickten Kontext (der Stub
+echot den Prompt-Block), die Namens-Hinweise erscheinen, „Übernehmen" geht
+trotzdem.
 
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 und
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
@@ -491,8 +509,8 @@ Dazu ein Spec, der auf keinem der zehn Pfade liegt, sondern auf der Naht
 darunter: `tests/seed.e2e.ts`, auf dem Seed-Werkzeug. Er belegt zweierlei —
 dass eine frische Instanz **leer** startet (der Boot lädt nichts) und dass
 `grimoire seed` die Fixtures vollständig einliest (Tree, Szenenkörper, NPC,
-Session, Eingang, Glossar, `seeded: beispiel` auf stdout — die drei Listen
-Zeile für Zeile über ihre eigenen Endpoints gelesen), während ein
+Session, Ideen, Glossar-Begriffe, `seeded: beispiel` auf stdout — jede über
+ihren eigenen Endpoint gelesen), während ein
 **zweiter** Lauf ablehnt, weil die Datenbank schon Kampagnen hält: gleiche
 Zeilenzahlen, gleicher Inhalt. Er braucht eigene Boots und benutzt darum
 `startGrimoireServer`/`seedCampaigns` direkt statt der `server`-Fixture.
@@ -551,8 +569,8 @@ an EINER Stelle fest (GET und PATCH). Der Text eines Kapitels wird auf
 seiner Leseansicht `/campaigns/:id/chapters/<id>` bearbeitet wie der einer
 Szene — gespeichert, gerendert, Titel und Status unverändert — und ein
 Zweitschreiber führt zur Konfliktzeile, deren „Neu laden" den gespeicherten
-Stand übernimmt. Die Pflege des Glossars läuft über seinen Listen-Endpoint
-und seine eigene Seite, was derselbe Spec belegt. Jeder Test dort betritt den
+Stand übernimmt. Ein Glossar-Begriff ist eine eigene Ressource, die die
+Glossar-Seite zeigt, was derselbe Spec belegt. Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
 zusätzlich den neuen Ort ab: eine Szene, deren `location` sich geändert hat,

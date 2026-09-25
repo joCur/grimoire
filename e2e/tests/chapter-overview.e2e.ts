@@ -686,7 +686,13 @@ test.describe("a campaign without a name", () => {
     // Without a name the header degrades to the id.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
     const nameless = await getCampaign(api);
-    expect(nameless).toEqual({ id: "beispiel", name: "beispiel", body: "", rev: nameless.rev });
+    expect(nameless).toEqual({
+      id: "beispiel",
+      name: "beispiel",
+      body: "",
+      glossaryIntro: "",
+      rev: nameless.rev,
+    });
 
     await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
     const dialog = page.getByRole("dialog");

@@ -264,7 +264,7 @@ Szenen-Aufruf, jeden NPC- und Orts-Aufruf und die Ein-Aufruf-Läufe:
 
 1. Server sammelt Kontext: alle npc-/location-ids + Namen, Kapitel-id,
    **Kampagnenwissen** und Glossar (beides aus der Datenbank —
-   `campaign_knowledge` bzw. `glossary`).
+   `knowledge_items` bzw. `glossary_terms`).
 2. Prompt = `system-prompt.md` + `example-output.json` (Few-Shot-Ziel)
    + Kampagnenwissen + Glossar + Kontext + Quelltext.
 3. LLM antwortet — mit dem **Objekt der Entität** (Szene, NPC, Ort, Ergänzung)
