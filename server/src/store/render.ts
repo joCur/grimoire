@@ -1,30 +1,16 @@
-// Rows → the API's entry shapes.
+// Rows and the shapes the lists answer.
 //
-// The campaign and the chapters are rendered here into an `EntryResponse`: an
-// address, a `properties` mapping, a markdown body, and the concurrency token
-// the client sends back. The scene, the npc and the location have their own
-// types (ADR #31) and render themselves in their domain modules (./scenes.ts,
-// ./npcs.ts, ./locations.ts); their row shapes stand below with the others.
+// The row shape of every table the store renders stands here, so a domain
+// module and its neighbours read one definition. Each entity with its own
+// resource renders itself in its domain module (ADR #31: ./campaigns.ts,
+// ./chapters.ts, ./scenes.ts, ./npcs.ts, ./locations.ts).
 //
-// Three rules hold this together:
-//
-//   1. `properties` IS REBUILT IN CONTRACT ORDER — the README's order, and
-//      nothing beside it: a stored entry has exactly the fields the contract
-//      names (db/schema.ts rule 1). The display-name fallbacks stay
-//      (`title`/`name` fall back to the id), applied once, here.
-//   2. THE BODY IS A DETERMINISTIC RENDERING, not a stored byte sequence. It
-//      is the editor's display value; no byte guarantees are made or needed.
-//   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER. The app has
-//      always treated it as opaque, and the row version cannot collide
-//      inside one second.
-//
-// A SESSION and THE INBOX are not entries and are not rendered to a text at
-// all (ADR #26): their rows travel AS rows — `SessionResponse` and
-// `InboxResponse` — and this module builds those shapes too. Nothing here
-// composes a markdown list, and nothing anywhere reads one back.
+// A SESSION and THE INBOX are not rendered to a text at all (ADR #26): their
+// rows travel AS rows — `SessionResponse` and `InboxResponse` — and this
+// module builds those shapes. Nothing here composes a markdown list, and
+// nothing anywhere reads one back.
 
 import type {
-  EntryResponse,
   InboxEntry,
   InboxResponse,
   SessionLogEntry,
@@ -33,7 +19,6 @@ import type {
   SessionSummary,
 } from "@grimoire/shared";
 import { localDateTimeToMs } from "./time";
-import { CAMPAIGN_PATH, chapterPath } from "./paths";
 
 // --- row shapes (the columns the renderer needs) ----------------------------
 
@@ -149,67 +134,6 @@ export interface GlossaryRow {
   explanation: string;
   pos: number;
   rev: number;
-}
-
-// --- properties assembly ---------------------------------------------------
-
-/** Drop `undefined`/`null` values so absent columns produce absent keys. */
-function compact(entries: Array<[string, unknown]>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of entries) {
-    if (value === undefined || value === null) continue;
-    out[key] = value;
-  }
-  return out;
-}
-
-function parsed(
-  path: string,
-  kind: EntryResponse["kind"],
-  properties: Record<string, unknown>,
-  body: string,
-  rev: number,
-): EntryResponse {
-  return { path, kind, properties, body, rev };
-}
-
-// --- per-kind rendering -----------------------------------------------------
-
-/**
- * The campaign's display name: its stored name, or the id when there is none.
- *
- * `""` in the column means "no authored name" — a campaign created without
- * one, or seeded without one. The fallback to the id is applied HERE, once,
- * and everything that shows a campaign name reads it through this function:
- * the campaign entry (`GET /entry`) and the campaign list (`GET /campaigns`)
- * once disagreed about it.
- */
-export function campaignDisplayName(row: CampaignRow): string {
-  return row.name === "" ? row.id : row.name;
-}
-
-export function campaignProperties(row: CampaignRow): Record<string, unknown> {
-  return compact([
-    ["id", row.id],
-    ["name", campaignDisplayName(row)],
-    ["description", row.description],
-  ]);
-}
-
-export function renderCampaign(row: CampaignRow): EntryResponse {
-  return parsed(CAMPAIGN_PATH, "campaign", campaignProperties(row), row.body, row.rev);
-}
-
-export function chapterProperties(row: ChapterRow): Record<string, unknown> {
-  return compact([
-    ["id", row.id],
-    ["title", row.title === "" ? row.id : row.title],
-    ["status", row.status],
-  ]);
-}
-
-export function renderChapter(row: ChapterRow): EntryResponse {
-  return parsed(chapterPath(row.id), "chapter", chapterProperties(row), row.body, row.rev);
 }
 
 // --- sessions ---------------------------------------------------------------

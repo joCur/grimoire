@@ -7,8 +7,7 @@
 //      Everything README.md names for an entity gets its own column; a key
 //      the contract does not name has no field behind it and is refused
 //      (a PATCH answers 400, and so does a seed). The contract is the
-//      entity's zod schema (ADR #31) — for the campaign and the chapter
-//      still the lists in store/properties.ts `PROPERTY_CONTRACT`.
+//      entity's zod schema (ADR #31).
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
@@ -70,7 +69,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { NPC_STATUSES } from "@grimoire/shared/npc";
 import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
-import { CHAPTER_STATUSES } from "@grimoire/shared/types";
+import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -109,7 +108,7 @@ export const campaigns = sqliteTable("campaigns", {
   /** Display name; empty string when none was authored (the id is then shown). */
   name: text("name").notNull().default(""),
   description: text("description"),
-  /** Free note space — the campaign entry's markdown body. */
+  /** Free note space — the campaign's markdown body. */
   body: text("body").notNull().default(""),
   /** Bumped on every write; the app polls it to invalidate its queries. */
   version: integer("version").notNull().default(1),
@@ -176,14 +175,14 @@ export const chapters = sqliteTable(
      * chapter-text edit unsaveable the moment somebody rearranges the scenes.
      * The other direction holds too, which is the one that bites: reordering
      * must not 409 an editor it has nothing to do with. So the order counts
-     * only its own writes, and `rev` counts only the entry's.
+     * only its own writes, and `rev` counts only the chapter's.
      */
     sceneOrderRev: integer("scene_order_rev").notNull().default(1),
     /**
      * Guard token of the chapter's THREAD LIST (`threads` below) — the
      * fourth list counter of its kind, for the reason `scene_order_rev` has
      * its own: the open threads are a list with a lifetime of their own, and
-     * `rev` guards the chapter ENTRY (properties and text, ADR #23). A thread
+     * `rev` guards the chapter's fields (`body` among them, ADR #23). A thread
      * adopted in the review must not 409 an open chapter-text editor, and a
      * text save must not invalidate a tick in the overview. So the list
      * counts only its own writes.
@@ -837,7 +836,7 @@ export const generateJobs = sqliteTable(
     /**
      * Target chapter of a scene run; NULL for an npc run. The one reference
      * WITHOUT a foreign key (rule 3): a run with „Neues Kapitel" names the
-     * chapter it is going to create, so the entry exists only once the
+     * chapter it is going to create, so the chapter exists only once the
      * proposal is accepted.
      */
     chapter: text("chapter"),

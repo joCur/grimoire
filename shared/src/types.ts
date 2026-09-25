@@ -1,26 +1,33 @@
-// Entity types of the Grimoire data model: an entry is its properties plus
-// its markdown body (README).
-// This is the code mirror of the format contract in /README.md — keep both
-// in sync; changes here need a matching README edit (and vice versa).
-//
-// Design rule (README): the format DEGRADES, it does not validate. Every
-// enum-ish field is typed as its known literals *or* any string, unknown
-// properties keys are preserved, and nothing in shared/ ever throws on
-// odd input.
-//
-// The chapter status below is the exception, and only on the way IN: since
-// ADR #25 it is a CHECK constraint of its column and the API answers 400 for
-// anything else. The type stays widened all the same, because a READER still
-// has to render whatever an older database hands it. The scene's and the
-// npc's closed lists stand with their schemas (./scene.ts, ./npc.ts).
+// Shared API types of Grimoire: the shapes that are no entity of their own —
+// the campaign list, the campaign tree, the lists, search and the generator
+// job — plus the instance settings.
 //
 // An entity with its own resource (ADR #31) has its type from its zod schema
-// in its own module — the location in ./location.ts, the npc in ./npc.ts and
-// the scene in ./scene.ts, re-exported here.
+// in its own module — the campaign in ./campaign.ts, the chapter in
+// ./chapter.ts, the scene in ./scene.ts, the npc in ./npc.ts and the
+// location in ./location.ts —, and the types are re-exported here.
 
+import type { ChapterStatus } from "./chapter";
 import type { LocationProposal } from "./location";
 import type { NpcChange, NpcProposal, NpcStatus } from "./npc";
 import type { SceneChange, SceneProposal, SceneStatus, SceneType } from "./scene";
+
+export type {
+  Campaign,
+  CampaignChange,
+  CampaignCreate,
+  CampaignPatch,
+  CampaignSeed,
+} from "./campaign";
+
+export type {
+  Chapter,
+  ChapterChange,
+  ChapterCreate,
+  ChapterPatch,
+  ChapterProposal,
+  ChapterStatus,
+} from "./chapter";
 
 export type {
   Location,
@@ -55,19 +62,6 @@ export type {
   SceneType,
 } from "./scene";
 
-/**
- * A chapter's lifecycle states, in that order. `active` is the ONE the app
- * acts on — the session view opens the active chapter, and there is at most
- * one per campaign (the server swaps it in a single transaction).
- *
- * These are the ONLY values the column takes: a CHECK constraint holds it to
- * them (ADR #25) and the API refuses to write anything else with a 400. A
- * reader still shows verbatim whatever an older database put there — the
- * status has three positions, so a fourth value can only be a typo.
- */
-export const CHAPTER_STATUSES = ["planned", "active", "done"] as const;
-export type ChapterStatus = (typeof CHAPTER_STATUSES)[number];
-
 /** The six callout kinds the renderer knows. Unknown kinds render as plain text. */
 export const CALLOUT_KINDS = [
   "readaloud",
@@ -79,56 +73,19 @@ export const CALLOUT_KINDS = [
 ] as const;
 export type CalloutKind = (typeof CALLOUT_KINDS)[number];
 
-/** Widens a literal union to string while keeping literal autocomplete. */
-type OrString<T extends string> = T | (string & {});
-
 /**
- * Properties of a campaign's `campaign` (README, the campaign section). The
- * entry is optional — without it the UI shows the campaign's
- * id. `id` is that id, `name` the display name; further keys
- * (e.g. `system`) are preserved verbatim.
- */
-export interface CampaignProperties {
-  id: string;
-  name: string;
-  /** One-liner shown next to the name (switcher meta, chapter overview subtitle). */
-  description?: string;
-  [key: string]: unknown;
-}
-
-/** Properties of a chapter. */
-export interface ChapterProperties {
-  id: string;
-  title: string;
-  status?: OrString<ChapterStatus>;
-  [key: string]: unknown;
-}
-
-/**
- * The kinds that are ENTRIES: a row with an address, properties and a text
- * (server/src/store/paths.ts). A scene, an npc and a location are not among
- * them — each is its own resource with its own type (ADR #31) — and neither
- * are a session, the inbox and the glossary, which are lists with their own
- * endpoints (ADR #26).
- */
-export type EntryKind = "campaign" | "chapter";
-
-/**
- * Everything the SEARCH INDEX holds: the entry kinds, the scene, the npc, the
- * location and the LIST kinds. A scene, an npc, a location and a glossary hit
- * have no entry address to offer (see SearchResult) — each names its kind and
- * id. `unknown` is what an address the schema does not describe reads as.
+ * Everything the SEARCH INDEX holds, and the list kinds beside them: a hit
+ * names its entity by `kind` and `id` (see SearchResult).
  */
 export type EntityKind =
-  | EntryKind
+  | "campaign"
+  | "chapter"
   | "scene"
   | "npc"
   | "location"
   | "session"
   | "inbox"
-  | "glossary"
-  | "unknown";
-
+  | "glossary";
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
 
@@ -152,10 +109,10 @@ export interface CampaignSummary {
    */
   lastSessionStarted?: string;
   /**
-   * Display name. Always present: a campaign
-   * without an authored name is shown under its id, exactly as the campaign
-   * ENTRY renders it (`GET /entry?path=campaign`) — the two endpoints must
-   * agree. Optional in the type so an older payload still parses.
+   * Display name. Always present: a campaign without an authored name is
+   * shown under its id, exactly as `GET /api/campaigns/:c` answers its `name`
+   * — the two endpoints must agree. Optional in the type so an older payload
+   * still parses.
    */
   name?: string;
   /**
@@ -179,8 +136,8 @@ export interface SceneSummary {
   /** The location id the scene names; absent when it sits at chapter level. */
   location?: string;
   /**
-   * The location entry's display NAME, degraded to the id when nobody has
-   * named it yet (an entry created and left empty). Absent exactly when
+   * The location's display NAME, degraded to the id when nobody has named
+   * it yet (a location created and left empty). Absent exactly when
    * `location` is.
    *
    * Resolved by the SERVER because only the server has the location rows at
@@ -198,13 +155,11 @@ export interface ChapterNode {
   /** The chapter's title; falls back to its id. */
   title: string;
   status?: ChapterStatus;
-  /** Address of the chapter — its id. */
-  path?: string;
   /**
    * Guard token of the scene ORDER below — what
    * `PUT /chapters/:chapter/scene-order` sends back and 409s on. Its own
-   * counter, NOT the chapter entry's `rev`: reordering and editing the
-   * chapter's text are separate writes and must not invalidate each other.
+   * counter, NOT the chapter's `rev`: reordering and editing the chapter are
+   * separate writes and must not invalidate each other.
    * Optional in the type so an older payload still parses.
    */
   sceneOrderRev?: number;
@@ -337,9 +292,9 @@ export interface ThreadEntry {
 /**
  * THE OPEN THREADS of a chapter — every endpoint under
  * `…/chapters/:chapter/threads` answers it: the rows in their order plus the
- * LIST's own guard token (`chapters.threads_rev`). Not the chapter entry's
- * `rev`: the list is not part of the entry, so writing it moves neither the
- * chapter's text nor its guard (ADR #26, #29).
+ * LIST's own guard token (`chapters.threads_rev`). Not the chapter's `rev`:
+ * the list is no field of the chapter, so writing it moves neither the
+ * chapter's `body` nor its guard (ADR #26, #29).
  */
 export interface ThreadsResponse {
   entries: ThreadEntry[];
@@ -391,9 +346,9 @@ export interface CampaignTree {
  * scenes in their new order, and the chapter's fresh guard token.
  *
  * `rev` is `chapters.scene_order_rev` — the ORDER's own guard token, which
- * the tree hands out as `ChapterNode.sceneOrderRev`. Not the chapter entry's
- * `rev` and not a scene's: reordering changes neither entry, so it must not
- * invalidate an editor open on one. `scenes` is the complete list of the
+ * the tree hands out as `ChapterNode.sceneOrderRev`. Not the chapter's `rev`
+ * and not a scene's: reordering changes neither, so it must not invalidate an
+ * editor open on one. `scenes` is the complete list of the
  * chapter's scene ids — a request naming anything else is refused whole
  * (`scene_order_mismatch`).
  */
@@ -403,74 +358,17 @@ export interface SceneOrderResponse {
 }
 
 /**
- * GET /api/campaigns/:campaign/entries/<address> — ONE entry: its address,
- * its kind, its properties, its markdown body and the guard token a PATCH
- * sends back.
- *
- * A scene, an npc and a location are not answered this way: each has its own
- * resource and type (ADR #31). A session, the inbox and the glossary have no
- * entry address at all (ADR #26) — they answer `SessionResponse`,
- * `InboxResponse` and `GlossaryResponse` on their own endpoints, and the
- * epoch readings a session needs travel there.
- */
-export interface EntryResponse {
-  /** The entry's address within the campaign (server/src/store/paths.ts). */
-  path: string;
-  kind: EntryKind;
-  properties: Record<string, unknown>;
-  /** The entry's markdown text. */
-  body: string;
-  /** Optimistic-concurrency token: PATCH sends it back, server 409s on mismatch. */
-  rev: number;
-}
-
-/**
- * The body of PATCH /api/campaigns/:campaign/entries/<address> — the ONE
- * write of an entry (ADR #23).
- *
- * `rev` is the guard token of the entry as it was read; a mismatch is a 409
- * that carries the current `rev` AND the current entry. At least one of
- * `properties` and `body` has to be there, and both together are ONE write:
- * the fields dialog and the text editor of one entry save through the same
- * request, and the row changes once — `rev` steps once either way, so it is
- * the answer's `rev` that goes into the next request, never `rev + 1`.
- */
-export interface PatchEntryRequest {
-  /** The `rev` the client read — the optimistic-concurrency token. */
-  rev: number;
-  /**
-   * The fields to change. Only the named keys are touched, and `null`
-   * removes a key. A key the entry's kind has no field for is a 400.
-   */
-  properties?: Record<string, unknown>;
-  /** The new markdown body, replacing the stored one completely. */
-  body?: string;
-  /**
-   * Write the given fields on top of whatever the row holds NOW instead of
-   * refusing on a stale `rev` — the DM's answer to the conflict dialog. Only
-   * the fields in this request are written, so a status somebody else
-   * changed meanwhile survives a forced text save.
-   */
-  force?: boolean;
-}
-
-/**
  * One row of GET /api/:campaign/search (the response wraps them as
- * `{ results: SearchResult[] }`, see SearchResponse). Indexed are the five
- * entry kinds and the glossary terms — see server/src/store/fts.ts.
+ * `{ results: SearchResult[] }`, see SearchResponse). Indexed are the
+ * campaign, the chapters, the scenes, the npcs, the locations and the
+ * glossary terms — see server/src/store/fts.ts. The search is truly mixed, so
+ * a hit names its entity by `kind` and `id`, and the app opens the resource
+ * of that entity — or, for a glossary term, the glossary (ADR #31).
  */
 export interface SearchResult {
   kind: EntityKind;
   id: string;
   title: string;
-  /**
-   * The entry's address — present only for the kinds reached through
-   * `…/entries/<address>`. A scene, an npc or a location hit carries none:
-   * each is opened by `kind` and `id` as its own resource (ADR #31). A
-   * glossary, inbox or session hit names a row of a LIST (ADR #26) and is
-   * opened through its list, by `kind` and `id`, too.
-   */
-  path?: string;
   /** Fuse.js score: 0 is a perfect match, values grow toward 1. */
   score: number;
   /** ~120 chars of body context around the first literal query hit. */

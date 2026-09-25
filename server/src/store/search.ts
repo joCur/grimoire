@@ -4,12 +4,9 @@
 // (./fts). The response is `{ results: SearchResult[] }`, max 20, with
 // `score` meaning "0 is a perfect match, values grow toward 1".
 //
-// A hit carries `path` only for a kind reached through its address. A scene,
-// an npc and a location are each their own resource (ADR #31), and a glossary
-// term is a row of a LIST (ADR #26): none of them has an address, so such a
-// hit is named by `kind` and `id` alone and the app opens the resource or the
-// list from those. Leaving `path` out is the point — an address that names
-// nothing would 404 the moment somebody followed it.
+// The search is truly mixed, so a hit names its entity by `kind` and `id`
+// (ADR #31): the app opens the resource of that entity from those — or, for a
+// glossary term, a row of a LIST (ADR #26), the glossary.
 //
 // The two properties the reference queries depend on:
 //
@@ -29,7 +26,6 @@ import { sql } from "drizzle-orm";
 import type { EntityKind, SearchResult } from "@grimoire/shared";
 import { requireCampaign } from "./campaigns";
 import { getDb } from "./handle";
-import { CAMPAIGN_PATH, chapterPath } from "./paths";
 
 export type { SearchResult };
 
@@ -92,25 +88,6 @@ interface FtsRow {
 }
 
 /**
- * The address an indexed entity is reached by (see ./paths), or undefined for
- * a hit that has none.
- */
-function pathForHit(kind: string, id: string): string | undefined {
-  switch (kind) {
-    case "chapter":
-      return chapterPath(id);
-    case "campaign":
-      return CAMPAIGN_PATH;
-    default:
-      // A scene, an npc and a location — each its own resource, opened by
-      // `kind` and `id` (ADR #31) —, `glossary`, and any list kind added to
-      // the index later: the row is named by `kind` and `id`, and there is
-      // no address to offer.
-      return undefined;
-  }
-}
-
-/**
  * Search one campaign. Campaign existence/safety is checked first (400 unsafe
  * id, 404 unknown campaign), exactly as the Fuse version did through
  * `collectCampaignFiles`.
@@ -129,12 +106,10 @@ export async function searchCampaign(campaign: string, query: string): Promise<S
     limit ${MAX_RESULTS}
   `);
   return rows.map((row) => {
-    const path = pathForHit(row.kind, row.entity_id);
     const result: SearchResult = {
       kind: row.kind as EntityKind,
       id: row.entity_id,
       title: row.title === "" ? row.entity_id : row.title,
-      ...(path === undefined ? {} : { path }),
       score: scoreFromRank(Number(row.rank)),
     };
     const snippet = makeSnippet(row.body ?? "", query);

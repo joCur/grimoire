@@ -1,38 +1,33 @@
 // Taking over what a generator run produced.
 //
-// A proposed scene is a `SceneProposal`, a proposed npc an `NpcProposal` and
-// a proposed location a `LocationProposal`, each the entity itself without
-// its guard (ADR #31); the chapter a „Neues Kapitel" run creates is a pair of
-// `properties` and `body` with its address. This is the write behind
-// `POST /generate/apply` and the accept: one transaction for the whole batch,
-// the documented `409 { conflicts, scenes, npcs, locations }` decided INSIDE
-// it, and the job row discarded in the same commit. A partial accept records
-// what it wrote instead. Nothing here is a second write path — a row that
-// already holds content is a conflict, not something to overwrite.
+// A run proposes entities, each the entity itself without its guard
+// (ADR #31): the chapter a „Neues Kapitel" run creates is a
+// `ChapterProposal`, a proposed scene a `SceneProposal`, a proposed npc an
+// `NpcProposal` and a proposed location a `LocationProposal`. This is the
+// write behind `POST /generate/apply` and the accept: one transaction for
+// the whole batch, the documented `409 { chapters, scenes, npcs, locations }`
+// decided INSIDE it, and the job row discarded in the same commit. A partial
+// accept records what it wrote instead. Nothing here is a second write path
+// — a row that already holds content is a conflict, not something to
+// overwrite.
 
-import { and, desc, eq } from "drizzle-orm";
-import type { LocationProposal, NpcProposal, SceneProposal } from "@grimoire/shared";
+import { and, eq } from "drizzle-orm";
+import type {
+  ChapterProposal,
+  LocationProposal,
+  NpcProposal,
+  SceneProposal,
+} from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { chapters, generateJobs } from "../db/schema";
-import { campaignRow, mutate } from "./campaigns";
-import { ensureChapterRow } from "./chapters";
-import { chapterRowOf, indexChapter } from "./entity-rows";
+import { generateJobs } from "../db/schema";
+import { mutate } from "./campaigns";
+import { chapterTaken, ensureChapterRow, insertChapterProposal } from "./chapters";
 import { insertLocationProposal, locationTaken } from "./locations";
 import { insertNpcProposal, npcTaken } from "./npcs";
-import { locatorFromPath, type Locator } from "./paths";
 import { insertSceneProposal, sceneTaken } from "./scenes";
-import { asOptStr, asStr } from "./shared";
 
 // --- the generator's apply step ------------------------------------------------
-
-/** One chapter draft ready to be written, with where it goes. */
-export interface EntityDraft {
-  /** The chapter's address — its id. */
-  rel: string;
-  properties: Record<string, unknown>;
-  body: string;
-}
 
 /**
  * Where a proposed scene goes in its chapter: a `pos`, or undefined for the
@@ -41,37 +36,6 @@ export interface EntityDraft {
  * is the chapter's end at that moment (store/chapters.ts `sceneRunPos`).
  */
 export type ScenePlacement = (tx: GrimoireDb, scene: SceneProposal) => number | undefined;
-
-/**
- * Insert one chapter draft — the chapter a „Neues Kapitel" run creates, and
- * a seeded chapter. The caller has already validated everything and checked
- * for conflicts; this is the write.
- */
-export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft): void {
-  const locator = locatorFromPath(draft.rel);
-  if (locator.kind !== "chapter") throw new ApiError(400, `cannot write ${draft.rel}`);
-  const props = draft.properties;
-  const pos =
-    (tx
-      .select({ pos: chapters.pos })
-      .from(chapters)
-      .where(eq(chapters.campaignId, campaign))
-      .orderBy(desc(chapters.pos))
-      .limit(1)
-      .all()[0]?.pos ?? -1) + 1;
-  tx.insert(chapters)
-    .values({
-      campaignId: campaign,
-      id: locator.id,
-      title: asStr(props.title, locator.id),
-      status: asOptStr(props.status),
-      body: draft.body,
-      pos,
-    })
-    .run();
-  const row = chapterRowOf(tx, campaign, locator.id);
-  if (row !== undefined) indexChapter(tx, campaign, row);
-}
 
 /**
  * Run a batch of generator writes in ONE transaction — and CHECK THE
@@ -92,21 +56,23 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
  * (a newer run started meanwhile) matches nothing and is ignored, which is
  * the documented behaviour.
  *
- * A scene that already exists is a conflict (reported by id under
- * `scenes`); an npc or a location that already holds content is one too
- * (under `npcs` or `locations`), while an empty one is filled.
+ * A chapter or a scene that already exists is a conflict (reported by id
+ * under `chapters` or `scenes`); an npc or a location that already holds
+ * content is one too (under `npcs` or `locations`), while an empty one is
+ * filled.
  */
-export async function applyDrafts(
+export async function writeGenerated(
   campaign: string,
-  drafts: EntityDraft[],
   options: {
+    /** The chapter a „Neues Kapitel" run creates, when it is not there yet. */
+    chapter?: ChapterProposal;
     scenes?: SceneProposal[];
     npcs?: NpcProposal[];
     locations?: LocationProposal[];
     jobId?: string;
     /**
      * The chapters the run decided on (ADR #18): each is written here if it
-     * is not there yet — the net under a new-chapter run, whose chapter draft
+     * is not there yet — the net under a new-chapter run, whose chapter
      * usually comes along. Any other chapter a scene names has to exist.
      */
     runChapters?: readonly string[];
@@ -123,6 +89,7 @@ export async function applyDrafts(
   } = {},
 ): Promise<void> {
   const {
+    chapter,
     scenes = [],
     npcs = [],
     locations = [],
@@ -140,26 +107,23 @@ export async function applyDrafts(
       // for content it had silently dropped. The batch is the model's output
       // — one hallucinated duplicate id is exactly the case — so the answer
       // is the documented one, and it names both offenders.
-      const duplicates = duplicateIds(drafts.map((draft) => draft.rel));
       const duplicateScenes = duplicateIds(scenes.map((scene) => scene.id));
       const duplicateNpcs = duplicateIds(npcs.map((npc) => npc.id));
       const duplicateLocations = duplicateIds(locations.map((location) => location.id));
       if (
-        duplicates.length > 0 ||
         duplicateScenes.length > 0 ||
         duplicateNpcs.length > 0 ||
         duplicateLocations.length > 0
       ) {
         throw new ApiError(409, "two proposals for the same target", {
-          conflicts: duplicates,
+          chapters: [],
           scenes: duplicateScenes,
           npcs: duplicateNpcs,
           locations: duplicateLocations,
         });
       }
-      const conflicts = drafts
-        .filter((draft) => draftTargetExistsIn(tx, campaign, draft.rel))
-        .map((draft) => draft.rel);
+      const takenChapters =
+        chapter !== undefined && chapterTaken(tx, campaign, chapter.id) ? [chapter.id] : [];
       const takenScenes = scenes
         .filter((scene) => sceneTaken(tx, campaign, scene.id))
         .map((scene) => scene.id);
@@ -168,13 +132,13 @@ export async function applyDrafts(
         .filter((location) => locationTaken(tx, campaign, location.id))
         .map((location) => location.id);
       if (
-        conflicts.length > 0 ||
+        takenChapters.length > 0 ||
         takenScenes.length > 0 ||
         takenNpcs.length > 0 ||
         takenLocations.length > 0
       ) {
         throw new ApiError(409, "target rows already exist", {
-          conflicts,
+          chapters: takenChapters,
           scenes: takenScenes,
           npcs: takenNpcs,
           locations: takenLocations,
@@ -183,7 +147,7 @@ export async function applyDrafts(
       // A chapter goes in before everything that names it, and an npc and a
       // location before the scene that lists them: the constraints are
       // checked per statement.
-      for (const draft of drafts) insertDraft(tx, campaign, draft);
+      if (chapter !== undefined) insertChapterProposal(tx, campaign, chapter);
       for (const chapter of runChapters) ensureChapterRow(tx, campaign, chapter);
       for (const location of locations) insertLocationProposal(tx, campaign, location);
       for (const npc of npcs) insertNpcProposal(tx, campaign, npc);
@@ -202,7 +166,7 @@ export async function applyDrafts(
     if (error instanceof ApiError) throw error;
     if (isConstraintViolation(error)) {
       throw new ApiError(409, "target rows already exist", {
-        conflicts: drafts.map((draft) => draft.rel),
+        chapters: chapter === undefined ? [] : [chapter.id],
         scenes: scenes.map((scene) => scene.id),
         npcs: npcs.map((npc) => npc.id),
         locations: locations.map((location) => location.id),
@@ -235,20 +199,4 @@ function duplicateIds(ids: readonly string[]): string[] {
 function isConstraintViolation(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(UNIQUE|PRIMARY KEY) constraint failed/i.test(message);
-}
-
-/** True when a chapter draft's target already exists (the apply step's 409). */
-function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boolean {
-  let locator: Locator;
-  try {
-    locator = locatorFromPath(rel);
-  } catch {
-    return false;
-  }
-  switch (locator.kind) {
-    case "chapter":
-      return chapterRowOf(db, campaign, locator.id) !== undefined;
-    case "campaign":
-      return (campaignRow(db, campaign)?.name ?? "") !== "";
-  }
 }

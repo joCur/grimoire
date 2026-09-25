@@ -6,8 +6,8 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  checkDraftNaming,
-  checkDraftsNaming,
+  checkProposalNaming,
+  checkProposalsNaming,
   findRuleHits,
   findWordHits,
   isCasingOnlyRule,
@@ -16,7 +16,7 @@ import {
 const RULES = [{ from: "Salt Harbour", to: "Salzhafen" }];
 
 /** A proposed scene as the check reads it: its id, its fields and its body. */
-function draft(
+function proposal(
   scene: string,
   fields: Record<string, unknown>,
   body: string,
@@ -68,24 +68,24 @@ describe("findWordHits", () => {
   });
 });
 
-describe("checkDraftNaming", () => {
-  test("no rules means no findings, whatever the draft says", () => {
-    expect(checkDraftNaming(draft("b", { title: "Salt Harbour" }, "Salt Harbour"), [])).toEqual(
+describe("checkProposalNaming", () => {
+  test("no rules means no findings, whatever the proposal says", () => {
+    expect(checkProposalNaming(proposal("b", { title: "Salt Harbour" }, "Salt Harbour"), [])).toEqual(
       [],
     );
   });
 
-  test("a clean draft produces nothing", () => {
-    const hints = checkDraftNaming(
-      draft("kai", { title: "Nachtwache" }, "Die Gruppe geht durch Salzhafen."),
+  test("a clean proposal produces nothing", () => {
+    const hints = checkProposalNaming(
+      proposal("kai", { title: "Nachtwache" }, "Die Gruppe geht durch Salzhafen."),
       RULES,
     );
     expect(hints).toEqual([]);
   });
 
   test("a body hit carries the line number and the line", () => {
-    const hints = checkDraftNaming(
-      draft(
+    const hints = checkProposalNaming(
+      proposal(
         "kai",
         { title: "Nachtwache" },
         "## Flow\n\nDie Gruppe erreicht Salt Harbour bei Ebbe.",
@@ -104,8 +104,8 @@ describe("checkDraftNaming", () => {
   });
 
   test("a field hit names the KEY and carries no line", () => {
-    const hints = checkDraftNaming(
-      draft(
+    const hints = checkProposalNaming(
+      proposal(
         "npcs/brakk",
         { id: "brakk", name: "Brakk", role: "Fischer in Salt Harbour" },
         "## Will\n\nRuhe.",
@@ -119,8 +119,8 @@ describe("checkDraftNaming", () => {
   });
 
   test("ids, tags and references are NOT checked — they are addresses", () => {
-    const hints = checkDraftNaming(
-      draft(
+    const hints = checkProposalNaming(
+      proposal(
         "kai",
         {
           id: "salt-harbour",
@@ -136,16 +136,16 @@ describe("checkDraftNaming", () => {
   });
 
   test("one finding per rule per line, not one per occurrence", () => {
-    const hints = checkDraftNaming(
-      draft("kai", { title: "Nachtwache" }, "Salt Harbour und Salt Harbour."),
+    const hints = checkProposalNaming(
+      proposal("kai", { title: "Nachtwache" }, "Salt Harbour und Salt Harbour."),
       RULES,
     );
     expect(hints).toHaveLength(1);
   });
 
   test("several rules each report separately", () => {
-    const hints = checkDraftNaming(
-      draft(
+    const hints = checkProposalNaming(
+      proposal(
         "kai",
         { title: "Nachtwache" },
         "Salt Harbour, und Fenn heißt jetzt anders.",
@@ -157,7 +157,7 @@ describe("checkDraftNaming", () => {
 
   test("a long line is capped and marked as cut", () => {
     const long = `Salt Harbour ${"x".repeat(400)}`;
-    const hints = checkDraftNaming(draft("b", { title: "T" }, long), RULES);
+    const hints = checkProposalNaming(proposal("b", { title: "T" }, long), RULES);
     expect(hints[0]?.excerpt.endsWith("…")).toBe(true);
     expect(hints[0]?.excerpt.length).toBeLessThanOrEqual(161);
   });
@@ -166,20 +166,20 @@ describe("checkDraftNaming", () => {
     // A scene whose fields hold no prose at all (a number, a list, a
     // mapping) is checked on its body alone: the check never throws, it
     // reports what it can read.
-    const hints = checkDraftNaming(
-      draft("b", { title: 7, tags: ["x"] }, "Salt Harbour hier."),
+    const hints = checkProposalNaming(
+      proposal("b", { title: 7, tags: ["x"] }, "Salt Harbour hier."),
       RULES,
     );
     expect(hints.map((h) => h.field)).toEqual(["body"]);
   });
 });
 
-describe("checkDraftsNaming", () => {
-  test("reports per draft, in draft order", () => {
-    const hints = checkDraftsNaming(
+describe("checkProposalsNaming", () => {
+  test("reports per proposal, in proposal order", () => {
+    const hints = checkProposalsNaming(
       [
-        draft("a", { title: "A" }, "Nichts hier."),
-        draft("b", { title: "Salt Harbour" }, "Salt Harbour."),
+        proposal("a", { title: "A" }, "Nichts hier."),
+        proposal("b", { title: "Salt Harbour" }, "Salt Harbour."),
       ],
       RULES,
     );
@@ -234,26 +234,26 @@ describe("findRuleHits", () => {
   });
 });
 
-describe("checkDraftNaming — the refined rules end to end", () => {
-  test("a draft that applied the Dragon rule produces NO hint", () => {
-    const hints = checkDraftNaming(
-      draft("kai", { title: "Der Red Dragon" }, "## Flow\n\nDer Red Dragon schläft."),
+describe("checkProposalNaming — the refined rules end to end", () => {
+  test("a proposal that applied the Dragon rule produces NO hint", () => {
+    const hints = checkProposalNaming(
+      proposal("kai", { title: "Der Red Dragon" }, "## Flow\n\nDer Red Dragon schläft."),
       [{ from: "Dragon", to: "Red Dragon" }],
     );
     expect(hints).toEqual([]);
   });
 
-  test("a draft that did NOT apply it is flagged, title and body", () => {
-    const hints = checkDraftNaming(
-      draft("kai", { title: "Der Dragon" }, "## Flow\n\nDer Dragon schläft."),
+  test("a proposal that did NOT apply it is flagged, title and body", () => {
+    const hints = checkProposalNaming(
+      proposal("kai", { title: "Der Dragon" }, "## Flow\n\nDer Dragon schläft."),
       [{ from: "Dragon", to: "Red Dragon" }],
     );
     expect(hints.map((h) => h.field)).toEqual(["title", "body"]);
   });
 
   test("a casing rule flags only the lower-case line", () => {
-    const hints = checkDraftNaming(
-      draft(
+    const hints = checkProposalNaming(
+      proposal(
         "kai",
         { title: "Nachtwache" },
         "In Salzhafen ist Markt.\nIn salzhafen auch.",

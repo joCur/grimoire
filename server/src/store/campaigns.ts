@@ -1,22 +1,40 @@
-// Campaigns: the row every other read and write starts from.
+// Campaigns: the campaign resource, and the row every other read and write
+// starts from.
 //
-// The lookup that turns a campaign id into a row (404 for an unknown one),
-// the list the app opens with, the create endpoint, and `campaigns.version` —
-// the counter `GET /version` answers. `mutate` lives here too, because every
-// write of this store is one transaction that bumps exactly that counter.
+// The campaign is its own resource with its own type (ADR #31,
+// @grimoire/shared/campaign): read, written, created and seeded here, typed
+// by its one zod schema. Beside it stand the lookup that turns a campaign id
+// into a row (404 for an unknown one), the list the app opens with, and
+// `campaigns.version` — the counter `GET /version` answers. `mutate` lives
+// here too, because every write of this store is one transaction that bumps
+// exactly that counter.
 
 import { asc, eq, sql } from "drizzle-orm";
-import { freeSlug, type CampaignSummary, type EntryResponse } from "@grimoire/shared";
+import {
+  campaignPatchSchema,
+  campaignSeedSchema,
+  freeSlug,
+  type Campaign,
+  type CampaignPatch,
+  type CampaignSeed,
+  type CampaignSummary,
+} from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeCampaignId } from "../addressing";
 import type { GrimoireDb } from "../db/client";
 import { campaigns, sessions } from "../db/schema";
 import { indexEntity } from "./fts";
 import { getDb } from "./handle";
-import { CAMPAIGN_PATH } from "./paths";
 import { expandBodyRefs } from "./refs";
-import { campaignDisplayName, renderCampaign, type CampaignRow } from "./render";
-import { compareSessionsNewestFirst, resolveNewId, slugTaken } from "./shared";
+import type { CampaignRow } from "./render";
+import {
+  compareSessionsNewestFirst,
+  normalizeBody,
+  parseRequest,
+  resolveNewId,
+  revConflict,
+  slugTaken,
+} from "./shared";
 
 // --- campaign lookup ---------------------------------------------------------
 
@@ -55,15 +73,98 @@ export function requireCampaignRow(tx: GrimoireDb, campaign: string): CampaignRo
   return row;
 }
 
-// --- reading the campaign entry ------------------------------------------------
+// --- rendering a row ----------------------------------------------------------
 
 /**
- * The campaign entry. Its row is already in hand wherever an address is
- * resolved — the campaign is what an address is relative to — so this only
- * renders it.
+ * The campaign's display name: its stored name, or the id when there is none.
+ *
+ * `""` in the column means "no authored name" — a campaign created without
+ * one, or seeded without one. The fallback to the id is applied HERE, once,
+ * and everything that shows a campaign name reads it through this function:
+ * the campaign (`GET /campaigns/:c`) and the campaign list (`GET /campaigns`)
+ * must agree about it.
  */
-export function readCampaignEntry(row: CampaignRow): EntryResponse {
-  return renderCampaign(row);
+export function campaignDisplayName(row: CampaignRow): string {
+  return row.name === "" ? row.id : row.name;
+}
+
+/**
+ * The campaign of a row. A description that holds nothing is a field the
+ * campaign does not carry; the body travels exactly as it is stored.
+ */
+export function renderCampaign(row: CampaignRow): Campaign {
+  return {
+    id: row.id,
+    name: campaignDisplayName(row),
+    ...(row.description === null ? {} : { description: row.description }),
+    body: row.body,
+    rev: row.rev,
+  };
+}
+
+// --- reading ------------------------------------------------------------------
+
+/** GET /api/campaigns/:campaign */
+export async function readCampaign(campaign: string): Promise<Campaign> {
+  return renderCampaign(await requireCampaign(campaign));
+}
+
+// --- writing ------------------------------------------------------------------
+
+/**
+ * The stored form of a name: a name that EQUALS the id is stored as "" — the
+ * empty name means "fall back to the id" everywhere it is rendered
+ * (`campaignDisplayName`), so the round trip shows the same name back and the
+ * row carries no redundant copy of its own key.
+ */
+function storedName(name: string, id: string): string {
+  return name === id ? "" : name;
+}
+
+/**
+ * PATCH /api/campaigns/:campaign — THE write of the campaign (ADR #23): any
+ * subset of its fields, checked against the campaign's schema — a key that
+ * is none of them, or a value of the wrong shape, is a 400 that names it —
+ * in ONE row update against ONE `rev`.
+ *
+ * Only the fields the patch names are touched; `null` clears the
+ * description. `force` replaces the guard by the row's current rev — the DM's
+ * answer to the conflict dialog, which writes only what this request
+ * carries. The id may be echoed, never changed (ADR #21). A patch that names
+ * no field is a 400 `nothing_to_write`.
+ */
+export async function patchCampaign(campaign: string, raw: unknown): Promise<Campaign> {
+  const patch: CampaignPatch = parseRequest(campaignPatchSchema, raw, "campaign patch");
+  const { rev, force, id: patchedId, ...fields } = patch;
+  const named = Object.values(fields).some((value) => value !== undefined);
+  if (!named && patchedId === undefined) {
+    throw new ApiError(400, "nothing to write — send at least one field", {
+      code: "nothing_to_write",
+    });
+  }
+  return mutate(campaign, (tx) => {
+    const row = requireCampaignRow(tx, campaign);
+    const guard = force === true ? row.rev : rev;
+    if (row.rev !== guard) {
+      throw revConflict(row.rev, "campaign changed", { campaign: renderCampaign(row) });
+    }
+    if (patchedId !== undefined && patchedId !== row.id) {
+      throw new ApiError(400, "id is the primary key — it is set at creation and never changes");
+    }
+    const next: CampaignRow = {
+      ...row,
+      name: fields.name === undefined ? row.name : storedName(fields.name, row.id),
+      description: fields.description === undefined ? row.description : fields.description,
+      body: fields.body === undefined ? row.body : normalizeBody(fields.body),
+      rev: row.rev + 1,
+    };
+    tx.update(campaigns)
+      .set({ name: next.name, description: next.description, body: next.body, rev: next.rev })
+      .where(eq(campaigns.id, campaign))
+      .run();
+    indexCampaign(tx, next);
+    return renderCampaign(next);
+  });
 }
 
 // --- transaction plumbing ----------------------------------------------------
@@ -116,8 +217,8 @@ export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
  * sorting random noise.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
- * unnamed campaign is shown under its id. This list and `GET /entries/
- * campaign` agree on that: both go through `campaignDisplayName`.
+ * unnamed campaign is shown under its id. This list and `GET /campaigns/:c`
+ * agree on that: both go through `campaignDisplayName`.
  */
 export async function listCampaigns(): Promise<CampaignSummary[]> {
   const db = await getDb();
@@ -149,26 +250,26 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
 }
 
 /**
- * POST /api/campaigns { name, description? } -> CampaignSummary.
+ * POST /api/campaigns { name, description?, id? } -> the campaign. `name`
+ * and `description` arrive trimmed, a blank description as none.
  *
  * The one create that cannot go through `mutate`: there is no campaign yet, so
  * there is no `version` to bump — the row starts at the column defaults, and
  * its own first version IS the change.
  *
- * A campaign id has NO reserved names, and that was checked rather than
- * assumed: `RESERVED_SEGMENTS` reserves first segments INSIDE a campaign, and
- * the api mounts no `/:campaign` route that a literal (`/api/campaigns`) could
- * be shadowed by — `/api/campaigns/tree` is the campaign `campaigns`, `GET
- * /api/campaigns` is the list, and both keep working. What is refused is an id
- * that is no id: an empty one, one a name yields nothing for, or an explicit
- * one that is no slug (`resolveNewId`), plus the path-safety rules
- * (`assertSafeCampaignId`).
+ * A campaign id has NO reserved names: every campaign route spells
+ * `/campaigns/:campaign/…`, and the one literal beside them is the list
+ * (`GET /api/campaigns`), so a campaign called `tree` is read at
+ * `/api/campaigns/tree` and its tree at `/api/campaigns/tree/tree`. What is
+ * refused is an id that is no id: an empty one, one a name yields nothing
+ * for, or an explicit one that is no slug (`resolveNewId`), plus the
+ * path-safety rules (`assertSafeCampaignId`).
  */
 export async function createCampaign(
   name: string,
   description?: string,
   explicitId?: string,
-): Promise<CampaignSummary> {
+): Promise<Campaign> {
   const id = resolveNewId(explicitId, name, "campaign", "name");
   assertSafeCampaignId(id);
   const db = await getDb();
@@ -176,31 +277,42 @@ export async function createCampaign(
     const tx = handle as unknown as GrimoireDb;
     if (campaignRow(tx, id) !== undefined) {
       const suggestion = freeSlug(id, (candidate) => campaignRow(tx, candidate) !== undefined);
-      // `path` in this 409 is an ADDRESS the app can link to, and a campaign id
-      // alone is not one. The entry that always exists — even for a campaign
-      // that holds nothing else — is the campaign row itself (`campaign`), so
-      // that is what is pointed at. It carries the campaign id as its first
-      // segment because a campaign collision has no campaign scope to be
-      // relative to, unlike every other create endpoint of the store.
-      throw slugTaken("campaign", id, suggestion, `${id}/${CAMPAIGN_PATH}`);
+      throw slugTaken("campaign", id, suggestion);
     }
-    // `name === id` is stored as "" — the empty name means "fall back to the
-    // id" everywhere it is rendered (./render), exactly as `patchEntry`
-    // stores it (./entries.ts), so the round trip agrees.
     tx.insert(campaigns)
-      .values({
-        id,
-        name: name.trim() === id ? "" : name.trim(),
-        description: description === undefined || description.trim() === "" ? null : description.trim(),
-      })
+      .values({ id, name: storedName(name, id), description: description ?? null })
       .run();
     const row = campaignRow(tx, id);
     if (row === undefined) throw new ApiError(500, "campaign could not be created");
     indexCampaign(tx, row);
-    const summary: CampaignSummary = { id: row.id, name: campaignDisplayName(row) };
-    if (row.description !== null && row.description.trim() !== "") {
-      summary.description = row.description;
-    }
-    return summary;
-  }) as CampaignSummary;
+    return renderCampaign(row);
+  }) as Campaign;
+}
+
+// --- seeding a campaign ---------------------------------------------------------
+
+/**
+ * A campaign without its guard — a fixture — checked against the campaign's
+ * schema. A key a campaign does not have, or a value of the wrong shape, is
+ * refused with the message `what` introduces.
+ */
+export function readCampaignSeed(raw: unknown, what: string): CampaignSeed {
+  return parseRequest(campaignSeedSchema, raw, what);
+}
+
+/**
+ * Write one campaign row from its fixture, INSIDE the caller's transaction —
+ * the seed's first write, which every other row hangs off.
+ */
+export function insertCampaignSeed(tx: GrimoireDb, seed: CampaignSeed): void {
+  tx.insert(campaigns)
+    .values({
+      id: seed.id,
+      name: storedName(seed.name, seed.id),
+      description: seed.description ?? null,
+      body: seed.body,
+    })
+    .run();
+  const row = campaignRow(tx, seed.id);
+  if (row !== undefined) indexCampaign(tx, row);
 }

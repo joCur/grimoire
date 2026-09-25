@@ -45,12 +45,26 @@ export interface SeedOverrides {
 
 /** The identity two entries are the same by: kind plus id. */
 function identity(entry: SeedEntry): string {
-  if (entry.kind === "inbox" || entry.kind === "glossary") return entry.kind;
-  if (entry.kind === "location") return `location/${entry.location.id}`;
-  if (entry.kind === "npc") return `npc/${entry.npc.id}`;
-  if (entry.kind === "scene") return `scene/${entry.scene.id}`;
-  const id = entry.properties.id;
-  return `${entry.kind}/${typeof id === "string" ? id : ""}`;
+  switch (entry.kind) {
+    case "inbox":
+    case "glossary":
+    case "threads":
+      return entry.kind;
+    case "campaign":
+      return `campaign/${entry.campaign.id}`;
+    case "chapter":
+      return `chapter/${entry.chapter.id}`;
+    case "location":
+      return `location/${entry.location.id}`;
+    case "npc":
+      return `npc/${entry.npc.id}`;
+    case "scene":
+      return `scene/${entry.scene.id}`;
+    case "session": {
+      const id = entry.properties.id;
+      return `session/${typeof id === "string" ? id : ""}`;
+    }
+  }
 }
 
 /**
