@@ -667,7 +667,7 @@ export const de = {
   "generate.input.chapterIdLabel": "Kapitel-Kennung",
   "generate.input.chapterIdPlaceholder": "z. B. 03-schmugglerbucht",
   "generate.input.chapterIdSuggested": "wird aus dem Titel vorgeschlagen",
-  "generate.input.chapterIdPreview": "wird angelegt als: {id}/",
+  "generate.input.chapterIdPreview": "wird angelegt als: chapters/{id}",
   "generate.input.chapterExists": "Kapitel existiert — Szenen werden dort angelegt",
   "generate.input.sourceLabel": "Quelltext (EN)",
   "generate.input.sourcePlaceholder":

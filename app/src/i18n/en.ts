@@ -610,7 +610,7 @@ export const en: Messages = {
   "generate.input.chapterIdLabel": "Chapter ID",
   "generate.input.chapterIdPlaceholder": "e.g. 03-schmugglerbucht",
   "generate.input.chapterIdSuggested": "suggested from the title",
-  "generate.input.chapterIdPreview": "will be created as: {id}/",
+  "generate.input.chapterIdPreview": "will be created as: chapters/{id}",
   "generate.input.chapterExists": "chapter exists — scenes are created in it",
   "generate.input.sourceLabel": "Source text (EN)",
   "generate.input.sourcePlaceholder":
