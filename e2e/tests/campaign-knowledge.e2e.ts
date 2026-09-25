@@ -39,7 +39,7 @@ import {
   getKnowledgeItemOrder,
   getKnowledgeItems,
   knowledgeItemPath,
-  putKnowledgeItemOrder,
+  knowledgeItemOrderPath,
 } from "../support/knowledge-item";
 import { getScene } from "../support/scene";
 import { expect, test } from "../support/test";
@@ -303,6 +303,7 @@ test("a competing write is a conflict, not a silent overwrite — for an item an
 }) => {
   const first = await createKnowledgeItem(api, { kind: "naming", from: "Alt", to: "Neu" });
   const second = await createKnowledgeItem(api, { kind: "fact", text: "Der Turm ist leer." });
+  const third = await createKnowledgeItem(api, { kind: "style", text: "Kurz halten." });
   await openKnowledge(page);
 
   // --- the item: the DM changes one field, somebody else another ------------
@@ -342,16 +343,37 @@ test("a competing write is a conflict, not a silent overwrite — for an item an
   });
 
   // --- the order: somebody else rearranged it in between --------------------
-  await putKnowledgeItemOrder(api, [second.id, first.id]);
-  await page.getByRole("button", { name: "Nach unten" }).first().click();
+  // The other writer's PUT and the DM's click run in ONE browser task: the
+  // click follows the PUT's answer in the same continuation, so the version
+  // poll cannot bring the fresh order — and its guard — into the page in
+  // between. The page still holds the guard it read, and the move is a 409.
+  const stale = await getKnowledgeItemOrder(api);
+  const written = await page.evaluate(
+    async ({ url, order }) => {
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(order),
+      });
+      // The first row's „Nach unten" — the list on screen is still the one
+      // before the PUT.
+      document.querySelector<HTMLButtonElement>('button[aria-label="Nach unten"]')?.click();
+      return res.status;
+    },
+    {
+      url: api.url(knowledgeItemOrderPath(api)),
+      order: { items: [third.id, first.id, second.id], rev: stale.rev },
+    },
+  );
+  expect(written).toBe(200);
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
   // Nothing was written: the order is the other writer's.
-  expect((await getKnowledgeItemOrder(api)).items).toEqual([second.id, first.id]);
+  expect((await getKnowledgeItemOrder(api)).items).toEqual([third.id, first.id, second.id]);
   // Reloading brings the order that is stored, and the conflict line goes.
   await page.getByRole("button", { name: "Neu laden" }).click();
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /bearbeiten$/ }).first()).toHaveAccessibleName(
-    /Der Turm ist leer/,
+    /Kurz halten/,
   );
 });
 
