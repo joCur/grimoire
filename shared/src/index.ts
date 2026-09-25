@@ -9,3 +9,5 @@ export * from "./chapter";
 export * from "./location";
 export * from "./npc";
 export * from "./scene";
+export * from "./thread";
+export * from "./idea";

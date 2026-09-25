@@ -50,7 +50,7 @@ async function getSession(id: string, campaign = "beispiel"): Promise<SessionRes
 
 /**
  * A SECOND campaign next to `beispiel`, holding nothing but its own row: no
- * name, no sessions, no inbox. That is what the "there is nothing yet" cases
+ * name, no sessions, no ideas. That is what the "there is nothing yet" cases
  * need, and a campaign row on its own is exactly it.
  */
 const FRESH = "frischling";

@@ -1,4 +1,4 @@
-// The open threads of one chapter, in the chapter overview.
+// The threads of one chapter, in the chapter overview.
 //
 // Where the design reference puts them: under the chapter's text, above
 // its scenes — the storylines the DM is carrying through the chapter, one
@@ -7,15 +7,15 @@
 // („Handlungsstrang übernehmen"); a thread adopted in this sitting carries the
 // same „neu" note the review shows.
 //
-// The list is its own resource (lib/use-threads.ts): rows with ids and the
-// list's guard token, so nothing here touches the chapter's text or the
-// chapter entry's `rev`. The row controls stay out of the way until the row
-// is the one in hand (hover or keyboard focus), like the scene rows' up/down.
+// Every thread is its own resource with its own guard (./use-thread-writes.ts),
+// so nothing here touches the chapter's text or the chapter's `rev`. The row
+// controls stay out of the way until the row is the one in hand (hover or
+// keyboard focus), like the scene rows' up/down.
 //
 // Desktop only, and that comes for free: below md the route shows the mobile
 // start surface instead of the overview.
 
-import type { ThreadEntry } from "@grimoire/shared/types";
+import type { Thread } from "@grimoire/shared/thread";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 
@@ -32,14 +32,15 @@ import { INPUT_CLASS } from "@/components/ui/field";
 import { useT } from "@/i18n";
 import { useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
-import { useThreads, useThreadWrites } from "@/lib/use-threads";
+
+import { useThreads, useThreadWrites } from "./use-thread-writes";
 
 /** What is open for typing: the add line, or one row's text. */
 type Draft =
   | { kind: "add"; text: string }
   | { kind: "edit"; id: string; text: string; rev: number };
 
-export function ChapterThreads({
+export function ThreadList({
   campaign,
   chapter,
   enabled,
@@ -55,7 +56,7 @@ export function ChapterThreads({
   const { adopted } = useReviewMemory();
   const adoptedHere = adopted[campaign] ?? [];
   const [draft, setDraft] = useState<Draft>();
-  const [confirmDelete, setConfirmDelete] = useState<{ row: ThreadEntry; rev: number }>();
+  const [confirmDelete, setConfirmDelete] = useState<Thread>();
   // The box the DM just clicked shows its new state at once; the list the
   // write answers takes over when it lands, and a refused tick falls back to
   // what is stored.
@@ -63,12 +64,12 @@ export function ChapterThreads({
 
   const list = threads.data;
   if (list === undefined) return null;
-  // Every write waits for the one on the wire, and none goes out against a
-  // list that moved until the DM has reloaded it.
+  // Every write waits for the one on the wire, and none goes out after a
+  // thread moved underneath until the DM has reloaded them.
   const locked = writes.isPending || writes.stale;
-  // While a row is being reworded nothing else rewrites the list under it:
-  // the save carries the token the row was opened with, and a tick next to it
-  // would turn that save into a conflict with the DM's own click.
+  // While a row is being reworded nothing else is written: the save carries
+  // the `rev` the row was opened with, and the DM's own tick on that row
+  // would turn the save into a conflict.
   const editing = draft?.kind === "edit";
 
   const submitDraft = async (event: FormEvent) => {
@@ -91,9 +92,9 @@ export function ChapterThreads({
 
   return (
     <div className="mb-5">
-      {list.entries.length > 0 && (
+      {list.length > 0 && (
         <ul aria-label={t("chapterOverview.threads.label")} className="flex flex-col">
-          {list.entries.map((row) =>
+          {list.map((row) =>
             draft?.kind === "edit" && draft.id === row.id ? (
               <li key={row.id}>
                 <ThreadInput
@@ -115,11 +116,11 @@ export function ChapterThreads({
                 onTick={(done) => {
                   setTicking({ id: row.id, done });
                   void writes
-                    .write({ kind: "tick", id: row.id, done, rev: list.rev })
+                    .write({ kind: "tick", id: row.id, done, rev: row.rev })
                     .finally(() => setTicking(undefined));
                 }}
-                onEdit={() => setDraft({ kind: "edit", id: row.id, text: row.text, rev: list.rev })}
-                onDelete={() => setConfirmDelete({ row, rev: list.rev })}
+                onEdit={() => setDraft({ kind: "edit", id: row.id, text: row.text, rev: row.rev })}
+                onDelete={() => setConfirmDelete(row)}
               />
             ),
           )}
@@ -146,8 +147,8 @@ export function ChapterThreads({
       )}
 
       {/* One quiet line at the list, never a toast — the DM is looking at the
-          row they just changed. The conflict has one honest answer on a list:
-          take the stored state (the open text is dropped with it). */}
+          row they just changed. The conflict has one honest answer here: take
+          the stored state (the open text is dropped with it). */}
       {(writes.stale || writes.failed !== undefined) && (
         <p role="status" className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-destructive">
           {writes.stale ? (
@@ -181,7 +182,7 @@ export function ChapterThreads({
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
             <DialogTitle>{t("chapterOverview.threads.confirmDelete.title")}</DialogTitle>
             <DialogDescription>
-              {t("chapterOverview.threads.confirmDelete.body", { text: confirmDelete.row.text })}
+              {t("chapterOverview.threads.confirmDelete.body", { text: confirmDelete.text })}
             </DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>
@@ -198,9 +199,9 @@ export function ChapterThreads({
                 variant="destructive"
                 disabled={locked}
                 onClick={() => {
-                  const { row, rev } = confirmDelete;
+                  const { id, rev } = confirmDelete;
                   setConfirmDelete(undefined);
-                  void writes.write({ kind: "remove", id: row.id, rev });
+                  void writes.write({ kind: "remove", id, rev });
                 }}
                 className="h-auto px-3 py-1.5 text-[12.5px] font-semibold"
               >
@@ -226,7 +227,7 @@ export function ThreadRow({
   onEdit,
   onDelete,
 }: {
-  row: ThreadEntry;
+  row: Thread;
   isNew: boolean;
   locked: boolean;
   onTick: (done: boolean) => void;

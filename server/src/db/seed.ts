@@ -4,10 +4,11 @@
 // its own resource (ADR #31) has a directory of its own, read with that
 // entity's own schema: the campaign is `campaigns/<id>.json`, a chapter
 // `chapters/<id>.json`, a scene `scenes/<id>.json`, an npc `npcs/<id>.json`,
-// a location `locations/<id>.json`, each exactly what its resource answers,
-// without the guard. The sessions and the lists (open threads, inbox,
-// glossary) sit in the campaign directory itself as `{ kind, … }` with their
-// rows. The seed is therefore not a second data format — it is the API's own
+// a location `locations/<id>.json`, a thread `threads/<id>.json`, an idea
+// `ideas/<id>.json`, each exactly what its resource answers, without the
+// guard. The sessions and the glossary sit in the campaign directory itself
+// as `{ kind, … }` with their rows. The seed is therefore not a second data
+// format — it is the API's own
 // shape written down, which is what makes it readable next to a response and
 // reviewable in a diff.
 //
@@ -22,13 +23,13 @@
 //      chapter through `insertChapterProposal` (store/chapters.ts), a scene
 //      through `insertSceneProposal` (store/scenes.ts), an npc through
 //      `insertNpcProposal` (store/npcs.ts), a location through
-//      `insertLocationProposal` (store/locations.ts) and a chapter's open
-//      threads through `insertThreadRows` (store/threads.ts), so references,
-//      tags, handouts and the search index are maintained by the same code a
-//      create endpoint runs. What has no endpoint because it is historic data
-//      — sessions with their pauses and log lines, the inbox list, the
-//      glossary — is written as rows here and indexed the way the store
-//      indexes it.
+//      `insertLocationProposal` (store/locations.ts), a thread through
+//      `insertThreadSeed` (store/threads.ts) and an idea through
+//      `insertIdeaSeed` (store/ideas.ts), so references, tags, handouts and
+//      the search index are maintained by the same code a create endpoint
+//      runs. What has no endpoint because it is historic data — sessions
+//      with their pauses and log lines, the glossary — is written as rows
+//      here and indexed the way the store indexes it.
 //   2. A REFERENCE TO SOMETHING THAT DOES NOT EXIST IS AN ERROR. Every
 //      reference is a foreign key (ADR #19) and nothing creates a row
 //      because something mentioned it, so a seed that names a missing row
@@ -38,7 +39,7 @@
 //      completely or nothing of it is.
 //
 // The load ORDER inside a campaign follows the foreign keys: campaign →
-// chapters → threads → locations → npcs → scenes → sessions → inbox →
+// chapters → threads → locations → npcs → scenes → sessions → ideas →
 // glossary (`seedCampaign`). Body references (`[[id]]`) are expanded in the
 // search index at the very end, because half the rows a body points at do
 // not exist yet while loading.
@@ -50,7 +51,6 @@ import type { GrimoireDb } from "./client";
 import {
   campaigns,
   glossary,
-  inboxEntries,
   logEntries,
   sessionPauses,
   sessionScenesPlayed,
@@ -59,13 +59,16 @@ import {
 import { isEntityId } from "@grimoire/shared";
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { IdeaSeed } from "@grimoire/shared/idea";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { ThreadSeed } from "@grimoire/shared/thread";
 import { insertCampaignSeed, readCampaignSeed } from "../store/campaigns";
 import { insertChapterProposal, readChapterProposal } from "../store/chapters";
 import { indexGlossaryTerm } from "../store/glossary";
-import { insertThreadRows } from "../store/threads";
+import { insertIdeaSeed, readIdeaSeed } from "../store/ideas";
+import { insertThreadSeed, readThreadSeed } from "../store/threads";
 import { insertLocationProposal, readLocationProposal } from "../store/locations";
 import { insertNpcProposal, readNpcProposal } from "../store/npcs";
 import { insertSceneProposal, readSceneProposal } from "../store/scenes";
@@ -103,39 +106,6 @@ export interface SeedSession {
   log?: SeedLogLine[];
 }
 
-/** One idea in the inbox: its text and whether it is ticked off. */
-export interface SeedInboxEntry {
-  text: string;
-  done?: boolean;
-}
-
-/** The inbox as its fixture holds it: the ideas in their order. */
-export interface SeedInbox {
-  kind: "inbox";
-  entries: SeedInboxEntry[];
-}
-
-/**
- * One open thread: the chapter it belongs to, its text and whether it is
- * ticked off — the row `GET …/chapters/:chapter/threads` answers, with its
- * chapter and without the id the store hands out.
- */
-export interface SeedThread {
-  chapter: string;
-  text: string;
-  done?: boolean;
-}
-
-/**
- * The open threads as their fixture holds them: a LIST beside the chapters
- * (ADR #26), so they travel as rows naming their chapter — never as a
- * checklist in a text.
- */
-export interface SeedThreads {
-  kind: "threads";
-  entries: SeedThread[];
-}
-
 /** One glossary row. */
 export interface SeedGlossaryEntry {
   term: string;
@@ -150,11 +120,11 @@ export interface SeedGlossary {
 }
 
 /**
- * A fixture of the campaign directory itself: a session or one of the lists.
- * Its `kind` is what tells them apart — they share the directory, while an
+ * A fixture of the campaign directory itself: a session or the glossary. Its
+ * `kind` is what tells them apart — they share the directory, while an
  * entity with its own resource has a directory of its own.
  */
-export type SeedList = SeedSession | SeedThreads | SeedInbox | SeedGlossary;
+export type SeedList = SeedSession | SeedGlossary;
 
 /**
  * One campaign as its fixture directory holds it: every entity in a slot of
@@ -168,9 +138,9 @@ export interface CampaignFixture {
   scenes?: SceneProposal[];
   npcs?: NpcProposal[];
   locations?: LocationProposal[];
+  threads?: ThreadSeed[];
+  ideas?: IdeaSeed[];
   sessions?: SeedSession[];
-  threads?: SeedThreads;
-  inbox?: SeedInbox;
   glossary?: SeedGlossary;
 }
 
@@ -199,16 +169,6 @@ export function asSeedList(where: string, value: unknown): SeedList {
   if (!isRecord(value)) fail(where, "not a JSON object");
   const kind = value.kind;
   if (typeof kind !== "string") fail(where, "no `kind`");
-  if (kind === "inbox") {
-    const entries = value.entries;
-    if (!Array.isArray(entries)) fail(where, "`entries` must be a list");
-    return { kind, entries: entries.map((e, i) => asInboxEntry(`${where} entry ${i}`, e)) };
-  }
-  if (kind === "threads") {
-    const entries = value.entries;
-    if (!Array.isArray(entries)) fail(where, "`entries` must be a list");
-    return { kind, entries: entries.map((e, i) => asThread(`${where} entry ${i}`, e)) };
-  }
   if (kind === "glossary") {
     const entries = value.entries;
     if (!Array.isArray(entries)) fail(where, "`entries` must be a list");
@@ -253,19 +213,6 @@ export function asSeedList(where: string, value: unknown): SeedList {
       };
     }),
   };
-}
-
-function asThread(where: string, value: unknown): SeedThread {
-  if (!isRecord(value)) fail(where, "not a JSON object");
-  const chapter = requireString(where, "`chapter`", value.chapter);
-  const text = requireString(where, "`text`", value.text);
-  return { chapter, text, ...(value.done === true ? { done: true } : {}) };
-}
-
-function asInboxEntry(where: string, value: unknown): SeedInboxEntry {
-  if (!isRecord(value)) fail(where, "not a JSON object");
-  const text = requireString(where, "`text`", value.text);
-  return { text, ...(value.done === true ? { done: true } : {}) };
 }
 
 /**
@@ -322,6 +269,8 @@ export async function readFixtureCampaign(dir: string): Promise<CampaignFixture>
     locations: await readEntityDirectory(dir, "locations", (raw) =>
       readLocationProposal(raw, "location"),
     ),
+    threads: await readEntityDirectory(dir, "threads", (raw) => readThreadSeed(raw, "thread")),
+    ideas: await readEntityDirectory(dir, "ideas", (raw) => readIdeaSeed(raw, "idea")),
   };
   const sessionFixtures: SeedSession[] = [];
   for (const name of await jsonFiles(dir)) {
@@ -330,13 +279,10 @@ export async function readFixtureCampaign(dir: string): Promise<CampaignFixture>
       sessionFixtures.push(list);
       continue;
     }
-    // The inbox, the glossary and the open threads are ONE list each per
-    // campaign, so a second fixture of the same list is refused rather than
-    // silently replacing the first.
-    if (fixture[list.kind] !== undefined) fail(name, `a second ${list.kind} fixture`);
-    if (list.kind === "threads") fixture.threads = list;
-    else if (list.kind === "inbox") fixture.inbox = list;
-    else fixture.glossary = list;
+    // The glossary is ONE list per campaign, so a second fixture of it is
+    // refused rather than silently replacing the first.
+    if (fixture.glossary !== undefined) fail(name, "a second glossary fixture");
+    fixture.glossary = list;
   }
   fixture.sessions = sessionFixtures;
   return fixture;
@@ -388,14 +334,14 @@ export function seedCampaign(db: GrimoireDb, fixture: CampaignFixture): string {
     const tx = handle as unknown as GrimoireDb;
     insertCampaignSeed(tx, fixture.campaign);
     for (const chapter of fixture.chapters ?? []) insertChapterProposal(tx, campaignId, chapter);
-    if (fixture.threads !== undefined) writeThreadRows(tx, campaignId, fixture.threads.entries);
+    for (const thread of fixture.threads ?? []) insertThreadSeed(tx, campaignId, thread);
     for (const location of fixture.locations ?? []) {
       insertLocationProposal(tx, campaignId, location);
     }
     for (const npc of fixture.npcs ?? []) insertNpcProposal(tx, campaignId, npc);
     for (const scene of fixture.scenes ?? []) insertSceneProposal(tx, campaignId, scene);
     for (const session of fixture.sessions ?? []) writeSessionRows(tx, campaignId, session);
-    if (fixture.inbox !== undefined) writeInboxRows(tx, campaignId, fixture.inbox.entries);
+    for (const idea of fixture.ideas ?? []) insertIdeaSeed(tx, campaignId, idea);
     if (fixture.glossary !== undefined) writeGlossaryRows(tx, campaignId, fixture.glossary);
     // The SECOND pass over the search index: bodies are indexed with their
     // `[[id]]` references replaced by the referenced display name
@@ -411,18 +357,6 @@ export function seedCampaign(db: GrimoireDb, fixture: CampaignFixture): string {
   });
 
   return campaignId;
-}
-
-/**
- * The open threads, chapter by chapter in the order the fixture names them —
- * each chapter's rows keep the fixture's order within it.
- */
-function writeThreadRows(tx: GrimoireDb, campaignId: string, entries: SeedThread[]): void {
-  const byChapter = new Map<string, SeedThread[]>();
-  for (const entry of entries) {
-    byChapter.set(entry.chapter, [...(byChapter.get(entry.chapter) ?? []), entry]);
-  }
-  for (const [chapter, rows] of byChapter) insertThreadRows(tx, campaignId, chapter, rows);
 }
 
 /**
@@ -485,18 +419,6 @@ function writeSessionRows(tx: GrimoireDb, campaignId: string, session: SeedSessi
 }
 
 /**
- * The inbox list — one row per idea, exactly what `POST /inbox` writes. No
- * heading rows: the inbox is a table and has no skeleton (ADR #26).
- */
-function writeInboxRows(tx: GrimoireDb, campaignId: string, entries: SeedInboxEntry[]): void {
-  entries.forEach((entry, pos) => {
-    tx.insert(inboxEntries)
-      .values({ campaignId, pos, text: entry.text, done: entry.done === true ? 1 : 0 })
-      .run();
-  });
-}
-
-/**
  * The glossary rows plus `campaigns.glossary_intro` — the prose above the
  * first term, which belongs to no term and would be lost on every save if it
  * had no place of its own.
@@ -518,15 +440,16 @@ function writeGlossaryRows(tx: GrimoireDb, campaignId: string, list: SeedGlossar
 
 /** How many fixtures a campaign holds — one per object its directory carries. */
 function fixtureCount(fixture: CampaignFixture): number {
-  const lists = [fixture.threads, fixture.inbox, fixture.glossary];
   return (
     1 +
     (fixture.chapters?.length ?? 0) +
     (fixture.scenes?.length ?? 0) +
     (fixture.npcs?.length ?? 0) +
     (fixture.locations?.length ?? 0) +
+    (fixture.threads?.length ?? 0) +
+    (fixture.ideas?.length ?? 0) +
     (fixture.sessions?.length ?? 0) +
-    lists.filter((list) => list !== undefined).length
+    (fixture.glossary === undefined ? 0 : 1)
   );
 }
 

@@ -1,24 +1,27 @@
 // The review model (app half): the union of the harvested session's tagged log
-// rows and the tagged inbox rows, plus the done-state that comes from the
-// server ONLY — a log row carries `reviewed`, an inbox row carries `done`.
+// rows and the tagged ideas, plus the done-state that comes from the server
+// ONLY — a log row carries `reviewed`, an idea carries `done`.
 // Used by the review route and by the topbar (progress, chapter overview
 // affordance); both share the same query cache, so nothing fetches twice.
 //
-// Rows in, rows out: the session and the inbox answer with lists, so the only
-// thing derived here is which SECTION a row belongs to and which actions its
-// tag allows. Marking a row done names its id.
+// Rows in, rows out: the session answers its log and the ideas answer
+// themselves, so the only thing derived here is which SECTION a row belongs to
+// and which actions its tag allows. Marking a log row done names its id,
+// ticking an idea off sends the idea's own guard.
 //
 // It is a HOOK, not a pure helper, so the two readable labels it produces —
 // the source chip and the progress line — come from the catalog through
 // `useT()` (same as lib/use-rev-write.ts); the lib layer stays free of copy of
 // its own.
 
-import type { InboxEntry, SessionLogEntry } from "@grimoire/shared/types";
+import type { Idea } from "@grimoire/shared/idea";
+import type { SessionLogEntry } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { fetchInbox, fetchTree } from "@/api";
+import { fetchTree } from "@/api";
 import { useT } from "@/i18n";
+import { ideasQuery } from "@/idea/idea-query";
 import { sceneTitle } from "@/lib/campaign";
 import { useActedKeys } from "@/lib/review-memory";
 import {
@@ -35,24 +38,19 @@ import {
 } from "@/lib/review";
 import { useLastStartedSession } from "@/lib/use-session";
 
-/** Query key of the campaign's inbox — one key, so page and aside share it. */
-export function inboxKey(campaign: string): [string, string] {
-  return ["inbox", campaign];
-}
-
 export interface ReviewEntry {
   /** Stable identity: the source plus the row's own id. */
   key: string;
-  source: "log" | "inbox";
+  source: "log" | "idea";
   /**
-   * Which list the entry belongs to: the tagged harvest, or the notes section
-   * of untagged inbox rows thrown in on the go, or the player-character
+   * Which section the entry belongs to: the tagged harvest, or the notes
+   * section of untagged ideas thrown in on the go, or the player-character
    * section of `#pc` rows. The counting is the same for all of them — one
    * source for page and topbar.
    */
   section: "harvest" | "notes" | "pc";
   /**
-   * Card label — the inbox label, or the log label plus the SCENE the row was
+   * Card label — the idea label, or the log label plus the SCENE the row was
    * written under. The scene id from the row is resolved against the tree; an
    * id the tree does not know stays as it is (degrade).
    */
@@ -63,8 +61,10 @@ export interface ReviewEntry {
   tag: string;
   /** Display text — hashtags stripped. */
   text: string;
-  /** The row's id: what `review/seen` and `review/inbox-done` name. */
+  /** The row's id: what `review/seen` names a log row by. */
   id: string;
+  /** The idea itself, for an entry from the ideas — ticking it off sends its `rev`. */
+  idea?: Idea;
   /** The character tag of a `#pc` entry — undefined means the general group. */
   pcGroup?: string;
   done: boolean;
@@ -79,7 +79,7 @@ export interface ReviewModel {
   pendingCount: number;
   /** Topbar progress per the prototype, in the UI language. */
   progressLabel: string;
-  /** Still loading session or inbox — nothing decided yet. */
+  /** Still loading the session or the ideas — nothing decided yet. */
   isPending: boolean;
   /** No session at all (the review has nothing to harvest). */
   noSession: boolean;
@@ -115,16 +115,16 @@ export function useReviewEntries(
   { enabled = true }: UseReviewOptions = {},
 ): ReviewModel {
   const t = useT();
-  // Inbox rows acted on in THIS browser session keep their (now done) card
+  // Ideas acted on in THIS browser session keep their (now done) card
   // visible instead of vanishing under the cursor — and the topbar counts the
   // same cards as the page because the memory sits above both.
   const acted = useActedKeys(campaign);
-  const keepDoneInbox = useMemo(
+  const keepDoneIdeas = useMemo(
     () =>
       new Set(
         [...acted.keys()]
-          .filter((key) => key.startsWith("inbox:"))
-          .map((key) => key.slice("inbox:".length)),
+          .filter((key) => key.startsWith("idea:"))
+          .map((key) => key.slice("idea:".length)),
       ),
     [acted],
   );
@@ -143,17 +143,16 @@ export function useReviewEntries(
     queryFn: () => fetchTree(campaign),
     enabled: enabled && campaign !== "",
   });
-  // An empty inbox answers with an empty list. An error here must never look
-  // like "no ideas", it just yields no entries.
-  const inbox = useQuery({
-    queryKey: inboxKey(campaign),
-    queryFn: () => fetchInbox(campaign),
+  // No ideas is an empty list. An error here must never look like "no
+  // ideas", it just yields no entries.
+  const ideas = useQuery({
+    ...ideasQuery(campaign),
     enabled: enabled && campaign !== "",
     retry: false,
   });
 
   const logRows = session.data?.log;
-  const inboxRows = inbox.data?.entries;
+  const ideaRows = ideas.data;
 
   // Tagged log rows (README: #thread/#npc/#loot/#decision).
   const harvestedLog = useMemo<HarvestedLogRow[]>(
@@ -174,11 +173,11 @@ export function useReviewEntries(
     [logRows],
   );
 
-  // The inbox rows the review shows: a row ticked off in an earlier sitting
-  // stays out, one ticked off in THIS sitting keeps its card.
-  const openInbox = useMemo<InboxEntry[]>(
-    () => (inboxRows ?? []).filter((row) => !row.done || keepDoneInbox.has(row.id)),
-    [inboxRows, keepDoneInbox],
+  // The ideas the review shows: one ticked off in an earlier sitting stays
+  // out, one ticked off in THIS sitting keeps its card.
+  const openIdeas = useMemo<Idea[]>(
+    () => (ideaRows ?? []).filter((row) => !row.done || keepDoneIdeas.has(row.id)),
+    [ideaRows, keepDoneIdeas],
   );
 
   const treeData = tree.data;
@@ -207,7 +206,7 @@ export function useReviewEntries(
       return item;
     });
 
-    const inboxEntries: ReviewEntry[] = openInbox.map((row) => {
+    const ideaEntries: ReviewEntry[] = openIdeas.map((row) => {
       const tags = extractHashtags(row.text);
       const pc = hasPcTag(tags);
       // A `#pc` row is a reminder for the table, an untagged one is a note
@@ -217,13 +216,14 @@ export function useReviewEntries(
       const tag = pc ? PC_TAG : (tags.find(isReviewTag) ?? tags[0] ?? "");
       const section: ReviewEntry["section"] = pc ? "pc" : tags.length === 0 ? "notes" : "harvest";
       const item: ReviewEntry = {
-        key: `inbox:${row.id}`,
-        source: "inbox",
+        key: `idea:${row.id}`,
+        source: "idea",
         section,
         sourceLabel: t("review.source.inbox"),
         tag,
         text: stripHashtags(row.text),
         id: row.id,
+        idea: row,
         done: row.done,
         // No tag means no tag-derived affordance, so BOTH harvest actions are
         // offered; a PC reminder is never adopted.
@@ -237,8 +237,8 @@ export function useReviewEntries(
       return item;
     });
 
-    return [...logEntries, ...inboxEntries];
-  }, [harvestedLog, openInbox, treeData, t]);
+    return [...logEntries, ...ideaEntries];
+  }, [harvestedLog, openIdeas, treeData, t]);
 
   const seenCount = entries.filter((e) => e.done).length;
   const total = entries.length;
@@ -250,7 +250,7 @@ export function useReviewEntries(
     seenCount,
     pendingCount: total - seenCount,
     progressLabel: t("review.progress", { seen: seenCount, total }),
-    isPending: session.isPending || inbox.isPending,
+    isPending: session.isPending || ideas.isPending,
     noSession,
     isError: session.isError,
     sessionId,

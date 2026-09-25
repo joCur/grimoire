@@ -1,9 +1,9 @@
 // The live aside's reminder list.
 //
-// The open `#pc` entries of log and inbox, grouped by character, as a
+// The open `#pc` entries of the log and the ideas, grouped by character, as a
 // compact checkable list. It reads the SAME model the wrap-up page and the
 // topbar counter read (lib/use-review) and does the same two writes: a log row
-// is marked reviewed, an inbox row done. Nothing is adopted here — a PC note
+// is marked reviewed, an idea ticked off. Nothing is adopted here — a PC note
 // is a reminder for the table, not campaign content.
 //
 // The list renders only when there is something to remind of: an empty
@@ -12,14 +12,19 @@
 // fall to the body — it becomes a focusable "Alles erledigt" line that takes
 // the focus over.
 
-import type { InboxResponse, SessionResponse } from "@grimoire/shared/types";
+import type { Idea } from "@grimoire/shared/idea";
+import type { SessionResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { markInboxLineDone, markLogLineSeen } from "@/api";
+import { markLogLineSeen } from "@/api";
 import { useT } from "@/i18n";
+import { tickIdea } from "@/idea/idea-api";
+import { ideasKey, withIdea } from "@/idea/idea-query";
+import { tickFailureKey } from "@/idea/idea-tick";
+import { isWriteConflict } from "@/lib/write-with-rev";
 import type { ReviewEntry } from "@/lib/use-review";
-import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
+import { pcGroups, useReviewEntries } from "@/lib/use-review";
 import { seedSession } from "@/lib/use-session";
 
 export function PcReminders({ campaign }: { campaign: string }) {
@@ -32,17 +37,22 @@ export function PcReminders({ campaign }: { campaign: string }) {
   const [cleared, setCleared] = useState(false);
 
   const done = useMutation({
-    mutationFn: (entry: ReviewEntry): Promise<SessionResponse | InboxResponse> => {
-      if (entry.source === "inbox") return markInboxLineDone(campaign, entry.id);
+    mutationFn: (entry: ReviewEntry): Promise<SessionResponse | Idea> => {
+      if (entry.idea !== undefined) return tickIdea(campaign, entry.idea);
       if (model.sessionId === "") throw new Error("no session to mark in");
       return markLogLineSeen(campaign, model.sessionId, entry.id);
     },
     onSuccess: (answer) => {
       setCleared(true);
-      // The done-state of a log row lives in the session, an idea's in the
-      // inbox — the answer is the fresh one either way.
+      // The done-state of a log row lives in the session, an idea's on the
+      // idea — the answer is the fresh one either way.
       if ("log" in answer) seedSession(queryClient, campaign, answer);
-      else queryClient.setQueryData(inboxKey(campaign), answer);
+      else queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withIdea(list, answer));
+    },
+    onError: (error) => {
+      // The idea moved since it was read: read the ideas again, so the next
+      // tick carries its current guard.
+      if (isWriteConflict(error)) void queryClient.invalidateQueries({ queryKey: ideasKey(campaign) });
     },
   });
 
@@ -91,7 +101,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
       </div>
       {done.isError && (
         <p className="pt-1.5 text-[11.5px] text-destructive" aria-live="polite">
-          {t("live.pc.failed")}
+          {t(tickFailureKey(done.error, "live.pc.failed"))}
         </p>
       )}
     </section>

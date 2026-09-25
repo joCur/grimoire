@@ -1,10 +1,10 @@
-// The review actions after a session: a log row reviewed, an idea ticked
-// off. An npc the review makes out of a note is created on the npc's own
-// resource (`POST …/npcs`, ./npcs.ts).
+// The review action after a session: a log row reviewed. An idea the review
+// ticks off is a PATCH of the idea (./ideas.ts), a thread it adopts is created
+// on the thread's resource (./threads.ts), and an npc it makes out of a note
+// on the npc's (./npcs.ts).
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";
-import { markInboxLineDone } from "../store/inbox";
 import { markLogLineSeen } from "../store/sessions";
 import { jsonBody } from "./http";
 
@@ -41,16 +41,4 @@ reviewRoutes.post("/campaigns/:campaign/review/seen", async (c) => {
       reviewId(body.logId, "logId"),
     ),
   );
-});
-
-// POST /api/campaigns/:campaign/review/inbox-done { id } -> InboxResponse
-// Ticks ONE idea off — the single documented exception to the inbox's
-// append-only rule, so a harvested idea does not come back in every future
-// review. `id` is the row's own id (`InboxEntry.id`).
-//
-// Idempotent: an idea already done comes back unchanged and the list's `rev`
-// stands. 404 when the inbox has no row with that id.
-reviewRoutes.post("/campaigns/:campaign/review/inbox-done", async (c) => {
-  const body = await jsonBody(c, ["id"]);
-  return c.json(await markInboxLineDone(c.req.param("campaign"), reviewId(body.id, "id")));
 });

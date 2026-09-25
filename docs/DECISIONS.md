@@ -1142,6 +1142,17 @@ der Zeitstempel samt der 400 des Session-Patches gelten unverändert.
 
 ## 26. Listen sind keine Einträge
 
+> **Status: ersetzt durch ADR #31.** Session, Log-Zeile, Pause, gespielte
+> Szene, Idee, Glossar-Begriff, Kampagnenwissen und Faden sind Entitäten wie
+> alle anderen: jede hat ihre eigene Ressource, ihren eigenen Typ, eine
+> stabile `id` und ihr eigenes `rev`. Es gibt keine Liste als eigene Klasse,
+> keinen Listen-Zähler, keinen Endpunkt, der eine ganze Liste tauscht, und
+> keinen Sonder-Endpunkt wie `review/inbox-done`. Was aus dieser
+> Entscheidung GILT: eine Zeile ist ihre Spalten — kein Markdown in der
+> Zeile, kein Leser, der Text in Zeilen zurückparst, keine Skelett-Zeilen —,
+> eine Pause ist keine Log-Zeile, und eine Adresse, die nichts benennt,
+> antwortet 404, ohne Umleitung und ohne Alias.
+
 **Kontext:** Sessions, Ideen und Glossar sind seit ADR #13 Tabellen — Zeilen
 mit Spalten, gepflegt über eigene Endpoints. Nach außen gaben sie sich
 trotzdem als Einträge: `sessions/<id>`, `inbox` und `glossary` waren Adressen,
@@ -1628,6 +1639,16 @@ eigene Änderung ab.
 
 ### Nachtrag 2026-09-23: die offenen Fäden sind eine Liste am Kapitel
 
+> **Teilweise überholt (ADR #31):** Ein Faden ist seine eigene Ressource
+> `…/threads/:id` mit `{ id, chapter, text, done, rev }`, flach unter der
+> Kampagne; sein Kapitel ist ein Feld. Jeder Faden hat sein eigenes `rev`,
+> `chapters.threads_rev` und die Antwortform mit der ganzen Liste gibt es
+> nicht, und `…/chapters/:chapter/threads` benennt nichts. Was GILT: ein
+> Faden ist eine Zeile und nie eine Checkliste im Kapiteltext, kein
+> Schreibzugriff auf einen Faden berührt Text oder `rev` des Kapitels und
+> umgekehrt, keine Suche und kein Generator-Kontext, und ein vorhandener
+> Abschnitt `## Offene Fäden` bleibt freier Text.
+
 Zweite Anwendung des Grundsatzes. Die offenen Fäden eines Kapitels sind keine
 Checkliste unter `## Offene Fäden` mehr, sondern eine eigene Liste (ADR #26):
 
@@ -1789,22 +1810,38 @@ Die Ressourcen der bisher erfassten Entitäten:
 | Szene | `GET/PATCH /campaigns/:c/scenes/:id` | `GET/POST /campaigns/:c/scenes` | `/campaigns/:c/scenes/:id` |
 | NPC | `GET/PATCH /campaigns/:c/npcs/:id` | `GET/POST /campaigns/:c/npcs` | `/campaigns/:c/npcs/:id` |
 | Ort | `GET/PATCH /campaigns/:c/locations/:id` | `GET/POST /campaigns/:c/locations` | `/campaigns/:c/locations/:id` |
+| Faden | `GET/PATCH/DELETE /campaigns/:c/threads/:id` | `GET/POST /campaigns/:c/threads` | in der Kapitelübersicht |
+| Idee | `GET/PATCH /campaigns/:c/ideas/:id` | `GET/POST /campaigns/:c/ideas` | in Nachbereitung und Mobil-Startfläche |
 
-Die API-Pfade stehen unter `/api` (ADR #22).
+Die API-Pfade stehen unter `/api` (ADR #22). URL-Segmente sind der
+englische Plural der Entität.
 
 - **Leitung:** Jede Ressource antwortet mit ihrem eigenen Typ, etwa
   `Location { id, name, chapter?, roll20Page?, atmosphere?, body, rev }`. Es
   gibt kein `kind`, kein `path`, keinen gemeinsamen Basistyp und keine
   Vereinigung mehrerer Entitäten; welche gemeint ist, steht in der URL.
   Feldnamen sind gewöhnliche Bezeichner (`roll20Page`).
-- **Szenen liegen flach** unter `…/scenes/:id`: Szenen-ids sind je Kampagne
-  eindeutig, und das Kapitel ist ein Feld der Szene, das sich ändern kann.
+- **Stabile Schlüssel.** Jede Entität hat eine stabile `id`, und über sie —
+  nie über ihre Position und nie über einen änderbaren Text — nennen URL,
+  Leitung und Verweise sie. Setzt der DM die id nicht selbst (ein Faden, eine
+  Idee), vergibt der Server beim Anlegen eine opake.
+- **Flach oder verschachtelt.** Eine Entität, die zwischen Eltern wandern
+  kann, liegt flach unter der Kampagne, und ihr Elternteil ist ein Feld: eine
+  Szene unter `…/scenes/:id`, ein Faden unter `…/threads/:id`, jeweils mit
+  `chapter`. Ihre ids sind je Kampagne eindeutig, und ihre URL ändert sich
+  nicht, wenn sie wandert; die Liste filtert nach dem Elternteil
+  (`…/threads?chapter=<id>`). Eine Entität, die ohne ihren Elternteil nicht
+  existiert und nie wandert, hängt unter ihm
+  (`…/<eltern>/:id/<entitäten>/:id`).
 - **Keine Sammelbegriffe.** Jedes Feld ist ein Feld seiner Entität, `body`
   eingeschlossen. Typen, Code und Doku beschreiben jede Entität mit ihren
   eigenen Feldern; es gibt keine Hälften einer Entität und keine gemeinsame
   Form, die mehrere Entitäten vertritt.
-- **Ein Zustand ist ein Feld, kein Aktions-Endpunkt.** Welches Kapitel aktiv
-  ist, sagt sein `status`, und je Kampagne ist höchstens ein Kapitel aktiv.
+- **Übergänge sind Änderungen an Ressourcen, keine Aktions-Endpunkte.** Ein
+  Zustand ist ein Feld: ein Wechsel ist ein `PATCH` darauf, ein Anfang ein
+  `POST`, ein Verwerfen ein `DELETE`. Eine Idee abhaken ist
+  `PATCH …/ideas/:id { rev, done }`. Welches Kapitel aktiv ist, sagt sein
+  `status`, und je Kampagne ist höchstens ein Kapitel aktiv.
   `PATCH …/chapters/:id { rev, status: "active" }` und `POST …/chapters` mit
   `status: "active"` aktivieren ein Kapitel; der Server setzt das bisher
   aktive Kapitel in derselben Transaktion auf `planned`, und dessen `rev`
@@ -1813,9 +1850,19 @@ Die API-Pfade stehen unter `/api` (ADR #22).
   prüft sie gegen das Schema der Entität. `null` löscht ein optionales Feld;
   ein Feld, das die Entität nicht hat, oder ein Wert der falschen Form ist
   eine 400, die das Feld nennt. Die `id` wird nie geändert (ADR #21). Ein
-  veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource; `force` und
+  veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource unter dem
+  Namen der Entität (`{ thread }`, `{ idea }` …); `force` und
   `nothing_to_write` gelten wie in ADR #23. Anlegen antwortet mit dem Typ der
-  Entität.
+  Entität und trägt kein `rev`, denn eine neue Zeile überschreibt nichts.
+  `DELETE` trägt `{ rev }` wie jeder Schreibzugriff mit Wächter.
+- **Ein Wächter je Zeile.** Jede Entität trägt ihr eigenes `rev`, und ein
+  Schreibzugriff bewegt nur das der Zeile, die er schreibt. Einen Zähler über
+  alle Zeilen einer Art gibt es nicht.
+- **Reihenfolge.** Wo der DM eine Reihenfolge setzt, schreibt sie ein
+  eigener Endpunkt mit eigenem Wächter, und kein `rev` einer Entität bewegt
+  sich dabei — die Szenen eines Kapitels (`…/chapters/:id/scene-order`,
+  ADR #27). Wo die App nicht sortiert, gilt die Reihenfolge des Anlegens, und
+  es gibt keinen Reihenfolge-Endpunkt (Faden, Idee).
 - **Eine Quelle je Entität: ein zod-Schema** in `shared/src/<entität>.ts`.
   Aus ihm kommen der TypeScript-Typ (`z.infer`), die Prüfung von `PATCH`,
   `POST` und Seed und das Antwort-Schema des Generators. Keine dieser Formen

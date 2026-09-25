@@ -8,8 +8,7 @@
 // stand the campaign tree — a shape that shows several entities and belongs
 // to its endpoint — and the order of a chapter's scenes: the chapter's
 // statement about its scenes, with its own guard (ADR #27). A scene itself
-// is its own resource (./scenes.ts), and a chapter's open threads are a list
-// of their own (./threads.ts).
+// is its own resource (./scenes.ts), and so is a thread (./threads.ts).
 
 import { and, asc, eq } from "drizzle-orm";
 import {
@@ -210,7 +209,7 @@ function sceneOrderMismatch(
  * Bumping either would turn an editor that is open on something else into a
  * conflict the moment somebody rearranges the chapter around it, which is a
  * write that editor is not competing with. The order is its own list with
- * its own lifetime, so it counts its own writes, exactly like the three list
+ * its own lifetime, so it counts its own writes, exactly like the two list
  * guards on `campaigns`.
  *
  * The list has to be EXACTLY the chapter's scenes — a missing, a foreign or
@@ -357,9 +356,9 @@ export async function patchChapter(campaign: string, id: string, raw: unknown): 
  * names no field is a 400 `nothing_to_write`.
  *
  * A patch that makes the chapter `active` takes `active` off the chapter that
- * held it, in this transaction (`clearOtherActiveChapters`). Neither the
- * scene order's guard nor the thread list's moves: both are the chapter's
- * lists, not its fields (ADR #27, ADR #29).
+ * held it, in this transaction (`clearOtherActiveChapters`). The scene
+ * order's guard does not move: the order is no field of the chapter
+ * (ADR #27).
  */
 export function patchChapterIn(
   tx: GrimoireDb,

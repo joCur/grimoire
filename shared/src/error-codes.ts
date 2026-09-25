@@ -54,7 +54,7 @@ export const ERROR_CODES = [
   "location_unknown",
   /** An entry of a scene's npc list names no npc entry. */
   "npc_unknown",
-  /** A `chapter` — of a scene, an npc or a location — names no chapter. */
+  /** A `chapter` — of a scene, an npc, a location or a thread — names no chapter. */
   "chapter_unknown",
   /**
    * 400, scene write: the `chapter` was CLEARED. A scene always belongs to a
@@ -92,26 +92,24 @@ export const ERROR_CODES = [
    * `{ rev }` always, plus the CURRENT state where there is one to hand back,
    * so the app can show what is in the way instead of fetching it again,
    * under the key of what was written: `{ campaign }`, `{ chapter }`,
-   * `{ scene }`, `{ npc }` or `{ location }` for the write of one of those,
-   * `{ session }` for
-   * `PATCH /sessions/:id`, `{ threads }` for a write of a chapter's thread
-   * list. A whole-list write (the glossary, the campaign knowledge, the
-   * scene order) carries none of them — the page reloads its own list.
+   * `{ scene }`, `{ npc }`, `{ location }`, `{ thread }` or `{ idea }` for
+   * the write of one of those, `{ session }` for `PATCH /sessions/:id`. A
+   * whole-list write (the glossary, the campaign knowledge, the scene order)
+   * carries none of them — the page reloads its own list.
    */
   "rev_conflict",
   /**
    * 400, a patch that names nothing to change: a campaign, chapter, scene,
-   * npc or location patch without a field, a session patch without a
-   * timestamp, a thread patch without `text` and `done`. No parameters.
+   * npc, location, thread or idea patch without a field, a session patch
+   * without a timestamp. No parameters.
    */
   "nothing_to_write",
   /**
-   * NO LONGER SENT. It was the 400 for a `body` on one of the three list
-   * addresses, and those addresses are gone: a session, the inbox and the
-   * glossary are lists with their own endpoints (ADR #26), so no write path
-   * can reach them with a text any more. The string stays because codes are
-   * APPEND-ONLY — an app catalog that still holds it is not wrong, it is just
-   * unreachable.
+   * NO LONGER SENT. It was the 400 for a `body` sent to a session, the ideas
+   * or the glossary, none of which has a text field, and each of them has
+   * endpoints of its own that take no `body`. The string stays because codes
+   * are APPEND-ONLY — an app catalog that still holds it is not wrong, it is
+   * just unreachable.
    */
   "body_not_editable",
   /** 503, generator: the server was restarted while the job was running. */

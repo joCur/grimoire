@@ -509,6 +509,9 @@ export const de = {
   "live.pc.done": "„{text}“ erledigt",
   "live.pc.allDone": "Alles erledigt.",
   "live.pc.failed": "Nicht gespeichert — Server prüfen.",
+  // An idea ticked off against a stale state: nothing was written, the ideas
+  // were read again (review and live aside).
+  "idea.tick.stale": "Diese Idee wurde inzwischen geändert. Die Liste ist neu geladen.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Lade Details …",
@@ -554,7 +557,7 @@ export const de = {
   "review.notes.lead":
     "Einträge aus den Ideen ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
-  // Player-character notes: `#pc` lines from log and inbox.
+  // Player-character notes: `#pc` lines from the log and the ideas.
   "review.pc.title": "Spielercharaktere",
   "review.pc.lead":
     "Einträge mit #pc — Erinnerungen für den Tisch, kein Kampagneninhalt. Abhaken oder für die nächste Nachbereitung behalten.",
@@ -637,7 +640,6 @@ export const de = {
   "kind.chapter": "Kapitel",
   "kind.campaign": "Kampagne",
   "kind.session": "Session",
-  "kind.inbox": "Idee",
   "kind.glossary": "Glossar",
   // The accessible name of a `[[ref]]` in a body (markdown/entity-refs.tsx):
   // what it points at, then its current name.

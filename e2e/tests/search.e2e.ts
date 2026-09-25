@@ -276,7 +276,9 @@ test("sessions and ideas are not in the index, so they never turn up", async ({ 
     const { results } = await api.get<{ results: { kind: string }[] }>(
       `campaigns/beispiel/search?q=${encodeURIComponent(query)}`,
     );
-    expect(results.filter((hit) => hit.kind === "session" || hit.kind === "inbox")).toEqual([]);
+    // Every hit is one of the indexed entities — none is a session or an idea.
+    const indexed = ["campaign", "chapter", "scene", "npc", "location", "glossary"];
+    expect(results.filter((hit) => !indexed.includes(hit.kind))).toEqual([]);
   }
 });
 

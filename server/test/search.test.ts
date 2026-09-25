@@ -287,12 +287,12 @@ describe("GET /api/campaigns/:campaign/version", () => {
     const before = await version();
     expect(await version()).toBe(before);
 
-    const res = await app.request("/api/campaigns/beispiel/inbox", {
+    const res = await app.request("/api/campaigns/beispiel/ideas", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text: "Notiz aus dem Versionstest" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(await version()).toBeGreaterThan(before);
   });
 

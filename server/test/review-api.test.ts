@@ -16,15 +16,8 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import type {
-  InboxResponse,
-  Npc,
-  SessionLogEntry,
-  SessionResponse,
-} from "@grimoire/shared";
+import type { Npc, SessionLogEntry, SessionResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { getDb } from "../src/store/handle";
-import { seedCampaign } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -45,12 +38,6 @@ async function getSession(id: string, campaign = "beispiel"): Promise<SessionRes
   const res = await app.request(`/api/campaigns/${campaign}/sessions/${id}`);
   expect(res.status).toBe(200);
   return (await res.json()) as SessionResponse;
-}
-
-async function getInbox(campaign = "beispiel"): Promise<InboxResponse> {
-  const res = await app.request(`/api/campaigns/${campaign}/inbox`);
-  expect(res.status).toBe(200);
-  return (await res.json()) as InboxResponse;
 }
 
 /** POST that must answer a session. */
@@ -208,72 +195,8 @@ describe("a #npc note becomes an npc on the npc's own resource", () => {
   });
 });
 
-describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
-  /** POST that must answer the inbox. */
-  async function done(id: string, campaign = "beispiel"): Promise<InboxResponse> {
-    const res = await postJson(`/api/campaigns/${campaign}/review/inbox-done`, { id });
-    expect(res.status).toBe(200);
-    return (await res.json()) as InboxResponse;
-  }
-
-  test("ticks off the named idea and nothing else", async () => {
-    const before = await getInbox();
-    const target = before.entries[0]!;
-    expect(target.done).toBe(false);
-    const after = await done(target.id);
-    expect(after.entries).toEqual(
-      before.entries.map((e) => (e.id === target.id ? { ...e, done: true } : e)),
-    );
-    // The list's own guard token moved, and a subsequent GET agrees.
-    expect(after.rev).toBeGreaterThan(before.rev);
-    expect(await getInbox()).toEqual(after);
-  });
-
-  test("idempotent: an idea already done writes nothing", async () => {
-    const target = (await getInbox()).entries[0]!;
-    const first = await done(target.id);
-    const again = await done(target.id);
-    expect(again).toEqual(first);
-  });
-
-  test("the id names ONE row, even between identical ideas", async () => {
-    // Two ideas with the same text are two rows with two ids, so ticking one
-    // off cannot be ambiguous — which a match on the text would have been.
-    expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Doppelt" })).status).toBe(200);
-    const list = (await postJson("/api/campaigns/beispiel/inbox", { text: "Doppelt" })).status;
-    expect(list).toBe(200);
-    const doubles = (await getInbox()).entries.filter((e) => e.text === "Doppelt");
-    expect(doubles).toHaveLength(2);
-    const after = await done(doubles[1]!.id);
-    expect(after.entries.filter((e) => e.text === "Doppelt").map((e) => e.done)).toEqual([
-      false,
-      true,
-    ]);
-  });
-
-  test("404 for an id the inbox does not have", async () => {
-    const before = await getInbox();
-    const res = await postJson("/api/campaigns/beispiel/review/inbox-done", { id: "999" });
-    expect(res.status).toBe(404);
-    expect(await getInbox()).toEqual(before);
-  });
-
-  test("400 on malformed bodies", async () => {
-    const bad = [{}, { id: "" }, { id: "   " }, { id: "a\nb" }, { id: 42 }, { id: "0", extra: 1 }];
-    for (const b of bad) {
-      expect((await postJson("/api/campaigns/beispiel/review/inbox-done", b)).status).toBe(400);
-    }
-  });
-
-  test("404 when the campaign has no inbox at all", async () => {
-    // GET answers 200 with an empty list, but there is still no such idea to
-    // check off — hence 404 here.
-    seedCampaign(await getDb(), { campaign: { id: "frischling", name: "", body: "" } });
-    const res = await postJson("/api/campaigns/frischling/review/inbox-done", { id: "0" });
-    expect(res.status).toBe(404);
-  });
-
-  test("404 for an unknown campaign on both endpoints", async () => {
+describe("an unknown campaign", () => {
+  test("404 on review/seen", async () => {
     expect(
       (
         await postJson("/api/campaigns/nope/review/seen", {
@@ -282,6 +205,5 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
         })
       ).status,
     ).toBe(404);
-    expect((await postJson("/api/campaigns/nope/review/inbox-done", { id: "0" })).status).toBe(404);
   });
 });

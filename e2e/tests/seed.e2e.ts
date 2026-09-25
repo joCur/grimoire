@@ -8,7 +8,7 @@
 //
 //   1. one seed run on a fresh database loads the whole campaign, and it is
 //      then reachable through the API (tree, a scene body, an npc, the
-//      session, the inbox, the glossary);
+//      session, the ideas, the glossary);
 //   2. a SECOND run on that same database refuses, because the database
 //      already holds campaigns — nothing is loaded twice, nothing is lost.
 //
@@ -24,7 +24,7 @@ import { openSqlite } from "../../server/src/db/driver";
 import { pristineDir, runDir } from "../support/paths";
 import { dbFor, expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
 import { apiFor, type Api } from "../support/api";
-import { getInbox } from "../support/inbox";
+import { getIdeas } from "../support/idea";
 import { getLocation } from "../support/location";
 import { getNpc } from "../support/npc";
 import { getScene } from "../support/scene";
@@ -170,13 +170,13 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
     },
   ]);
 
-  // --- the inbox: its own TABLE too -----------------------------------------
-  const inbox = await getInbox(api);
-  expect(inbox.entries).toEqual([
+  // --- the ideas: each its own resource --------------------------------------
+  expect(await getIdeas(api)).toEqual([
     {
-      id: expect.any(String),
+      id: "dorfschmied",
       text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
       done: false,
+      rev: 1,
     },
   ]);
 

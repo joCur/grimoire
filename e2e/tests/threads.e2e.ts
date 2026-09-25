@@ -1,25 +1,23 @@
-// Critical path 5, second half: a chapter's open threads are a LIST of rows
-// (ADR #26, #29), kept in the chapter overview. See CLAUDE.md.
+// Critical paths 1 and 5: a thread is its own resource (ADR #31) —
+// `…/threads/:id`, `{ id, chapter, text, done, rev }` — kept in the chapter
+// overview. See CLAUDE.md.
 //
-// The review adopts a thread by appending a row (review.e2e.ts). Here the
-// same list is kept by hand, where the design reference puts it — under the
-// chapter's text: add a thread, tick it, reword it, delete it. Every one
-// of those writes answers the whole list and moves only the list's own guard
-// (`chapters.threads_rev`); the CHAPTER — its text and its `rev` —
-// stays exactly as it was, so an open chapter editor never runs into a
-// conflict over a thread.
+// The review adopts a thread by creating one (review.e2e.ts). Here the
+// threads are kept by hand, where the design reference puts them — under the
+// chapter's text: add a thread, tick it, reword it, delete it. Every one of
+// those writes answers the one thread it wrote and moves only that thread's
+// own guard; the CHAPTER — its text and its `rev` — stays exactly as it was,
+// so an open chapter editor never runs into a conflict over a thread.
 //
-// A write against a list that moved is a 409 that writes nothing, and the
-// overview answers it the way the list surfaces do: the conflict line with
-// „Neu laden".
+// A write against a thread that moved is a 409 that writes nothing, and the
+// overview answers it with the conflict line and „Neu laden".
 
 import type { Page } from "@playwright/test";
 
-import type { ThreadsResponse } from "@grimoire/shared/types";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
-import { getChapter } from "../support/chapter";
-import { getThreads, threadsPath } from "../support/threads";
+import { chapterPath, getChapter } from "../support/chapter";
+import { createThread, getThread, getThreads, patchThread, threadPath } from "../support/thread";
 
 const CHAPTER = "01-salzhafen";
 const SEEDED = "Wer bezahlt die Schmuggler?";
@@ -29,10 +27,10 @@ function threadList(page: Page) {
 }
 
 async function stored(api: Api): Promise<Array<[string, boolean]>> {
-  return (await getThreads(api, CHAPTER)).entries.map((row) => [row.text, row.done]);
+  return (await getThreads(api, CHAPTER)).map((row) => [row.text, row.done]);
 }
 
-test("the chapter overview keeps the list: add, tick, reword, delete — the chapter never moves", async ({
+test("the chapter overview keeps the threads: add, tick, reword, delete — the chapter never moves", async ({
   page,
   api,
 }) => {
@@ -97,37 +95,37 @@ test("the chapter overview keeps the list: add, tick, reword, delete — the cha
   await expect(list.getByRole("listitem")).toHaveText([SEEDED]);
   await expect.poll(() => stored(api)).toEqual([[SEEDED, false]]);
 
-  // Five writes to the list, none to the chapter.
+  // Five writes to threads, none to the chapter; the seeded thread's own
+  // guard never moved.
   const chapterAfter = await getChapter(api, CHAPTER);
   expect(chapterAfter.body).toBe(chapterBefore.body);
   expect(chapterAfter.rev).toBe(chapterBefore.rev);
-  expect((await getThreads(api, CHAPTER)).rev).toBe(6);
+  expect((await getThreads(api, CHAPTER))[0]!.rev).toBe(1);
 });
 
-test("a second writer changed the list: the save is refused, „Neu laden“ takes the stored state", async ({
+test("a second writer changed the thread: the save is refused, „Neu laden“ takes the stored state", async ({
   page,
   api,
 }) => {
   await page.goto("/campaigns/beispiel");
   await expect(threadList(page).getByRole("listitem")).toHaveText([SEEDED]);
 
-  // The row is opened for rewording — on the list as it stood then.
+  // The row is opened for rewording — on the thread as it stood then.
   await page.getByRole("button", { name: `„${SEEDED}“ bearbeiten` }).click();
   const field = page.getByRole("textbox", { name: `„${SEEDED}“ bearbeiten` });
   await field.fill("Mein Entwurf");
 
   // Meanwhile another tab ticks the very same thread.
-  const before = await getThreads(api, CHAPTER);
-  const id = before.entries[0]!.id;
-  await api.send<ThreadsResponse>("PATCH", threadsPath(api, CHAPTER, id), { rev: before.rev, done: true });
+  const [seeded] = await getThreads(api, CHAPTER);
+  await patchThread(api, seeded!.id, { rev: seeded!.rev, done: true });
 
-  // The save carries the token the row was opened with: 409, nothing written.
+  // The save carries the `rev` the row was opened with: 409, nothing written.
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   const conflict = page.getByRole("status").filter({ hasText: "Inzwischen geändert" });
   await expect(conflict).toBeVisible();
   expect(await stored(api)).toEqual([[SEEDED, true]]);
 
-  // „Neu laden" drops the draft and shows the list as it is stored.
+  // „Neu laden" drops the draft and shows the threads as they are stored.
   await conflict.getByRole("button", { name: "Neu laden" }).click();
   await expect(conflict).toHaveCount(0);
   await expect(field).toHaveCount(0);
@@ -153,7 +151,7 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
 
   // A thread is appended underneath — the write „Handlungsstrang übernehmen" makes.
   const chapterRev = (await getChapter(api, CHAPTER)).rev;
-  await api.send<ThreadsResponse>("POST", threadsPath(api, CHAPTER), { text: "Nebenbei notiert" });
+  await createThread(api, { chapter: CHAPTER, text: "Nebenbei notiert" });
   expect((await getChapter(api, CHAPTER)).rev).toBe(chapterRev);
 
   // So the chapter save lands, and the thread stands beside it.
@@ -162,4 +160,37 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
   await expect.poll(async () => (await getChapter(api, CHAPTER)).body).toContain("Den Leuchtturm wieder anzünden.");
   expect((await stored(api)).map(([text]) => text)).toEqual([SEEDED, "Nebenbei notiert"]);
   await expect(threadList(page).getByRole("listitem")).toHaveText([SEEDED, "Nebenbei notiert"]);
+});
+
+test("the thread resource: flat answers, its own guard, strict fields, and nothing under the chapter", async ({
+  api,
+}) => {
+  // Flat: every field of the thread, its chapter among them — no list around it.
+  const [seeded] = await getThreads(api, CHAPTER);
+  expect(seeded).toEqual({ id: seeded!.id, chapter: CHAPTER, text: SEEDED, done: false, rev: 1 });
+  expect(await getThread(api, seeded!.id)).toEqual(seeded);
+
+  // The address under the chapter names nothing.
+  expect((await api.fetch(`${chapterPath(api, CHAPTER)}/threads`)).status).toBe(404);
+
+  const send = (method: string, id: string, body: unknown) =>
+    api.fetch(threadPath(api, id), {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // A key that is no field of a thread is a 400 that names it, and writes nothing.
+  const unknown = await send("PATCH", seeded!.id, { rev: 1, done: true, pos: 3 });
+  expect(unknown.status).toBe(400);
+  expect(await unknown.text()).toContain("pos");
+
+  // A stale `rev` is 409 with the current thread, and writes nothing.
+  const ticked = await patchThread(api, seeded!.id, { rev: 1, done: true });
+  const stale = await send("PATCH", seeded!.id, { rev: 1, text: "Überschrieben?" });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ code: "rev_conflict", rev: 2, thread: ticked });
+  const deleted = await send("DELETE", seeded!.id, { rev: 1 });
+  expect(deleted.status).toBe(409);
+  expect(await getThread(api, seeded!.id)).toEqual(ticked);
 });

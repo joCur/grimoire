@@ -5,14 +5,11 @@
 // resource renders itself in its domain module (ADR #31: ./campaigns.ts,
 // ./chapters.ts, ./scenes.ts, ./npcs.ts, ./locations.ts).
 //
-// A SESSION and THE INBOX are not rendered to a text at all (ADR #26): their
-// rows travel AS rows — `SessionResponse` and `InboxResponse` — and this
-// module builds those shapes. Nothing here composes a markdown list, and
-// nothing anywhere reads one back.
+// A SESSION is not rendered to a text at all (ADR #26): its rows travel AS
+// rows — `SessionResponse` — and this module builds that shape. Nothing here
+// composes a markdown list, and nothing anywhere reads one back.
 
 import type {
-  InboxEntry,
-  InboxResponse,
   SessionLogEntry,
   SessionPauseInterval,
   SessionResponse,
@@ -29,9 +26,8 @@ export interface CampaignRow {
   body: string;
   version: number;
   rev: number;
-  /** Guard tokens of the two lists that have no row of their own. */
+  /** Guard token of the glossary, which has no row of its own. */
   glossaryRev: number;
-  inboxRev: number;
   /** Guard token of the campaign-knowledge list. */
   knowledgeRev: number;
 }
@@ -46,8 +42,6 @@ export interface ChapterRow {
   rev: number;
   /** Guard token of the chapter's scene ORDER, separate from `rev`. */
   sceneOrderRev: number;
-  /** Guard token of the chapter's thread list, separate from `rev`. */
-  threadsRev: number;
 }
 
 export interface SceneRow {
@@ -121,12 +115,6 @@ export interface LogRow {
   text: string;
   hash: string;
   reviewed: number;
-}
-
-export interface InboxRow {
-  pos: number;
-  text: string;
-  done: number;
 }
 
 export interface GlossaryRow {
@@ -205,29 +193,4 @@ export function renderSession(
     scenesPlayed: played,
     rev: row.rev,
   };
-}
-
-// --- inbox ------------------------------------------------------------------
-
-/**
- * One inbox row as the API answers it. `id` is the row's `pos` — the append
- * counter IS its key (db/schema.ts), and the list is append-only, so the
- * position a row was written at never moves.
- */
-export function inboxEntry(row: InboxRow): InboxEntry {
-  return { id: String(row.pos), text: row.text, done: row.done !== 0 };
-}
-
-/**
- * THE INBOX as a list plus the list's own guard token. Neither the inbox nor
- * the glossary is a single row that could carry a `rev`, so each has its
- * counter on the campaign row (`inbox_rev`/`glossary_rev`, db/schema.ts):
- * `campaigns.version` cannot stand in for them, because EVERY write bumps it
- * and one unrelated log line would invalidate an edit the DM had open.
- *
- * An EMPTY inbox is an empty list, not a missing one (200) — a 404 would make
- * every reader special-case an answer that means nothing is wrong.
- */
-export function renderInbox(rows: InboxRow[], rev: number): InboxResponse {
-  return { entries: rows.map(inboxEntry), rev };
 }

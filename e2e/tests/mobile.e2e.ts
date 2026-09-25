@@ -1,12 +1,12 @@
-// Critical path 8: the mobile start surface and the inbox capture at 390px;
+// Critical path 8: the mobile start surface and the idea capture at 390px;
 // see CLAUDE.md.
 //
-// Mobile is search, reading view and inbox (UI-BRIEF) — exactly that, checked
+// Mobile is search, reading view and ideas (UI-BRIEF) — exactly that, checked
 // at 390×844 (iPhone size), including what the server stored.
 
 import { expect, test } from "../support/test";
 import type { SeedSession } from "../../server/src/db/seed";
-import { getInbox } from "../support/inbox";
+import { getIdeas } from "../support/idea";
 
 /** A session that started YESTERDAY and was never ended. */
 const OPEN_SESSION: SeedSession = (() => {
@@ -25,7 +25,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 const IDEA = "Nachtmarkt im Hafen als Aufhänger #thread";
 
-test("mobile start surface: search, inbox capture, lookup lists", async ({ page, api }) => {
+test("mobile start surface: search, idea capture, lookup lists", async ({ page, api }) => {
   await page.goto("/campaigns/beispiel");
 
   // The desktop topbar is desktop chrome — below md the surface carries its
@@ -51,27 +51,24 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   // reference creates nothing (ADR #19).
   await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("2 Orte");
 
-  // --- inbox capture -------------------------------------------------------
-  const inbox = page.getByLabel("Ideen");
-  await inbox.fill(IDEA);
+  // --- idea capture --------------------------------------------------------
+  const capture = page.getByLabel("Ideen");
+  await capture.fill(IDEA);
   await page.getByRole("button", { name: "Einwerfen" }).click();
 
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
-  await expect(inbox).toHaveValue("");
-  // The idea is a ROW of the inbox list, appended at the end, and the list
-  // answers with its own guard token. Append-only: the row that was already
-  // there survives, and nothing is ticked off.
-  await expect.poll(() => getInbox(api)).toEqual({
-    rev: expect.any(Number),
-    entries: [
-      {
-        id: expect.any(String),
-        text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
-        done: false,
-      },
-      { id: expect.any(String), text: IDEA, done: false },
-    ],
-  });
+  await expect(capture).toHaveValue("");
+  // The idea is an IDEA of its own, flat, with its own guard, at the end: the
+  // idea that was already there survives unchanged, and nothing is ticked off.
+  await expect.poll(() => getIdeas(api)).toEqual([
+    {
+      id: "dorfschmied",
+      text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+      done: false,
+      rev: 1,
+    },
+    { id: expect.any(String), text: IDEA, done: false, rev: 1 },
+  ]);
 
   // --- search and reading view ---------------------------------------------
   await page.getByRole("button", { name: "Szenen, NPCs, Orte suchen …" }).click();

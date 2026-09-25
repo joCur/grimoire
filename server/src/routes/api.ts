@@ -33,7 +33,7 @@ import { campaignRoutes } from "./campaigns";
 import { chapterRoutes } from "./chapters";
 import { generateRoutes } from "./generate";
 import { glossaryRoutes } from "./glossary";
-import { inboxRoutes } from "./inbox";
+import { ideaRoutes } from "./ideas";
 import { knowledgeRoutes } from "./knowledge";
 import { locationRoutes } from "./locations";
 import { npcRoutes } from "./npcs";
@@ -76,16 +76,14 @@ api.route("/", chapterRoutes);
 api.route("/", sceneRoutes);
 api.route("/", npcRoutes);
 api.route("/", locationRoutes);
+api.route("/", threadRoutes);
+api.route("/", ideaRoutes);
 api.route("/", knowledgeRoutes);
 
-// LISTS (ADR #26). A session, the inbox, the glossary and a chapter's open
-// threads are tables, and they answer their OWN shapes on their own
-// endpoints — `SessionResponse`, `InboxResponse`, `GlossaryResponse`,
-// `ThreadsResponse`, rows all the way down.
+// A session and the glossary answer their OWN shapes on their own endpoints
+// — `SessionResponse` and `GlossaryResponse`, rows all the way down.
 api.route("/", sessionRoutes);
-api.route("/", inboxRoutes);
 api.route("/", glossaryRoutes);
-api.route("/", threadRoutes);
 
 api.route("/", reviewRoutes);
 api.route("/", searchRoutes);

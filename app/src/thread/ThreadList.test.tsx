@@ -1,7 +1,6 @@
-// Render test for one row of a chapter's open threads, and the reading of a
-// refused thread write.
+// Render test for one row of a chapter's threads.
 //
-// A thread is a ROW of the chapter's list: the tick is a real checkbox named
+// A thread is one ROW under its chapter: the tick is a real checkbox named
 // by the thread's text, the two row controls carry the text in their names
 // too (a column of bare "edit" buttons says nothing about which row it
 // edits), and the „neu" note appears only on a row adopted in this sitting.
@@ -9,15 +8,19 @@
 
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ThreadEntry } from "@grimoire/shared";
+import type { Thread } from "@grimoire/shared/thread";
 
-import { ApiError, threadsConflict } from "@/api";
+import { ThreadRow } from "./ThreadList";
 
-import { ThreadRow } from "./ChapterThreads";
+const SEEDED: Thread = {
+  id: "wer-bezahlt-die-schmuggler",
+  chapter: "01-salzhafen",
+  text: "Wer bezahlt die Schmuggler?",
+  done: false,
+  rev: 1,
+};
 
-const SEEDED: ThreadEntry = { id: "t-1", text: "Wer bezahlt die Schmuggler?", done: false };
-
-function render(row: ThreadEntry, over: { isNew?: boolean; locked?: boolean } = {}): string {
+function render(row: Thread, over: { isNew?: boolean; locked?: boolean } = {}): string {
   return renderToStaticMarkup(
     <ul>
       <ThreadRow
@@ -56,21 +59,5 @@ describe("ThreadRow", () => {
   test("while a write is on the wire or the list is stale, nothing is clickable", () => {
     const html = render(SEEDED, { locked: true });
     expect(html.match(/disabled=""/g)?.length).toBe(3);
-  });
-});
-
-describe("threadsConflict", () => {
-  const list = { entries: [SEEDED], rev: 4 };
-
-  test("a 409 hands back the list it was refused against", () => {
-    const error = new ApiError(409, "conflict", { code: "rev_conflict", rev: 4, threads: list });
-    expect(threadsConflict(error)).toEqual(list);
-  });
-
-  test("anything else is no thread conflict, and a 409 without a list degrades", () => {
-    expect(threadsConflict(new ApiError(404, "gone", {}))).toBeUndefined();
-    expect(threadsConflict(new Error("offline"))).toBeUndefined();
-    expect(threadsConflict(new ApiError(409, "conflict", { rev: 4 }))).toBeUndefined();
-    expect(threadsConflict(new ApiError(409, "conflict", { threads: { rev: "x" } }))).toBeUndefined();
   });
 });

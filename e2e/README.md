@@ -167,11 +167,11 @@ support/test.ts          das `test` der Suite: eigene Datenbank + eigener
                          `api`, `db` und `seed`
 support/api.ts           `Api`: der Zugang zum Server eines Tests, an eine
                          Kampagne gebunden, ohne Wissen über Entitäten
-support/campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts
+support/campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts,
+support/thread.ts, idea.ts
                          die Helfer je Entität: lesen, prüfen, schreiben,
                          Pfade — getippt mit `@grimoire/shared/<entität>`
-support/session.ts, inbox.ts, threads.ts
-                         die Helfer der Sessions und Listen
+support/session.ts       die Helfer der Sessions
 support/procs.ts         verwaltete Kindprozesse (Start, Warten, Stoppen)
 fixtures/stub-llm.ts     standalone LLM-Stub (auch einzeln startbar)
 fixtures/replies.ts      die kanonischen Modellantworten
@@ -209,17 +209,18 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   sich frisch ein Token und spielt damit den „zweiten Schreiber" — und
   `createNpc(api, { name, id?, body? })`, das `POST …/npcs`.
 
-  Die **Sessions und Listen** haben keine Adresse (ADR #26) und ihre
-  eigenen Module: `getActiveSession(api, includeEnded?)` und
+  Faden und Idee haben ihre eigenen Module: `getThreads(api, kapitel)`,
+  `getThread(api, id)`, `createThread(api, { chapter, text })`,
+  `patchThread(api, id, { rev?, …Felder })` und `threadPath(api, id?)`
+  (`support/thread.ts`), `getIdeas(api)` und `ideaPath(api, id?)`
+  (`support/idea.ts`). Die **Sessions** haben ihr eigenes Modul:
+  `getActiveSession(api, includeEnded?)` und
   `activeSessionId(api, …)` (die laufende bzw. zuletzt gestartete —
   `undefined`, wenn nichts läuft; der Endpoint antwortet dafür 200 mit
-  `null`), `getSession(api, id)`, `sessionExists(api, id)`,
-  `listSessions(api)` (`support/session.ts`), `getInbox(api)`
-  (`support/inbox.ts`) und `getThreads(api, kapitel)`/
-  `threadsPath(api, kapitel, id?)` (`support/threads.ts`). Jede
-  Behauptung über eine Session oder eine Idee liest ein **Feld** —
-  `log`, `pauses`, `scenesPlayed`, `entries[].done` —, nie einen gerenderten
-  Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
+  `null`), `getSession(api, id)`, `sessionExists(api, id)` und
+  `listSessions(api)` (`support/session.ts`). Jede Behauptung über eine
+  Session, eine Idee oder einen Faden liest ein **Feld** — `log`, `pauses`,
+  `scenesPlayed`, `done` —, nie einen gerenderten Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
   kein Spec schreibt eine hin, sie kommt immer vom Server.
   `todaySessionId()` ist die datumsförmige id einer Session, die ein Spec
   **selbst seedet**.
@@ -400,24 +401,30 @@ lesen darum Zeilen statt Texte:
   mit ihrer Dauer, die gespielten Szenen — und die alte Eintrags-Adresse
   derselben Session als 404. Die Leseansicht einer Szene bietet wie jede
   Leseansicht „Session starten".
-- **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): Review und Ideen benennen
-  ihre Zeilen per `id`, also liest der Spec das `reviewed` der getroffenen
-  Log-Zeile und das `done` der abgehakten Idee — und prüft, dass keine andere
-  Zeile das Flag trägt. „Handlungsstrang übernehmen" wird eine Zeile der
-  Fäden-Liste des Kapitels (`GET …/chapters/01-salzhafen/threads`); Text und
-  `rev` des Kapitels bleiben gleich, abgehakt wird per `id` (unbekannt: 404,
-  alter Listen-Stand: 409 mit der aktuellen Liste). `threads.e2e.ts` pflegt
-  die Liste in der Kapitelübersicht — anlegen, abhaken, umformulieren,
-  löschen, die Konfliktzeile mit „Neu laden" — und zeigt, dass ein
-  Fäden-Write einen offenen Kapitel-Editor nicht in einen Konflikt treibt.
+- **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): die Review benennt eine
+  Log-Zeile per `id` und hakt eine Idee mit `PATCH …/ideas/<id> { rev, done }`
+  ab, also liest der Spec das `reviewed` der getroffenen Log-Zeile und die
+  abgehakte Idee samt ihrem neuen `rev` — und prüft, dass keine andere das
+  Flag trägt. Eine Idee mit altem `rev` ist 409 mit der aktuellen Idee, ein
+  `text` im `PATCH` eine 400, und `…/inbox` sowie `review/inbox-done`
+  antworten 404. „Handlungsstrang übernehmen" wird ein Faden des Kapitels
+  (`POST …/threads`, flach mit `chapter`); Text und `rev` des Kapitels
+  bleiben gleich, und der schon vorhandene Faden auch. Abgehakt wird per `id`
+  gegen das `rev` des Fadens (unbekannt: 404, alter Stand: 409 mit dem
+  aktuellen Faden). `threads.e2e.ts` pflegt die Fäden in der Kapitelübersicht
+  (Pfad 1) — anlegen, abhaken, umformulieren, löschen, die Konfliktzeile mit
+  „Neu laden" —, zeigt, dass ein Faden-Write einen offenen Kapitel-Editor
+  nicht in einen Konflikt treibt, und prüft die Ressource selbst: flache
+  Antwort, 400 für ein unbekanntes Feld, 409 mit altem `rev` (auch beim
+  `DELETE`) und 404 auf `…/chapters/<kapitel>/threads`.
   „NPC anlegen" auf einer `#npc`-Zeile ist `POST …/npcs { name, id, body }`:
   ein neuer NPC bekommt die Notiz als Text, ein leerer unter der Kennung wird
   gefüllt, und bei einem NPC mit Inhalt bleibt der Dialog mit dem
   Konflikt-Satz offen — nichts geschrieben, die Log-Zeile bleibt
   `reviewed: false`.
-- **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Zeile, angehängt;
-  der Spec vergleicht die ganze `InboxResponse` samt `rev`, womit
-  Append-only und „nichts abgehakt" in einer Zusicherung stehen.
+- **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Idee am Ende;
+  der Spec vergleicht alle Ideen samt `rev`, womit „die vorhandene Idee
+  bleibt unberührt" und „nichts abgehakt" in einer Zusicherung stehen.
 
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 und
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf

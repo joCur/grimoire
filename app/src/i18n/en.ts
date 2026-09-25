@@ -455,6 +455,7 @@ export const en: Messages = {
   "live.pc.done": "Mark \u201c{text}\u201d done",
   "live.pc.allDone": "All done.",
   "live.pc.failed": "Not saved — check the server.",
+  "idea.tick.stale": "This idea was changed in the meantime. The list has been reloaded.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Loading details …",
@@ -500,7 +501,7 @@ export const en: Messages = {
   "review.notes.lead":
     "Untagged entries from the ideas — adopt them, create an NPC or tick them off.",
 
-  // Player-character notes: `#pc` lines from log and inbox.
+  // Player-character notes: `#pc` lines from the log and the ideas.
   "review.pc.title": "Player characters",
   "review.pc.lead":
     "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next review.",
@@ -581,7 +582,6 @@ export const en: Messages = {
   "kind.chapter": "Chapter",
   "kind.campaign": "Campaign",
   "kind.session": "Session",
-  "kind.inbox": "Idea",
   "kind.glossary": "Glossary",
   "markdown.ref.aria": "{kind}: {name}",
 

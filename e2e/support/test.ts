@@ -24,16 +24,16 @@
 //   test.use({ seed: { without: { sessions: ["2026-01-15"] } } });
 //
 // An object whose id a fixture already has REPLACES that fixture, any other
-// adds one. The campaign, a chapter, a scene, an npc and a location are each
-// their own resource (ADR #31) and have a directory of their own
-// (`campaigns/<id>.json`, `chapters/<id>.json`, …): the fixture is the entity
+// adds one. The campaign, a chapter, a scene, an npc, a location, a thread and
+// an idea are each their own resource (ADR #31) and have a directory of their
+// own (`campaigns/<id>.json`, `chapters/<id>.json`, …): the fixture is the entity
 // itself, every field flat, without a guard. A session sits in the campaign
 // directory itself as `session-<id>.json`.
 //
 // What the suite knows about each entity — reading it, writing it, its
 // request paths — lives in that entity's own module next to this one
-// (campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts, session.ts,
-// inbox.ts, threads.ts). This file only puts server, seed and fixtures
+// (campaign.ts, chapter.ts, scene.ts, npc.ts, location.ts, thread.ts,
+// idea.ts, session.ts). This file only puts server, seed and fixtures
 // together.
 //
 // Without overrides the pristine copy from the global setup is used directly
@@ -66,9 +66,11 @@ import { test as base, expect } from "@playwright/test";
 
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { IdeaSeed } from "@grimoire/shared/idea";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { ThreadSeed } from "@grimoire/shared/thread";
 
 import { openSqlite, type SqliteClient } from "../../server/src/db/driver";
 import type { SeedSession } from "../../server/src/db/seed";
@@ -121,6 +123,8 @@ export interface Seed {
   scenes?: SceneProposal[];
   npcs?: NpcProposal[];
   locations?: LocationProposal[];
+  threads?: ThreadSeed[];
+  ideas?: IdeaSeed[];
   sessions?: SeedSession[];
   /** Fixtures to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
   without?: {
@@ -128,6 +132,8 @@ export interface Seed {
     scenes?: string[];
     npcs?: string[];
     locations?: string[];
+    threads?: string[];
+    ideas?: string[];
     sessions?: string[];
   };
   /**
@@ -208,6 +214,8 @@ async function overrideFixtures(campaignDir: string, seed: Seed): Promise<void> 
     seed.locations,
     without.locations,
   );
+  await overrideEntity(campaignDir, (id) => `threads/${id}.json`, byId, seed.threads, without.threads);
+  await overrideEntity(campaignDir, (id) => `ideas/${id}.json`, byId, seed.ideas, without.ideas);
   await overrideEntity(
     campaignDir,
     (id) => `session-${id}.json`,

@@ -5,7 +5,8 @@
 // An entity with its own resource (ADR #31) has its type from its zod schema
 // in its own module — the campaign in ./campaign.ts, the chapter in
 // ./chapter.ts, the scene in ./scene.ts, the npc in ./npc.ts and the
-// location in ./location.ts —, and the types are re-exported here.
+// location in ./location.ts, whose types are re-exported here, and the
+// thread in ./thread.ts and the idea in ./idea.ts, imported from there.
 
 import type { ChapterStatus } from "./chapter";
 import type { LocationProposal } from "./location";
@@ -84,7 +85,6 @@ export type EntityKind =
   | "npc"
   | "location"
   | "session"
-  | "inbox"
   | "glossary";
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
@@ -261,56 +261,6 @@ export interface SessionResponse extends SessionSummary {
   scenesPlayed: string[];
   /** Guard token of the session row — `PATCH …/sessions/:id` sends it back. */
   rev: number;
-}
-
-/** One idea in the inbox. */
-export interface InboxEntry {
-  /** The row's stable id — what `POST /review/inbox-done` names it by. */
-  id: string;
-  text: string;
-  done: boolean;
-}
-
-/**
- * THE INBOX — `GET …/inbox`, `POST …/inbox` and
- * `POST …/review/inbox-done`: a list of rows plus the LIST's own guard token
- * (`campaigns.inbox_rev`), not an entry with a text.
- */
-export interface InboxResponse {
-  entries: InboxEntry[];
-  rev: number;
-}
-
-/** One open thread — a row of a chapter's thread list. */
-export interface ThreadEntry {
-  /** The row's stable id — what a tick, an edit and a delete name it by. */
-  id: string;
-  text: string;
-  done: boolean;
-}
-
-/**
- * THE OPEN THREADS of a chapter — every endpoint under
- * `…/chapters/:chapter/threads` answers it: the rows in their order plus the
- * LIST's own guard token (`chapters.threads_rev`). Not the chapter's `rev`:
- * the list is no field of the chapter, so writing it moves neither the
- * chapter's `body` nor its guard (ADR #26, #29).
- */
-export interface ThreadsResponse {
-  entries: ThreadEntry[];
-  rev: number;
-}
-
-/**
- * The body of `PATCH …/chapters/:chapter/threads/:id` — tick, untick or
- * reword ONE thread. `rev` is the list's token as it was read; a stale one
- * is 409 `rev_conflict` carrying the current list under `threads`. At least
- * one of `text` and `done` has to be there, otherwise 400 `nothing_to_write`.
- */
-export interface PatchThreadRequest {
-  rev: number;
-  text?: string;
-  done?: boolean;
 }
 
 /**

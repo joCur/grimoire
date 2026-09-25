@@ -1,15 +1,15 @@
 // Pure helpers of the review view: hashtag handling and the grouping of
 // player-character notes. No react, no query imports.
 //
-// Log rows, inbox rows and the chapter's open threads arrive as ROWS from the
-// server and are named by their id, so nothing here parses a list out of text.
+// Log rows, ideas and threads arrive as ROWS from the server and are named by
+// their id, so nothing here parses a list out of text.
 //
 // Everything degrades (README): unparsable input yields empty results or
 // passes through unchanged, never an error.
 
 
 /**
- * The log/inbox hashtags the review harvests (README). `#date` is deliberately
+ * The hashtags of the log and the ideas the review harvests (README). `#date` is deliberately
  * NOT one of them — in-game dates are no harvest.
  */
 export const REVIEW_TAGS = ["thread", "npc", "loot", "decision"] as const;
@@ -70,8 +70,9 @@ export function hasPcTag(tags: readonly string[]): boolean {
 }
 
 /**
- * Tags that belong to the log/inbox CONVENTION (README) and can therefore
- * never be a character name: `#pc` itself, the four harvest tags and `#date`.
+ * Tags that belong to the CONVENTION of log and ideas (README) and can
+ * therefore never be a character name: `#pc` itself, the four harvest tags and
+ * `#date`.
  * A row tagged `#pc #thread` is a reminder that also mentions a thread — not a
  * note about a character named after that tag.
  */
