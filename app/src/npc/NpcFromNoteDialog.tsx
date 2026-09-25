@@ -1,8 +1,8 @@
-// "NPC anlegen" in the session review: the npc needs an id the DM chooses —
-// a log line is prose, and ids are the stable reference keys of the format
-// (README) — so the review proposes a kebab-case slug derived from the text
-// and lets it be edited. Optional display name; the line's text becomes the
-// npc's whole text, with no heading around it.
+// "NPC anlegen" from a note of the session review: the npc needs an id the DM
+// chooses — a note is prose, and ids are the stable reference keys of the
+// format (README) — so the dialog proposes a kebab-case slug derived from the
+// text (./npc-from-note.ts) and lets it be edited. Optional display name; the
+// note's text becomes the npc's whole text, with no heading around it.
 //
 // An id whose npc is still empty is filled with the note. An id whose npc
 // already holds something is refused by the server and nothing is written:
@@ -20,11 +20,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useT } from "@/i18n";
-import { deriveNpcSlug, isNpcSlug, npcNameFromText } from "@/lib/review";
-import type { ReviewEntry } from "@/lib/use-review";
 
-interface NpcCreateDialogProps {
-  entry: ReviewEntry;
+import { deriveNpcSlug, isNpcSlug, npcNameFromText } from "./npc-from-note";
+
+interface NpcFromNoteDialogProps {
+  /** The note the npc is created from. */
+  text: string;
   pending: boolean;
   /** Inline error: the id is taken, or the server refused or did not answer. */
   error?: string | undefined;
@@ -32,16 +33,16 @@ interface NpcCreateDialogProps {
   onSubmit: (values: { id: string; name?: string }) => void;
 }
 
-export function NpcCreateDialog({
-  entry,
+export function NpcFromNoteDialog({
+  text,
   pending,
   error,
   onClose,
   onSubmit,
-}: NpcCreateDialogProps) {
+}: NpcFromNoteDialogProps) {
   const t = useT();
-  const [id, setId] = useState(() => deriveNpcSlug(entry.text));
-  const [name, setName] = useState(() => npcNameFromText(entry.text) ?? "");
+  const [id, setId] = useState(() => deriveNpcSlug(text));
+  const [name, setName] = useState(() => npcNameFromText(text) ?? "");
 
   const trimmedId = id.trim();
   const trimmedName = name.trim();

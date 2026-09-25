@@ -30,10 +30,10 @@ import { Link, useParams } from "react-router";
 
 import { appendLog, endSession, fetchEntry, fetchTree } from "@/api";
 import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
-import { LocationCard } from "@/components/LocationCard";
+import { LocationCard } from "@/location/LocationCard";
 import type { OpenTarget } from "@/lib/open-target";
 import { MobileBackRow } from "@/components/MobileBackRow";
-import { NpcCard } from "@/components/NpcCard";
+import { NpcCard } from "@/npc/NpcCard";
 import { PcReminders } from "@/components/PcReminders";
 import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";

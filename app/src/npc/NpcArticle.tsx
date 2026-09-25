@@ -1,23 +1,23 @@
 // The reading view of an NPC (ADR #31): its name and status, the lines the
 // table needs — role, voice, appearance, what it wants (`motivation`), the
 // quick stats and the Roll20 sheet it refers to — and its text. The same
-// column and the same markdown pipeline as every other article
-// (./EntityArticle.tsx).
+// column and the same markdown pipeline as every other article.
 //
 // The statblock line stays PLAIN TEXT on purpose: the format references
 // Roll20 by name, it never links or copies it (README). The motivation reads
-// exactly as the cards read it (lib/entity-excerpt.ts): a `[[slug]]` inside
-// reads as the current name.
+// exactly as the cards read it (./npc-excerpt.ts): a `[[slug]]` inside reads
+// as the current name.
 
 import type { Npc } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
-import { Title } from "@/components/EntityArticle";
+import { Title } from "@/components/ArticleHeader";
 import { useT } from "@/i18n";
-import { npcStatusLabel } from "@/lib/entity";
-import { npcExcerpt } from "@/lib/entity-excerpt";
 import { useEntityRefs } from "@/markdown/entity-refs";
 import { Markdown } from "@/markdown/Markdown";
+
+import { npcExcerpt } from "./npc-excerpt";
+import { npcStatusLabel } from "./npc-status";
 
 export function NpcArticle({
   npc,

@@ -19,6 +19,8 @@ import type { LucideIcon } from "lucide-react";
 
 import type { MessageKey, Translate } from "@/i18n";
 import { encodeAddress } from "@/lib/address";
+import { locationHref } from "@/location/location-links";
+import { npcHref } from "@/npc/npc-links";
 
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
@@ -90,9 +92,8 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 
 /**
  * Route for a picked result. An npc and a location open their own reading
- * views by their id (/campaigns/:campaign/npcs/<id>,
- * /campaigns/:campaign/locations/<id>, ADR #31); an entry opens as an entry
- * view (/campaigns/:campaign/entries/<path>); the lists open the page that
+ * views by their id — the route their slice names (ADR #31); a scene or a
+ * chapter opens by its address (/campaigns/:campaign/entries/<path>); the lists open the page that
  * HOLDS the row — a session its reading page, an idea the wrap-up it is
  * waiting in, a term the glossary page — and the campaign itself opens the
  * chapter overview.
@@ -110,9 +111,9 @@ export function resultHref(
     case "campaign":
       return scope;
     case "npc":
-      return `${scope}/npcs/${encodeURIComponent(result.id)}`;
+      return npcHref(encodeURIComponent(campaign), result.id);
     case "location":
-      return `${scope}/locations/${encodeURIComponent(result.id)}`;
+      return locationHref(encodeURIComponent(campaign), result.id);
     case "session":
       return `${scope}/sessions/${encodeURIComponent(result.id)}`;
     case "inbox":

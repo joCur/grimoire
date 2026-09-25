@@ -1,20 +1,21 @@
 // The reading view of a LOCATION (ADR #31): its name, the `atmosphere` line,
 // the Roll20 page reference and its text — the same column and the same
-// markdown pipeline as every other article (./EntityArticle.tsx).
+// markdown pipeline as every other article.
 //
 // The Roll20 line stays PLAIN TEXT on purpose: the format references Roll20
 // by name, it never links or copies it (README). The atmosphere reads exactly
-// as the cards read it (lib/entity-excerpt.ts): a `[[slug]]` inside reads as
+// as the cards read it (./location-excerpt.ts): a `[[slug]]` inside reads as
 // the current name.
 
 import type { Location } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
-import { ActionGroup, Title } from "@/components/EntityArticle";
+import { ActionGroup, Title } from "@/components/ArticleHeader";
 import { useT } from "@/i18n";
-import { locationExcerpt } from "@/lib/entity-excerpt";
 import { useEntityRefs } from "@/markdown/entity-refs";
 import { Markdown } from "@/markdown/Markdown";
+
+import { locationExcerpt } from "./location-excerpt";
 
 export function LocationArticle({
   location,

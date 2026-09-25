@@ -119,7 +119,6 @@ const TYPE_OF_CONTROL: Record<FieldControl, string> = {
   reference: "string",
   references: "array",
   chips: "array",
-  pairs: "array",
 };
 
 const MODES: EntryMode[] = ["create", "augment"];

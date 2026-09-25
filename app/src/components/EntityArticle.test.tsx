@@ -1,7 +1,6 @@
-// Render tests for the entry reading view (react-dom/server — no DOM):
-// the titled header and the one rule behind it — the scene type overline
-// never appears above a non-scene. (An npc and a location have their own
-// articles: ./NpcArticle.test.tsx, ./LocationArticle.test.tsx.)
+// Render tests for the reading view of a chapter and the campaign
+// (react-dom/server — no DOM): the titled header and the one rule behind
+// it — the scene type overline never appears above them.
 
 import type { EntryKind, EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";

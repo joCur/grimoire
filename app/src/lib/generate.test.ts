@@ -38,7 +38,6 @@ import {
   mergeDraftEdits,
   newChapterId,
   nextChapterPrefix,
-  npcChangeOf,
   npcIdError,
   npcOf,
   npcState,
@@ -604,23 +603,6 @@ describe("review state mapping", () => {
       role: "Fischerin",
       body: "Neu.\n",
     });
-  });
-
-  test("the form of a proposed npc becomes its change: every form field named", () => {
-    const keys = ["name", "role", "status", "quickstats", "motivation"];
-    expect(
-      npcChangeOf({ name: "Grella", status: "alive", quickstats: { insight: "+2" } }, keys),
-    ).toEqual({
-      name: "Grella",
-      role: null,
-      status: "alive",
-      quickstats: { insight: "+2" },
-      motivation: null,
-    });
-    // A required field the form left blank is not named — the proposal keeps it.
-    expect(npcChangeOf({ status: "alive" }, ["name", "status"])).toEqual({ status: "alive" });
-    // A value the npc's schema refuses queues nothing.
-    expect(npcChangeOf({ status: "verschollen" }, ["status"])).toBeUndefined();
   });
 
   test("`dropped` is a set sent whole, not a merge", () => {

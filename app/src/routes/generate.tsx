@@ -61,8 +61,6 @@ import {
   Sparkles,
   SpellCheck,
   StickyNote,
-  User,
-  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -85,10 +83,7 @@ import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
 import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
-import { npcStatusLabel } from "@/lib/entity";
-import { npcExcerpt } from "@/lib/entity-excerpt";
 import { propString, propStringArray } from "@/lib/properties";
-import { propertiesFieldsFor } from "@/lib/properties-form";
 import { sceneStatusMeta, sceneStatusOf } from "@/lib/scene-status";
 import {
   applySummary,
@@ -106,7 +101,6 @@ import {
   draftOf,
   locationState,
   newChapterId,
-  npcChangeOf,
   npcIdError,
   npcOf,
   npcState,
@@ -126,17 +120,18 @@ import {
   type PartState,
 } from "@/lib/generate";
 import { promptKnowledgeCount } from "@/lib/entry-list";
-import { locationHref, locationLabel, npcHref, npcLabel } from "@/lib/open-target";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
-import { useEntityRefs } from "@/markdown/entity-refs";
+import { LocationProposalRow } from "@/location/LocationProposalRow";
+import { locationLabel } from "@/location/location-links";
 import { Markdown } from "@/markdown/Markdown";
+import { NpcProposalCard } from "@/npc/NpcProposalCard";
+import { NpcProposalRow } from "@/npc/NpcProposalRow";
+import { npcHref, npcLabel } from "@/npc/npc-links";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
 type Target = { kind: "chapter"; id: string } | { kind: "new" };
-
-type ProposalDecision = "accepted" | "rejected";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
 /** The two links in the sent-context hint — quiet, part of the sentence. */
@@ -579,52 +574,38 @@ export function GenerateRoute() {
   );
 
   /** One proposed npc of the run, decided and accepted by its id (ADR #31). */
-  const npcRow = (npc: NpcProposal, cardRef?: (el: HTMLElement | null) => void) => {
-    const state = npcState(job, npc.id);
-    return (
-      <ProposalRow
-        key={`npc:${npc.id}`}
-        icon={User}
-        name={npc.name}
-        label={npcLabel(npc.id)}
-        {...(cardRef === undefined ? {} : { cardRef })}
-        reason={proposalReason(scenes, t)}
-        decision={reviewState.npcs[npc.id]}
-        state={state}
-        writtenHref={state === "written" ? npcHref(campaign, npc.id) : undefined}
-        writtenLabel={state === "written" ? npcLabel(npc.id) : undefined}
-        busy={apply.isPending}
-        onDecide={(decision) => review.decide({ npcs: { [npc.id]: decision ?? null } })}
-        onAccept={() => apply.mutate({ npcs: [npc.id] })}
-      />
-    );
-  };
+  const npcRow = (npc: NpcProposal, cardRef?: (el: HTMLElement | null) => void) => (
+    <NpcProposalRow
+      key={`npc:${npc.id}`}
+      campaign={campaign}
+      npc={npc}
+      {...(cardRef === undefined ? {} : { cardRef })}
+      reason={proposalReason(scenes, t)}
+      decision={reviewState.npcs[npc.id]}
+      state={npcState(job, npc.id)}
+      busy={apply.isPending}
+      onDecide={(decision) => review.decide({ npcs: { [npc.id]: decision ?? null } })}
+      onAccept={() => apply.mutate({ npcs: [npc.id] })}
+    />
+  );
   /** One proposed location of the run, decided and accepted by its id (ADR #31). */
   const locationRow = (
     location: LocationProposal,
     cardRef?: (el: HTMLElement | null) => void,
-  ) => {
-    const state = locationState(job, location.id);
-    return (
-      <ProposalRow
-        key={`location:${location.id}`}
-        icon={MapPin}
-        name={location.name}
-        label={locationLabel(location.id)}
-        {...(cardRef === undefined ? {} : { cardRef })}
-        reason={proposalReason(scenes, t)}
-        decision={reviewState.locations[location.id]}
-        state={state}
-        writtenHref={state === "written" ? locationHref(campaign, location.id) : undefined}
-        writtenLabel={state === "written" ? locationLabel(location.id) : undefined}
-        busy={apply.isPending}
-        onDecide={(decision) =>
-          review.decide({ locations: { [location.id]: decision ?? null } })
-        }
-        onAccept={() => apply.mutate({ locations: [location.id] })}
-      />
-    );
-  };
+  ) => (
+    <LocationProposalRow
+      key={`location:${location.id}`}
+      campaign={campaign}
+      location={location}
+      {...(cardRef === undefined ? {} : { cardRef })}
+      reason={proposalReason(scenes, t)}
+      decision={reviewState.locations[location.id]}
+      state={locationState(job, location.id)}
+      busy={apply.isPending}
+      onDecide={(decision) => review.decide({ locations: { [location.id]: decision ?? null } })}
+      onAccept={() => apply.mutate({ locations: [location.id] })}
+    />
+  );
 
   const applied = written !== undefined;
   // The window between the click and this run's job being readable is the
@@ -1911,236 +1892,6 @@ function PartActions({
         >
           {t(state === "dropped" ? "generate.review.undrop" : "generate.review.drop")}
         </Button>
-      )}
-    </div>
-  );
-}
-
-/**
- * The npc an NPC run proposes, as a card: the generator's own card chrome
- * (name, status pill, edit toggle, mono resource label) with the lines of the
- * npc's reading view above the text — role, voice, appearance, motivation,
- * quick stats chips, statblock reference, read with the same helper the
- * reading view and the cards use (`npcExcerpt`). Rebuilt here rather than
- * reusing the reading view's article on purpose: that one reads an npc that
- * EXISTS, with a guard, and nothing is written yet.
- *
- * Same two views as a scene draft: the rendered text through the normal
- * markdown pipeline, or the editor over the npc's fields and its text. What
- * the editor changes is reported as the npc's change (`npcEdits`): the form
- * fields together, the text on its own.
- */
-function NpcProposalCard({
-  npc,
-  tree,
-  editing,
-  onToggleEditing,
-  onChange,
-  onFlush,
-}: {
-  npc: NpcProposal;
-  tree: CampaignTree | undefined;
-  editing: boolean;
-  onToggleEditing: () => void;
-  onChange: (change: NpcChange) => void;
-  onFlush: () => void;
-}) {
-  const t = useT();
-  const { resolve } = useEntityRefs();
-  const { role, voice, will, quickstats } = npcExcerpt(npc, (slug) => resolve(slug)?.name);
-  const label = npcLabel(npc.id);
-  const editorId = `gen-draft-${label.replace(/[^a-zA-Z0-9-]/g, "-")}`;
-  const { id: _id, body, ...fields } = npc;
-  const formKeys = [...(propertiesFieldsFor("npc", t) ?? []), ...(propertiesFieldsFor("npc", t, "text") ?? [])].map(
-    (field) => field.key,
-  );
-
-  return (
-    <div className="my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6">
-      <div className="mb-1 flex flex-wrap items-center gap-2.5">
-        <h2 className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground">
-          {npc.name === "" ? npc.id : npc.name}
-        </h2>
-        <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
-          {npcStatusLabel(npc.status, t)}
-        </span>
-        <MarkdownEditorToggle
-          editing={editing}
-          onToggleEditing={onToggleEditing}
-          controlsId={editorId}
-        />
-      </div>
-      <p className="mb-3.5 font-mono text-[11.5px] text-faint">{label}</p>
-      <div className="mb-2 border-b border-border pb-4">
-        {role !== undefined && (
-          <p className="text-[13.5px] leading-[1.5] text-muted-foreground">{role}</p>
-        )}
-        {voice !== undefined && (
-          <p className="mt-2 text-[14px] leading-[1.6] text-body italic">{voice}</p>
-        )}
-        {npc.appearance !== undefined && npc.appearance !== "" && (
-          <p className="mt-1 text-[14px] leading-[1.6] text-body-secondary italic">
-            {npc.appearance}
-          </p>
-        )}
-        {will !== undefined && (
-          <p className="mt-3 text-[14px] leading-[1.6] text-body">
-            <span className="text-muted-foreground">{t("npcCard.will.inline")}</span> {will}
-          </p>
-        )}
-        {quickstats.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {quickstats.map(([key, value]) => (
-              <span
-                key={key}
-                className="rounded-[4px] border border-input bg-background px-[7px] py-[3px] font-mono text-[11px] text-soft"
-              >
-                {key} {value}
-              </span>
-            ))}
-          </div>
-        )}
-        {npc.statblock !== undefined && npc.statblock !== "" && (
-          <p className="mt-3 text-[12.5px] text-muted-foreground">
-            {t("generate.review.statblock", { statblock: npc.statblock })}
-          </p>
-        )}
-      </div>
-      {editing ? (
-        <DraftEditor
-          path={label}
-          kind="npc"
-          properties={fields}
-          body={body}
-          tree={tree}
-          onPropertiesChange={(next) => {
-            const change = npcChangeOf(next, formKeys);
-            if (change !== undefined) onChange(change);
-          }}
-          onBodyChange={(text) => onChange({ body: text })}
-          onFlush={onFlush}
-        />
-      ) : (
-        <Markdown>{body}</Markdown>
-      )}
-    </div>
-  );
-}
-
-/**
- * One proposal row — a proposed npc or location: marker, name, mono resource
- * label, italic reason, decision.
- */
-function ProposalRow({
-  icon: Icon,
-  name,
-  label,
-  reason,
-  decision,
-  state,
-  writtenHref,
-  writtenLabel,
-  busy,
-  cardRef,
-  onDecide,
-  onAccept,
-}: {
-  icon: LucideIcon;
-  name: string;
-  /** What the row names: the resource segment and id (`npcs/<id>`, `locations/<id>`). */
-  label: string;
-  reason: string;
-  decision: ProposalDecision | undefined;
-  state: PartState;
-  /** Where the written row lives, once it is written. */
-  writtenHref: string | undefined;
-  writtenLabel: string | undefined;
-  busy: boolean;
-  /** Same as SceneCard's: the retry's focus follows the part here too. */
-  cardRef?: (el: HTMLElement | null) => void;
-  onDecide: (decision: ProposalDecision | undefined) => void;
-  onAccept: () => void;
-}) {
-  const t = useT();
-  return (
-    <div
-      ref={cardRef}
-      tabIndex={-1}
-      className={cn(
-        "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-        (decision === "rejected" || state === "rejected") && "opacity-55",
-      )}
-    >
-      <Icon aria-hidden size={16} className="flex-none text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-[14px] text-foreground">{name}</span>
-          <span className="font-mono text-[11px] text-faint">{label}</span>
-        </div>
-        <p className="mt-0.5 text-[12.5px] text-muted-foreground italic">{reason}</p>
-      </div>
-      {state === "written" ? (
-        <p className="flex flex-none items-center gap-2 text-[12.5px] text-muted-foreground">
-          <Check aria-hidden size={14} className="flex-none text-success-text" />
-          {t("generate.review.partWritten")}
-          {writtenHref !== undefined && (
-            <Link
-              to={writtenHref}
-              className="rounded font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              {writtenLabel}
-            </Link>
-          )}
-        </p>
-      ) : decision === undefined ? (
-        <div className="flex flex-none gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onDecide("accepted")}
-            className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
-          >
-            {t("generate.stub.accept")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onDecide("rejected")}
-            className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-          >
-            {t("generate.stub.reject")}
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-none items-center gap-2">
-          {/* An ACCEPTED entry can be written on its own — the
-              rest of the run stays reviewable. */}
-          {decision === "accepted" && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={onAccept}
-              className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-            >
-              {t("generate.review.acceptOne")}
-            </Button>
-          )}
-          {/* The decided row stays a control so a wrong decision is
-              reversible (the prototype shows a label; a click puts the
-              buttons back). */}
-          <button
-            type="button"
-            onClick={() => onDecide(undefined)}
-            title={t("generate.stub.undo")}
-            className={cn(
-              "flex-none rounded-md px-1.5 py-1 text-[12.5px]",
-              decision === "accepted" ? "text-primary-hover" : "text-muted-foreground",
-            )}
-          >
-            {t(decision === "accepted" ? "generate.stub.accepted" : "generate.stub.rejected")}
-          </button>
-        </div>
       )}
     </div>
   );

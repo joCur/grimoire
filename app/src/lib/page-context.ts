@@ -21,7 +21,6 @@ import { kindFromAddress } from "@grimoire/shared/kind";
 import type { Translate } from "@/i18n";
 import { addressSegments } from "@/lib/address";
 import { locationName } from "@/lib/campaign";
-import { locationsHref, npcsHref } from "@/lib/open-target";
 
 /** One step of the context line; without `to` it is plain text. */
 export interface ContextCrumb {
@@ -40,9 +39,9 @@ export interface ContextCrumb {
  * display name (the location's name when the location exists, otherwise the
  * slug as written — never prettified), and is absent for a scene addressed
  * directly under its chapter.
- * Chapter entry: just the chapter, unlinked — it IS the chapter.
- * (An npc's and a location's reading views have their own routes and crumbs:
- * `npcPageCrumbs`, `locationPageCrumbs`.)
+ * Chapter: just the chapter, unlinked — it IS the chapter.
+ * (An npc's and a location's reading views have their own routes and crumbs,
+ * in their own slices.)
  *
  * The list labels come from the CATALOG via `t` — the crumb
  * says exactly what the list page it points at is titled, and this helper
@@ -75,16 +74,4 @@ export function pageContextCrumbs(
     default:
       return [];
   }
-}
-
-/** The context of an npc's reading view: its list (ADR #31). */
-export function npcPageCrumbs(campaign: string, t: Translate): ContextCrumb[] {
-  if (campaign === "") return [];
-  return [{ label: t("browse.title.npcs"), to: npcsHref(campaign) }];
-}
-
-/** The context of a location's reading view: its list (ADR #31). */
-export function locationPageCrumbs(campaign: string, t: Translate): ContextCrumb[] {
-  if (campaign === "") return [];
-  return [{ label: t("browse.title.locations"), to: locationsHref(campaign) }];
 }

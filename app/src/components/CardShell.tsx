@@ -1,7 +1,7 @@
-// The one interactive surface shared by the aside cards (NPC, location).
+// The one interactive surface of the aside cards.
 //
-// Two variants, deliberately identical in looks: a LINK into the reading view
-// (scene aside) or, with `onOpen`, a BUTTON that hands the target back to the
+// Two variants, deliberately identical in looks: a LINK into a reading view
+// (scene aside) or, with `onOpen`, a BUTTON that hands the click back to the
 // caller (live mode: a card click must open the detail drawer, never navigate
 // away from the running session). Both are keyboard-focusable and carry the
 // app's global focus outline.
@@ -9,21 +9,18 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { openTargetHref, type OpenTarget } from "@/lib/open-target";
 import { cn } from "@/lib/utils";
 
-export function EntityCardShell({
-  campaign,
-  target,
+export function CardShell({
+  href,
   className,
   onOpen,
   children,
 }: {
-  campaign: string;
-  /** What the card opens — an npc or a location by its id. */
-  target: OpenTarget;
+  /** Where the card leads when it is a link. */
+  href: string;
   className?: string;
-  onOpen?: (target: OpenTarget) => void;
+  onOpen?: (() => void) | undefined;
   children: ReactNode;
 }) {
   const shell = cn(
@@ -32,13 +29,13 @@ export function EntityCardShell({
   );
   if (onOpen !== undefined) {
     return (
-      <button type="button" onClick={() => onOpen(target)} className={shell}>
+      <button type="button" onClick={onOpen} className={shell}>
         {children}
       </button>
     );
   }
   return (
-    <Link to={openTargetHref(campaign, target)} className={shell}>
+    <Link to={href} className={shell}>
       {children}
     </Link>
   );

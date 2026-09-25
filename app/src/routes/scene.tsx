@@ -8,9 +8,9 @@
 // Every other entry renders through EntityArticle, chosen by the
 // `kind` the server sends: a plain titled header for chapter/campaign/anything
 // else. An npc and a location are each read on their own route
-// (routes/npc.tsx, routes/location.tsx, ADR #31). The scene's type overline
-// belongs to scenes only — a scene status above a chapter would name the
-// wrong thing.
+// (npc/NpcRoute.tsx, location/LocationRoute.tsx, ADR #31). The scene's type
+// overline belongs to scenes only — a scene status above a chapter would
+// name the wrong thing.
 //
 // Above the article sits the context line: the topbar carries no
 // breadcrumb, so chapter and group for a scene live here, right above the
@@ -42,7 +42,7 @@ import { EntityArticle } from "@/components/EntityArticle";
 import { EntryBodyEditAction, EntryBodyEditor } from "@/components/EntryBodyEditor";
 import { PropertiesAction } from "@/components/PropertiesAction";
 import { MobileBackRow } from "@/components/MobileBackRow";
-import { NpcCard } from "@/components/NpcCard";
+import { NpcCard } from "@/npc/NpcCard";
 import { PageContext } from "@/components/PageContext";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";

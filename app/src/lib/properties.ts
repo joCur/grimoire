@@ -14,11 +14,3 @@ export function propStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [String(value)];
   return value.filter((v) => v !== undefined && v !== null).map((v) => String(v));
 }
-
-/** Quickstats properties as [key, value] string pairs; non-scalar values dropped. */
-export function propQuickstats(value: unknown): [string, string][] {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return [];
-  return Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
-    .map(([k, v]) => [k, String(v)]);
-}

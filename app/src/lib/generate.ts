@@ -20,7 +20,7 @@
 //   - which of the view's states the server's job puts us in,
 //     and the error body of a failed job.
 
-import { npcChangeSchema, npcSchema, withNpcChange } from "@grimoire/shared/npc";
+import { withNpcChange } from "@grimoire/shared/npc";
 import type {
   DraftEdit,
   GenerateJob,
@@ -476,33 +476,6 @@ export function npcOf(
     out = withNpcChange(out, change) as NpcProposal;
   }
   return out;
-}
-
-/** The change a review edit of a proposed npc may carry — every field but its `id`. */
-const npcEditSchema = npcChangeSchema.omit({ id: true });
-
-/**
- * The form fields of a proposed npc as the change the review keeps on the
- * job: every field of the form named, so the change says what the form
- * shows — a value where the form holds one, `null` where an optional field
- * was emptied. A required field the form left blank is not named at all: the
- * proposal's own value stands. Undefined when the values do not fit the
- * npc's schema, so nothing the server would refuse is queued.
- */
-export function npcChangeOf(
-  fields: Record<string, unknown>,
-  formKeys: readonly string[],
-): NpcChange | undefined {
-  const shape: Record<string, { safeParse: (value: unknown) => { success: boolean } }> =
-    npcSchema.shape;
-  const candidate: Record<string, unknown> = {};
-  for (const key of formKeys) {
-    const value = fields[key];
-    if (value !== undefined) candidate[key] = value;
-    else if (shape[key]?.safeParse(undefined).success === true) candidate[key] = null;
-  }
-  const parsed = npcEditSchema.safeParse(candidate);
-  return parsed.success ? parsed.data : undefined;
 }
 
 /** Merge boolean decisions; `null` deletes the key (the server does this). */

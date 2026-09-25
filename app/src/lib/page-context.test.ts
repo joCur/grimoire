@@ -3,10 +3,9 @@ import type { CampaignTree } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n";
 
-import { locationPageCrumbs, npcPageCrumbs, pageContextCrumbs } from "./page-context";
+import { pageContextCrumbs } from "./page-context";
 
 const de = translator("de");
-const en = translator("en");
 
 const tree: CampaignTree = {
   campaign: "beispiel",
@@ -44,31 +43,10 @@ describe("pageContextCrumbs", () => {
     ]);
   });
 
-  test("npc and location views point at THEIR list, never at a chapter", () => {
-    // An npc's and a location's reading views are their own routes, and so
-    // are their lists.
-    expect(npcPageCrumbs("beispiel", de)).toEqual([
-      { label: "NPCs", to: "/campaigns/beispiel/npcs" },
-    ]);
-    expect(locationPageCrumbs("beispiel", de)).toEqual([
-      { label: "Orte", to: "/campaigns/beispiel/locations" },
-    ]);
-  });
-
-  test("the list labels follow the UI language", () => {
-    expect(npcPageCrumbs("beispiel", en)).toEqual([
-      { label: "NPCs", to: "/campaigns/beispiel/npcs" },
-    ]);
-    expect(locationPageCrumbs("beispiel", en)).toEqual([
-      { label: "Locations", to: "/campaigns/beispiel/locations" },
-    ]);
-  });
-
   test("the campaign name never appears in the context line", () => {
-    const labels = [
-      ...npcPageCrumbs("beispiel", de),
-      ...pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de),
-    ].map((c) => c.label);
+    const labels = pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree, de).map(
+      (c) => c.label,
+    );
     expect(labels).not.toContain("beispiel");
   });
 
@@ -90,7 +68,6 @@ describe("pageContextCrumbs", () => {
 
   test("no campaign or no path yields nothing", () => {
     expect(pageContextCrumbs("", "01-salzhafen/prolog", tree, de)).toEqual([]);
-    expect(npcPageCrumbs("", de)).toEqual([]);
     expect(pageContextCrumbs("beispiel", "", tree, de)).toEqual([]);
   });
 });

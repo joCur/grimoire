@@ -1,5 +1,5 @@
-// One editing session over ONE location (ADR #31) — the location's twin of
-// lib/use-entry-edit.ts, with the same rules:
+// One editing session over ONE location (ADR #31), with the rules every
+// editing session in the app follows (lib/use-entry-edit.ts):
 //
 //   the write       ONE PATCH of the location per interaction — any subset of
 //                  its fields, `body` among them.
@@ -22,10 +22,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { WRITE_FAILED_MESSAGE } from "@/lib/write-with-rev";
 
-/** The query key of one location — the one its reading view reads. */
-export function locationKey(campaign: string, id: string): QueryKey {
-  return ["location", campaign, id];
-}
+import { locationKey } from "./location-query";
 
 export interface LocationEdit {
   /** The version this session writes against. */

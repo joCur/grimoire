@@ -18,8 +18,14 @@
 // focus (./ref-preview.tsx) — the click stays exactly what it is.
 //
 // Unresolved stays literal text: no red, no tooltip, no icon. The reference
-// simply becomes alive the moment the entity exists — without touching the
+// simply becomes alive the moment its target exists — without touching the
 // body again.
+//
+// This module only ASSIGNS a slug to what it names — an npc, a location or a
+// scene — out of the tree. Where the reference leads and what its preview
+// shows come from the one that is named (lib/open-target.ts,
+// components/EntityPreview.tsx, and from there the npc's and the location's
+// own slices).
 
 import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, type ReactNode } from "react";

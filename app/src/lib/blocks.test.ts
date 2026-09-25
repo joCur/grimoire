@@ -620,8 +620,8 @@ describe("list operations are lossless when nothing actually moves", () => {
   });
 });
 
-// The labels come from the catalog and the translator is passed in (issue
-// #69) — the German names are the ones the reading view shows.
+// The labels come from the catalog and the translator is passed in
+// (ADR #15) — the German names are the ones the reading view shows.
 const t = translator("de");
 
 describe("labels", () => {

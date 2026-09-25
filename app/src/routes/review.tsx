@@ -30,7 +30,6 @@ import { Link, useNavigate, useParams } from "react-router";
 
 import { appendThread, createNpc, fetchTree, markInboxLineDone, markLogLineSeen } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
-import { NpcCreateDialog } from "@/components/NpcCreateDialog";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
 import { useT } from "@/i18n";
@@ -41,9 +40,10 @@ import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
 import { inboxKey, pcGroups, useReviewEntries } from "@/lib/use-review";
-import { npcKey } from "@/lib/use-npc-edit";
 import { seedSession } from "@/lib/use-session";
 import { threadsKey, useThreads } from "@/lib/use-threads";
+import { NpcFromNoteDialog } from "@/npc/NpcFromNoteDialog";
+import { npcKey } from "@/npc/npc-query";
 
 type ActionKind = ReviewActionKind;
 
@@ -363,9 +363,9 @@ export function ReviewRoute() {
       </div>
 
       {npcEntry !== undefined && (
-        <NpcCreateDialog
+        <NpcFromNoteDialog
           key={npcEntry.key}
-          entry={npcEntry}
+          text={npcEntry.text}
           pending={act.isPending}
           error={npcError}
           onClose={() => {

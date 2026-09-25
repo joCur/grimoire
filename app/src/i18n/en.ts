@@ -320,7 +320,7 @@ export const en: Messages = {
   "server.field.title": "The title",
 
 
-  // --- status enum labels (lib/scene-status.ts, lib/entity.ts) --------------
+  // --- status enum labels (lib/scene-status.ts, npc/npc-status.ts) ----------
   "status.scene.ready": "ready",
   "status.scene.draft": "draft",
   "status.scene.played": "played",
@@ -513,7 +513,7 @@ export const en: Messages = {
   "review.threads.new": "new",
   "review.finish": "Done — back to the chapters",
 
-  // --- NPC create dialog of the review (components/NpcCreateDialog.tsx) -----
+  // --- NPC create dialog of the review (npc/NpcFromNoteDialog.tsx) ----------
   "npcCreate.description":
     "Creates a new NPC with the status “unknown” and uses this note as its text. If an empty NPC already has this ID, it receives the note. If an NPC with this ID already has content, nothing is written and the note stays open.",
   "npcCreate.idLabel": "ID (appears in the address)",
@@ -815,7 +815,7 @@ export const en: Messages = {
   "sceneArticle.tag": "#{tag}",
   "sceneArticle.handout": "Handout: {handout}",
 
-  // --- the aside cards (components/NpcCard.tsx, components/LocationCard.tsx) -
+  // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} — not an NPC ID, so not an entry.",
   "npcCard.unloadable": "{id} — NPC not loadable, check the server.",
   "npcCard.will.inline": "Wants:",
@@ -831,7 +831,8 @@ export const en: Messages = {
   // location row has a label of its own.
   "refPreview.scene.location": "Location",
 
-  // --- entity reading view (components/EntityArticle.tsx) -------------------
+  // --- npc and location reading views (npc/NpcArticle.tsx,
+  //     location/LocationArticle.tsx) ------------------------------------------
   "entity.npc.statblock": "Statblock: {value}",
   "entity.location.roll20": "Roll20 page: {value}",
 

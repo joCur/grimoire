@@ -1,27 +1,28 @@
 // "/campaigns/:campaign/list/scenes", "/campaigns/:campaign/npcs" and
 // "/campaigns/:campaign/locations" — the simple list pages, reached from the
 // mobile start surface's lookup rows and from the topbar's quiet npc and
-// location links on the desktop: scenes grouped flat by chapter, npcs and
-// locations alphabetical. A scene row opens its read view
-// (/campaigns/:campaign/entries/<path>), an npc or a location row its own
-// (/campaigns/:campaign/npcs/<id>, /campaigns/:campaign/locations/<id>,
-// ADR #31) — and the npc and location lists are their resources' own lists.
-// The layout is width-agnostic (a plain list).
+// location links on the desktop. The page is the frame: the heading, the
+// list's create action and the loading states; the rows come from the list
+// they show — the scenes grouped flat by chapter here, the npcs and the
+// locations from their own slices (ADR #31). The layout is width-agnostic (a
+// plain list).
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, ChevronRight, GitFork, MapPin, User } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { Link, useParams } from "react-router";
+import { Bookmark, GitFork } from "lucide-react";
+import { useParams } from "react-router";
 
-import { fetchLocations, fetchNpcs, fetchTree } from "@/api";
-import { LocationCreateAction, NpcCreateAction } from "@/components/CreateActions";
+import { fetchTree } from "@/api";
+import { ListRow } from "@/components/ListRow";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 import { browseListTitle } from "@/lib/entity";
 import { encodeAddress } from "@/lib/address";
-import { locationHref, npcHref } from "@/lib/open-target";
+import { LocationCreateAction } from "@/location/LocationCreateAction";
+import { LocationList } from "@/location/LocationList";
+import { NpcCreateAction } from "@/npc/NpcCreateAction";
+import { NpcList } from "@/npc/NpcList";
 
 /**
  * `kind` is the list of a route of its own (`npcs`, `locations`); without it
@@ -92,7 +93,7 @@ function SceneList({ campaign, tree }: { campaign: string; tree: CampaignTree })
             {chapter.title}
           </p>
           {chapter.scenes.map((scene) => (
-            <Row
+            <ListRow
               key={scene.path}
               to={entryHref(campaign, scene.path)}
               icon={scene.type === "contingency" ? GitFork : Bookmark}
@@ -106,87 +107,7 @@ function SceneList({ campaign, tree }: { campaign: string; tree: CampaignTree })
   );
 }
 
-/** The npcs, read from their own resource list (already sorted by name). */
-function NpcList({ campaign }: { campaign: string }) {
-  const t = useT();
-  const { data: npcs } = useQuery({
-    queryKey: ["npcs", campaign],
-    queryFn: () => fetchNpcs(campaign),
-  });
-  if (npcs === undefined) return null;
-  if (npcs.length === 0) {
-    return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.npcs")}</p>;
-  }
-  return (
-    <>
-      {npcs.map((npc) => (
-        <Row
-          key={npc.id}
-          to={npcHref(campaign, npc.id)}
-          icon={User}
-          title={npc.name === "" ? npc.id : npc.name}
-          meta={npc.role}
-        />
-      ))}
-    </>
-  );
-}
-
-/** The locations, read from their own resource list (already sorted by name). */
-function LocationList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
-  const t = useT();
-  const { data: locations } = useQuery({
-    queryKey: ["locations", campaign],
-    queryFn: () => fetchLocations(campaign),
-  });
-  if (locations === undefined) return null;
-  if (locations.length === 0) {
-    return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.locations")}</p>;
-  }
-  return (
-    <>
-      {locations.map((location) => (
-        <Row
-          key={location.id}
-          to={locationHref(campaign, location.id)}
-          icon={MapPin}
-          title={location.name}
-          meta={tree.chapters.find((ch) => ch.id === location.chapter)?.title}
-        />
-      ))}
-    </>
-  );
-}
-
 /** The read view of a scene, by its address. */
 function entryHref(campaign: string, path: string): string {
   return `/campaigns/${campaign}/entries/${encodeAddress(path)}`;
-}
-
-function Row({
-  to,
-  icon: Icon,
-  title,
-  meta,
-}: {
-  to: string;
-  icon: LucideIcon;
-  title: string;
-  meta: string | undefined;
-}) {
-  return (
-    <Link
-      to={to}
-      className="flex min-h-[52px] items-center gap-3 rounded-md border-b border-divider px-1 py-1.5 hover:bg-card"
-    >
-      <Icon aria-hidden size={16} className="flex-none text-muted-foreground" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] text-foreground">{title}</span>
-        {meta !== undefined && meta !== "" && (
-          <span className="mt-px block truncate text-[12.5px] text-muted-foreground">{meta}</span>
-        )}
-      </span>
-      <ChevronRight aria-hidden size={15} className="flex-none text-faint" />
-    </Link>
-  );
 }

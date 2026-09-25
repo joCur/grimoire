@@ -1,13 +1,13 @@
-// Location card fed from the location's own resource (ADR #31) — the
-// counterpart of NpcCard for the live aside: the DM needs the PLACE of the
-// running scene as readily as its people ("where are we right now?").
+// Location card fed from the location's own resource (ADR #31) — for the live
+// aside, beside the cards of the scene's people: the DM needs the PLACE of the
+// running scene as readily as them ("where are we right now?").
 //
 // Shown: the display name and the one line that is useful mid-sentence — the
 // `atmosphere` field when the location has one, else the Roll20 page
 // reference (plain text: the format references Roll20 by name, it never links
 // it — README). A `[[slug]]` inside the atmosphere reads as the current name,
 // like in the text; the rows are the ones the hover preview of a reference
-// shows too (components/EntityCompact).
+// shows too (./LocationCompact.tsx).
 //
 // Degradation like everywhere: while the query runs nothing is claimed, any
 // failure is a one-liner. Never an error. A scene's `location` names a
@@ -16,14 +16,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchLocation } from "@/api";
-import { EntityCardShell } from "@/components/EntityCardShell";
-import { LocationCompact } from "@/components/EntityCompact";
+import { CardShell } from "@/components/CardShell";
 import { useI18n } from "@/i18n";
-import { locationExcerpt } from "@/lib/entity-excerpt";
 import type { OpenTarget } from "@/lib/open-target";
-import { locationKey } from "@/lib/use-location-edit";
 import { useEntityRefs } from "@/markdown/entity-refs";
+
+import { LocationCompact } from "./LocationCompact";
+import { locationHref } from "./location-links";
+import { locationExcerpt } from "./location-excerpt";
+import { locationQuery } from "./location-query";
 
 export function LocationCard({
   campaign,
@@ -32,16 +33,12 @@ export function LocationCard({
 }: {
   campaign: string;
   id: string;
-  /** Opens the live drawer instead of navigating (see EntityCardShell). */
+  /** Opens the live drawer instead of navigating (see CardShell). */
   onOpen?: (target: OpenTarget) => void;
 }) {
   const { tNode } = useI18n();
   const { resolve } = useEntityRefs();
-  const { data, isPending, isError } = useQuery({
-    queryKey: locationKey(campaign, id),
-    queryFn: () => fetchLocation(campaign, id),
-    retry: false,
-  });
+  const { data, isPending, isError } = useQuery({ ...locationQuery(campaign, id), retry: false });
 
   if (isPending) return null;
 
@@ -61,16 +58,15 @@ export function LocationCard({
   if (data === undefined) return null;
 
   return (
-    <EntityCardShell
-      campaign={campaign}
-      target={{ kind: "location", id }}
-      onOpen={onOpen}
+    <CardShell
+      href={locationHref(campaign, id)}
+      onOpen={onOpen === undefined ? undefined : () => onOpen({ kind: "location", id })}
       className="p-3.5"
     >
       <LocationCompact
         name={data.name}
         excerpt={locationExcerpt(data, (slug) => resolve(slug)?.name)}
       />
-    </EntityCardShell>
+    </CardShell>
   );
 }

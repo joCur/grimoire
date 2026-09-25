@@ -32,7 +32,7 @@
 //
 // Touch devices get no preview and no listeners: a tap navigates, as before.
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import {
   useEffect,
   useId,
@@ -44,14 +44,35 @@ import {
   type ReactNode,
 } from "react";
 
-import { fetchEntry, fetchLocation, fetchNpc } from "@/api";
+import { fetchEntry } from "@/api";
 import { EntityPreview } from "@/components/EntityPreview";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { NameOf } from "@/lib/entity-excerpt";
-import { locationKey } from "@/lib/use-location-edit";
-import { npcKey } from "@/lib/use-npc-edit";
+import { locationQuery } from "@/location/location-query";
+import { npcQuery } from "@/npc/npc-query";
 
 import type { ResolvedEntityRef } from "./entity-refs";
+
+/**
+ * The query the preview of a target reads — the npc's and the location's own,
+ * from their slices (ADR #31), the scene's by its address.
+ */
+function previewQuery(
+  campaign: string,
+  target: ResolvedEntityRef,
+): { queryKey: QueryKey; queryFn: () => Promise<unknown> } {
+  switch (target.kind) {
+    case "npc":
+      return npcQuery(campaign, target.slug);
+    case "location":
+      return locationQuery(campaign, target.slug);
+    case "scene":
+      return {
+        queryKey: ["entry", campaign, target.path],
+        queryFn: () => fetchEntry(campaign, target.path),
+      };
+  }
+}
 
 const OPEN_DELAY_MS = 250;
 const CLOSE_DELAY_MS = 120;
@@ -206,31 +227,13 @@ export function RefPreview({
   };
   const show = (): void => {
     clearTimers();
-    // The SAME query the card reads — the npc's and the location's own for
-    // them (ADR #31), the scene's entry for a scene; `staleTime: Infinity`
-    // leaves what is already cached alone.
-    if (target.kind === "npc") {
-      void queryClient.prefetchQuery({
-        queryKey: npcKey(campaign, target.slug),
-        queryFn: () => fetchNpc(campaign, target.slug),
-        retry: false,
-        staleTime: Infinity,
-      });
-    } else if (target.kind === "location") {
-      void queryClient.prefetchQuery({
-        queryKey: locationKey(campaign, target.slug),
-        queryFn: () => fetchLocation(campaign, target.slug),
-        retry: false,
-        staleTime: Infinity,
-      });
-    } else if (target.kind === "scene") {
-      void queryClient.prefetchQuery({
-        queryKey: ["entry", campaign, target.path],
-        queryFn: () => fetchEntry(campaign, target.path),
-        retry: false,
-        staleTime: Infinity,
-      });
-    }
+    // The SAME query the card reads; `staleTime: Infinity` leaves what is
+    // already cached alone.
+    void queryClient.prefetchQuery({
+      ...previewQuery(campaign, target),
+      retry: false,
+      staleTime: Infinity,
+    });
     if (openKey === key) return;
     if (opensAtOnce()) openNow();
     else openTimer.current = window.setTimeout(openNow, OPEN_DELAY_MS);

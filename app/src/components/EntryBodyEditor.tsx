@@ -1,9 +1,7 @@
-// Edit mode of the reading view: the edit action in the header of a
-// scene/chapter/campaign — and of an npc and a location, on their own routes —
-// swaps the rendered text for the editor. `BodyEditor` is the surface, the
-// same for every kind; `EntryBodyEditor` hands it an entry's editing session,
-// and the npc's and the location's reading views hand it theirs
-// (components/NpcActions.tsx, components/LocationActions.tsx).
+// Edit mode of the reading view: the edit action in the header swaps the
+// rendered text for the editor. `BodyEditor` is the surface, the same on every
+// reading view; `EntryBodyEditor` hands it the editing session of a scene, a
+// chapter or the campaign, and every other reading view hands it its own.
 //
 // That editor has TWO surfaces over ONE draft:
 //
@@ -21,12 +19,12 @@
 //
 // What the DM sees stays the same page: the header (title, chips, status
 // control) keeps standing, only the body below it becomes editable. Beside
-// the text the surface carries the kind's PROSE FIELDS — an npc's
-// `motivation`, a location's `atmosphere` (@grimoire/shared `FieldSurface`):
-// prose the cards show, written where prose is written. They share the row's
-// one guard (ADR #23), so a save is ONE patch of whatever changed, and a
-// forced save resends exactly that. Every other field stays with the status
-// control and the dialog.
+// the text the surface carries the PROSE FIELDS its caller puts there — an
+// npc's `motivation`, a location's `atmosphere` (ADR #29): prose the cards
+// show, written where prose is written. They share the row's one guard
+// (ADR #23), so a save is ONE write of whatever changed, and a forced save
+// resends exactly that. Every other field stays with the status control and
+// the dialog.
 //
 // Losing work is the one real risk here, so:
 //   * a conflict (409) keeps the draft and puts the shared conflict line under
@@ -37,16 +35,15 @@
 //   * a block list that would come back DIFFERENT from what it shows (a `##`
 //     typed into an If-section's child moves the whole branch on the next
 //     parse) blocks the save until the DM decides — composerIssues, the same
-//     seam the properties dialog uses for an unfinished quickstat row.
+//     seam a dialog uses for a field that cannot be written yet.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { BlockComposer, ComposerModeToggle } from "@/components/BlockComposer";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
-import { PropertiesFieldControl } from "@/components/PropertiesFields";
 import {
   EditorShell,
   MarkdownEditorSurface,
@@ -72,13 +69,6 @@ import {
   type ComposerDraft,
 } from "@/lib/composer";
 import { bodyEditorChange, hasBodyEditChange, type BodyEditChange } from "@/lib/entry-body";
-import {
-  propertiesFieldsFor,
-  propertiesFormValues,
-  propertiesPatch,
-  type FormValues,
-  type PropertiesField,
-} from "@/lib/properties-form";
 import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /**
@@ -104,22 +94,16 @@ function textareaIdFor(key: string): string {
 
 // --- the draft ------------------------------------------------------------------
 
-/** What the surface is seeded with: the text and the prose fields' form values. */
-export interface BodyEditSeed {
-  body: string;
-  values: FormValues;
-}
-
 /** The draft of one edit, and the baseline "is there anything to save?" is measured against. */
 export interface BodyDraft {
   draft: ComposerDraft;
   setDraft: (next: ComposerDraft | ((current: ComposerDraft) => ComposerDraft)) => void;
-  fieldValues: FormValues;
-  setFieldValues: (next: FormValues) => void;
-  /** The change a save would send — each half only when it changed. */
-  change: BodyEditChange;
-  /** Continue from a stored state: the draft and its baseline are replaced by it. */
-  reseed: (seed: BodyEditSeed) => void;
+  /** The text the save is measured against. */
+  baseline: string;
+  /** The text the draft stands for right now. */
+  body: string;
+  /** Continue from a stored text: the draft and its baseline are replaced by it. */
+  reseed: (body: string) => void;
 }
 
 /**
@@ -127,36 +111,40 @@ export interface BodyDraft {
  * session writes against, so it moves only when that version does, i.e. when
  * the DM adopts the stored row after a conflict (`reseed`).
  */
-export function useBodyDraft(seed: BodyEditSeed, fields: readonly PropertiesField[]): BodyDraft {
+export function useBodyDraft(seed: string): BodyDraft {
   // The block composer is the default surface (a PO decision): the DM
   // maintains prose in forms, the textarea is the fallback.
-  const [draft, setDraft] = useState(() => composerDraft(seed.body));
-  const [baseline, setBaseline] = useState(seed.body);
-  const [fieldBaseline, setFieldBaseline] = useState<FormValues>(seed.values);
-  const [fieldValues, setFieldValues] = useState<FormValues>(fieldBaseline);
+  const [draft, setDraft] = useState(() => composerDraft(seed));
+  const [baseline, setBaseline] = useState(seed);
   const body = useMemo(() => draftBody(draft), [draft]);
   return {
     draft,
     setDraft,
-    fieldValues,
-    setFieldValues,
-    change: bodyEditorChange(baseline, body, propertiesPatch(fields, fieldBaseline, fieldValues)),
+    baseline,
+    body,
     reseed: (stored) => {
       // The DM chose the stored text: the draft is replaced by it and there is
       // nothing left to save. The SURFACE stays as it is — reseeding is an
       // answer to a conflict, not a reason to move someone off the textarea
       // they were writing in.
-      setDraft((current) => composerDraftIn(stored.body, current.mode));
-      setBaseline(stored.body);
-      setFieldBaseline(stored.values);
-      setFieldValues(stored.values);
+      setDraft((current) => composerDraftIn(stored, current.mode));
+      setBaseline(stored);
     },
   };
 }
 
-/** What the surface needs from the editing session of its kind. */
-export interface BodyEditSession {
-  save: (change: BodyEditChange) => void;
+/** The prose fields beside the text: their controls, labels, and what changed in them. */
+export interface BodyEditFields<F extends object> {
+  controls: ReactNode;
+  /** The fields' labels, for the hint under the editor. */
+  labels: readonly string[];
+  /** The change of the fields that moved — empty when none did. */
+  change: F;
+}
+
+/** What the surface needs from the editing session behind it. */
+export interface BodyEditSession<F extends object = Record<string, unknown>> {
+  save: (change: BodyEditChange<F>) => void;
   isSaving: boolean;
   message?: string | undefined;
   /** Present while a write stands refused — the conflict line shows. */
@@ -165,11 +153,11 @@ export interface BodyEditSession {
   forceSave?: (() => void) | undefined;
 }
 
-// --- an entry's editor -------------------------------------------------------------
+// --- the editor of a scene, a chapter and the campaign -----------------------------
 
 /**
- * The editor of an entry: its text, and beside it the prose properties of its
- * kind, written through the entry's editing session.
+ * The editor of a scene, a chapter or the campaign: its text, written
+ * through its editing session.
  */
 export function EntryBodyEditor({
   campaign,
@@ -178,25 +166,17 @@ export function EntryBodyEditor({
 }: {
   campaign: string;
   /**
-   * The entry on screen when the edit started: its text seeds the editor and
+   * The row on screen when the edit started: its text seeds the editor and
    * its version is what the write is checked against. Mount this component per
    * path (`key`) so a navigation starts a new editing session.
    */
   entry: EntryResponse;
   onClose: () => void;
 }) {
-  const t = useT();
-  // The prose properties edited beside the text — none for a scene, a chapter
-  // or the campaign.
-  const fields = useMemo(() => propertiesFieldsFor(entry.kind, t, "text") ?? [], [entry.kind, t]);
-  const draft = useBodyDraft(
-    { body: entry.body, values: propertiesFormValues(fields, entry.properties) },
-    fields,
-  );
+  const draft = useBodyDraft(entry.body);
   const edit = useEntryEdit(campaign, entry.path, entry.rev, {
     onSaved: onClose,
-    onReload: (stored) =>
-      draft.reseed({ body: stored.body, values: propertiesFormValues(fields, stored.properties) }),
+    onReload: (stored) => draft.reseed(stored.body),
     // The text feeds the tree's counts/titles and the search index, so neither
     // the campaign's lists nor the command palette may keep the old text.
     invalidateOnSuccess: [
@@ -204,21 +184,15 @@ export function EntryBodyEditor({
       ["search", campaign],
     ],
   });
-  const session: BodyEditSession = {
-    ...edit,
-    save: (change) =>
-      edit.save({
-        ...(change.body === undefined ? {} : { body: change.body }),
-        ...(change.fields === undefined ? {} : { properties: change.fields }),
-      }),
-  };
   return (
     <BodyEditor
       editorKey={entry.path}
       label={entry.path}
-      fields={fields}
       draft={draft}
-      session={session}
+      session={{
+        ...edit,
+        save: (change) => edit.save(change.body === undefined ? {} : { body: change.body }),
+      }}
       onClose={onClose}
     />
   );
@@ -227,11 +201,11 @@ export function EntryBodyEditor({
 // --- the surface --------------------------------------------------------------------
 
 /**
- * The editing surface itself, the same for every kind: the text on two
- * surfaces over one draft, the prose fields beside it, the conflict line and
- * the discard guard.
+ * The editing surface itself, the same on every reading view: the text on
+ * two surfaces over one draft, the prose fields beside it, the conflict line
+ * and the discard guard.
  */
-export function BodyEditor({
+export function BodyEditor<F extends object>({
   editorKey,
   label,
   fields,
@@ -243,13 +217,15 @@ export function BodyEditor({
   editorKey: string;
   /** How the surface is named for assistive technology. */
   label: string;
-  fields: readonly PropertiesField[];
+  /** The prose fields beside the text, when the row has any. */
+  fields?: BodyEditFields<F>;
   draft: BodyDraft;
-  session: BodyEditSession;
+  session: BodyEditSession<F>;
   onClose: () => void;
 }) {
   const t = useT();
-  const { draft, setDraft, fieldValues, setFieldValues, change: write } = state;
+  const { draft, setDraft } = state;
+  const write = bodyEditorChange(state.baseline, state.body, fields?.change);
   // Textarea (true) or rendered preview (false) — the markdown surface's own
   // toggle, unchanged. The block surface has no preview of its own: every card
   // already shows its content.
@@ -258,8 +234,7 @@ export function BodyEditor({
   const { isSaving, message } = edit;
   const dirty = hasBodyEditChange(write);
   // What the block list would break if it were written now, per block — the
-  // same seam the properties dialog uses (PropertiesAction): the card
-  // says it, the button waits. The raw surface has no such state: its text IS
+  // same seam a dialog uses for a field: the card says it, the button waits. The raw surface has no such state: its text IS
   // the row's.
   const issues = useMemo(
     () => (draft.mode === "blocks" ? composerIssues(draft.blocks, t) : EMPTY_ISSUES),
@@ -313,23 +288,9 @@ export function BodyEditor({
           </>
         }
       >
-        {fields.length > 0 && (
+        {fields !== undefined && (
           <div className="mt-3.5 flex flex-col gap-3.5 border-b border-border pb-4">
-            {fields.map((field) => {
-              const value = fieldValues[field.key];
-              if (value === undefined) return null;
-              return (
-                <PropertiesFieldControl
-                  key={field.key}
-                  field={field}
-                  value={value}
-                  tree={undefined}
-                  pending=""
-                  onChange={(next) => setFieldValues({ ...fieldValues, [field.key]: next })}
-                  onPendingChange={() => undefined}
-                />
-              );
-            })}
+            {fields.controls}
           </div>
         )}
         {draft.mode === "blocks" ? (
@@ -352,11 +313,9 @@ export function BodyEditor({
       </EditorShell>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-[12px] text-faint">
-          {fields.length === 0
+          {fields === undefined
             ? t("bodyEditor.hint")
-            : t("bodyEditor.hint.withFields", {
-                fields: fields.map((field) => field.label).join(", "),
-              })}
+            : t("bodyEditor.hint.withFields", { fields: fields.labels.join(", ") })}
         </p>
         {/* A write error wins the line; without one it says why the save
             button is dead, because a disabled button next to a card-level hint

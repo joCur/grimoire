@@ -6,13 +6,11 @@
 // it below with zod's own API, so a new field of an npc is one line in the
 // schema and one in its form fields.
 //
-// The FORM FIELDS the app's dialog is built from stand here too, keyed by the
-// same field names: which control edits a field, which list a reference picks
-// from, and where it is edited. They are typed against the schema, so a field
-// without a form entry — or a form entry without a field — does not compile.
+// The app edits an npc with its own form fields, typed against the type
+// derived here (app/src/npc/), so a field the form does not handle does not
+// compile.
 
 import { z } from "zod";
-import type { PropertyFieldDef } from "./property-fields";
 
 /** An npc's states. A CHECK constraint holds the column to them (ADR #25). */
 export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
@@ -214,31 +212,3 @@ export function withNpcChange(npc: NpcProposal, change: NpcChange): Record<strin
   }
   return next;
 }
-
-// --- the form fields ------------------------------------------------------------
-
-/**
- * How the app edits each field, in the order the dialog shows them. `id` is
- * fixed at creation (ADR #21) and `body` has its own editor, so neither is
- * here; `motivation` is edited beside the body, not in the dialog
- * (`surface: "text"`, ADR #29). `name` and `status` are required like the
- * schema's own fields: an npc always has both, so neither can be emptied.
- */
-const NPC_FORM: {
-  [K in Exclude<keyof NpcFields, "id" | "body">]-?: Omit<PropertyFieldDef, "key">;
-} = {
-  name: { control: "text", required: true },
-  role: { control: "text" },
-  chapter: { control: "reference", source: "chapters" },
-  status: { control: "select", values: NPC_STATUSES, required: true },
-  statblock: { control: "text" },
-  quickstats: { control: "pairs" },
-  voice: { control: "textarea" },
-  appearance: { control: "textarea" },
-  motivation: { control: "textarea", surface: "text" },
-};
-
-/** The form fields of an npc, as a list in dialog order. */
-export const NPC_FIELDS: readonly PropertyFieldDef[] = Object.entries(NPC_FORM).map(
-  ([key, def]) => ({ key, ...def }),
-);

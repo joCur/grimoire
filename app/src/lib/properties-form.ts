@@ -1,47 +1,42 @@
-// The properties form — editing the properties fields of one entry from the app.
-// This module is the pure half: which fields a kind has, what the open form
-// starts with, and the PATCH body a save sends.
+// The properties form of a scene and a chapter — editing their fields from
+// the app. This module is the pure half: which fields each has, what the open
+// form starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
 //
 // Three rules carry the whole thing:
 //
-//   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
-//      list per kind, `id` deliberately absent (it is fixed at creation,
-//      ADR #21) and the kind itself as well (it is derived from the path).
-//   2. Only what the DM CHANGED is patched. The entry write re-emits the
-//      whole YAML block from the parsed entry, so every key we do not send
-//      keeps its value — unknown keys of an imported entry included. Sending
-//      an unchanged field would be a no-op at best and a type/format change at
-//      worst (`quickstats: {wis: 2}` -> `{wis: '2'}`).
+//   1. The FIELD LIST comes from @grimoire/shared/property-fields — one list
+//      per kind, `id` deliberately absent (it is fixed at creation, ADR #21)
+//      and the kind itself as well (it is derived from the path).
+//   2. Only what the DM CHANGED is patched: every key we do not send keeps
+//      its value. Sending an unchanged field would be a no-op at best and a
+//      type/format change at worst.
 //   3. Clearing a field DELETES the key (`null`, the server's delete marker)
-//      instead of writing an empty value — `tags: []` or `role: ''` is noise
-//      in an entry the DM also reads in an editor. Same choice the campaign
-//      metadata dialog made for a blank description.
+//      instead of writing an empty value — `tags: []` or `trigger: ''` is
+//      noise. Same choice the campaign metadata dialog made for a blank
+//      description.
 //
 // The format DEGRADES (README): a reference field takes a free-text id that
-// has no entry yet, and a wrong-typed value is shown as text rather than
+// names no row yet, and a wrong-typed value is shown as text rather than
 // throwing. The closed fields are the exception — `status` and `type` are
 // CHECK constraints of their columns (ADR #25), so a select over them needs no
 // room for a value from outside the list.
 
-import { NPC_STATUSES } from "@grimoire/shared/npc";
-import type { CampaignTree, EntityKind, LocationFields, NpcFields } from "@grimoire/shared/types";
+import type { CampaignTree, EntityKind } from "@grimoire/shared/types";
 import {
   PROPERTY_FIELDS,
-  fieldSurface,
   isPropertiesKind,
   type FieldControl,
-  type FieldSurface,
   type PropertiesKind,
   type PropertyFieldDef,
   type ReferenceSource,
 } from "@grimoire/shared/property-fields";
-import { toSlug } from "@grimoire/shared/slug";
+import { isEntityId, toSlug } from "@grimoire/shared/slug";
 
+import type { FieldOption } from "@/components/fields/SelectField";
 import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
-import { isEntityId, npcStatusLabel } from "@/lib/entity";
-import { propQuickstats, propStringArray } from "@/lib/properties";
+import { propStringArray } from "@/lib/properties";
 import { chapterStatusOptions } from "@/lib/chapter-status";
 import { sceneStatusOptions } from "@/lib/scene-status";
 
@@ -49,26 +44,17 @@ import { sceneStatusOptions } from "@/lib/scene-status";
  * How one field is edited:
  *
  *   text / textarea   free string (textarea = the fields that hold a sentence)
- *   select            a known value set, plus whatever stands in the entry
- *   reference         ONE id of an existing entity, free text allowed
+ *   select            a known value set
+ *   reference         ONE id of an existing row, free text allowed
  *   references        MANY such ids, as chips
  *   chips             free string list (`tags`, `handouts`)
- *   pairs             free key/value map (`quickstats`)
  *
  * The kinds, the controls and the reference sources come from
- * @grimoire/shared/property-fields — the generator's reply schemas are built
- * from the SAME field list, so the question which fields an npc has is answered
- * once for the whole repo. Re-exported here because every caller in the app
- * already imports them from this module.
+ * @grimoire/shared/property-fields — the scene's generator reply schema is
+ * checked against the SAME field list. Re-exported here because every caller
+ * in the app already imports them from this module.
  */
-export type { FieldControl, FieldSurface, PropertiesKind, ReferenceSource };
-
-export interface FieldOption {
-  /** What is written to the entry. */
-  value: string;
-  /** What the DM reads — the entity's name/title, or the value itself. */
-  label: string;
-}
+export type { FieldControl, PropertiesKind, ReferenceSource };
 
 export interface PropertiesField {
   /** The field key, verbatim. */
@@ -78,18 +64,15 @@ export interface PropertiesField {
   control: FieldControl;
   /** Quiet line under the control; the format's own note in most cases. */
   hint?: string;
-  /**
-   * A field the entity cannot lose (`title`/`name`, an npc's `status`) — blank
-   * blocks the save, and a `select` offers no empty choice.
-   */
+  /** A field that cannot be emptied (`title`) — blank blocks the save. */
   required?: boolean;
   /**
-   * A REFERENCE the entry cannot lose — a scene's chapter, which is part of
+   * A REFERENCE the scene cannot lose — its chapter, which is part of
    * its address. Clearing it blocks the save with its own line under the
    * field (`propertiesFormIssues`) instead of travelling to the server and
    * coming back as a 400.
    *
-   * Separate from `required`, which is about a field that holds a NAME and
+   * Separate from `required`, which is about a field that holds a TITLE and
    * also makes the key non-nullable in the generator's reply schema
    * (@grimoire/shared/entry-schema) — a generated scene may well carry no
    * chapter of its own, because the run writes it.
@@ -110,16 +93,16 @@ export interface PropertiesField {
 //
 // Three kinds of string, three different owners:
 //
-//   field KEYS      `title`, `npcs`, `roll20Page` — wire names. They travel
-//                   to the server and back and are never translated.
-//   option VALUES   `active`, `planned`, `insight +2` — data. Not copy.
+//   field KEYS      `title`, `npcs` — wire names. They travel to the
+//                   server and back and are never translated.
+//   option VALUES   `active`, `planned` — data. Not copy.
 //   LABELS          the only translated half: every one of them is a catalog
 //                   key here (FIELD_COPY), resolved through the translator.
 //
-// The enum option LABELS (scene status, npc status, chapter status) come from
-// lib/scene-status.ts, lib/entity.ts and lib/chapter-status.ts instead, which
-// the chapter overview, the lists and the cards share: a signature change here would drag
-// half of those views along.
+// The enum option LABELS (scene status, chapter status) come from
+// lib/scene-status.ts and lib/chapter-status.ts instead, which the chapter
+// overview and the lists share: a signature change here would drag half of
+// those views along.
 
 /** Catalog keys of a field's copy — label, and the optional two below it. */
 interface FieldCopy {
@@ -129,52 +112,14 @@ interface FieldCopy {
 }
 
 /**
- * The copy of a location's fields, typed against the location's schema
- * (@grimoire/shared/location): a field without copy — or copy for a field the
- * location does not have — does not compile. `id` and `body` have no form
- * field.
- */
-const LOCATION_COPY: { [K in Exclude<keyof LocationFields, "id" | "body">]-?: FieldCopy } = {
-  name: { label: "properties.location.name.label" },
-  chapter: { label: "properties.location.chapter.label" },
-  roll20Page: { label: "properties.location.roll20.label", hint: "properties.location.roll20.hint" },
-  atmosphere: {
-    label: "properties.location.atmosphere.label",
-    hint: "properties.location.atmosphere.hint",
-  },
-};
-
-/**
- * The copy of an npc's fields, typed against the npc's schema
- * (@grimoire/shared/npc): a field without copy — or copy for a field the npc
- * does not have — does not compile. `id` and `body` have no form field.
- */
-const NPC_COPY: { [K in Exclude<keyof NpcFields, "id" | "body">]-?: FieldCopy } = {
-  name: { label: "properties.npc.name.label" },
-  role: { label: "properties.npc.role.label", hint: "properties.npc.role.hint" },
-  chapter: { label: "properties.npc.chapter.label", hint: "properties.npc.chapter.hint" },
-  status: { label: "properties.npc.status.label" },
-  statblock: {
-    label: "properties.npc.statblock.label",
-    hint: "properties.npc.statblock.hint",
-    placeholder: "properties.npc.statblock.placeholder",
-  },
-  quickstats: { label: "properties.npc.quickstats.label", hint: "properties.npc.quickstats.hint" },
-  voice: { label: "properties.npc.voice.label", hint: "properties.npc.voice.hint" },
-  appearance: { label: "properties.npc.appearance.label", hint: "properties.npc.appearance.hint" },
-  motivation: { label: "properties.npc.motivation.label", hint: "properties.npc.motivation.hint" },
-};
-
-/**
  * The COPY of every field, by kind and key. This is the whole app-side half
  * of the tables: the field LIST, its order, its controls and its known value
  * sets live in @grimoire/shared/property-fields, and what is left here is
  * what a translator owns.
  *
- * The field KEYS (`title`, `npcs`, `roll20Page`) are wire names and stay
- * untranslated, and so do the option VALUES — `active`, `planned`,
- * `insight +2` are data. Only the LABELS are translated, and every one of
- * them is a catalog key here.
+ * The field KEYS (`title`, `npcs`) are wire names and stay untranslated, and
+ * so do the option VALUES — `active`, `planned` are data. Only the LABELS are
+ * translated, and every one of them is a catalog key here.
  */
 const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
   scene: {
@@ -188,8 +133,6 @@ const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
     tags: { label: "properties.scene.tags.label", hint: "properties.scene.tags.hint" },
     status: { label: "properties.scene.status.label" },
   },
-  npc: NPC_COPY,
-  location: LOCATION_COPY,
   chapter: {
     title: { label: "properties.chapter.title.label" },
     // No placeholder: a select has no empty text box to hint at.
@@ -204,9 +147,9 @@ const SCENE_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
 
 /**
  * The labelled options of a `select`. The enum LABELS come from the modules
- * the chapter overview, the lists and the cards share (lib/scene-status.ts,
- * lib/entity.ts, lib/chapter-status.ts) — the VALUES come from the shared
- * field list, so a format change lands in one place and the labels follow.
+ * the chapter overview and the lists share (lib/scene-status.ts,
+ * lib/chapter-status.ts) — the VALUES come from the shared field list, so a
+ * format change lands in one place and the labels follow.
  */
 function optionsOf(
   kind: PropertiesKind,
@@ -220,11 +163,6 @@ function optionsOf(
   // the one active chapter for a properties patch too, so the rule does not
   // depend on which of the two doors the write came through.
   if (kind === "chapter" && def.key === "status") return chapterStatusOptions(t);
-  if (kind === "npc" && def.key === "status") {
-    // The shared list itself, not `def.values`: it is the typed single source
-    // the CHECK constraint is built from, and the labels need that type.
-    return NPC_STATUSES.map((value) => ({ value, label: npcStatusLabel(value, t) }));
-  }
   if (kind === "scene" && def.key === "type") {
     return (def.values ?? []).map((value) => {
       const key = SCENE_TYPE_LABEL_KEYS[value];
@@ -245,9 +183,8 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
     // honest fallback and the i18n test is what keeps it unused.
     label: copy === undefined ? def.key : t(copy.label),
     ...(def.required === true ? { required: true } : {}),
-    // The scene is the one kind whose `chapter` is mandatory (ADR #19): an
-    // npc and a location may sit outside every chapter, a scene may not — its
-    // chapter is a segment of its address.
+    // A scene's `chapter` is mandatory (ADR #19): its chapter is a segment
+    // of its address.
     ...(kind === "scene" && def.key === "chapter" ? { mandatoryRef: true } : {}),
     ...(def.source === undefined ? {} : { source: def.source }),
     ...(copy?.hint === undefined ? {} : { hint: t(copy.hint) }),
@@ -256,21 +193,13 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
   };
 }
 
-/**
- * The fields of a kind that one SURFACE edits (@grimoire/shared
- * `FieldSurface`): the properties dialog by default, or — with `"text"` — the
- * entry's own edit surface, where a prose property the cards show is written
- * beside the text. Undefined for a kind without a form.
- */
+/** The fields of a kind's form, or undefined for a kind without one. */
 export function propertiesFieldsFor(
   kind: EntityKind,
   t: Translate,
-  surface: FieldSurface = "dialog",
 ): readonly PropertiesField[] | undefined {
   if (!isPropertiesKind(kind)) return undefined;
-  return PROPERTY_FIELDS[kind]
-    .filter((def) => fieldSurface(def) === surface)
-    .map((def) => fieldOf(kind, def, t));
+  return PROPERTY_FIELDS[kind].map((def) => fieldOf(kind, def, t));
 }
 
 /** The kind's label, used in the dialog title. */
@@ -278,10 +207,6 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
   switch (kind) {
     case "scene":
       return t("kind.scene");
-    case "npc":
-      return t("kind.npc");
-    case "location":
-      return t("kind.location");
     case "chapter":
       return t("kind.chapter");
     default:
@@ -337,8 +262,7 @@ export function locationRef(text: string, options: readonly FieldOption[]): Loca
 /** One field's edit state; the shape follows the control, not the value. */
 export type FieldValue =
   | { kind: "text"; text: string }
-  | { kind: "list"; items: readonly string[] }
-  | { kind: "pairs"; entries: readonly { key: string; value: string }[] };
+  | { kind: "list"; items: readonly string[] };
 
 export type FormValues = Record<string, FieldValue>;
 
@@ -348,8 +272,6 @@ export function fieldValueKind(control: FieldControl): FieldValue["kind"] {
     case "references":
     case "chips":
       return "list";
-    case "pairs":
-      return "pairs";
     default:
       return "text";
   }
@@ -357,8 +279,8 @@ export function fieldValueKind(control: FieldControl): FieldValue["kind"] {
 
 /**
  * A scalar properties value as editable text. Numbers and booleans are shown
- * verbatim instead of being dropped (degrade — a hand-edited `statblock: 12`
- * is text to the DM); anything structural becomes an empty field, and since an
+ * verbatim instead of being dropped (degrade — a stored `trigger: 12` is
+ * text to the DM); anything structural becomes an empty field, and since an
  * untouched field is never patched, nothing is lost by that.
  */
 function scalarText(value: unknown): string {
@@ -378,12 +300,6 @@ export function propertiesFormValues(
     switch (fieldValueKind(field.control)) {
       case "list":
         values[field.key] = { kind: "list", items: propStringArray(raw) };
-        break;
-      case "pairs":
-        values[field.key] = {
-          kind: "pairs",
-          entries: propQuickstats(raw).map(([key, value]) => ({ key, value })),
-        };
         break;
       default:
         values[field.key] = { kind: "text", text: scalarText(raw) };
@@ -413,17 +329,6 @@ function normalize(value: FieldValue, field?: PropertiesField): FieldValue {
         kind: "list",
         items: value.items.map((item) => item.trim()).filter((item) => item !== ""),
       };
-    case "pairs":
-      return {
-        kind: "pairs",
-        // A row without a VALUE is a deleted key, never `key: ''` (rule 3) —
-        // and a row without a KEY cannot be written at all. The latter is not
-        // silently dropped, though: propertiesFormIssues blocks the save
-        // while such a row still holds text (see there).
-        entries: value.entries
-          .map((entry) => ({ key: entry.key.trim(), value: entry.value.trim() }))
-          .filter((entry) => entry.key !== "" && entry.value !== ""),
-      };
   }
 }
 
@@ -434,15 +339,12 @@ function isEmpty(value: FieldValue): boolean {
       return value.text === "";
     case "list":
       return value.items.length === 0;
-    case "pairs":
-      return value.entries.length === 0;
   }
 }
 
 /**
  * Comparable form of a normalized value — order matters (a reordered npc list
- * IS a change the DM made), and the entry objects are built here, so their key
- * order is fixed.
+ * IS a change the DM made).
  */
 function valueKey(value: FieldValue): string {
   switch (value.kind) {
@@ -450,42 +352,23 @@ function valueKey(value: FieldValue): string {
       return `text:${value.text}`;
     case "list":
       return `list:${JSON.stringify(value.items)}`;
-    case "pairs":
-      return `pairs:${JSON.stringify(value.entries)}`;
   }
 }
 
-/**
- * A quickstat value keeps its YAML type: a value that is exactly how a number
- * prints stays a NUMBER, everything else stays a string. Without this, editing
- * one stat would rewrite `{wis: 2}` as `{wis: '2'}` — and a DM-typed `+2`
- * (which YAML reads as 2) must stay the string `+2` it was typed as.
- */
-function pairScalar(value: string): string | number {
-  const parsed = Number(value);
-  return value !== "" && Number.isFinite(parsed) && String(parsed) === value ? parsed : value;
-}
-
-/** The YAML value a non-empty field writes. */
+/** The value a non-empty field writes. */
 function patchValue(value: FieldValue): unknown {
   switch (value.kind) {
     case "text":
       return value.text;
     case "list":
       return [...value.items];
-    case "pairs": {
-      const out: Record<string, string | number> = {};
-      for (const entry of value.entries) out[entry.key] = pairScalar(entry.value);
-      return out;
-    }
   }
 }
 
 /**
  * The properties patch: ONLY the fields whose value actually moved.
  * A field that ended up empty is sent as `null` (the server deletes the key),
- * everything else as its value. Keys the form does not know are never in here,
- * so an imported entry keeps them.
+ * everything else as its value. Keys the form does not know are never in here.
  */
 export function propertiesPatch(
   fields: readonly PropertiesField[],
@@ -522,7 +405,7 @@ export function propertiesPatch(
 /**
  * The whole properties object a patch produces on top of a base — for the
  * callers that cannot send a patch at all. The generator review is one: its
- * draft is not an entry yet, and what it stores per draft is the complete
+ * scene is not written yet, and what it stores per scene is the complete
  * properties object, so the form's diff has to be folded back into the
  * values it was measured against. `null` is the patch's delete marker here
  * too: the key is dropped, not written as an empty value.
@@ -543,37 +426,23 @@ export function applyPropertiesPatch(
  * What is WRONG in the form right now, per field key — the line the control
  * shows under itself, and the reason the save action stays disabled.
  *
- * Two controls can get into such a state.
- *
- * The pairs control, in both cases where writing (or not writing) silently
- * would lose something the DM typed:
- *
- *   * a row with a value but no name — it cannot be written at all, so it is
- *     said out loud instead of vanishing on save,
- *   * two rows with the SAME name — YAML has one key per name, so the earlier
- *     value would be swallowed by the later one.
- *
- * A row that is completely empty (or holds only a name, which means deleting
- * that key) is fine and produces nothing here.
- *
- * A `location` that yields NO id: the field takes free
- * text and the save slugs it, so any name is fine — but text made of
- * punctuation alone leaves nothing an id could be made of
- * (shared/slug.ts never invents one), and
+ * A `location` that yields NO id: the field takes free text and the save
+ * slugs it, so any name is fine — but text made of punctuation alone leaves
+ * nothing an id could be made of (shared/slug.ts never invents one), and
  * there is no value to send. The hint under the field says what every other
  * text WILL do; this is the one that cannot be done.
  *
- * And an ID LIST (`npcs`): that list holds ids, not names — every entry is a
- * reference to an npc entry — so a non-slug entry can name nothing and the
- * server refuses it. Saying it here makes that a line under the field before
- * the click. `initial` is what the entry already holds and is EXEMPT, so a
- * scene stays savable whatever it carries today.
+ * An ID LIST (`npcs`): that list holds ids, not names — every entry is a
+ * reference to an npc — so a non-slug entry can name nothing and the server
+ * refuses it. Saying it here makes that a line under the field before the
+ * click. `initial` is what the scene already holds and is EXEMPT, so a scene
+ * stays savable whatever it carries today.
  *
- * And a MANDATORY REFERENCE that was cleared: a scene's chapter is part of
- * its address, so the server refuses a patch that removes it
- * (`chapter_required`). Saying it here is the same improvement — a line under
- * the field and a disabled save action, instead of a round trip that ends in
- * a toast.
+ * A MANDATORY REFERENCE that was cleared: a scene's chapter is part of its
+ * address, so the server refuses a patch that removes it
+ * (`chapter_required`). Saying it here is the same improvement — a line
+ * under the field and a disabled save action, instead of a round trip that
+ * ends in a toast.
  */
 export function propertiesFormIssues(
   fields: readonly PropertiesField[],
@@ -607,25 +476,6 @@ export function propertiesFormIssues(
       if (offender !== undefined) {
         issues[field.key] = t("properties.issue.notAnId", { id: offender });
       }
-      continue;
-    }
-    if (value.kind !== "pairs") continue;
-    const seen = new Set<string>();
-    let nameless = false;
-    let duplicate: string | undefined;
-    for (const entry of value.entries) {
-      const key = entry.key.trim();
-      if (key === "") {
-        if (entry.value.trim() !== "") nameless = true;
-        continue;
-      }
-      if (seen.has(key)) duplicate ??= key;
-      seen.add(key);
-    }
-    if (nameless) {
-      issues[field.key] = t("properties.issue.namelessRow");
-    } else if (duplicate !== undefined) {
-      issues[field.key] = t("properties.issue.duplicateName", { name: duplicate });
     }
   }
   return issues;
@@ -633,7 +483,7 @@ export function propertiesFormIssues(
 
 /**
  * True when the open form holds something a save would carry — the question
- * the discard guard asks. An unfinished pairs row counts: it is exactly the
+ * the discard guard asks. Text that blocks the save counts: it is exactly the
  * work that must not disappear on a stray Esc.
  */
 export function hasPropertiesChanges(
@@ -643,12 +493,12 @@ export function hasPropertiesChanges(
   t: Translate,
 ): boolean {
   if (Object.keys(propertiesPatch(fields, initial, current)).length > 0) return true;
-  // With `initial`, so that free text an imported entry already carries in
-  // `npcs` is not read as unsaved work by the discard guard.
+  // With `initial`, so that free text a scene already carries in `npcs` is
+  // not read as unsaved work by the discard guard.
   return Object.keys(propertiesFormIssues(fields, current, initial, t)).length > 0;
 }
 
-/** Blank required field = not a save (the entity would lose its name). */
+/** Blank required field = not a save (the row would lose its title). */
 export function canSubmitProperties(
   fields: readonly PropertiesField[],
   values: FormValues,
@@ -688,7 +538,7 @@ export function commitPendingText(
 // --- reference lookups -------------------------------------------------------
 
 /**
- * What a reference field offers: the ids that HAVE an entry, labelled with their
+ * What a reference field offers: the ids that HAVE a row, labelled with their
  * name/title. Order is the tree's. A value outside this list is still valid —
  * the control is an input, not a closed list (README: references degrade).
  */
@@ -706,14 +556,3 @@ export function referenceOptions(
       return tree.chapters.map((chapter) => ({ value: chapter.id, label: chapter.title }));
   }
 }
-
-/** The known name of an id, or undefined — the dim second line of a chip. */
-export function referenceLabel(
-  options: readonly FieldOption[],
-  value: string,
-): string | undefined {
-  const hit = options.find((option) => option.value === value);
-  return hit === undefined || hit.label === value ? undefined : hit.label;
-}
-
-

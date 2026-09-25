@@ -1,4 +1,4 @@
-// The aside cards (NPC, location): what they show of an npc or a location.
+// The npc's aside card: what it shows of an npc.
 //
 // `npcs:` holds ids. A non-slug value is no id and therefore no npc — the
 // server refuses one. Asking for `Alte Fischerin` would answer 404 and blame
@@ -14,14 +14,12 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 
-import type { Location, Npc } from "@grimoire/shared/types";
+import type { Npc } from "@grimoire/shared/types";
 
-import { locationKey } from "@/lib/use-location-edit";
-import { npcKey } from "@/lib/use-npc-edit";
 import { EntityRefScope, type ResolvedEntityRef } from "@/markdown/entity-refs";
 
-import { LocationCard } from "./LocationCard";
 import { NpcCard } from "./NpcCard";
+import { npcKey } from "./npc-query";
 
 function render(id: string): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -46,7 +44,7 @@ describe("NpcCard — a reference that is no id", () => {
   });
 });
 
-describe("aside cards — a reference inside the excerpt", () => {
+describe("NpcCard — a reference inside the excerpt", () => {
   // The tree's answer for the two slugs the rows below mention.
   const index = new Map<string, ResolvedEntityRef>([
     ["fenn", { kind: "npc", slug: "fenn", name: "Fenn" }],
@@ -58,14 +56,6 @@ describe("aside cards — a reference inside the excerpt", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const npc: Npc = { id: "grella", name: "Grella", status: "unknown", body: "", rev: 1, ...fields };
     client.setQueryData(npcKey("beispiel", "grella"), npc);
-    return renderWith(client, card);
-  }
-
-  /** A location card over a cached location — the location's own resource (ADR #31). */
-  function renderLocation(fields: Partial<Location>, card: ReactNode): string {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const location: Location = { id: "kai", name: "Der Kai", body: "", rev: 1, ...fields };
-    client.setQueryData(locationKey("beispiel", "kai"), location);
     return renderWith(client, card);
   }
 
@@ -105,23 +95,5 @@ describe("aside cards — a reference inside the excerpt", () => {
       );
       expect(html).not.toContain("Nur im Text");
     }
-  });
-
-  test("location card: the atmosphere reads with names", () => {
-    const html = renderLocation(
-      { atmosphere: "Hier riecht es nach [[fenn]]s Tabak." },
-      <LocationCard campaign="beispiel" id="kai" />,
-    );
-    expect(html).toContain("Hier riecht es nach Fenns Tabak.");
-    expect(html).not.toContain("[[fenn]]");
-  });
-
-  test("location card: a `## Atmosphäre` section is not read — the Roll20 page stands in", () => {
-    const html = renderLocation(
-      { roll20Page: "Kai", body: "## Atmosphäre\n\nNur im Text, nie auf der Karte.\n" },
-      <LocationCard campaign="beispiel" id="kai" />,
-    );
-    expect(html).not.toContain("Nur im Text");
-    expect(html).toContain("Roll20-Seite: Kai");
   });
 });

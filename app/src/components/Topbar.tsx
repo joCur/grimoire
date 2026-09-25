@@ -115,7 +115,8 @@ import {
   settingsCampaign,
 } from "@/lib/campaign";
 import { sessionElapsedLabel, sessionIsEmpty, sessionIsPaused } from "@/lib/session";
-import { locationsHref, npcsHref } from "@/lib/open-target";
+import { locationsHref } from "@/location/location-links";
+import { npcsHref } from "@/npc/npc-links";
 import { navSection } from "@/lib/topbar-nav";
 import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";

@@ -1,58 +1,50 @@
 // What the hover preview of a `[[slug]]` reference says about its target — a
-// glimpse, not the entry: a head line with kind and status, then the rows of
-// the compact card (components/EntityCompact.tsx) for an NPC or a location,
-// or the scene's own short form (type, trigger, location).
+// glimpse, not the row: a head line with kind and status, then the rows of its
+// short form. This module only picks WHICH preview a target gets: an npc's and
+// a location's come from their own slices, a scene's is below.
 //
 // Kind and name are known before anything loads — the tree that resolved the
 // reference has them — so the card opens labelled, never empty. The rest
-// comes with the row — an npc and a location from their own resources
-// (ADR #31), a scene from its entry — under the SAME query key the aside
-// cards and the drawer use, so a row one of them already read is not asked
-// for again (`staleTime: Infinity`: only the version poll's invalidation
-// makes it stale). While it loads, static placeholder bars stand in; if it fails, the
+// comes with the row under the SAME query key the aside cards and the drawer
+// use, so a row one of them already read is not asked for again
+// (`staleTime: Infinity`: only the version poll's invalidation makes it
+// stale). While it loads, static placeholder bars stand in; if it fails, the
 // card simply keeps kind and name — mid-sentence an error line is noise.
 //
 // Passive by contract: nothing in here is a link or a control, and names
-// inside an excerpt are plain text (lib/entity-excerpt.ts).
+// inside a short form are plain text.
 
 import { useQuery } from "@tanstack/react-query";
-import { Skull } from "lucide-react";
-import type { ReactNode } from "react";
 
-import type { NpcStatus, SceneStatus } from "@grimoire/shared/types";
-
-import { fetchEntry, fetchLocation, fetchNpc, fetchTree } from "@/api";
-import { CompactName, LocationCompact, NpcCompact } from "@/components/EntityCompact";
+import { fetchEntry, fetchTree } from "@/api";
+import { CompactHead, CompactName, CompactPlaceholder } from "@/components/Compact";
 import { useT, type Translate } from "@/i18n";
-import { npcStatusLabel } from "@/lib/entity";
-import {
-  locationExcerpt,
-  npcExcerpt,
-  sceneExcerpt,
-  type NameOf,
-  type SceneExcerpt,
-} from "@/lib/entity-excerpt";
+import { sceneExcerpt, type NameOf, type SceneExcerpt } from "@/lib/entity-excerpt";
 import { sceneStatusMeta } from "@/lib/scene-status";
-import { locationKey } from "@/lib/use-location-edit";
-import { npcKey } from "@/lib/use-npc-edit";
-import { cn } from "@/lib/utils";
+import { LocationPreview } from "@/location/LocationPreview";
 import type { ResolvedEntityRef } from "@/markdown/entity-refs";
+import { NpcPreview } from "@/npc/NpcPreview";
 
-/** How loud a status is: alive/ready are good news, dead is the one warning. */
-type StatusTone = "good" | "dead" | "quiet";
-
-interface StatusLine {
-  label: string;
-  tone: StatusTone;
-}
-
-function npcStatusLine(status: NpcStatus, t: Translate): StatusLine {
-  const tone: StatusTone = status === "alive" ? "good" : status === "dead" ? "dead" : "quiet";
-  return { label: npcStatusLabel(status, t), tone };
-}
-
-function sceneStatusLine(status: SceneStatus, t: Translate): StatusLine {
-  return { label: sceneStatusMeta(status, t).label, tone: status === "ready" ? "good" : "quiet" };
+export function EntityPreview({
+  campaign,
+  target,
+  nameOf,
+}: {
+  campaign: string;
+  target: ResolvedEntityRef;
+  /** Display name of a slug — references inside a short form read as names. */
+  nameOf: NameOf;
+}) {
+  switch (target.kind) {
+    case "npc":
+      return <NpcPreview campaign={campaign} id={target.slug} name={target.name} nameOf={nameOf} />;
+    case "location":
+      return (
+        <LocationPreview campaign={campaign} id={target.slug} name={target.name} nameOf={nameOf} />
+      );
+    case "scene":
+      return <ScenePreview campaign={campaign} path={target.path} name={target.name} nameOf={nameOf} />;
+  }
 }
 
 /** The scene's kind is its type: planned or contingency, else just "scene". */
@@ -62,41 +54,24 @@ function sceneKindLabel(type: string | undefined, t: Translate): string {
   return t("kind.scene");
 }
 
-export function EntityPreview({
+function ScenePreview({
   campaign,
-  target,
+  path,
+  name,
   nameOf,
 }: {
   campaign: string;
-  target: ResolvedEntityRef;
-  /** Display name of a slug — references inside an excerpt read as names. */
+  path: string;
+  name: string;
   nameOf: NameOf;
 }) {
   const t = useT();
-  const entryPath = target.kind === "scene" ? target.path : "";
   const entry = useQuery({
-    queryKey: ["entry", campaign, entryPath],
-    queryFn: () => fetchEntry(campaign, entryPath),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     retry: false,
     retryOnMount: false,
     staleTime: Infinity,
-    enabled: target.kind === "scene",
-  });
-  const npc = useQuery({
-    queryKey: npcKey(campaign, target.slug),
-    queryFn: () => fetchNpc(campaign, target.slug),
-    retry: false,
-    retryOnMount: false,
-    staleTime: Infinity,
-    enabled: target.kind === "npc",
-  });
-  const location = useQuery({
-    queryKey: locationKey(campaign, target.slug),
-    queryFn: () => fetchLocation(campaign, target.slug),
-    retry: false,
-    retryOnMount: false,
-    staleTime: Infinity,
-    enabled: target.kind === "location",
   });
   // A scene names its location by id; its display name is the tree's —
   // already in the cache, because the tree is what resolved this reference.
@@ -104,88 +79,37 @@ export function EntityPreview({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
     staleTime: Infinity,
-    enabled: target.kind === "scene",
   });
-  const data = entry.data;
-
-  let kind: string;
-  let status: StatusLine | undefined;
-  let rows: ReactNode = null;
-
-  if (target.kind === "npc") {
-    kind = t("kind.npc");
-    if (npc.data !== undefined) {
-      const excerpt = npcExcerpt(npc.data, nameOf);
-      if (excerpt.status !== undefined) status = npcStatusLine(excerpt.status, t);
-      rows = <NpcCompact name={target.name} excerpt={excerpt} clamp />;
-    }
-  } else if (target.kind === "location") {
-    kind = t("kind.location");
-    if (location.data !== undefined) {
-      rows = (
-        <LocationCompact
-          name={target.name}
-          excerpt={locationExcerpt(location.data, nameOf)}
-          clamp
-        />
-      );
-    }
-  } else {
-    const excerpt =
-      data === undefined
-        ? undefined
-        : sceneExcerpt(
-            data,
-            (id) => tree.data?.locations.find((location) => location.id === id)?.name,
-            nameOf,
-          );
-    kind = sceneKindLabel(excerpt?.type, t);
-    if (excerpt !== undefined) {
-      status = sceneStatusLine(excerpt.status, t);
-      rows = <SceneCompact name={target.name} excerpt={excerpt} />;
-    }
-  }
-
+  const excerpt =
+    entry.data === undefined
+      ? undefined
+      : sceneExcerpt(
+          entry.data,
+          (id) => tree.data?.locations.find((location) => location.id === id)?.name,
+          nameOf,
+        );
   return (
     <>
-      <p className="mb-1 flex items-center gap-1.5 text-[11px] tracking-[.06em] uppercase text-muted-foreground">
-        <span>{kind}</span>
-        {status !== undefined && (
-          <>
-            <span aria-hidden className="text-faint">
-              ·
-            </span>
-            <StatusLabel status={status} />
-          </>
-        )}
-      </p>
-      {rows ?? (
+      <CompactHead
+        kind={sceneKindLabel(excerpt?.type, t)}
+        status={
+          excerpt === undefined
+            ? undefined
+            : {
+                label: sceneStatusMeta(excerpt.status, t).label,
+                tone: excerpt.status === "ready" ? "good" : "quiet",
+              }
+        }
+      />
+      {excerpt === undefined ? (
         <>
-          <CompactName name={target.name} />
-          {(target.kind === "npc"
-            ? npc.isPending
-            : target.kind === "location"
-              ? location.isPending
-              : entry.isPending) && <Placeholder kind={target.kind} />}
+          <CompactName name={name} />
+          {entry.isPending && <CompactPlaceholder widths={["w-[85%]", "w-[60%]"]} />}
         </>
+      ) : (
+        <SceneCompact name={name} excerpt={excerpt} />
       )}
     </>
-  );
-}
-
-function StatusLabel({ status }: { status: StatusLine }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-[11.5px] tracking-normal normal-case",
-        status.tone === "good" && "text-success-text",
-        status.tone === "dead" && "text-destructive",
-        status.tone === "quiet" && "text-dim",
-      )}
-    >
-      {status.tone === "dead" && <Skull aria-hidden size={12} className="flex-none" />}
-      {status.label}
-    </span>
   );
 }
 
@@ -208,30 +132,5 @@ function SceneCompact({ name, excerpt }: { name: string; excerpt: SceneExcerpt }
         </p>
       )}
     </>
-  );
-}
-
-/** Static bars where the rows will be — no shimmer, nothing that moves. */
-function Placeholder({ kind }: { kind: ResolvedEntityRef["kind"] }) {
-  const bar = "my-[7px] block h-[9px] rounded-[4px] bg-secondary";
-  if (kind !== "npc") {
-    return (
-      <div aria-hidden className="mt-1.5">
-        <span className={cn(bar, "w-[85%]")} />
-        <span className={cn(bar, "w-[60%]")} />
-      </div>
-    );
-  }
-  return (
-    <div aria-hidden className="mt-1.5">
-      <span className={cn(bar, "w-[60%]")} />
-      <span className={cn(bar, "w-[95%]")} />
-      <span className={cn(bar, "w-[85%]")} />
-      <div className="mt-2.5 flex gap-[5px]">
-        <span className="h-[18px] w-[58px] rounded-[4px] border border-border bg-secondary" />
-        <span className="h-[18px] w-[58px] rounded-[4px] border border-border bg-secondary" />
-        <span className="h-[18px] w-[58px] rounded-[4px] border border-border bg-secondary" />
-      </div>
-    </div>
   );
 }

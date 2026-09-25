@@ -1,5 +1,5 @@
-// One editing session over ONE npc (ADR #31) — the npc's twin of
-// lib/use-location-edit.ts, with the same rules:
+// One editing session over ONE npc (ADR #31), with the rules every editing
+// session in the app follows (lib/use-entry-edit.ts):
 //
 //   the write       ONE PATCH of the npc per interaction — any subset of its
 //                  fields, `body` among them.
@@ -22,10 +22,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { WRITE_FAILED_MESSAGE } from "@/lib/write-with-rev";
 
-/** The query key of one npc — the one its reading view reads. */
-export function npcKey(campaign: string, id: string): QueryKey {
-  return ["npc", campaign, id];
-}
+import { npcKey } from "./npc-query";
 
 export interface NpcEdit {
   /** The version this session writes against. */

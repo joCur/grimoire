@@ -1,35 +1,34 @@
-// "/campaigns/:campaign/locations/:id" — the reading view of ONE location,
-// its own resource with its own type (ADR #31). The page is the entry
-// route's sibling: the context line on top (the location list), the
-// article, and the three quiet actions in its header — edit (the text with
-// the `atmosphere` beside it), the dialog over the other fields, and the
-// augment run.
+// "/campaigns/:campaign/npcs/:id" — the reading view of ONE npc, its own
+// resource with its own type (ADR #31). The page is the scene route's
+// sibling: the context line on top (the npc list), the article, and the
+// three quiet actions in its header — edit (the text with the `motivation`
+// beside it), the dialog over the other fields, and the augment run.
 //
-// Edit mode is remembered BY LOCATION: this route stays mounted across a
-// navigation, and an editor seeded from another location would be a lie.
+// Edit mode is remembered BY NPC: this route stays mounted across a
+// navigation, and an editor seeded from another npc would be a lie.
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 
-import { fetchLocation, fetchTree } from "@/api";
-import { LocationAugmentAction } from "@/components/AugmentAction";
+import { fetchTree } from "@/api";
 import { EntryBodyEditAction } from "@/components/EntryBodyEditor";
-import { LocationArticle } from "@/components/LocationArticle";
-import { LocationBodyEditor, LocationPropertiesAction } from "@/components/LocationActions";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
-import { locationPageCrumbs } from "@/lib/page-context";
-import { locationKey } from "@/lib/use-location-edit";
 
-export function LocationRoute() {
+import { NpcArticle } from "./NpcArticle";
+import { NpcBodyEditor, NpcFieldsAction } from "./NpcActions";
+import { NpcAugmentAction } from "./NpcAugmentAction";
+import { npcPageCrumbs } from "./npc-links";
+import { npcQuery } from "./npc-query";
+
+export function NpcRoute() {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
   const { data, isPending } = useQuery({
-    queryKey: locationKey(campaign, id),
-    queryFn: () => fetchLocation(campaign, id),
+    ...npcQuery(campaign, id),
     enabled: campaign !== "" && id !== "",
   });
   const tree = useQuery({
@@ -51,7 +50,7 @@ export function LocationRoute() {
     );
   }
   // The error screen only when there is NOTHING to show: a failing background
-  // refetch keeps the cached location — and an open editor with it.
+  // refetch keeps the cached npc — and an open editor with it.
   if (data === undefined) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
@@ -64,15 +63,15 @@ export function LocationRoute() {
   const actions = (
     <>
       {editing ? null : <EntryBodyEditAction onEdit={() => setEditingId(data.id)} />}
-      <LocationPropertiesAction campaign={campaign} location={data} tree={tree.data} />
-      {editing ? null : <LocationAugmentAction campaign={campaign} location={data} />}
+      <NpcFieldsAction campaign={campaign} npc={data} tree={tree.data} />
+      {editing ? null : <NpcAugmentAction campaign={campaign} npc={data} />}
     </>
   );
   const body = editing ? (
-    <LocationBodyEditor
+    <NpcBodyEditor
       key={data.id}
       campaign={campaign}
-      location={data}
+      npc={data}
       onClose={() => setEditingId(undefined)}
     />
   ) : undefined;
@@ -82,8 +81,8 @@ export function LocationRoute() {
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
-          <PageContext crumbs={locationPageCrumbs(campaign, t)} />
-          <LocationArticle location={data} actions={actions} body={body} />
+          <PageContext crumbs={npcPageCrumbs(campaign, t)} />
+          <NpcArticle npc={data} actions={actions} body={body} />
         </div>
       </div>
     </>

@@ -16,7 +16,8 @@ import { BookA, Bookmark, Lightbulb, MapPin, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { MessageKey } from "@/i18n";
-import { locationsHref, npcsHref } from "@/lib/open-target";
+import { locationsHref } from "@/location/location-links";
+import { npcsHref } from "@/npc/npc-links";
 
 export interface LookupTarget {
   /** Stable key — also what a test or the palette identifies a row by. */
