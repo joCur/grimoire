@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 // The `grimoire` CLI.
 //
-//   grimoire seed [dir]      load JSON campaign entries into the database
+//   grimoire seed [dir]      load JSON campaign fixtures into the database
 //
 // The server boots EMPTY — a fresh installation has no content, and creating
 // a campaign in the app is the normal way to start. `seed` is for the
 // development and test data: it loads the committed `fixtures/` tree, where a
-// directory is a campaign and each fixture file in it is one entry in the shape the
-// API speaks (db/seed.ts).
+// directory is a campaign and each fixture in it is one object in the shape
+// the API speaks (db/seed.ts).
 //
 // Deliberately thin: argument parsing, a readable report, an exit code. A
 // database that already holds campaigns is refused rather than mixed with a
@@ -26,8 +26,8 @@ const DEFAULT_SOURCE = path.resolve(PACKAGE_DIR, "../fixtures");
 
 const USAGE = `grimoire — Grimoire maintenance CLI
 
-  grimoire seed [dir]   Load JSON campaign entries into the database.
-                        One subdirectory per campaign, one fixture file per entry.
+  grimoire seed [dir]   Load JSON campaign fixtures into the database.
+                        One subdirectory per campaign, one JSON object per fixture.
                         dir defaults to ${DEFAULT_SOURCE}
                         Target database: GRIMOIRE_DATA/grimoire.db
                         (currently ${getDbFile()})
@@ -55,8 +55,8 @@ async function seed(args: string[]): Promise<number> {
     }
     for (const outcome of await seedFixtures(db, source)) {
       console.log(
-        `seeded: ${outcome.campaignId} (${outcome.entries} ` +
-          `${outcome.entries === 1 ? "entry" : "entries"})`,
+        `seeded: ${outcome.campaignId} (${outcome.fixtures} ` +
+          `${outcome.fixtures === 1 ? "fixture" : "fixtures"})`,
       );
     }
     return 0;

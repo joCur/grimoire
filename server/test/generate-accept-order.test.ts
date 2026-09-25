@@ -24,7 +24,7 @@ import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
 import type { CompletionResult, CorrectionTurn, GenerateRequest } from "../src/llm-provider";
 import { generateJobs, scenes } from "../src/db/schema";
-import { readFixtureSources, seedCampaign } from "../src/db/seed";
+import { readFixtureCampaign, seedCampaign } from "../src/db/seed";
 import { closeStore, getDb, initStore } from "../src/store/handle";
 import { dropStore, FIXTURES, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
@@ -299,11 +299,7 @@ test("the start survives a server restart between two accepts", async () => {
   try {
     closeStore();
     const db = await initStore({ dbFile });
-    const sources = await readFixtureSources(path.join(FIXTURES, "beispiel"));
-    seedCampaign(
-      db,
-      sources.map((source) => source.entry),
-    );
+    seedCampaign(db, await readFixtureCampaign(path.join(FIXTURES, "beispiel")));
     await runJob(EXISTING_CHAPTER);
     await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene"]);
     const start = await storedSceneStart();

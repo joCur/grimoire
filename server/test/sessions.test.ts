@@ -7,7 +7,7 @@
 // Two facts shape every case below:
 //
 //   * THE STORE IS THE DATABASE. Every case runs against its OWN in-memory
-//     database, seeded from the committed JSON entries by the real loader
+//     database, seeded from the committed JSON fixtures by the real loader
 //     (test/support/store.ts), so the cases cannot build on each other.
 //     Assertions read the API's own answer — which is what the app sees and
 //     therefore what the contract is about.
@@ -51,12 +51,12 @@ async function getSession(id: string, campaign = "beispiel"): Promise<SessionRes
 /**
  * A SECOND campaign next to `beispiel`, holding nothing but its own row: no
  * name, no sessions, no inbox. That is what the "there is nothing yet" cases
- * need, and a campaign entry on its own is exactly it.
+ * need, and a campaign row on its own is exactly it.
  */
 const FRESH = "frischling";
 
 async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
-  seedCampaign(await getDb(), [{ kind: "campaign", campaign: { id: FRESH, name: "", body: "" } }]);
+  seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "" } });
   await fn();
 }
 

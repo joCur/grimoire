@@ -5,7 +5,7 @@
 // the answer is an `InboxResponse` and nothing else.
 //
 // Every case runs against its OWN in-memory database, seeded from the
-// committed JSON entries by the real loader (test/support/store.ts), so the
+// committed JSON fixtures by the real loader (test/support/store.ts), so the
 // cases cannot build on each other. The system time is faked per case
 // (setSystemTime) for deterministic dates.
 
@@ -40,12 +40,12 @@ async function getInbox(campaign = "beispiel"): Promise<InboxResponse> {
 /**
  * A SECOND campaign next to `beispiel`, holding nothing but its own row: no
  * name, no sessions, no inbox. That is what the "there is nothing yet" cases
- * need, and a campaign entry on its own is exactly it.
+ * need, and a campaign row on its own is exactly it.
  */
 const FRESH = "frischling";
 
 async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
-  seedCampaign(await getDb(), [{ kind: "campaign", campaign: { id: FRESH, name: "", body: "" } }]);
+  seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "" } });
   await fn();
 }
 
@@ -100,8 +100,3 @@ describe("POST /api/campaigns/:campaign/inbox", () => {
     expect((await postJson("/api/campaigns/nope/session/start")).status).toBe(404);
   });
 });
-
-// The metadata dialog writes name/description through the entry PATCH —
-// the ONE write path. The campaign ROW always exists, GET /entry always
-// answers with an entry and a guard token, and naming a campaign that has no
-// name is an ordinary patch.

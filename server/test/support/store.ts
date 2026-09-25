@@ -1,8 +1,8 @@
 // Test setup for the database-backed API.
 //
 // Every test case gets its OWN in-memory database, seeded from the committed
-// JSON entries in `fixtures/beispiel` through the real seed loader
-// (src/db/seed.ts) — the same call `grimoire seed` makes. Those entries are
+// JSON fixtures in `fixtures/beispiel` through the real seed loader
+// (src/db/seed.ts) — the same call `grimoire seed` makes. Those fixtures are
 // the fixture of the whole suite (CLAUDE.md, "Arbeitsweise"), and because
 // they are written in the shape the API speaks, there is no second data
 // format anywhere.
@@ -12,15 +12,20 @@
 // same loader as production, no cleanup, and each case is independent.
 //
 // A case that needs a DIFFERENT campaign than the fixture describes says so
-// in the call instead of building one: `without` drops entries by their
-// fixture file name, `entries` adds new ones and REPLACES a fixture entry of
-// the same kind and id. That keeps the difference to the fixture readable in
-// the test itself.
+// in the call instead of building one, entity by entity: `npcs: [...]` adds
+// npcs and REPLACES a fixture npc of the same id, `without: { npcs: [...] }`
+// drops fixture npcs by their id — and the same for every other entity. That
+// keeps the difference to the fixture readable in the test itself.
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { CampaignSeed } from "@grimoire/shared/campaign";
+import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { LocationProposal } from "@grimoire/shared/location";
+import type { NpcProposal } from "@grimoire/shared/npc";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import type { GrimoireDb } from "../../src/db/client";
-import { readFixtureSources, seedCampaign, type SeedEntry } from "../../src/db/seed";
+import { readFixtureCampaign, seedCampaign, type SeedSession } from "../../src/db/seed";
 import { closeStore, initStore } from "../../src/store/handle";
 
 /** The committed fixture campaigns — read-only for the suite. */
@@ -32,40 +37,46 @@ export const FIXTURES = path.resolve(
 /** The example campaign every case starts from. */
 const BEISPIEL = path.join(FIXTURES, "beispiel");
 
+/**
+ * What a case changes about the example campaign, entity by entity. Each
+ * list ADDS its objects, and one whose id matches a fixture object REPLACES
+ * it — that is how a case says "the same campaign, but this npc looks like
+ * so" without restating the rest.
+ */
 export interface SeedOverrides {
-  /**
-   * Entries to add. One whose kind and id match a fixture entry REPLACES it
-   * — that is how a case says "the same campaign, but this npc looks like
-   * so" without restating the rest.
-   */
-  entries?: SeedEntry[];
-  /** Fixture file stems to leave out, e.g. `"session-2026-01-15"` or `"scenes/smuggler-captured"`. */
-  without?: string[];
+  /** Replaces the example campaign's own row. */
+  campaign?: CampaignSeed;
+  chapters?: ChapterProposal[];
+  scenes?: SceneProposal[];
+  npcs?: NpcProposal[];
+  locations?: LocationProposal[];
+  sessions?: SeedSession[];
+  /** Fixture objects to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
+  without?: {
+    chapters?: string[];
+    scenes?: string[];
+    npcs?: string[];
+    locations?: string[];
+    sessions?: string[];
+  };
 }
 
-/** The identity two entries are the same by: kind plus id. */
-function identity(entry: SeedEntry): string {
-  switch (entry.kind) {
-    case "inbox":
-    case "glossary":
-    case "threads":
-      return entry.kind;
-    case "campaign":
-      return `campaign/${entry.campaign.id}`;
-    case "chapter":
-      return `chapter/${entry.chapter.id}`;
-    case "location":
-      return `location/${entry.location.id}`;
-    case "npc":
-      return `npc/${entry.npc.id}`;
-    case "scene":
-      return `scene/${entry.scene.id}`;
-    case "session": {
-      const id = entry.properties.id;
-      return `session/${typeof id === "string" ? id : ""}`;
-    }
-  }
+/**
+ * The fixture's objects of one entity, minus the ids `without` names and the
+ * ones `added` replaces, followed by `added` — so a replacement lands at the
+ * end of its entity's load, not where the fixture object sat.
+ */
+function merged<T>(
+  fixture: T[] | undefined,
+  added: T[] | undefined,
+  without: string[] | undefined,
+  id: (value: T) => unknown,
+): T[] {
+  const gone = new Set<unknown>([...(without ?? []), ...(added ?? []).map(id)]);
+  return [...(fixture ?? []).filter((value) => !gone.has(id(value))), ...(added ?? [])];
 }
+
+const byId = (value: { id: string }): string => value.id;
 
 /**
  * A fresh in-memory database holding the fixture campaign, plus whatever
@@ -75,16 +86,22 @@ function identity(entry: SeedEntry): string {
 export async function seedStore(overrides: SeedOverrides = {}): Promise<GrimoireDb> {
   closeStore();
   const db = await initStore({ dbFile: ":memory:" });
-  const without = new Set(overrides.without ?? []);
-  const added = overrides.entries ?? [];
-  const replaced = new Set(added.map(identity));
-  const entries = (await readFixtureSources(BEISPIEL))
-    .filter((source) => !without.has(source.stem))
-    .map((source) => source.entry)
-    .filter((entry) => !replaced.has(identity(entry)));
-  // The added entries go last, so a replacement lands where its kind is
-  // loaded (db/seed.ts sorts by kind) rather than where the fixture sat.
-  seedCampaign(db, [...entries, ...added]);
+  const fixture = await readFixtureCampaign(BEISPIEL);
+  const without = overrides.without ?? {};
+  seedCampaign(db, {
+    ...fixture,
+    campaign: overrides.campaign ?? fixture.campaign,
+    chapters: merged(fixture.chapters, overrides.chapters, without.chapters, byId),
+    scenes: merged(fixture.scenes, overrides.scenes, without.scenes, byId),
+    npcs: merged(fixture.npcs, overrides.npcs, without.npcs, byId),
+    locations: merged(fixture.locations, overrides.locations, without.locations, byId),
+    sessions: merged(
+      fixture.sessions,
+      overrides.sessions,
+      without.sessions,
+      (session) => session.properties.id,
+    ),
+  });
   return db;
 }
 

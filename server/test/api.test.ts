@@ -1,4 +1,4 @@
-// Read-API tests against the DATABASE, seeded from the committed JSON entries
+// Read-API tests against the DATABASE, seeded from the committed JSON fixtures
 // in `fixtures/beispiel` — the example campaign is the fixture of the whole
 // suite (see test/support/store.ts). The Hono app runs in-process via
 // app.request(), so no live port is needed.
@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignSummary, CampaignTree } from "@grimoire/shared";
 import { app } from "../src/server";
-import { seedCampaign, type SeedEntry } from "../src/db/seed";
+import { seedCampaign, type CampaignFixture } from "../src/db/seed";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 
 describe("GET /api/campaigns", () => {
@@ -64,22 +64,20 @@ describe("GET /api/campaigns", () => {
   });
 
   describe("several campaigns side by side", () => {
-    /** A campaign's entries: its own, plus one session per id given. */
+    /** A campaign: its own row, plus one session per id given. */
     function campaign(
       fields: { id: string; name?: string; description?: string },
       sessionIds: string[] = [],
-    ): SeedEntry[] {
-      return [
-        { kind: "campaign", campaign: { name: "", ...fields, body: "" } },
-        ...sessionIds.map(
-          (id): SeedEntry => ({
-            kind: "session",
-            properties: { id, scenes_played: [] },
-            body: "",
-            log: [],
-          }),
-        ),
-      ];
+    ): CampaignFixture {
+      return {
+        campaign: { name: "", ...fields, body: "" },
+        sessions: sessionIds.map((id) => ({
+          kind: "session",
+          properties: { id, scenes_played: [] },
+          body: "",
+          log: [],
+        })),
+      };
     }
 
     beforeEach(async () => {
@@ -157,8 +155,8 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // A scene is its own resource and carries no address (ADR #31).
     expect(Object.hasOwn(arrival, "path")).toBe(false);
     expect(chapter.scenes[1]!.type).toBe("contingency");
-    // The order carries its own guard token, separate from the chapter
-    // entry's `rev`.
+    // The order carries its own guard token, separate from the chapter's
+    // `rev`.
     expect(chapter.sceneOrderRev).toBe(1);
   });
 
@@ -166,11 +164,11 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     const t = await tree();
     expect(t.npcs.map((n) => n.id)).toEqual(["fenn", "jorna"]); // Fenn < Hafenmeisterin Jorna
     expect(t.npcs[0]!.name).toBe("Fenn");
-    // Both locations the example campaign's scenes name have an entry of
-    // their own — a reference never creates one.
+    // Both locations the example campaign's scenes name have a row of their
+    // own — a reference never creates one.
     expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
-    // A tree entry for a session is its identifying HEAD: when it ran, and
+    // The tree's item for a session is its identifying HEAD: when it ran, and
     // nothing of its content. The log and the played scenes come from the
     // session itself (GET /sessions/:id) — a session is not an entry, and the
     // tree is a navigation index (ADR #26).

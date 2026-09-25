@@ -1,15 +1,19 @@
 // Seeding a campaign from JSON fixtures.
 //
 // One object per fixture file, in the shape the API speaks. An entity with
-// its own resource (ADR #31) has a directory of its own, and each fixture in
-// it is exactly what the resource answers, without the guard: the campaign is
-// `campaigns/<id>.json`, a chapter `chapters/<id>.json`, a scene
-// `scenes/<id>.json`, an npc `npcs/<id>.json`, a location
-// `locations/<id>.json`, each its fields side by side, `body` among them. The
-// lists and the sessions sit in the campaign directory as `{ kind, … }` with
-// their rows. The seed is therefore not a second data format — it is the API's own shape
-// written down, which is what makes it readable next to a response and
+// its own resource (ADR #31) has a directory of its own, read with that
+// entity's own schema: the campaign is `campaigns/<id>.json`, a chapter
+// `chapters/<id>.json`, a scene `scenes/<id>.json`, an npc `npcs/<id>.json`,
+// a location `locations/<id>.json`, each exactly what its resource answers,
+// without the guard. The sessions and the lists (open threads, inbox,
+// glossary) sit in the campaign directory itself as `{ kind, … }` with their
+// rows. The seed is therefore not a second data format — it is the API's own
+// shape written down, which is what makes it readable next to a response and
 // reviewable in a diff.
+//
+// A campaign read from its directory is a `CampaignFixture`: one slot per
+// entity, each typed with that entity's own type, so nothing downstream has
+// to tell the entities apart again.
 //
 // THREE RULES hold this together:
 //
@@ -35,9 +39,9 @@
 //
 // The load ORDER inside a campaign follows the foreign keys: campaign →
 // chapters → threads → locations → npcs → scenes → sessions → inbox →
-// glossary. Body references (`[[id]]`) are expanded in the search index at
-// the very end, because half the rows a body points at do not exist yet
-// while loading.
+// glossary (`seedCampaign`). Body references (`[[id]]`) are expanded in the
+// search index at the very end, because half the rows a body points at do
+// not exist yet while loading.
 
 import { eq, sql } from "drizzle-orm";
 import path from "node:path";
@@ -52,14 +56,12 @@ import {
   sessionScenesPlayed,
   sessions,
 } from "./schema";
-import {
-  isEntityId,
-  type CampaignSeed,
-  type ChapterProposal,
-  type LocationProposal,
-  type NpcProposal,
-  type SceneProposal,
-} from "@grimoire/shared";
+import { isEntityId } from "@grimoire/shared";
+import type { CampaignSeed } from "@grimoire/shared/campaign";
+import type { ChapterProposal } from "@grimoire/shared/chapter";
+import type { LocationProposal } from "@grimoire/shared/location";
+import type { NpcProposal } from "@grimoire/shared/npc";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { insertCampaignSeed, readCampaignSeed } from "../store/campaigns";
 import { insertChapterProposal, readChapterProposal } from "../store/chapters";
 import { indexGlossaryTerm } from "../store/glossary";
@@ -93,10 +95,24 @@ export interface SeedLogLine {
   reviewed?: boolean;
 }
 
+/** One session as its fixture holds it: its fields, its text and its log rows. */
+export interface SeedSession {
+  kind: "session";
+  properties: SessionFields;
+  body?: string;
+  log?: SeedLogLine[];
+}
+
 /** One idea in the inbox: its text and whether it is ticked off. */
 export interface SeedInboxEntry {
   text: string;
   done?: boolean;
+}
+
+/** The inbox as its fixture holds it: the ideas in their order. */
+export interface SeedInbox {
+  kind: "inbox";
+  entries: SeedInboxEntry[];
 }
 
 /**
@@ -110,50 +126,52 @@ export interface SeedThread {
   done?: boolean;
 }
 
+/**
+ * The open threads as their fixture holds them: a LIST beside the chapters
+ * (ADR #26), so they travel as rows naming their chapter — never as a
+ * checklist in a text.
+ */
+export interface SeedThreads {
+  kind: "threads";
+  entries: SeedThread[];
+}
+
 /** One glossary row. */
 export interface SeedGlossaryEntry {
   term: string;
   explanation: string;
 }
 
-/**
- * One seeded object. `kind` is what decides the shape — the discriminator a
- * list fixture of the campaign directory carries, and for an entity with its
- * own resource the directory it was read from (that fixture file carries no
- * kind: it is the entity as its resource answers it, without the guard).
- */
-export type SeedEntry =
-  | { kind: "campaign"; campaign: CampaignSeed }
-  | { kind: "chapter"; chapter: ChapterProposal }
-  | { kind: "threads"; entries: SeedThread[] }
-  | { kind: "scene"; scene: SceneProposal }
-  | { kind: "npc"; npc: NpcProposal }
-  | { kind: "location"; location: LocationProposal }
-  | { kind: "session"; properties: SessionFields; body?: string; log?: SeedLogLine[] }
-  | { kind: "inbox"; entries: SeedInboxEntry[] }
-  | { kind: "glossary"; intro?: string; entries: SeedGlossaryEntry[] };
+/** The glossary as its fixture holds it: the prose above the first term and the rows. */
+export interface SeedGlossary {
+  kind: "glossary";
+  intro?: string;
+  entries: SeedGlossaryEntry[];
+}
 
 /**
- * The order the kinds are written in — the foreign keys decide it, so this is
- * the one place it is written down.
+ * A fixture of the campaign directory itself: a session or one of the lists.
+ * Its `kind` is what tells them apart — they share the directory, while an
+ * entity with its own resource has a directory of its own.
  */
-const LOAD_ORDER: SeedEntry["kind"][] = [
-  "campaign",
-  "chapter",
-  "threads",
-  "location",
-  "npc",
-  "scene",
-  "session",
-  "inbox",
-  "glossary",
-];
+export type SeedList = SeedSession | SeedThreads | SeedInbox | SeedGlossary;
 
-/** The stem a seeded entry came from — named in every error this module throws. */
-export interface SeedSource {
-  /** The fixture file name without its `.json` extension, e.g. `session-2026-01-15`. */
-  stem: string;
-  entry: SeedEntry;
+/**
+ * One campaign as its fixture directory holds it: every entity in a slot of
+ * its own, typed with that entity's own type. Only the campaign is required
+ * — it is the row everything else hangs off — so a caller that needs a bare
+ * campaign names nothing but it.
+ */
+export interface CampaignFixture {
+  campaign: CampaignSeed;
+  chapters?: ChapterProposal[];
+  scenes?: SceneProposal[];
+  npcs?: NpcProposal[];
+  locations?: LocationProposal[];
+  sessions?: SeedSession[];
+  threads?: SeedThreads;
+  inbox?: SeedInbox;
+  glossary?: SeedGlossary;
 }
 
 class SeedError extends Error {}
@@ -172,12 +190,12 @@ function requireString(where: string, what: string, value: unknown): string {
 }
 
 /**
- * Validate one parsed list fixture of the campaign directory into a
- * `SeedEntry`. Deliberately strict — the seed is the contract of the whole
+ * Validate one parsed fixture of the campaign directory itself into a
+ * `SeedList`. Deliberately strict — the seed is the contract of the whole
  * test suite, and a silently ignored key there would hide a real mismatch
  * with the API shape.
  */
-export function asSeedEntry(where: string, value: unknown): SeedEntry {
+export function asSeedList(where: string, value: unknown): SeedList {
   if (!isRecord(value)) fail(where, "not a JSON object");
   const kind = value.kind;
   if (typeof kind !== "string") fail(where, "no `kind`");
@@ -187,8 +205,6 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
     return { kind, entries: entries.map((e, i) => asInboxEntry(`${where} entry ${i}`, e)) };
   }
   if (kind === "threads") {
-    // The open threads are a LIST beside their chapters (ADR #26), so they
-    // travel as rows naming their chapter — never as a checklist in a text.
     const entries = value.entries;
     if (!Array.isArray(entries)) fail(where, "`entries` must be a list");
     return { kind, entries: entries.map((e, i) => asThread(`${where} entry ${i}`, e)) };
@@ -239,57 +255,6 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
   };
 }
 
-/**
- * The fixture of one entity with its own resource: the entity as its resource
- * answers it, without the guard, read by that entity's own reader — or the
- * seed error that names what is wrong. The id has to be a slug like every id
- * a create endpoint hands out.
- */
-function asSeedEntity<T extends { id: string }>(
-  where: string,
-  value: unknown,
-  read: (raw: unknown) => T,
-): T {
-  let entity: T;
-  try {
-    entity = read(value);
-  } catch (error) {
-    fail(where, error instanceof Error ? error.message : String(error));
-  }
-  if (!isEntityId(entity.id)) fail(where, "`id` must be a kebab-case slug");
-  return entity;
-}
-
-/** The campaign fixture. */
-export function asSeedCampaign(where: string, value: unknown): SeedEntry {
-  const campaign = asSeedEntity(where, value, (raw) => readCampaignSeed(raw, "campaign"));
-  return { kind: "campaign", campaign };
-}
-
-/** One chapter fixture. */
-export function asSeedChapter(where: string, value: unknown): SeedEntry {
-  const chapter = asSeedEntity(where, value, (raw) => readChapterProposal(raw, "chapter"));
-  return { kind: "chapter", chapter };
-}
-
-/** One scene fixture. */
-export function asSeedScene(where: string, value: unknown): SeedEntry {
-  const scene = asSeedEntity(where, value, (raw) => readSceneProposal(raw, "scene"));
-  return { kind: "scene", scene };
-}
-
-/** One npc fixture. */
-export function asSeedNpc(where: string, value: unknown): SeedEntry {
-  const npc = asSeedEntity(where, value, (raw) => readNpcProposal(raw, "npc"));
-  return { kind: "npc", npc };
-}
-
-/** One location fixture. */
-export function asSeedLocation(where: string, value: unknown): SeedEntry {
-  const location = asSeedEntity(where, value, (raw) => readLocationProposal(raw, "location"));
-  return { kind: "location", location };
-}
-
 function asThread(where: string, value: unknown): SeedThread {
   if (!isRecord(value)) fail(where, "not a JSON object");
   const chapter = requireString(where, "`chapter`", value.chapter);
@@ -304,48 +269,77 @@ function asInboxEntry(where: string, value: unknown): SeedInboxEntry {
 }
 
 /**
- * The directory of each entity with its own resource, and the reader of its
- * fixture files.
+ * Every fixture in an entity's own directory, each read by that entity's own
+ * reader (its zod schema, in the store of the entity) — or the seed error
+ * that names the fixture and what is wrong with it. The id has to be a slug
+ * like every id a create endpoint hands out.
  */
-const ENTITY_DIRECTORIES: ReadonlyArray<
-  readonly [string, (where: string, value: unknown) => SeedEntry]
-> = [
-  ["campaigns", asSeedCampaign],
-  ["chapters", asSeedChapter],
-  ["scenes", asSeedScene],
-  ["npcs", asSeedNpc],
-  ["locations", asSeedLocation],
-];
-
-/**
- * Read one campaign directory: every fixture file in it, sorted BY NAME.
- * The name itself carries no meaning — it is only what makes the order
- * deterministic and what an error message and `seedStore({ without })` name
- * an entry by.
- */
-export async function readFixtureCampaign(dir: string): Promise<SeedEntry[]> {
-  return (await readFixtureSources(dir)).map((source) => source.entry);
+async function readEntityDirectory<T extends { id: string }>(
+  dir: string,
+  directory: string,
+  read: (raw: unknown) => T,
+): Promise<T[]> {
+  const entityDir = path.join(dir, directory);
+  const out: T[] = [];
+  for (const name of await jsonFiles(entityDir)) {
+    const where = `${directory}/${name}`;
+    const raw = await readJson(entityDir, name);
+    let entity: T;
+    try {
+      entity = read(raw);
+    } catch (error) {
+      fail(where, error instanceof Error ? error.message : String(error));
+    }
+    if (!isEntityId(entity.id)) fail(where, "`id` must be a kebab-case slug");
+    out.push(entity);
+  }
+  return out;
 }
 
 /**
- * `readFixtureCampaign`, with the fixture file stem each entry came from. The
- * stem of a fixture file in an entity's own directory carries the directory
- * (`chapters/01-salzhafen`, `scenes/smuggler-captured`, `npcs/fenn`, …).
+ * Read one campaign directory: each entity's own directory with that
+ * entity's schema, then the sessions and lists of the directory itself. Every
+ * directory is read sorted BY NAME — the name carries no meaning, it only
+ * makes the order deterministic and is what an error message names a fixture
+ * by. Exactly one campaign is required: the campaign row is what every other
+ * row hangs off, and a directory without it (or with two) does not describe
+ * a campaign.
  */
-export async function readFixtureSources(dir: string): Promise<SeedSource[]> {
-  const sources: SeedSource[] = [];
+export async function readFixtureCampaign(dir: string): Promise<CampaignFixture> {
+  const found = await readEntityDirectory(dir, "campaigns", (raw) =>
+    readCampaignSeed(raw, "campaign"),
+  );
+  if (found.length !== 1) {
+    throw new SeedError(`a campaign needs exactly one campaign, found ${found.length}`);
+  }
+  const fixture: CampaignFixture = {
+    campaign: found[0]!,
+    chapters: await readEntityDirectory(dir, "chapters", (raw) =>
+      readChapterProposal(raw, "chapter"),
+    ),
+    scenes: await readEntityDirectory(dir, "scenes", (raw) => readSceneProposal(raw, "scene")),
+    npcs: await readEntityDirectory(dir, "npcs", (raw) => readNpcProposal(raw, "npc")),
+    locations: await readEntityDirectory(dir, "locations", (raw) =>
+      readLocationProposal(raw, "location"),
+    ),
+  };
+  const sessionFixtures: SeedSession[] = [];
   for (const name of await jsonFiles(dir)) {
-    const stem = name.slice(0, -".json".length);
-    sources.push({ stem, entry: asSeedEntry(name, await readJson(dir, name)) });
-  }
-  for (const [directory, read] of ENTITY_DIRECTORIES) {
-    const entityDir = path.join(dir, directory);
-    for (const name of await jsonFiles(entityDir)) {
-      const stem = `${directory}/${name.slice(0, -".json".length)}`;
-      sources.push({ stem, entry: read(`${stem}.json`, await readJson(entityDir, name)) });
+    const list = asSeedList(name, await readJson(dir, name));
+    if (list.kind === "session") {
+      sessionFixtures.push(list);
+      continue;
     }
+    // The inbox, the glossary and the open threads are ONE list each per
+    // campaign, so a second fixture of the same list is refused rather than
+    // silently replacing the first.
+    if (fixture[list.kind] !== undefined) fail(name, `a second ${list.kind} fixture`);
+    if (list.kind === "threads") fixture.threads = list;
+    else if (list.kind === "inbox") fixture.inbox = list;
+    else fixture.glossary = list;
   }
-  return sources;
+  fixture.sessions = sessionFixtures;
+  return fixture;
 }
 
 /** The `.json` fixture file names of a directory, sorted; none when it does not exist. */
@@ -384,26 +378,25 @@ function asStringList(value: unknown): string[] {
 }
 
 /**
- * Write one campaign's entries into `db`, in ONE transaction. Exactly one
- * campaign is required: the campaign row is what every other row hangs off,
- * and a seed without it (or with two) does not describe a campaign.
+ * Write one campaign into `db`, in ONE transaction, slot by slot in the order
+ * the foreign keys dictate. Returns the campaign's id.
  */
-export function seedCampaign(
-  db: GrimoireDb,
-  entries: SeedEntry[],
-): { campaignId: string; entries: number } {
-  const campaignEntries = entries.filter((e) => e.kind === "campaign");
-  if (campaignEntries.length !== 1) {
-    throw new SeedError(`a campaign needs exactly one campaign, found ${campaignEntries.length}`);
-  }
-  const campaignId = campaignEntries[0]!.campaign.id;
-  const byKind = (kind: SeedEntry["kind"]): SeedEntry[] => entries.filter((e) => e.kind === kind);
+export function seedCampaign(db: GrimoireDb, fixture: CampaignFixture): string {
+  const campaignId = fixture.campaign.id;
 
   db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
-    for (const kind of LOAD_ORDER) {
-      for (const entry of byKind(kind)) writeEntry(tx, campaignId, entry);
+    insertCampaignSeed(tx, fixture.campaign);
+    for (const chapter of fixture.chapters ?? []) insertChapterProposal(tx, campaignId, chapter);
+    if (fixture.threads !== undefined) writeThreadRows(tx, campaignId, fixture.threads.entries);
+    for (const location of fixture.locations ?? []) {
+      insertLocationProposal(tx, campaignId, location);
     }
+    for (const npc of fixture.npcs ?? []) insertNpcProposal(tx, campaignId, npc);
+    for (const scene of fixture.scenes ?? []) insertSceneProposal(tx, campaignId, scene);
+    for (const session of fixture.sessions ?? []) writeSessionRows(tx, campaignId, session);
+    if (fixture.inbox !== undefined) writeInboxRows(tx, campaignId, fixture.inbox.entries);
+    if (fixture.glossary !== undefined) writeGlossaryRows(tx, campaignId, fixture.glossary);
     // The SECOND pass over the search index: bodies are indexed with their
     // `[[id]]` references replaced by the referenced display name
     // (store/refs.ts), and while loading, half the rows a body points at do
@@ -417,30 +410,7 @@ export function seedCampaign(
       .run();
   });
 
-  return { campaignId, entries: entries.length };
-}
-
-function writeEntry(tx: GrimoireDb, campaignId: string, entry: SeedEntry): void {
-  switch (entry.kind) {
-    case "campaign":
-      return insertCampaignSeed(tx, entry.campaign);
-    case "chapter":
-      return insertChapterProposal(tx, campaignId, entry.chapter);
-    case "threads":
-      return writeThreadRows(tx, campaignId, entry.entries);
-    case "location":
-      return insertLocationProposal(tx, campaignId, entry.location);
-    case "npc":
-      return insertNpcProposal(tx, campaignId, entry.npc);
-    case "scene":
-      return insertSceneProposal(tx, campaignId, entry.scene);
-    case "session":
-      return writeSessionRows(tx, campaignId, entry);
-    case "inbox":
-      return writeInboxRows(tx, campaignId, entry.entries);
-    case "glossary":
-      return writeGlossaryRows(tx, campaignId, entry);
-  }
+  return campaignId;
 }
 
 /**
@@ -463,23 +433,19 @@ function writeThreadRows(tx: GrimoireDb, campaignId: string, entries: SeedThread
  * Nothing about a session is indexed for search: its content is the log, and
  * the log is read in the session view and the review, never looked up by name.
  */
-function writeSessionRows(
-  tx: GrimoireDb,
-  campaignId: string,
-  entry: SeedEntry & { kind: "session" },
-): void {
-  const id = asString(entry.properties.id);
+function writeSessionRows(tx: GrimoireDb, campaignId: string, session: SeedSession): void {
+  const id = asString(session.properties.id);
   tx.insert(sessions)
     .values({
       campaignId,
       id,
-      started: asOptString(entry.properties.started),
-      ended: asOptString(entry.properties.ended),
-      body: entry.body ?? "",
+      started: asOptString(session.properties.started),
+      ended: asOptString(session.properties.ended),
+      body: session.body ?? "",
     })
     .run();
 
-  const pauses = Array.isArray(entry.properties.pauses) ? entry.properties.pauses : [];
+  const pauses = Array.isArray(session.properties.pauses) ? session.properties.pauses : [];
   pauses.forEach((pause, pos) => {
     if (!isRecord(pause)) fail(`session ${id}`, `pause ${pos} is not a JSON object`);
     tx.insert(sessionPauses)
@@ -493,7 +459,7 @@ function writeSessionRows(
       .run();
   });
 
-  (entry.log ?? []).forEach((line, pos) => {
+  (session.log ?? []).forEach((line, pos) => {
     const at = line.at ?? null;
     const sceneId = line.sceneId ?? null;
     tx.insert(logEntries)
@@ -513,7 +479,7 @@ function writeSessionRows(
   // `scenes_played` is an ORDERED list, and a scene the party returned to
   // appears in it twice: `pos` is part of the key, so a repetition is a
   // second row and the sequence is what the review reads back.
-  asStringList(entry.properties.scenes_played).forEach((sceneId, pos) => {
+  asStringList(session.properties.scenes_played).forEach((sceneId, pos) => {
     tx.insert(sessionScenesPlayed).values({ campaignId, sessionId: id, sceneId, pos }).run();
   });
 }
@@ -535,41 +501,52 @@ function writeInboxRows(tx: GrimoireDb, campaignId: string, entries: SeedInboxEn
  * first term, which belongs to no term and would be lost on every save if it
  * had no place of its own.
  */
-function writeGlossaryRows(
-  tx: GrimoireDb,
-  campaignId: string,
-  entry: SeedEntry & { kind: "glossary" },
-): void {
-  entry.entries.forEach((row, pos) => {
+function writeGlossaryRows(tx: GrimoireDb, campaignId: string, list: SeedGlossary): void {
+  list.entries.forEach((row, pos) => {
     tx.insert(glossary)
       .values({ campaignId, term: row.term, explanation: row.explanation, pos })
       .run();
     indexGlossaryTerm(tx, campaignId, row.term, row.explanation);
   });
-  if (entry.intro !== undefined && entry.intro !== "") {
+  if (list.intro !== undefined && list.intro !== "") {
     tx.update(campaigns)
-      .set({ glossaryIntro: entry.intro })
+      .set({ glossaryIntro: list.intro })
       .where(eq(campaigns.id, campaignId))
       .run();
   }
 }
 
+/** How many fixtures a campaign holds — one per object its directory carries. */
+function fixtureCount(fixture: CampaignFixture): number {
+  const lists = [fixture.threads, fixture.inbox, fixture.glossary];
+  return (
+    1 +
+    (fixture.chapters?.length ?? 0) +
+    (fixture.scenes?.length ?? 0) +
+    (fixture.npcs?.length ?? 0) +
+    (fixture.locations?.length ?? 0) +
+    (fixture.sessions?.length ?? 0) +
+    lists.filter((list) => list !== undefined).length
+  );
+}
+
 /**
  * Seed every SUBDIRECTORY of `root` as one campaign, in name order. That is
- * the whole layout: a directory is a campaign, the fixture files in it are its
- * entries.
+ * the whole layout: a directory is a campaign. Reports each campaign's id
+ * and how many fixtures it held.
  */
 export async function seedFixtures(
   db: GrimoireDb,
   root: string,
-): Promise<Array<{ campaignId: string; entries: number }>> {
+): Promise<Array<{ campaignId: string; fixtures: number }>> {
   const dirs = (await readdir(root, { withFileTypes: true }))
     .filter((e) => e.isDirectory() && !e.name.startsWith("."))
     .map((e) => e.name)
     .sort((a, b) => a.localeCompare(b, "en"));
-  const out: Array<{ campaignId: string; entries: number }> = [];
+  const out: Array<{ campaignId: string; fixtures: number }> = [];
   for (const name of dirs) {
-    out.push(seedCampaign(db, await readFixtureCampaign(path.join(root, name))));
+    const fixture = await readFixtureCampaign(path.join(root, name));
+    out.push({ campaignId: seedCampaign(db, fixture), fixtures: fixtureCount(fixture) });
   }
   return out;
 }

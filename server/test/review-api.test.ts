@@ -1,7 +1,7 @@
 // Review actions against the database stack.
 //
 // Same setup as the write-API tests: one fresh in-memory database per case,
-// seeded from the committed JSON entries by the real loader
+// seeded from the committed JSON fixtures by the real loader
 // (test/support/store.ts). Every assertion reads the API's answer or the
 // structured endpoint behind it.
 //
@@ -268,9 +268,7 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
   test("404 when the campaign has no inbox at all", async () => {
     // GET answers 200 with an empty list, but there is still no such idea to
     // check off — hence 404 here.
-    seedCampaign(await getDb(), [
-      { kind: "campaign", campaign: { id: "frischling", name: "", body: "" } },
-    ]);
+    seedCampaign(await getDb(), { campaign: { id: "frischling", name: "", body: "" } });
     const res = await postJson("/api/campaigns/frischling/review/inbox-done", { id: "0" });
     expect(res.status).toBe(404);
   });

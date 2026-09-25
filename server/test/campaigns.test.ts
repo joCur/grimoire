@@ -68,9 +68,7 @@ describe("reading the campaign", () => {
   });
 
   test("a campaign without a name of its own shows its id, like the list", async () => {
-    seedCampaign(await getDb(), [
-      { kind: "campaign", campaign: { id: FRESH, name: "", body: "" } },
-    ]);
+    seedCampaign(await getDb(), { campaign: { id: FRESH, name: "", body: "" } });
     const campaign = await getCampaign(`/api/campaigns/${FRESH}`);
     expect(campaign).toEqual({ id: FRESH, name: FRESH, body: "", rev: campaign.rev });
     expect((await listed(FRESH))?.name).toBe(FRESH);

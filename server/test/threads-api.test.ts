@@ -19,7 +19,7 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignTree, Chapter, ThreadsResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { asSeedEntry } from "../src/db/seed";
+import { asSeedList } from "../src/db/seed";
 import { getDb } from "../src/store/handle";
 import { insertThreadRows } from "../src/store/threads";
 import { dropStore, seedStore } from "./support/store";
@@ -296,17 +296,17 @@ describe("storage", () => {
         { chapter: "02-bucht", text: "Erledigt", done: true },
       ],
     };
-    expect(asSeedEntry("threads", threads)).toEqual({
+    expect(asSeedList("threads", threads)).toEqual({
       kind: "threads",
       entries: [
         { chapter: "02-bucht", text: "Offen" },
         { chapter: "02-bucht", text: "Erledigt", done: true },
       ],
     });
-    expect(() => asSeedEntry("threads", { ...threads, entries: "x" })).toThrow();
-    expect(() => asSeedEntry("threads", { kind: "threads", entries: [{ text: "x" }] })).toThrow();
+    expect(() => asSeedList("threads", { ...threads, entries: "x" })).toThrow();
+    expect(() => asSeedList("threads", { kind: "threads", entries: [{ text: "x" }] })).toThrow();
     expect(() =>
-      asSeedEntry("threads", { kind: "threads", entries: [{ chapter: "02-bucht", done: true }] }),
+      asSeedList("threads", { kind: "threads", entries: [{ chapter: "02-bucht", done: true }] }),
     ).toThrow();
   });
 });

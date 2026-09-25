@@ -224,26 +224,23 @@ describe("referrersOf", () => {
 
 describe("the seed expands references (second pass)", () => {
   test("a seeded body is findable under the referenced NAME", async () => {
-    // The seed writes one index row per entry AS IT GOES, and a body can
-    // reference an entry whose row does not exist yet at that moment — so the
+    // The seed writes one index row per object AS IT GOES, and a body can
+    // reference a row that does not exist yet at that moment — so the
     // expansion is a second pass at the end of the load (db/seed.ts). This
     // case is what exercises it: the scene's body names jorna by reference,
     // and the search has to find it under her display name.
     await seedStore({
-      entries: [
+      scenes: [
         {
-          kind: "scene",
-          scene: {
-            id: "seeded-ref",
-            title: "Referenz aus dem Seed",
-            type: "planned",
-            chapter: "01-salzhafen",
-            npcs: [],
-            handouts: [],
-            tags: [],
-            status: "draft",
-            body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
-          },
+          id: "seeded-ref",
+          title: "Referenz aus dem Seed",
+          type: "planned",
+          chapter: "01-salzhafen",
+          npcs: [],
+          handouts: [],
+          tags: [],
+          status: "draft",
+          body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
         },
       ],
     });
