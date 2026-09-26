@@ -50,7 +50,17 @@ export const de = {
   "topbar.nav.locations": "Orte",
   "topbar.search": "Suchen …",
   "topbar.generator": "Generator",
-  "topbar.generator.running": "Generierung läuft …",
+  // The campaign's generator job in one sentence — what it is about and
+  // where it stands (topbar, generator page).
+  "generatorJob.scene.running": "Die KI schreibt gerade Szenen.",
+  "generatorJob.scene.ready": "Die vorgeschlagenen Szenen warten auf deine Prüfung.",
+  "generatorJob.scene.failed": "Der Lauf für neue Szenen ist fehlgeschlagen.",
+  "generatorJob.npc.running": "Die KI schreibt gerade einen NPC.",
+  "generatorJob.npc.ready": "Der vorgeschlagene NPC wartet auf deine Prüfung.",
+  "generatorJob.npc.failed": "Der Lauf für einen neuen NPC ist fehlgeschlagen.",
+  "generatorJob.augment.running": "Die KI ergänzt gerade {name}.",
+  "generatorJob.augment.ready": "Der Vorschlag für {name} wartet auf deine Prüfung.",
+  "generatorJob.augment.failed": "Die Ergänzung von {name} ist fehlgeschlagen.",
   "topbar.generator.progress": "{written} von {total} übernommen",
   "topbar.review.pending": "Nachbereitung · {count} offen",
   // The same link below xl, where the row has no width to spare:
@@ -725,6 +735,11 @@ export const de = {
 
   // --- generator: working state (routes/generate.tsx) ----------------------
   "generate.working.title": "Entwürfe werden generiert …",
+  "generate.augment.title": "Gerade läuft eine Ergänzung",
+  "generate.augment.lead":
+    "Eine Ergänzung wird dort geprüft, wo das Ergänzte steht. Solange sie offen ist, startet hier "
+    + "kein neuer Lauf.",
+  "generate.augment.open": "Zur Ergänzung",
   "generate.working.correction":
     "Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur ans Modell zurück.",
   "generate.working.background":
@@ -1005,6 +1020,9 @@ export const de = {
 
   // --- the augment-with-AI action (generator-job/AugmentAction.tsx) --------
   "augment.action": "Mit KI ergänzen",
+  "augment.action.running": "KI ergänzt …",
+  "augment.action.ready": "Vorschlag prüfen",
+  "augment.action.failed": "Ergänzung fehlgeschlagen",
   "augment.title": "Mit KI ergänzen",
   "augment.description":
     "Quelltext und/oder Anweisung — die KI ergänzt {name}. Nichts wird überschrieben, "
@@ -1022,11 +1040,14 @@ export const de = {
   "augment.start": "Ergänzen",
   "augment.starting": "Starte …",
   "augment.start.failed": "Lauf nicht gestartet — Server prüfen.",
-  "augment.running": "Läuft auf dem Server. Du kannst den Tab schließen — das Ergebnis bleibt.",
-  "augment.busy": "Ein anderer Generator-Lauf läuft gerade. Erst abwarten oder dort verwerfen.",
+  "augment.running":
+    "Läuft auf dem Server. Du kannst den Dialog schließen und weiterarbeiten: Oben in der Leiste "
+    + "siehst du, wann der Vorschlag bereit ist, und kommst mit einem Klick hierher zurück.",
+  "augment.busy": "Ein anderer KI-Lauf läuft gerade. Warte ihn ab oder verwirf ihn dort.",
   "augment.busy.review":
-    "Ein anderer Generator-Lauf wartet noch auf Prüfung. Übernimm oder verwirf ihn erst "
-    + "im Generator — ein neuer Lauf würde ihn löschen.",
+    "Ein anderer KI-Lauf wartet noch auf deine Prüfung. Übernimm oder verwirf ihn erst, "
+    + "denn ein neuer Lauf würde ihn löschen.",
+  "augment.busy.open": "Zum anderen Lauf",
   "augment.discard": "Lauf verwerfen",
   "augment.discard.failed": "Konnte den Lauf nicht verwerfen — Server prüfen.",
 

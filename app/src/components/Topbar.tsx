@@ -30,8 +30,9 @@
 // state), the session chip (one click starts a session and enters
 // /campaigns/:campaign/live), the harvest progress on the
 // review with a quiet chapter overview link into it while today's session
-// still has unharvested log lines, and the generator entry on the chapter
-// overview with its run indicator.
+// still has unharvested log lines, and the generator entry — on the chapter
+// overview always, on every other campaign view while the campaign has a
+// job — with the job's state and the way to its review.
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Plus, Search, Settings, Sparkles } from "lucide-react";
@@ -44,7 +45,7 @@ import {
   useSearchParams,
 } from "react-router";
 
-import { fetchCampaigns } from "@/api";
+import { fetchCampaigns, fetchTree } from "@/api";
 import { CampaignCreateDialog } from "@/campaign/CampaignCreate";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -65,7 +66,15 @@ import {
 import { locationsHref } from "@/location/location-links";
 import { npcsHref } from "@/npc/npc-links";
 import { navSection } from "@/lib/topbar-nav";
-import { acceptProgress, pipelineProgress } from "@/generator-job/generator-job-state";
+import {
+  acceptProgress,
+  augmentTarget,
+  augmentTargetName,
+  jobSentence,
+  jobState,
+  pipelineProgress,
+} from "@/generator-job/generator-job-state";
+import { generatorHref, jobHref } from "@/generator-job/job-links";
 import { useGenerateJob } from "@/generator-job/generator-job-query";
 import { cn } from "@/lib/utils";
 import { useReviewCards } from "@/lib/use-review";
@@ -158,6 +167,7 @@ export function Topbar() {
   const isReadingView = isChapter || isScene || isNpcView || isLocationView;
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
+  const isGenerate = campaignOf(generateMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -328,9 +338,15 @@ export function Topbar() {
             midnight, today's date names no session at all. */}
         {isChapterOverview && <ChapterOverviewReviewLink campaign={campaign} />}
 
-        {/* Quiet entry into the generator — chapter overview only, next to the brass
-            session button per the prototype. Carries the run indicator. */}
-        {isChapterOverview && <GeneratorLink campaign={campaign} />}
+        {/* Quiet entry into the generator, next to the brass session button
+            per the prototype — always on the chapter overview, and on every
+            other campaign view while the campaign has a job, which it then
+            carries: where it stands, and one click to where it is reviewed.
+            Not in the live mode, which belongs to the running session, and
+            not on the generator page, which shows the job itself. */}
+        {campaign !== "" && !isLive && !isSettings && !isGenerate && (
+          <GeneratorLink campaign={campaign} always={isChapterOverview} />
+        )}
 
         {/* Instance settings — ONE gear, icon-only, following the generator
             entry's icon pattern. Icon-only at EVERY width on purpose: the
@@ -395,15 +411,38 @@ function TopbarNavLink({
 }
 
 /**
- * The chapter overview's generator entry — with a quiet run indicator while a generate
- * job is working. It shares the generator route's query key,
- * so there is no second poll loop: one lookup when the chapter overview mounts, then
- * polling only while a job is actually running.
+ * The generator entry and the campaign's job in ONE chip. On the chapter
+ * overview it is always there — the way into the generator. On every other
+ * campaign view it appears while the campaign has a job, so a run started on
+ * a reading view is findable from anywhere: a dot for where the job stands,
+ * the job in one sentence as its name and title, and a click lands where the
+ * job is reviewed — an augment run at its row with the review open, any other
+ * run on the generator page (generator-job/job-links.ts).
+ *
+ * It shares the generator route's query key, so there is no second poll
+ * loop: one lookup when a campaign view mounts, then polling only while a job
+ * is actually running.
  */
-function GeneratorLink({ campaign }: { campaign: string }) {
+function GeneratorLink({ campaign, always }: { campaign: string; always: boolean }) {
   const t = useT();
   const { data } = useGenerateJob(campaign);
-  const running = data?.status === "running";
+  const job = data ?? null;
+  const target = augmentTarget(job);
+  // The name of the augmented row, from the campaign tree (the same query
+  // the search and the reference links share), asked only while an augment
+  // run is there to name.
+  const tree = useQuery({
+    queryKey: ["tree", campaign],
+    queryFn: () => fetchTree(campaign),
+    enabled: target !== undefined,
+  });
+  const state = jobState(job);
+  const sentence = jobSentence(
+    job,
+    target === undefined ? "" : augmentTargetName(tree.data, target),
+    t,
+  );
+  const running = state === "running";
   // A run the DM already took PART of is neither done nor running — it
   // is half applied, and the entry says how far it got so a
   // forgotten rest is findable from anywhere.
@@ -418,15 +457,17 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   // finished ones are already reviewable and acceptable. So the dot and the
   // progress are not exclusive — the chip shows what is true.
   const runProgress = pipelineProgress(data, t);
+  const status = [sentence, runProgress].filter((part) => part !== undefined).join(" ");
+  if (!always && state === undefined) return null;
   return (
     <Link
-      to={`/campaigns/${campaign}/generate`}
+      to={job === null ? generatorHref(campaign) : jobHref(campaign, job)}
       title={
-        running
-          ? (runProgress ?? t("topbar.generator.running"))
-          : partial
-            ? progressLabel
-            : undefined
+        status !== ""
+          ? partial
+            ? `${status} ${progressLabel}`
+            : status
+          : undefined
       }
       className={cn(
         buttonVariants({ variant: "outline" }),
@@ -437,15 +478,21 @@ function GeneratorLink({ campaign }: { campaign: string }) {
       {/* Below xl the row is tight: the label steps aside and the
           icon carries the entry — the accessible name stays either way. */}
       <span className="max-xl:sr-only">{t("topbar.generator")}</span>
-      {running && (
+      {state !== undefined && (
         <>
-          {/* Pulses only where motion is welcome; otherwise a static dot
-              carries the same information. */}
+          {/* The dot says where the job stands: it pulses while the run is
+              going (only where motion is welcome; otherwise it stands
+              still), stands still once a proposal waits, and turns to the
+              error colour when the run failed. */}
           <span
             aria-hidden
-            className="size-1.5 flex-none rounded-full bg-primary motion-safe:animate-pulse"
+            className={cn(
+              "size-1.5 flex-none rounded-full",
+              state === "failed" ? "bg-destructive" : "bg-primary",
+              running && "motion-safe:animate-pulse",
+            )}
           />
-          <span className="sr-only">{runProgress ?? t("topbar.generator.running")}</span>
+          <span className="sr-only">{status}</span>
         </>
       )}
       {/* The progress number, and the width it is allowed to cost. A run that

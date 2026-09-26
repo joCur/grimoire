@@ -27,7 +27,13 @@ import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getCampaign, patchCampaign } from "../support/campaign";
 import { chapterPath, getChapter, patchChapter } from "../support/chapter";
-import { getGeneratorJob, patchGeneratorJob, startGeneratorJob } from "../support/generator-job";
+import {
+  getGeneratorJob,
+  patchGeneratorJob,
+  startAugmentJob,
+  startGeneratorJob,
+  waitForGeneratorJob,
+} from "../support/generator-job";
 import { getScene, patchScene } from "../support/scene";
 import { todaySessionId } from "../support/session";
 import { ui, uiExact, uiPattern } from "../support/ui";
@@ -564,6 +570,42 @@ test("the topbar does not overflow at medium widths with no session running", as
     expect(
       await topbarOverflow(page),
       `chapter overview at ${width}px with wider glyphs`,
+    ).toEqual({ row: 0, page: 0 });
+  }
+});
+
+/**
+ * The generator chip on a READING VIEW: it is there only while the campaign
+ * has a job, and then it stands on a row the chapter overview's guards never
+ * see — the reading view's own, with the session chip's start offer.
+ */
+test("the topbar does not overflow on a reading view while an augment run waits", async ({
+  page,
+  api,
+}) => {
+  const title = (await getScene(api, "smuggler-captured")).title;
+  await startAugmentJob(
+    api,
+    { kind: "scene", id: "smuggler-captured" },
+    { instruction: "Introduce a plot thread around the smugglers' informer" },
+  );
+  expect((await waitForGeneratorJob(api)).status).toBe("done");
+
+  for (const width of TOPBAR_WIDTHS) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/campaigns/example/scenes/smuggler-captured");
+    if (width >= 768) {
+      await expect(
+        page.getByRole("link", {
+          name: uiPattern("generatorJob.augment.ready", { name: title }),
+        }),
+      ).toBeVisible();
+    }
+    expect(await topbarOverflow(page), `reading view at ${width}px`).toEqual({ row: 0, page: 0 });
+    await widenGlyphs(page, "1px");
+    expect(
+      await topbarOverflow(page),
+      `reading view at ${width}px with wider glyphs`,
     ).toEqual({ row: 0, page: 0 });
   }
 });

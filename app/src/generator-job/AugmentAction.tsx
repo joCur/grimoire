@@ -36,6 +36,7 @@ import type { GeneratorJob, NamingHint } from "@grimoire/shared/generator-job";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router";
 
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
@@ -58,7 +59,14 @@ import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
 import { cn } from "@/lib/utils";
 
 import { discardGeneratorJob, generateJobKey, useGenerateJob } from "./generator-job-query";
-import { reviewOf, runJobArrived } from "./generator-job-state";
+import {
+  isAugmentOf,
+  jobState,
+  reviewOf,
+  runJobArrived,
+  type AugmentTarget,
+} from "./generator-job-state";
+import { AUGMENT_OPEN_PARAM, jobHref } from "./job-links";
 import { useJobReview, type JobReviewSync } from "./use-job-review";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
@@ -118,24 +126,59 @@ export interface ApplySession {
  * The trigger and its open state. Open-BY-ROW, like an edit mode: the
  * reading route stays mounted across a navigation, and a dialog holding row A
  * while the route already shows B would send A's decisions to B.
+ *
+ * The trigger carries its row's own run: while the campaign's job is the
+ * augment run of THIS row, the label says where it stands — going, waiting
+ * for review, failed — so a closed dialog is never a forgotten run. And a link
+ * that arrives with the open parameter (job-links.ts, the topbar's job chip)
+ * opens the dialog right away and takes the parameter off the address, so a
+ * reload does not open it a second time.
  */
 export function AugmentTrigger({
+  campaign,
+  target,
   openKey,
   children,
 }: {
+  campaign: string;
+  /** The row this trigger augments. */
+  target: AugmentTarget;
   openKey: string;
   children: (onClose: () => void) => ReactNode;
 }) {
   const t = useT();
   const [openFor, setOpenFor] = useState<string>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wantsOpen = searchParams.has(AUGMENT_OPEN_PARAM);
   useEffect(() => {
     setOpenFor(undefined);
   }, [openKey]);
+  useEffect(() => {
+    if (!wantsOpen) return;
+    setOpenFor(openKey);
+    setSearchParams(
+      (params) => {
+        params.delete(AUGMENT_OPEN_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  }, [wantsOpen, openKey, setSearchParams]);
+  const job = useGenerateJob(campaign).data;
+  const state = isAugmentOf(job, target) ? jobState(job) : undefined;
   return (
     <>
       <HeaderAction
         icon={Sparkles}
-        label={t("augment.action")}
+        label={t(
+          state === "running"
+            ? "augment.action.running"
+            : state === "ready"
+              ? "augment.action.ready"
+              : state === "failed"
+                ? "augment.action.failed"
+                : "augment.action",
+        )}
         onClick={() => setOpenFor(openKey)}
         className="hidden md:inline-flex"
       />
@@ -154,7 +197,7 @@ function Keyed({ children }: { children: ReactNode }) {
 export function AugmentDialog({
   campaign,
   name,
-  isMine,
+  target,
   start: startRun,
   review,
   onClose,
@@ -162,8 +205,8 @@ export function AugmentDialog({
   campaign: string;
   /** What the dialog calls the row — its name, never its address. */
   name: string;
-  /** Is this job the augment run of THIS row? */
-  isMine: (job: GeneratorJob) => boolean;
+  /** The row this dialog augments — its job is the augment run of it. */
+  target: AugmentTarget;
   start: (input: { sourceText: string; instruction: string }) => Promise<GeneratorJob>;
   /** The review of a finished run of this row, or undefined while there is no proposal. */
   review: (job: GeneratorJob) => ReactNode | undefined;
@@ -194,7 +237,7 @@ export function AugmentDialog({
   // is reported as busy rather than silently adopted — one job per campaign
   // is the server's rule and the DM has to know whose job is in the way.
   const current = job.data;
-  const mine = current !== undefined && current !== null && isMine(current);
+  const mine = current !== undefined && current !== null && isAugmentOf(current, target);
   // ANY foreign job blocks, not just a running one: a finished generator run
   // whose review nobody has looked at yet would be DELETED by the next start
   // (one job per campaign, and a start replaces a finished row). The DM has
@@ -312,7 +355,16 @@ export function AugmentDialog({
               )}
               {foreign && (
                 <p className="mb-3 text-[13px] text-muted-foreground">
-                  {t(foreignRunning ? "augment.busy" : "augment.busy.review")}
+                  {t(foreignRunning ? "augment.busy" : "augment.busy.review")}{" "}
+                  {/* Where the job in the way is reviewed — its row, or the
+                      generator page. */}
+                  <Link
+                    to={jobHref(campaign, current)}
+                    onClick={onClose}
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    {t("augment.busy.open")}
+                  </Link>
                 </p>
               )}
               <label htmlFor="augment-source" className={cn(OVERLINE, "mb-2 block")}>

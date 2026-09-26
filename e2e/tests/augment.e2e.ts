@@ -19,7 +19,11 @@
 //      turn, and the DM reviews the corrected one,
 //   f) a LOCATION is augmented on its own resource (decisions/resources): its run starts
 //      on `…/locations/:id/augment`, its proposal is the location as read
-//      beside the location as proposed, and the accept writes the location.
+//      beside the location as proposed, and the accept writes the location,
+//   g) a run is findable from anywhere: the topbar carries the campaign's job
+//      on every campaign view and leads into the open review at its row, the
+//      trigger says where its own row's run stands, and the generator page
+//      and the busy notice of another row lead there too.
 //
 // Two of them carry the default rule with them, because it is the rule the
 // whole feature turns on: by default only empty and new units are accepted,
@@ -55,7 +59,12 @@ import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getCampaign } from "../support/campaign";
 import { getChapter } from "../support/chapter";
-import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
+import {
+  getGeneratorJob,
+  readGeneratorJob,
+  startAugmentJob,
+  waitForGeneratorJob,
+} from "../support/generator-job";
 import { getLocation } from "../support/location";
 import { createNpc, getNpc, patchNpc } from "../support/npc";
 import { getScene, patchScene } from "../support/scene";
@@ -378,7 +387,8 @@ test("block decisions survive a reload — the review state is on the job", asyn
   await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: ui("augment.action") }).click();
+  // The trigger carries its row's finished run: the proposal waits.
+  await page.getByRole("button", { name: ui("augment.action.ready") }).click();
   await expect(newBlock()).toBeVisible({ timeout: 30_000 });
   await expect(keep()).toHaveAttribute("aria-pressed", "true");
 });
@@ -658,6 +668,77 @@ test("the proposal appears on a polled update — a run that is really running",
   await expect(
     page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last(),
   ).toBeVisible();
+});
+
+test("a run started here is found from anywhere: the topbar leads back into the review", async ({
+  page,
+  api,
+}) => {
+  const title = (await getScene(api, SCENE)).title;
+  await page.goto(SCENE_URL);
+  await page.getByRole("button", { name: ui("augment.action") }).click();
+  await page
+    .getByLabel(ui("augment.source.label"))
+    .fill(`${INSTRUCTION}\n\n${TRIGGER.latePart}`);
+  await page.getByRole("button", { name: ui("augment.start"), exact: true }).click();
+  await expect(page.getByText(ui("augment.running"))).toBeVisible();
+
+  // The dialog may go while the run is on — the trigger keeps its state.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: ui("augment.action.running") })).toBeVisible();
+
+  // Anywhere else in the campaign the topbar names the run and its row …
+  await page.goto("/campaigns/example/npcs");
+  const chip = (key: "generatorJob.augment.running" | "generatorJob.augment.ready") =>
+    page.getByRole("link", { name: uiPattern(key, { name: title }) });
+  await expect(chip("generatorJob.augment.running")).toBeVisible();
+  // … says when the proposal waits …
+  await expect(chip("generatorJob.augment.ready")).toBeVisible({ timeout: 30_000 });
+
+  // … and one click lands in the open review at the scene, the address
+  // without the parameter that opened it.
+  await chip("generatorJob.augment.ready").click();
+  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible();
+  await expect(
+    page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last(),
+  ).toBeVisible();
+
+  // Rejecting takes the job — and the chip — with it.
+  await page.getByRole("button", { name: ui("augment.reject") }).click();
+  await expect(chip("generatorJob.augment.ready")).toHaveCount(0);
+  expect(await readGeneratorJob(api)).toBeNull();
+});
+
+test("the generator page leads to an open augment run instead of an empty review", async ({
+  page,
+  api,
+}) => {
+  const name = (await getNpc(api, FILLED_NPC)).name;
+  await startAugmentJob(api, { kind: "npc", id: FILLED_NPC }, { instruction: INSTRUCTION });
+  expect((await waitForGeneratorJob(api)).status).toBe("done");
+
+  await page.goto("/campaigns/example/generate");
+  await expect(
+    page.getByText(ui("generatorJob.augment.ready", { name }), { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: ui("generate.augment.open") }).click();
+  await expect(page).toHaveURL(new RegExp(`${FILLED_NPC_URL}$`));
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible();
+});
+
+test("another row's run in the way: the busy notice leads to it", async ({ page, api }) => {
+  await startAugmentJob(api, { kind: "scene", id: SCENE }, { instruction: INSTRUCTION });
+  expect((await waitForGeneratorJob(api)).status).toBe("done");
+
+  await page.goto(LOCATION_URL);
+  // The location's own trigger has no run of its own to report.
+  await page.getByRole("button", { name: ui("augment.action") }).click();
+  await expect(page.getByText(ui("augment.busy.review"))).toBeVisible();
+  await page.getByRole("link", { name: ui("augment.busy.open") }).click();
+  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible();
 });
 
 // --- helpers ------------------------------------------------------------------

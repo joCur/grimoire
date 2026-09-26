@@ -12,6 +12,10 @@
 //           accepted/rejected one by one. NOTHING is written yet.
 //   done    what the accept wrote — the scenes as drafts
 //
+// An augment run is the campaign's one job as well, but it is reviewed at
+// the row it works on. While one is open the route shows none of the four
+// states: it names the run and leads to its review.
+//
 // The route has TWO modes, picked by the quiet chip row above
 // the input form: scenes (scene drafts for a chapter) and npc (one npc from
 // source material). Both run through the same four states, the same
@@ -64,10 +68,12 @@ import { promptKnowledgeCount } from "@/knowledge-item/knowledge-item-draft";
 import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { serverErrorBodyMessage, serverErrorMessage, useT, type Translate } from "@/i18n";
 import {
   applySummary,
+  augmentTarget,
+  augmentTargetName,
   contextHint,
   knowledgeHint,
   generatePhase,
@@ -75,6 +81,7 @@ import {
   hasReviewableParts,
   jobErrorBody,
   jobMode,
+  jobSentence,
   jobPipelineParts,
   jobProgress,
   locationState,
@@ -95,6 +102,7 @@ import {
   writtenBy,
   type AcceptSelection,
   type GenerateMode,
+  type GeneratePhase,
 } from "@/generator-job/generator-job-state";
 import {
   acceptJobParts,
@@ -109,6 +117,7 @@ import {
 } from "@/generator-job/generator-job-query";
 import { GeneratorJobPartCard } from "@/generator-job/GeneratorJobPartCard";
 import { GeneratorJobWorking } from "@/generator-job/GeneratorJobWorking";
+import { jobHref } from "@/generator-job/job-links";
 import { useJobReview } from "@/generator-job/use-job-review";
 import { cn } from "@/lib/utils";
 import { LocationProposalRow } from "@/location/LocationProposalRow";
@@ -616,13 +625,21 @@ export function GenerateRoute() {
     });
   if (arrived) setAwaitingJob(undefined);
   const starting = awaitingJob !== undefined && !arrived && !applied;
-  const phase = generatePhase({
+  const runPhase = generatePhase({
     applied,
     starting,
     jobChecked: jobQuery.isSuccess || jobQuery.isError,
     ...(job === null ? {} : { jobStatus: job.status }),
     hasParts: hasReviewableParts(job),
   });
+  // An AUGMENT run is the campaign's one job too, but it is reviewed where
+  // its row lives, not here. While it is open this page says so and leads
+  // there — neither a spinner nor a review of a result this page cannot read.
+  const augmenting = augmentTarget(job);
+  const phase: GeneratePhase | "augment" =
+    augmenting !== undefined && runPhase !== "checking" && runPhase !== "done"
+      ? "augment"
+      : runPhase;
 
   const startError = start.error instanceof ApiError ? start.error : undefined;
   // A failed job carries the same body the endpoint answers with:
@@ -950,6 +967,23 @@ export function GenerateRoute() {
         {phase === "checking" && <div className="py-24 md:py-[120px]" />}
 
         {phase === "working" && <GeneratorJobWorking />}
+
+        {phase === "augment" && job !== null && augmenting !== undefined && (
+          <div className="py-16 md:py-[80px]">
+            <h1 className="mb-2 font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
+              {t("generate.augment.title")}
+            </h1>
+            <p className="mb-2 text-[14px] leading-[1.6] text-foreground">
+              {jobSentence(job, augmentTargetName(tree.data, augmenting), t)}
+            </p>
+            <p className="mb-5 text-[14px] leading-[1.6] text-body-secondary">
+              {t("generate.augment.lead")}
+            </p>
+            <Link to={jobHref(campaign, job)} className={buttonVariants()}>
+              {t("generate.augment.open")}
+            </Link>
+          </div>
+        )}
 
         {/* The review of a SCENE run — gated on the phase and the job's kind,
             never on a result being there: in a pipelined

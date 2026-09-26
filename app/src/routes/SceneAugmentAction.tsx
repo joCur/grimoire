@@ -28,12 +28,16 @@ export function SceneAugmentAction({
   scene: Scene;
 }) {
   return (
-    <AugmentTrigger openKey={`${campaign}/scene/${scene.id}`}>
+    <AugmentTrigger
+      campaign={campaign}
+      target={{ kind: "scene", id: scene.id }}
+      openKey={`${campaign}/scene/${scene.id}`}
+    >
       {(onClose) => (
         <AugmentDialog
           campaign={campaign}
           name={scene.title === "" ? scene.id : scene.title}
-          isMine={(job) => job.kind === "scene-augment" && job.scene === scene.id}
+          target={{ kind: "scene", id: scene.id }}
           start={(input) => startSceneAugmentJob(campaign, scene.id, input)}
           review={(job) => {
             const result = job.sceneAugmentResult;
