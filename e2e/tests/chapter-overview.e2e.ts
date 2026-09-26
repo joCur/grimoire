@@ -107,7 +107,6 @@ const RUNNING_SESSION: SessionSeed = {
   body: "",
   pauses: [],
   log: [],
-  playedScenes: [],
 };
 
 /**

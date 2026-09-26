@@ -29,7 +29,7 @@
 // resource (decisions/resources) and have a directory of their own
 // (`campaigns/<id>.json`, `chapters/<id>.json`, …, `sessions/<id>.json`): the
 // fixture is the entity itself, every field flat, without a guard — a session
-// with its pauses, log entries and played scenes embedded.
+// with its pauses and log entries embedded.
 //
 // What the suite knows about each entity — reading it, writing it, its
 // request paths — lives in that entity's own module next to this one

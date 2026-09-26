@@ -11,10 +11,10 @@
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
-//      npcs of a scene, the chapter of an npc, a location and a thread, the
-//      scene of a log entry and of a played scene each carry a
-//      composite `(campaign_id, <ref>)` foreign key with
-//      `ON UPDATE CASCADE` (rule 5) and `ON DELETE NO ACTION`. So a stored
+//      npcs of a scene, the chapter of an npc, a location and a thread, and
+//      the scene of a log entry each carry a composite
+//      `(campaign_id, <ref>)` foreign key with `ON UPDATE CASCADE` (rule 5)
+//      and `ON DELETE NO ACTION`. So a stored
 //      reference names an entry that EXISTS, and the database is what
 //      guarantees it. Nullable where the reference may be absent;
 //      `scenes.chapter_id` is NOT NULL, because a scene belongs to a
@@ -475,8 +475,7 @@ export const locations = sqliteTable(
  *
  * ORDER is `started` alone (store/session-rows.ts `compareSessionsNewestFirst`),
  * with `createdAt` as the tie-break — see that column. `rev` guards the
- * session's own fields; its pauses, log entries and played scenes carry
- * their own.
+ * session's own fields; its pauses and log entries carry their own.
  */
 export const sessions = sqliteTable(
   "sessions",
@@ -595,44 +594,6 @@ export const logEntries = sqliteTable(
       columns: [t.campaignId, t.sceneId],
       foreignColumns: [scenes.campaignId, scenes.id],
       name: "log_entries_scene_fk",
-    })
-      .onUpdate("cascade")
-      .onDelete("no action"),
-  ],
-);
-
-/**
- * One PLAYED SCENE of a session (decisions/resources): a step of the evening through the
- * scenes. The played scenes are a SEQUENCE — a scene the group returned to
- * later stands in it twice —, so the scene is no key: `id` is an OPAQUE
- * random string (store/played-scenes.ts), unique within its session, and
- * `pos` is the order of play. `rev` is the row's own guard (rule 4).
- */
-export const playedScenes = sqliteTable(
-  "played_scenes",
-  {
-    campaignId: text("campaign_id").notNull(),
-    sessionId: text("session_id").notNull(),
-    /** Opaque random id — the played scene's identity on the wire. */
-    id: text("id").notNull(),
-    /** The scene — a foreign key to an existing scene (rule 3). */
-    sceneId: text("scene_id").notNull(),
-    pos: integer("pos").notNull(),
-    rev: revColumn(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.campaignId, t.sessionId, t.id] }),
-    foreignKey({
-      columns: [t.campaignId, t.sessionId],
-      foreignColumns: [sessions.campaignId, sessions.id],
-      name: "played_scenes_session_fk",
-    })
-      .onUpdate("cascade")
-      .onDelete("cascade"),
-    foreignKey({
-      columns: [t.campaignId, t.sceneId],
-      foreignColumns: [scenes.campaignId, scenes.id],
-      name: "played_scenes_scene_fk",
     })
       .onUpdate("cascade")
       .onDelete("no action"),
@@ -978,7 +939,6 @@ export const schema = {
   sessions,
   pauses,
   logEntries,
-  playedScenes,
   ideas,
   glossaryTerms,
   knowledgeItems,

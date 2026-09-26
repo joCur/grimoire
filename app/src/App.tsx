@@ -179,8 +179,8 @@ export function App() {
           {/* Review — the session review, entered after ending a session
               and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
-          {/* One evening, read-only. Reached from ⌘K. Its played scenes
-              link to the scene's own route, handed in from here. */}
+          {/* One evening, read-only. Reached from ⌘K. The scenes of its
+              notes link to the scene's own route, handed in from here. */}
           <Route path="sessions/:id" element={<SessionRoute sceneHref={sceneHref} />} />
           <Route path="*" element={<CampaignNotFound />} />
         </Route>

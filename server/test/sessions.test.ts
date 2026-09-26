@@ -3,8 +3,8 @@
 //
 // Every case runs against its own in-memory database seeded from the
 // committed fixtures (test/support/store.ts), with the system clock faked.
-// The pauses, the log entries and the played scenes have their own test
-// modules; here they only appear as what a session embeds.
+// The pauses and the log entries have their own test modules; here they only
+// appear as what a session embeds.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { eq } from "drizzle-orm";
@@ -97,7 +97,6 @@ describe("reading a session", () => {
           rev: 1,
         },
       ],
-      playedScenes: [{ id: "ankunft", sceneId: "lighthouse-arrival", rev: 1 }],
       rev: 1,
     });
   });
@@ -214,7 +213,6 @@ describe("starting a session — POST …/sessions", () => {
       body: "",
       pauses: [],
       log: [],
-      playedScenes: [],
       rev: 1,
     });
     expect(await readSession(session.id)).toEqual(session);
@@ -335,7 +333,6 @@ describe("writing a session — PATCH …/sessions/:id", () => {
     // The children are not the session's to write: they stand as they were.
     expect(session.pauses).toEqual(before.pauses);
     expect(session.log).toEqual(before.log);
-    expect(session.playedScenes).toEqual(before.playedScenes);
   });
 
   test("400 for a field the patch does not take — named, and nothing written", async () => {
@@ -344,7 +341,6 @@ describe("writing a session — PATCH …/sessions/:id", () => {
       { ended: "2026-01-15T23:00:00" },
       { started: "2026-01-15T19:00:00" },
       { pauses: [] },
-      { playedScenes: [] },
       { endedMs: "spät" },
     ]) {
       const res = await send("PATCH", `${SESSIONS}/${FIXTURE_SESSION}`, { rev: before.rev, ...field });
@@ -419,20 +415,6 @@ describe("deleting a session — DELETE …/sessions/:id", () => {
     expect(await readSession(session.id)).toEqual(before);
   });
 
-  test("a session with a played scene but no log is not empty either", async () => {
-    const session = await startSession();
-    expect(
-      (
-        await send("POST", `${SESSIONS}/${session.id}/played-scenes`, {
-          sceneId: "lighthouse-arrival",
-        })
-      ).status,
-    ).toBe(201);
-    const res = await send("DELETE", `${SESSIONS}/${session.id}`, { rev: session.rev });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ code: "session_not_empty" });
-  });
-
   test("a stale rev is 409 with the current session, and nothing is removed", async () => {
     const session = await startSession();
     const res = await send("DELETE", `${SESSIONS}/${session.id}`, { rev: session.rev + 1 });
@@ -449,7 +431,7 @@ describe("deleting a session — DELETE …/sessions/:id", () => {
 });
 
 describe("the addresses that name nothing", () => {
-  test("the session verbs, the campaign's log and review/seen are 404", async () => {
+  test("the session verbs, the campaign's log, review/seen and played-scenes are 404", async () => {
     const session = await startSession();
     expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
     for (const verb of ["start", "end", "pause", "continue", "discard", "resume"]) {
@@ -461,6 +443,13 @@ describe("the addresses that name nothing", () => {
         await send("POST", "/api/campaigns/beispiel/review/seen", {
           sessionId: FIXTURE_SESSION,
           logId: "spuren-gefunden",
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await send("POST", `${SESSIONS}/${session.id}/played-scenes`, {
+          sceneId: "lighthouse-arrival",
         })
       ).status,
     ).toBe(404);

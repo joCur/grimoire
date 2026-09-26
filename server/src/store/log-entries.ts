@@ -111,7 +111,7 @@ export async function createLogEntry(
   return mutate(campaign, (tx) => {
     requireRunningSessionRow(tx, campaign, sessionId);
     const sceneId = request.sceneId ?? null;
-    if (sceneId !== null) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
+    if (sceneId !== null) assertSceneRef(tx, campaign, sceneId);
     const at = format(new Date(), LOCAL_TIME);
     const id = randomUUID();
     tx.insert(logEntries)
