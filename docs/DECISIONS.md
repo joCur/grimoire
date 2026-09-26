@@ -1125,10 +1125,12 @@ der Leser, den diese Entscheidung ausschließt.
   von ADR #19: „Übernehmen" und der Schreibweg prüfen sie nicht, und ein
   `[[id]]` ohne Eintrag, das der DM schreibt, bleibt sichtbarer Text.
 - **NPC-Stub:** Der Text eines neuen Stubs ist genau die Notiz, ohne
-  Überschrift; ohne Notiz bleibt er leer. Ein Stub ohne Name und Notiz gilt
-  als leer (`isEmptyNpcRow`), und ein späteres Anlegen oder Übernehmen
-  derselben id füllt ihn, statt mit 409 zu kollidieren. Ein NPC mit Inhalt
-  kommt unverändert zurück; die Notiz wird dann nicht angehängt.
+  Überschrift; ohne Notiz bleibt er leer. Leer ist ein NPC, dessen Felder
+  alle auf ihrem Default stehen (`isEmptyNpcRow`); ein `status` außer dem
+  Default zählt als Inhalt. Ein späteres Anlegen oder Übernehmen derselben id
+  füllt einen leeren NPC, statt mit 409 zu kollidieren. Ein NPC mit Inhalt
+  ist 409 `slug_taken` mit einem freien Vorschlag, und geschrieben wird
+  nichts.
 - Ein bestehender Abschnitt `## Notizen` bleibt freier Text.
 
 **Kapitel und Kampagne zeigen ihren ganzen Text:**
