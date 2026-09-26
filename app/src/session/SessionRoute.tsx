@@ -2,9 +2,10 @@
 //
 // The page is READ-ONLY and shows exactly what the server stored — when the
 // evening started and ended, the pauses, the log in the order it was written,
-// and the scenes that were played as links back into the campaign. The
-// session reads its children embedded (decisions/resources). Where a scene lives is the
-// scene's to say: the page is handed that link.
+// and the scenes its notes were taken in (./session-scenes.ts) as links back
+// into the campaign. The session reads its children embedded
+// (decisions/resources). Where a scene lives is the scene's to say: the page
+// is handed that link.
 //
 // The log row renders the way the live panel's rows do: the wall-clock time in
 // mono, then the scene it was written under, then the text with its hashtags
@@ -15,12 +16,14 @@ import type { Pause } from "@grimoire/shared/pause";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
-import { fetchTree } from "@/api";
+import { fetchTree, isNotFound } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
 import { hasScene, sceneTitle } from "@/lib/campaign";
 
+import { scenesWithNotes } from "./session-scenes";
 import { formatDuration, sessionDateLabel, sessionElapsedMs, sessionTimeLabel } from "./session-time";
 import { useSession } from "./use-session";
 
@@ -48,6 +51,7 @@ export function SessionRoute({
   }
   const data = session.data;
   if (data === undefined) {
+    if (isNotFound(session.error)) return <NotFound campaign={campaign} />;
     return (
       <p className="mx-auto max-w-[680px] px-5 pt-8 text-muted-foreground md:px-7 md:pt-10">
         {t("session.page.notLoadable")}
@@ -68,6 +72,7 @@ export function SessionRoute({
     (pause): pause is Pause & { fromMs: number; toMs: number } =>
       pause.fromMs !== undefined && pause.toMs !== undefined,
   );
+  const noteScenes = scenesWithNotes(data);
 
   return (
     <>
@@ -174,14 +179,14 @@ export function SessionRoute({
           >
             {t("session.page.scenes")}
           </h2>
-          {data.playedScenes.length === 0 ? (
+          {noteScenes.length === 0 ? (
             <p className="text-[13.5px] text-muted-foreground">{t("session.page.scenes.empty")}</p>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {data.playedScenes.map(({ id: playedId, sceneId }) => {
+              {noteScenes.map((sceneId) => {
                 const title = sceneTitle(tree.data, sceneId) ?? sceneId;
                 return (
-                  <li key={playedId} className="text-[14px]">
+                  <li key={sceneId} className="text-[14px]">
                     {!hasScene(tree.data, sceneId) ? (
                       <span className="text-body-secondary">{title}</span>
                     ) : (

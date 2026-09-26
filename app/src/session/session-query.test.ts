@@ -13,7 +13,6 @@ import {
   updateSession,
   withLogEntry,
   withPause,
-  withPlayedScene,
 } from "./session-query";
 
 const session = (id: string, extra: Partial<Session> = {}): Session => ({
@@ -22,7 +21,6 @@ const session = (id: string, extra: Partial<Session> = {}): Session => ({
   body: "",
   pauses: [],
   log: [],
-  playedScenes: [],
   rev: 1,
   ...extra,
 });
@@ -37,12 +35,10 @@ describe("the folds", () => {
     expect(withLogEntry(one, reviewed).log).toEqual([reviewed]);
   });
 
-  test("pauses and played scenes fold the same way", () => {
+  test("pauses fold the same way", () => {
     const pause = { id: "p1", from: "2026-01-15T19:10:00", rev: 1 };
     const ended = { ...pause, to: "2026-01-15T19:20:00", rev: 2 };
     expect(withPause(withPause(session("s"), pause), ended).pauses).toEqual([ended]);
-    const played = { id: "x", sceneId: "harbor", rev: 1 };
-    expect(withPlayedScene(session("s"), played).playedScenes).toEqual([played]);
   });
 });
 

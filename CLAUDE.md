@@ -46,8 +46,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `fixtures/beispiel/threads/<id>.json`, an idea under
   `fixtures/beispiel/ideas/<id>.json`, a glossary term under
   `fixtures/beispiel/glossary-terms/<id>.json`, campaign knowledge under
-  `fixtures/beispiel/knowledge-items/<id>.json`, a session with its pauses,
-  log lines and played scenes under
+  `fixtures/beispiel/knowledge-items/<id>.json`, a session with its pauses
+  and log lines under
   `fixtures/beispiel/sessions/<id>.json`, each as the object its resource
   returns, without `rev`. It is
   the **seed** for dev/tests/E2E and the reference for callouts. NEVER
@@ -71,7 +71,7 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   — `campaigns`, `chapters` (with the scene order), `scenes`, `npcs`,
   `locations`, `threads`, `ideas`, `sessions` (with `session-rows`, the
   session row its children look up), `pauses`, `log-entries`,
-  `played-scenes`, `glossary-terms`,
+  `glossary-terms`,
   `knowledge-items` (with their order),
   `generated` (accepting a generator run) — and
   each carries the **read AND write access** of its kind. No catch-all
@@ -80,18 +80,19 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `app/src/<entity>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
   `session/`, `generator-job/`) with everything the app knows about it
-  (decisions/resources); **slices do not import each other.** Pause, log
-  line and played scene belong to the `session/` slice: the app reads them
-  only embedded in their session, and every one of their writes lands in the
-  session's cache; their resources each have their own module there
-  (`pause-api.ts`, `log-entry-api.ts`, `played-scene-api.ts`). Shared are
+  (decisions/resources); **slices do not import each other.** Pause and log
+  line belong to the `session/` slice: the app reads them only embedded in
+  their session, and every one of their writes lands in the session's cache;
+  their resources each have their own module there (`pause-api.ts`,
+  `log-entry-api.ts`). Shared are
   only UI building blocks without knowledge of entities
   (`app/src/components/`, e.g. `components/fields/`); mixed places (search,
   `[[id]]` resolution, campaign tree) are pure dispatchers. A page that
   shows several entities is composed from the slices like `App.tsx` and
   passes foreign parts in as a slot (the chapter overview passes the chapter
   its threads and its scene list, the scene gets its NPC cards, the reading
-  page of a session gets the link of a scene; scene, NPC and location get
+  page of a session gets the link of a scene, the live view's next-scene
+  step gets setting the scene status; scene, NPC and location get
   their augment action from the generator job). Whatever connects two slices
   lives with the page that composes them (the reminders of the live view
   from log lines and ideas in `routes/PcReminders.tsx`, the augment actions
@@ -126,14 +127,14 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   token of the read (`rev`, the row version) — 409 on conflict, never a
   silent overwrite.
 - Campaign, chapter, scene, NPC, location, thread, idea, glossary term,
-  campaign knowledge and session with pause, log line and played scene are
-  each their own resource (decisions/resources):
+  campaign knowledge and session with pause and log line are each their
+  own resource (decisions/resources):
   `/campaigns/<id>` responds with `Campaign`, `…/chapters/<id>` with
   `Chapter`, `…/scenes/<id>` with `Scene`, `…/npcs/<id>` with `Npc`,
   `…/locations/<id>` with `Location`, `…/threads/<id>` with `Thread`,
   `…/ideas/<id>` with `Idea`, `…/glossary-terms/<id>` with `GlossaryTerm`,
   `…/knowledge-items/<id>` with `KnowledgeItem`, `…/sessions/<id>` with
-  `Session` (pauses, log lines and played scenes embedded), all fields side
+  `Session` (pauses and log lines embedded), all fields side
   by side,
   `body` included where the entity has one, without `kind` and `path`;
   every row carries its own `rev`. The app routes are
@@ -152,8 +153,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `POST …/sessions/<id>/pauses` begins a pause, `PATCH
   …/pauses/<pause-id> { rev, toMs }` ends it; `POST …/sessions/<id>/log`
   creates a log line, `PATCH …/log/<log-id> { rev, reviewed }` reviews
-  it; `POST …/sessions/<id>/played-scenes { sceneId }` creates a played
-  scene.
+  it. A scene is played solely through its `status` (`played`); a session
+  holds no played scenes.
   The running session is returned by `GET …/sessions?running=true` (one or
   none); the list is newest first. `POST …/sessions` starts,
   `PATCH …/sessions/<id> { rev, endedMs }` ends, `DELETE` discards an empty
@@ -308,20 +309,25 @@ The paths:
 4. Session cycle: start (open is the first scene of the order that is
    neither `played` nor `dropped`, otherwise the first; the running session
    is returned by `GET …/sessions?running=true`) → quick note → log **line**
-   with `sceneId` (`POST …/sessions/<id>/log`); the note creates **no**
-   played scene → the next-scene action leads to the following one in the
-   order; if the session has a log line with the `sceneId` of the scene
-   being left, it creates a played scene for **the scene being left** (`POST
-   …/sessions/<id>/played-scenes`, once per session); without a note it
-   creates nothing → pause (`POST …/pauses`, an interval, no log line;
-   ended with `PATCH …/pauses/<id> { rev, toMs }`) → end (`PATCH
-   …/sessions/<id> { rev, endedMs }`; the scene currently open is **not**
-   created as played) → debrief. Every child carries its own `rev`; none
+   with `sceneId` (`POST …/sessions/<id>/log`); the note changes **no**
+   scene `status` → the next-scene action leads to the following one in the
+   order; next to it sits the played checkbox, checked when the session has
+   a log line with the `sceneId` of the open scene, and changeable by the
+   DM. When checked, the click sets **the scene being left** to played
+   (`PATCH …/scenes/<id> { rev, status: "played" }`, nothing if it already
+   is; afterwards it stands in the played group and as played in the
+   chapter overview); unchecked, it writes nothing. If the scene was changed
+   elsewhere (409), the next scene does not open, the step says so in a
+   whole sentence, and the second click writes against the reloaded `rev`
+   → pause (`POST …/pauses`, an interval, no log line; ended with `PATCH
+   …/pauses/<id> { rev, toMs }`) → end (`PATCH …/sessions/<id> { rev,
+   endedMs }`; this changes no scene `status`) → debrief. Every child carries its own `rev`; none
    moves the session's; on an ended session every new child is 409
    `session_ended`, and the live view says so in a whole sentence. The old
-   addresses `…/session`, `…/session/start` and `…/log` respond 404. Plus
-   the reading page of a past session
-   (`/campaigns/:id/sessions/<session-id>`)
+   addresses `…/session`, `…/session/start`, `…/log` and
+   `…/sessions/<id>/played-scenes` respond 404. Plus the reading page of a
+   past session (`/campaigns/:id/sessions/<session-id>`) with the scenes of
+   its log lines, each once, as links
 5. Debrief: accept a plot thread → a thread of the active chapter
    (`POST …/threads { chapter, text }`, without `rev`; chapter text and
    chapter `rev` stay untouched); tick off an idea → `PATCH …/ideas/<id>

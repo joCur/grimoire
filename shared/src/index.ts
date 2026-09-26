@@ -18,5 +18,4 @@ export * from "./knowledge-item";
 export * from "./session";
 export * from "./log-entry";
 export * from "./pause";
-export * from "./played-scene";
 export * from "./generator-job";

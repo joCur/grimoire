@@ -1,6 +1,6 @@
-// A session in the suite: its resource `…/sessions/:id` (decisions/resources), every
-// field flat, its pauses, log entries and played scenes embedded — each child
-// with its own id and rev. Its type is the one `@grimoire/shared/session`
+// A session in the suite: its resource `…/sessions/:id` (decisions/resources),
+// every field flat, its pauses and log entries embedded — each child with its
+// own id and rev. Its type is the one `@grimoire/shared/session`
 // derives from the session's schema.
 
 import type { Session } from "@grimoire/shared/session";
@@ -21,11 +21,6 @@ export function logEntryPath(api: Api, sessionId: string, id?: string): string {
 export function pausePath(api: Api, sessionId: string, id?: string): string {
   const base = `${sessionPath(api, sessionId)}/pauses`;
   return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
-}
-
-/** The request path of a session's played scenes. */
-export function playedScenesPath(api: Api, sessionId: string): string {
-  return `${sessionPath(api, sessionId)}/played-scenes`;
 }
 
 /** Every session of the campaign, newest first, each with its children. */

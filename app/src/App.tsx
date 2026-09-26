@@ -1,6 +1,7 @@
 import { Outlet, Route, Routes, useParams } from "react-router";
 
 import { ChapterRoute } from "@/chapter/ChapterRoute";
+import { NotFound } from "@/components/NotFound";
 import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
@@ -46,6 +47,12 @@ function CampaignScope() {
       <Outlet />
     </RefProvider>
   );
+}
+
+// A path under a campaign that no route knows: the way back is the campaign.
+function CampaignNotFound() {
+  const { campaign = "" } = useParams();
+  return <NotFound campaign={campaign} />;
 }
 
 // App shell per the design reference: constant topbar, the view below is
@@ -172,10 +179,14 @@ export function App() {
           {/* Review — the session review, entered after ending a session
               and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
-          {/* One evening, read-only. Reached from ⌘K. Its played scenes
-              link to the scene's own route, handed in from here. */}
+          {/* One evening, read-only. Reached from ⌘K. The scenes of its
+              notes link to the scene's own route, handed in from here. */}
           <Route path="sessions/:id" element={<SessionRoute sceneHref={sceneHref} />} />
+          <Route path="*" element={<CampaignNotFound />} />
         </Route>
+        {/* Any other path: the not-found view, inside the layout so the
+            topbar stays. */}
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   );

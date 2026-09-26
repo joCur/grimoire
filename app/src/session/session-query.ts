@@ -7,16 +7,14 @@
 // campaign's version poll invalidates.
 //
 // A session embeds its children, so the session is the one cache they live
-// in: a write of a pause, a log entry or a played scene answers that one row,
-// and it is folded into every cached copy of its session (`withPause`,
-// `withLogEntry`, `withPlayedScene`) — the session is never read again for a
-// row the server just handed over. A write of the session itself answers the
+// in: a write of a pause or a log entry answers that one row, and it is
+// folded into every cached copy of its session (`withPause`, `withLogEntry`)
+// — the session is never read again for a row the server just handed over. A write of the session itself answers the
 // session, which replaces its cached copies.
 
 import { isSessionEnded, type Session } from "@grimoire/shared/session";
 import type { LogEntry } from "@grimoire/shared/log-entry";
 import type { Pause } from "@grimoire/shared/pause";
-import type { PlayedScene } from "@grimoire/shared/played-scene";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 import { fetchRunningSession, fetchSession, fetchSessions } from "./session-api";
@@ -76,11 +74,6 @@ export function withPause(session: Session, pause: Pause): Session {
 /** The session with this log entry in it. */
 export function withLogEntry(session: Session, entry: LogEntry): Session {
   return { ...session, log: withRow(session.log, entry) };
-}
-
-/** The session with this played scene in it. */
-export function withPlayedScene(session: Session, played: PlayedScene): Session {
-  return { ...session, playedScenes: withRow(session.playedScenes, played) };
 }
 
 /**

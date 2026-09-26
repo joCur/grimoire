@@ -6,7 +6,7 @@
 // npc/npc-api.ts, location/location-api.ts, thread/thread-api.ts,
 // idea/idea-api.ts, glossary-term/glossary-term-api.ts,
 // knowledge-item/knowledge-item-api.ts, session/session-api.ts with the
-// clients of its pauses, log entries and played scenes beside it,
+// clients of its pauses and log entries beside it,
 // generator-job/generator-job-api.ts), built from the HTTP helpers exported
 // here — `startJob` among them, because an augment run starts on the
 // resource of its scene, npc or location.
@@ -35,6 +35,11 @@ export class ApiError extends Error {
     this.status = status;
     this.details = details;
   }
+}
+
+/** Whether a failed read was the server saying the row does not exist. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
 }
 
 /** Build the ApiError for a failed response, keeping the JSON error body. */

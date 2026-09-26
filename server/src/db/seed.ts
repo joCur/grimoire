@@ -7,8 +7,8 @@
 // `locations/<id>.json`, a thread `threads/<id>.json`, an idea
 // `ideas/<id>.json`, a glossary term `glossary-terms/<id>.json`, a knowledge
 // item `knowledge-items/<id>.json` and a session `sessions/<id>.json` with
-// its pauses, log entries and played scenes embedded — each exactly what its
-// resource answers, without the guard (decisions/resources). The seed is therefore not a
+// its pauses and log entries embedded — each exactly what its resource
+// answers, without the guard (decisions/resources). The seed is therefore not a
 // second data format — it is the API's own shape written down, which is what
 // makes it readable next to a response and reviewable in a diff.
 //

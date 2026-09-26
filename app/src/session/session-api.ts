@@ -1,8 +1,7 @@
 // The API client of a session (decisions/resources): its resource — list, read, start,
 // end, delete. Built from the shared HTTP helpers (../api.ts). Its children
-// — pauses, log entries, played scenes — are written on their own resources
-// under it (./pause-api.ts, ./log-entry-api.ts, ./played-scene-api.ts) and
-// read embedded in it.
+// — pauses and log entries — are written on their own resources under it
+// (./pause-api.ts, ./log-entry-api.ts) and read embedded in it.
 //
 // WHICH session runs is always the server's answer (`?running=true`), never
 // a date the app computes: a session that runs past midnight keeps running,

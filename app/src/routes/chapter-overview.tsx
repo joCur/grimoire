@@ -17,12 +17,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
-import { fetchTree } from "@/api";
+import { fetchTree, isNotFound } from "@/api";
 import { CampaignEditAction } from "@/campaign/CampaignEditAction";
 import { campaignQuery } from "@/campaign/campaign-query";
 import { ChapterCreateAction } from "@/chapter/ChapterCreateAction";
 import { ChapterSection } from "@/chapter/ChapterSection";
 import { ClampedText } from "@/components/ClampedText";
+import { NotFound } from "@/components/NotFound";
 import { useT } from "@/i18n";
 import { CHAPTER_OVERVIEW_LOOKUP_TARGETS } from "@/lib/lookup";
 import { useCampaignMeta } from "@/lib/use-campaign";
@@ -33,7 +34,7 @@ import { ThreadList } from "@/thread/ThreadList";
 export function ChapterOverviewRoute() {
   const t = useT();
   const { campaign = "" } = useParams();
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, error } = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
@@ -54,6 +55,10 @@ export function ChapterOverviewRoute() {
   });
   // Open the active chapter(s) by default; without one, the first.
   const anyActive = data?.chapters.some((ch) => ch.status === "active") ?? false;
+
+  // A campaign the server does not know: the not-found view on both
+  // breakpoints, and the way back is the start, not this campaign.
+  if (data === undefined && isNotFound(error)) return <NotFound />;
 
   return (
     <>

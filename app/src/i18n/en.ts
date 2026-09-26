@@ -19,6 +19,13 @@ export const en: Messages = {
   "common.serverDown":
     "Server unreachable — start the Grimoire server on port 3000.",
 
+  // --- not-found view (components/NotFound.tsx) -----------------------------
+  "notFound.title": "This page does not exist",
+  "notFound.body":
+    "There is nothing at this address. The link may be mistyped, or what it pointed to was deleted.",
+  "notFound.toCampaign": "To the chapter overview",
+  "notFound.toStart": "Back to the start",
+
   // --- language switch ------------------------------------------------------
   "language.heading": "Language",
   "language.de": "Deutsch",
@@ -79,8 +86,8 @@ export const en: Messages = {
   "session.page.log.empty": "Nothing was noted down in this session.",
   "session.page.pauses": "Pauses",
   "session.page.pauseRow": "{from} – {to} ({duration})",
-  "session.page.scenes": "Scenes played",
-  "session.page.scenes.empty": "No scene marked as played.",
+  "session.page.scenes": "Scenes with notes",
+  "session.page.scenes.empty": "No note in this session was taken in a scene.",
 
   // --- create dialogs -------------------------------------------------------
   "create.failed": "Not created — check the server.",
@@ -423,7 +430,10 @@ export const en: Messages = {
   "live.nav.playedGroup": "Played {count}",
 
   "live.next": "Next scene: {title}",
-  "live.next.failed": "The next scene did not open because the played scene was not saved — check the server.",
+  "live.next.played": "played",
+  "live.next.changedElsewhere":
+    "This scene was changed elsewhere in the meantime and has been reloaded. Click “Next scene” again to mark it as played.",
+  "live.next.failed": "The next scene did not open because the scene was not saved as played — check the server.",
 
   "live.scene.none":
     "No scene in the active chapter — create scenes on the chapters page.",

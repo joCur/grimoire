@@ -2,11 +2,10 @@
 //
 // A SESSION IS ITS OWN RESOURCE (decisions/resources): `…/sessions` and
 // `…/sessions/:id`, answering the `Session` type — `{ id, started,
-// startedMs?, ended?, endedMs?, body, pauses, log, playedScenes, rev }`. Its
-// children are embedded when it is read, and each is written on its own
-// resource under it: `…/sessions/:id/pauses` (./pauses.ts),
-// `…/sessions/:id/log` (./log-entries.ts) and `…/sessions/:id/played-scenes`
-// (./played-scenes.ts).
+// startedMs?, ended?, endedMs?, body, pauses, log, rev }`. Its children are
+// embedded when it is read, and each is written on its own resource under it:
+// `…/sessions/:id/pauses` (./pauses.ts) and `…/sessions/:id/log`
+// (./log-entries.ts).
 //
 // TIME. Every zone-less timestamp carries the SERVER's epoch reading beside
 // it (`startedMs`, `endedMs`, a pause's `fromMs`/`toMs`) — only the server
@@ -56,8 +55,8 @@ sessionRoutes.get("/campaigns/:campaign/sessions", async (c) =>
 );
 
 // GET /api/campaigns/:campaign/sessions/:id -> Session
-// The session with its pauses, its log and its played scenes. 404 for an
-// unknown campaign or session.
+// The session with its pauses and its log. 404 for an unknown campaign or
+// session.
 sessionRoutes.get("/campaigns/:campaign/sessions/:id", async (c) =>
   c.json(await readSession(c.req.param("campaign"), c.req.param("id"))),
 );
@@ -84,8 +83,8 @@ sessionRoutes.post("/campaigns/:campaign/sessions", async (c) => {
 // Ends the session (`endedMs`), lets it run again (`endedMs: null`) or
 // corrects its start (`startedMs`). A moment is an EPOCH value: the server
 // stores the reading of it in its own timezone. Ending closes an open pause
-// at the same moment. The pauses, the log and the played scenes are not
-// written here — each has its own resource.
+// at the same moment. The pauses and the log are not written here — each has
+// its own resource.
 //
 // A key that is not one of these — `started`, `ended`, `pauses` among them —
 // or a value of the wrong shape is a 400 that names it; naming no field is
@@ -101,8 +100,7 @@ sessionRoutes.patch("/campaigns/:campaign/sessions/:id", async (c) => {
 
 // DELETE /api/campaigns/:campaign/sessions/:id { rev } -> 204
 // The undo of a mis-clicked start. Only an EMPTY session may be deleted — no
-// log entry, no played scene, a text of nothing but headings; one with
-// content is 409 { code: "session_not_empty", id } and is ended, not deleted.
+// log entry, a text of nothing but headings; one with content is 409 { code: "session_not_empty", id } and is ended, not deleted.
 // A stale `rev` is 409 { code: "rev_conflict", rev, session }. Either refusal
 // removes nothing. 404 for an unknown campaign or session.
 sessionRoutes.delete("/campaigns/:campaign/sessions/:id", async (c) => {
