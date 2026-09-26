@@ -19,7 +19,7 @@ function fixture(id: string): SceneProposal {
 }
 
 const NAMES: Record<string, string> = {
-  jorna: "Hafenmeisterin Jorna",
+  jorna: "Harbourmaster Jorna",
   fenn: "Fenn",
 };
 const nameOf = (slug: string): string | undefined => NAMES[slug];
@@ -31,20 +31,20 @@ describe("sceneExcerpt", () => {
   test("type, trigger, the location's display name and status", () => {
     const excerpt = sceneExcerpt(
       fixture("smuggler-captured"),
-      (id) => (id === "bucht" ? "Die Nordbucht" : undefined),
+      (id) => (id === "bucht" ? "The North Cove" : undefined),
       nameOf,
     );
     expect(excerpt).toEqual({
       type: "contingency",
       trigger: "Charaktere werden beim Auskundschaften der Bucht entdeckt",
-      location: "Die Nordbucht",
+      location: "The North Cove",
       status: "ready",
     });
   });
 
   test("a location nobody knows stays as written; no trigger, no row", () => {
-    const excerpt = sceneExcerpt({ ...planned, location: "irgendwo" }, () => undefined, nameOf);
-    expect(excerpt.location).toBe("irgendwo");
+    const excerpt = sceneExcerpt({ ...planned, location: "somewhere" }, () => undefined, nameOf);
+    expect(excerpt.location).toBe("somewhere");
     expect(excerpt.trigger).toBeUndefined();
     expect(excerpt.status).toBe("draft");
   });
@@ -58,10 +58,10 @@ describe("sceneExcerpt", () => {
 
   test("a reference in the trigger reads as the current name", () => {
     const excerpt = sceneExcerpt(
-      { ...planned, trigger: "[[jorna]] schlägt Alarm" },
+      { ...planned, trigger: "[[jorna]] raises the alarm" },
       () => undefined,
       nameOf,
     );
-    expect(excerpt.trigger).toBe("Hafenmeisterin Jorna schlägt Alarm");
+    expect(excerpt.trigger).toBe("Harbourmaster Jorna raises the alarm");
   });
 });

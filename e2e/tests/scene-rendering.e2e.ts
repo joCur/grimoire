@@ -11,17 +11,16 @@
 //
 // A scene is its own resource (decisions/resources): its reading view is
 // `/campaigns/:c/scenes/:id`, read through `GET …/scenes/:id`.
-//
-// UI text is found through its catalog key (decisions/testing); the example
-// campaign's own content is data and is asserted as it is stored.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { SceneProposal } from "@grimoire/shared/scene";
+import { getCampaign } from "../support/campaign";
+import { getChapter } from "../support/chapter";
 import { E2E_FIXTURES_DIR } from "../support/paths";
 import { expect, test } from "../support/test";
-import { locationExists } from "../support/location";
+import { getLocation, locationExists } from "../support/location";
 import { createNpc, getNpc, npcExists } from "../support/npc";
 import { getScene, patchScene, sceneExists, scenePath } from "../support/scene";
 import { ui } from "../support/ui";
@@ -36,7 +35,7 @@ const LOOT_SCENE = scene("loot-scene.json");
 
 /**
  * A scene whose table CANNOT fit 390px — seven columns of long, unbreakable
- * words. The reference scene's W6 table is narrow enough to fit, so it cannot
+ * words. The reference scene's d6 table is narrow enough to fit, so it cannot
  * prove that the box overflows instead of the page; this one can.
  */
 const WIDE_TABLE_SCENE = scene("wide-table-scene.json");
@@ -112,31 +111,36 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   page,
   api,
 }) => {
+  // The example campaign's own names, read from their resources.
+  const scene = await getScene(api, "lighthouse-arrival");
+  const chapter = await getChapter(api, "01-salzhafen");
+  const location = await getLocation(api, "leuchtturm");
+  const campaign = await getCampaign(api);
+  const jorna = await getNpc(api, "jorna");
+
   await page.goto(ARRIVAL);
 
   // The context line above the title: chapter › group, replacing
   // the topbar breadcrumb. The chapter links back to the chapter overview.
   const context = page.getByRole("navigation", { name: ui("context.aria") });
-  await expect(
-    context.getByRole("link", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
-  ).toBeVisible();
+  await expect(context.getByRole("link", { name: chapter.title })).toBeVisible();
   // The group is the scene's location, resolved to the name its entry
   // carries — no invented prettification.
-  await expect(context).toContainText("hafen");
+  await expect(context).toContainText(location.name);
   // The chrome names the campaign exactly ONCE — in the switcher. The old
   // breadcrumb spelled it again right next to the near-identical chapter title.
-  await expect(
-    page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
-  ).toHaveCount(1);
+  await expect(page.getByRole("banner").getByText(campaign.name)).toHaveCount(1);
 
   const article = page.getByRole("article");
   await expect(article.getByText(ui("sceneArticle.type.planned"))).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(scene.title);
   // Chip row from the properties (the scene's location, resolved to its name).
-  await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toBeVisible();
-  await expect(article.getByText(ui("sceneArticle.tag", { tag: "social" }), { exact: true })).toBeVisible();
+  await expect(article.getByText(location.name, { exact: true })).toBeVisible();
   await expect(
-    article.getByText(ui("sceneArticle.handout", { handout: "Karte von Salzhafen" })),
+    article.getByText(ui("sceneArticle.tag", { tag: "social" }), { exact: true }),
+  ).toBeVisible();
+  await expect(
+    article.getByText(ui("sceneArticle.handout", { handout: scene.handouts[0] ?? "" })),
   ).toBeVisible();
   // The status display IS the control.
   await expect(
@@ -149,7 +153,9 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   const readaloud = page.locator("[data-callout='readaloud']");
   await expect(readaloud).toHaveCount(1);
   await expect(readaloud).toContainText("Der Turm ragt schwarz gegen den Abendhimmel auf.");
-  await expect(readaloud.getByRole("button", { name: ui("markdown.readaloud.copy.aria") })).toBeAttached();
+  await expect(
+    readaloud.getByRole("button", { name: ui("markdown.readaloud.copy.aria") }),
+  ).toBeAttached();
 
   const check = page.locator("[data-callout='check']");
   await expect(check).toContainText(ui("markdown.callout.check"));
@@ -163,18 +169,20 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(note).toContainText(ui("markdown.callout.note"));
   await expect(note).toContainText("Kontingenz");
 
-  // NPC card of the scene: name, mono id, voice, what it wants (the npc's
+  // NPC card of the scene: name, mono id, voice, "Will" (the npc's
   // `motivation` field — the body carries no such section), quickstats
   // chips.
-  const aside = page.getByRole("complementary").filter({ hasText: ui("scene.npcs.heading") });
-  await expect(aside).toContainText("Hafenmeisterin Jorna");
+  const aside = page
+    .getByRole("complementary")
+    .filter({ hasText: ui("scene.npcs.heading") });
+  await expect(aside).toContainText(jorna.name);
   await expect(aside).toContainText("jorna");
   await expect(aside).toContainText(ui("npcCard.voice"));
   await expect(aside).toContainText("knapp, wetterrau, duzt jeden");
   await expect(aside).toContainText(ui("npcCard.will"));
   await expect(aside).toContainText("Das Leuchtfeuer muss wieder brennen");
   // …and it can only have come from the field: the text does not say it.
-  expect((await getNpc(api, "jorna")).body).not.toContain("Das Leuchtfeuer");
+  expect(jorna.body).not.toContain("Das Leuchtfeuer");
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 
@@ -182,22 +190,22 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   // (decisions/resources).
   await aside.getByRole("link").first().click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(jorna.name);
 });
 
 test("reference scene 2: contingency header, collapsible If-sections, consequence", async ({
   page,
+  api,
 }) => {
+  const scene = await getScene(api, "smuggler-captured");
   await page.goto(CAPTURED);
 
-  await expect(page.getByText(ui("sceneArticle.type.contingency"), { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Von den Schmugglern erwischt",
-  );
-  await expect(page.getByText(ui("sceneArticle.trigger.label"))).toBeVisible();
   await expect(
-    page.getByText("Charaktere werden beim Auskundschaften der Bucht entdeckt"),
+    page.getByText(ui("sceneArticle.type.contingency"), { exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(scene.title);
+  await expect(page.getByText(ui("sceneArticle.trigger.label"), { exact: true })).toBeVisible();
+  await expect(page.getByText(String(scene.trigger))).toBeVisible();
 
   // `## If:` sections render as branches — open by default (design reference).
   const branches = page.locator("details[data-if-section]");
@@ -231,25 +239,34 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
   );
 
   // Fenn is the scene's npc.
-  const aside = page.getByRole("complementary").filter({ hasText: ui("scene.npcs.heading") });
-  await expect(aside).toContainText("Fenn");
+  const fenn = await getNpc(api, "fenn");
+  const aside = page
+    .getByRole("complementary")
+    .filter({ hasText: ui("scene.npcs.heading") });
+  await expect(aside).toContainText(fenn.name);
   await expect(aside).toContainText("leise, höflich");
 });
 
 test("a referenced NPC without information is a thin card, not a gap", async ({ page, api }) => {
   // An npc created and not filled in: the aside shows it like any other
-  // card — the id as the name, nothing else, no warning and no detour — and
-  // the card opens the (equally thin) page.
+  // card — the id as the name, nothing else. No "missing" line, no detour
+  // to create a stub, and the card opens the (equally thin) page.
   expect(await npcExists(api, "holm")).toBe(false);
   await createNpc(api, { name: "holm" });
   await patchScene(api, "lighthouse-arrival", { npcs: ["jorna", "holm"] });
   expect(await npcExists(api, "holm")).toBe(true);
 
   await page.goto(ARRIVAL);
-  const aside = page.getByRole("complementary").filter({ hasText: ui("scene.npcs.heading") });
-  await expect(aside).toContainText("holm");
+  const aside = page
+    .getByRole("complementary")
+    .filter({ hasText: ui("scene.npcs.heading") });
+  // The thin card says the name (the id) and the mono id — nothing else, and
+  // the aside offers no control beside its links.
+  const holm = aside.getByRole("link", { name: /holm/ });
+  await expect(holm).toHaveText(/^\s*holm\s*holm\s*$/);
+  await expect(aside.getByRole("button")).toHaveCount(0);
 
-  await aside.getByRole("link", { name: /holm/ }).click();
+  await holm.click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/holm$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
   // And it is editable from here like every other npc.
@@ -278,7 +295,7 @@ test("a scene location is a REFERENCE: a location that exists, or a 400", async 
 
   // Free text is refused too, with the slug it would have used — the
   // README's free-text exception is gone.
-  const text = await patchLocation("The old harbour", before.rev);
+  const text = await patchLocation("The Old Harbour", before.rev);
   expect(text.status).toBe(400);
   expect(await text.json()).toMatchObject({
     code: "location_not_an_id",
@@ -304,24 +321,22 @@ test.describe("with a seeded loot scene", () => {
     // [!loot] is missing from the reference scenes, so the sixth kind is
     // checked on a scene this test seeds into its own copy of the fixtures.
     await page.goto(`/campaigns/beispiel/scenes/${LOOT_SCENE.id}`);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Beutezug in der Räucherkammer",
-    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOOT_SCENE.title);
 
     const loot = page.locator("[data-callout='loot']");
     await expect(loot).toContainText(ui("markdown.callout.loot"));
-    await expect(loot).toContainText("Zwei Ballen Schmuggeltabak");
+    await expect(loot).toContainText("Two bales of smuggled tobacco");
 
     // Unknown kinds stay a plain blockquote — the format degrades, never errors.
-    await expect(page.locator("[data-callout='erfunden']")).toHaveCount(0);
-    await expect(page.locator("blockquote")).toContainText("[!erfunden] Unbekannte Callout-Sorte");
+    await expect(page.locator("[data-callout='invented']")).toHaveCount(0);
+    await expect(page.locator("blockquote")).toContainText("[!invented] Unknown callout kind");
   });
 });
 
 // The table is part of the same critical path — the reference
-// scene carries a W6 table inside its `[!note]`, so path 2 checks it where
+// scene carries a d6 table inside its `[!note]`, so path 2 checks it where
 // the DM meets it.
-test("the reference scene's W6 table renders as a table inside the note callout", async ({
+test("the reference scene's d6 table renders as a table inside the note callout", async ({
   page,
 }) => {
   await page.goto(ARRIVAL);

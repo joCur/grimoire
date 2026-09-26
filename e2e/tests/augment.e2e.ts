@@ -43,6 +43,7 @@ import {
   AUGMENT_NPC_MOTIVATION,
   AUGMENT_NPC_ROLE,
   AUGMENT_NPC_SECRET,
+  AUGMENT_NPC_SECRET_OPENING,
   AUGMENT_NPC_STATUS,
   AUGMENT_NPC_VOICE,
   AUGMENT_THREAD_CONDITION,
@@ -52,10 +53,14 @@ import {
 } from "../fixtures/replies";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
+import { getCampaign } from "../support/campaign";
+import { getChapter } from "../support/chapter";
 import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation } from "../support/location";
 import { createNpc, getNpc, patchNpc } from "../support/npc";
 import { getScene, patchScene } from "../support/scene";
+import { ui, uiPattern } from "../support/ui";
+import type { MessageKey } from "../../app/src/i18n/messages";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
 const SCENE = "smuggler-captured";
@@ -66,10 +71,31 @@ const FILLED_NPC = "jorna";
 const FILLED_NPC_URL = `/campaigns/beispiel/npcs/${FILLED_NPC}`;
 
 /** The empty npc — created, never filled in. */
-const EMPTY_NPC = "spitzel";
+const EMPTY_NPC = "informer";
 const NPC_URL = `/campaigns/beispiel/npcs/${EMPTY_NPC}`;
 
-const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
+const INSTRUCTION = "Introduce a plot thread around the smugglers' informer";
+
+/** The example campaign's location — the augment target of (f). */
+const LOCATION = "leuchtturm";
+const LOCATION_URL = `/campaigns/beispiel/locations/${LOCATION}`;
+
+/** What a second writer puts into the scene while the review is open. */
+const OTHER_WRITER_TEXT = "Someone else rewrote the scene.";
+
+/** Any unit's take and keep toggle, whatever unit it names. */
+const TAKE_UNIT = uiPattern("augment.decision.takeUnit", { label: /.*/ }, { exact: true });
+const KEEP_UNIT = uiPattern("augment.decision.keepUnit", { label: /.*/ }, { exact: true });
+
+/** The accessible name of a `[[ref]]` to an npc. */
+function npcRefName(name: string): string {
+  return ui("markdown.ref.aria", { kind: ui("kind.npc"), name });
+}
+
+/** The first line of the paragraph under a heading of a body — seeded prose, read as data. */
+function firstLineAfter(body: string, heading: string): string {
+  return body.split(`${heading}\n\n`)[1]!.split("\n")[0]!;
+}
 
 /**
  * Create an npc with nothing but the id — how a DM ends up with an npc that
@@ -86,9 +112,9 @@ async function createEmptyNpc(api: Api): Promise<void> {
 
 /** Open the dialog on what the page shows and start a run. */
 async function startAugment(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
-  await page.getByLabel("Anweisung (optional)").fill(INSTRUCTION);
-  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+  await page.getByRole("button", { name: ui("augment.action") }).click();
+  await page.getByLabel(ui("augment.instruction.label")).fill(INSTRUCTION);
+  await page.getByRole("button", { name: ui("augment.start"), exact: true }).click();
 }
 
 test("empty npc from a reference: augment fills the holes, keeps what is filled", async ({
@@ -98,43 +124,44 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await createEmptyNpc(api);
 
   await page.goto(NPC_URL);
-  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toBeVisible();
+  await page.getByRole("button", { name: ui("augment.action") }).click();
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toBeVisible();
   // The dialog names the npc it is about by its DISPLAY NAME — the resource
   // segment is how it is stored, not how the DM knows it.
-  const lead = page.getByText("die KI ergänzt", { exact: false });
+  const lead = page.getByText(ui("augment.description", { name: EMPTY_NPC }));
   await expect(lead).toBeVisible();
-  await expect(lead).toContainText(EMPTY_NPC);
   await expect(lead).not.toContainText("npcs/");
 
   // Nothing may start without input (source text and/or instruction).
-  const startButton = page.getByRole("button", { name: "Ergänzen", exact: true });
+  const startButton = page.getByRole("button", { name: ui("augment.start"), exact: true });
   await expect(startButton).toBeDisabled();
-  await page.getByLabel("Anweisung (optional)").fill(INSTRUCTION);
+  await page.getByLabel(ui("augment.instruction.label")).fill(INSTRUCTION);
   await expect(startButton).toBeEnabled();
   await startButton.click();
 
   // The server job finishes and the review takes the dialog over.
-  await expect(page.getByText("Vorhanden").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(ui("augment.field.current")).first()).toBeVisible({
+    timeout: 30_000,
+  });
 
   // The defaults: `role`, `voice` and `motivation` are holes -> new,
   // preselected for acceptance; `name` and `status` already carry a value ->
   // changed, KEPT.
-  await expectDecision(page, "role", "Neu", "Übernehmen");
-  await expectDecision(page, "voice", "Neu", "Übernehmen");
-  await expectDecision(page, "motivation", "Neu", "Übernehmen");
-  await expectDecision(page, "name", "Geändert", "Behalten");
-  await expectDecision(page, "status", "Geändert", "Behalten");
+  await expectDecision(page, "role", "augment.state.new", "take");
+  await expectDecision(page, "voice", "augment.state.new", "take");
+  await expectDecision(page, "motivation", "augment.state.new", "take");
+  await expectDecision(page, "name", "augment.state.changed", "keep");
+  await expectDecision(page, "status", "augment.state.changed", "keep");
   // The two-column diff really shows both sides.
-  await expect(fieldRow(page, "role").getByText("leer")).toBeVisible();
+  await expect(fieldRow(page, "role").getByText(ui("augment.field.empty"))).toBeVisible();
   await expect(fieldRow(page, "role")).toContainText(AUGMENT_NPC_ROLE);
   await expect(fieldRow(page, "name")).toContainText(AUGMENT_NPC_NAME);
 
   await expect(fieldRow(page, "motivation")).toContainText(AUGMENT_NPC_MOTIVATION);
 
   // The body is empty, so every proposed block is an addition — preselected.
-  const secretBlock = page.locator("li").filter({ hasText: "Meldet" }).last();
-  await expect(secretBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+  const secretBlock = page.locator("li").filter({ hasText: AUGMENT_NPC_SECRET_OPENING }).last();
+  await expect(secretBlock.getByRole("button", { name: TAKE_UNIT })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -167,7 +194,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   expect((await getNpc(api, EMPTY_NPC)).role).toBeUndefined();
 
   await acceptButton(page).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
 
   // One transaction. The holes are filled …
   const npc = await getNpc(api, EMPTY_NPC);
@@ -189,8 +216,9 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   // resolved.
   await expect(page.getByText(AUGMENT_NPC_MOTIVATION)).toBeVisible();
   const secret = page.locator("[data-callout='secret']");
-  await expect(secret).toContainText("Meldet");
-  await expect(secret.getByRole("link", { name: /NPC:/ })).toBeVisible();
+  await expect(secret).toContainText(AUGMENT_NPC_SECRET_OPENING);
+  const fenn = (await getNpc(api, "fenn")).name;
+  await expect(secret.getByRole("link", { name: npcRefName(fenn) })).toBeVisible();
 });
 
 test("prepared scene: the new thread is added, every existing block survives", async ({
@@ -204,7 +232,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // The scene's other fields are untouched by the reply, and the review says
   // so instead of inventing a decision.
-  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+  await expect(page.getByText(ui("augment.properties.none"))).toBeVisible({
     timeout: 30_000,
   });
 
@@ -228,32 +256,34 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // Exactly ONE decision: the new `## If:` section, as an addition.
   const newBlock = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
-  await expect(newBlock).toContainText("Falls-Abschnitt");
-  await expect(newBlock).toContainText("Neu");
+  await expect(newBlock).toContainText(ui("composer.blockType.ifSection"));
+  await expect(newBlock).toContainText(ui("augment.state.new"));
   // The card is the decision, so it has to show the WHOLE section — the DM
   // cannot accept a branch whose body is nowhere on screen.
   await expect(newBlock).toContainText(`## If: ${AUGMENT_THREAD_CONDITION}`);
   await expect(newBlock).toContainText(AUGMENT_THREAD_TEXT);
-  await expect(newBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+  await expect(newBlock.getByRole("button", { name: TAKE_UNIT })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   // The existing blocks are not decisions — they sit behind the toggle that
   // reveals unchanged blocks, and they carry no toggle of their own.
-  const flowBlock = () => page.locator("li").filter({ hasText: "Entwaffnet und gefesselt" }).last();
+  const flowOpening = firstLineAfter(before.body, "## Flow");
+  const flowBlock = () => page.locator("li").filter({ hasText: flowOpening }).last();
   await expect(flowBlock()).toHaveCount(0);
-  await page.getByRole("button", { name: "Unveränderte Blöcke zeigen" }).click();
+  await page.getByRole("button", { name: ui("augment.body.showUnchanged") }).click();
   await expect(flowBlock()).toBeVisible();
-  await expect(flowBlock().getByRole("button", { name: /^Behalten: / })).toHaveCount(0);
+  await expect(flowBlock().getByRole("button", { name: KEEP_UNIT })).toHaveCount(0);
 
   // The raw tab is the second surface of that rule — a line/word diff over the
   // whole body, with the added lines marked.
-  await page.getByRole("button", { name: "Markdown", exact: true }).click();
+  const modes = page.getByRole("group", { name: ui("augment.body.modeGroup") });
+  await modes.getByRole("button", { name: ui("augment.body.markdown"), exact: true }).click();
   await expect(page.getByText(`## If: ${AUGMENT_THREAD_CONDITION}`)).toBeVisible();
-  await page.getByRole("button", { name: "Blöcke", exact: true }).click();
+  await modes.getByRole("button", { name: ui("augment.body.blocks"), exact: true }).click();
 
   await acceptButton(page).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
 
   // The whole point: the scene GREW. Everything that stood there before
   // stands there unchanged, character for character.
@@ -284,11 +314,11 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
   await page.goto(FILLED_NPC_URL);
   await startAugment(page);
 
-  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+  await expect(page.getByText(ui("augment.properties.none"))).toBeVisible({
     timeout: 30_000,
   });
   await acceptButton(page).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
 
   // The body grew, and the stats the DM authored are still the mapping they
   // were — values included, bare numbers and all.
@@ -300,17 +330,17 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
 });
 
 test("an unknown [[id]] in the proposal costs one correction turn", async ({ page, api }) => {
-  // The stub's first reply adds a sentence naming `[[der-fremde]]`; the
+  // The stub's first reply adds a sentence naming `[[the-stranger]]`; the
   // correction turn answers the good proposal. What the review shows — and
   // what the accept writes — is the corrected one.
   await page.goto(FILLED_NPC_URL);
-  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page.getByRole("button", { name: ui("augment.action") }).click();
   await page
-    .getByLabel("Quelltext", { exact: false })
+    .getByLabel(ui("augment.source.label"))
     .fill(`${INSTRUCTION}\n\n${TRIGGER.unknownRef}`);
-  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+  await page.getByRole("button", { name: ui("augment.start"), exact: true }).click();
 
-  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+  await expect(page.getByText(ui("augment.properties.none"))).toBeVisible({
     timeout: 30_000,
   });
   const job = await getGeneratorJob(api);
@@ -319,7 +349,7 @@ test("an unknown [[id]] in the proposal costs one correction turn", async ({ pag
   await expect(page.getByRole("dialog")).not.toContainText(UNKNOWN_REF_ID);
 
   await acceptButton(page).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
   const after = (await getNpc(api, FILLED_NPC)).body;
   expect(after).toContain(AUGMENT_THREAD_TEXT);
   expect(after).not.toContain(UNKNOWN_REF_ID);
@@ -334,9 +364,9 @@ test("block decisions survive a reload — the review state is on the job", asyn
   // The one decision of this reply is the new `## If:` section, preselected
   // (a new unit is accepted by default).
   const newBlock = () => page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
-  const keep = () => newBlock().getByRole("button", { name: /^Behalten: / });
+  const keep = () => newBlock().getByRole("button", { name: KEEP_UNIT });
   await expect(newBlock()).toBeVisible({ timeout: 30_000 });
-  await expect(newBlock().getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+  await expect(newBlock().getByRole("button", { name: TAKE_UNIT })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -345,10 +375,10 @@ test("block decisions survive a reload — the review state is on the job", asyn
   // comes back on the DM's decision instead of on the default.
   await keep().click();
   await expect(keep()).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Gespeichert")).toBeVisible();
+  await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page.getByRole("button", { name: ui("augment.action") }).click();
   await expect(newBlock()).toBeVisible({ timeout: 30_000 });
   await expect(keep()).toHaveAttribute("aria-pressed", "true");
 });
@@ -359,19 +389,19 @@ test("while the run is on, only the run's own controls are there", async ({ page
   // running job the first would start nothing (one job per campaign) and the
   // second reads like a stop that it is not.
   await page.goto(SCENE_URL);
-  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
-  await page.getByLabel("Quelltext", { exact: false }).fill(`${INSTRUCTION}\n\n${TRIGGER.slow}`);
-  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+  await page.getByRole("button", { name: ui("augment.action") }).click();
+  await page.getByLabel(ui("augment.source.label")).fill(`${INSTRUCTION}\n\n${TRIGGER.slow}`);
+  await page.getByRole("button", { name: ui("augment.start"), exact: true }).click();
 
-  const discard = page.getByRole("button", { name: "Lauf verwerfen" });
+  const discard = page.getByRole("button", { name: ui("augment.discard") });
   await expect(discard).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("button", { name: "Ergänzen", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Abbrechen", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: ui("augment.start"), exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: ui("common.cancel"), exact: true })).toHaveCount(0);
 
   // …and the run can be dropped from there, which is the point of the one
   // button that IS shown.
   await discard.click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
 });
 
 test("rejecting the proposal writes nothing and takes the job with it", async ({
@@ -382,11 +412,11 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
 
   await page.goto(SCENE_URL);
   await startAugment(page);
-  const rejectButton = page.getByRole("button", { name: "Vorschlag verwerfen" });
+  const rejectButton = page.getByRole("button", { name: ui("augment.reject") });
   await expect(rejectButton).toBeVisible({ timeout: 30_000 });
 
   await rejectButton.click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
 
   // Nothing written — not even a new row version — and the job is gone.
   expect(await getScene(api, SCENE)).toEqual(before);
@@ -403,50 +433,51 @@ test("409: the scene moves while the review is open — nothing is written", asy
 }) => {
   await page.goto(SCENE_URL);
   await startAugment(page);
-  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible({
     timeout: 30_000,
   });
 
   // A second writer through the same API is the only way a scene changes
   // under an open review: the review writes against the version it was cut
   // from, so this invalidates it.
-  await patchScene(api, SCENE, { body: "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n" });
+  await patchScene(api, SCENE, { body: `## Flow\n\n${OTHER_WRITER_TEXT}\n` });
 
   await acceptButton(page).click();
   // The shared conflict line — with ONE action here: the accept step posts to
   // the job's own endpoint, which has no forced write, so continuing from what
   // is stored is the only honest answer and forcing is not offered.
-  const conflictLine = page.getByRole("alert").filter({ hasText: "Inzwischen geändert" });
+  const conflictLine = page.getByRole("alert").filter({ hasText: ui("editConflict.line") });
   await expect(conflictLine).toBeVisible();
-  await expect(conflictLine.getByRole("button", { name: "Neu laden" })).toBeVisible();
-  await expect(conflictLine.getByRole("button", { name: "Trotzdem speichern" })).toHaveCount(0);
+  await expect(conflictLine.getByRole("button", { name: ui("editConflict.reload") })).toBeVisible();
+  await expect(conflictLine.getByRole("button", { name: ui("editConflict.force") })).toHaveCount(0);
   // The dialog stays open with the decisions intact, and NOTHING was written.
   const conflicted = (await getScene(api, SCENE)).body;
-  expect(conflicted).toContain("Jemand anderes hat die Szene umgeschrieben.");
+  expect(conflicted).toContain(OTHER_WRITER_TEXT);
   expect(conflicted).not.toContain(AUGMENT_THREAD_TEXT);
 
   // Continuing from what is stored RE-ALIGNS the proposal against it, so the
   // next attempt carries the current version and goes through — a conflict is
   // a detour, not a dead end…
-  await conflictLine.getByRole("button", { name: "Neu laden" }).click();
+  await conflictLine.getByRole("button", { name: ui("editConflict.reload") }).click();
   await expect(conflictLine).toHaveCount(0);
   await acceptButton(page).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
   const written = (await getScene(api, SCENE)).body;
   expect(written).toContain(AUGMENT_THREAD_TEXT);
   // …and the other writer is NOT overwritten by a decision that was cut
   // against the body they replaced.
-  expect(written).toContain("Jemand anderes hat die Szene umgeschrieben.");
+  expect(written).toContain(OTHER_WRITER_TEXT);
 });
 
 test("the entry point: npc, location and scene — and nothing else", async ({
   page,
+  api,
 }) => {
-  const action = page.getByRole("button", { name: "Mit KI ergänzen" });
+  const action = page.getByRole("button", { name: ui("augment.action") });
 
   await page.goto(FILLED_NPC_URL);
   await expect(action).toBeVisible();
-  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  await page.goto(LOCATION_URL);
   await expect(action).toBeVisible();
   await page.goto(SCENE_URL);
   await expect(action).toBeVisible();
@@ -455,11 +486,11 @@ test("the entry point: npc, location and scene — and nothing else", async ({
   // action on the chapter's reading view or the campaign's route.
   await page.goto("/campaigns/beispiel/chapters/01-salzhafen");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Kapitel 1: Der Leuchtturm von Salzhafen",
+    (await getChapter(api, "01-salzhafen")).title,
   );
   await expect(action).toHaveCount(0);
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText((await getCampaign(api)).name);
   await expect(action).toHaveCount(0);
 });
 
@@ -467,10 +498,11 @@ test("a location is augmented on its own resource: the proposal, then one write"
   page,
   api,
 }) => {
-  const before = await getLocation(api, "leuchtturm");
-  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  const before = await getLocation(api, LOCATION);
+  expect(before.roll20Page).toEqual(expect.any(String));
+  await page.goto(LOCATION_URL);
   await startAugment(page);
-  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible({
     timeout: 30_000,
   });
 
@@ -478,7 +510,7 @@ test("a location is augmented on its own resource: the proposal, then one write"
   // location as read beside the location as proposed, no address anywhere.
   const job: Record<string, unknown> = await getGeneratorJob(api);
   expect(job.kind).toBe("location-augment");
-  expect(job.location).toBe("leuchtturm");
+  expect(job.location).toBe(LOCATION);
   expect(job.target).toBeUndefined();
   expect(job.augmentResult).toBeUndefined();
   const proposal = job.locationAugmentResult as {
@@ -486,10 +518,10 @@ test("a location is augmented on its own resource: the proposal, then one write"
     current: Record<string, unknown>;
     proposed: Record<string, unknown>;
   };
-  expect(proposal.id).toBe("leuchtturm");
+  expect(proposal.id).toBe(LOCATION);
   const { rev: _rev, ...current } = before;
   expect(proposal.current).toEqual(current);
-  expect(proposal.proposed.roll20Page).toBe("Leuchtturm");
+  expect(proposal.proposed.roll20Page).toBe(before.roll20Page);
   for (const side of [proposal.current, proposal.proposed]) {
     expect(Object.keys(side)).not.toContain("path");
     expect(Object.keys(side)).not.toContain("kind");
@@ -498,15 +530,15 @@ test("a location is augmented on its own resource: the proposal, then one write"
 
   // The new plot thread is an addition — preselected; nothing is written yet.
   const thread = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
-  await expect(thread.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+  await expect(thread.getByRole("button", { name: TAKE_UNIT })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  expect((await getLocation(api, "leuchtturm")).body).toBe(before.body);
+  expect((await getLocation(api, LOCATION)).body).toBe(before.body);
 
   await acceptButton(page).click();
-  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  const after = await getLocation(api, "leuchtturm");
+  await expect(page.getByRole("heading", { name: ui("augment.title") })).toHaveCount(0);
+  const after = await getLocation(api, LOCATION);
   expect(after.body).toContain(AUGMENT_THREAD_TEXT);
   expect(after.body.trimStart().startsWith(before.body.trim())).toBe(true);
   expect(after.atmosphere).toBe(before.atmosphere);
@@ -535,14 +567,14 @@ test.describe("at 390px (critical path 8)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByText(AUGMENT_NPC_MOTIVATION)).toBeVisible();
     await expect(page.locator("[data-callout='secret']")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Mit KI ergänzen" })).toBeHidden();
+    await expect(page.getByRole("button", { name: ui("augment.action") })).toBeHidden();
 
     await page.goto(SCENE_URL);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Von den Schmugglern erwischt",
+      (await getScene(api, SCENE)).title,
     );
     await expect(page.locator("details[data-if-section]")).toHaveCount(2);
-    await expect(page.getByRole("button", { name: "Mit KI ergänzen" })).toBeHidden();
+    await expect(page.getByRole("button", { name: ui("augment.action") })).toBeHidden();
 
     // Nothing may scroll sideways at 390px.
     const overflow = await page.evaluate(
@@ -589,11 +621,11 @@ test("the proposal appears as soon as the job is done — start request still in
   await startAugment(page);
   // The honest state right after the click: no job of this run is readable
   // yet, so the dialog says the run is going — and it keeps polling for it.
-  await expect(page.getByText("Läuft auf dem Server", { exact: false })).toBeVisible();
+  await expect(page.getByText(ui("augment.running"))).toBeVisible();
 
   // …and the first poll that answers carries the finished run, so THIS is the
   // review — no closing, no reopening, long before the 202 of the same run.
-  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible({
     timeout: 7_000,
   });
   await expect(
@@ -604,23 +636,23 @@ test("the proposal appears as soon as the job is done — start request still in
   // Let the held response go: the arrival of the 202 must not throw the
   // review away again.
   await expect(async () => expect(released).toBe(true)).toPass({ timeout: 10_000 });
-  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible();
 });
 
 test("the proposal appears on a polled update — a run that is really running", async ({
   page,
 }) => {
   await page.goto(SCENE_URL);
-  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page.getByRole("button", { name: ui("augment.action") }).click();
   await page
-    .getByLabel("Quelltext", { exact: false })
+    .getByLabel(ui("augment.source.label"))
     .fill(`${INSTRUCTION}\n\n${TRIGGER.latePart}`);
-  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+  await page.getByRole("button", { name: ui("augment.start"), exact: true }).click();
 
-  await expect(page.getByText("Läuft auf dem Server", { exact: false })).toBeVisible();
+  await expect(page.getByText(ui("augment.running"))).toBeVisible();
   // No reopening: the poll that finds the finished job swaps the spinner for
   // the review by itself.
-  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
+  await expect(page.getByRole("button", { name: ui("augment.reject") })).toBeVisible({
     timeout: 20_000,
   });
   await expect(
@@ -645,17 +677,17 @@ function fieldRow(page: Page, key: string) {
 async function expectDecision(
   page: Page,
   key: string,
-  state: string,
-  chosen: "Übernehmen" | "Behalten",
+  state: Extract<MessageKey, "augment.state.new" | "augment.state.changed">,
+  chosen: "take" | "keep",
 ): Promise<void> {
   const row = fieldRow(page, key);
-  await expect(row).toContainText(state);
+  await expect(row).toContainText(ui(state));
   // The row buttons are named with their unit, which is what distinguishes
   // them from the footer's accept button.
-  await expect(row.getByRole("button", { name: `${chosen}: ${key}` })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  const toggle = chosen === "take" ? "augment.decision.takeUnit" : "augment.decision.keepUnit";
+  await expect(
+    row.getByRole("button", { name: ui(toggle, { label: key }), exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 }
 
 /**
@@ -664,5 +696,5 @@ async function expectDecision(
  * button is addressable exactly.
  */
 function acceptButton(page: Page) {
-  return page.getByRole("button", { name: "Übernehmen", exact: true });
+  return page.getByRole("button", { name: ui("augment.accept"), exact: true });
 }

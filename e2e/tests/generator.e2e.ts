@@ -12,7 +12,7 @@
 // (e2e/fixtures/stub-llm.ts) through the real OpenAICompatProvider and
 // validates the reply mechanically exactly as in production.
 //
-// The German strings matched below are the content of the stub's replies
+// The content strings matched below are the content of the stub's replies
 // (e2e/fixtures/replies.ts) and of the seeded example campaign — data the
 // model and the seed wrote, not UI text. UI text comes from the catalog.
 
@@ -26,11 +26,14 @@ import {
   LOCATION_STUB_NAME,
   NPC_DEFAULT_ID,
   NPC_DEFAULT_NAME,
+  NPC_FENN_RELATION,
   NPC_MOTIVATION,
   NPC_ROLE,
+  NPC_SECRET_OPENING,
   NPC_STUB_ID,
   NPC_STUB_MOTIVATION,
   NPC_STUB_NAME,
+  OUTLINE_WARNING,
   SCENE_ID,
   SCENE_TITLE,
   TRIGGER,
@@ -43,9 +46,7 @@ import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation, locationExists } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
-import { ui, uiExact } from "../support/ui";
-import type { MessageKey } from "../../app/src/i18n/messages";
-import type { MessageParams } from "../../app/src/i18n/format";
+import { ui, uiExact, uiPattern } from "../support/ui";
 
 /** How the review names the proposed scene: its resource segment and id. */
 const SCENE_LABEL = `scenes/${SCENE_ID}`;
@@ -64,7 +65,7 @@ const EDITED_TITLE = "Night watch on the quay, in the rain";
  * The opening words of the stub scene's read-aloud (e2e/fixtures/replies.ts):
  * reply content the model wrote, matched as data.
  */
-const READALOUD_OPENING = "Die Flut zieht sich";
+const READALOUD_OPENING = "The tide pulls back";
 
 /** What the DM's edit puts in place of READALOUD_OPENING. */
 const EDITED_READALOUD = "The tide goes out in the rain";
@@ -84,19 +85,8 @@ const ACTIVE_CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
 /** The seeded name of the npc `fenn` (fixtures/beispiel/npcs). */
 const FENN = "Fenn";
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * A catalog text whose token count varies: the `tokens` parameter matches any
- * grouped number, everything else is the catalog's own wording.
- */
-function usagePattern(key: MessageKey, params: MessageParams): RegExp {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui(key, { ...params, tokens: marker }).split(marker);
-  return new RegExp(`${escapeRegExp(before)}[\\d.]+${escapeRegExp(after)}`);
-}
+/** A token count in a usage line: any grouped number. */
+const TOKENS = /[\d.]+/;
 
 /** The pending line of a scene run's review: its summary, nothing written yet. */
 function pendingSummary(scenes: number, stubs: number): string {
@@ -113,11 +103,7 @@ function applyAllName(scenes: number, stubs: number): RegExp {
 }
 
 /** The bulk accept button, whatever it counts. */
-const APPLY_ANY = (() => {
-  const marker = "\u0000";
-  const [before = ""] = ui("generate.review.apply", { count: marker }).split(marker);
-  return new RegExp(`^${escapeRegExp(before)}`);
-})();
+const APPLY_ANY = uiPattern("generate.review.apply", { count: /.*/ }, { exact: true });
 
 /** The accessible name of a `[[ref]]` to an npc. */
 function npcRefName(name: string): string {
@@ -189,9 +175,9 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // Not one correction among them: the scene and the location name
   // `[[grella]]`, an npc only this run proposes, and a reference to a
   // proposal is valid.
-  await expect(page.getByText(usagePattern("generate.pipeline.cost", { calls: 4 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.pipeline.cost", { calls: 4, tokens: TOKENS }))).toBeVisible();
   // The model's warning is shown, not swallowed (the stub's warning text).
-  await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
+  await expect(page.getByText(OUTLINE_WARNING)).toBeVisible();
 
   // The scene's card: title, label, status pill, rendered body.
   const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
@@ -380,7 +366,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   // One scene, nothing else proposed — and, the point of the case, exactly TWO
   // calls: the outline and the one scene. A correction turn would be a third.
   await expect(page.getByText(pendingSummary(1, 0))).toBeVisible();
-  await expect(page.getByText(usagePattern("generate.pipeline.cost", { calls: 2 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.pipeline.cost", { calls: 2, tokens: TOKENS }))).toBeVisible();
   // Nothing failed, so no error block and no retry action.
   await expect(page.getByRole("button", { name: ui("generate.pipeline.retry") })).toHaveCount(0);
 
@@ -424,13 +410,13 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   // Quoted quickstats survive as strings — the plus is still there (the
   // stub's quickstats, like the secret and the relation below).
   await expect(card).toContainText("insight +1");
-  await expect(card.locator("[data-callout='secret']")).toContainText("Hat gesehen");
+  await expect(card.locator("[data-callout='secret']")).toContainText(NPC_SECRET_OPENING);
   // The motivation is a field of the proposed npc, shown like on the NPC
   // card — its `[[fenn]]` as the current name.
   await expect(card).toContainText(
     `${ui("npcCard.will.inline")} ${NPC_MOTIVATION.split(" — ")[0]!}`,
   );
-  await expect(card).toContainText("traut Fenn nicht");
+  await expect(card).toContainText(`does not trust ${FENN}`);
 
   // The edit action offers it beside the text, where the npc's editor does —
   // and an edit there is one of the npc's changes the accept writes.
@@ -487,7 +473,7 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
   page,
   api,
 }) => {
-  // The stub's first reply names `[[der-fremde]]`, an id nobody has; the
+  // The stub's first reply names `[[the-stranger]]`, an id nobody has; the
   // server sends it back as a correction turn and the second reply is the
   // good one. The DM only ever sees the corrected draft.
   await page.goto("/campaigns/beispiel/generate");
@@ -504,18 +490,18 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
     { timeout: 30_000 },
   );
   // Two calls: the reply with the dangling reference and its correction.
-  await expect(page.getByText(usagePattern("generate.usage", { attempts: 2 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.usage", { attempts: 2, tokens: TOKENS }))).toBeVisible();
   const card = page.locator("div").filter({ hasText: `npcs/${NPC_DEFAULT_ID}` }).last();
   await expect(card).not.toContainText(UNKNOWN_REF_ID);
   // The relation to an npc the campaign has stayed, as a link (the stub's
   // relation text).
-  await expect(card).toContainText("kennt ihn vom Kai");
+  await expect(card).toContainText(NPC_FENN_RELATION);
   await expect(card.getByRole("link", { name: npcRefName(FENN) }).first()).toBeVisible();
 
   await page.getByRole("button", { name: ui("generate.review.applyNpc"), exact: true }).click();
   await expect(page.getByText(ui("generate.written.title.npc"))).toBeVisible();
   const { body } = await getNpc(api, NPC_DEFAULT_ID);
-  expect(body).toContain("- [[fenn]]: kennt ihn vom Kai");
+  expect(body).toContain(`- [[fenn]]: ${NPC_FENN_RELATION}`);
   expect(body).not.toContain(UNKNOWN_REF_ID);
 });
 
@@ -546,7 +532,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   // Three calls: the outline, then the scene part's initial call plus its
   // correction turn. The failure block still reports the attempt count,
   // because it reads the run's usage out of the error body.
-  await expect(page.getByText(usagePattern("generate.usage", { attempts: 3 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.usage", { attempts: 3, tokens: TOKENS }))).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
   await page.getByText(ui("generate.error.rawReply")).click();

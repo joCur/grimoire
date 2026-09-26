@@ -16,6 +16,7 @@
 // navigation, and the campaign's name, description and text are editable from
 // the header — the campaign's route IS the chapter overview (decisions/resources).
 
+import escapeStringRegexp from "escape-string-regexp";
 import type { Locator, Page } from "@playwright/test";
 
 import type { CampaignSeed } from "@grimoire/shared/campaign";
@@ -29,6 +30,51 @@ import { chapterPath, getChapter, patchChapter } from "../support/chapter";
 import { getGeneratorJob, patchGeneratorJob, startGeneratorJob } from "../support/generator-job";
 import { getScene, patchScene } from "../support/scene";
 import { todaySessionId } from "../support/session";
+import { ui, uiExact, uiPattern } from "../support/ui";
+
+// Seeded content of the example campaign (fixtures/beispiel) the overview
+// shows — data the spec checks for, not UI text.
+
+/** The campaign's name. */
+const CAMPAIGN_NAME = "Der Leuchtturm von Salzhafen";
+/** The opening of the campaign's description. */
+const CAMPAIGN_DESCRIPTION = "Eine Küstenkampagne um einen erloschenen Leuchtturm";
+/** The opening of the campaign's text. */
+const CAMPAIGN_BODY = "Kampagnenweite Notizen: Ton ist bodenständige";
+/** The title of the active chapter `01-salzhafen`. */
+const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+/** The whole text of that chapter. */
+const CHAPTER_BODY = "Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.";
+/** The name of the location `leuchtturm`. */
+const LIGHTHOUSE = "Der Leuchtturm von Salzhafen";
+/** The planned scene `lighthouse-arrival`. */
+const ARRIVAL = "Ankunft am Leuchtturm";
+/** The contingency scene `smuggler-captured` and its trigger. */
+const CAPTURED = "Von den Schmugglern erwischt";
+const CAPTURED_TRIGGER = "Charaktere werden beim Auskundschaften der Bucht entdeckt";
+/** The names of the npcs `fenn` and `jorna`. */
+const FENN = "Fenn";
+const JORNA = "Hafenmeisterin Jorna";
+
+/** The label of a chapter status in the UI. */
+const chapterStatus = (status: "planned" | "active" | "done") =>
+  ui(`properties.chapter.status.${status}`);
+
+/** The accessible name of a chapter's status control showing that status. */
+const chapterStatusName = (status: "planned" | "active" | "done") =>
+  ui("status.change.aria", { current: chapterStatus(status) });
+
+/** The accessible name of a scene's status control showing `ready`. */
+const READY_STATUS_NAME = ui("status.change.aria", { current: ui("status.scene.ready") });
+
+/** The dialog of a chapter's properties. */
+const CHAPTER_PROPERTIES_TITLE = ui("properties.title", { kind: ui("kind.chapter") });
+
+/** The label of a chapter's title field — the form marks it required. */
+const CHAPTER_TITLE_LABEL = `${ui("properties.chapter.title.label")}${ui("properties.field.required")}`;
+
+/** The topbar's section nav, in its order. */
+const NAV_KEYS = ["topbar.nav.chapters", "topbar.nav.npcs", "topbar.nav.locations"] as const;
 
 /**
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
@@ -83,21 +129,24 @@ async function widenGlyphs(page: Page, spacing: string) {
  */
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
+/** The session chip while a session runs — its name opens with the state, the clock follows. */
+const RUNNING_CHIP = uiPattern("session.state.running");
+
 /**
  * A scene that names NO location — its row simply has no location part
  * (decisions/scene-order). The example campaign has none, so the test that needs one
  * seeds it.
  */
 const SCENE_WITHOUT_LOCATION: SceneProposal = {
-  id: "ohne-ort-szene",
-  title: "Irgendwo unterwegs",
+  id: "no-location-scene",
+  title: "Somewhere on the road",
   type: "planned",
   chapter: "01-salzhafen",
   npcs: [],
   handouts: [],
   tags: ["travel"],
   status: "draft",
-  body: "\n## Flow\n\nDie Gruppe ist auf der Straße, der Ort steht noch nicht fest.\n",
+  body: "\n## Flow\n\nThe party is on the road, the place is not settled yet.\n",
 };
 
 /** Today's session, started at 19:30 and never ended. */
@@ -123,6 +172,7 @@ const NAMELESS_CAMPAIGN: CampaignSeed = {
 
 test('"/" redirects into the campaign and the chapter overview shows chapter and scenes', async ({
   page,
+  api,
 }) => {
   await page.goto("/");
 
@@ -130,78 +180,69 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 
   // Campaign header from the campaign.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Der Leuchtturm von Salzhafen",
-  );
-  await expect(page.getByText("1 Kapitel · 2 Szenen")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
+  // The counter counts what the tree holds: one chapter, two scenes.
+  const tree = await api.get<{ chapters: { scenes: unknown[] }[] }>("campaigns/beispiel/tree");
+  expect(tree.chapters.map((chapter) => chapter.scenes.length)).toEqual([2]);
   await expect(
-    page.getByText("Eine Küstenkampagne um einen erloschenen Leuchtturm", {
-      exact: false,
-    }),
+    page.getByText(
+      `${ui("chapterOverview.chapterCount", { count: 1 })} · ${ui("chapterOverview.sceneCount", { count: 2 })}`,
+    ),
   ).toBeVisible();
+  await expect(page.getByText(CAMPAIGN_DESCRIPTION, { exact: false })).toBeVisible();
   // …and under the one-line description the campaign's TEXT, rendered. It is
   // short, so it stands whole and there is nothing to open.
-  await expect(page.getByText("Kampagnenweite Notizen: Ton ist bodenständige", { exact: false })).toBeVisible();
+  await expect(page.getByText(CAMPAIGN_BODY, { exact: false })).toBeVisible();
 
   // The chapter accordion: title, scene count, its text — and the status
   // control BESIDE the trigger (a menu trigger cannot sit inside the
   // accordion button).
-  const chapter = page.getByRole("button", {
-    name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
-  });
+  const chapter = page.getByRole("button", { name: new RegExp(escapeStringRegexp(CHAPTER_TITLE)) });
   await expect(chapter).toBeVisible();
   // The chapter is a HEADING inside that trigger, so the outline does not
   // jump from the chapter overview's h1 straight to the contingency block.
   await expect(
-    chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
+    chapter.getByRole("heading", { level: 2, name: CHAPTER_TITLE }),
   ).toBeVisible();
-  await expect(chapter).toContainText("2 Szenen");
+  await expect(chapter).toContainText(ui("chapterOverview.sceneCount", { count: 2 }));
   // The status is the localized label, and it is the control.
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toContainText(
-    "Aktiv",
+  await expect(page.getByRole("button", { name: chapterStatusName("active") })).toContainText(
+    chapterStatus("active"),
   );
   // Open by default (status: active) — the text is the chapter's, all of it
-  // and nothing prefixed, so no „Mehr anzeigen" either.
-  await expect(
-    page.getByText("Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toHaveCount(0);
+  // and nothing prefixed, so no show-more toggle either.
+  await expect(page.getByText(CHAPTER_BODY, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: ui("common.showMore") })).toHaveCount(0);
 
   // The planned scene is a ROW of the chapter's one list — no location
   // heading over it (decisions/scene-order). The location stands in the row's meta
   // line, and it stands there with the NAME of its entry: the bare slug
   // `leuchtturm` is no location for the reader and appears nowhere.
   await expect(
-    page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
+    page.getByRole("heading", { level: 3, name: LIGHTHOUSE }),
   ).toHaveCount(0);
   await expect(page.getByText("leuchtturm", { exact: true })).toHaveCount(0);
-  const planned = page.getByRole("link", { name: /Ankunft am Leuchtturm/ });
+  const planned = page.getByRole("link", { name: new RegExp(escapeStringRegexp(ARRIVAL)) });
   await expect(planned).toBeVisible();
-  await expect(planned).toContainText(
-    "Leuchtturm von Salzhafen · #social #travel",
-  );
-  await expect(
-    page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
-  ).toBeVisible();
+  await expect(planned).toContainText(`${LIGHTHOUSE} · #social #travel`);
+  await expect(page.getByRole("button", { name: READY_STATUS_NAME }).first()).toBeVisible();
 
   // Contingencies stay a block of their own at the end — the one heading the
   // list still has, because it names a section of the chapter.
-  await expect(page.getByRole("heading", { level: 3, name: "Eventualszenen" })).toBeVisible();
-  const contingency = page.getByRole("link", {
-    name: /Von den Schmugglern erwischt/,
-  });
+  await expect(
+    page.getByRole("heading", { level: 3, name: ui("scene.contingencies.heading") }),
+  ).toBeVisible();
+  const contingency = page.getByRole("link", { name: new RegExp(escapeStringRegexp(CAPTURED)) });
   await expect(contingency).toBeVisible();
   await expect(contingency).toContainText(
-    "Wenn: Charaktere werden beim Auskundschaften der Bucht entdeckt",
+    ui("chapterOverview.scene.trigger", { trigger: CAPTURED_TRIGGER }),
   );
 
   // Opening a row is the chapter overview's job — the scene's own reading
   // view takes over from here (decisions/resources).
   await planned.click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARRIVAL);
 });
 
 test.describe("a scene without a location", () => {
@@ -215,33 +256,35 @@ test.describe("a scene without a location", () => {
     await page.goto("/campaigns/beispiel");
     // No section for it and none for the scenes that DO name a location: the
     // contingency block is the only heading the list has left.
-    await expect(page.getByRole("heading", { level: 3 })).toHaveText(["Eventualszenen"]);
-    await expect(page.getByText("Ohne Ort")).toHaveCount(0);
-    const scene = page.getByRole("link", { name: /Irgendwo unterwegs/ });
+    await expect(page.getByRole("heading", { level: 3 })).toHaveText([
+      ui("scene.contingencies.heading"),
+    ]);
+    const scene = page.getByRole("link", { name: new RegExp(escapeStringRegexp(SCENE_WITHOUT_LOCATION.title)) });
     await expect(scene).toBeVisible();
     // The meta line is the tags alone — no placeholder, no dangling separator,
     // while the scene one row above still names its location.
     await expect(scene).toContainText("#travel");
     await expect(scene).not.toContainText("·");
-    await expect(page.getByRole("link", { name: /Ankunft am Leuchtturm/ })).toContainText(
-      "Leuchtturm von Salzhafen · #social #travel",
+    await expect(page.getByRole("link", { name: new RegExp(escapeStringRegexp(ARRIVAL)) })).toContainText(
+      `${LIGHTHOUSE} · #social #travel`,
     );
     // …and it opens on its own route like every scene.
-    await expect(scene).toHaveAttribute("href", "/campaigns/beispiel/scenes/ohne-ort-szene");
+    await expect(scene).toHaveAttribute(
+      "href",
+      `/campaigns/beispiel/scenes/${SCENE_WITHOUT_LOCATION.id}`,
+    );
   });
 });
 
 test("the topbar trio navigates without anything in the left block moving", async ({
   page,
 }) => {
-  const CAMPAIGN_LABEL = "Kampagne: Der Leuchtturm von Salzhafen";
-  const nav = page
-    .getByRole("banner")
-    .getByRole("navigation", { name: "Kapitel, NPCs und Orte" });
+  const CAMPAIGN_LABEL = ui("campaign.switcher.current", { name: CAMPAIGN_NAME });
+  const nav = page.getByRole("banner").getByRole("navigation", { name: ui("topbar.nav.aria") });
   // The campaign context: the switcher trigger, prefix included.
   const label = page
     .getByRole("banner")
-    .getByRole("button", { name: /^Kampagne: / });
+    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: /.*/ }) });
   /** aria-current marks the one of the three that IS the current view. */
   const current = nav.locator("[aria-current='page']");
 
@@ -257,9 +300,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     nav: await nav.textContent(),
     switcherBox: await label.boundingBox(),
     linkBoxes: await Promise.all(
-      ["Kapitel", "NPCs", "Orte"].map((name) =>
-        nav.getByRole("link", { name }).boundingBox(),
-      ),
+      NAV_KEYS.map((key) => nav.getByRole("link", { name: ui(key) }).boundingBox()),
     ),
   });
 
@@ -268,20 +309,16 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     onChapterOverview: Awaited<ReturnType<typeof leftBlock>>,
   ) => {
     expect(await leftBlock()).toEqual(onChapterOverview);
-    await expect(
-      page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
-    ).toHaveCount(1);
+    await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
   };
 
   await page.goto("/campaigns/beispiel");
   await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
-  await expect(nav.getByRole("link")).toHaveText(["Kapitel", "NPCs", "Orte"]);
+  await expect(nav.getByRole("link")).toHaveText(NAV_KEYS.map((key) => ui(key)));
   // The chapter overview marks its own entry.
-  await expect(current).toHaveText("Kapitel");
+  await expect(current).toHaveText(ui("topbar.nav.chapters"));
   const onChapterOverview = await leftBlock();
-  await expect(
-    page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
-  ).toHaveCount(1);
+  await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
 
   // The chapter overview carries a lookup line — it is where the two
   // campaign-content pages are reached from on
@@ -289,56 +326,59 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // the trio above is still exactly chapters/NPCs/locations, which is what the
   // rest of this test measures.
   await expect(
-    page.getByRole("navigation", { name: "Nachschlagen" }).getByRole("link"),
-  ).toHaveText(["NPCs", "Orte", "Glossar", "Kampagnenwissen"]);
+    page.getByRole("navigation", { name: ui("lookup.heading") }).getByRole("link"),
+  ).toHaveText([
+    ui("browse.title.npcs"),
+    ui("browse.title.locations"),
+    ui("glossary.title"),
+    ui("knowledge.title"),
+  ]);
 
-  await nav.getByRole("link", { name: "Orte" }).click();
+  await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.locations"));
   // Both example locations sit in the same chapter and each row names that
   // chapter under the location, so the name is anchored: the row STARTS with
   // the location's own name, where the other one only mentions it as its
   // chapter.
   await expect(
-    page.getByRole("main").getByRole("link", { name: /^Der Leuchtturm von Salzhafen/ }),
+    page.getByRole("main").getByRole("link", { name: new RegExp(`^${escapeStringRegexp(LIGHTHOUSE)}`) }),
   ).toBeVisible();
-  await expect(current).toHaveText("Orte");
+  await expect(current).toHaveText(ui("topbar.nav.locations"));
   await assertChromeIsStable(onChapterOverview);
-  // No list-title crumb behind the switcher — "Orte" appears in the banner
-  // exactly once, in the nav.
+  // No list-title crumb behind the switcher — the list's label appears in the
+  // banner exactly once, in the nav.
   await expect(
-    page.getByRole("banner").getByText("Orte", { exact: true }),
+    page.getByRole("banner").getByText(ui("topbar.nav.locations"), { exact: true }),
   ).toHaveCount(1);
 
   // The npc list is the npc's own route (decisions/resources).
-  await nav.getByRole("link", { name: "NPCs" }).click();
+  await nav.getByRole("link", { name: ui("topbar.nav.npcs") }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
-  await expect(current).toHaveText("NPCs");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.npcs"));
+  await expect(current).toHaveText(ui("topbar.nav.npcs"));
   await assertChromeIsStable(onChapterOverview);
 
   // --- entry views: same chrome, section marking follows the entity ---------
   // A scene belongs to the chapters section; its hierarchy lives in the page's
   // context line, not in the topbar.
   await page.goto("/campaigns/beispiel/scenes/lighthouse-arrival");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Ankunft am Leuchtturm",
-  );
-  await expect(current).toHaveText("Kapitel");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARRIVAL);
+  await expect(current).toHaveText(ui("topbar.nav.chapters"));
   await assertChromeIsStable(onChapterOverview);
 
   // An NPC belongs to NPCs — whichever chapter happens to mention it. A
   // breadcrumb claiming a chapter path here would be plain misleading for an
   // NPC opened from the NPC list.
   await page.goto("/campaigns/beispiel/npcs/fenn");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
-  await expect(current).toHaveText("NPCs");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(FENN);
+  await expect(current).toHaveText(ui("topbar.nav.npcs"));
   await assertChromeIsStable(onChapterOverview);
   // Its context line points at the list it came from.
   await expect(
     page
-      .getByRole("navigation", { name: "Kontext" })
-      .getByRole("link", { name: "NPCs" }),
+      .getByRole("navigation", { name: ui("context.aria") })
+      .getByRole("link", { name: ui("browse.title.npcs") }),
   ).toHaveAttribute("href", "/campaigns/beispiel/npcs");
 
   // Views that belong to no section mark nothing at all.
@@ -351,20 +391,16 @@ test("the topbar trio navigates without anything in the left block moving", asyn
 
   // The chapters link is the way back to the chapter overview — the reason the
   // trio exists.
-  await nav.getByRole("link", { name: "Kapitel" }).click();
+  await nav.getByRole("link", { name: ui("topbar.nav.chapters") }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Der Leuchtturm von Salzhafen",
-  );
-  await expect(current).toHaveText("Kapitel");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
+  await expect(current).toHaveText(ui("topbar.nav.chapters"));
   await assertChromeIsStable(onChapterOverview);
 
   // The switcher still switches, from a list as well.
-  await nav.getByRole("link", { name: "Orte" }).click();
+  await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
   await label.click();
-  await page
-    .getByRole("menuitem", { name: /Der Leuchtturm von Salzhafen/ })
-    .click();
+  await page.getByRole("menuitem", { name: new RegExp(escapeStringRegexp(CAMPAIGN_NAME)) }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 });
 
@@ -386,11 +422,11 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 
   test("keeps the whole chrome where it was", async ({ page }) => {
     const banner = page.getByRole("banner");
-    const nav = banner.getByRole("navigation", {
-      name: "Kapitel, NPCs und Orte",
+    const nav = banner.getByRole("navigation", { name: ui("topbar.nav.aria") });
+    const label = banner.getByRole("button", {
+      name: uiPattern("campaign.switcher.current", { name: /.*/ }),
     });
-    const label = banner.getByRole("button", { name: /^Kampagne: / });
-    const gear = banner.getByRole("link", { name: "Einstellungen" });
+    const gear = banner.getByRole("link", { name: ui("settings.title") });
     const chip = banner.locator("[data-session-chip]");
 
     /**
@@ -407,12 +443,10 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
       switcherBox: await label.boundingBox(),
       navLabels: await nav.getByRole("link").allTextContents(),
       navBoxes: await Promise.all(
-        ["Kapitel", "NPCs", "Orte"].map((name) =>
-          nav.getByRole("link", { name }).boundingBox(),
-        ),
+        NAV_KEYS.map((key) => nav.getByRole("link", { name: ui(key) }).boundingBox()),
       ),
       searchBox: await banner
-        .getByRole("button", { name: /Suche/ })
+        .getByRole("button", { name: uiPattern("topbar.search") })
         .boundingBox(),
       session: await chip.getAttribute("data-session-chip"),
       sessionBox: await chip.boundingBox(),
@@ -421,19 +455,17 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 
     await page.goto("/campaigns/beispiel/npcs");
     await expect(label).toHaveAccessibleName(
-      "Kampagne: Der Leuchtturm von Salzhafen",
+      ui("campaign.switcher.current", { name: CAMPAIGN_NAME }),
     );
     await expect(chip).toHaveAttribute("data-session-chip", "running");
-    await expect(nav.locator("[aria-current='page']")).toHaveText("NPCs");
+    await expect(nav.locator("[aria-current='page']")).toHaveText(ui("topbar.nav.npcs"));
     // On a list route the gear is just an entry, not the current view.
     await expect(gear).not.toHaveAttribute("aria-current", "page");
     const before = await chrome();
 
     await gear.click();
     await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Einstellungen",
-    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("settings.title"));
 
     // Nothing moved, nothing vanished, nothing appeared.
     expect(await chrome()).toEqual(before);
@@ -442,9 +474,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
     await expect(gear).toHaveAttribute("aria-current", "page");
     await expect(nav.locator("[aria-current='page']")).toHaveCount(0);
     // The campaign name is still up there exactly once — in the switcher.
-    await expect(banner.getByText(/Der Leuchtturm von Salzhafen/)).toHaveCount(
-      1,
-    );
+    await expect(banner.getByText(CAMPAIGN_NAME)).toHaveCount(1);
     // And the chip is still the running session's, so the live clock the
     // version poll keeps fresh is reachable from here as well.
     await chip.click();
@@ -454,8 +484,8 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 
 /**
  * The topbar must not overflow at ANY width from 390px up. The medium widths
- * are the tight ones — switcher, live pill, timer, Pause, verwerfen, beenden,
- * search and Generator in one 56px row would run over. With the session
+ * are the tight ones — switcher, live pill, timer, pause, discard, end,
+ * search and generator in one 56px row would run over. With the session
  * consolidated into ONE chip the row fits; this test is the guard that keeps
  * it fitting.
  */
@@ -470,17 +500,13 @@ test.describe("with a session running since 19:30", () => {
     for (const width of TOPBAR_WIDTHS) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/campaigns/beispiel");
-      await expect(
-        page.getByRole("link", { name: /Session läuft/ }),
-      ).toBeVisible();
+      await expect(page.getByRole("link", { name: RUNNING_CHIP })).toBeVisible();
       // The gear is on the row at every width the topbar IS the
       // chrome at — icon-only on purpose, so it cannot grow the row. Below md
       // the whole topbar is hidden (the mobile start surface replaces it), so
       // there is nothing to be visible there.
       if (width >= 768) {
-        await expect(
-          page.getByRole("link", { name: "Einstellungen" }),
-        ).toBeVisible();
+        await expect(page.getByRole("link", { name: ui("settings.title") })).toBeVisible();
       }
       expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
         row: 0,
@@ -498,8 +524,8 @@ test.describe("with a session running since 19:30", () => {
       await page.goto("/campaigns/beispiel/live");
       await expect(
         width >= 768
-          ? page.getByRole("button", { name: /Session läuft/ })
-          : page.getByRole("link", { name: /Session läuft/ }),
+          ? page.getByRole("button", { name: RUNNING_CHIP })
+          : page.getByRole("link", { name: RUNNING_CHIP }),
       ).toBeVisible();
       expect(await topbarOverflow(page), `live at ${width}px`).toEqual({
         row: 0,
@@ -516,9 +542,9 @@ test.describe("with a session running since 19:30", () => {
 
 /**
  * The FULLEST row there is — and the one the guard above never saw: with NO
- * session running the chip carries the long "Session starten" label instead
- * of the clock, and the example campaign's last session leaves the
- * "Nachbereitung · N offen" link on the row next to generator and gear. At
+ * session running the chip carries the long start label instead of the
+ * clock, and the example campaign's last session leaves the review link with
+ * its open count on the row next to generator and gear. At
  * 768 and at 1024 that row is tightest: a regression there overflows by 41
  * and 10px in plain macOS rendering, invisible to a `scrollWidth` metric.
  */
@@ -529,13 +555,11 @@ test("the topbar does not overflow at medium widths with no session running", as
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/campaigns/beispiel");
     if (width >= 768) {
-      await expect(
-        page.getByRole("button", { name: "Session starten" }),
-      ).toBeVisible();
+      await expect(page.getByRole("button", { name: ui("session.start") })).toBeVisible();
       // The review link is part of THIS row on purpose — it is the widest
       // optional element, and the one that runs the row over.
       await expect(
-        page.getByRole("link", { name: /Nachbereitung/ }),
+        page.getByRole("link", { name: uiPattern("topbar.review.pending", { count: /\d+/ }) }),
       ).toBeVisible();
     }
     expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
@@ -589,30 +613,31 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     review: { writtenScenes: [THREE_SCENES[0].id] },
   });
 
+  // The chip counts against the PARTS OF THE RUN, not against the parts that
+  // happen to have answered already: one of three, next to the
+  // finished-scenes count on the generator page.
+  const progress = ui("topbar.generator.progress", { written: 1, total: 3 });
+
   for (const width of TOPBAR_WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/campaigns/beispiel");
     // Below md the topbar is hidden (the mobile start surface is the chrome
     // there), so the chip is only on the row from 768 up.
     if (width >= 768) {
-      const chip = page.getByRole("link", { name: /Generator/ });
+      const chip = page.getByRole("link", { name: uiPattern("topbar.generator") });
       await expect(chip).toBeVisible();
       // The chip stands before the job is read; its name carries the
       // progress once it is.
-      await expect(chip).toHaveAccessibleName(/1 von 3 übernommen/);
+      await expect(chip).toHaveAccessibleName(new RegExp(escapeStringRegexp(progress)));
       // The number is on the chip exactly ONCE, whatever the width does with
       // it: above 2xl it is spelled out, below it stands
       // in the accessible name only — never both, which would read as the
       // same progress phrase printed twice.
       const text = await chip.innerText();
       expect(
-        text.match(/übernommen/g)?.length ?? 0,
+        text.split(progress).length - 1,
         `chip text at ${width}px: ${JSON.stringify(text)}`,
       ).toBe(1);
-      // And it counts against the PARTS OF THE RUN, not against the parts
-      // that happen to have answered already: one of three, next to the
-      // finished-scenes count on the generator page.
-      expect(text).toContain("1 von 3 übernommen");
     }
     expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({ row: 0, page: 0 });
     await widenGlyphs(page, "1px");
@@ -623,7 +648,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
   }
 });
 
-test("„Kampagne bearbeiten“ writes name, description and text — header, switcher and the campaign follow", async ({
+test("the edit-campaign dialog writes name, description and text — header, switcher and the campaign follow", async ({
   page,
   api,
 }) => {
@@ -631,45 +656,47 @@ test("„Kampagne bearbeiten“ writes name, description and text — header, sw
 
   // `exact`: a per-chapter edit action stands on the same page, and a
   // role name matches as a substring.
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Kampagne bearbeiten");
-  await expect(dialog).toContainText("Name, Beschreibung und Text der Kampagne.");
+  await page.getByRole("button", { name: uiExact("common.edit") }).click();
+  const dialog = page.getByRole("dialog", { name: ui("campaignEdit.title") });
+  await expect(dialog).toContainText(ui("campaignEdit.description"));
   // Prefilled from the campaign as it is stored.
-  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue(
-    "Der Leuchtturm von Salzhafen",
+  const stored = await getCampaign(api);
+  await expect(dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true })).toHaveValue(
+    stored.name,
   );
-  await expect(dialog.getByLabel("Beschreibung")).toHaveValue(
-    /Eine Küstenkampagne um einen erloschenen Leuchtturm/,
+  await expect(dialog.getByLabel(ui("campaignEdit.field.description"))).toHaveValue(
+    stored.description ?? "",
   );
-  const text = dialog.getByRole("textbox", { name: "Text" });
-  await expect(text).toHaveValue(/Kampagnenweite Notizen:/);
+  const text = dialog.getByRole("textbox", { name: ui("campaignEdit.field.body") });
+  await expect(text).toHaveValue(stored.body);
 
   // Nothing typed, nothing to save.
-  const save = dialog.getByRole("button", { name: "Speichern" });
+  const save = dialog.getByRole("button", { name: ui("common.save") });
   await expect(save).toBeDisabled();
 
-  await dialog.getByLabel("Name", { exact: true }).fill("Salzhafen, zweite Fassung");
-  await dialog.getByLabel("Beschreibung").fill("Jetzt mit mehr Schmuggel und weniger Möwen.");
-  await text.fill("## Ton\n\nBodenständig, salzig, **ohne** hohe Magie.");
+  const name = "Salzhafen, second draft";
+  const description = "Now with more smuggling and fewer gulls.";
+  await dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true }).fill(name);
+  await dialog.getByLabel(ui("campaignEdit.field.description")).fill(description);
+  await text.fill("## Tone\n\nDown to earth, salty, **without** high magic.");
   await save.click();
 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   // Chapter overview header, subtitle and the text under it, rendered …
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen, zweite Fassung");
-  await expect(page.getByText("Jetzt mit mehr Schmuggel und weniger Möwen.")).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2, name: "Ton" })).toBeVisible();
-  await expect(page.getByText("Kampagnenweite Notizen", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
+  await expect(page.getByText(description)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Tone" })).toBeVisible();
+  await expect(page.getByText(CAMPAIGN_BODY, { exact: false })).toHaveCount(0);
   // … and the switcher label, which reads the campaign list.
   await expect(
-    page.getByRole("button", { name: "Kampagne: Salzhafen, zweite Fassung" }),
+    page.getByRole("button", { name: ui("campaign.switcher.current", { name }) }),
   ).toBeVisible();
 
   // Stored, through the campaign's own resource.
   const campaign = await getCampaign(api);
-  expect(campaign.name).toBe("Salzhafen, zweite Fassung");
-  expect(campaign.description).toBe("Jetzt mit mehr Schmuggel und weniger Möwen.");
-  expect(campaign.body).toBe("## Ton\n\nBodenständig, salzig, **ohne** hohe Magie.\n");
+  expect(campaign.name).toBe(name);
+  expect(campaign.description).toBe(description);
+  expect(campaign.body).toBe("## Tone\n\nDown to earth, salty, **without** high magic.\n");
 });
 
 test.describe("a campaign without a name", () => {
@@ -694,55 +721,57 @@ test.describe("a campaign without a name", () => {
       rev: nameless.rev,
     });
 
-    await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText("Kampagne bearbeiten");
+    await page.getByRole("button", { name: uiExact("common.edit") }).click();
+    const dialog = page.getByRole("dialog", { name: ui("campaignEdit.title") });
+    await expect(dialog).toBeVisible();
     // The id is the placeholder, never a proposed name.
-    await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("");
-    await expect(dialog.getByLabel("Beschreibung")).toHaveValue("");
+    const nameField = dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true });
+    await expect(nameField).toHaveValue("");
+    await expect(nameField).toHaveAttribute("placeholder", "beispiel");
+    await expect(dialog.getByLabel(ui("campaignEdit.field.description"))).toHaveValue("");
 
-    await dialog.getByLabel("Name", { exact: true }).fill("Salzhafen von vorn");
-    await dialog.getByLabel("Beschreibung").fill("Frisch angelegt aus der App.");
-    await dialog.getByRole("button", { name: "Speichern" }).click();
+    await nameField.fill("Salzhafen from scratch");
+    await dialog.getByLabel(ui("campaignEdit.field.description")).fill("Freshly created from the app.");
+    await dialog.getByRole("button", { name: ui("common.save") }).click();
 
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen von vorn");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen from scratch");
     // The id does not move — the server sets it, never the client.
     const campaign = await getCampaign(api);
     expect(campaign.id).toBe("beispiel");
-    expect(campaign.name).toBe("Salzhafen von vorn");
-    expect(campaign.description).toBe("Frisch angelegt aus der App.");
+    expect(campaign.name).toBe("Salzhafen from scratch");
+    expect(campaign.description).toBe("Freshly created from the app.");
     expect(campaign.body).toBe("");
   });
 });
 
-test("„Kampagne bearbeiten“ and a second writer: the conflict line, and „Trotzdem speichern“ writes only the dialog's changes", async ({
+test("the edit-campaign dialog and a second writer: the conflict line, and the save-anyway action writes only the dialog's changes", async ({
   page,
   api,
 }) => {
   await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  const name = dialog.getByLabel("Name", { exact: true });
-  await expect(name).toHaveValue("Der Leuchtturm von Salzhafen");
-  await name.fill("Salzhafen im Nebel");
+  await page.getByRole("button", { name: uiExact("common.edit") }).click();
+  const dialog = page.getByRole("dialog", { name: ui("campaignEdit.title") });
+  const name = dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true });
+  await expect(name).toHaveValue(CAMPAIGN_NAME);
+  await name.fill("Salzhafen in the fog");
 
   // The second writer changes the TEXT while the dialog stands.
-  await patchCampaign(api, { body: "Von der API geschrieben.\n" });
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await patchCampaign(api, { body: "Written by the API.\n" });
+  await dialog.getByRole("button", { name: ui("common.save") }).click();
 
   // Nothing written: the typed name stays, the conflict line asks.
-  await expect(dialog.getByRole("alert")).toContainText("Inzwischen geändert");
-  await expect(name).toHaveValue("Salzhafen im Nebel");
-  expect((await getCampaign(api)).name).toBe("Der Leuchtturm von Salzhafen");
+  await expect(dialog.getByRole("alert")).toContainText(ui("editConflict.line"));
+  await expect(name).toHaveValue("Salzhafen in the fog");
+  expect((await getCampaign(api)).name).toBe(CAMPAIGN_NAME);
 
   // Forcing writes the one field the DM changed — the other writer's text
   // survives.
-  await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
+  await dialog.getByRole("button", { name: ui("editConflict.force") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen im Nebel");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen in the fog");
   const stored = await getCampaign(api);
-  expect(stored.name).toBe("Salzhafen im Nebel");
-  expect(stored.body).toBe("Von der API geschrieben.\n");
+  expect(stored.name).toBe("Salzhafen in the fog");
+  expect(stored.body).toBe("Written by the API.\n");
 });
 
 test("the chapter overview header is ONE row: the actions right beside the title, never under it", async ({
@@ -757,13 +786,13 @@ test("the chapter overview header is ONE row: the actions right beside the title
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/campaigns/beispiel");
     const title = page.getByRole("heading", { level: 1 });
-    await expect(title).toHaveText("Der Leuchtturm von Salzhafen");
-    const counter = page.getByText(/\d+ Kapitel · \d+ Szenen/);
-    const create = page.getByRole("button", { name: "Kapitel anlegen" });
-    const edit = page.getByRole("button", { name: "Bearbeiten", exact: true });
-    const description = page.getByText("Eine Küstenkampagne um einen erloschenen", {
-      exact: false,
-    });
+    await expect(title).toHaveText(CAMPAIGN_NAME);
+    const counter = page.getByText(
+      `${ui("chapterOverview.chapterCount", { count: 1 })} · ${ui("chapterOverview.sceneCount", { count: 2 })}`,
+    );
+    const create = page.getByRole("button", { name: ui("create.chapter.title") });
+    const edit = page.getByRole("button", { name: uiExact("common.edit") });
+    const description = page.getByText(CAMPAIGN_DESCRIPTION, { exact: false });
 
     const [titleBox, counterBox, createBox, editBox, descriptionBox] = await Promise.all(
       [title, counter, create, edit, description].map(
@@ -790,7 +819,7 @@ test("the chapter overview header is ONE row: the actions right beside the title
 
     // Description, then the lookup line — in that order.
     const lookupBox = (await page
-      .getByRole("navigation", { name: "Nachschlagen" })
+      .getByRole("navigation", { name: ui("lookup.heading") })
       .boundingBox())!;
     expect(descriptionBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
     expect(lookupBox.y).toBeGreaterThan(descriptionBox!.y);
@@ -799,19 +828,27 @@ test("the chapter overview header is ONE row: the actions right beside the title
 
 // Critical path 1: the chapter overview shows the WHOLE text of a chapter and
 // of the campaign — rendered like everywhere else, nothing picked out by a
-// heading — on a few lines at first. „Mehr anzeigen" exists only where the
-// text really is longer than that, and a link in the cut-off part that takes
+// heading — on a few lines at first. The show-more toggle exists only where
+// the text really is longer than that, and a link in the cut-off part that takes
 // the keyboard focus opens the text, so the focus never sits on something
 // hidden.
 
 /** A text that is longer than four lines at any width, ending in a reference. */
 const LONG_TEXT = [
-  "## Worum es geht",
-  "Seit drei Nächten brennt das Leuchtfeuer nicht mehr, und im Hafen erzählt jeder eine andere Geschichte darüber, wer es gelöscht hat.",
-  "> [!secret] Die Hafenmeisterin weiß mehr, als sie sagt.",
-  "Die Gruppe soll herausfinden, wer das Feuer gelöscht hat, bevor das nächste Schiff an den Klippen zerschellt.",
-  "Am Ende wartet [[jorna]] am Kai.",
+  "## What it is about",
+  "For three nights the beacon has not burned, and everyone in the harbour tells a different story about who put it out.",
+  "> [!secret] The harbour master knows more than she says.",
+  "The party is to find out who put out the fire before the next ship breaks on the cliffs.",
+  "At the end [[jorna]] waits on the quay.",
 ].join("\n\n");
+
+/** The heading of that text, and the opening of its first paragraph. */
+const LONG_TEXT_HEADING = "What it is about";
+const LONG_TEXT_OPENING = "For three nights the beacon has not burned";
+
+/** The show-more and show-less toggles of a clamped text. */
+const showMore = (page: Page) => page.getByRole("button", { name: ui("common.showMore") });
+const showLess = (page: Page) => page.getByRole("button", { name: ui("common.showLess") });
 
 /** The clamped box a toggle opens — named by the toggle's aria-controls. */
 async function clampBox(page: Page, toggle: Locator) {
@@ -828,34 +865,34 @@ test("a long chapter text is clamped, opens and closes; a link in the cut-off pa
   await page.goto("/campaigns/beispiel");
 
   // Rendered through the one renderer: the heading, the callout, the reference.
-  await expect(page.getByRole("heading", { level: 2, name: "Worum es geht" })).toBeVisible();
-  const toggle = page.getByRole("button", { name: "Mehr anzeigen" });
+  await expect(page.getByRole("heading", { level: 2, name: LONG_TEXT_HEADING })).toBeVisible();
+  const toggle = showMore(page);
   await expect(toggle).toHaveCount(1);
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   const box = await clampBox(page, toggle);
   await expect(box).toHaveAttribute("data-clamped", "");
-  await expect(box).toContainText("Die Hafenmeisterin weiß mehr");
+  await expect(box).toContainText("The harbour master knows more");
   const clampedHeight = (await box.boundingBox())!.height;
   // Four lines of 14px at line height 1.6, plus the 4px focus-ring margin on
   // both sides — and not a pixel of the rest.
   expect(clampedHeight).toBeLessThanOrEqual(4 * 14 * 1.6 + 8 + 1);
 
   await toggle.click();
-  const less = page.getByRole("button", { name: "Weniger anzeigen" });
+  const less = showLess(page);
   await expect(less).toHaveAttribute("aria-expanded", "true");
   await expect(box).not.toHaveAttribute("data-clamped", "");
   expect((await box.boundingBox())!.height).toBeGreaterThan(clampedHeight);
   // The reference at the very end is a live link to its entry.
-  await expect(box.getByRole("link", { name: /Jorna/ })).toBeVisible();
+  await expect(box.getByRole("link", { name: new RegExp(escapeStringRegexp(JORNA)) })).toBeVisible();
 
   await less.click();
   await expect(box).toHaveAttribute("data-clamped", "");
-  await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toBeFocused();
+  await expect(showMore(page)).toBeFocused();
 
   // The keyboard reaches the reference in the hidden part — and the text opens.
-  await box.getByRole("link", { name: /Jorna/ }).focus();
+  await box.getByRole("link", { name: new RegExp(escapeStringRegexp(JORNA)) }).focus();
   await expect(box).not.toHaveAttribute("data-clamped", "");
-  await expect(page.getByRole("button", { name: "Weniger anzeigen" })).toBeVisible();
+  await expect(showLess(page)).toBeVisible();
 });
 
 test("the campaign's text stands under its description, clamped the same way", async ({
@@ -865,11 +902,11 @@ test("the campaign's text stands under its description, clamped the same way", a
   await patchCampaign(api, { body: `${LONG_TEXT}\n` });
   // The chapter's own text is short, so the one toggle is the header's.
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByText("Seit drei Nächten brennt das Leuchtfeuer", { exact: false })).toBeVisible();
-  const toggle = page.getByRole("button", { name: "Mehr anzeigen" });
+  await expect(page.getByText(LONG_TEXT_OPENING, { exact: false })).toBeVisible();
+  const toggle = showMore(page);
   await expect(toggle).toHaveCount(1);
   const box = await clampBox(page, toggle);
-  await expect(box).toContainText("Seit drei Nächten brennt das Leuchtfeuer");
+  await expect(box).toContainText(LONG_TEXT_OPENING);
   await expect(box).toHaveAttribute("data-clamped", "");
   await toggle.click();
   await expect(box).not.toHaveAttribute("data-clamped", "");
@@ -877,11 +914,9 @@ test("the campaign's text stands under its description, clamped the same way", a
   // An empty campaign text shows nothing extra — the description stays.
   await patchCampaign(api, { body: "" });
   await page.reload();
-  await expect(
-    page.getByText("Eine Küstenkampagne um einen erloschenen Leuchtturm", { exact: false }),
-  ).toBeVisible();
-  await expect(page.getByText("Seit drei Nächten brennt das Leuchtfeuer", { exact: false })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toHaveCount(0);
+  await expect(page.getByText(CAMPAIGN_DESCRIPTION, { exact: false })).toBeVisible();
+  await expect(page.getByText(LONG_TEXT_OPENING, { exact: false })).toHaveCount(0);
+  await expect(showMore(page)).toHaveCount(0);
 });
 
 // Critical path 1: a chapter is editable where it is read.
@@ -898,50 +933,45 @@ test("a chapter's title and text are editable from the chapter overview", async 
 }) => {
   await page.goto("/campaigns/beispiel");
   // The active chapter is open by default, so its actions are on screen.
-  const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
+  const properties = page.getByRole("button", { name: ui("chapterOverview.chapter.properties") });
   await expect(properties).toBeVisible();
 
   // --- the title, through the chapter's dialog ---
   await properties.click();
-  let dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Kapitel: Eigenschaften");
+  let dialog = page.getByRole("dialog", { name: CHAPTER_PROPERTIES_TITLE });
   // The form marks a required field in its label, so the accessible name is
   // that whole string.
-  const title = dialog.getByRole("textbox", { name: "Titel · nötig" });
-  await expect(title).toHaveValue("Kapitel 1: Der Leuchtturm von Salzhafen");
-  await title.fill("Kapitel 1: Salzhafen");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  const title = dialog.getByRole("textbox", { name: CHAPTER_TITLE_LABEL });
+  await expect(title).toHaveValue(CHAPTER_TITLE);
+  await title.fill("Chapter 1: Salzhafen");
+  await dialog.getByRole("button", { name: ui("common.save") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The overview heading follows — it reads the tree, which the save
   // invalidated.
-  await expect(page.getByRole("heading", { level: 2, name: "Kapitel 1: Salzhafen" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Chapter 1: Salzhafen" })).toBeVisible();
 
   // --- the text, through the edit dialog ---
-  await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
-  dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Kapitel bearbeiten: Kapitel 1: Salzhafen");
-  await expect(dialog).toContainText(
-    "Der Text des Kapitels als Markdown. Die Kapitelübersicht zeigt ihn unter dem Titel.",
-  );
-  const body = dialog.getByRole("textbox", { name: "Text" });
-  await expect(body).toHaveValue(/Leuchtfeuer/);
+  await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
+  dialog = page.getByRole("dialog", {
+    name: ui("chapterBody.title", { title: "Chapter 1: Salzhafen" }),
+  });
+  await expect(dialog).toContainText(ui("chapterBody.description"));
+  const body = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
+  await expect(body).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
   await body.fill("");
-  await expect(body).toHaveAttribute(
-    "placeholder",
-    "Worum es in diesem Kapitel geht und was die Gruppe erreichen soll",
-  );
+  await expect(body).toHaveAttribute("placeholder", ui("chapterBody.field.body.placeholder"));
   // A heading is text like any other now: it is shown, and so is what follows.
-  await body.fill("## Worum es geht\n\nDen Leuchtturm wieder anzünden.");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await body.fill("## What it is about\n\nLight the lighthouse again.");
+  await dialog.getByRole("button", { name: ui("common.save") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The overview shows the whole text, rendered.
-  await expect(page.getByRole("heading", { level: 2, name: "Worum es geht" })).toBeVisible();
-  await expect(page.getByText("Den Leuchtturm wieder anzünden.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "What it is about" })).toBeVisible();
+  await expect(page.getByText("Light the lighthouse again.", { exact: true })).toBeVisible();
   const stored = await getChapter(api, "01-salzhafen");
-  expect(stored.title).toBe("Kapitel 1: Salzhafen");
-  expect(stored.body).toContain("Den Leuchtturm wieder anzünden.");
+  expect(stored.title).toBe("Chapter 1: Salzhafen");
+  expect(stored.body).toContain("Light the lighthouse again.");
 });
 
 test("the chapter edit dialog shows the 409 instead of overwriting a second writer", async ({
@@ -949,29 +979,28 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   api,
 }) => {
   await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
+  await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
   const dialog = page.getByRole("dialog");
-  const body = dialog.getByRole("textbox", { name: "Text" });
-  await expect(body).toHaveValue(/Leuchtfeuer/);
+  const body = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
+  await expect(body).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
 
   // A SECOND WRITER while the dialog stands (there is no "external edit" any
   // more — e2e/README.md): the API writes with a fresh token.
-  await patchChapter(api, "01-salzhafen", { body: "Von der API.\n" });
+  await patchChapter(api, "01-salzhafen", { body: "From the API.\n" });
 
-  await body.fill("Aus dem Dialog.");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await body.fill("From the dialog.");
+  await dialog.getByRole("button", { name: ui("common.save") }).click();
 
   // Nothing was written, the dialog says so, and the typed text is still
   // there.
-  await expect(dialog.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  await expect(body).toHaveValue("Aus dem Dialog.");
-  expect((await getChapter(api, "01-salzhafen")).body).toContain("Von der API.");
+  await expect(dialog.getByText(ui("editConflict.line"), { exact: false })).toBeVisible();
+  await expect(body).toHaveValue("From the dialog.");
+  expect((await getChapter(api, "01-salzhafen")).body).toContain("From the API.");
 
-  // Forcing writes the same field on top of the row as it stands. The save
-  // label is addressed exactly: the conflict line's force action contains it.
-  await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
+  // Forcing writes the same field on top of the row as it stands.
+  await dialog.getByRole("button", { name: ui("editConflict.force") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByText("Aus dem Dialog.", { exact: true })).toBeVisible();
+  await expect(page.getByText("From the dialog.", { exact: true })).toBeVisible();
 });
 
 // The chapter status control (critical paths 1 and 7). The overview decides
@@ -994,6 +1023,9 @@ function chapterPatches(page: Page): string[] {
   return writes;
 }
 
+/** The title of a second chapter the status tests create. */
+const SECOND_CHAPTER = "Chapter 2: The Cove";
+
 /** The ids of the campaign's active chapters, as the tree lists them. */
 async function activeChapters(api: Api): Promise<string[]> {
   const tree = await api.get<{ chapters: { id: string; status?: string }[] }>(
@@ -1002,40 +1034,44 @@ async function activeChapters(api: Api): Promise<string[]> {
   return tree.chapters.filter((chapter) => chapter.status === "active").map((chapter) => chapter.id);
 }
 
-test("the chapter status control shows the German labels and makes another chapter the active one", async ({
+test("the chapter status control shows the localized labels and makes another chapter the active one", async ({
   page,
   api,
 }) => {
   // A second chapter to move the status TO — the example campaign has one.
   const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: "Kapitel 2: Die Bucht",
+    title: SECOND_CHAPTER,
   });
-  expect(created.id).toBe("kapitel-2-die-bucht");
+  expect(created.id).toBe("chapter-2-the-cove");
 
   await page.goto("/campaigns/beispiel");
 
   // The active chapter's control names its current value for a screen reader…
-  const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
+  const activeMenu = page.getByRole("button", { name: chapterStatusName("active") });
   await expect(activeMenu).toBeVisible();
   // …and the label is the localized one, not the wire value.
-  await expect(activeMenu).toContainText("Aktiv");
+  await expect(activeMenu).toContainText(chapterStatus("active"));
   await expect(activeMenu).not.toContainText("active");
 
-  // The three options, in lifecycle order and in German.
+  // The three options, in lifecycle order, localized.
   await activeMenu.click();
   const menu = page.getByRole("menu");
-  await expect(menu.getByRole("menuitemradio")).toHaveText(["Geplant", "Aktiv", "Abgeschlossen"]);
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    chapterStatus("planned"),
+    chapterStatus("active"),
+    chapterStatus("done"),
+  ]);
   await page.keyboard.press("Escape");
 
   // --- activating B, from B's own control ---
   const writes = chapterPatches(page);
-  const second = page.getByRole("button", { name: /Kapitel 2: Die Bucht/ });
+  const second = page.getByRole("button", { name: new RegExp(escapeStringRegexp(SECOND_CHAPTER)) });
   await expect(second).toBeVisible();
-  await page.getByRole("button", { name: "Status ändern, aktuell Geplant" }).click();
-  await page.getByRole("menuitemradio", { name: "Aktiv" }).click();
+  await page.getByRole("button", { name: chapterStatusName("planned") }).click();
+  await page.getByRole("menuitemradio", { name: chapterStatus("active") }).click();
 
   // B is active, A went back to planned — in one write.
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: chapterStatusName("active") })).toHaveCount(1);
   await expect.poll(async () => (await getChapter(api, "01-salzhafen")).status).toBe("planned");
   expect((await getChapter(api, created.id)).status).toBe("active");
   expect(await activeChapters(api)).toEqual([created.id]);
@@ -1050,13 +1086,14 @@ test("the chapter status control shows the German labels and makes another chapt
   // it: still one write, B active and A planned.
   await page.waitForTimeout(2_000);
   expect(writes).toHaveLength(1);
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: chapterStatusName("active") })).toHaveCount(1);
   // Per CHAPTER row (the control beside its h2) — the scene rows in the open
   // accordion carry controls of their own.
+  const prefix = ui("status.change.aria", { current: "" });
   const rows = await page
-    .locator('xpath=//h2/ancestor::div[1]//button[starts-with(@aria-label,"Status ändern")]')
+    .locator(`xpath=//h2/ancestor::div[1]//button[starts-with(@aria-label,"${prefix}")]`)
     .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
-  expect(rows).toEqual(["Status ändern, aktuell Geplant", "Status ändern, aktuell Aktiv"]);
+  expect(rows).toEqual([chapterStatusName("planned"), chapterStatusName("active")]);
   expect(await activeChapters(api)).toEqual([created.id]);
 });
 
@@ -1065,11 +1102,11 @@ test("a second writer: the chapter status pick reports the conflict inline, the 
   api,
 }) => {
   const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: "Kapitel 2: Die Bucht",
+    title: SECOND_CHAPTER,
   });
   await page.goto("/campaigns/beispiel");
-  const trigger = page.getByRole("button", { name: "Status ändern, aktuell Geplant" });
-  const message = page.getByText("Inzwischen geändert — neu laden");
+  const trigger = page.getByRole("button", { name: chapterStatusName("planned") });
+  const message = page.getByText(ui("write.stale"));
 
   // The control reads the chapter when its menu opens; a write between that
   // read and the pick makes the pick stale. The version poll (~5s) can heal
@@ -1079,8 +1116,8 @@ test("a second writer: the chapter status pick reports the conflict inline, the 
     await trigger.click();
     await expect(page.getByRole("menu")).toBeVisible();
     await page.waitForTimeout(300);
-    await patchChapter(api, created.id, { body: `Von einem zweiten Schreiber (${attempt}).\n` });
-    await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
+    await patchChapter(api, created.id, { body: `From a second writer (${attempt}).\n` });
+    await page.getByRole("menuitemradio", { name: chapterStatus("done") }).click();
     conflicted = await message
       .waitFor({ state: "visible", timeout: 4000 })
       .then(() => true)
@@ -1092,14 +1129,14 @@ test("a second writer: the chapter status pick reports the conflict inline, the 
   // the control has no conflict actions of its own.
   const stored = await getChapter(api, created.id);
   expect(stored.status).toBe("planned");
-  expect(stored.body).toContain("Von einem zweiten Schreiber");
-  await expect(page.getByRole("button", { name: "Trotzdem speichern" })).toHaveCount(0);
+  expect(stored.body).toContain("From a second writer");
+  await expect(page.getByRole("button", { name: ui("editConflict.force") })).toHaveCount(0);
 
   // The control re-read the chapter, so the SAME pick works now.
   await trigger.click();
-  await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
+  await page.getByRole("menuitemradio", { name: chapterStatus("done") }).click();
   await expect(
-    page.getByRole("button", { name: "Status ändern, aktuell Abgeschlossen" }),
+    page.getByRole("button", { name: chapterStatusName("done") }),
   ).toBeVisible();
   await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
   expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
@@ -1108,13 +1145,13 @@ test("a second writer: the chapter status pick reports the conflict inline, the 
 // The control is a RADIO group, so the checked option is the state —
 // selecting it is nothing to write.
 test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
-  await api.send("POST", chapterPath(api), { title: "Kapitel 2: Die Bucht" });
+  await api.send("POST", chapterPath(api), { title: SECOND_CHAPTER });
   const writes = chapterPatches(page);
 
   await page.goto("/campaigns/beispiel");
-  const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
+  const activeMenu = page.getByRole("button", { name: chapterStatusName("active") });
   await activeMenu.click();
-  await page.getByRole("menuitemradio", { name: "Aktiv" }).click();
+  await page.getByRole("menuitemradio", { name: chapterStatus("active") }).click();
   await page.waitForTimeout(1_000);
 
   expect(writes).toEqual([]);
@@ -1123,20 +1160,20 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
 });
 
 // A value other than `active` moves only the chapter it names.
-test("picking Abgeschlossen writes that chapter and leaves the active one alone", async ({
+test("picking done writes that chapter and leaves the active one alone", async ({
   page,
   api,
 }) => {
   const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: "Kapitel 2: Die Bucht",
+    title: SECOND_CHAPTER,
   });
 
   await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: "Status ändern, aktuell Geplant" }).click();
-  await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
+  await page.getByRole("button", { name: chapterStatusName("planned") }).click();
+  await page.getByRole("menuitemradio", { name: chapterStatus("done") }).click();
 
   await expect(
-    page.getByRole("button", { name: "Status ändern, aktuell Abgeschlossen" }),
+    page.getByRole("button", { name: chapterStatusName("done") }),
   ).toBeVisible();
   await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
   // The evening's chapter is untouched.
@@ -1149,7 +1186,7 @@ test("picking Abgeschlossen writes that chapter and leaves the active one alone"
 // a chapter goes stale the moment another writer activates a different one
 // (up to one version poll), and an untouched active value in the form would
 // put it back — from a dialog that was only opened to fix a title.
-test("an untouched status field is not written, not even a stale Aktiv", async ({ page, api }) => {
+test("an untouched status field is not written, not even a stale active", async ({ page, api }) => {
   const patches: string[] = [];
   page.on("request", (request) => {
     if (request.method() === "PATCH") patches.push(request.postData() ?? "");
@@ -1158,13 +1195,13 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   await page.goto("/campaigns/beispiel");
   // The active chapter is open by default: it is in the app's cache now, with
   // `status: active`.
-  const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
+  const properties = page.getByRole("button", { name: ui("chapterOverview.chapter.properties") });
   await expect(properties).toBeVisible();
 
   // Another writer activates a second chapter. The app does not know yet —
   // the version poll is what tells it, and the dialog opens before that.
   const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: "Kapitel 2: Die Bucht",
+    title: SECOND_CHAPTER,
     id: "02",
   });
   await patchChapter(api, "02", { status: "active" });
@@ -1173,64 +1210,63 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   await properties.click();
   const dialog = page.getByRole("dialog");
   // The scenario, spelled out: the form opened on the STALE value.
-  await expect(dialog.getByLabel("Status")).toHaveValue("active");
+  await expect(dialog.getByLabel(ui("properties.chapter.status.label"))).toHaveValue("active");
 
   // Only the title is touched.
-  await dialog.getByLabel("Titel").fill("Kapitel 1: Salzhafen");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await dialog.getByLabel(ui("properties.chapter.title.label")).fill("Chapter 1: Salzhafen");
+  await dialog.getByRole("button", { name: ui("common.save") }).click();
   // The other writer moved the chapter, so the frozen rev is stale: the first
   // attempt is the 409 of decisions/writes, nothing written. The typed title stays and
   // the next attempt writes on top of what is stored — with the status STILL
   // untouched, which is the point of this test.
-  await expect(dialog).toContainText("Inzwischen geändert");
-  await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
+  await expect(dialog).toContainText(ui("editConflict.line"));
+  await dialog.getByRole("button", { name: ui("editConflict.force") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The title is written, the status is not even mentioned — and the chapter
   // the other writer activated keeps it.
   const stored = await getChapter(api, "01-salzhafen");
-  expect(stored.title).toBe("Kapitel 1: Salzhafen");
+  expect(stored.title).toBe("Chapter 1: Salzhafen");
   expect(stored.status).toBe("planned");
   expect((await getChapter(api, created.id)).status).toBe("active");
   // Both attempts sent the title and nothing else — the status field never
   // appears on the wire, so no stale active value can ride along.
   expect(patches).toHaveLength(2);
   for (const body of patches) {
-    expect(body).toContain("Kapitel 1: Salzhafen");
+    expect(body).toContain("Chapter 1: Salzhafen");
     expect(body).not.toContain("status");
   }
 });
 
 // The chapter's dialog is the second door onto the same value — and it must
 // not be a way past the one-active rule.
-test("the chapter's dialog offers the enum and its Aktiv makes the chapter the active one", async ({
+test("the chapter's dialog offers the enum and its active value makes the chapter the active one", async ({
   page,
   api,
 }) => {
   const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: "Kapitel 2: Die Bucht",
+    title: SECOND_CHAPTER,
   });
 
   await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: /Kapitel 2: Die Bucht/ }).click();
+  await page.getByRole("button", { name: new RegExp(escapeStringRegexp(SECOND_CHAPTER)) }).click();
   // Two chapters are open now, so the actions are named per chapter — the
   // second one belongs to the second chapter.
-  await page.getByRole("button", { name: "Kapitel-Eigenschaften" }).nth(1).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Kapitel: Eigenschaften");
+  await page.getByRole("button", { name: ui("chapterOverview.chapter.properties") }).nth(1).click();
+  const dialog = page.getByRole("dialog", { name: CHAPTER_PROPERTIES_TITLE });
 
   // A select over the enum, not a free text field.
-  const status = dialog.getByLabel("Status");
+  const status = dialog.getByLabel(ui("properties.chapter.status.label"));
   await expect(status).toBeVisible();
-  await status.selectOption({ label: "Aktiv" });
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await status.selectOption({ label: chapterStatus("active") });
+  await dialog.getByRole("button", { name: ui("common.save") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The server kept the rule: exactly one active chapter, and it is this one.
   await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("active");
   await expect.poll(async () => (await getChapter(api, "01-salzhafen")).status).toBe("planned");
   expect(await activeChapters(api)).toEqual([created.id]);
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: chapterStatusName("active") })).toHaveCount(1);
 });
 
 // --- the scene order: one list, up/down, one guard of its own (decisions/scene-order) -----
@@ -1240,7 +1276,7 @@ const CHAPTER = "01-salzhafen";
 /** The write path of that order: the whole list, against its own guard. */
 const ORDER_PATH = `campaigns/beispiel/chapters/${CHAPTER}/scene-order`;
 /** The conflict line of the order — it reports and reloads, it does not force. */
-const ORDER_CONFLICT = "Reihenfolge inzwischen geändert — der aktuelle Stand ist geladen.";
+const ORDER_CONFLICT = ui("chapterOverview.order.conflict");
 
 /** The tree's answer about one chapter's order — the parts this spec reads. */
 interface OrderTree {
@@ -1254,11 +1290,14 @@ interface OrderTree {
 
 /** Scene id -> the title its row and its move controls carry. */
 const TITLES: Record<string, string> = {
-  "lighthouse-arrival": "Ankunft am Leuchtturm",
-  "order-keller": "Der Keller unter dem Turm",
-  "order-steg": "Nachts am Steg",
-  "smuggler-captured": "Von den Schmugglern erwischt",
+  "lighthouse-arrival": ARRIVAL,
+  "order-keller": "The cellar under the tower",
+  "order-steg": "At the jetty by night",
+  "smuggler-captured": CAPTURED,
 };
+
+/** The move-down name of any row, its title captured. */
+const MOVE_DOWN = uiPattern("chapterOverview.scene.moveDown.aria", { title: /(.*)/ }, { exact: true });
 
 /** One planned scene for the order fixtures, with a location so the row has a meta line. */
 function plannedScene(id: string, location: string): SceneProposal {
@@ -1313,9 +1352,9 @@ async function storedOrder(api: Api): Promise<string[]> {
  */
 async function shownOrder(page: Page): Promise<string[]> {
   const labels = await page
-    .getByRole("button", { name: /nach unten$/ })
+    .getByRole("button", { name: MOVE_DOWN })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels.map((label) => label.replace(/^„|“ nach unten$/g, ""));
+  return labels.flatMap((label) => MOVE_DOWN.exec(label)?.[1] ?? []);
 }
 
 /** The titles of an order given by id — what `shownOrder` has to answer. */
@@ -1327,9 +1366,13 @@ test.describe("the scene order of a chapter", () => {
   test.use({ seed: ORDER_SEED });
 
   const up = (page: Page, id: string) =>
-    page.getByRole("button", { name: `„${TITLES[id]}“ nach oben` });
+    page.getByRole("button", {
+      name: ui("chapterOverview.scene.moveUp.aria", { title: TITLES[id] ?? id }),
+    });
   const down = (page: Page, id: string) =>
-    page.getByRole("button", { name: `„${TITLES[id]}“ nach unten` });
+    page.getByRole("button", {
+      name: ui("chapterOverview.scene.moveDown.aria", { title: TITLES[id] ?? id }),
+    });
 
   test("the scenes are ONE list, and a step down survives a reload", async ({ page, api }) => {
     await page.goto("/campaigns/beispiel");
@@ -1403,7 +1446,7 @@ test.describe("the scene order of a chapter", () => {
     // `rev` and nothing of the chapter's order (decisions/scene-order).
     const node = await orderNode(api);
     const before = await getScene(api, "order-keller");
-    const written = await patchScene(api, "order-keller", { title: "Der Keller, neu vermessen" });
+    const written = await patchScene(api, "order-keller", { title: "The cellar, measured anew" });
     expect(written.rev).not.toBe(before.rev);
     const after = await orderNode(api);
     expect(after.sceneOrderRev).toBe(node.sceneOrderRev);
@@ -1417,13 +1460,15 @@ test.describe("the scene order of a chapter", () => {
     const scene = "lighthouse-arrival";
     const sceneBefore = await getScene(api, scene);
     const chapterBefore = await getChapter(api, CHAPTER);
-    const addition = "Eine Zeile, die das Umsortieren überlebt.";
+    const addition = "A line that survives the reordering.";
 
     // The scene's text editor stands open on the version it started from.
     await page.goto(`/campaigns/beispiel/scenes/${scene}`);
-    await page.getByRole("button", { name: "Bearbeiten" }).click();
-    await page.getByRole("button", { name: "Markdown", exact: true }).click();
-    const textarea = page.getByRole("textbox", { name: /^Markdown-Text von/ });
+    await page.getByRole("button", { name: ui("common.edit") }).click();
+    await page.getByRole("button", { name: uiExact("composer.mode.markdown") }).click();
+    const textarea = page.getByRole("textbox", {
+      name: uiPattern("bodyEditor.markdown.aria", { path: /.+/ }),
+    });
     await expect(textarea).toHaveValue(sceneBefore.body);
     await textarea.fill(`${sceneBefore.body}\n${addition}\n`);
 
@@ -1439,27 +1484,29 @@ test.describe("the scene order of a chapter", () => {
     expect((await getChapter(api, CHAPTER)).rev).toBe(chapterBefore.rev);
 
     // So the save lands — no conflict line, the typed text is stored.
-    await page.getByRole("button", { name: "Speichern" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Inzwischen geändert" })).toHaveCount(0);
+    await page.getByRole("button", { name: ui("common.save") }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: ui("editConflict.line") }),
+    ).toHaveCount(0);
     await expect.poll(async () => (await getScene(api, scene)).body).toContain(addition);
     expect(await storedOrder(api)).toEqual(reordered);
 
     // The chapter's own text holds `chapters.rev`, which the order does not
     // touch either — same promise, other half of the chapter.
     await page.goto("/campaigns/beispiel");
-    await page.getByRole("button", { name: "Kapitel bearbeiten" }).click();
+    await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
     const dialog = page.getByRole("dialog");
-    const chapterText = dialog.getByRole("textbox", { name: "Text" });
-    await expect(chapterText).toHaveValue(/Leuchtfeuer/);
-    await chapterText.fill("Den Leuchtturm wieder anzünden.");
+    const chapterText = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
+    await expect(chapterText).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
+    await chapterText.fill("Light the lighthouse again.");
     const second = await orderNode(api);
     const again = ["order-steg", "order-keller", "lighthouse-arrival", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });
-    await dialog.getByRole("button", { name: "Speichern" }).click();
+    await dialog.getByRole("button", { name: ui("common.save") }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect
       .poll(async () => (await getChapter(api, CHAPTER)).body)
-      .toContain("Den Leuchtturm wieder anzünden.");
+      .toContain("Light the lighthouse again.");
     // …and the chapter write left the order where the other writer put it.
     expect(await storedOrder(api)).toEqual(again);
   });
@@ -1468,22 +1515,22 @@ test.describe("the scene order of a chapter", () => {
 test("the npc's and the location's reading views offer the session start like every reading view", async ({
   page,
 }) => {
-  const start = page.getByRole("banner").getByRole("button", { name: "Session starten" });
+  const start = page.getByRole("banner").getByRole("button", { name: ui("session.start") });
 
   // The npc's and the location's own routes are reading views: with no
   // session running the chip offers the start, exactly as it does on a scene.
   await page.goto("/campaigns/beispiel/npcs/jorna");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(JORNA);
   await expect(start).toBeVisible();
   await page.goto("/campaigns/beispiel/locations/leuchtturm");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LIGHTHOUSE);
   await expect(start).toBeVisible();
 
   // The lists are lists, not reading views — no start offered there.
   await page.goto("/campaigns/beispiel/npcs");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.npcs"));
   await expect(start).toHaveCount(0);
   await page.goto("/campaigns/beispiel/locations");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.locations"));
   await expect(start).toHaveCount(0);
 });

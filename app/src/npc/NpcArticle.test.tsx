@@ -72,7 +72,7 @@ describe("NpcArticle", () => {
     const html = render({ id: "holm", name: "holm", status: "unknown", body: "", rev: 1 });
     expect(html).toContain("holm");
     expect(html).toContain(t("status.npc.unknown"));
-    expect(html).not.toContain(t("properties.npc.statblock.label"));
+    expect(html).not.toContain(t("entity.npc.statblock", { value: "" }));
     expect(html).not.toContain(t("npcCard.will.inline"));
   });
 
@@ -83,14 +83,14 @@ describe("NpcArticle", () => {
         actions={
           <>
             {/* Stand-in caller markup, not app copy. */}
-            <button type="button">{"first"}</button>
-            <button type="button">{"second"}</button>
+            <button type="button">{"First"}</button>
+            <button type="button">{"Second"}</button>
           </>
         }
       />,
     );
     expect(html).toMatch(
-      /<span class="[^"]*gap-2[^"]*"><button[^>]*>first<\/button><button[^>]*>second<\/button><\/span>/,
+      /<span class="[^"]*gap-2[^"]*"><button[^>]*>First<\/button><button[^>]*>Second<\/button><\/span>/,
     );
     // The text stands below the header.
     expect(html).toContain("Ahnt, dass jemand im Dorf");

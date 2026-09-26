@@ -105,17 +105,17 @@ describe("roundtrip over the fixtures", () => {
     const body = [
       "## Flow",
       "",
-      "Am Kai wartet [[jorna]]s Boot, [[leuchtturm]] liegt dunkel.",
+      "At the quay [[jorna]]s boat waits, [[lighthouse]] lies dark.",
       "",
-      "> [!readaloud] [[jorna]] sieht euch nicht an.",
+      "> [!readaloud] [[jorna]] does not look at you.",
       "",
-      "## If: sie fragen nach [[fenn]]",
+      "## If: they ask about [[fenn]]",
       "",
-      "Dann schweigt [[jorna]] — und [[niemand]] hilft ihnen.",
+      "Then [[jorna]] falls silent — and [[nobody]] helps them.",
       "",
     ].join("\n");
     expect(serializeBlocks(parseBlocks(body))).toBe(body);
-    expect(blockText(parseBlocks(body)[1]!)).toContain("[[jorna]]s Boot");
+    expect(blockText(parseBlocks(body)[1]!)).toContain("[[jorna]]s boat");
   });
 });
 
@@ -176,13 +176,13 @@ describe("structure of the reference scenes", () => {
   });
 
   test("a heading of depth <= 2 ends an If-section", () => {
-    const body = "## If: a\n\ndrin\n\n## Flow\n\ndraußen\n";
+    const body = "## If: a\n\ninside\n\n## Flow\n\noutside\n";
     expect(shape(parseBlocks(body))).toEqual(["ifSection(text)", "heading", "text"]);
     expect(serializeBlocks(parseBlocks(body))).toBe(body);
   });
 
   test("a deeper heading stays inside the If-section", () => {
-    const body = "## If: a\n\n### Detail\n\ndrin\n";
+    const body = "## If: a\n\n### Detail\n\ninside\n";
     expect(shape(parseBlocks(body))).toEqual(["ifSection(heading,text)"]);
     expect(serializeBlocks(parseBlocks(body))).toBe(body);
   });
@@ -199,53 +199,53 @@ describe("editing a block", () => {
     const before = original.source;
     if (before === undefined) throw new Error("parsed blocks carry their source");
 
-    const edited = withBlockText(original, "Der Turm steht still. Kein Licht.");
+    const edited = withBlockText(original, "The tower stands still. No light.");
     expect(edited.source).toBeUndefined();
     expect(edited.gap).toBe(original.gap); // a separator is not content
 
     const next = serializeBlocks(blocks.map((b) => (b === original ? edited : b)));
     expect(next).toBe(
-      body.replace(before, "> [!readaloud] Der Turm steht still. Kein Licht."),
+      body.replace(before, "> [!readaloud] The tower stands still. No light."),
     );
     // Nothing else moved: cutting the changed region out leaves the rest equal.
     expect(next.split("> [!readaloud]")[0]).toBe(body.split("> [!readaloud]")[0]);
   });
 
   test("an edited multi-paragraph callout renders bare `>` for blank lines", () => {
-    const blocks = parseBlocks("> [!note] alt\n");
+    const blocks = parseBlocks("> [!note] old\n");
     const note = blocks[0];
     if (note?.type !== "callout") throw new Error("expected a callout");
-    expect(serializeBlocks([withBlockText(note, "eins\n\nzwei")])).toBe(
-      "> [!note] eins\n>\n> zwei\n",
+    expect(serializeBlocks([withBlockText(note, "one\n\ntwo")])).toBe(
+      "> [!note] one\n>\n> two\n",
     );
   });
 
   test("editing an If-condition keeps the children verbatim", () => {
-    const body = "## If: alt\n\n> [!note]  seltsam    umbrochen\n> weiter\n";
+    const body = "## If: old\n\n> [!note]  oddly    wrapped\n> onward\n";
     const blocks = parseBlocks(body);
     const section = blocks[0];
     if (section?.type !== "ifSection") throw new Error("expected an If-section");
-    const next = serializeBlocks([withIfCondition(section, "neu")]);
-    expect(next).toBe("## If: neu\n\n> [!note]  seltsam    umbrochen\n> weiter\n");
+    const next = serializeBlocks([withIfCondition(section, "new")]);
+    expect(next).toBe("## If: new\n\n> [!note]  oddly    wrapped\n> onward\n");
   });
 
   test("editing a child of a section is not swallowed by the section", () => {
-    const body = "## If: a\n\n> [!check] alt\n";
+    const body = "## If: a\n\n> [!check] old\n";
     const blocks = parseBlocks(body);
     const section = blocks[0];
     if (section?.type !== "ifSection") throw new Error("expected an If-section");
     const child = section.children[0];
     if (child?.type !== "callout") throw new Error("expected a callout child");
-    const next = serializeBlocks([withChildren(section, [withBlockText(child, "neu")])]);
-    expect(next).toBe("## If: a\n\n> [!check] neu\n");
+    const next = serializeBlocks([withChildren(section, [withBlockText(child, "new")])]);
+    expect(next).toBe("## If: a\n\n> [!check] new\n");
   });
 });
 
 describe("constructors", () => {
   test("a new callout parses back into the same block", () => {
-    const block = makeCallout("readaloud", "Der Turm steht still.");
+    const block = makeCallout("readaloud", "The tower stands still.");
     const markdown = serializeBlocks([block]);
-    expect(markdown).toBe("> [!readaloud] Der Turm steht still.\n");
+    expect(markdown).toBe("> [!readaloud] The tower stands still.\n");
     const reparsed = parseBlocks(markdown)[0];
     if (reparsed?.type !== "callout") throw new Error("expected a callout");
     expect(reparsed.kind).toBe("readaloud");
@@ -255,7 +255,7 @@ describe("constructors", () => {
 
   test("every callout kind is a fixpoint, single-paragraph and multi", () => {
     for (const kind of ["readaloud", "check", "secret", "outcome", "loot", "note"] as const) {
-      for (const text of ["kurz", "eins\n\nzwei", "eine Zeile\nnoch eine"]) {
+      for (const text of ["short", "one\n\ntwo", "one line\nanother one"]) {
         const markdown = serializeBlocks([makeCallout(kind, text)]);
         const reparsed = parseBlocks(markdown)[0];
         if (reparsed?.type !== "callout") throw new Error(`not a callout: ${markdown}`);
@@ -267,35 +267,35 @@ describe("constructors", () => {
   });
 
   test("an If-section with children is a fixpoint", () => {
-    const section = makeIfSection("sie lügen", [
+    const section = makeIfSection("they lie", [
       makeCallout("check", "Charisma (Deception) vs. Wisdom (Insight)."),
-      makeText("- geglaubt\n- nicht geglaubt"),
+      makeText("- believed\n- not believed"),
     ]);
     const markdown = serializeBlocks([section]);
     expect(markdown).toBe(
-      "## If: sie lügen\n\n> [!check] Charisma (Deception) vs. Wisdom (Insight).\n\n- geglaubt\n- nicht geglaubt\n",
+      "## If: they lie\n\n> [!check] Charisma (Deception) vs. Wisdom (Insight).\n\n- believed\n- not believed\n",
     );
     expect(shape(parseBlocks(markdown))).toEqual(["ifSection(callout:check,text)"]);
     expect(serializeBlocks(parseBlocks(markdown))).toBe(markdown);
   });
 
   test("headings and text blocks are fixpoints", () => {
-    const blocks = [makeHeading(2, "Flow"), makeText("Ein Absatz.\nZweite Zeile.")];
+    const blocks = [makeHeading(2, "Flow"), makeText("A paragraph.\nSecond line.")];
     const markdown = serializeBlocks(blocks);
-    expect(markdown).toBe("## Flow\n\nEin Absatz.\nZweite Zeile.\n");
+    expect(markdown).toBe("## Flow\n\nA paragraph.\nSecond line.\n");
     expect(serializeBlocks(parseBlocks(markdown))).toBe(markdown);
   });
 
   test("constructors normalize surrounding blank lines", () => {
     expect(serializeBlocks([makeCallout("note", "\n  \nText\n\n")])).toBe("> [!note] Text\n");
-    expect(makeIfSection("  sie lügen  ").condition).toBe("sie lügen");
+    expect(makeIfSection("  they lie  ").condition).toBe("they lie");
     expect(makeHeading(3, " Detail ").text).toBe("Detail");
   });
 
   test("a new block inserted into a CRLF body keeps CRLF", () => {
     const blocks = parseBlocks("## Flow\r\n\r\nText\r\n");
-    const next = insertBlock(blocks, blocks.length, makeCallout("note", "neu\n\nauch neu"));
-    expect(serializeBlocks(next)).toBe("## Flow\r\n\r\nText\r\n\r\n> [!note] neu\r\n>\r\n> auch neu\r\n");
+    const next = insertBlock(blocks, blocks.length, makeCallout("note", "new\n\nalso new"));
+    expect(serializeBlocks(next)).toBe("## Flow\r\n\r\nText\r\n\r\n> [!note] new\r\n>\r\n> also new\r\n");
   });
 });
 
@@ -303,8 +303,8 @@ describe("list operations keep the leading whitespace at the head", () => {
   const body = "\n## Flow\n\nText\n";
 
   test("inserting at the front does not leak a blank line", () => {
-    const next = insertBlock(parseBlocks(body), 0, makeHeading(2, "Vorher"));
-    expect(serializeBlocks(next)).toBe("\n## Vorher\n\n## Flow\n\nText\n");
+    const next = insertBlock(parseBlocks(body), 0, makeHeading(2, "Before"));
+    expect(serializeBlocks(next)).toBe("\n## Before\n\n## Flow\n\nText\n");
   });
 
   test("removing the head hands the lead to the new head", () => {
@@ -325,32 +325,32 @@ describe("degenerate input roundtrips", () => {
     "only a newline": "\n",
     "only blank lines": "\n  \n\t\n",
     "no trailing newline": "## Flow\n\nText",
-    "crlf everywhere": "\r\n## Flow\r\n\r\n> [!check] DC 13\r\n> zweite Zeile\r\n",
-    "unknown callout kind": "> [!warning] Kein bekannter Typ\n> zweite Zeile\n",
-    "plain blockquote": "> Nur ein Zitat\n>\n> mit zwei Absätzen\n",
-    "nested blockquote": "> [!note] außen\n>\n> > innen\n> > tiefer\n",
-    "heading inside a callout": "> [!secret] Text\n> ## keine echte Überschrift\n",
-    "callout marker without a space": ">[!note]dicht geschrieben\n",
-    "uppercase callout marker": "> [!NOTE] Groß geschrieben\n",
+    "crlf everywhere": "\r\n## Flow\r\n\r\n> [!check] DC 13\r\n> second line\r\n",
+    "unknown callout kind": "> [!warning] No known type\n> second line\n",
+    "plain blockquote": "> Just a quote\n>\n> with two paragraphs\n",
+    "nested blockquote": "> [!note] outer\n>\n> > inner\n> > deeper\n",
+    "heading inside a callout": "> [!secret] Text\n> ## not a real heading\n",
+    "callout marker without a space": ">[!note]tightly written\n",
+    "uppercase callout marker": "> [!NOTE] Upper case\n",
     "blank lines run": "## A\n\n\n\nText\n\n\n",
     "trailing whitespace lines": "Text\n   \n\t\n",
     "if section without a condition": "## If:\n\nText\n",
-    "if section with trailing spaces": "## If:   sie lügen   \n\nText\n",
+    "if section with trailing spaces": "## If:   they lie   \n\nText\n",
     "closed atx heading": "## Flow ##\n\nText\n",
-    "seventh level pseudo heading": "####### kein Heading\n",
-    "code fence with structure inside": "```\n## If: nicht echt\n\n> [!note] auch nicht\n```\n",
-    "unclosed code fence": "```md\n## If: nicht echt\n",
-    "indented code block": "    > [!note] eingerückt\n    ## kein Heading\n",
-    "loose list": "- eins\n\n- zwei\n",
+    "seventh level pseudo heading": "####### no heading\n",
+    "code fence with structure inside": "```\n## If: not real\n\n> [!note] neither\n```\n",
+    "unclosed code fence": "```md\n## If: not real\n",
+    "indented code block": "    > [!note] indented\n    ## no heading\n",
+    "loose list": "- one\n\n- two\n",
     "table": "| a | b |\n| - | - |\n| 1 | 2 |\n",
-    "html comment": "<!-- wird von der App befüllt -->\n",
-    "lazy blockquote continuation": "> [!note] erste Zeile\nfaul weiter\n",
-    "setext heading": "Titel\n=====\n\nText\n",
-    "thematic break": "Text\n\n---\n\nmehr\n",
-    "callout right after a list": "- eins\n> [!note] direkt danach\n",
+    "html comment": "<!-- filled in by the app -->\n",
+    "lazy blockquote continuation": "> [!note] first line\nlazily onward\n",
+    "setext heading": "Title\n=====\n\nText\n",
+    "thematic break": "Text\n\n---\n\nmore\n",
+    "callout right after a list": "- one\n> [!note] right after\n",
     "no blank line between headings": "## A\n## B\n### C\n",
     "windows text without final newline": "## Flow\r\n\r\nText",
-    "mixed line endings": "## Flow\n\r\nText\r\n\nmehr\n",
+    "mixed line endings": "## Flow\n\r\nText\r\n\nmore\n",
     "if section at the very end": "## Flow\n\n## If: a\n",
     "two if sections in a row": "## If: a\n\n## If: b\n\nText\n",
   };
@@ -362,25 +362,25 @@ describe("degenerate input roundtrips", () => {
   }
 
   test("an unknown callout kind stays a raw block and is never reformatted", () => {
-    const block = parseBlocks("> [!warning] Kein bekannter Typ\n")[0];
+    const block = parseBlocks("> [!warning] No known type\n")[0];
     if (block?.type !== "markdown") throw new Error("expected a raw block");
     expect(block.calloutKind).toBe("warning");
     // Raw text is verbatim markdown, markers included.
-    expect(block.text).toBe("> [!warning] Kein bekannter Typ");
+    expect(block.text).toBe("> [!warning] No known type");
   });
 
   test("a plain blockquote is a raw block without a callout kind", () => {
-    const block = parseBlocks("> Nur ein Zitat\n")[0];
+    const block = parseBlocks("> Just a quote\n")[0];
     if (block?.type !== "markdown") throw new Error("expected a raw block");
     expect(block.calloutKind).toBeUndefined();
   });
 
   test("an uppercase marker yields the canonical lowercase kind", () => {
-    const block = parseBlocks("> [!NOTE] Groß\n")[0];
+    const block = parseBlocks("> [!NOTE] Upper\n")[0];
     if (block?.type !== "callout") throw new Error("expected a callout");
     expect(block.kind).toBe("note");
     // …while the stored spelling survives untouched.
-    expect(serializeBlocks([block])).toBe("> [!NOTE] Groß\n");
+    expect(serializeBlocks([block])).toBe("> [!NOTE] Upper\n");
   });
 
   test("a marker on its own line puts the text on the first line", () => {
@@ -449,7 +449,7 @@ describe("the whitespace-only seed", () => {
     if (seed?.type !== "text") throw new Error("expected the seed block");
     // Without this the body would be saved without a trailing newline at all
     // (the seed's gap is "" — that is what round-tripped the whitespace).
-    expect(serializeBlocks([withBlockText(seed, "Erster Satz.")])).toBe("\n\nErster Satz.\n");
+    expect(serializeBlocks([withBlockText(seed, "First sentence.")])).toBe("\n\nFirst sentence.\n");
   });
 
   test("a CRLF-only body keeps CRLF when it is typed into", () => {
@@ -457,15 +457,15 @@ describe("the whitespace-only seed", () => {
     const seed = blocks[0];
     if (seed?.type !== "text") throw new Error("expected the seed block");
     // The leading blank line is the ONLY evidence of the body's line ending.
-    expect(serializeBlocks([withBlockText(seed, "Erster Satz.")])).toBe("\r\nErster Satz.\r\n");
+    expect(serializeBlocks([withBlockText(seed, "First sentence.")])).toBe("\r\nFirst sentence.\r\n");
   });
 
   test("an edited last block of a body without a final newline gets one", () => {
     const blocks = parseBlocks("## Flow\n\nText");
     const last = blocks[1];
     if (last?.type !== "text") throw new Error("expected a text block");
-    const next = blocks.map((block) => (block === last ? withBlockText(last, "Neu") : block));
-    expect(serializeBlocks(next)).toBe("## Flow\n\nNeu\n");
+    const next = blocks.map((block) => (block === last ? withBlockText(last, "New") : block));
+    expect(serializeBlocks(next)).toBe("## Flow\n\nNew\n");
     // …while leaving it alone leaves the body alone.
     expect(serializeBlocks(blocks)).toBe("## Flow\n\nText");
   });
@@ -475,45 +475,45 @@ describe("the If-heading is read exactly like the renderer reads it", () => {
   // remark-grimoire matches on mdastToString(heading), which drops emphasis —
   // so these headings collapse into a <details> in the reading view and have to
   // be section cards here, not heading cards.
-  const CASES = ["## *If:* sie lügen", "## **If:** sie lügen", "## `If:` sie lügen"];
+  const CASES = ["## *If:* they lie", "## **If:** they lie", "## `If:` they lie"];
 
   for (const heading of CASES) {
     test(`${heading} is a section`, () => {
-      const body = `${heading}\n\ndrin\n`;
+      const body = `${heading}\n\ninside\n`;
       expect(shape(parseBlocks(body))).toEqual(["ifSection(text)"]);
       expect(serializeBlocks(parseBlocks(body))).toBe(body);
     });
   }
 
   test("markup INSIDE the condition is left alone", () => {
-    const section = parseBlocks("## If: sie *lügen*\n")[0];
+    const section = parseBlocks("## If: they *lie*\n")[0];
     if (section?.type !== "ifSection") throw new Error("expected an If-section");
-    expect(section.condition).toBe("sie *lügen*");
+    expect(section.condition).toBe("they *lie*");
   });
 
   test("a wrapped prefix hands over the condition without its wrappers", () => {
-    const section = parseBlocks("## **If:** sie lügen\n")[0];
+    const section = parseBlocks("## **If:** they lie\n")[0];
     if (section?.type !== "ifSection") throw new Error("expected an If-section");
-    expect(section.condition).toBe("sie lügen");
+    expect(section.condition).toBe("they lie");
   });
 
   test("only H2 is a section — the depth rule is unchanged", () => {
-    expect(shape(parseBlocks("### If: zu tief\n"))).toEqual(["heading"]);
-    expect(shape(parseBlocks("# If: zu hoch\n"))).toEqual(["heading"]);
+    expect(shape(parseBlocks("### If: too deep\n"))).toEqual(["heading"]);
+    expect(shape(parseBlocks("# If: too high\n"))).toEqual(["heading"]);
   });
 });
 
 describe("what ends an If-section", () => {
   test("a heading of depth 1 or 2 at the start of a line does", () => {
     expect(endsIfSectionText("## Flow")).toBe(true);
-    expect(endsIfSectionText("# Kapitel")).toBe(true);
-    expect(endsIfSectionText("Text\n\n## Flow\n\nmehr")).toBe(true);
-    expect(endsIfSectionText("## If: noch eine Bedingung")).toBe(true);
+    expect(endsIfSectionText("# Chapter")).toBe(true);
+    expect(endsIfSectionText("Text\n\n## Flow\n\nmore")).toBe(true);
+    expect(endsIfSectionText("## If: another condition")).toBe(true);
   });
 
   test("a deeper heading and plain prose do not", () => {
     expect(endsIfSectionText("### Detail")).toBe(false);
-    expect(endsIfSectionText("Ein Absatz über ## Rauten.")).toBe(false);
+    expect(endsIfSectionText("A paragraph about ## hashes.")).toBe(false);
     expect(endsIfSectionText("")).toBe(false);
   });
 
@@ -521,20 +521,20 @@ describe("what ends an If-section", () => {
     // …inside a code fence,
     expect(endsIfSectionText("```md\n## Flow\n```")).toBe(false);
     // …in a blockquote (a callout's text keeps its markers in a raw block),
-    expect(endsIfSectionText("> [!note] Text\n> ## keine Überschrift")).toBe(false);
+    expect(endsIfSectionText("> [!note] Text\n> ## no heading")).toBe(false);
     // …and in an indented code block.
-    expect(endsIfSectionText("    ## kein Heading")).toBe(false);
+    expect(endsIfSectionText("    ## no heading")).toBe(false);
     // An unclosed fence swallows the rest, exactly as the parser does.
     expect(endsIfSectionText("```\n## Flow")).toBe(false);
   });
 
   test("blockMarkdown is what the serializer would write for one block", () => {
-    const parsed = parseBlocks("> [!note]  seltsam    umbrochen\n")[0];
+    const parsed = parseBlocks("> [!note]  oddly    wrapped\n")[0];
     if (parsed === undefined) throw new Error("expected a block");
     // Untouched: verbatim, spelling included.
-    expect(blockMarkdown(parsed)).toBe("> [!note]  seltsam    umbrochen");
+    expect(blockMarkdown(parsed)).toBe("> [!note]  oddly    wrapped");
     // Edited or constructed: the house style.
-    expect(blockMarkdown(makeHeading(3, "Danach"))).toBe("### Danach");
+    expect(blockMarkdown(makeHeading(3, "After"))).toBe("### After");
     expect(blockMarkdown(makeText(""))).toBe("");
   });
 });
@@ -547,29 +547,29 @@ describe("the invariant under a seeded fuzz", () => {
   const FRAGMENTS = [
     "",
     "   ",
-    "# Kapitel",
+    "# Chapter",
     "## Flow",
-    "## If: sie lügen",
+    "## If: they lie",
     "## If:",
     "### Detail",
-    "###### tief",
-    "Ein Absatz mit Text.",
-    "noch eine Zeile",
-    "- ein Listenpunkt",
-    "1. erster",
-    "> [!readaloud] Vorlesetext",
+    "###### deep",
+    "A paragraph with text.",
+    "another line",
+    "- a list item",
+    "1. first",
+    "> [!readaloud] Read-aloud text",
     "> [!check] DC 13",
-    "> [!warning] unbekannt",
-    "> weiter im Zitat",
+    "> [!warning] unknown",
+    "> quote continues",
     ">",
-    "> > tiefer verschachtelt",
+    "> > nested deeper",
     "```",
     "```ts",
     "| a | b |",
     "---",
-    "<!-- Kommentar -->",
-    "    eingerückter Code",
-    "Text mit zwei Leerzeichen  ",
+    "<!-- comment -->",
+    "    indented code",
+    "Text with two spaces  ",
   ];
 
   function lcg(seed: number): () => number {
@@ -613,41 +613,41 @@ describe("list operations are lossless when nothing actually moves", () => {
   test("insert then remove restores the body", () => {
     const body = fixtureBody("scenes/lighthouse-arrival.json");
     const blocks = parseBlocks(body);
-    const fresh = makeCallout("loot", "Ein Silberring am Daumen.");
+    const fresh = makeCallout("loot", "A silver ring on the thumb.");
     for (let at = 0; at <= blocks.length; at++) {
       const inserted = insertBlock(blocks, at, fresh);
-      expect(serializeBlocks(inserted)).toContain("> [!loot] Ein Silberring am Daumen.");
+      expect(serializeBlocks(inserted)).toContain("> [!loot] A silver ring on the thumb.");
       expect(serializeBlocks(removeBlock(inserted, fresh.id))).toBe(body);
     }
   });
 });
 
 // The labels come from the catalog and the translator is passed in
-// (decisions/i18n) — the German names are the ones the reading view shows.
+// (decisions/i18n): a callout is named with the key the reading view uses.
 const t = translator("de");
 
 describe("labels", () => {
   test("the six callouts use the names the reading view already shows", () => {
     const kinds = ["readaloud", "check", "secret", "outcome", "loot", "note"] as const;
-    const expected = ["Vorlesetext", "Probe", "Geheim", "Ergebnis", "Beute", "Notiz"];
+    const expected = kinds.map((kind) => t(`markdown.callout.${kind}`));
     expect(kinds.map((kind) => blockLabel(makeCallout(kind, "x"), t))).toEqual(expected);
     expect(kinds.map((kind) => calloutLabel(kind, t))).toEqual(expected);
   });
 
-  test("structural blocks are named in German", () => {
-    expect(blockLabel(makeIfSection("a"), t)).toBe("Falls-Abschnitt");
-    expect(blockLabel(makeHeading(2, "Flow"), t)).toBe("Überschrift");
-    expect(blockLabel(makeText("Absatz"), t)).toBe("Text");
+  test("structural blocks are named by their block type", () => {
+    expect(blockLabel(makeIfSection("a"), t)).toBe(t("composer.blockType.ifSection"));
+    expect(blockLabel(makeHeading(2, "Flow"), t)).toBe(t("composer.blockType.heading"));
+    expect(blockLabel(makeText("Paragraph"), t)).toBe(t("composer.blockType.text"));
     const raw = parseBlocks("> [!warning] x\n")[0];
     if (raw === undefined) throw new Error("expected a block");
-    expect(blockLabel(raw, t)).toBe("Markdown-Block");
+    expect(blockLabel(raw, t)).toBe(t("composer.blockType.markdown"));
   });
 
   test("ids are unique across blocks and parses", () => {
     const ids = [
       ...parseBlocks(fixtureBody("scenes/lighthouse-arrival.json")),
       ...parseBlocks(fixtureBody("scenes/lighthouse-arrival.json")),
-      makeText("neu"),
+      makeText("new"),
     ].map((block) => block.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -656,35 +656,35 @@ describe("labels", () => {
 // --- tables ------------------------------------------------------------------
 //
 // A table is NOT a block type. It is markdown inside a text block (or
-// inside a callout's text), which is exactly why nothing here had to change —
-// the line scan never splits on a `|` line. These tests nail that down, so a
-// later "let us model tables" change has to argue with the round-trip.
+// inside a callout's text): the line scan never splits on a `|` line. These
+// tests nail that down, so modelling tables as blocks has to argue with the
+// round-trip.
 
 describe("tables are part of a text block, byte-stable", () => {
-  const W6 = [
-    "| W6 | Was treibt in der Bucht |",
+  const D6 = [
+    "| d6 | What drifts in the bay |",
     "| --- | --- |",
-    "| 1 | Ein leeres Fass |",
-    "| 2 | Ein Ruder mit Kerben |",
+    "| 1 | An empty barrel |",
+    "| 2 | A notched oar |",
   ].join("\n");
 
   test("a table is ONE text block, not one per row", () => {
-    const body = `${W6}\n`;
+    const body = `${D6}\n`;
     expect(shape(parseBlocks(body))).toEqual(["text"]);
     expect(serializeBlocks(parseBlocks(body))).toBe(body);
   });
 
   test("prose, table and prose stay three blocks and round-trip", () => {
-    const body = `Davor.\n\n${W6}\n\nDanach.\n`;
+    const body = `Before.\n\n${D6}\n\nAfter.\n`;
     expect(shape(parseBlocks(body))).toEqual(["text", "text", "text"]);
     expect(serializeBlocks(parseBlocks(body))).toBe(body);
   });
 
   test("a table inside a callout is part of the callout's text", () => {
-    const quoted = W6.split("\n")
+    const quoted = D6.split("\n")
       .map((line) => `> ${line}`)
       .join("\n");
-    const body = `> [!note] Zufallstabelle\n>\n${quoted}\n`;
+    const body = `> [!note] Random table\n>\n${quoted}\n`;
     const blocks = parseBlocks(body);
     expect(shape(blocks)).toEqual(["callout:note"]);
     const callout = blocks[0];
@@ -696,7 +696,7 @@ describe("tables are part of a text block, byte-stable", () => {
   });
 
   test("a table inside an If-section round-trips with the section", () => {
-    const body = `## If: sie wurfeln\n\n${W6}\n`;
+    const body = `## If: they roll\n\n${D6}\n`;
     expect(shape(parseBlocks(body))).toEqual(["ifSection(text)"]);
     expect(serializeBlocks(parseBlocks(body))).toBe(body);
   });

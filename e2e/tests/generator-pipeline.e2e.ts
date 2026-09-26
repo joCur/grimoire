@@ -5,14 +5,14 @@
 //
 //   1. a run with three scenes where one fails leaves the other two
 //      reviewable and acceptable, with the failed part carrying its error and
-//      a „Erneut versuchen“ of its own,
+//      a retry action of its own,
 //   2. that retry re-runs only that part, and afterwards all three are there,
 //   3. accepting one part and then the rest empties the run and the job is
 //      gone,
 //   4. a restart mid-run keeps the finished parts and fails the one that was
 //      in flight (the other half of generator-restart.e2e.ts, one level
 //      deeper),
-//   5. „Verwerfen" during a run stops the open parts,
+//   5. discarding during a run stops the open parts,
 //   6. the scenes of a run accepted one by one in REVERSE stand in the
 //      chapter overview in outline order, behind the chapter's own scenes.
 //
@@ -21,6 +21,7 @@
 // only decides WHICH canned reply comes back for which part
 // (e2e/fixtures/stub-llm.ts).
 
+import escapeStringRegexp from "escape-string-regexp";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "@playwright/test";
@@ -37,6 +38,7 @@ import {
   startGeneratorJob,
 } from "../support/generator-job";
 import { getScene, sceneExists } from "../support/scene";
+import { ui, uiPattern } from "../support/ui";
 
 const CHAPTER = "01-salzhafen";
 
@@ -46,6 +48,27 @@ away through the mudflats.`;
 
 /** How the review names one proposed scene — its resource segment and id. */
 const sceneLabel = (id: string) => `scenes/${id}`;
+
+/** The discard action of a run's review: the whole run, or its open rest. */
+const DISCARD = new RegExp(
+  `^(${escapeStringRegexp(ui("common.discard"))}|${escapeStringRegexp(ui("generate.review.discardRest"))})$`,
+);
+
+/** Fill the scene run's source text and start it. */
+async function startSceneRun(page: Page, source: string): Promise<void> {
+  await page.getByLabel(ui("generate.input.sourceLabel")).fill(source);
+  await page.getByRole("button", { name: ui("generate.input.submit.scene") }).click();
+}
+
+/** The part-level accept action of the proposed scene `id`. */
+async function acceptPart(page: Page, id: string): Promise<void> {
+  await page
+    .locator("div")
+    .filter({ hasText: sceneLabel(id) })
+    .last()
+    .getByRole("button", { name: ui("generate.review.acceptOne") })
+    .click();
+}
 
 /**
  * A source text that makes the run three scenes and breaks the middle one's
@@ -63,11 +86,10 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   api,
 }, testInfo) => {
   await page.goto(`/campaigns/beispiel/generate`);
-  await page.getByLabel("Quelltext (EN)").fill(threeSceneSource(`w${testInfo.workerIndex}a`));
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await startSceneRun(page, threeSceneSource(`w${testInfo.workerIndex}a`));
 
   // --- (1) the review fills up: two drafts, one failed part ----------------
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
   for (const scene of THREE_SCENES) {
@@ -78,22 +100,29 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   // nowhere to be seen, because the DM never gets to edit it.
   const failedTitle = THREE_SCENES.find((s) => s.id === FAILING_SCENE_ID)!.title;
   const failedCard = page.locator("section").filter({ hasText: failedTitle }).last();
-  await expect(failedCard).toContainText("nicht geschrieben");
-  await expect(
-    failedCard.getByText('"status": Ungültige Eingabe: erwartet "draft"', { exact: false }),
-  ).toBeVisible();
+  await expect(failedCard).toContainText(ui("generate.pipeline.partFailed"));
+  // The card carries the part's own errors: the validation messages the
+  // server stored on the part, one of them naming the field that failed.
+  await expect(failedCard).toContainText(ui("generate.pipeline.partInvalid"));
+  const failedPart = (await getGeneratorJob(api)).pipeline!.parts.find(
+    (part) => part.status === "failed",
+  )!;
+  const statusIssue = (failedPart.validationErrors ?? []).find(
+    (message) => message.includes('"status"') && message.includes('"draft"'),
+  );
+  expect(statusIssue).toBeDefined();
+  await expect(failedCard.getByText(statusIssue!, { exact: true })).toBeVisible();
   // The cost of the whole run is one quiet line, counting CALLS.
-  await expect(page.getByText(/~[\d.]+ Tokens · \d+ Aufrufe?/)).toBeVisible();
+  await expect(
+    page.getByText(
+      uiPattern("generate.pipeline.cost", { tokens: /[\d.]+/, calls: /\d+/ }),
+    ),
+  ).toBeVisible();
 
   // --- (2) a finished part is acceptable while one is still open ----------
   const firstId = THREE_SCENES[0].id;
   expect(await sceneExists(api, firstId)).toBe(false);
-  await page
-    .locator("div")
-    .filter({ hasText: sceneLabel(firstId) })
-    .last()
-    .getByRole("button", { name: "Diesen übernehmen" })
-    .click();
+  await acceptPart(page, firstId);
   // Written, the card links to the scene it became, on the scene's own route.
   await expect(page.getByRole("link", { name: sceneLabel(firstId) })).toHaveAttribute(
     "href",
@@ -103,8 +132,8 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   // The job is still there — the failed part is not settled.
   expect(await readGeneratorJob(api)).not.toBeNull();
 
-  // --- (3) „Erneut versuchen“ restarts THAT part only ---------------------
-  await failedCard.getByRole("button", { name: "Erneut versuchen" }).click();
+  // --- (3) the retry action restarts THAT part only -----------------------
+  await failedCard.getByRole("button", { name: ui("generate.pipeline.retry") }).click();
   // The focus went with the click: the button unmounts the moment the part
   // runs again, and the status card itself is replaced by the draft card the
   // moment the part is done — so the focus FOLLOWS the part across both swaps
@@ -123,11 +152,13 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   for (const scene of THREE_SCENES) {
     await expect(page.getByRole("heading", { level: 2, name: scene.title })).toBeVisible();
   }
-  await expect(page.getByText("nicht geschrieben")).toHaveCount(0);
+  await expect(page.getByText(ui("generate.pipeline.partFailed"))).toHaveCount(0);
 
-  // --- (4) „Rest übernehmen“ writes what is left and the job is gone -----
-  await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  // --- (4) accepting the rest writes what is left and the job is gone -----
+  await page
+    .getByRole("button", { name: uiPattern("generate.review.applyRest", { count: /.+/ }) })
+    .click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   for (const scene of THREE_SCENES) {
     const stored = await getScene(api, scene.id);
     expect(stored.title).toBe(scene.title);
@@ -141,10 +172,11 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
  * read off the move controls, which carry the row's title in their name.
  */
 async function shownOrder(page: Page): Promise<string[]> {
+  const moveDown = uiPattern("chapterOverview.scene.moveDown.aria", { title: /(.*)/ }, { exact: true });
   const labels = await page
-    .getByRole("button", { name: /nach unten$/ })
+    .getByRole("button", { name: moveDown })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels.map((label) => label.replace(/^„|“ nach unten$/g, ""));
+  return labels.flatMap((label) => moveDown.exec(label)?.[1] ?? []);
 }
 
 test("scenes accepted one by one in reverse stand in outline order", async ({ page, api }) => {
@@ -155,9 +187,8 @@ test("scenes accepted one by one in reverse stand in outline order", async ({ pa
   const before = await chapterScenes();
 
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill([SOURCE, TRIGGER.threeScenes].join("\n\n"));
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await startSceneRun(page, [SOURCE, TRIGGER.threeScenes].join("\n\n"));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
   for (const scene of THREE_SCENES) {
@@ -169,16 +200,11 @@ test("scenes accepted one by one in reverse stand in outline order", async ({ pa
   // run, so it answers with the written summary instead of a link.
   const reversed = [...THREE_SCENES].reverse();
   for (const [index, scene] of reversed.entries()) {
-    await page
-      .locator("div")
-      .filter({ hasText: sceneLabel(scene.id) })
-      .last()
-      .getByRole("button", { name: "Diesen übernehmen" })
-      .click();
+    await acceptPart(page, scene.id);
     if (index < reversed.length - 1) {
       await expect(page.getByRole("link", { name: sceneLabel(scene.id) })).toBeVisible();
     } else {
-      await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+      await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
     }
   }
   expect(await readGeneratorJob(api)).toBeNull();
@@ -209,28 +235,20 @@ test("a finished part is acceptable while the run is still running", async ({
 }) => {
   await page.goto("/campaigns/beispiel/generate");
   // The LAST scene's reply is held, so the run is genuinely `running` while
-  // the DM accepts one of the two that answered — which is the claim: „was
-  // hier steht, kannst du schon übernehmen", not „warte, bis alles da ist".
-  await page
-    .getByLabel("Quelltext (EN)")
-    .fill([SOURCE, TRIGGER.threeScenes, TRIGGER.slowPart].join("\n\n"));
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  // the DM accepts one of the two that answered — which is the claim: what is
+  // here can already be accepted, without waiting for everything to arrive.
+  await startSceneRun(page, [SOURCE, TRIGGER.threeScenes, TRIGGER.slowPart].join("\n\n"));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
-  await expect(page.getByText("Der Lauf ist noch nicht fertig", { exact: false })).toBeVisible();
+  await expect(page.getByText(ui("generate.pipeline.stillRunning"))).toBeVisible();
 
   const firstId = THREE_SCENES[0].id;
   const before = await getGeneratorJob(api);
   expect(before.status).toBe("running");
 
   expect(await sceneExists(api, firstId)).toBe(false);
-  await page
-    .locator("div")
-    .filter({ hasText: sceneLabel(firstId) })
-    .last()
-    .getByRole("button", { name: "Diesen übernehmen" })
-    .click();
+  await acceptPart(page, firstId);
   await expect(page.getByRole("link", { name: sceneLabel(firstId) })).toBeVisible();
   expect(await sceneExists(api, firstId)).toBe(true);
 
@@ -241,7 +259,7 @@ test("a finished part is acceptable while the run is still running", async ({
   expect(after.pipeline!.parts.at(-1)!.status).toBe("running");
 
   // Cleanup: the held call must not outlive the test's server.
-  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
+  await page.getByRole("button", { name: DISCARD }).click();
 });
 
 test("the review replaces the spinner on a POLL, without a reload", async ({
@@ -251,34 +269,34 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   // The regression this claim exists for: every part answers so fast that the
   // review can be the FIRST thing the page ever renders, so nothing would
   // watch the spinner turn into it. With late parts the browser really sees
-  // „Entwürfe werden generiert …" first and the switch has to happen on a
-  // polled job — never on a reload.
+  // the working state first and the switch has to happen on a polled job —
+  // never on a reload.
   await page.goto("/campaigns/beispiel/generate");
-  await page
-    .getByLabel("Quelltext (EN)")
-    .fill([SOURCE, TRIGGER.threeScenes, TRIGGER.latePart, TRIGGER.slowPart].join("\n\n"));
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await startSceneRun(
+    page,
+    [SOURCE, TRIGGER.threeScenes, TRIGGER.latePart, TRIGGER.slowPart].join("\n\n"),
+  );
 
   // The spinner first — with nothing to review, that is the honest state.
-  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
+  await expect(page.getByText(ui("generate.working.title"))).toBeVisible();
   // …and the run is genuinely `running` while it stands there.
   const during = await getGeneratorJob(api);
   expect(during.status).toBe("running");
 
   // No reload, no goto: the poll alone has to carry the view into the review.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
   const firstTitle = THREE_SCENES[0].title;
   await expect(page.getByRole("heading", { level: 2, name: firstTitle })).toBeVisible();
-  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeHidden();
+  await expect(page.getByText(ui("generate.working.title"))).toBeHidden();
   // And the run is STILL going while the review stands there: the switch was
   // made by a poll of a `running` job, not by its end.
   const shown = await getGeneratorJob(api);
   expect(shown.status).toBe("running");
 
   // Cleanup — nothing of this run needs to be written.
-  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
+  await page.getByRole("button", { name: DISCARD }).click();
 });
 
 test("a FAILED part alone is already the review (no empty page)", async ({
@@ -291,20 +309,19 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   // on. Gating the review on a RESULT would render this state as an empty page
   // that only appears on a reload.
   await page.goto("/campaigns/beispiel/generate");
-  await page
-    .getByLabel("Quelltext (EN)")
-    .fill(threeSceneSource(`w${testInfo.workerIndex}d`, TRIGGER.latePart));
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await startSceneRun(page, threeSceneSource(`w${testInfo.workerIndex}d`, TRIGGER.latePart));
 
   const failedTitle = THREE_SCENES.find((s) => s.id === FAILING_SCENE_ID)!.title;
   // No reload: the failed part carries the view into the review on its own,
-  // with its error and its own „Erneut versuchen".
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  // with its error and its own retry action.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
   const failedCard = page.locator("section").filter({ hasText: failedTitle }).last();
-  await expect(failedCard).toContainText("nicht geschrieben");
-  await expect(failedCard.getByRole("button", { name: "Erneut versuchen" })).toBeVisible();
+  await expect(failedCard).toContainText(ui("generate.pipeline.partFailed"));
+  await expect(
+    failedCard.getByRole("button", { name: ui("generate.pipeline.retry") }),
+  ).toBeVisible();
   // The pin of the claim: at this moment NO part has produced a draft yet —
   // the review is on the screen because a part FAILED, not because one
   // succeeded. (Waiting for the late parts first would pass either way.)
@@ -323,27 +340,28 @@ test("a FAILED part alone is already the review (no empty page)", async ({
     });
   }
 
-  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
+  await page.getByRole("button", { name: DISCARD }).click();
 });
 
-test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, testInfo) => {
+test("discarding during a run stops the open parts", async ({ page, api }, testInfo) => {
   await page.goto("/campaigns/beispiel/generate");
   // The last scene's reply is HELD, so the run is genuinely still going while
   // the DM is already looking at the two that answered.
-  await page
-    .getByLabel("Quelltext (EN)")
-    .fill(threeSceneSource(`w${testInfo.workerIndex}b`, TRIGGER.slowPart));
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await startSceneRun(page, threeSceneSource(`w${testInfo.workerIndex}b`, TRIGGER.slowPart));
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
   // The run says how far it got — and that what is here can already be taken.
-  await expect(page.getByText(/von 3 Szenen fertig/)).toBeVisible();
-  await expect(page.getByText("Der Lauf ist noch nicht fertig", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText(uiPattern("generate.pipeline.progress", { total: 3, done: /\d+/ })),
+  ).toBeVisible();
+  await expect(page.getByText(ui("generate.pipeline.stillRunning"))).toBeVisible();
 
-  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
+  await page.getByRole("button", { name: DISCARD }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    ui("generate.input.title.scene"),
+  );
   expect(await readGeneratorJob(api)).toBeNull();
   // Nothing of the abandoned run lands afterwards.
   for (const scene of THREE_SCENES) {
@@ -427,7 +445,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     );
     expect(retried.status).toBe("running");
     expect(parts(retried).map((part) => part.status)).toEqual(["done", "done", "running"]);
-    // Nothing was written by any of it — only „Übernehmen“ writes.
+    // Nothing was written by any of it — only the accept writes.
     expect(await sceneExists(api, THREE_SCENES[0].id)).toBe(false);
   } finally {
     await second.proc.stop();

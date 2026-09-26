@@ -14,15 +14,15 @@ import {
   type LocationFormValues,
 } from "./location-form";
 
-const LEUCHTTURM: LocationProposal = {
-  id: "leuchtturm",
-  name: "Der Leuchtturm",
-  chapter: "01-salzhafen",
-  roll20Page: "Leuchtturm",
+const LIGHTHOUSE: LocationProposal = {
+  id: "lighthouse",
+  name: "The Lighthouse",
+  chapter: "01-salt-harbour",
+  roll20Page: "Lighthouse",
   body: "",
 };
 
-const initial = locationFormValues(LEUCHTTURM);
+const initial = locationFormValues(LIGHTHOUSE);
 
 const edited = (changes: Partial<LocationFormValues>): LocationFormValues => ({
   ...initial,
@@ -32,9 +32,9 @@ const edited = (changes: Partial<LocationFormValues>): LocationFormValues => ({
 describe("locationFormValues", () => {
   test("the location's values, a field it does not hold as an empty field", () => {
     expect(initial).toEqual({
-      name: "Der Leuchtturm",
-      chapter: "01-salzhafen",
-      roll20Page: "Leuchtturm",
+      name: "The Lighthouse",
+      chapter: "01-salt-harbour",
+      roll20Page: "Lighthouse",
       atmosphere: "",
     });
   });
@@ -43,13 +43,13 @@ describe("locationFormValues", () => {
 describe("locationFormChange", () => {
   test("an untouched form writes nothing, whitespace is no change", () => {
     expect(locationFormChange(initial, initial)).toEqual({});
-    expect(locationFormChange(initial, edited({ roll20Page: " Leuchtturm " }))).toEqual({});
+    expect(locationFormChange(initial, edited({ roll20Page: " Lighthouse " }))).toEqual({});
     expect(locationFormDirty(initial, initial)).toBe(false);
   });
 
   test("only the changed field is sent", () => {
-    expect(locationFormChange(initial, edited({ atmosphere: "Salz in der Luft." }))).toEqual({
-      atmosphere: "Salz in der Luft.",
+    expect(locationFormChange(initial, edited({ atmosphere: "Salt in the air." }))).toEqual({
+      atmosphere: "Salt in the air.",
     });
   });
 

@@ -30,10 +30,17 @@ describe("textOverflows", () => {
 });
 
 describe("ClampedText", () => {
+  // The chapter's text is a single paragraph; the campaign's runs over several
+  // source lines. Both are read from the example campaign, not spelled out.
+  const chapterText = chapter.body.trim();
+  const campaignLines = campaign.body.trim().split("\n");
+  const firstLine = campaignLines[0] ?? "";
+  const lastLine = campaignLines.at(-1) ?? "";
+
   test("renders the whole text through the markdown renderer", () => {
     const html = renderToStaticMarkup(<ClampedText>{chapter.body}</ClampedText>);
     expect(html).toContain('class="md-body"');
-    expect(html).toContain("<p>Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.</p>");
+    expect(html).toContain(`<p>${chapterText}</p>`);
     // Unmeasured: neither clamped nor with a toggle.
     expect(html).not.toContain("data-clamped");
     expect(html).not.toContain("<button");
@@ -41,16 +48,18 @@ describe("ClampedText", () => {
 
   test("a heading in the text is part of the text, not a selector", () => {
     const html = renderToStaticMarkup(
-      <ClampedText>{`## Ziel des Kapitels\n\n${chapter.body}`}</ClampedText>,
+      <ClampedText>{`## Chapter goal\n\n${chapter.body}`}</ClampedText>,
     );
-    expect(html).toContain("<h2>Ziel des Kapitels</h2>");
-    expect(html).toContain("Herausfinden, warum das Leuchtfeuer");
+    expect(html).toContain("<h2>Chapter goal</h2>");
+    expect(html).toContain(chapterText);
   });
 
   test("every paragraph of the campaign text is there", () => {
     const html = renderToStaticMarkup(<ClampedText>{campaign.body}</ClampedText>);
-    expect(html).toContain("Kampagnenweite Notizen");
-    expect(html).toContain("kennt niemanden vor Ort.");
+    expect(campaignLines.length).toBeGreaterThan(1);
+    expect(firstLine).not.toBe("");
+    expect(html).toContain(firstLine);
+    expect(html).toContain(lastLine);
   });
 
   test("a blank text renders nothing", () => {

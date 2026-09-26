@@ -7,13 +7,13 @@ import type { Thread } from "@grimoire/shared/thread";
 import { withThread, withoutThread } from "./thread-query";
 
 const SEEDED: Thread = {
-  id: "wer-bezahlt-die-schmuggler",
-  chapter: "01-salzhafen",
-  text: "Wer bezahlt die Schmuggler?",
+  id: "who-pays-the-smugglers",
+  chapter: "01-salt-harbour",
+  text: "Who pays the smugglers?",
   done: false,
   rev: 1,
 };
-const SECOND: Thread = { ...SEEDED, id: "t-2", text: "Lichter in der Bucht" };
+const SECOND: Thread = { ...SEEDED, id: "t-2", text: "Lights in the cove" };
 
 describe("withThread", () => {
   test("a written thread replaces itself in its place", () => {

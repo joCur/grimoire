@@ -45,17 +45,17 @@ describe("npcExcerpt", () => {
   });
 
   test("a reference in the motivation reads as the current name — no brackets", () => {
-    const grella = npc({ motivation: "[[fenn]] loswerden, bevor [[niemand]] fragt." });
-    expect(npcExcerpt(grella, nameOf).will).toBe("Fenn loswerden, bevor [[niemand]] fragt.");
+    const grella = npc({ motivation: "Get rid of [[fenn]] before [[nobody]] asks." });
+    expect(npcExcerpt(grella, nameOf).will).toBe("Get rid of Fenn before [[nobody]] asks.");
   });
 
   test("…but a reference quoted as code stays code", () => {
-    const grella = npc({ motivation: "Schreibt `[[fenn]]` an jede Wand." });
-    expect(npcExcerpt(grella, nameOf).will).toBe("Schreibt `[[fenn]]` an jede Wand.");
+    const grella = npc({ motivation: "Writes `[[fenn]]` on every wall." });
+    expect(npcExcerpt(grella, nameOf).will).toBe("Writes `[[fenn]]` on every wall.");
   });
 
   test("a `## Will` section in the body is not read — only the field is", () => {
-    const grella = npc({ body: "## Will\n\nDas steht im Text und bleibt Text.\n" });
+    const grella = npc({ body: "## Will\n\nThis stands in the text and stays text.\n" });
     expect(npcExcerpt(grella, nameOf).will).toBeUndefined();
   });
 

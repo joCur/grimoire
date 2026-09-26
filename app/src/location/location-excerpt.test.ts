@@ -22,7 +22,7 @@ function locationFixture(id: string): Location {
 
 /** A location of nothing but what a case names. */
 function location(fields: Partial<Location>): Location {
-  return { id: "ort", name: "Ort", body: "", rev: 1, ...fields };
+  return { id: "place", name: "Place", body: "", rev: 1, ...fields };
 }
 
 const NAMES: Record<string, string> = { fenn: "Fenn" };
@@ -37,15 +37,15 @@ describe("locationExcerpt", () => {
   });
 
   test("a reference in the atmosphere reads as the current name", () => {
-    const ort = location({ atmosphere: "Hier riecht es nach [[fenn]]s Tabak." });
-    expect(locationExcerpt(ort, nameOf).mood).toBe("Hier riecht es nach Fenns Tabak.");
+    const place = location({ atmosphere: "The quay smells of [[fenn]]s pipe tobacco." });
+    expect(locationExcerpt(place, nameOf).mood).toBe("The quay smells of Fenns pipe tobacco.");
   });
 
-  test("a `## Atmosphäre` section in the body is not read — only the field is", () => {
-    const ort = location({
-      roll20Page: "Bucht",
-      body: "## Atmosphäre\n\nDas steht im Text und bleibt Text.\n",
+  test("a `## Atmosphere` section in the body is not read — only the field is", () => {
+    const place = location({
+      roll20Page: "Cove",
+      body: "## Atmosphere\n\nThis stands in the text and stays text.\n",
     });
-    expect(locationExcerpt(ort, nameOf)).toEqual({ mood: undefined, page: "Bucht" });
+    expect(locationExcerpt(place, nameOf)).toEqual({ mood: undefined, page: "Cove" });
   });
 });

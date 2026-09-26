@@ -14,8 +14,8 @@
 //      sentence for, instead of leaving a `running` row the app polls forever;
 //   2. a FINISHED run comes back whole — result, warnings and the review edits
 //      — and is still acceptable afterwards. That is the loss this guards
-//      against: a deploy between „fertig" and „Übernehmen" must not throw a
-//      good generation away.
+//      against: a deploy between a finished run and its accept must not throw
+//      a good generation away.
 
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -45,7 +45,7 @@ const SOURCE = `The party watches the quay at low tide. Two lanterns move along 
 mole while Fenn's crew shifts a cargo before dawn.`;
 
 /** A title no reply fixture spells, so only the DM's edit can produce it. */
-const EDITED_TITLE = "Nachtwache am Kai, nach dem Neustart";
+const EDITED_TITLE = "Night watch at the quay, after the restart";
 
 /** A run directory of this test's own, plus its cleanup. */
 async function ownDataDir(testId: string, workerIndex: number): Promise<string> {
@@ -130,7 +130,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
 
 test("a finished job survives a restart whole and is still applyable", async ({}, testInfo) => {
   const dataDir = await ownDataDir(testInfo.testId, testInfo.workerIndex);
-  const edited = `<!-- nach dem Neustart noch da -->\n`;
+  const edited = `<!-- still here after the restart -->\n`;
 
   // --- boot 1: run to completion, then edit a draft in the review ----------
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);

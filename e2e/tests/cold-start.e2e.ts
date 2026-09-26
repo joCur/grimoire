@@ -21,6 +21,7 @@
 // campaign is created — it is the UI's only entry point for one.
 
 import type { Page } from "@playwright/test";
+import escapeStringRegexp from "escape-string-regexp";
 
 import { expect, test } from "../support/test";
 import { apiFor } from "../support/api";
@@ -30,18 +31,7 @@ import { getLocation } from "../support/location";
 import { getNpc, npcExists, npcPath } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { getSession, runningSessionId } from "../support/session";
-import { ui } from "../support/ui";
-
-/** A catalog text around a parameter, split at it — for matching one end of a name. */
-function around(key: Parameters<typeof ui>[0], param: string): [string, string] {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui(key, { [param]: marker }).split(marker);
-  return [before, after];
-}
-
-function escaped(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+import { ui, uiPattern } from "../support/ui";
 
 /**
  * The chapter overview's scene rows in DOM order, by the title they show.
@@ -50,17 +40,18 @@ function escaped(text: string): string {
  * name, and a row has no other handle that says where in the order it stands.
  */
 async function shownSceneOrder(page: Page): Promise<string[]> {
-  const [before, after] = around("chapterOverview.scene.moveDown.aria", "title");
+  const moveDown = uiPattern("chapterOverview.scene.moveDown.aria", { title: /(.*)/ }, { exact: true });
   const labels = await page
-    .getByRole("button", { name: new RegExp(`${escaped(after)}$`) })
+    .getByRole("button", { name: moveDown })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels.map((label) => label.slice(before.length, label.length - after.length));
+  return labels.map((label) => moveDown.exec(label)?.[1] ?? label);
 }
 
 /** The top bar's campaign switcher, whatever campaign it currently shows. */
 function campaignSwitcher(page: Page) {
-  const [before] = around("campaign.switcher.current", "name");
-  return page.getByRole("banner").getByRole("button", { name: new RegExp(`^${escaped(before)}`) });
+  return page
+    .getByRole("banner")
+    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: /.*/ }, { exact: true }) });
 }
 
 /** The error line of a create whose id is taken. */
@@ -447,7 +438,7 @@ test("the second campaign is created in the top bar's switcher", async ({ page, 
   // …and switching back works, which is what the menu was there for already.
   await page
     .getByRole("menu")
-    .getByRole("menuitem", { name: new RegExp(escaped(CAMPAIGN_NAME)) })
+    .getByRole("menuitem", { name: new RegExp(escapeStringRegexp(CAMPAIGN_NAME)) })
     .click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 });
@@ -579,7 +570,7 @@ test("cold start and creating an npc work at 390px", async ({ page, server }) =>
   // and the list is where an NPC is created.
   await page
     .getByRole("navigation", { name: ui("lookup.heading") })
-    .getByRole("link", { name: new RegExp(`^${escaped(ui("browse.title.npcs"))}`) })
+    .getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui("browse.title.npcs"))}`) })
     .click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs$`));
   await page.getByRole("button", { name: ui("create.npc.title") }).click();

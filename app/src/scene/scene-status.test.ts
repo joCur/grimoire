@@ -21,14 +21,14 @@ import {
 const t = translator("de");
 const tEn = translator("en");
 
-const SCENE = "ankunft-leuchtturm";
+const SCENE = "lighthouse-arrival-scene";
 
 function sceneAt(rev: number, status: SceneStatus): Scene {
   return {
     id: SCENE,
-    title: "Ankunft",
+    title: "Arrival",
     type: "planned",
-    chapter: "01-salzhafen",
+    chapter: "01-salt-harbour",
     npcs: [],
     handouts: [],
     tags: [],
@@ -86,11 +86,11 @@ describe("sceneStatusPatchBody", () => {
 describe("writeSceneStatus", () => {
   test("PATCHes the scene and returns the server's scene", async () => {
     const calls = mockFetch([{ status: 200, body: sceneAt(222, "ready") }]);
-    const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
+    const result = await writeSceneStatus("example", SCENE, 111, "ready");
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/scenes/${SCENE}`);
+    expect(calls[0]?.url).toBe(`/api/campaigns/example/scenes/${SCENE}`);
     expect(calls[0]?.body).toEqual({ rev: 111, status: "ready" });
     expect(result.ok).toBe(true);
     expect(result.row?.rev).toBe(222);
@@ -101,12 +101,12 @@ describe("writeSceneStatus", () => {
       { status: 409, body: { code: "rev_conflict", error: "scene changed", rev: 999 } },
       { status: 200, body: sceneAt(999, "draft") },
     ]);
-    const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
+    const result = await writeSceneStatus("example", SCENE, 111, "ready");
 
     expect(result.ok).toBe(false);
     expect(result.row?.rev).toBe(999);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe(`/api/campaigns/beispiel/scenes/${SCENE}`);
+    expect(calls[1]?.url).toBe(`/api/campaigns/example/scenes/${SCENE}`);
   });
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {
@@ -114,11 +114,11 @@ describe("writeSceneStatus", () => {
       { status: 409, body: { code: "rev_conflict", error: "scene changed", rev: 999 } },
       { status: 200, body: sceneAt(999, "draft") },
     ]);
-    const conflict = await writeSceneStatus("beispiel", SCENE, 111, "ready");
+    const conflict = await writeSceneStatus("example", SCENE, 111, "ready");
     const fresh = conflict.row?.rev;
 
     const calls = mockFetch([{ status: 200, body: sceneAt(1000, "ready") }]);
-    const retry = await writeSceneStatus("beispiel", SCENE, fresh ?? 0, "ready");
+    const retry = await writeSceneStatus("example", SCENE, fresh ?? 0, "ready");
 
     expect(calls[0]?.body).toEqual({ rev: 999, status: "ready" });
     expect(retry.ok).toBe(true);
@@ -129,19 +129,19 @@ describe("writeSceneStatus", () => {
       { status: 409, body: { code: "rev_conflict", error: "scene changed", rev: 999 } },
       { status: 500, body: { error: "boom" } },
     ]);
-    expect(await writeSceneStatus("beispiel", SCENE, 111, "ready")).toEqual({ ok: false });
+    expect(await writeSceneStatus("example", SCENE, 111, "ready")).toEqual({ ok: false });
   });
 
   test("every other failure throws (the control shows its quiet line)", async () => {
     mockFetch([{ status: 500, body: { error: "boom" } }]);
-    await expect(writeSceneStatus("beispiel", SCENE, 111, "ready")).rejects.toBeInstanceOf(
+    await expect(writeSceneStatus("example", SCENE, 111, "ready")).rejects.toBeInstanceOf(
       ApiError,
     );
   });
 });
 
 describe("status labels", () => {
-  test("the menu offers exactly the known quartet, German and in lifecycle order", () => {
+  test("the menu offers exactly the known quartet, in lifecycle order, each with its label", () => {
     expect(sceneStatusOptions(t).map((o) => o.value)).toEqual([
       "draft",
       "ready",
@@ -149,19 +149,19 @@ describe("status labels", () => {
       "dropped",
     ]);
     expect(sceneStatusOptions(t).map((o) => o.label)).toEqual([
-      "Entwurf",
-      "Bereit",
-      "Gespielt",
-      "Verworfen",
+      t("status.scene.draft"),
+      t("status.scene.ready"),
+      t("status.scene.played"),
+      t("status.scene.dropped"),
     ]);
   });
 
   test("and the same quartet in English", () => {
     expect(sceneStatusOptions(tEn).map((o) => o.label)).toEqual([
-      "draft",
-      "ready",
-      "played",
-      "dropped",
+      tEn("status.scene.draft"),
+      tEn("status.scene.ready"),
+      tEn("status.scene.played"),
+      tEn("status.scene.dropped"),
     ]);
   });
 
@@ -170,7 +170,7 @@ describe("status labels", () => {
     // else (decisions/constraints) and there is no value left for the renderer to fall back
     // for — the type is what says so.
     // @ts-expect-error not one of draft | ready | played | dropped
-    const foreign: SceneStatus = "verschollen";
+    const foreign: SceneStatus = "missing";
     expect(SCENE_STATUSES as readonly string[]).not.toContain(foreign);
   });
 });
@@ -186,5 +186,4 @@ describe("isSceneDone", () => {
     expect(isSceneDone("draft")).toBe(false);
     expect(isSceneDone("ready")).toBe(false);
   });
-
 });

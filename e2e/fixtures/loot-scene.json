@@ -1,6 +1,6 @@
 {
   "id": "loot-check",
-  "title": "Beutezug in der Räucherkammer",
+  "title": "Plunder in the Smokehouse",
   "type": "planned",
   "chapter": "01-salzhafen",
   "location": "leuchtturm",
@@ -10,5 +10,5 @@
     "loot"
   ],
   "status": "draft",
-  "body": "\n## Flow\n\nNur als Callout-Prüfung da: `[!loot]` kommt in den Referenzszenen nicht vor\n(die dürfen nicht angefasst werden — CLAUDE.md), der Renderer muss den Kasten\naber genauso zeigen wie die anderen fünf.\n\n> [!loot] Zwei Ballen Schmuggeltabak, ein Silberring am Daumen des Wärters\n> und ein Frachtbrief ohne Absender.\n\n> [!erfunden] Unbekannte Callout-Sorte — degradiert zum normalen Zitat,\n> niemals ein Fehler.\n"
+  "body": "\n## Flow\n\nOnly here as a callout check: `[!loot]` does not occur in the reference scenes\n(they must not be touched — CLAUDE.md), but the renderer has to show the box\njust like the other five.\n\n> [!loot] Two bales of smuggled tobacco, a silver ring on the keeper's thumb\n> and a bill of lading without a sender.\n\n> [!invented] Unknown callout kind — degrades to a normal quote,\n> never an error.\n"
 }

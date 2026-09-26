@@ -16,35 +16,35 @@ describe("npcIdError", () => {
 
   test("accepts kebab ids", () => {
     expect(npcIdError("grella", [], t)).toBeUndefined();
-    expect(npcIdError("die-graue-witwe", [], t)).toBeUndefined();
-    expect(npcIdError("wache-2", [], t)).toBeUndefined();
+    expect(npcIdError("the-grey-widow", [], t)).toBeUndefined();
+    expect(npcIdError("guard-2", [], t)).toBeUndefined();
   });
 
   test("rejects what the server would reject", () => {
-    expect(npcIdError("Grella", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("die graue", [], t)).toContain("Leerzeichen");
-    expect(npcIdError("npcs/grella", [], t)).toContain("Schrägstriche");
-    expect(npcIdError("grella_2", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("-grella", [], t)).toContain("Kleinbuchstaben");
-    expect(npcIdError("gräfin", [], t)).toContain("Kleinbuchstaben");
+    expect(npcIdError("Grella", [], t)).toBe(t("generate.input.npcId.charset"));
+    expect(npcIdError("the grey", [], t)).toBe(t("generate.input.npcId.space"));
+    expect(npcIdError("npcs/grella", [], t)).toBe(t("generate.input.npcId.slash"));
+    expect(npcIdError("grella_2", [], t)).toBe(t("generate.input.npcId.charset"));
+    expect(npcIdError("-grella", [], t)).toBe(t("generate.input.npcId.charset"));
+    expect(npcIdError("gräfin", [], t)).toBe(t("generate.input.npcId.charset"));
   });
 
   test("an id whose entry exists is named as such — the server would 409", () => {
-    expect(npcIdError("fenn", ["fenn", "jorna"], t)).toContain("existiert schon");
+    expect(npcIdError("fenn", ["fenn", "jorna"], t)).toBe(t("generate.input.npcId.exists"));
     expect(npcIdError("grella", ["fenn", "jorna"], t)).toBeUndefined();
   });
 });
 
 describe("npcOf", () => {
   test("changes lie on the proposal in order, and `null` clears a field", () => {
-    const proposed = { id: "grella", name: "Grella", status: "unknown" as const, body: "s", voice: "leise" };
-    const stored = { role: "Fischerin", body: "Neu.\n" };
+    const proposed = { id: "grella", name: "Grella", status: "unknown" as const, body: "s", voice: "quiet" };
+    const stored = { role: "Fisherwoman", body: "New.\n" };
     expect(npcOf(proposed, stored, { voice: null })).toEqual({
       id: "grella",
       name: "Grella",
       status: "unknown",
-      role: "Fischerin",
-      body: "Neu.\n",
+      role: "Fisherwoman",
+      body: "New.\n",
     });
     // Nothing laid on it: the proposal as the run made it.
     expect(npcOf(proposed, undefined)).toEqual(proposed);

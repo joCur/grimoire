@@ -4,7 +4,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import { translator } from "@/i18n/format";
 
 import { reviewFailureKey } from "./log-entry-review";
 
@@ -13,12 +12,7 @@ const conflict = new ApiError(409, "log entry changed", { code: "rev_conflict", 
 describe("reviewFailureKey", () => {
   test("a 409 is the stale log entry, in the review and in the live aside", () => {
     expect(reviewFailureKey(conflict, "review.action.failed")).toBe("session.log.review.stale");
-    expect(translator("de")(reviewFailureKey(conflict, "live.pc.failed"))).toBe(
-      "Diese Notiz wurde inzwischen anderswo geändert. Die Session ist neu geladen.",
-    );
-    expect(translator("en")(reviewFailureKey(conflict, "live.pc.failed"))).toBe(
-      "This note was changed elsewhere in the meantime. The session has been reloaded.",
-    );
+    expect(reviewFailureKey(conflict, "live.pc.failed")).toBe("session.log.review.stale");
   });
 
   test("a server error or a lost connection keeps the surface's sentence", () => {

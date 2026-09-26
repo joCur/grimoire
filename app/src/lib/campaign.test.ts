@@ -20,8 +20,8 @@ describe("pickLastCampaign", () => {
   });
 
   test("exactly one campaign always wins — with or without sessions", () => {
-    expect(pickLastCampaign([c("beispiel", "2026-01-15T19:30:00")])).toBe("beispiel");
-    expect(pickLastCampaign([c("beispiel")])).toBe("beispiel");
+    expect(pickLastCampaign([c("example", "2026-01-15T19:30:00")])).toBe("example");
+    expect(pickLastCampaign([c("example")])).toBe("example");
   });
 
   test("newest session wins over the alphabetically first id", () => {
@@ -71,11 +71,11 @@ describe("pickLastCampaign", () => {
   });
 
   test("an unparsable `started` ranks behind every real one, never crashes", () => {
-    expect(pickLastCampaign([c("alpha", "gestern"), c("zeta", "2020-01-01T20:00:00")])).toBe(
+    expect(pickLastCampaign([c("alpha", "yesterday"), c("zeta", "2020-01-01T20:00:00")])).toBe(
       "zeta",
     );
     // …and two unreadable ones stay stable: the alphabetically first id.
-    expect(pickLastCampaign([c("zeta", "gestern"), c("alpha", "gestern")])).toBe("alpha");
+    expect(pickLastCampaign([c("zeta", "yesterday"), c("alpha", "yesterday")])).toBe("alpha");
   });
 
   test("a minute-precise `started` from an older entry still orders", () => {
@@ -95,45 +95,45 @@ const scene = (id: string, title: string): SceneSummary => ({
 });
 
 const tree: CampaignTree = {
-  campaign: "beispiel",
+  campaign: "example",
   chapters: [
-    { id: "01-salzhafen", title: "Kapitel 1", scenes: [] },
+    { id: "01-salt-harbour", title: "Chapter 1", scenes: [] },
     {
-      id: "02-bucht",
-      title: "Kapitel 2",
+      id: "02-bay",
+      title: "Chapter 2",
       scenes: [
-        scene("lighthouse-arrival", "Ankunft am Leuchtturm"),
-        scene("smuggler-captured", "Von den Schmugglern erwischt"),
+        scene("lighthouse-arrival", "Arrival at the lighthouse"),
+        scene("smuggler-captured", "Caught by the smugglers"),
       ],
     },
   ],
   npcs: [],
   locations: [
-    { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+    { id: "lighthouse", name: "The Lighthouse of Salt Harbour" },
   ],
   sessions: [],
 };
 
 describe("locationName", () => {
   test("resolves a known id to its name — what a scene's meta line shows", () => {
-    expect(locationName(tree, "leuchtturm")).toBe("Der Leuchtturm von Salzhafen");
+    expect(locationName(tree, "lighthouse")).toBe("The Lighthouse of Salt Harbour");
   });
 
   test("an unknown slug passes through unchanged — a scene needs no location", () => {
-    expect(locationName(tree, "hafen")).toBe("hafen");
-    expect(locationName(undefined, "hafen")).toBe("hafen");
+    expect(locationName(tree, "harbour")).toBe("harbour");
+    expect(locationName(undefined, "harbour")).toBe("harbour");
     expect(locationName(tree, undefined)).toBeUndefined();
   });
 });
 
 describe("sceneTitle", () => {
   test("finds the title across the chapters", () => {
-    expect(sceneTitle(tree, "lighthouse-arrival")).toBe("Ankunft am Leuchtturm");
-    expect(sceneTitle(tree, "smuggler-captured")).toBe("Von den Schmugglern erwischt");
+    expect(sceneTitle(tree, "lighthouse-arrival")).toBe("Arrival at the lighthouse");
+    expect(sceneTitle(tree, "smuggler-captured")).toBe("Caught by the smugglers");
   });
 
   test("degrades to the id when the tree does not know the scene", () => {
-    expect(sceneTitle(tree, "weg-vom-fenster")).toBe("weg-vom-fenster");
+    expect(sceneTitle(tree, "gone-for-good")).toBe("gone-for-good");
     expect(sceneTitle(undefined, "lighthouse-arrival")).toBe("lighthouse-arrival");
   });
 
@@ -145,7 +145,7 @@ describe("sceneTitle", () => {
 describe("hasScene", () => {
   test("knows the scenes of every chapter, and nothing else", () => {
     expect(hasScene(tree, "smuggler-captured")).toBe(true);
-    expect(hasScene(tree, "weg-vom-fenster")).toBe(false);
+    expect(hasScene(tree, "gone-for-good")).toBe(false);
     expect(hasScene(undefined, "smuggler-captured")).toBe(false);
     expect(hasScene(tree, undefined)).toBe(false);
   });
@@ -165,7 +165,7 @@ describe("settingsCampaign", () => {
   });
 
   test("an origin that is no campaign is ignored — never a row into nothing", () => {
-    expect(settingsCampaign("weg-umbenannt", list)).toBe("zeta");
+    expect(settingsCampaign("renamed-away", list)).toBe("zeta");
   });
 
   test("no campaign at all stays undefined — a fresh instance has no back row", () => {

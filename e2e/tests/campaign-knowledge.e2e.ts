@@ -24,9 +24,6 @@
 
 import type { Page } from "@playwright/test";
 
-import type { MessageParams } from "../../app/src/i18n/format";
-import type { MessageKey } from "../../app/src/i18n/messages";
-
 import { CONTEXT_ECHO, OLD_NAME, SCENE_ID, TRIGGER } from "../fixtures/replies";
 import { underCampaign } from "../support/api";
 import { getCampaign, patchCampaign } from "../support/campaign";
@@ -46,26 +43,15 @@ import {
 } from "../support/knowledge-item";
 import { getScene } from "../support/scene";
 import { expect, test } from "../support/test";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 
 const SOURCE = "The party watches the quay at low tide.";
 /** The spelling the naming convention asks for instead of OLD_NAME. */
 const NEW_NAME = "Brinemarsh";
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** A catalog text as a pattern whose `{param}` stands for any value. */
-function uiAny(key: MessageKey, param: string, params: MessageParams = {}): RegExp {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui(key, { ...params, [param]: marker }).split(marker);
-  return new RegExp(`^${escapeRegExp(before)}.+${escapeRegExp(after)}$`);
-}
-
 /** A row control's name for ANY row — the catalog sentence around its title. */
 function anyRow(key: "editableList.edit" | "editableList.remove"): RegExp {
-  return uiAny(key, "name");
+  return uiPattern(key, { name: /.+/ }, { exact: true });
 }
 
 /** The edit button's name of the row titled `name`. */
@@ -81,7 +67,7 @@ function removeRow(name: string): string {
 /** The heading of the naming hints, for any number of them. */
 function anyNamingHeading(): RegExp {
   const forms = [1, 2].map((count) =>
-    escapeRegExp(ui("generate.review.namingHeading", { count })).replace(String(count), "\\d+"),
+    uiPattern("generate.review.namingHeading", { count }).source.replace(String(count), "\\d+"),
   );
   return new RegExp(`^(?:${forms.join("|")})$`);
 }
@@ -604,7 +590,9 @@ test("the generator run: the knowledge travels, the naming check flags the draft
     page.getByText(ui("generate.review.namingWhereField", { path: where, field: "title" })),
   ).toBeVisible();
   await expect(
-    page.getByText(uiAny("generate.review.namingWhereBody", "line", { path: where })).first(),
+    page
+      .getByText(uiPattern("generate.review.namingWhereBody", { path: where, line: /.+/ }, { exact: true }))
+      .first(),
   ).toBeVisible();
 
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.

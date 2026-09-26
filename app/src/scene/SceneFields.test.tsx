@@ -9,26 +9,33 @@ import type { SceneProposal } from "@grimoire/shared/scene";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { translator } from "@/i18n/format";
+
 import { SceneFields } from "./SceneFields";
 import { sceneFormValues, type SceneFormValues, type ScenePendingChips } from "./scene-form";
 
+const t = translator("de");
+
+/** The accessible name of a chip's remove button. */
+const removeLabel = (item: string): string => `aria-label="${t("properties.field.remove.aria", { item })}"`;
+
 const tree: CampaignTree = {
-  campaign: "beispiel",
-  chapters: [{ id: "01-salzhafen", title: "Kapitel 1", scenes: [] }],
+  campaign: "example",
+  chapters: [{ id: "01-salt-harbour", title: "Chapter 1", scenes: [] }],
   npcs: [
     { id: "fenn", name: "Fenn", status: "alive" },
-    { id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+    { id: "jorna", name: "Harbourmaster Jorna", status: "alive" },
   ],
-  locations: [{ id: "leuchtturm", name: "Der Leuchtturm" }],
+  locations: [{ id: "lighthouse", name: "The Lighthouse" }],
   sessions: [],
 };
 
 const SCENE: SceneProposal = {
-  id: "ankunft",
-  title: "Ankunft",
+  id: "arrival",
+  title: "Arrival",
   type: "planned",
-  chapter: "01-salzhafen",
-  location: "leuchtturm",
+  chapter: "01-salt-harbour",
+  location: "lighthouse",
   npcs: [],
   handouts: [],
   tags: [],
@@ -63,51 +70,59 @@ describe("reference fields", () => {
     const html = render();
     expect(html).toContain('list="prop-location-options"');
     expect(html).toContain('<datalist id="prop-location-options">');
-    expect(html).toContain('value="leuchtturm"');
-    expect(html).toContain("Der Leuchtturm");
+    expect(html).toContain('value="lighthouse"');
+    expect(html).toContain("The Lighthouse");
   });
 
   test("free text in the location field is read as its id", () => {
     // The DM types a name, so the line answers for the id that text means.
-    expect(render({ location: "Der alte Hafen" })).toContain("Unbekannt — Ort muss existieren.");
+    expect(render({ location: "The Old Harbour" })).toContain(t("properties.ref.unknownLocation"));
     // …and a name that slugs to a known location lands on it.
-    expect(render({ location: "Leuchtturm" })).toContain("Der Leuchtturm");
+    expect(render({ location: "Lighthouse" })).toContain("The Lighthouse");
   });
 
   test("text no slug can be derived from says nothing — the issue does", () => {
-    const html = render({ location: "???" }, {}, { location: "Kein verwendbarer Name" });
-    expect(html).not.toContain("Unbekannt — Ort muss existieren.");
-    expect(html).toContain("Kein verwendbarer Name");
+    const issue = t("properties.issue.locationUnusable", { value: "???" });
+    const html = render({ location: "???" }, {}, { location: issue });
+    expect(html).not.toContain(t("properties.ref.unknownLocation"));
+    expect(html).toContain(issue);
   });
 
   test("an unknown chapter is not promised — chapters are never created by being named", () => {
-    expect(render({ chapter: "99-nirgendwo" })).toContain("Unbekannt — Kapitel muss existieren.");
+    expect(render({ chapter: "99-nowhere" })).toContain(t("properties.ref.unknownChapter"));
   });
 
   test("npcs are chips: each id removable, the add-input suggests the known ones", () => {
-    const html = render({ npcs: ["fenn", "kapitaen-torv"] });
-    expect(html).toContain('aria-label="fenn entfernen"');
-    expect(html).toContain('aria-label="kapitaen-torv entfernen"');
+    const html = render({ npcs: ["fenn", "captain-torv"] });
+    expect(html).toContain(removeLabel("fenn"));
+    expect(html).toContain(removeLabel("captain-torv"));
     expect(html).toContain('<datalist id="prop-npcs-options">');
-    expect(html).toContain("Hafenmeisterin Jorna");
+    expect(html).toContain("Harbourmaster Jorna");
   });
 });
 
 describe("what a scene cannot be without", () => {
   test("title, type, chapter and status are marked as needed, the rest is not", () => {
     const html = render();
-    const needed = [...html.matchAll(/<span class="[^"]*">([^<]+)<span class="[^"]*"> · nötig<\/span>/g)].map(
-      (match) => match[1],
+    const marker = new RegExp(
+      `<span class="[^"]*">([^<]+)<span class="[^"]*">${t("properties.field.required")}</span>`,
+      "g",
     );
-    expect(needed).toEqual(["Titel", "Typ", "Kapitel", "Status"]);
+    const needed = [...html.matchAll(marker)].map((match) => match[1]);
+    expect(needed).toEqual([
+      t("properties.scene.title.label"),
+      t("properties.scene.type.label"),
+      t("properties.scene.chapter.label"),
+      t("properties.scene.status.label"),
+    ]);
   });
 });
 
 describe("chips and selects", () => {
   test("tags are plain chips with a remove button each", () => {
     const html = render({ tags: ["social", "escape"] });
-    expect(html).toContain('aria-label="social entfernen"');
-    expect(html).toContain('aria-label="escape entfernen"');
+    expect(html).toContain(removeLabel("social"));
+    expect(html).toContain(removeLabel("escape"));
     expect(html).not.toContain('<datalist id="prop-tags-options">');
   });
 
@@ -117,7 +132,7 @@ describe("chips and selects", () => {
 
   test("a hand-edited list keeps its duplicates, each removable on its own", () => {
     const html = render({ tags: ["social", "social"] });
-    expect(count(html, 'aria-label="social entfernen"')).toBe(2);
+    expect(count(html, removeLabel("social"))).toBe(2);
   });
 
   test("type and status offer their closed lists and nothing else", () => {
@@ -125,9 +140,9 @@ describe("chips and selects", () => {
     // there is no empty choice.
     const html = render();
     expect(html).toContain('value="draft" selected');
-    expect(html).toContain("Bereit");
-    expect(html).toContain("Eventualszene");
-    expect(html).not.toContain("— nicht gesetzt —");
+    expect(html).toContain(t("status.scene.ready"));
+    expect(html).toContain(t("properties.scene.type.contingency"));
+    expect(html).not.toContain(t("properties.field.unset"));
     expect(count(html, "<option")).toBe(2 + 4 + 1 + 1 + 2);
   });
 });

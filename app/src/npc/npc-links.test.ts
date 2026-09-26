@@ -12,25 +12,25 @@ const en = translator("en");
 
 describe("npc links", () => {
   test("the reading view and the list are the npc's own routes", () => {
-    expect(npcHref("beispiel", "fenn")).toBe("/campaigns/beispiel/npcs/fenn");
-    expect(npcsHref("beispiel")).toBe("/campaigns/beispiel/npcs");
+    expect(npcHref("example", "fenn")).toBe("/campaigns/example/npcs/fenn");
+    expect(npcsHref("example")).toBe("/campaigns/example/npcs");
     expect(npcLabel("fenn")).toBe("npcs/fenn");
   });
 
   test("the reading view points at THE npc list, never at a chapter", () => {
-    expect(npcPageCrumbs("beispiel", de)).toEqual([
-      { label: "NPCs", to: "/campaigns/beispiel/npcs" },
+    expect(npcPageCrumbs("example", de)).toEqual([
+      { label: de("browse.title.npcs"), to: "/campaigns/example/npcs" },
     ]);
   });
 
   test("the list label follows the UI language", () => {
-    expect(npcPageCrumbs("beispiel", en)).toEqual([
-      { label: "NPCs", to: "/campaigns/beispiel/npcs" },
+    expect(npcPageCrumbs("example", en)).toEqual([
+      { label: en("browse.title.npcs"), to: "/campaigns/example/npcs" },
     ]);
   });
 
   test("the campaign name never appears in the context line", () => {
-    expect(npcPageCrumbs("beispiel", de).map((c) => c.label)).not.toContain("beispiel");
+    expect(npcPageCrumbs("example", de).map((c) => c.label)).not.toContain("example");
   });
 
   test("no campaign yields nothing", () => {

@@ -1,4 +1,4 @@
-// The provider's own two guarantees (issue #69 follow-up), both pure render —
+// The provider's own two guarantees, both pure render —
 // so `react-dom/server` is enough, the way the other component tests do it.
 //
 //   1. THE GATE: while `GET /api/settings` is pending, nothing language-
@@ -13,7 +13,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { translator } from "./format";
 import { I18nProvider, useT } from "./provider";
+
+/** The probe's line in each language. */
+const GERMAN = translator("de")("topbar.search");
+const ENGLISH = translator("en")("topbar.search");
 
 /** A child that can only render if it got a language. */
 function Probe() {
@@ -46,11 +51,16 @@ function settledClient(locale: string | null): QueryClient {
 }
 
 describe("the first paint is gated", () => {
+  test("the probe's line differs between the languages", () => {
+    // Otherwise the assertions below could not tell the languages apart.
+    expect(GERMAN).not.toBe(ENGLISH);
+  });
+
   test("renders no copy at all while the setting is unknown", () => {
     const html = renderWith(pendingClient());
     // The child never mounted, in EITHER language.
-    expect(html).not.toContain("Suchen");
-    expect(html).not.toContain("Search");
+    expect(html).not.toContain(GERMAN);
+    expect(html).not.toContain(ENGLISH);
     // What is on screen is the neutral shell: a glyph, marked as busy.
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("<svg");
@@ -59,25 +69,25 @@ describe("the first paint is gated", () => {
   test("and nothing below the provider ever sees a pending language", () => {
     // The gate is the reason `isPending` is always false for children — a view
     // that handled it would be handling a state that cannot occur.
-    expect(renderWith(settledClient("en"))).toContain("Search");
+    expect(renderWith(settledClient("en"))).toContain(ENGLISH);
   });
 });
 
 describe("the stored language wins", () => {
   test("German when the instance says de", () => {
-    expect(renderWith(settledClient("de"))).toContain("Suchen");
+    expect(renderWith(settledClient("de"))).toContain(GERMAN);
   });
 
   test("English when the instance says en", () => {
     const html = renderWith(settledClient("en"));
-    expect(html).toContain("Search");
-    expect(html).not.toContain("Suchen");
+    expect(html).toContain(ENGLISH);
+    expect(html).not.toContain(GERMAN);
   });
 
   test("no stored value falls back to the browser, silence to the default", () => {
     // This runner's `navigator` offers no language at all, and silence is not
     // "asked for something other than German" — so the primary language stands
     // (messages.ts `browserLocale`).
-    expect(renderWith(settledClient(null))).toContain("Suchen");
+    expect(renderWith(settledClient(null))).toContain(GERMAN);
   });
 });
