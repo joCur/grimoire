@@ -24,7 +24,8 @@
     "./session": "./src/session.ts",
     "./log-entry": "./src/log-entry.ts",
     "./pause": "./src/pause.ts",
-    "./generator-job": "./src/generator-job.ts"
+    "./generator-job": "./src/generator-job.ts",
+    "./trash": "./src/trash.ts"
   },
   "scripts": {
     "test": "bun test",

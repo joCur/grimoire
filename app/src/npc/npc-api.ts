@@ -1,5 +1,6 @@
 // The API client of an npc (decisions/resources): its resource — read, list, create,
-// write — its write conflict and the augment run on it. Built from the shared HTTP helpers (../api.ts).
+// write — its write conflict, the augment run on it and its way out of the
+// trash (decisions/trash). Built from the shared HTTP helpers (../api.ts).
 
 import type { Npc, NpcPatch } from "@grimoire/shared/npc";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
@@ -115,4 +116,18 @@ export function applyNpcAugment(
   input: Omit<NpcPatch, "force" | "id"> & { jobId?: string },
 ): Promise<Npc> {
   return postJson<Npc>(`${npcsUrl(campaign, id)}/augment/apply`, input);
+}
+
+/** The npcs in the trash, the latest to go there first, each with its `deletedMs`. */
+export function fetchTrashedNpcs(campaign: string): Promise<Npc[]> {
+  return getJson<Npc[]>(`${npcsUrl(campaign)}?deleted=true`);
+}
+
+/**
+ * Take ONE npc out of the trash against the `rev` it went there with. Its
+ * chapter in the trash is 409 `restore_blocked`, a stale `rev` 409 with the
+ * current npc.
+ */
+export function restoreNpc(campaign: string, npc: Pick<Npc, "id" | "rev">): Promise<Npc> {
+  return sendJson<Npc>("PATCH", npcsUrl(campaign, npc.id), { rev: npc.rev, deletedMs: null });
 }

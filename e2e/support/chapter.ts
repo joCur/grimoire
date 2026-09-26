@@ -33,3 +33,17 @@ export async function patchChapter(
   const rev = change.rev ?? (await getChapter(api, id)).rev;
   return api.send<Chapter>("PATCH", chapterPath(api, id), { ...change, rev });
 }
+
+/**
+ * Put one chapter in the trash (decisions/trash): DELETE its resource with the
+ * `rev` it has now. Answers the chapter with its `deletedMs` and moved `rev`.
+ */
+export async function trashChapter(api: Api, id: string): Promise<Chapter> {
+  const { rev } = await api.get<Chapter>(chapterPath(api, id));
+  return api.send<Chapter>("DELETE", chapterPath(api, id), { rev });
+}
+
+/** The chapters in the trash, the latest to go there first. */
+export function getTrashedChapters(api: Api): Promise<Chapter[]> {
+  return api.get<Chapter[]>(`${chapterPath(api)}?deleted=true`);
+}

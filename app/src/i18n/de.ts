@@ -300,6 +300,33 @@ export const de = {
   // the topbar, which stays the three campaign-wide entries it has).
   "lookup.heading": "Nachschlagen",
 
+  // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
+  "trash.title": "Papierkorb",
+  "trash.lead":
+    "Was du löschst, liegt hier {days} Tage lang. Bis dahin kannst du es zurückholen, danach wird es endgültig entfernt.",
+  "trash.loading": "Lade den Papierkorb …",
+  "trash.loadFailed": "Der Papierkorb konnte nicht geladen werden — Server prüfen.",
+  "trash.empty": "Der Papierkorb ist leer. Was du löschst, landet hier und lässt sich zurückholen.",
+  "trash.group.chapters": "Kapitel",
+  "trash.group.scenes": "Szenen",
+  "trash.group.npcs": "NPCs",
+  "trash.group.locations": "Orte",
+  "trash.group.ideas": "Ideen",
+  "trash.remaining":
+    "{days, plural, =0 {Wird heute endgültig entfernt.} one {Wird in # Tag endgültig entfernt.} other {Wird in # Tagen endgültig entfernt.}}",
+  "trash.chapter.scenes":
+    "{count, plural, one {Seine # Szene kommt mit zurück.} other {Seine # Szenen kommen mit zurück.}}",
+  "trash.restore": "Zurückholen",
+  "trash.restore.aria": "„{name}“ zurückholen",
+  "trash.restored": "„{name}“ ist zurückgeholt.",
+  "trash.restore.stale":
+    "Das wurde inzwischen anderswo geändert. Der Papierkorb ist neu geladen — versuch es noch einmal.",
+  "trash.restore.gone":
+    "Das liegt nicht mehr im Papierkorb: Es wurde schon zurückgeholt oder endgültig entfernt.",
+  "trash.restore.failed": "Nicht zurückgeholt — Server prüfen.",
+  "notice.region": "Hinweise",
+  "notice.undo": "Rückgängig",
+
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} „{id}“ existiert schon — Vorschlag: „{suggestion}“',
   "server.slug_reserved": '„{id}“ ist ein reservierter Name — Vorschlag: „{suggestion}“',
@@ -326,11 +353,18 @@ export const de = {
   "server.session_ended":
     "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. Starte eine neue Session, um weiterzumachen.",
   "server.trash_blocked":
-    "Das kann nicht in den Papierkorb, weil noch etwas darauf verweist. Entferne erst diese Verweise.",
+    "Das kann nicht in den Papierkorb, solange {blockers} darauf {count, plural, one {verweist} other {verweisen}}. Entferne erst diese Verweise.",
   "server.chapter_in_trash":
-    "Diese Szene kann nicht zurückgeholt werden, weil ihr Kapitel im Papierkorb liegt. Hol zuerst das Kapitel zurück.",
+    'Diese Szene kann nicht zurückgeholt werden, weil ihr Kapitel „{chapter}“ im Papierkorb liegt. Hol zuerst das Kapitel zurück.',
   "server.restore_blocked":
-    "Das kann nicht zurückgeholt werden, weil etwas, worauf es verweist, im Papierkorb liegt. Hol das zuerst zurück.",
+    "Das kann nicht zurückgeholt werden, solange {blockers} im Papierkorb {count, plural, one {liegt} other {liegen}}. Hol {count, plural, one {das} other {sie}} zuerst zurück.",
+  // One row in the way of a trash or a restore, as it stands inside the
+  // sentences above; several of them are joined into one list.
+  "server.blocker.chapter": 'das Kapitel „{name}“',
+  "server.blocker.scene": 'die Szene „{name}“',
+  "server.blocker.npc": 'der NPC „{name}“',
+  "server.blocker.location": 'der Ort „{name}“',
+  "server.blocker.log-entry": 'die Notiz „{name}“',
   "server.rev_conflict": "Inzwischen geändert — neu laden vor dem Speichern.",
   "server.nothing_to_write": "Nichts zu speichern.",
   "server.body_not_editable":
@@ -510,6 +544,11 @@ export const de = {
   // An idea ticked off against a stale state: nothing was written, the ideas
   // were read again (review and live aside).
   "idea.tick.stale": "Diese Idee wurde inzwischen geändert. Die Liste ist neu geladen.",
+  "idea.trash.aria": "Idee „{text}“ löschen",
+  "idea.trash.done": "Die Idee liegt im Papierkorb.",
+  "idea.trash.failed": "Die Idee wurde nicht gelöscht — Server prüfen.",
+  "idea.restore.failed":
+    "Die Idee konnte nicht zurückgeholt werden und liegt weiter im Papierkorb. Du findest sie dort.",
   // A log line reviewed against a stale state: nothing was written, the
   // session was read again (review and live aside).
   "session.log.review.stale":

@@ -1,6 +1,6 @@
 // The API client of a scene (decisions/resources): its resource — read, create, write —
-// its write conflict, and the augment run on it. Built from the shared HTTP
-// helpers (../api.ts).
+// its write conflict, the augment run on it, and its way out of the trash
+// (decisions/trash). Built from the shared HTTP helpers (../api.ts).
 
 import type { Scene, SceneCreate, ScenePatch } from "@grimoire/shared/scene";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
@@ -107,4 +107,25 @@ export function applySceneAugment(
   input: Omit<ScenePatch, "force" | "id"> & { jobId?: string },
 ): Promise<Scene> {
   return postJson<Scene>(`${scenesUrl(campaign, id)}/augment/apply`, input);
+}
+
+/**
+ * The scenes in the trash, the latest to go there first, each with its
+ * `deletedMs` — the scenes that went with their chapter share its moment.
+ */
+export function fetchTrashedScenes(campaign: string): Promise<Scene[]> {
+  return getJson<Scene[]>(`${scenesUrl(campaign)}?deleted=true`);
+}
+
+/**
+ * Take ONE scene out of the trash against the `rev` it went there with; it
+ * comes back at the end of its chapter. Its chapter in the trash is 409
+ * `chapter_in_trash`, a location or npc of it in the trash 409
+ * `restore_blocked`, a stale `rev` 409 with the current scene.
+ */
+export function restoreScene(campaign: string, scene: Pick<Scene, "id" | "rev">): Promise<Scene> {
+  return sendJson<Scene>("PATCH", scenesUrl(campaign, scene.id), {
+    rev: scene.rev,
+    deletedMs: null,
+  });
 }

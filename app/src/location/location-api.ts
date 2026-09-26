@@ -1,6 +1,6 @@
 // The API client of a location (decisions/resources): its resource — read, list,
-// create, write — its write conflict, and the augment run on it. Built from
-// the shared HTTP helpers (../api.ts).
+// create, write — its write conflict, the augment run on it, and its way out
+// of the trash (decisions/trash). Built from the shared HTTP helpers (../api.ts).
 
 import type { Location, LocationPatch } from "@grimoire/shared/location";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
@@ -115,4 +115,24 @@ export function applyLocationAugment(
   input: Omit<LocationPatch, "force" | "id"> & { jobId?: string },
 ): Promise<Location> {
   return postJson<Location>(`${locationsUrl(campaign, id)}/augment/apply`, input);
+}
+
+/** The locations in the trash, the latest to go there first, each with its `deletedMs`. */
+export function fetchTrashedLocations(campaign: string): Promise<Location[]> {
+  return getJson<Location[]>(`${locationsUrl(campaign)}?deleted=true`);
+}
+
+/**
+ * Take ONE location out of the trash against the `rev` it went there with.
+ * Its chapter in the trash is 409 `restore_blocked`, a stale `rev` 409 with
+ * the current location.
+ */
+export function restoreLocation(
+  campaign: string,
+  location: Pick<Location, "id" | "rev">,
+): Promise<Location> {
+  return sendJson<Location>("PATCH", locationsUrl(campaign, location.id), {
+    rev: location.rev,
+    deletedMs: null,
+  });
 }

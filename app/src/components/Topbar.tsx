@@ -119,12 +119,13 @@ export function Topbar() {
   const scenesMatch = matchPath("/campaigns/:campaign/scenes/*", pathname);
   const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
   const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
-  // The two campaign-content pages. They are NOT in the nav trio
-  // and must not be — but the bar above them is still
+  // The two campaign-content pages and the trash. They are NOT in the nav
+  // trio and must not be — but the bar above them is still
   // this campaign's bar, so the campaign has to be derived here too. Without
   // them the topbar goes blank on those pages: no switcher, no ⌘K, no gear.
   const knowledgeMatch = matchPath("/campaigns/:campaign/knowledge", pathname);
   const glossaryMatch = matchPath("/campaigns/:campaign/glossary", pathname);
+  const trashMatch = matchPath("/campaigns/:campaign/trash", pathname);
   const chapterOverviewMatch = matchPath("/campaigns/:campaign", pathname);
   const isSettings = matchPath("/settings", pathname) !== null;
   const settingsFrom = useSettingsCampaign(isSettings);
@@ -138,6 +139,7 @@ export function Topbar() {
     campaignOf(locationsMatch) ??
     campaignOf(knowledgeMatch) ??
     campaignOf(glossaryMatch) ??
+    campaignOf(trashMatch) ??
     campaignOf(chapterOverviewMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??
     "";

@@ -141,7 +141,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `/campaigns/:id/locations/<id>`; threads are maintained by the chapter
   overview, ideas by the debrief and the mobile start surface, glossary terms
   by the page `/campaigns/:id/glossary` and campaign knowledge by
-  `/campaigns/:id/knowledge`.
+  `/campaigns/:id/knowledge`; what is in the trash is listed and restored
+  on `/campaigns/:id/trash` (decisions/trash).
   A scene and a thread lie flat under their campaign; their chapter is a
   field. Which
   chapter is active is said by its `status`: at most one per campaign, and
@@ -417,6 +418,17 @@ The paths:
     (pencil, an invalid identifier blocks the create action, an empty field
     derives it from the name again) and the slug collision (409 with a
     suggestion, writes nothing)
+11. Trash (decisions/trash): delete an idea in the debrief (`DELETE
+    …/ideas/<id> { rev }`, no confirmation) → a notice with an undo action
+    restores it (`PATCH …/ideas/<id> { rev, deletedMs: null }` with the `rev`
+    the deletion answered with); delete it again → the trash page
+    (`/campaigns/:id/trash`, reached from the chapter overview's lookup line,
+    ⌘K and the mobile start surface; not from the topbar) lists it with the
+    days it has left and restores it. A chapter deleted with its scenes is ONE
+    row of the page, naming how many scenes come back with it, and its restore
+    brings them back in their order; a restore that something in the trash
+    stands in the way of (`restore_blocked`, `chapter_in_trash`) names what in
+    a whole sentence and writes nothing. The page fits 390px
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same

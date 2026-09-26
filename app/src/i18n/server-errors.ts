@@ -18,11 +18,12 @@
 // failure rather than a sentence that silently degrades in production.
 
 import { isErrorCode, type ErrorCode, type ErrorField, type ErrorKind } from "@grimoire/shared";
+import { trashBlockerSchema, type TrashBlocker, type TrashBlockerKind } from "@grimoire/shared/trash";
 
 import { ApiError } from "@/api";
 
 import type { MessageParams, Translate } from "./format";
-import type { MessageKey } from "./messages";
+import { INTL_TAG, type MessageKey } from "./messages";
 
 const CODE_KEY: Record<ErrorCode, MessageKey> = {
   slug_taken: "server.slug_taken",
@@ -68,6 +69,32 @@ const FIELD_KEY: Record<ErrorField, MessageKey> = {
   name: "server.field.name",
   title: "server.field.title",
 };
+
+const BLOCKER_KEY: Record<TrashBlockerKind, MessageKey> = {
+  chapter: "server.blocker.chapter",
+  scene: "server.blocker.scene",
+  npc: "server.blocker.npc",
+  location: "server.blocker.location",
+  "log-entry": "server.blocker.log-entry",
+};
+
+/**
+ * The rows a trash or restore refusal names as being in the way, or
+ * `undefined` when the body carries none in their shape.
+ */
+function blockersOf(value: unknown): TrashBlocker[] | undefined {
+  const parsed = trashBlockerSchema.array().safeParse(value);
+  return parsed.success && parsed.data.length > 0 ? parsed.data : undefined;
+}
+
+/**
+ * The rows in the way as ONE list inside the refusal's sentence — each named
+ * by its kind and name, joined the way the UI language joins a list.
+ */
+function blockerList(blockers: readonly TrashBlocker[], t: Translate): string {
+  const names = blockers.map((blocker) => t(BLOCKER_KEY[blocker.kind], { name: blocker.name }));
+  return new Intl.ListFormat(INTL_TAG[t.locale], { type: "conjunction" }).format(names);
+}
 
 function isKind(value: unknown): value is ErrorKind {
   return typeof value === "string" && value in KIND_KEY;
@@ -161,6 +188,19 @@ function paramsFor(
       const value = text(body.value);
       return value === undefined ? undefined : { value };
     }
+    case "trash_blocked":
+    case "restore_blocked": {
+      // The sentence names the rows in the way, so the DM knows what to
+      // remove or restore first. Without them it would only restate the rule.
+      const blockers = blockersOf(body.blockers);
+      if (blockers === undefined) return undefined;
+      return { blockers: blockerList(blockers, t), count: blockers.length };
+    }
+    case "chapter_in_trash": {
+      // The one row in the way is the scene's chapter.
+      const chapter = blockersOf(body.blockers)?.find((blocker) => blocker.kind === "chapter");
+      return chapter === undefined ? undefined : { chapter: chapter.name };
+    }
     case "llm_truncated": {
       // No cap configured: the endpoint's own default, which has no number.
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
@@ -183,9 +223,6 @@ function paramsFor(
     case "llm_invalid":
     case "nothing_to_write":
     case "body_not_editable":
-    case "trash_blocked":
-    case "chapter_in_trash":
-    case "restore_blocked":
       return {};
   }
 }

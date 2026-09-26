@@ -14,3 +14,17 @@ export function ideaPath(api: Api, id?: string): string {
 export function getIdeas(api: Api): Promise<Idea[]> {
   return api.get<Idea[]>(ideaPath(api));
 }
+
+/**
+ * Put one idea in the trash (decisions/trash): DELETE its resource with the
+ * `rev` it has now. Answers the idea with its `deletedMs` and moved `rev`.
+ */
+export async function trashIdea(api: Api, id: string): Promise<Idea> {
+  const { rev } = await api.get<Idea>(ideaPath(api, id));
+  return api.send<Idea>("DELETE", ideaPath(api, id), { rev });
+}
+
+/** The ideas in the trash, the latest to go there first. */
+export function getTrashedIdeas(api: Api): Promise<Idea[]> {
+  return api.get<Idea[]>(`${ideaPath(api)}?deleted=true`);
+}

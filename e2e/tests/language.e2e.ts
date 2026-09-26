@@ -181,6 +181,7 @@ test("the language switch: English and back, server-side and without a reload", 
     uiIn("en", "browse.title.locations"),
     uiIn("en", "glossary.title"),
     uiIn("en", "knowledge.title"),
+    uiIn("en", "trash.title"),
   ]);
   await expect(page.getByRole("button", { name: uiIn("en", "topbar.search") })).toBeVisible();
   await expect(

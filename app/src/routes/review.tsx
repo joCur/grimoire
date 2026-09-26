@@ -7,7 +7,9 @@
 // The server is the truth: every action writes through its endpoint, and what
 // comes back — the thread that was created, the npc that was created, plus
 // the log entry that was reviewed or the idea that was ticked off — is
-// seeded into the caches. The page harvests the first session of the list:
+// seeded into the caches. An idea can also be deleted from its card: it goes
+// to the trash (decisions/trash), and a notice offers to undo that — the
+// restore writes against the `rev` the deletion answered with. The page harvests the first session of the list:
 // the last started one, ended or not. An npc is created on its own resource
 // (`POST …/npcs`) with the note as its text; when the id already names an npc
 // with content, nothing is written, the dialog says so, and the row stays
@@ -15,7 +17,7 @@
 // (`POST …/threads`); the chapter's text and its `rev` stay as they are
 // (decisions/data-shape). The ONLY client state is cosmetic: which action a card got in
 // this sitting (the server stores done/not-done, not which action) and which
-// threads were adopted here (the "neu" chip, by thread id).
+// threads were adopted here (the new-thread chip, by thread id).
 // Mobile: the desk task stays usable — one column, stacked cards.
 
 import type { Idea } from "@grimoire/shared/idea";
@@ -23,19 +25,20 @@ import type { LogEntry } from "@grimoire/shared/log-entry";
 import type { Npc } from "@grimoire/shared/npc";
 import type { Thread } from "@grimoire/shared/thread";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check } from "lucide-react";
-import { useState } from "react";
+import { Check, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { fetchTree } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { showNotice, showUndoNotice } from "@/components/Notices";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
 import { useT } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
-import { tickIdea } from "@/idea/idea-api";
+import { restoreIdea, tickIdea, trashIdea } from "@/idea/idea-api";
 import { tickFailureKey } from "@/idea/idea-tick";
-import { ideasKey, withIdea } from "@/idea/idea-query";
+import { ideaTrashKey, ideasKey, withIdea, withoutIdea } from "@/idea/idea-query";
 import { createConflict } from "@/lib/create";
 import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
@@ -121,6 +124,7 @@ export function ReviewRoute() {
   const keptKey = (card: ReviewCard) => `${campaign}:${card.key}`;
 
   const model = useReviewCards(campaign);
+  const heading = useRef<HTMLHeadingElement>(null);
 
   // The active chapter (fallback: the first) — the same rule as the live nav.
   const tree = useQuery({
@@ -209,14 +213,52 @@ export function ReviewRoute() {
     },
   });
 
-  const busyKey = act.isPending ? act.variables?.card.key : undefined;
+  // Deleting an idea puts it in the trash; the notice beside it takes it back
+  // out, against the `rev` the deletion answered with.
+  const trash = useMutation({
+    mutationFn: (idea: Idea) => trashIdea(campaign, idea),
+    onMutate: () => act.reset(),
+    onSuccess: (trashed) => {
+      queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withoutIdea(list, trashed.id));
+      void queryClient.invalidateQueries({ queryKey: ideaTrashKey(campaign) });
+      // The card and its buttons are gone: the focus goes back to the top of
+      // the page instead of falling to the document.
+      heading.current?.focus();
+      showUndoNotice({
+        message: t("idea.trash.done"),
+        undoLabel: t("notice.undo"),
+        onUndo: () => {
+          restoreIdea(campaign, trashed).then(
+            () => {
+              void queryClient.invalidateQueries({ queryKey: ideasKey(campaign) });
+              void queryClient.invalidateQueries({ queryKey: ideaTrashKey(campaign) });
+            },
+            () => showNotice(t("idea.restore.failed")),
+          );
+        },
+      });
+    },
+    onError: (error) => {
+      // The idea moved since it was read: read the ideas again, so the next
+      // attempt carries its current guard.
+      if (isWriteConflict(error)) void queryClient.invalidateQueries({ queryKey: ideasKey(campaign) });
+    },
+  });
+
+  const busyKey = act.isPending
+    ? act.variables?.card.key
+    : trash.isPending
+      ? `idea:${trash.variables?.id ?? ""}`
+      : undefined;
   // The dialog's own line: the id names an npc with content (nothing was
   // written, the note stays in the row), or any other refusal in the
   // server's words, or a server that did not answer.
   const npcError =
     act.isError && act.variables?.action === "npc" ? npcFailure(act.error, t) : undefined;
   const cardError = (card: ReviewCard) =>
-    act.isError && act.variables?.action !== "npc" && act.variables?.card.key === card.key
+    trash.isError && card.idea !== undefined && trash.variables?.id === card.idea.id
+      ? t(tickFailureKey(trash.error, "idea.trash.failed"))
+      : act.isError && act.variables?.action !== "npc" && act.variables?.card.key === card.key
       ? t(
           card.logEntry !== undefined
             ? reviewFailureKey(act.error, "review.action.failed")
@@ -258,6 +300,14 @@ export function ReviewRoute() {
         act.reset();
         act.mutate({ card, action: "dismiss" });
       }}
+      onTrash={
+        card.idea === undefined
+          ? undefined
+          : () => {
+              trash.reset();
+              if (card.idea !== undefined) trash.mutate(card.idea);
+            }
+      }
     />
   );
 
@@ -265,7 +315,11 @@ export function ReviewRoute() {
     <>
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto max-w-[680px] px-5 pt-8 pb-24 md:px-7 md:pt-10 md:pb-[100px]">
-        <h1 className="mb-2 font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className="mb-2 rounded font-serif text-[26px] leading-[1.25] font-semibold text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
           {t("review.title")}
         </h1>
 
@@ -389,6 +443,7 @@ function ReviewCardView({
   onNpc,
   onDismiss,
   onKeep,
+  onTrash,
 }: {
   card: ReviewCard;
   action: ActionKind | undefined;
@@ -401,6 +456,8 @@ function ReviewCardView({
   onNpc: () => void;
   onDismiss: () => void;
   onKeep: () => void;
+  /** Put the card's idea in the trash; absent for a card from the log. */
+  onTrash: (() => void) | undefined;
 }) {
   const t = useT();
   const label = doneLabel(action, card.section, t);
@@ -486,6 +543,20 @@ function ReviewCardView({
               >
                 {t("review.action.keep")}
               </Button>
+            )}
+            {onTrash !== undefined && (
+              // Quiet and last: no confirmation, because the notice that
+              // follows offers the undo, and the trash keeps the idea.
+              <button
+                type="button"
+                aria-label={t("idea.trash.aria", { text: card.text })}
+                title={t("idea.trash.aria", { text: card.text })}
+                disabled={busy}
+                onClick={onTrash}
+                className="ml-auto flex size-8 flex-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-panel-deep hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-35 motion-reduce:transition-none"
+              >
+                <Trash2 aria-hidden size={15} />
+              </button>
             )}
           </div>
           {error !== undefined && (

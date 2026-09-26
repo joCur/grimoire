@@ -19,3 +19,4 @@ export * from "./session";
 export * from "./log-entry";
 export * from "./pause";
 export * from "./generator-job";
+export * from "./trash";

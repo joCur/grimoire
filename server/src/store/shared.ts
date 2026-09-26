@@ -19,6 +19,7 @@ import {
   type ErrorField,
   type ErrorKind,
 } from "@grimoire/shared";
+import type { TrashBlocker } from "@grimoire/shared/trash";
 import { ApiError } from "../api-error";
 import { LOCAL_DATE_TIME_SECONDS } from "./time";
 
@@ -169,19 +170,8 @@ export function guardRev(current: number, sent: number, what: string): void {
 // trash, or in it, is answered as a 409 that names the rows in the way, so
 // the app can say which ones in a whole sentence; nothing is written.
 
-/** The kinds a trash refusal can name as being in the way. */
-export type TrashBlockerKind = "chapter" | "scene" | "npc" | "location" | "log-entry";
-
-/**
- * One row in the way of a trash or a restore: its kind, its id and the name
- * the DM knows it by — a log entry by its text, beside its `session`.
- */
-export interface TrashBlocker {
-  kind: TrashBlockerKind;
-  id: string;
-  name: string;
-  session?: string;
-}
+/** One row in the way of a trash or a restore, in its shared shape. */
+export type { TrashBlocker } from "@grimoire/shared/trash";
 
 /** The kinds that go to the trash on their own. */
 export type TrashKind = "chapter" | "scene" | "npc" | "location" | "idea";
