@@ -2,7 +2,7 @@
 //
 // Whether a scene was PLAYED is the scene's status alone; a session records no
 // scenes of its own. What the session knows is where the DM took notes — that
-// is the sign a scene came up that evening. The live view's "gespielt" box
+// is the sign a scene came up that evening. The live view's played box
 // starts ticked in such a scene, and the reading page of a past evening lists
 // those scenes.
 //

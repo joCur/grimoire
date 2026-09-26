@@ -5,7 +5,7 @@
 // the status control is here: the tree invalidation (chapter overview rows,
 // live nav and search read the status from there) and the target value shown
 // dimmed while the write runs — which is the write's variables, no second
-// state. Beside it, the one status write the live view's "Nächste Szene"
+// state. Beside it, the one status write the live view's next-scene
 // step takes: marking the scene being left as played.
 
 import type { SceneStatus } from "@grimoire/shared/scene";

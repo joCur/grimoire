@@ -1,5 +1,5 @@
 // The log panel of the live mode: the session's log (newest first) pinned
-// above the Schnellnotiz — recessed panel, max ~46% of the aside. Nothing may
+// above the quick note — recessed panel, max ~46% of the aside. Nothing may
 // ever overlay the note input.
 //
 // A note is a log entry of the running session, taken in the scene that is

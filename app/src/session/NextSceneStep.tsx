@@ -1,15 +1,15 @@
-// "Nächste Szene": the one step of the evening, under the open scene. It
+// The next-scene step: the one step of the evening, under the open scene. It
 // names where the DM reaches next so the left list does not have to be
 // searched mid-sentence (UI-BRIEF §3).
 //
 // It lives at the END of the CENTER column of the live mode, which is the
-// whole placement decision: the Schnellnotiz is the second most important
+// whole placement decision: the quick note is the second most important
 // element of that view and sits in the aside, so a step here can neither
 // cover it nor push itself between a scene and the field the DM types into.
 // Quiet, one line, the title in the label — a step nobody can read at a
 // glance is not a step.
 //
-// Left of the step, in the same row, the "gespielt" box: ticked, the step
+// Left of the step, in the same row, the played box: ticked, the step
 // marks the scene being left as played — its STATUS, the one place that
 // says so — before the next scene opens; unticked, it just opens the next
 // scene. The box starts ticked when the session holds a note taken in the
