@@ -1,6 +1,7 @@
 import { Outlet, Route, Routes, useParams } from "react-router";
 
 import { ChapterRoute } from "@/chapter/ChapterRoute";
+import { NoticeHost } from "@/components/Notices";
 import { NotFound } from "@/components/NotFound";
 import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -26,6 +27,7 @@ import { NpcAugmentAction } from "@/routes/NpcAugmentAction";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SettingsRoute } from "@/routes/settings";
+import { TrashRoute } from "@/routes/trash";
 import { SceneAugmentAction } from "@/routes/SceneAugmentAction";
 import { SceneList } from "@/scene/SceneList";
 import { SceneRoute } from "@/scene/SceneRoute";
@@ -62,6 +64,8 @@ function CampaignNotFound() {
 // The update banner sits above the topbar and therefore above
 // every view including the mobile surfaces, where the topbar is hidden; it
 // renders nothing unless the version poll saw a build mismatch.
+// The notice host is mounted once for every view: a notice (the undo of a
+// deletion) outlives the view that raised it.
 function Layout() {
   return (
     <ReviewMemoryProvider>
@@ -72,6 +76,7 @@ function Layout() {
           <Outlet />
         </main>
       </div>
+      <NoticeHost />
     </ReviewMemoryProvider>
   );
 }
@@ -173,6 +178,11 @@ export function App() {
               deliberately not from the topbar. */}
           <Route path="knowledge" element={<KnowledgeRoute />} />
           <Route path="glossary" element={<GlossaryRoute />} />
+          {/* The trash — what was deleted, until it is removed for good
+              (decisions/trash). Reached like the two pages above, never
+              from the topbar. It composes the trash lists and restores of
+              the chapter, scene, npc, location and idea slices. */}
+          <Route path="trash" element={<TrashRoute />} />
           <Route path="live" element={<LiveRoute />} />
           {/* Generator — entered from the chapter overview's "Generator". */}
           <Route path="generate" element={<GenerateRoute />} />

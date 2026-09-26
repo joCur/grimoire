@@ -27,7 +27,8 @@ import type { Thread } from "@grimoire/shared/thread";
 import type { CampaignTree, SearchResult } from "@grimoire/shared";
 import { app } from "../src/server";
 import { writeGenerated } from "../src/store/generated";
-import { purgeTrash, TRASH_RETENTION_DAYS } from "../src/store/trash";
+import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
+import { purgeTrash } from "../src/store/trash";
 import { dropStore, seedStore } from "./support/store";
 
 const CAMPAIGN = "example";

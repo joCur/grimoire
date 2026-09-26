@@ -33,3 +33,17 @@ export async function patchLocation(
   const rev = change.rev ?? (await getLocation(api, id)).rev;
   return api.send<Location>("PATCH", locationPath(api, id), { ...change, rev });
 }
+
+/**
+ * Put one location in the trash (decisions/trash): DELETE its resource with the
+ * `rev` it has now. Answers the location with its `deletedMs` and moved `rev`.
+ */
+export async function trashLocation(api: Api, id: string): Promise<Location> {
+  const { rev } = await api.get<Location>(locationPath(api, id));
+  return api.send<Location>("DELETE", locationPath(api, id), { rev });
+}
+
+/** The locations in the trash, the latest to go there first. */
+export function getTrashedLocations(api: Api): Promise<Location[]> {
+  return api.get<Location[]>(`${locationPath(api)}?deleted=true`);
+}

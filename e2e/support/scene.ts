@@ -33,3 +33,17 @@ export async function patchScene(
   const rev = change.rev ?? (await getScene(api, id)).rev;
   return api.send<Scene>("PATCH", scenePath(api, id), { ...change, rev });
 }
+
+/**
+ * Put one scene in the trash (decisions/trash): DELETE its resource with the
+ * `rev` it has now. Answers the scene with its `deletedMs` and moved `rev`.
+ */
+export async function trashScene(api: Api, id: string): Promise<Scene> {
+  const { rev } = await api.get<Scene>(scenePath(api, id));
+  return api.send<Scene>("DELETE", scenePath(api, id), { rev });
+}
+
+/** The scenes in the trash, the latest to go there first. */
+export function getTrashedScenes(api: Api): Promise<Scene[]> {
+  return api.get<Scene[]>(`${scenePath(api)}?deleted=true`);
+}

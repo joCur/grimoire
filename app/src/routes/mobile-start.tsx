@@ -7,7 +7,7 @@
 // the server is the truth) and there is no recents endpoint yet.
 
 import { useQuery } from "@tanstack/react-query";
-import { BookA, Bookmark, ChevronRight, Lightbulb, MapPin, Search, User } from "lucide-react";
+import { BookA, Bookmark, ChevronRight, Lightbulb, MapPin, Search, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -97,6 +97,9 @@ export function MobileStart({ campaign }: { campaign: string }) {
             come free with the tree query these two do not share. */}
         <BrowseRow to={`/campaigns/${campaign}/glossary`} icon={BookA} label={t("glossary.title")} />
         <BrowseRow to={`/campaigns/${campaign}/knowledge`} icon={Lightbulb} label={t("knowledge.title")} />
+        {/* The trash, last: what the DM threw away, until it is removed for
+            good (decisions/trash). No count either. */}
+        <BrowseRow to={`/campaigns/${campaign}/trash`} icon={Trash2} label={t("trash.title")} />
       </nav>
 
       {/* The language switch. This surface REPLACES the topbar below `md`, so

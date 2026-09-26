@@ -42,7 +42,8 @@ included, without `kind`, without `path`:
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
 
 `DELETE` on a chapter, a scene, an NPC, a location or an idea puts it in the
-**trash** (see trash below); the other `DELETE`s remove their row.
+**trash** (see trash below); the other `DELETE`s remove their row. The trash
+has its app route `/campaigns/<campaign>/trash`.
 
 The chapter overview stays `/campaigns/<campaign>`; the list of campaigns
 (`GET /api/campaigns`) responds with its own shape, the name next to the
@@ -694,6 +695,13 @@ its references and carries `deletedMs`, the moment it went there.
   names something in the trash is 409 `restore_blocked` — both with
   `blockers`. A chapter that went to the trash `active` comes back `planned`
   if another chapter has become active in the meantime.
+
+In the app, the **trash page** (`/campaigns/<campaign>/trash`) lists what is
+in the trash by kind, each row with the days it has left, and restores it;
+a scene that went there with its chapter is part of the chapter's row. It is
+reached from the chapter overview's lookup line, ⌘K and the mobile start
+surface. Deleting an idea in the debrief asks for no confirmation: a notice
+offers to undo it.
 
 ## References point to existing rows
 

@@ -1,6 +1,6 @@
 # e2e — the critical paths against the real stack
 
-Playwright suite for the ten critical paths from `CLAUDE.md`. Built app, real
+Playwright suite for the critical paths from `CLAUDE.md`. Built app, real
 server process on its own SQLite database, real browser. Nothing in the
 browser is mocked — the only stand-in is the LLM: a local, OpenAI-compatible
 stub (`fixtures/stub-llm.ts`) that the server calls over HTTP through the
@@ -242,6 +242,14 @@ row itself. `fixtures/` is only copied, never changed. Seed plus boot cost
   opaque random string: no spec writes one down, it always comes from the
   server. `todaySessionId()` is the date-shaped id of a session a spec
   **seeds itself**.
+
+  A chapter, a scene, a location and an idea can be put in the **trash**
+  from a spec ([decisions/trash](../docs/decisions/trash.md)):
+  `trashChapter`/`trashScene`/`trashLocation`/`trashIdea(api, id)` send the
+  `DELETE` with the row's current `rev` and answer the row with its
+  `deletedMs`; `getTrashedChapters`/`getTrashedScenes`/
+  `getTrashedLocations`/`getTrashedIdeas(api)` read the list with
+  `?deleted=true`.
 - `db` — reads this test's `grimoire.db` through the server's driver
   (`server/src/db/driver.ts`, no second SQLite dependency). Only for claims
   the API cannot make — row counts, for instance (`tests/seed.e2e.ts`).
@@ -389,6 +397,7 @@ write paths lie on it:
 | 8 Mobile           | `tests/mobile.e2e.ts`                                          |
 | 9 Edit the text    | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`, `tests/chapter-edit-mode.e2e.ts`, `tests/chapter-overview.e2e.ts` (the edit-campaign dialog) |
 | 10 Cold start      | `tests/cold-start.e2e.ts`                                      |
+| 11 Trash           | `tests/trash.e2e.ts`                                           |
 
 Paths 3, 4, 5 and 8 read rows instead of texts:
 

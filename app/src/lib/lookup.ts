@@ -1,6 +1,6 @@
 // The campaign's reference pages, named once.
 //
-// Four pages, four entry points, and they must not drift apart: the chapter overview's
+// Several pages, several entry points, and they must not drift apart: the chapter overview's
 // quiet line under the campaign header, the mobile start surface's rows, the
 // ⌘K palette's navigation targets and (for two of them) the generator's
 // context line. Each surface renders them its own way — that is what makes a
@@ -8,11 +8,11 @@
 // where they lead is decided here.
 //
 // NOT IN THE TOPBAR, deliberately. The topbar carries the three campaign-wide
-// entries and stays as it is; a fourth and fifth link up there would crowd the
-// one bar that has to survive every width, and the glossary is not something
-// the DM reaches for mid-session.
+// entries and stays as it is; more links up there would crowd the
+// one bar that has to survive every width, and neither the glossary nor the
+// trash is something the DM reaches for mid-session.
 
-import { BookA, Bookmark, Lightbulb, MapPin, User } from "lucide-react";
+import { BookA, Bookmark, Lightbulb, MapPin, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { MessageKey } from "@/i18n";
@@ -21,7 +21,7 @@ import { npcsHref } from "@/npc/npc-links";
 
 export interface LookupTarget {
   /** Stable key — also what a test or the palette identifies a row by. */
-  id: "scenes" | "npcs" | "locations" | "glossary" | "knowledge";
+  id: "scenes" | "npcs" | "locations" | "glossary" | "knowledge" | "trash";
   href: (campaign: string) => string;
   icon: LucideIcon;
   label: MessageKey;
@@ -30,7 +30,8 @@ export interface LookupTarget {
 /**
  * The reference pages, in the order every surface shows them: the three
  * derived from the campaign tree first, then the two the DM MAINTAINS.
- * Content you read before content you edit.
+ * Content you read before content you edit. The trash comes last: it holds
+ * what the DM threw away (decisions/trash).
  */
 export const LOOKUP_TARGETS: readonly LookupTarget[] = [
   {
@@ -53,6 +54,7 @@ export const LOOKUP_TARGETS: readonly LookupTarget[] = [
     icon: Lightbulb,
     label: "knowledge.title",
   },
+  { id: "trash", href: (c) => `/campaigns/${c}/trash`, icon: Trash2, label: "trash.title" },
 ];
 
 /**

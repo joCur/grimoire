@@ -274,6 +274,33 @@ export const en: Messages = {
 
   "lookup.heading": "Look up",
 
+  // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
+  "trash.title": "Trash",
+  "trash.lead":
+    "What you delete stays here for {days} days. Until then you can restore it; after that it is removed for good.",
+  "trash.loading": "Loading the trash …",
+  "trash.loadFailed": "The trash could not be loaded — check the server.",
+  "trash.empty": "The trash is empty. Whatever you delete lands here and can be restored.",
+  "trash.group.chapters": "Chapters",
+  "trash.group.scenes": "Scenes",
+  "trash.group.npcs": "NPCs",
+  "trash.group.locations": "Locations",
+  "trash.group.ideas": "Ideas",
+  "trash.remaining":
+    "{days, plural, =0 {Removed for good today.} one {Removed for good in # day.} other {Removed for good in # days.}}",
+  "trash.chapter.scenes":
+    "{count, plural, one {Its # scene comes back with it.} other {Its # scenes come back with it.}}",
+  "trash.restore": "Restore",
+  "trash.restore.aria": "Restore “{name}”",
+  "trash.restored": "“{name}” has been restored.",
+  "trash.restore.stale":
+    "This was changed elsewhere in the meantime. The trash has been reloaded — try again.",
+  "trash.restore.gone":
+    "This is no longer in the trash: it was already restored or removed for good.",
+  "trash.restore.failed": "Not restored — check the server.",
+  "notice.region": "Notices",
+  "notice.undo": "Undo",
+
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
@@ -300,11 +327,18 @@ export const en: Messages = {
   "server.session_ended":
     "This session has already ended, so nothing was saved. Start a new session to carry on.",
   "server.trash_blocked":
-    "This cannot go to the trash because something still refers to it. Remove those references first.",
+    "This cannot go to the trash while {blockers} still {count, plural, one {refers} other {refer}} to it. Remove those references first.",
   "server.chapter_in_trash":
-    "This scene cannot be restored because its chapter is in the trash. Restore the chapter first.",
+    "This scene cannot be restored because its chapter “{chapter}” is in the trash. Restore the chapter first.",
   "server.restore_blocked":
-    "This cannot be restored because something it refers to is in the trash. Restore that first.",
+    "This cannot be restored while {blockers} {count, plural, one {is} other {are}} in the trash. Restore {count, plural, one {it} other {them}} first.",
+  // One row in the way of a trash or a restore, as it stands inside the
+  // sentences above; several of them are joined into one list.
+  "server.blocker.chapter": "the chapter “{name}”",
+  "server.blocker.scene": "the scene “{name}”",
+  "server.blocker.npc": "the NPC “{name}”",
+  "server.blocker.location": "the location “{name}”",
+  "server.blocker.log-entry": "the note “{name}”",
   "server.rev_conflict": "Changed in the meantime — reload before saving.",
   "server.nothing_to_write": "Nothing to save.",
   "server.body_not_editable": "This list has no editable text — it is maintained row by row.",
@@ -462,6 +496,11 @@ export const en: Messages = {
   "live.pc.allDone": "All done.",
   "live.pc.failed": "Not saved — check the server.",
   "idea.tick.stale": "This idea was changed in the meantime. The list has been reloaded.",
+  "idea.trash.aria": "Delete the idea “{text}”",
+  "idea.trash.done": "The idea is in the trash.",
+  "idea.trash.failed": "The idea was not deleted — check the server.",
+  "idea.restore.failed":
+    "The idea could not be restored and is still in the trash. You will find it there.",
   "session.log.review.stale":
     "This note was changed elsewhere in the meantime. The session has been reloaded.",
 

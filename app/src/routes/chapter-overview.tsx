@@ -75,8 +75,8 @@ export function ChapterOverviewRoute() {
                   the same line — the shape of the design reference's chapter overview
                   header (design/Grimoire.dc.html: a baseline row that does
                   not wrap).
-                  In a `flex-wrap` row, „Kapitel anlegen" next to
-                  „Bearbeiten" drops onto a line of ITS OWN, right-aligned
+                  In a `flex-wrap` row, the create-chapter action next to
+                  the edit action drops onto a line of ITS OWN, right-aligned
                   under the title, on any campaign with a normal-length name.
                   So the actions are no longer a wrap candidate: the row holds
                   the title block and the actions and does not wrap between
@@ -152,14 +152,14 @@ export function ChapterOverviewRoute() {
 
 /**
  * The chapter overview's quiet lookup line into the campaign's reference
- * pages (NPCs, locations, glossary, campaign knowledge).
+ * pages (NPCs, locations, glossary, campaign knowledge) and, last, the trash.
  *
  * The mobile start surface carries these as tap rows; the desktop has nowhere
  * else for the glossary and the knowledge page to be reached from. The TOPBAR
  * is deliberately not it — it keeps the three campaign-wide entries and does
  * not grow (a fourth and fifth link there would crowd the one bar that has to
- * survive every width, and the glossary is not something the DM reaches for
- * mid-session). So the chapter overview's own header gets the line, one row
+ * survive every width, and neither the glossary nor the trash is something
+ * the DM reaches for mid-session). So the chapter overview's own header gets the line, one row
  * under the campaign description: the same list as on the phone, in the
  * compact shape a desktop header can afford.
  *

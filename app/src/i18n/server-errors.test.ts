@@ -156,6 +156,58 @@ describe("the closed columns", () => {
   });
 });
 
+describe("the trash refusals", () => {
+  const scene = { kind: "scene", id: "lighthouse-arrival", name: "Arrival at the lighthouse" };
+  const npc = { kind: "npc", id: "fenn", name: "Fenn" };
+  const note = { kind: "log-entry", id: "l1", name: "Tracks in the sand", session: "2026-01-15" };
+
+  test("a refused trash names every row in the way, in both languages", () => {
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(body("trash_blocked", { blockers: [scene, note] }), t);
+      expect(sentence).toContain("Arrival at the lighthouse");
+      expect(sentence).toContain("Tracks in the sand");
+      expect(sentence).toBe(
+        t("server.trash_blocked", {
+          blockers: new Intl.ListFormat(t.locale === "de" ? "de-DE" : "en-US", {
+            type: "conjunction",
+          }).format([
+            t("server.blocker.scene", { name: scene.name }),
+            t("server.blocker.log-entry", { name: note.name }),
+          ]),
+          count: 2,
+        }),
+      );
+    }
+  });
+
+  test("a refused restore names what is still in the trash", () => {
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(body("restore_blocked", { blockers: [npc] }), t);
+      expect(sentence).toBe(
+        t("server.restore_blocked", {
+          blockers: t("server.blocker.npc", { name: "Fenn" }),
+          count: 1,
+        }),
+      );
+    }
+  });
+
+  test("a scene whose chapter is in the trash names the chapter", () => {
+    const chapter = { kind: "chapter", id: "02-cove", name: "The cove" };
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(body("chapter_in_trash", { blockers: [chapter] }), t);
+      expect(sentence).toBe(t("server.chapter_in_trash", { chapter: "The cove" }));
+    }
+  });
+
+  test("a body without its blockers degrades to the server's own text", () => {
+    for (const code of ["trash_blocked", "restore_blocked", "chapter_in_trash"]) {
+      expect(serverErrorBodyMessage(body(code), de)).toBe(`technical: ${code}`);
+      expect(serverErrorBodyMessage(body(code, { blockers: [] }), de)).toBe(`technical: ${code}`);
+    }
+  });
+});
+
 describe("the degrade rule", () => {
   test("every code the server may send has a sentence in both languages", () => {
     for (const code of ERROR_CODES) {
@@ -169,6 +221,9 @@ describe("the degrade rule", () => {
           term: "x",
           max: "1",
           allowed: "a, b",
+          blockers: "x",
+          count: 1,
+          chapter: "x",
         });
         expect(sentence.trim()).not.toBe("");
         expect(sentence).not.toContain("{");

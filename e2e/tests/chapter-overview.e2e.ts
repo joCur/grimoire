@@ -321,7 +321,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
 
   // The chapter overview carries a lookup line — it is where the two
-  // campaign-content pages are reached from on
+  // campaign-content pages and the trash are reached from on
   // the desktop. What matters HERE is that they are not in the TOPBAR:
   // the trio above is still exactly chapters/NPCs/locations, which is what the
   // rest of this test measures.
@@ -332,6 +332,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     ui("browse.title.locations"),
     ui("glossary.title"),
     ui("knowledge.title"),
+    ui("trash.title"),
   ]);
 
   await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();

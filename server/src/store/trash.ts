@@ -13,6 +13,7 @@
 // trash refuses a row something live still names, and a restore refuses a row
 // whose reference is in the trash), so it expires no later either.
 
+import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
 import { format, subDays } from "date-fns";
 import type { GrimoireDb } from "../db/client";
 import { bumpCampaignVersion } from "./campaigns";
@@ -23,9 +24,6 @@ import { purgeLocations } from "./locations";
 import { purgeNpcs } from "./npcs";
 import { purgeScenes } from "./scenes";
 import { LOCAL_DATE_TIME_SECONDS } from "./time";
-
-/** How long a row stays in the trash before the purge removes it. */
-export const TRASH_RETENTION_DAYS = 30;
 
 /**
  * Remove every row that went to the trash more than `TRASH_RETENTION_DAYS`

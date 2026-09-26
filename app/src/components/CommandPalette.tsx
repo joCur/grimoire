@@ -80,8 +80,8 @@ export function CommandPalette({
   // Empty query shows nothing yet; results only exist for a non-empty term.
   const hits = term === "" ? [] : (search.data?.results ?? []);
   // Above the hits: the PAGES of this campaign whose name the DM typed. The
-  // glossary and the campaign knowledge are reachable from the chapter
-  // overview and the phone's start surface, but ⌘K is where this app's
+  // glossary, the campaign knowledge and the trash are reachable from the
+  // chapter overview and the phone's start surface, but ⌘K is where this app's
   // keyboard goes first — and the server's index holds entries, not pages,
   // so it can never answer for them. A navigation target the DM typed the name
   // of is what they meant, and there are never more than a handful.
@@ -218,7 +218,7 @@ type Item =
 /**
  * Which of the campaign's pages the typed term names. A plain substring match
  * on the LOCALISED label — the DM types a fragment of the page's name, and
- * there are five candidates, so nothing here is worth a ranking.
+ * there are only a handful of candidates, so nothing here is worth a ranking.
  */
 function navTargets(campaign: string, term: string, t: Translate): LookupTarget[] {
   if (campaign === "" || term === "") return [];

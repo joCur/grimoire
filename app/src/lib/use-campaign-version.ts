@@ -9,7 +9,7 @@
 // bundle this tab is running. The banner (components/UpdateBanner.tsx) reads
 // that flag. No second request, no second interval.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { fetchVersion } from "@/api";
@@ -58,35 +58,47 @@ export function useCampaignVersion(campaign: string): void {
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
     // Something changed on the server — refetch everything read from this
-    // campaign. The campaign's, a chapter's, a scene's, an npc's and a
-    // location's reads name their own key roots in their slices (decisions/resources). So
-    // do the sessions: the running one, the list and each evening share one
-    // root — a session ended in another tab must reach the global live
-    // indicator without a reload. The ideas and each chapter's threads name
-    // their key roots in their slices too; the threads are keyed per chapter below the campaign,
-    // and the prefix reaches all of them. The glossary terms, the knowledge
-    // items and their order name theirs in their slices as well. An OPEN row
-    // on their pages keeps the `rev` it was opened with
-    // (components/EditableList.tsx), so a fresh list never turns into a
-    // silent overwrite.
-    for (const key of [
-      "tree",
-      ...CAMPAIGN_QUERY_ROOTS,
-      ...CHAPTER_QUERY_ROOTS,
-      ...SCENE_QUERY_ROOTS,
-      ...NPC_QUERY_ROOTS,
-      ...LOCATION_QUERY_ROOTS,
-      "search",
-      ...SESSION_QUERY_ROOTS,
-      ...THREAD_QUERY_ROOTS,
-      ...IDEA_QUERY_ROOTS,
-      ...GLOSSARY_TERM_QUERY_ROOTS,
-      ...KNOWLEDGE_ITEM_QUERY_ROOTS,
-    ]) {
-      void queryClient.invalidateQueries({ queryKey: [key, campaign] });
-    }
-    // …plus the campaign list, which carries name/description from
-    // `campaign` and is keyed without a campaign segment.
-    void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    // campaign.
+    invalidateCampaignQueries(queryClient, campaign);
   }, [data, campaign, queryClient]);
+}
+
+/**
+ * Mark every query read from this campaign stale, so what is on screen
+ * refetches. The campaign's, a chapter's, a scene's, an npc's and a
+ * location's reads name their own key roots in their slices
+ * (decisions/resources), their trash lists among them. So do the sessions:
+ * the running one, the list and each evening share one root — a session ended
+ * in another tab must reach the global live indicator without a reload. The
+ * ideas and each chapter's threads name their key roots in their slices too;
+ * the threads are keyed per chapter below the campaign, and the prefix reaches
+ * all of them. The glossary terms, the knowledge items and their order name
+ * theirs in their slices as well. An OPEN row on their pages keeps the `rev`
+ * it was opened with (components/EditableList.tsx), so a fresh list never
+ * turns into a silent overwrite.
+ *
+ * The version poll runs it when the counter moved; a write that changes more
+ * than the rows it answered with — a restore from the trash, which brings a
+ * row back into the tree, the lists and the search — runs it right away.
+ */
+export function invalidateCampaignQueries(queryClient: QueryClient, campaign: string): void {
+  for (const key of [
+    "tree",
+    ...CAMPAIGN_QUERY_ROOTS,
+    ...CHAPTER_QUERY_ROOTS,
+    ...SCENE_QUERY_ROOTS,
+    ...NPC_QUERY_ROOTS,
+    ...LOCATION_QUERY_ROOTS,
+    "search",
+    ...SESSION_QUERY_ROOTS,
+    ...THREAD_QUERY_ROOTS,
+    ...IDEA_QUERY_ROOTS,
+    ...GLOSSARY_TERM_QUERY_ROOTS,
+    ...KNOWLEDGE_ITEM_QUERY_ROOTS,
+  ]) {
+    void queryClient.invalidateQueries({ queryKey: [key, campaign] });
+  }
+  // …plus the campaign list, which carries name/description from
+  // `campaign` and is keyed without a campaign segment.
+  void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
 }
