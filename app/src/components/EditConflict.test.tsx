@@ -11,6 +11,8 @@ import { translator } from "@/i18n/format";
 import { EditConflict } from "./EditConflict";
 
 /** Without a provider the catalog answers in the primary language. */
+const t = translator("de");
+
 function render(props: Parameters<typeof EditConflict>[0]): string {
   return renderToStaticMarkup(<EditConflict {...props} />);
 }
@@ -19,15 +21,15 @@ describe("EditConflict", () => {
   test("states it and offers both answers", () => {
     const html = render({ onReload: () => {}, onForce: () => {} });
     expect(html).toContain('role="alert"');
-    expect(html).toContain("Inzwischen geändert");
-    expect(html).toContain("Neu laden");
-    expect(html).toContain("Trotzdem speichern");
+    expect(html).toContain(t("editConflict.line"));
+    expect(html).toContain(t("editConflict.reload"));
+    expect(html).toContain(t("editConflict.force"));
   });
 
   test("a write path without force offers reloading only", () => {
     const html = render({ onReload: () => {} });
-    expect(html).toContain("Neu laden");
-    expect(html).not.toContain("Trotzdem speichern");
+    expect(html).toContain(t("editConflict.reload"));
+    expect(html).not.toContain(t("editConflict.force"));
   });
 
   test("both answers are off while a write runs — they would race it", () => {

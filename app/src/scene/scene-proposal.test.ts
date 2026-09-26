@@ -4,11 +4,11 @@ import { describe, expect, test } from "bun:test";
 import { sceneOf } from "./scene-proposal";
 
 const PROPOSED: SceneProposal = {
-  id: "ankunft",
-  title: "Ankunft",
+  id: "arrival",
+  title: "Arrival",
   type: "planned",
-  chapter: "01-salzhafen",
-  location: "leuchtturm",
+  chapter: "01-salt-harbour",
+  location: "lighthouse",
   npcs: [],
   handouts: [],
   tags: [],
@@ -25,11 +25,11 @@ describe("sceneOf", () => {
   test("changes lie on top in order — the typing buffer last", () => {
     const scene = sceneOf(
       PROPOSED,
-      { title: "Auf dem Job", body: "## Anders\n" },
-      { title: "Im Puffer" },
+      { title: "On the job", body: "## Different\n" },
+      { title: "In the buffer" },
     );
-    expect(scene.title).toBe("Im Puffer");
-    expect(scene.body).toBe("## Anders\n");
+    expect(scene.title).toBe("In the buffer");
+    expect(scene.body).toBe("## Different\n");
     expect(scene.status).toBe("draft");
   });
 

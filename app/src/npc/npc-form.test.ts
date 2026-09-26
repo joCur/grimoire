@@ -20,17 +20,17 @@ import {
 
 const t = translator("de");
 
-/** The fixture npc „Fenn" — its quickstats arrive as numbers. */
+/** An npc modeled on the fixture npc Fenn — its quickstats arrive as numbers. */
 const FENN: NpcProposal = {
   id: "fenn",
   name: "Fenn",
-  role: "Anführer der Schmuggler in der Nordbucht",
-  chapter: "01-salzhafen",
+  role: "Leader of the smugglers in the north cove",
+  chapter: "01-salt-harbour",
   status: "alive",
   statblock: "Roll20: Fenn",
   quickstats: { wis: 2, insight: 2, "passive-perception": 13 },
-  voice: "leise, höflich",
-  appearance: "salzverkrustete Lederjacke",
+  voice: "quiet, polite",
+  appearance: "salt-crusted leather jacket",
   body: "",
 };
 
@@ -72,11 +72,11 @@ describe("npcFormChange", () => {
 
   test("only the changed field is sent — everything else survives stored", () => {
     expect(npcFormChange(initial, edited({ status: "dead" }))).toEqual({ status: "dead" });
-    expect(npcFormChange(initial, edited({ role: "Kapitän" }))).toEqual({ role: "Kapitän" });
+    expect(npcFormChange(initial, edited({ role: "Captain" }))).toEqual({ role: "Captain" });
   });
 
   test("whitespace around a value is not a change", () => {
-    expect(npcFormChange(initial, edited({ name: "  Fenn  ", voice: "leise, höflich " }))).toEqual({});
+    expect(npcFormChange(initial, edited({ name: "  Fenn  ", voice: "quiet, polite " }))).toEqual({});
   });
 
   test("clearing a field CLEARS the value — text and quickstats alike", () => {
@@ -107,8 +107,8 @@ describe("npcFormChange", () => {
           { key: "insight", value: "+2" },
           // A row that cannot be written (no name). It is not IN the write —
           // and it never gets there, because the issue blocks the save while
-          // it stands (see „unfinished quickstat rows“ below).
-          { key: "", value: "wird nicht geschrieben" },
+          // it stands (see "unfinished quickstat rows" below).
+          { key: "", value: "is not written" },
         ],
       }),
     );
@@ -149,7 +149,7 @@ describe("unfinished quickstat rows block the save", () => {
 
   test("the npc's own rows are fine — nothing to complain about", () => {
     expect(npcFormIssues(initial, t)).toEqual({});
-    // An empty row (the „Zeile hinzufügen“ state) and a name whose value was
+    // An empty row (the state the add-row action leaves) and a name whose value was
     // cleared (= delete this key) are both legitimate.
     expect(
       npcFormIssues(
@@ -168,9 +168,7 @@ describe("unfinished quickstat rows block the save", () => {
       { key: "insight", value: "2" },
       { key: "  ", value: "+3" },
     ]);
-    expect(npcFormIssues(values, t).quickstats).toBe(
-      "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
-    );
+    expect(npcFormIssues(values, t).quickstats).toBe(t("properties.issue.namelessRow"));
     expect(canSubmitNpcForm(values, t)).toBe(false);
   });
 
@@ -180,7 +178,7 @@ describe("unfinished quickstat rows block the save", () => {
       { key: "insight", value: "3" },
     ]);
     expect(npcFormIssues(values, t).quickstats).toBe(
-      'Name „insight“ doppelt — jeder Name darf nur einmal vorkommen.',
+      t("properties.issue.duplicateName", { name: "insight" }),
     );
   });
 });

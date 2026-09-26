@@ -10,20 +10,20 @@ const chapter = { isChapterOverview: false, isChapter: true };
 const scenes = { isChapterOverview: false, isScenes: true };
 
 describe("navSection", () => {
-  test("the chapter overview is the Kapitel section", () => {
+  test("the chapter overview is the chapters section", () => {
     expect(navSection(chapterOverview)).toBe("chapters");
   });
 
-  test("a chapter's reading view and a scene's own routes belong under Kapitel", () => {
+  test("a chapter's reading view and a scene's own routes belong under chapters", () => {
     expect(navSection(chapter)).toBe("chapters");
     expect(navSection(scenes)).toBe("chapters");
   });
 
-  test("an npc's own routes — its list and its reading view — are NPCs", () => {
+  test("an npc's own routes — its list and its reading view — are npcs", () => {
     expect(navSection(npcs)).toBe("npcs");
   });
 
-  test("a location's own routes — its list and its reading view — are Orte", () => {
+  test("a location's own routes — its list and its reading view — are locations", () => {
     expect(navSection(locations)).toBe("locations");
   });
 

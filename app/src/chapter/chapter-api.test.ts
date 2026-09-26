@@ -10,10 +10,10 @@ import { ApiError } from "@/api";
 
 import { chapterConflict, createChapter, patchChapter } from "./chapter-api";
 
-const CHAPTER = "01-salzhafen";
+const CHAPTER = "01-salt-harbour";
 
 function chapterAt(rev: number, body: string): Chapter {
-  return { id: CHAPTER, title: "Salzhafen", status: "active", body, rev };
+  return { id: CHAPTER, title: "Salt Harbour", status: "active", body, rev };
 }
 
 interface Call {
@@ -50,21 +50,21 @@ function mockFetch(answers: Array<{ status: number; body: unknown }>): Call[] {
 
 describe("patchChapter", () => {
   test("PATCHes the chapter's own resource with the request as given", async () => {
-    const calls = mockFetch([{ status: 200, body: chapterAt(222, "Mein Text.\n") }]);
-    const written = await patchChapter("beispiel", CHAPTER, { rev: 111, body: "Mein Text.\n" });
+    const calls = mockFetch([{ status: 200, body: chapterAt(222, "My text.\n") }]);
+    const written = await patchChapter("example", CHAPTER, { rev: 111, body: "My text.\n" });
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/chapters/${CHAPTER}`);
-    expect(calls[0]?.body).toEqual({ rev: 111, body: "Mein Text.\n" });
+    expect(calls[0]?.url).toBe(`/api/campaigns/example/chapters/${CHAPTER}`);
+    expect(calls[0]?.body).toEqual({ rev: 111, body: "My text.\n" });
     expect(written.rev).toBe(222);
   });
 
   test("making a chapter active is the same write, with its rev", async () => {
     const calls = mockFetch([{ status: 200, body: chapterAt(5, "") }]);
-    await patchChapter("beispiel", "02-bucht", { rev: 4, status: "active" });
+    await patchChapter("example", "02-cove", { rev: 4, status: "active" });
 
-    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/chapters/02-bucht");
+    expect(calls[0]?.url).toBe("/api/campaigns/example/chapters/02-cove");
     expect(calls[0]?.body).toEqual({ rev: 4, status: "active" });
   });
 
@@ -76,17 +76,17 @@ describe("patchChapter", () => {
           code: "rev_conflict",
           error: "chapter changed",
           rev: 999,
-          chapter: chapterAt(999, "Fremder Text.\n"),
+          chapter: chapterAt(999, "Foreign text.\n"),
         },
       },
     ]);
-    const failure = await patchChapter("beispiel", CHAPTER, { rev: 111, body: "x" }).catch(
+    const failure = await patchChapter("example", CHAPTER, { rev: 111, body: "x" }).catch(
       (error: unknown) => error,
     );
 
     const conflict = chapterConflict(failure);
     expect(conflict?.rev).toBe(999);
-    expect(conflict?.chapter?.body).toBe("Fremder Text.\n");
+    expect(conflict?.chapter?.body).toBe("Foreign text.\n");
   });
 });
 
@@ -111,17 +111,17 @@ describe("chapterConflict", () => {
 
 describe("createChapter", () => {
   test("POSTs the title, the text and the id the DM set", async () => {
-    const calls = mockFetch([{ status: 201, body: chapterAt(1, "Ankommen.\n") }]);
-    await createChapter("beispiel", { title: "Salzhafen", body: "Ankommen.", id: CHAPTER });
+    const calls = mockFetch([{ status: 201, body: chapterAt(1, "Arriving.\n") }]);
+    await createChapter("example", { title: "Salt Harbour", body: "Arriving.", id: CHAPTER });
 
     expect(calls[0]?.method).toBe("POST");
-    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/chapters");
-    expect(calls[0]?.body).toEqual({ title: "Salzhafen", body: "Ankommen.", id: CHAPTER });
+    expect(calls[0]?.url).toBe("/api/campaigns/example/chapters");
+    expect(calls[0]?.body).toEqual({ title: "Salt Harbour", body: "Arriving.", id: CHAPTER });
   });
 
   test("leaves out what the dialog left empty", async () => {
     const calls = mockFetch([{ status: 201, body: chapterAt(1, "") }]);
-    await createChapter("beispiel", { title: "Salzhafen" });
-    expect(calls[0]?.body).toEqual({ title: "Salzhafen" });
+    await createChapter("example", { title: "Salt Harbour" });
+    expect(calls[0]?.body).toEqual({ title: "Salt Harbour" });
   });
 });

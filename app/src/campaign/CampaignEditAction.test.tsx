@@ -6,13 +6,16 @@ import { PenLine } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { HeaderAction } from "@/components/HeaderAction";
+import { translator } from "@/i18n/format";
 
 import { CampaignEditAction } from "./CampaignEditAction";
 
+const t = translator("de");
+
 describe("CampaignEditAction", () => {
-  test("is the shared trigger named „Bearbeiten“", () => {
-    expect(renderToStaticMarkup(<CampaignEditAction campaign="beispiel" />)).toBe(
-      renderToStaticMarkup(<HeaderAction icon={PenLine} label="Bearbeiten" onClick={() => {}} />),
+  test("is the shared trigger named by the common edit label", () => {
+    expect(renderToStaticMarkup(<CampaignEditAction campaign="example" />)).toBe(
+      renderToStaticMarkup(<HeaderAction icon={PenLine} label={t("common.edit")} onClick={() => {}} />),
     );
   });
 

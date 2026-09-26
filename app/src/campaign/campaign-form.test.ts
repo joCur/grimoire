@@ -13,10 +13,10 @@ import {
 } from "./campaign-form";
 
 const CAMPAIGN: Campaign = {
-  id: "beispiel",
-  name: "Salzhafen",
-  description: "Küste",
-  body: "\nKampagnenweite Notizen.\n",
+  id: "example",
+  name: "Salt Harbour",
+  description: "Coast",
+  body: "\nCampaign-wide notes.\n",
   glossaryIntro: "",
   rev: 3,
 };
@@ -25,9 +25,9 @@ const initial = campaignFormValues(CAMPAIGN);
 describe("campaignFormValues", () => {
   test("the dialog starts with name, description and text as stored", () => {
     expect(initial).toEqual({
-      name: "Salzhafen",
-      description: "Küste",
-      body: "\nKampagnenweite Notizen.\n",
+      name: "Salt Harbour",
+      description: "Coast",
+      body: "\nCampaign-wide notes.\n",
     });
   });
 
@@ -43,10 +43,10 @@ describe("campaignFormChange", () => {
   });
 
   test("only what moved is sent, trimmed", () => {
-    expect(campaignFormChange(initial, { ...initial, name: "  Neuhafen  " })).toEqual({
-      name: "Neuhafen",
+    expect(campaignFormChange(initial, { ...initial, name: "  New Harbour  " })).toEqual({
+      name: "New Harbour",
     });
-    expect(campaignFormChange(initial, { ...initial, description: " Küste " })).toEqual({});
+    expect(campaignFormChange(initial, { ...initial, description: " Coast " })).toEqual({});
   });
 
   test("a blank description clears it instead of writing an empty line", () => {
@@ -56,8 +56,8 @@ describe("campaignFormChange", () => {
   });
 
   test("the text is written as markdown, ending in one newline", () => {
-    expect(campaignFormChange(initial, { ...initial, body: "Neue Notizen." })).toEqual({
-      body: "Neue Notizen.\n",
+    expect(campaignFormChange(initial, { ...initial, body: "New notes." })).toEqual({
+      body: "New notes.\n",
     });
     expect(campaignFormChange(initial, { ...initial, body: "  \n" })).toEqual({ body: "" });
   });
@@ -69,7 +69,7 @@ describe("campaignFormChange", () => {
 
 describe("campaignBodyToWrite", () => {
   test("whitespace around the text is no part of it", () => {
-    expect(campaignBodyToWrite("\nNotizen.\n\n")).toBe("Notizen.\n");
+    expect(campaignBodyToWrite("\nNotes.\n\n")).toBe("Notes.\n");
     expect(campaignBodyToWrite("")).toBe("");
   });
 });
@@ -87,9 +87,9 @@ describe("prefillCampaignName", () => {
     // The dialog must not propose the id as a name — the server answers it
     // for an unnamed campaign, so the field starts empty and the id is the
     // placeholder.
-    expect(prefillCampaignName("beispiel", "beispiel")).toBe("");
-    expect(prefillCampaignName("beispiel", undefined)).toBe("");
-    expect(prefillCampaignName("beispiel", "Salzhafen")).toBe("Salzhafen");
-    expect(campaignFormValues({ ...CAMPAIGN, name: "beispiel" }).name).toBe("");
+    expect(prefillCampaignName("example", "example")).toBe("");
+    expect(prefillCampaignName("example", undefined)).toBe("");
+    expect(prefillCampaignName("example", "Salt Harbour")).toBe("Salt Harbour");
+    expect(campaignFormValues({ ...CAMPAIGN, name: "example" }).name).toBe("");
   });
 });

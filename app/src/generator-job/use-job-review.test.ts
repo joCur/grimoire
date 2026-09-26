@@ -61,11 +61,11 @@ describe("flush", () => {
     // A long debounce — an un-awaited flush would leave the edit in the
     // queue, which is exactly how the accept lost it.
     const queue = createReviewQueue(h.io, 10_000);
-    queue.editScene("kai", { body: "im Regen" });
+    queue.editScene("quay", { body: "in the rain" });
     expect(h.sent).toEqual([]);
 
     await queue.flush();
-    expect(h.sent).toEqual([{ sceneEdits: { kai: { body: "im Regen" } } }]);
+    expect(h.sent).toEqual([{ sceneEdits: { quay: { body: "in the rain" } } }]);
     expect(last(h.statuses)).toBe("saved");
   });
 
@@ -98,22 +98,22 @@ describe("a proposed scene and npc", () => {
   test("a scene's changes merge field by field into one patch", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
-    queue.editScene("kai", { title: "Am Kai", location: "leuchtturm" });
-    queue.editScene("kai", { body: "Neu.\n", location: null });
+    queue.editScene("quay", { title: "At the Quay", location: "lighthouse" });
+    queue.editScene("quay", { body: "New.\n", location: null });
     await queue.flush();
     expect(h.sent).toEqual([
-      { sceneEdits: { kai: { title: "Am Kai", location: null, body: "Neu.\n" } } },
+      { sceneEdits: { quay: { title: "At the Quay", location: null, body: "New.\n" } } },
     ]);
   });
 
   test("an npc's changes merge field by field into one patch", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
-    queue.editNpc("grella", { role: "Fischerin", voice: "heiser" });
-    queue.editNpc("grella", { body: "Neu.\n", voice: null });
+    queue.editNpc("grella", { role: "Fisherwoman", voice: "hoarse" });
+    queue.editNpc("grella", { body: "New.\n", voice: null });
     await queue.flush();
     expect(h.sent).toEqual([
-      { npcEdits: { grella: { role: "Fischerin", voice: null, body: "Neu.\n" } } },
+      { npcEdits: { grella: { role: "Fisherwoman", voice: null, body: "New.\n" } } },
     ]);
   });
 });
@@ -124,7 +124,7 @@ describe("a failed patch", () => {
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new Error("network");
 
-    queue.editScene("kai", { body: "im Regen" });
+    queue.editScene("quay", { body: "in the rain" });
     await queue.flush();
     expect(h.sent).toEqual([]);
     expect(last(h.statuses)).toBe("error");
@@ -133,8 +133,8 @@ describe("a failed patch", () => {
 
     // The next flush retries it — nothing was lost.
     await queue.flush();
-    expect(h.sent).toEqual([{ sceneEdits: { kai: { body: "im Regen" } } }]);
-    expect(h.shown).toEqual({ kai: { body: "im Regen" } });
+    expect(h.sent).toEqual([{ sceneEdits: { quay: { body: "in the rain" } } }]);
+    expect(h.shown).toEqual({ quay: { body: "in the rain" } });
     expect(last(h.statuses)).toBe("saved");
   });
 
@@ -142,7 +142,7 @@ describe("a failed patch", () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new Error("network");
-    queue.editScene("kai", { body: "im Regen" });
+    queue.editScene("quay", { body: "in the rain" });
     await queue.flush();
     expect(last(h.statuses)).toBe("error");
 
@@ -153,7 +153,7 @@ describe("a failed patch", () => {
     expect(last(h.statuses)).toBe("saved");
     // …and the retried edit went along with it.
     expect(h.sent).toEqual([
-      { sceneEdits: { kai: { body: "im Regen" } }, review: { npcs: { grella: "accepted" } } },
+      { sceneEdits: { quay: { body: "in the rain" } }, review: { npcs: { grella: "accepted" } } },
     ]);
   });
 

@@ -9,11 +9,11 @@ import { npcStatusLabel } from "./npc-status";
 const t = translator("de");
 
 describe("npcStatusLabel", () => {
-  test("known statuses map to German labels", () => {
-    expect(npcStatusLabel("alive", t)).toBe("Lebendig");
-    expect(npcStatusLabel("dead", t)).toBe("Tot");
-    expect(npcStatusLabel("missing", t)).toBe("Vermisst");
-    expect(npcStatusLabel("unknown", t)).toBe("Unbekannt");
+  test("known statuses map to their catalog labels", () => {
+    expect(npcStatusLabel("alive", t)).toBe(t("status.npc.alive"));
+    expect(npcStatusLabel("dead", t)).toBe(t("status.npc.dead"));
+    expect(npcStatusLabel("missing", t)).toBe(t("status.npc.missing"));
+    expect(npcStatusLabel("unknown", t)).toBe(t("status.npc.unknown"));
   });
 
   test("every known status of the format has a label", () => {
@@ -27,7 +27,7 @@ describe("npcStatusLabel", () => {
     // the only other case there could be is a foreign value, which the column
     // cannot hold (decisions/constraints). The type is what says so.
     // @ts-expect-error not one of alive | dead | missing | unknown
-    const foreign: NpcStatus = "verschollen im Nebel";
+    const foreign: NpcStatus = "lost in the fog";
     expect(NPC_STATUSES as readonly string[]).not.toContain(foreign);
   });
 });

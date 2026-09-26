@@ -9,10 +9,13 @@ import { SlidersHorizontal } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { HeaderAction } from "@/components/HeaderAction";
+import { translator } from "@/i18n/format";
 
 import { ChapterFieldsAction } from "./ChapterActions";
 
-const CHAPTER: Chapter = { id: "01-salzhafen", title: "Salzhafen", body: "", rev: 1 };
+const t = translator("de");
+
+const CHAPTER: Chapter = { id: "01-salt-harbour", title: "Salt Harbour", body: "", rev: 1 };
 
 function trigger(label: string): string {
   return renderToStaticMarkup(
@@ -21,17 +24,17 @@ function trigger(label: string): string {
 }
 
 describe("ChapterFieldsAction", () => {
-  test("is the shared trigger named „Eigenschaften“", () => {
+  test("is the shared trigger under the plain fields label", () => {
     expect(
-      renderToStaticMarkup(<ChapterFieldsAction campaign="beispiel" chapter={CHAPTER} />),
-    ).toBe(trigger("Eigenschaften"));
+      renderToStaticMarkup(<ChapterFieldsAction campaign="example" chapter={CHAPTER} />),
+    ).toBe(trigger(t("properties.action")));
   });
 
   test("takes the chapter-named label where the overview asks for it", () => {
     expect(
       renderToStaticMarkup(
-        <ChapterFieldsAction campaign="beispiel" chapter={CHAPTER} label="Kapitel-Eigenschaften" />,
+        <ChapterFieldsAction campaign="example" chapter={CHAPTER} label={t("chapterOverview.chapter.properties")} />,
       ),
-    ).toBe(trigger("Kapitel-Eigenschaften"));
+    ).toBe(trigger(t("chapterOverview.chapter.properties")));
   });
 });

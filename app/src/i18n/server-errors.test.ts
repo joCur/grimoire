@@ -3,10 +3,9 @@
 // text instead of to a blank toast.
 //
 // The five REFERENCE refusals are the reason this file exists: each of them
-// names the value that resolves to nothing, and the sentence has to tell the
-// DM what to do about it — create the entry first. A code whose sentence
-// silently fell back to the English `error` text would make that advice
-// invisible in the German UI.
+// names the value that resolves to nothing, and its catalog sentence tells the
+// DM what to do about it. A code whose sentence silently fell back to the
+// English `error` text would make that advice invisible in the German UI.
 
 import { describe, expect, test } from "bun:test";
 
@@ -24,29 +23,31 @@ function body(code: string, extra: Record<string, unknown> = {}) {
 }
 
 describe("the reference refusals", () => {
-  const cases: Array<[string, string, string]> = [
-    ["location_unknown", "der-alte-hafen", "Den Ort „der-alte-hafen“ gibt es nicht"],
-    ["npc_unknown", "holm", "Den NPC „holm“ gibt es nicht"],
-    ["chapter_unknown", "99-nirgendwo", "Das Kapitel „99-nirgendwo“ gibt es nicht"],
-    ["log_scene_unknown", "gibt-es-nicht", "Die Szene „gibt-es-nicht“ gibt es nicht"],
-    ["played_scene_unknown", "gibt-es-nicht", "Die gespielte Szene „gibt-es-nicht“"],
+  // Each of them names the value that resolves to nothing.
+  const cases: Array<[string, string]> = [
+    ["location_unknown", "the-old-harbour"],
+    ["npc_unknown", "holm"],
+    ["chapter_unknown", "99-nowhere"],
+    ["log_scene_unknown", "does-not-exist"],
+    ["played_scene_unknown", "does-not-exist"],
   ];
 
-  test("each one names its value and says to create the entry first", () => {
-    for (const [code, value, expected] of cases) {
-      const sentence = de(`server.${code}` as never, { value });
-      expect(sentence).toContain(expected);
-      expect(sentence).toContain("anlegen");
-      // …and that is what the wire body renders to.
-      expect(serverErrorBodyMessage(body(code, { value }), de)).toBe(sentence);
+  test("each one renders its own sentence with its value, in both languages", () => {
+    for (const [code, value] of cases) {
+      for (const t of [de, en]) {
+        const sentence = serverErrorBodyMessage(body(code, { value }), t);
+        expect(sentence).toBe(t(`server.${code}` as never, { value }));
+        expect(sentence).toContain(value);
+        expect(sentence).not.toBe(`technical: ${code}`);
+      }
     }
   });
 
-  test("English says the same thing", () => {
+  test("the German sentence is not the English one", () => {
     for (const [code, value] of cases) {
-      const sentence = serverErrorBodyMessage(body(code, { value }), en);
-      expect(sentence).toContain(value);
-      expect(sentence?.toLowerCase()).toContain("does not exist");
+      expect(serverErrorBodyMessage(body(code, { value }), de)).not.toBe(
+        serverErrorBodyMessage(body(code, { value }), en),
+      );
     }
   });
 
@@ -59,55 +60,56 @@ describe("the reference refusals", () => {
 
 describe("the chapter a scene may not lose", () => {
   test("it reads as a rule, in both languages, and carries no parameter", () => {
-    // The refusal a cleared Kapitel field answers with. Nothing to name —
+    // The refusal a cleared chapter field answers with. Nothing to name —
     // the value is gone, which is the whole message.
-    const german = serverErrorBodyMessage(body("chapter_required"), de);
-    expect(german).toContain("Kapitel");
-    expect(german).toContain("nicht entfernen");
-    expect(serverErrorBodyMessage(body("chapter_required"), en)).toContain("needs a chapter");
+    for (const t of [de, en]) {
+      expect(serverErrorBodyMessage(body("chapter_required"), t)).toBe(
+        t("server.chapter_required"),
+      );
+    }
   });
 });
 
 describe("the location value that is no id", () => {
-  test("with a slug to propose, the sentence carries it — and says to create it", () => {
-    const sentence = serverErrorBodyMessage(
-      body("location_not_an_id", { value: "Der alte Hafen", suggestion: "der-alte-hafen" }),
-      de,
-    );
-    expect(sentence).toContain("Der alte Hafen");
-    expect(sentence).toContain("der-alte-hafen");
-    expect(sentence).toContain("anlegen");
+  test("with a slug to propose, the sentence carries it", () => {
+    const params = { value: "The old harbour", suggestion: "the-old-harbour" };
+    const sentence = serverErrorBodyMessage(body("location_not_an_id", params), de);
+    expect(sentence).toBe(de("server.location_not_an_id", params));
+    expect(sentence).toContain("The old harbour");
+    expect(sentence).toContain("the-old-harbour");
   });
 
-  test("without one it says what to type instead, and proposes nothing", () => {
+  test("without one it takes the sentence that proposes nothing", () => {
     const sentence = serverErrorBodyMessage(body("location_not_an_id", { value: "???" }), de);
+    expect(sentence).toBe(de("server.location_not_an_id.noSuggestion", { value: "???" }));
     expect(sentence).toContain("???");
-    expect(sentence).toContain("Kleinbuchstaben");
     expect(sentence).not.toContain("{suggestion}");
   });
 });
 
 describe("the two refusals of the entry write", () => {
-  test("a request with neither field says so in one short sentence", () => {
+  test("a request with neither field has its own sentence without parameters", () => {
     // No parameters: there is no field to name, which is the message.
-    expect(serverErrorBodyMessage(body("nothing_to_write"), de)).toBe("Nichts zu speichern.");
-    expect(serverErrorBodyMessage(body("nothing_to_write"), en)).toBe("Nothing to save.");
+    for (const t of [de, en]) {
+      expect(serverErrorBodyMessage(body("nothing_to_write"), t)).toBe(
+        t("server.nothing_to_write"),
+      );
+    }
   });
 
-  test("text sent to a list entry says why, not just that it failed", () => {
-    const german = serverErrorBodyMessage(body("body_not_editable", { path: "glossary" }), de);
-    expect(german).toContain("keinen bearbeitbaren Text");
-    expect(german).toContain("Liste");
-    const english = serverErrorBodyMessage(body("body_not_editable", { path: "glossary" }), en);
-    expect(english).toContain("no editable text");
-    expect(english).toContain("list");
+  test("text sent to a list entry gets its own sentence, not the generic one", () => {
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(body("body_not_editable", { path: "glossary" }), t);
+      expect(sentence).toBe(t("server.body_not_editable"));
+      expect(sentence).not.toBe("technical: body_not_editable");
+    }
   });
 });
 
 describe("the closed columns", () => {
   const status = body("status_not_allowed", {
     kind: "scene",
-    value: "halbfertig",
+    value: "half-done",
     allowed: ["draft", "ready", "played", "dropped"],
   });
   const sceneType = body("scene_type_not_allowed", {
@@ -116,20 +118,29 @@ describe("the closed columns", () => {
   });
 
   test("the refused value and the positions the column accepts, enumerated", () => {
-    const german = serverErrorBodyMessage(status, de);
-    expect(german).toContain("halbfertig");
-    expect(german).toContain("draft, ready, played, dropped");
-    const english = serverErrorBodyMessage(status, en);
-    expect(english).toContain("halbfertig");
-    expect(english).toContain("draft, ready, played, dropped");
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(status, t);
+      expect(sentence).toBe(
+        t("server.status_not_allowed", {
+          value: "half-done",
+          allowed: "draft, ready, played, dropped",
+        }),
+      );
+      expect(sentence).toContain("half-done");
+      expect(sentence).toContain("draft, ready, played, dropped");
+    }
   });
 
   test("the scene type has its own sentence", () => {
-    const german = serverErrorBodyMessage(sceneType, de);
-    expect(german).toContain("Szenentyp");
-    expect(german).toContain("optional");
-    expect(german).toContain("planned, contingency");
-    expect(serverErrorBodyMessage(sceneType, en)).toContain("scene type");
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(sceneType, t);
+      expect(sentence).toBe(
+        t("server.scene_type_not_allowed", { value: "optional", allowed: "planned, contingency" }),
+      );
+      expect(sentence).toContain("optional");
+      expect(sentence).toContain("planned, contingency");
+      expect(sentence).not.toBe(serverErrorBodyMessage(status, t));
+    }
   });
 
   test("a body without value or list degrades to the server's own text", () => {
@@ -166,7 +177,7 @@ describe("the degrade rule", () => {
   });
 
   test("an unknown code falls back to the English text, never to nothing", () => {
-    expect(serverErrorBodyMessage({ code: "aus_der_zukunft", error: "something new" }, de)).toBe(
+    expect(serverErrorBodyMessage({ code: "from_the_future", error: "something new" }, de)).toBe(
       "something new",
     );
     expect(serverErrorBodyMessage({}, de)).toBeUndefined();

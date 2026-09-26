@@ -7,12 +7,12 @@ import type { Idea } from "@grimoire/shared/idea";
 import { withIdea } from "./idea-query";
 
 const SEEDED: Idea = {
-  id: "dorfschmied",
-  text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+  id: "village-smith",
+  text: "Idea: The village smith repairs smuggling tools suspiciously often #thread",
   done: false,
   rev: 1,
 };
-const SECOND: Idea = { id: "i-2", text: "Schmied beobachten", done: false, rev: 1 };
+const SECOND: Idea = { id: "i-2", text: "Watch the smith", done: false, rev: 1 };
 
 describe("withIdea", () => {
   test("a ticked idea replaces itself in its place", () => {

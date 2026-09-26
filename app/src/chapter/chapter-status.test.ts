@@ -25,22 +25,26 @@ describe("the enum", () => {
 
   test("knows its own members and nothing else", () => {
     for (const status of CHAPTER_STATUSES) expect(isChapterStatus(status)).toBe(true);
-    expect(isChapterStatus("laeuft")).toBe(false);
+    expect(isChapterStatus("running")).toBe(false);
     expect(isChapterStatus("")).toBe(false);
   });
 });
 
 describe("labels", () => {
-  test("the German labels", () => {
+  test("each value takes its own catalog label, in German", () => {
     expect(chapterStatusOptions(t).map((o) => o.label)).toEqual([
-      "Geplant",
-      "Aktiv",
-      "Abgeschlossen",
+      t("properties.chapter.status.planned"),
+      t("properties.chapter.status.active"),
+      t("properties.chapter.status.done"),
     ]);
   });
 
-  test("and the English ones", () => {
-    expect(chapterStatusOptions(tEn).map((o) => o.label)).toEqual(["Planned", "Active", "Done"]);
+  test("and in English", () => {
+    expect(chapterStatusOptions(tEn).map((o) => o.label)).toEqual([
+      tEn("properties.chapter.status.planned"),
+      tEn("properties.chapter.status.active"),
+      tEn("properties.chapter.status.done"),
+    ]);
   });
 
   test("the option VALUES are the wire values, never translated", () => {
@@ -53,7 +57,7 @@ describe("labels", () => {
     // else (decisions/constraints); the type is what says so, so the renderer has nothing
     // to fall back for.
     // @ts-expect-error not one of planned | active | done
-    const foreign: ChapterStatus = "laeuft";
+    const foreign: ChapterStatus = "running";
     expect(CHAPTER_STATUSES as readonly string[]).not.toContain(foreign);
   });
 

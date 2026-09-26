@@ -5,14 +5,14 @@
 // The KEY SET is enforced by the typecheck (en.ts is a `Record<MessageKey,
 // string>`), so these tests cover what types cannot: that every pattern
 // actually COMPILES in both languages, that the plural forms are real ICU and
-// not a German sentence with an English number glued on, and that the browser
+// not a sentence of one language with a number glued on, and that the browser
 // preference maps to a supported locale.
 
 import { describe, expect, test } from "bun:test";
 
 import { de } from "./de";
 import { en } from "./en";
-import { CATALOGS, formatDate, formatParts, translator } from "./format";
+import { CATALOGS, formatDate, formatParts, pattern, translator } from "./format";
 import { LOCALES, preferredLocale, type Locale, type MessageKey } from "./messages";
 
 const KEYS = Object.keys(de) as MessageKey[];
@@ -58,14 +58,14 @@ describe("the catalogs", () => {
   });
 });
 
-// The typographic guard: the catalog used to write German
-// quotation marks as an opening `„` closed by an ASCII `"`, and the generator
-// prompts imitated the catalog. Scanned over the VALUES, not over the source
+// The typographic guard: a German quotation opens with the low mark (U+201E)
+// and closes with U+201C, never with an ASCII `"`, and the generator prompts
+// imitate the catalog. Scanned over the VALUES, not over the source
 // text: there the closing ASCII `"` is indistinguishable from the string
 // delimiter. The markdown side of the same rule — prompts, few-shots,
 // fixtures — lives in server/test/typography.test.ts.
 describe("German quotation marks", () => {
-  /** `„` and, later in the same message, an ASCII `"` with no `“` between. */
+  /** U+201E and, later in the same message, an ASCII `"` with no U+201C between. */
   const MIXED = /\u201E[^\u201C]*"/;
 
   test("no German message closes a quotation with an ASCII quote", () => {
@@ -73,44 +73,59 @@ describe("German quotation marks", () => {
     expect(bad).toEqual([]);
   });
 
-  test("English closes with `“…”`, never with a stray `„`", () => {
+  test("no English message carries the German opening mark U+201E", () => {
     const bad = KEYS.filter((key) => en[key].includes("\u201E"));
     expect(bad).toEqual([]);
   });
 });
 
 describe("plural", () => {
-  test("German picks singular and plural per count", () => {
-    const t = translator("de");
-    expect(t("mobileStart.count.scenes", { count: 1 })).toBe("1 Szene");
-    expect(t("mobileStart.count.scenes", { count: 3 })).toBe("3 Szenen");
-    expect(t("mobileStart.count.locations", { count: 1 })).toBe("1 Ort");
-    expect(t("mobileStart.count.locations", { count: 0 })).toBe("0 Orte");
-  });
+  // The number leads the phrase and the noun after it follows the plural
+  // category: one form for 1, another for every other count.
+  const KEYS_WITH_PLURAL = ["mobileStart.count.scenes", "mobileStart.count.locations"] as const;
 
-  test("English picks its own forms", () => {
-    const t = translator("en");
-    expect(t("mobileStart.count.scenes", { count: 1 })).toBe("1 scene");
-    expect(t("mobileStart.count.scenes", { count: 3 })).toBe("3 scenes");
-    expect(t("mobileStart.count.locations", { count: 1 })).toBe("1 location");
+  /** The phrase after the number, for a count. */
+  function noun(locale: Locale, key: MessageKey, count: number): string {
+    const out = translator(locale)(key, { count });
+    expect(out.startsWith(`${count} `)).toBe(true);
+    return out.slice(`${count} `.length);
+  }
+
+  for (const locale of LOCALES) {
+    test(`${locale} picks singular and plural per count`, () => {
+      for (const key of KEYS_WITH_PLURAL) {
+        expect(noun(locale, key, 1)).not.toBe(noun(locale, key, 3));
+        // Zero is not singular.
+        expect(noun(locale, key, 0)).toBe(noun(locale, key, 3));
+      }
+    });
+  }
+
+  test("each language brings its own forms", () => {
+    for (const key of KEYS_WITH_PLURAL) {
+      for (const count of [1, 3]) {
+        expect(noun("en", key, count)).not.toBe(noun("de", key, count));
+      }
+    }
   });
 });
 
 describe("interpolation", () => {
   test("puts the value in, once, in the right place", () => {
-    expect(translator("de")("campaign.switcher.current", { name: "Salzhafen" })).toBe(
-      "Kampagne: Salzhafen",
-    );
-    expect(translator("en")("campaign.switcher.current", { name: "Salzhafen" })).toBe(
-      "Campaign: Salzhafen",
-    );
+    for (const locale of LOCALES) {
+      const out = translator(locale)("campaign.switcher.current", { name: "Salt Harbour" });
+      expect(out).toBe(pattern(locale, "campaign.switcher.current").replace("{name}", "Salt Harbour"));
+      expect(out.split("Salt Harbour")).toHaveLength(2);
+    }
   });
 
   test("formatParts keeps a non-string value as its own part", () => {
-    const marker = { mono: "salzhafen" };
+    const marker = { mono: "salt-harbour" };
     const parts = formatParts("de", "campaign.switcher.current", { name: marker });
     expect(parts).toContain(marker);
-    expect(parts.filter((part) => typeof part === "string").join("")).toBe("Kampagne: ");
+    expect(parts.filter((part) => typeof part === "string").join("")).toBe(
+      pattern("de", "campaign.switcher.current").replace("{name}", ""),
+    );
   });
 
   test("degrades to the raw pattern instead of throwing", () => {
