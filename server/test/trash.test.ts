@@ -30,9 +30,9 @@ import { writeGenerated } from "../src/store/generated";
 import { purgeTrash, TRASH_RETENTION_DAYS } from "../src/store/trash";
 import { dropStore, seedStore } from "./support/store";
 
-const CAMPAIGN = "beispiel";
+const CAMPAIGN = "example";
 const API = `/api/campaigns/${CAMPAIGN}`;
-const CHAPTER = "01-salzhafen";
+const CHAPTER = "01-salt-harbour";
 /** The fixture scene no log entry names — free to go to the trash. */
 const FREE_SCENE = "smuggler-captured";
 /** The fixture scene the fixture session's log entries name. */
@@ -163,7 +163,7 @@ describe("a scene in the trash", () => {
     expect(body.kind).toBe("scene");
     expect(body.id).toBe(NOTED_SCENE);
     expect(body.blockers?.map((b) => [b.kind, b.id, b.session])).toEqual([
-      ["log-entry", "spuren-gefunden", "2026-01-15"],
+      ["log-entry", "tracks-found", "2026-01-15"],
       ["log-entry", "old-metta", "2026-01-15"],
     ]);
     expect((await get<Scene>(`/scenes/${NOTED_SCENE}`)).rev).toBe(1);
@@ -172,11 +172,11 @@ describe("a scene in the trash", () => {
   test("it leaves the search and comes back with its restore", async () => {
     const hit = (results: SearchResult[]) =>
       results.some((r) => r.kind === "scene" && r.id === FREE_SCENE);
-    expect(hit(await search("Schmugglern"))).toBe(true);
+    expect(hit(await search("Smugglers"))).toBe(true);
     await trash(`/scenes/${FREE_SCENE}`, 1);
-    expect(hit(await search("Schmugglern"))).toBe(false);
+    expect(hit(await search("Smugglers"))).toBe(false);
     await restore(`/scenes/${FREE_SCENE}`, 2);
-    expect(hit(await search("Schmugglern"))).toBe(true);
+    expect(hit(await search("Smugglers"))).toBe(true);
   });
 
   test("its id stays taken: creating it again is the slug collision", async () => {
@@ -258,7 +258,7 @@ describe("npcs and locations in the trash", () => {
     const body = await trash<ErrorBody>("/npcs/fenn", 1, 409);
     expect(body.code).toBe("trash_blocked");
     expect(body.blockers?.map((b) => [b.kind, b.id, b.name])).toEqual([
-      ["scene", FREE_SCENE, "Von den Schmugglern erwischt"],
+      ["scene", FREE_SCENE, "Caught by the Smugglers"],
     ]);
     await trash(`/scenes/${FREE_SCENE}`, 1);
     const npc = await trash<Npc>("/npcs/fenn", 1);
@@ -308,15 +308,15 @@ describe("npcs and locations in the trash", () => {
   });
 
   test("a location a live scene plays at stays; once the scene is gone it can go and come back", async () => {
-    const body = await trash<ErrorBody>("/locations/bucht", 1, 409);
+    const body = await trash<ErrorBody>("/locations/cove", 1, 409);
     expect(body.code).toBe("trash_blocked");
     expect(body.blockers?.map((b) => [b.kind, b.id])).toEqual([["scene", FREE_SCENE]]);
     await trash(`/scenes/${FREE_SCENE}`, 1);
-    const location = await trash<Location>("/locations/bucht", 1);
+    const location = await trash<Location>("/locations/cove", 1);
     expect(location.deletedMs).toBe(T0);
-    await get("/locations/bucht", 404);
-    expect((await get<Location[]>("/locations?deleted=true")).map((l) => l.id)).toEqual(["bucht"]);
-    const back = await restore<Location>("/locations/bucht", 2);
+    await get("/locations/cove", 404);
+    expect((await get<Location[]>("/locations?deleted=true")).map((l) => l.id)).toEqual(["cove"]);
+    const back = await restore<Location>("/locations/cove", 2);
     expect(back.deletedMs).toBeUndefined();
     expect(back.rev).toBe(3);
   });
@@ -329,9 +329,9 @@ describe("a chapter in the trash", () => {
     expect(body.blockers?.map((b) => [b.kind, b.id])).toEqual([
       ["npc", "fenn"],
       ["npc", "jorna"],
-      ["location", "bucht"],
-      ["location", "leuchtturm"],
-      ["log-entry", "spuren-gefunden"],
+      ["location", "cove"],
+      ["location", "lighthouse"],
+      ["log-entry", "tracks-found"],
       ["log-entry", "old-metta"],
     ]);
     expect((await get<Chapter>(`/chapters/${CHAPTER}`)).rev).toBe(1);
