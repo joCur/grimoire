@@ -3,7 +3,7 @@
 // label in the overview, where the campaign's own edit action stands on the
 // same page.
 
-import type { Chapter } from "@grimoire/shared/types";
+import type { Chapter } from "@grimoire/shared/chapter";
 import { describe, expect, test } from "bun:test";
 import { SlidersHorizontal } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";

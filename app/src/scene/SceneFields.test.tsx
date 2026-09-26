@@ -4,7 +4,8 @@
 // typeable and visible — and the chips and selects of the lists and the two
 // closed fields.
 
-import type { CampaignTree, SceneProposal } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

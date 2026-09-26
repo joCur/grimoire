@@ -18,8 +18,12 @@
 // chapter writes `planned`, and no status on a chapter means "not started",
 // which is what `planned` says.
 
-import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
-import type { Chapter, ChapterPatch, ChapterStatus } from "@grimoire/shared/types";
+import {
+  CHAPTER_STATUSES,
+  type Chapter,
+  type ChapterPatch,
+  type ChapterStatus,
+} from "@grimoire/shared/chapter";
 
 import type { MessageKey, Translate } from "@/i18n";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";

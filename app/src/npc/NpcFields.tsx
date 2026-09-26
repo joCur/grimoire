@@ -7,7 +7,7 @@
 // always has a status, so there is no empty choice.
 
 import { NPC_STATUSES } from "@grimoire/shared/npc";
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 
 import { fieldId } from "@/components/fields/FieldRow";
 import { PairsField } from "@/components/fields/PairsField";

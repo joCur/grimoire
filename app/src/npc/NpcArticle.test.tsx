@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import type { Npc } from "@grimoire/shared/types";
+import type { Npc } from "@grimoire/shared/npc";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

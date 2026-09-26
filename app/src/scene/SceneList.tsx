@@ -2,7 +2,7 @@
 // flat per chapter, the chapter title as a quiet group overline, each row its
 // title, the location's name and a link to its reading view.
 
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import { Bookmark, GitFork } from "lucide-react";
 
 import { ListRow } from "@/components/ListRow";

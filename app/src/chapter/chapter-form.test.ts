@@ -2,7 +2,7 @@
 // decides what is written at all, the representation a cleared status is
 // written in, and the text the overview's text dialog writes.
 
-import type { ChapterProposal } from "@grimoire/shared/types";
+import type { ChapterProposal } from "@grimoire/shared/chapter";
 import { describe, expect, test } from "bun:test";
 
 import {

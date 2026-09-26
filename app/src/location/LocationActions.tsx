@@ -5,7 +5,8 @@
 // own editing session (./use-location-edit.ts): the fields a surface changed
 // become ONE location PATCH.
 
-import type { CampaignTree, Location } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { Location } from "@grimoire/shared/location";
 
 import { BodyEditor, useBodyDraft } from "@/components/BodyEditor";
 import { FieldsDialog, FieldsDialogAction, useFieldsForm } from "@/components/fields/FieldsDialog";

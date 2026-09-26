@@ -18,7 +18,7 @@
 // 3. `[[slug]]` entity references: every text node is split and the
 //    reference becomes a `<span data-entity-ref="slug">` carrying the
 //    literal `[[slug]]` as its text. RESOLUTION IS NOT THIS PLUGIN'S JOB —
-//    the name lives in the campaign tree, which only React has (EntityRef in
+//    the name lives in the campaign tree, which only React has (RefLink in
 //    Markdown.tsx). The literal text inside the span is therefore also the
 //    degradation: a span whose slug nothing resolves renders exactly what the
 //    DM typed. Code (fenced and inline) and link text are skipped, and in a

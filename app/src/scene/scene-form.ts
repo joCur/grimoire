@@ -24,12 +24,7 @@
 // server's answer (a 400 with its own sentence, i18n/server-errors.ts).
 
 import { isEntityId, toSlug } from "@grimoire/shared/slug";
-import type {
-  SceneChange,
-  SceneProposal,
-  SceneStatus,
-  SceneType,
-} from "@grimoire/shared/types";
+import type { SceneChange, SceneProposal, SceneStatus, SceneType } from "@grimoire/shared/scene";
 
 import type { FieldOption } from "@/components/fields/SelectField";
 import { textValue } from "@/components/fields/text";

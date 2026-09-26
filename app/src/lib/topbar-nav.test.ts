@@ -6,22 +6,17 @@ import { navSection } from "./topbar-nav";
 const chapterOverview = { isChapterOverview: true };
 const npcs = { isChapterOverview: false, isNpcs: true };
 const locations = { isChapterOverview: false, isLocations: true };
-const list = (listKind: string) => ({ isChapterOverview: false, listKind });
 const chapter = { isChapterOverview: false, isChapter: true };
-const scene = { isChapterOverview: false, isScene: true };
+const scenes = { isChapterOverview: false, isScenes: true };
 
 describe("navSection", () => {
   test("the chapter overview is the Kapitel section", () => {
     expect(navSection(chapterOverview)).toBe("chapters");
   });
 
-  test("the scene list is Kapitel", () => {
-    expect(navSection(list("scenes"))).toBe("chapters");
-  });
-
-  test("the reading views of a chapter and a scene belong under Kapitel", () => {
+  test("a chapter's reading view and a scene's own routes belong under Kapitel", () => {
     expect(navSection(chapter)).toBe("chapters");
-    expect(navSection(scene)).toBe("chapters");
+    expect(navSection(scenes)).toBe("chapters");
   });
 
   test("an npc's own routes — its list and its reading view — are NPCs", () => {
@@ -35,11 +30,5 @@ describe("navSection", () => {
   test("views that belong to no section are marked nowhere", () => {
     // Generator, review, a session, the glossary.
     expect(navSection({ isChapterOverview: false })).toBeUndefined();
-  });
-
-  test("degrades: an unknown list kind marks nothing", () => {
-    expect(navSection(list("dragons"))).toBeUndefined();
-    // The npc list lives at its own route, not under `list/`.
-    expect(navSection(list("npcs"))).toBeUndefined();
   });
 });

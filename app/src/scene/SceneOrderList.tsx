@@ -4,7 +4,7 @@
 // The chapter is the tree's node; the scene order is written through its own
 // endpoint with its own guard (lib/use-scene-order.ts).
 
-import type { ChapterNode } from "@grimoire/shared/types";
+import type { ChapterNode } from "@grimoire/shared/campaign-tree";
 import { GitFork } from "lucide-react";
 
 import { useT } from "@/i18n";

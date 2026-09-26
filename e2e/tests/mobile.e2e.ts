@@ -111,7 +111,7 @@ test("mobile: the reference scene's reading view stays readable", async ({ page 
   // then the scene list — onto the scene's own route (ADR #31).
   await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: /^Szenen/ }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/scenes$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes$/);
   await page.getByRole("link", { name: /Ankunft am Leuchtturm/ }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
 

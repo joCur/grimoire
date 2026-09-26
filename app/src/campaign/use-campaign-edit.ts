@@ -13,7 +13,7 @@
 //                  the answers are `reload` (continue from what is stored) and
 //                  `forceSave` (write the same fields on top of it).
 
-import type { Campaign, CampaignChange, CampaignPatch } from "@grimoire/shared/types";
+import type { Campaign, CampaignChange, CampaignPatch } from "@grimoire/shared/campaign";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 

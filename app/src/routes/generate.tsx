@@ -41,12 +41,9 @@
 // in edit mode, and what a finished accept wrote. The decisions live on the
 // job (review.npcs, review.locations).
 
-import type {
-  LocationProposal,
-  NpcProposal,
-  SceneChange,
-  SceneProposal,
-} from "@grimoire/shared/types";
+import type { LocationProposal } from "@grimoire/shared/location";
+import type { NpcProposal } from "@grimoire/shared/npc";
+import type { SceneChange, SceneProposal } from "@grimoire/shared/scene";
 import {
   isGeneratorJobSettled,
   type GeneratorJob,

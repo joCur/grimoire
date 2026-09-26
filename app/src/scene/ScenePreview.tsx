@@ -6,7 +6,7 @@
 // reading view and drawer share); while it loads, static bars stand in, and if
 // it fails the card simply keeps kind and title.
 
-import type { SceneType } from "@grimoire/shared/types";
+import type { SceneType } from "@grimoire/shared/scene";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchTree } from "@/api";

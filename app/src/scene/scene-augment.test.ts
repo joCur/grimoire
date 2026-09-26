@@ -1,7 +1,7 @@
 // A scene's augment proposal, field by field: what is listed, and which
 // default each listed field starts with.
 
-import type { SceneProposal } from "@grimoire/shared/types";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { describe, expect, test } from "bun:test";
 
 import { sceneFieldProposals } from "./scene-augment";

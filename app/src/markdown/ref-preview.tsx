@@ -1,5 +1,5 @@
 // The hover preview of a resolved `[[slug]]` reference: WHEN it shows, WHERE
-// it sits and how it leaves. What it says is components/EntityPreview.tsx.
+// it sits and how it leaves. What it says is components/RefTargetPreview.tsx.
 //
 // Timing, in one place:
 //
@@ -44,18 +44,18 @@ import {
   type ReactNode,
 } from "react";
 
-import { EntityPreview } from "@/components/EntityPreview";
+import { RefTargetPreview } from "@/components/RefTargetPreview";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { locationQuery } from "@/location/location-query";
 import { npcQuery } from "@/npc/npc-query";
 import { sceneQuery } from "@/scene/scene-query";
 
-import type { ResolvedEntityRef } from "./entity-refs";
+import type { ResolvedRef } from "./refs";
 
 /** The query the preview of a target reads — its own, from its slice (ADR #31). */
 function previewQuery(
   campaign: string,
-  target: ResolvedEntityRef,
+  target: ResolvedRef,
 ): { queryKey: QueryKey; queryFn: () => Promise<unknown> } {
   switch (target.kind) {
     case "npc":
@@ -189,7 +189,7 @@ export function RefPreview({
   children,
 }: {
   campaign: string;
-  target: ResolvedEntityRef;
+  target: ResolvedRef;
   /** Display name of a slug — references inside a short form read as names. */
   nameOf: (slug: string) => string | undefined;
   /**
@@ -311,7 +311,7 @@ export function RefPreview({
         }}
         onPointerDown={hideNow}
       >
-        <EntityPreview campaign={campaign} target={target} nameOf={nameOf} />
+        <RefTargetPreview campaign={campaign} target={target} nameOf={nameOf} />
       </HoverCardContent>
     </HoverCard>
   );

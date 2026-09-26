@@ -2,7 +2,7 @@
 // changes against the scene as the run read it. Pure, so the rule is
 // unit-testable.
 
-import type { SceneProposal } from "@grimoire/shared/types";
+import type { SceneProposal } from "@grimoire/shared/scene";
 
 import { formatFieldValue, type FieldProposal } from "@/lib/augment";
 

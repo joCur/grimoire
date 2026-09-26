@@ -4,8 +4,7 @@
 // npc's own editing session as the accepting write. App.tsx hands it to the
 // npc's route as its augment slot.
 
-import { npcChangeSchema } from "@grimoire/shared/npc";
-import type { Npc } from "@grimoire/shared/types";
+import { npcChangeSchema, type Npc } from "@grimoire/shared/npc";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {

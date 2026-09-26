@@ -7,8 +7,8 @@
 // form fields.
 //
 // The campaign list (`GET /api/campaigns`) is not the campaign: it answers
-// `CampaignSummary`, which carries the newest session beside the name
-// (./types.ts).
+// `CampaignSummary` (below), which carries the newest session beside the
+// name.
 
 import { z } from "zod";
 
@@ -66,3 +66,37 @@ export const campaignCreateSchema = campaignSeedSchema
   .extend({ id: z.string().optional() });
 
 export type CampaignCreate = z.infer<typeof campaignCreateSchema>;
+
+/** One row of the campaign list, `GET /api/campaigns`. */
+export interface CampaignSummary {
+  /** The campaign's id — the key in every URL. */
+  id: string;
+  /**
+   * Id of the campaign's newest session (the `<id>` of `sessions/<id>`).
+   * OPAQUE: an address, not a
+   * date, and NOT comparable — order by `lastSessionStarted` instead. Absent
+   * when the campaign has no session.
+   */
+  lastSession?: string;
+  /**
+   * `started` of that newest session — the zone-less wall-clock string the
+   * session carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
+   * means, and the only orderable thing about a session the client
+   * gets. Absent when the campaign has no session, or when that session has no
+   * usable `started` — either way it then sorts behind every campaign that
+   * has one.
+   */
+  lastSessionStarted?: string;
+  /**
+   * Display name. Always present: a campaign without an authored name is
+   * shown under its id, exactly as `GET /api/campaigns/:c` answers its `name`
+   * — the two endpoints must agree. Optional in the type so an older payload
+   * still parses.
+   */
+  name?: string;
+  /**
+   * One-line description of the campaign; absent when there is none (unlike
+   * `name` there is nothing sensible to synthesize).
+   */
+  description?: string;
+}

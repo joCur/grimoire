@@ -7,7 +7,7 @@
 // to "not set" clears it (`null`). The title is the exception — a chapter
 // always has one, so a blank title is no save.
 
-import type { ChapterChange, ChapterProposal } from "@grimoire/shared/types";
+import type { ChapterChange, ChapterProposal } from "@grimoire/shared/chapter";
 
 import { textValue } from "@/components/fields/text";
 

@@ -2,7 +2,7 @@
 // plugin operates on mdast only, no DOM involved).
 
 import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
-import { CALLOUT_KINDS } from "@grimoire/shared/types";
+import { CALLOUT_KINDS } from "@grimoire/shared/callouts";
 import { describe, expect, test } from "bun:test";
 import type { Blockquote, Root, RootContent } from "mdast";
 import { toString as mdastToString } from "mdast-util-to-string";

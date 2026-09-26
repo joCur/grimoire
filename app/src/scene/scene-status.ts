@@ -10,8 +10,12 @@
 // hold anything else (ADR #25) and the value is one of the four everywhere
 // below — there is no foreign value to render.
 
-import { SCENE_STATUSES } from "@grimoire/shared/scene";
-import type { Scene, ScenePatch, SceneStatus } from "@grimoire/shared/types";
+import {
+  SCENE_STATUSES,
+  type Scene,
+  type ScenePatch,
+  type SceneStatus,
+} from "@grimoire/shared/scene";
 
 import type { MessageKey, Translate } from "@/i18n";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";

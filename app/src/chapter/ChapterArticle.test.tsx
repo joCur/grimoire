@@ -1,7 +1,7 @@
 // Render tests for the article of a chapter's reading view (react-dom/server —
 // no DOM): the titled header, and never the scene's type overline above it.
 
-import type { Chapter } from "@grimoire/shared/types";
+import type { Chapter } from "@grimoire/shared/chapter";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

@@ -1,7 +1,8 @@
 // The API: assembles the route modules, one per resource (./<resource>.ts).
 // Mounted under /api in server.ts. Response shapes are the contracts in
-// @grimoire/shared: each entity's type from its own module, the other shapes
-// in types.ts. THE ROUTE MODULES ARE THE API's documentation:
+// @grimoire/shared: each entity's type from its own module, and each answer
+// that shows several entities at once (tree, search) in the module of its
+// endpoint. THE ROUTE MODULES ARE THE API's documentation:
 // every endpoint is described right above its route, and there is no second
 // list anywhere that could drift away from it. HTTP helpers several modules
 // share live in ./http.ts.

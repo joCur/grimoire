@@ -22,7 +22,7 @@
 // route renders the mobile start surface instead of the overview, so these
 // actions are not on the phone at all.
 
-import type { Chapter } from "@grimoire/shared/types";
+import type { Chapter } from "@grimoire/shared/chapter";
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 

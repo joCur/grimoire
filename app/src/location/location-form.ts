@@ -7,7 +7,7 @@
 // blank clears the value (`null`) instead of writing an empty one. The name
 // is the exception — a location always has one, so a blank name is no save.
 
-import type { LocationChange, LocationProposal } from "@grimoire/shared/types";
+import type { LocationChange, LocationProposal } from "@grimoire/shared/location";
 
 import { textValue } from "@/components/fields/text";
 

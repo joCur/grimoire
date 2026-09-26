@@ -12,7 +12,7 @@
 // tree, a query or a DOM.
 
 import { expandBodyEntityRefs } from "@grimoire/shared/refs";
-import type { SceneProposal, SceneStatus, SceneType } from "@grimoire/shared/types";
+import type { SceneProposal, SceneStatus, SceneType } from "@grimoire/shared/scene";
 
 /** Current display name of a slug, or undefined when nothing owns it. */
 export type NameOf = (slug: string) => string | undefined;

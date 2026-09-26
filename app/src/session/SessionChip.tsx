@@ -26,8 +26,7 @@
 // (`?running=true`), not a date the app computes: a session that goes past
 // midnight stays the running one.
 
-import type { Session } from "@grimoire/shared/session";
-import { isSessionEmpty } from "@grimoire/shared/session";
+import { type Session, isSessionEmpty } from "@grimoire/shared/session";
 import { ChevronDown, Pause, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";

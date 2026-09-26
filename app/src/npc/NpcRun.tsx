@@ -10,7 +10,8 @@
 //            so no proposal rows and no count in the apply button.
 //   done     the action that opens the npc the accept wrote.
 
-import type { CampaignTree, NpcChange } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { NpcChange } from "@grimoire/shared/npc";
 import type { GeneratorJob, GenerateNpcResult } from "@grimoire/shared/generator-job";
 import { useQueryClient } from "@tanstack/react-query";
 import { StickyNote } from "lucide-react";

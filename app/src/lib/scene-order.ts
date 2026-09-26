@@ -10,7 +10,7 @@
 // overview and the session view have to agree on these rules, and a rule that
 // is a function can be tested without rendering either of them.
 
-import type { CampaignTree, ChapterNode, SceneSummary } from "@grimoire/shared/types";
+import type { CampaignTree, ChapterNode, SceneSummary } from "@grimoire/shared/campaign-tree";
 
 import { isSceneDone } from "@/scene/scene-status";
 

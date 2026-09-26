@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
-import type { Location } from "@grimoire/shared/types";
+import type { Location } from "@grimoire/shared/location";
 
 import { locationExcerpt } from "./location-excerpt";
 

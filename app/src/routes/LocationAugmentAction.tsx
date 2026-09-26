@@ -4,8 +4,7 @@
 // location's own editing session as the accepting write. App.tsx hands it to
 // the location's route as its augment slot.
 
-import { locationChangeSchema } from "@grimoire/shared/location";
-import type { Location } from "@grimoire/shared/types";
+import { locationChangeSchema, type Location } from "@grimoire/shared/location";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {

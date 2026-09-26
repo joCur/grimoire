@@ -6,7 +6,7 @@
 // yet — and not a fallback: `npcs.status` is a CHECK constraint of its
 // column, so the database cannot hold anything else (ADR #25).
 
-import type { NpcStatus } from "@grimoire/shared/types";
+import type { NpcStatus } from "@grimoire/shared/npc";
 
 import type { MessageKey, Translate } from "@/i18n";
 

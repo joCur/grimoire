@@ -27,14 +27,14 @@
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
-import type { SceneSummary } from "@grimoire/shared/types";
+import type { SceneSummary } from "@grimoire/shared/campaign-tree";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { fetchTree } from "@/api";
-import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
+import { LiveDrawer } from "@/components/LiveDrawer";
 import { LocationCard } from "@/location/LocationCard";
 import type { OpenTarget } from "@/lib/open-target";
 import { MobileBackRow } from "@/components/MobileBackRow";
@@ -42,7 +42,7 @@ import { NpcCard } from "@/npc/NpcCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
 import { initialSessionScene, nextSessionScene } from "@/lib/scene-order";
-import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
+import { RefDrawerTarget } from "@/markdown/refs";
 import { cn } from "@/lib/utils";
 import { SceneArticle } from "@/scene/SceneArticle";
 import { sceneHref } from "@/scene/scene-links";
@@ -226,14 +226,14 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             // — the selected scene and the half-typed
             // Schnellnotiz survive it.
             <>
-              <EntityRefDrawerTarget onOpen={setDrawerTarget}>
+              <RefDrawerTarget onOpen={setDrawerTarget}>
                 {/* Keyed by the scene: a switch REMOUNTS the column instead of
                     reconciling the new text into the old nodes. Without it the
                     `## If:` branches the DM opened in one scene would stay open
                     in the next one — the branches start collapsed per scene and
                     nothing is remembered across a switch. */}
                 <LiveScene key={selected.id} campaign={campaign} id={selected.id} />
-              </EntityRefDrawerTarget>
+              </RefDrawerTarget>
               {next !== undefined && (
                 <NextSceneStep
                   campaign={campaign}
@@ -285,13 +285,13 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 
       {/* A reference INSIDE the drawer switches the drawer, it does not
           navigate either — same rule, one level deeper. */}
-      <EntityRefDrawerTarget onOpen={setDrawerTarget}>
-        <LiveEntityDrawer
+      <RefDrawerTarget onOpen={setDrawerTarget}>
+        <LiveDrawer
           campaign={campaign}
           target={drawerTarget}
           onClose={() => setDrawerTarget(undefined)}
         />
-      </EntityRefDrawerTarget>
+      </RefDrawerTarget>
     </div>
   );
 }

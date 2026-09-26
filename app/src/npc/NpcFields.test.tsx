@@ -3,7 +3,7 @@
 // without an empty choice, the quick stats as key/value rows, and the
 // `motivation` apart from them — it is written beside the text.
 
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

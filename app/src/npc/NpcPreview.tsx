@@ -5,7 +5,7 @@
 // its cards and drawer share); while it loads, static bars stand in, and if
 // it fails the card simply keeps kind and name.
 
-import type { NpcStatus } from "@grimoire/shared/types";
+import type { NpcStatus } from "@grimoire/shared/npc";
 import { useQuery } from "@tanstack/react-query";
 import { Skull } from "lucide-react";
 

@@ -17,7 +17,7 @@
 //
 // No react, no mdast: plain string predicates, callable from both sides.
 
-import { CALLOUT_KINDS, type CalloutKind } from "@grimoire/shared/types";
+import { CALLOUT_KINDS, type CalloutKind } from "@grimoire/shared/callouts";
 
 import type { MessageKey } from "@/i18n";
 

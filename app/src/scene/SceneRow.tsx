@@ -4,7 +4,7 @@
 // button inside an anchor is invalid markup and would need click juggling,
 // two siblings in one hover row need neither.
 
-import type { SceneSummary } from "@grimoire/shared/types";
+import type { SceneSummary } from "@grimoire/shared/campaign-tree";
 import { ArrowDown, ArrowUp, Bookmark, GitFork } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";

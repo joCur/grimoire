@@ -7,7 +7,7 @@
 // list are handed in (`threads`, `scenes`), so the chapter never reaches into
 // another entity's slice. The overview composes them.
 
-import type { ChapterNode } from "@grimoire/shared/types";
+import type { ChapterNode } from "@grimoire/shared/campaign-tree";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";

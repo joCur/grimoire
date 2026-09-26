@@ -2,8 +2,7 @@
 // usable, and what the review shows of the proposed npc once changes lie on
 // it. Pure, so every rule is unit-testable.
 
-import { withNpcChange } from "@grimoire/shared/npc";
-import type { NpcChange, NpcProposal } from "@grimoire/shared/types";
+import { withNpcChange, type NpcChange, type NpcProposal } from "@grimoire/shared/npc";
 
 import type { Translate } from "@/i18n";
 

@@ -5,7 +5,7 @@
 // `active` makes the server put the chapter that held it back to `planned` in
 // the same transaction, so there is no separate call for it.
 
-import type { Chapter, ChapterCreate, ChapterPatch } from "@grimoire/shared/types";
+import type { Chapter, ChapterCreate, ChapterPatch } from "@grimoire/shared/chapter";
 
 import { ApiError, campaignPath, getJson, postJson, sendJson } from "@/api";
 

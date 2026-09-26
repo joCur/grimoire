@@ -7,16 +7,16 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 
-import type { Location } from "@grimoire/shared/types";
+import type { Location } from "@grimoire/shared/location";
 
-import { EntityRefScope, type ResolvedEntityRef } from "@/markdown/entity-refs";
+import { RefScope, type ResolvedRef } from "@/markdown/refs";
 
 import { LocationCard } from "./LocationCard";
 import { locationKey } from "./location-query";
 
 describe("LocationCard — a reference inside the excerpt", () => {
   // The tree's answer for the slug the rows below mention.
-  const index = new Map<string, ResolvedEntityRef>([
+  const index = new Map<string, ResolvedRef>([
     ["fenn", { kind: "npc", slug: "fenn", name: "Fenn" }],
   ]);
 
@@ -28,9 +28,9 @@ describe("LocationCard — a reference inside the excerpt", () => {
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <EntityRefScope campaign="beispiel" index={index}>
+          <RefScope campaign="beispiel" index={index}>
             <LocationCard campaign="beispiel" id="kai" />
-          </EntityRefScope>
+          </RefScope>
         </MemoryRouter>
       </QueryClientProvider>,
     );

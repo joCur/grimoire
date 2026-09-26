@@ -20,7 +20,7 @@ import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/ref
 import { useT } from "@/i18n";
 
 import { Callout } from "./Callout";
-import { EntityRef, EntityRefName, useEntityRefs } from "./entity-refs";
+import { RefLink, RefName, useRefs } from "./refs";
 import {
   COPY_PARTS_ATTR,
   ENTITY_REF_ATTR,
@@ -53,9 +53,9 @@ const components: Components = {
     // Inside a `## If:` summary a reference is the resolved NAME AS TEXT —
     // the row's own click must toggle the branch, not navigate away.
     if (attrs[ENTITY_REF_PLAIN_ATTR] !== undefined) {
-      return <EntityRefName slug={slug} fallback={children} />;
+      return <RefName slug={slug} fallback={children} />;
     }
-    return <EntityRef slug={slug} fallback={children} />;
+    return <RefLink slug={slug} fallback={children} />;
   },
   // A table never widens the page: it scrolls inside its own box.
   table(props) {
@@ -200,7 +200,7 @@ function CalloutSection({
   copyParts?: string;
   children: ReactNode;
 }) {
-  const { resolve } = useEntityRefs();
+  const { resolve } = useRefs();
   const text =
     copyParts === undefined
       ? undefined

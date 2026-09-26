@@ -7,12 +7,12 @@
 // as the cards read it (./location-excerpt.ts): a `[[slug]]` inside reads as
 // the current name.
 
-import type { Location } from "@grimoire/shared/types";
+import type { Location } from "@grimoire/shared/location";
 import type { ReactNode } from "react";
 
 import { ActionGroup, Title } from "@/components/ArticleHeader";
 import { useT } from "@/i18n";
-import { useEntityRefs } from "@/markdown/entity-refs";
+import { useRefs } from "@/markdown/refs";
 import { Markdown } from "@/markdown/Markdown";
 
 import { locationExcerpt } from "./location-excerpt";
@@ -29,7 +29,7 @@ export function LocationArticle({
   body?: ReactNode;
 }) {
   const t = useT();
-  const { resolve } = useEntityRefs();
+  const { resolve } = useRefs();
   const { mood, page } = locationExcerpt(location, (slug) => resolve(slug)?.name);
   return (
     <article className="w-full min-w-0">

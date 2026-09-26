@@ -8,12 +8,12 @@
 // exactly as the cards read it (./npc-excerpt.ts): a `[[slug]]` inside reads
 // as the current name.
 
-import type { Npc } from "@grimoire/shared/types";
+import type { Npc } from "@grimoire/shared/npc";
 import type { ReactNode } from "react";
 
 import { Title } from "@/components/ArticleHeader";
 import { useT } from "@/i18n";
-import { useEntityRefs } from "@/markdown/entity-refs";
+import { useRefs } from "@/markdown/refs";
 import { Markdown } from "@/markdown/Markdown";
 
 import { npcExcerpt } from "./npc-excerpt";
@@ -31,7 +31,7 @@ export function NpcArticle({
   body?: ReactNode;
 }) {
   const t = useT();
-  const { resolve } = useEntityRefs();
+  const { resolve } = useRefs();
   const { role, voice, will, quickstats } = npcExcerpt(npc, (slug) => resolve(slug)?.name);
   return (
     <article className="w-full min-w-0">

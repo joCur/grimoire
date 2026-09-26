@@ -2,7 +2,7 @@
 // reading view, the context line of that view, and the label it carries in a
 // run's review beside the npcs and locations of the same run.
 
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 
 import type { ContextCrumb } from "@/components/PageContext";
 import { locationName } from "@/lib/campaign";

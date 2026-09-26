@@ -7,7 +7,7 @@
 // an empty line; a text left blank is stored as the empty string. The name
 // carries the campaign, so a blank name is no save.
 
-import type { Campaign, CampaignChange } from "@grimoire/shared/types";
+import type { Campaign, CampaignChange } from "@grimoire/shared/campaign";
 
 import { textValue } from "@/components/fields/text";
 

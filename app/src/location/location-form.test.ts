@@ -3,7 +3,7 @@
 // written in. All pure — the write itself is the location's editing session
 // (./use-location-edit.ts).
 
-import type { LocationProposal } from "@grimoire/shared/types";
+import type { LocationProposal } from "@grimoire/shared/location";
 import { describe, expect, test } from "bun:test";
 
 import {

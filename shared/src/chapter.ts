@@ -80,3 +80,19 @@ export const chapterCreateSchema = chapterProposalSchema
   .extend({ id: z.string().optional() });
 
 export type ChapterCreate = z.infer<typeof chapterCreateSchema>;
+
+/**
+ * PUT /api/campaigns/:campaign/chapters/:chapter/scene-order — the chapter's
+ * scenes in their new order, and the chapter's fresh guard token.
+ *
+ * `rev` is `chapters.scene_order_rev` — the ORDER's own guard token, which
+ * the tree hands out as `ChapterNode.sceneOrderRev`. Not the chapter's `rev`
+ * and not a scene's: reordering changes neither, so it must not invalidate an
+ * editor open on one. `scenes` is the complete list of the
+ * chapter's scene ids — a request naming anything else is refused whole
+ * (`scene_order_mismatch`).
+ */
+export interface SceneOrderResponse {
+  scenes: string[];
+  rev: number;
+}

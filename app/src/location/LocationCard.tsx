@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CardShell } from "@/components/CardShell";
 import { useI18n } from "@/i18n";
 import type { OpenTarget } from "@/lib/open-target";
-import { useEntityRefs } from "@/markdown/entity-refs";
+import { useRefs } from "@/markdown/refs";
 
 import { LocationCompact } from "./LocationCompact";
 import { locationHref } from "./location-links";
@@ -37,7 +37,7 @@ export function LocationCard({
   onOpen?: (target: OpenTarget) => void;
 }) {
   const { tNode } = useI18n();
-  const { resolve } = useEntityRefs();
+  const { resolve } = useRefs();
   const { data, isPending, isError } = useQuery({ ...locationQuery(campaign, id), retry: false });
 
   if (isPending) return null;

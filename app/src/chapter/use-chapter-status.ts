@@ -9,7 +9,7 @@
 // The tree carries every chapter's status (the overview, the session view),
 // and the session view reads which chapter is active, so both follow.
 
-import type { ChapterStatus } from "@grimoire/shared/types";
+import type { ChapterStatus } from "@grimoire/shared/chapter";
 
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 import { withRev } from "@/lib/write-with-rev";

@@ -2,7 +2,7 @@
 // column and the same markdown pipeline as every other article. Free of
 // queries, so it renders without a server.
 
-import type { Chapter } from "@grimoire/shared/types";
+import type { Chapter } from "@grimoire/shared/chapter";
 import type { ReactNode } from "react";
 
 import { ActionGroup, Title } from "@/components/ArticleHeader";

@@ -5,7 +5,8 @@
 // Pure functions, tested without a render — the two views share these rules,
 // so they are checked once, here.
 
-import type { CampaignTree, SceneStatus, SceneSummary, SceneType } from "@grimoire/shared/types";
+import type { CampaignTree, SceneSummary } from "@grimoire/shared/campaign-tree";
+import type { SceneStatus, SceneType } from "@grimoire/shared/scene";
 import { describe, expect, test } from "bun:test";
 
 import {

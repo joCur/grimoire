@@ -24,7 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CardShell } from "@/components/CardShell";
 import { useI18n } from "@/i18n";
 import type { OpenTarget } from "@/lib/open-target";
-import { useEntityRefs } from "@/markdown/entity-refs";
+import { useRefs } from "@/markdown/refs";
 
 import { NpcCompact } from "./NpcCompact";
 import { npcExcerpt } from "./npc-excerpt";
@@ -47,7 +47,7 @@ export function NpcCard({
   onOpen?: (target: OpenTarget) => void;
 }) {
   const { t, tNode } = useI18n();
-  const { resolve } = useEntityRefs();
+  const { resolve } = useRefs();
   // A NON-SLUG value is no id and therefore no npc: `npcs:` holds ids and
   // the server refuses anything else. Asking for `Alte Fischerin` would
   // answer 404 and blame the server for data it was handed — so it is not

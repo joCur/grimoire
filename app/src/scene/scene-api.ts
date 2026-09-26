@@ -2,7 +2,7 @@
 // its write conflict, and the augment run on it. Built from the shared HTTP
 // helpers (../api.ts).
 
-import type { Scene, SceneCreate, ScenePatch } from "@grimoire/shared/types";
+import type { Scene, SceneCreate, ScenePatch } from "@grimoire/shared/scene";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {

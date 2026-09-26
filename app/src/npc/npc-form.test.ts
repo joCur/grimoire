@@ -3,7 +3,7 @@
 // what blocks a save. All pure — the write itself is the npc's editing
 // session (./use-npc-edit.ts).
 
-import type { NpcProposal } from "@grimoire/shared/types";
+import type { NpcProposal } from "@grimoire/shared/npc";
 import { describe, expect, test } from "bun:test";
 
 import { translator } from "@/i18n/format";

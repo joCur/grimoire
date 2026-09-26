@@ -9,7 +9,7 @@
 // left, Literata 19px, and a quiet copy button (for the Roll20 chat) that
 // only surfaces on hover/focus.
 
-import type { CalloutKind } from "@grimoire/shared/types";
+import type { CalloutKind } from "@grimoire/shared/callouts";
 import { Check, Copy, CornerDownRight, Dice3, Eye, Gem, PenLine } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 

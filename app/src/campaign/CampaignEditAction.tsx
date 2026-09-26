@@ -16,7 +16,7 @@
 // On success the campaign list is invalidated too: the switcher label and the
 // overview header read the name and the description from it.
 
-import type { Campaign } from "@grimoire/shared/types";
+import type { Campaign } from "@grimoire/shared/campaign";
 import { useQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useState } from "react";

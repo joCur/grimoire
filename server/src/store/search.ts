@@ -23,7 +23,7 @@
 // (title 10, ref 6, tags 4, body 1).
 
 import { sql } from "drizzle-orm";
-import type { EntityKind, SearchResult } from "@grimoire/shared";
+import type { SearchKind, SearchResult } from "@grimoire/shared";
 import { requireCampaign } from "./campaigns";
 import { getDb } from "./handle";
 
@@ -107,7 +107,7 @@ export async function searchCampaign(campaign: string, query: string): Promise<S
   `);
   return rows.map((row) => {
     const result: SearchResult = {
-      kind: row.kind as EntityKind,
+      kind: row.kind as SearchKind,
       id: row.entity_id,
       title: row.title === "" ? row.entity_id : row.title,
       score: scoreFromRank(Number(row.rank)),

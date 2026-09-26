@@ -1,8 +1,7 @@
 // The chapter status enum in the app: labels from the catalog, and the one
 // write every value takes.
 
-import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
-import type { ChapterStatus } from "@grimoire/shared/types";
+import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/chapter";
 import { describe, expect, test } from "bun:test";
 
 import { translator } from "@/i18n";

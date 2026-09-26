@@ -1,7 +1,7 @@
 // An npc's augment proposal, field by field (ADR #31): what the model changes
 // against the npc as the run read it. Pure, so the rule is unit-testable.
 
-import type { NpcProposal } from "@grimoire/shared/types";
+import type { NpcProposal } from "@grimoire/shared/npc";
 
 import { formatFieldValue, type FieldProposal } from "@/lib/augment";
 
