@@ -112,7 +112,10 @@ export function EditorShell({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-4 py-4 md:px-5">
+    <div
+      data-testid="text-editor"
+      className="rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-4 py-4 md:px-5"
+    >
       <div className="flex flex-wrap items-center gap-2">
         {controls}
         {actions !== undefined && (

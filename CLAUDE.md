@@ -361,13 +361,22 @@ The paths:
    chapter in outline order, even when they are accepted one by one and in
    reverse order — start value at the first acceptance plus the number in
    the outline (decisions/scene-order)
-7. Fields dialog (labeled "properties" in the UI)/status control including
-   the 409 conflict: the dialog over the fields of a scene, an NPC, a
-   location or a chapter shows the conflict line with its two actions —
-   the reload action fetches the current values, the save-anyway action
-   writes only the dialog's fields (a concurrent text change survives
-   that). The status control itself has no conflict actions: it reports the
-   stale state, and the DM reloads.
+7. Fields dialog (labeled "properties" in the UI) / scene edit mode /
+   status control including the 409 conflict: the dialog over the fields of
+   an NPC, a location or a chapter shows the conflict line with its two
+   actions — the reload action fetches the current values, the save-anyway
+   action writes only the dialog's fields (a concurrent text change
+   survives that). A scene has no fields dialog: its edit mode on
+   `/campaigns/:id/scenes/<id>` edits title, trigger (contingency scenes
+   only), status, the field chips (type, location, NPCs, tags, handouts,
+   chapter — a popover on desktop, a bottom sheet on a phone; at 390px the
+   first three chips plus a sheet listing all fields, no horizontal scroll)
+   and `body` together, and saving is ONE `PATCH …/scenes/<id>` carrying
+   only the changed fields plus `rev`. A 409 shows the same conflict line
+   above the title: the reload action takes the stored scene, the
+   save-anyway action writes only the changed fields. Leaving with unsaved
+   changes asks first. The status control of a reading view has no conflict
+   actions: it reports the stale state, and the DM reloads.
    The control activates a chapter with `PATCH …/chapters/<id> { rev,
    status: "active" }`; the previously active one is then `planned`, and
    exactly one chapter is active.
@@ -375,18 +384,20 @@ The paths:
    (`POST …/ideas`, responds with `Idea`), at the end, nothing ticked off;
    if a session is running (`GET …/sessions?running=true`), the start
    surface shows its chip as the way back
-9. Edit the text of a scene: open → change `body` → save →
+9. Edit the text of a scene: open its edit mode → change `body` → save →
    visible rendered; 409 on a competing second write → the same
    conflict line instead of silently overwriting. The reload action
-   discards the unsaved text and takes over the saved state, the save-anyway
-   action writes only `body`, so that a field changed by someone else stays.
+   discards the unsaved edits and takes over the saved state, the
+   save-anyway action writes only the fields changed in the edit mode, so
+   that a field changed by someone else stays.
    Because all fields of a scene,
    `body` included, share ONE row and ONE guard (decisions/writes), a pure
-   status write by a second writer is a conflict too — the status next to
-   the open editor is not silently taken over. Since decisions/sqlite there
+   status write by a second writer is a conflict too — nothing next to the
+   open edit mode is silently taken over. Since decisions/sqlite there
    is no external file change any more; the guard is the row version `rev`.
    The text of a chapter is editable on its reading view
-   (`/campaigns/:id/chapters/<id>`) like that of a scene. The
+   (`/campaigns/:id/chapters/<id>`) through the text editor with its own
+   conflict line. The
    campaign is written like every entity via its resource
    (`PATCH /campaigns/:id`); its route is the chapter overview. The header of
    the chapter overview stays untouched: its single edit action opens the

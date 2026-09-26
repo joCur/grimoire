@@ -1,332 +1,74 @@
-// Critical path 7: the properties patch from the app, here through the
-// properties form — one dialog per entity kind over ALL typed fields,
-// including the 409 conflict. It also touches path 2 (the reading view must
-// show the new values the moment the dialog closes) and path 8 (the form has
-// to be usable at 390px). See CLAUDE.md.
+// Critical path 7: the fields dialog of an npc, a location and a chapter —
+// one dialog per entity over all of its typed fields, including the 409
+// conflict. It also touches path 2 (the reading view must show the new values
+// the moment the dialog closes) and path 8 (the dialog has to be usable at
+// 390px). A scene has no such dialog: its fields are edited in its edit mode
+// (tests/scene-edit-mode.e2e.ts). See CLAUDE.md.
 //
 // The sibling spec on this path is tests/status-control.e2e.ts: the status
-// control patches ONE key, this form patches any of them. Two things make the
-// form the harder case and are what this spec is about:
+// control patches ONE key, this dialog patches any of them. What makes the
+// dialog the harder case, and what this spec is about:
 //
 //   1. It is a PATCH, not a write of the whole row. Only the fields the DM
-//      actually changed may travel — a field the form knows but the DM did not
-//      touch, and the whole body, have to come out of a save untouched.
+//      actually changed may travel — a field the dialog knows but the DM did
+//      not touch, and the whole body, have to come out of a save untouched.
 //   2. The conflict is DETERMINISTIC here, unlike the status control: the
 //      dialog freezes the rev it opened with on purpose, so the ~5s version
 //      poll cannot heal the staleness while the DM types. No retry loop.
 //   3. Everything the save uses is frozen at open, so the dialog belongs to
 //      ONE row: a navigation under the open modal (⌘K works over it) has to
-//      close it, or the next save writes row A's diff onto row B. And
-//      what is typed does not vanish without a question — neither on Esc nor
-//      in an unfinished quickstat row.
+//      close it, or the next save writes row A's change into row B. And what
+//      is typed does not vanish without a question — neither on Esc nor in an
+//      unfinished quickstat row.
 //
-// Every assertion reads the row back through the API — what the UI shows
-// and what the database holds are checked separately. An external change
-// means a SECOND WRITER through the same API, which is what bumps the row's
-// guard token.
+// Elements are found by role and catalog key (decisions/testing). Every
+// assertion about stored state reads the row back through the API. An
+// external change means a SECOND WRITER through the same API, which is what
+// bumps the row's guard token.
 
-import escapeStringRegexp from "escape-string-regexp";
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "../support/test";
-import type { Api } from "../support/api";
-import { getLocation, locationExists, patchLocation } from "../support/location";
+import { getLocation, patchLocation } from "../support/location";
 import { getNpc, npcPath, patchNpc } from "../support/npc";
-import { getScene, patchScene, scenePath } from "../support/scene";
-import { getSession } from "../support/session";
+import { getScene, scenePath } from "../support/scene";
+import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
 /** The npc of the example campaign the npc cases edit — its own resource (decisions/resources). */
 const NPC = "jorna";
 const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
-/** The shared conflict line (EditConflict) — the only role="alert" of the app. */
-const CONFLICT_LINE = ui("editConflict.line");
-/** Names of the example campaign (fixtures/beispiel) the cases read. */
-const SCENE_TITLE = "Ankunft am Leuchtturm";
 const NPC_NAME = "Hafenmeisterin Jorna";
-const LIGHTHOUSE = "Der Leuchtturm von Salzhafen";
-const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+const LOCATION = "leuchtturm";
+const LOCATION_URL = `/campaigns/beispiel/locations/${LOCATION}`;
+const LOCATION_NAME = "Der Leuchtturm von Salzhafen";
 
-/** The title of an entity's properties dialog. */
-function propertiesTitle(kind: "scene" | "npc" | "location" | "chapter"): string {
-  return ui("properties.title", { kind: ui(`kind.${kind}`) });
+/** The name of an entity's fields dialog. */
+function dialogName(kind: "kind.npc" | "kind.location" | "kind.chapter"): string {
+  return ui("properties.title", { kind: ui(kind) });
 }
 
-/**
- * Read the scene: its text, and every other field beside it — a field save has
- * to leave the text alone, which is what the assertions look at.
- */
-async function sceneSplit(api: Api) {
-  const { body, rev: _rev, ...fields } = await getScene(api, SCENE);
-  return { fields, body };
+/** The label of a field that cannot be emptied — it carries the marker that says so. */
+function requiredLabel(key: "properties.npc.name.label"): string {
+  return `${ui(key)}${ui("properties.field.required")}`;
 }
 
-/**
- * The resolved-name line under a reference input. Pinned down by ROLE and an
- * anchored text, not by text alone: the field's own <datalist> carries the
- * same name as an <option>, and the chapter field right above resolves to a
- * title that CONTAINS the location's name.
- */
-function referenceHint(dialog: Locator, name: string) {
-  return dialog
-    .getByRole("paragraph")
-    .filter({ hasText: new RegExp(`^${escapeStringRegexp(name)}$`) });
-}
-
-/** Open the header's properties action and hand back the dialog. */
-async function openProperties(page: Page) {
+/** Open the header's fields action and hand back the dialog. */
+async function openProperties(page: Page, kind: "kind.npc" | "kind.location" | "kind.chapter") {
   await page.getByRole("button", { name: ui("properties.action") }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: dialogName(kind) });
   await expect(dialog).toBeVisible();
   return dialog;
 }
 
-test("scene properties: chips, reference and status land in the scene — nothing else moves", async ({
-  page,
-  api,
-}) => {
-  const pristine = await sceneSplit(api);
-  // The location the scene is moved into below has to EXIST — a reference
-  // names an entry, and nothing is created by naming it (decisions/constraints). Creating
-  // one is the app's own path (tested in create.e2e.ts); here it is one call.
-  await api.send("POST", "campaigns/beispiel/locations", { name: "North Cove" });
-  // Entered from the chapter overview, so there is a history entry BEHIND the
-  // scene — the step-back assertion after the move below needs one.
-  await page.goto("/campaigns/beispiel");
-  await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
+function saveButton(dialog: Locator) {
+  // exact: the conflict line's "save anyway" contains the same word.
+  return dialog.getByRole("button", { name: ui("common.save"), exact: true });
+}
 
-  // The header action row: the body editor and this form, nothing else.
-  const headerActions = page
-    .getByRole("article")
-    .getByRole("button")
-    .filter({
-      hasText: new RegExp(
-        `^(${escapeStringRegexp(ui("common.edit"))}|${escapeStringRegexp(ui("properties.action"))})$`,
-      ),
-    });
-  await expect(headerActions).toHaveText([ui("common.edit"), ui("properties.action")]);
-
-  const dialog = await openProperties(page);
-  await expect(dialog).toContainText(propertiesTitle("scene"));
-  // The id is context, not a field: it is fixed at creation.
-  await expect(dialog).toContainText("lighthouse-arrival");
-  await expect(dialog.getByRole("button", { name: ui("idField.edit") })).toHaveCount(0);
-  await expect(dialog.getByLabel(ui("properties.scene.title.label"))).toHaveValue(SCENE_TITLE);
-  await expect(dialog.getByLabel(ui("properties.scene.status.label"))).toHaveValue("ready");
-
-  // A reference field is a text input with suggestions, and it says what the
-  // id it holds resolves to.
-  const location = dialog.getByLabel(ui("properties.scene.location.label"));
-  await expect(location).toHaveValue("leuchtturm");
-  await expect(referenceHint(dialog, LIGHTHOUSE)).toBeVisible();
-  // Its suggestions SUGGEST, they do not close the field: the ids that have an
-  // entry, offered through a native <datalist>. (No role reaches a datalist
-  // option, so this is the one place the spec uses the DOM id the field
-  // builds for its list.)
-  const suggestions = dialog.locator("#prop-location-options option");
-  // The three locations the campaign has: the two of the example data plus
-  // the one created above.
-  await expect(suggestions).toHaveCount(3);
-  await expect(suggestions.first()).toHaveAttribute("value", "leuchtturm");
-  // A reference CHIP names its entity next to the raw id.
-  const npcChip = dialog.getByRole("listitem").filter({ hasText: "jorna" });
-  await expect(npcChip).toContainText(NPC_NAME);
-
-  // Nothing changed yet, so there is nothing to save.
-  const save = dialog.getByRole("button", { name: ui("common.save") });
-  await expect(save).toBeDisabled();
-
-  // Enter turns the typed text into a chip …
-  const tags = dialog.getByLabel(ui("properties.scene.tags.label"));
-  await tags.fill("stealth");
-  await tags.press("Enter");
-  await expect(tags).toHaveValue("");
-  await expect(dialog.getByRole("button", { name: ui("properties.field.remove.aria", { item: "stealth" }) })).toBeVisible();
-  // … and text still STANDING in the input is folded in by the save instead
-  // of being lost with the closing dialog.
-  await tags.fill("night-scene");
-
-  // An id nothing holds stays typeable, and the hint says the save would be
-  // refused — a typo is visible before the click instead of in a toast after
-  // it (decisions/constraints).
-  await location.fill("does-not-exist");
-  await expect(referenceHint(dialog, ui("properties.ref.unknownLocation"))).toBeVisible();
-  await expect(referenceHint(dialog, LIGHTHOUSE)).toHaveCount(0);
-  // The location that exists resolves to its name, and that is the save below.
-  await location.fill("north-cove");
-  await expect(referenceHint(dialog, "North Cove")).toBeVisible();
-
-  // A CHAPTER says the same thing, and the server answers 400 for it too.
-  // Typed and taken back, so the save below stays the one this spec is about.
-  const chapter = dialog.getByLabel(ui("properties.scene.chapter.label"));
-  await chapter.fill("99-nowhere");
-  await expect(referenceHint(dialog, ui("properties.ref.unknownChapter"))).toBeVisible();
-  await chapter.fill("01-salzhafen");
-
-  await dialog.getByLabel(ui("properties.scene.status.label")).selectOption("draft");
-  await expect(save).toBeEnabled();
-  await save.click();
-
-  // The dialog closes and the reading view is already on the new values: the
-  // patch answers with the written scene and the mutation seeds it.
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  const article = page.getByRole("article");
-  await expect(article).toContainText(ui("sceneArticle.tag", { tag: "stealth" }));
-  await expect(article).toContainText(ui("sceneArticle.tag", { tag: "night-scene" }));
-  await expect(article.getByText("North Cove", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", {
-      name: ui("status.change.aria", { current: ui("status.scene.draft") }),
-    }),
-  ).toBeVisible();
-  // The scene is reached by its id (decisions/resources): a new location is a field, and
-  // the route stays where it is.
-  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
-
-  // The chapter overview does NOT re-sort: the location is a word of the row
-  // now, not a group over it (decisions/scene-order). So the row keeps its place in the
-  // order and names the new location — with the NAME of the location entry,
-  // never its id.
-  await page.goto("/campaigns/beispiel");
-  const row = page.getByRole("link", { name: new RegExp(escapeStringRegexp(SCENE_TITLE)) });
-  await expect(row).toContainText("North Cove");
-  await expect(row).not.toContainText(LIGHTHOUSE);
-  await expect(page.getByText("north-cove", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 3, name: "North Cove" })).toHaveCount(0);
-  // References resolve over ids, so the session's log rows are untouched — a
-  // row still names the scene it was taken in by that id.
-  expect((await getSession(api, "2026-01-15")).log.map((row) => row.sceneId)).toContain(
-    "lighthouse-arrival",
-  );
-
-  // Stored: the three changed fields …
-  await expect.poll(() => getScene(api, SCENE)).toHaveProperty("status", "draft");
-  const after = await sceneSplit(api);
-  expect(after.fields.tags).toEqual(["social", "travel", "stealth", "night-scene"]);
-  expect(after.fields.location).toBe("north-cove");
-  // …and the location it names is untouched: a scene references its group, it
-  // never writes it.
-  expect((await getLocation(api, "north-cove")).name).toBe("North Cove");
-  expect(after.fields.status).toBe("draft");
-  // … the untouched ones with their values …
-  expect(after.fields).toEqual({
-    ...pristine.fields,
-    tags: ["social", "travel", "stealth", "night-scene"],
-    location: "north-cove",
-    status: "draft",
-  });
-  // … and the body untouched, byte for byte.
-  expect(after.body).toBe(pristine.body);
-});
-
-test("the location field reads a name as its id — a missing location is refused", async ({
-  page,
-  api,
-}) => {
-  // A scene's `location` holds an id — but the DM types a name, and the form
-  // reads it as the id it means.
-  // What the save cannot do is invent the entry: a reference names something
-  // that exists (decisions/constraints), so a name no location holds is refused until that
-  // location is there — and then the very same save lands.
-  await page.goto(SCENE_URL);
-  const dialog = await openProperties(page);
-  const ort = dialog.getByLabel(ui("properties.scene.location.label"));
-  const save = dialog.getByRole("button", { name: ui("common.save") });
-
-  // Typing the NAME of an existing location resolves to that location.
-  await ort.fill("Leuchtturm");
-  await expect(referenceHint(dialog, LIGHTHOUSE)).toBeVisible();
-
-  // Text no slug can be derived from is blocked by the form itself.
-  await ort.fill("???");
-  await expect(
-    dialog.getByText(ui("properties.issue.locationUnusable", { value: "???" })),
-  ).toBeVisible();
-  await expect(save).toBeDisabled();
-
-  // A name no location holds: typeable, and the hint says it has to exist.
-  await ort.fill("The Old Harbour");
-  await expect(referenceHint(dialog, ui("properties.ref.unknownLocation"))).toBeVisible();
-  await expect(save).toBeEnabled();
-  await save.click();
-
-  // The server refuses it in the UI language, the dialog stays open on what
-  // was typed, and NOTHING was written — neither the scene nor a location.
-  await expect(
-    dialog.getByText(ui("server.location_unknown", { value: "the-old-harbour" })),
-  ).toBeVisible();
-  await expect(ort).toHaveValue("The Old Harbour");
-  expect(await locationExists(api, "the-old-harbour")).toBe(false);
-  expect((await getScene(api, SCENE)).location).toBe("leuchtturm");
-
-  // With the location created, the same save lands and the scene names it.
-  await api.send("POST", "campaigns/beispiel/locations", { name: "The Old Harbour" });
-  await save.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
-  await expect.poll(() => getScene(api, SCENE)).toHaveProperty("location", "the-old-harbour");
-
-  // …and the chapter overview's row names it, with the location's name.
-  await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("link", { name: new RegExp(escapeStringRegexp(SCENE_TITLE)) })).toContainText(
-    "The Old Harbour",
-  );
-});
-
-test("a rejected save shows the SERVER sentence, not the generic one", async ({ page }) => {
-  // The shared write layer answered every non-conflict rejection with its
-  // caller's generic wording, so a 400 that names exactly what is wrong was
-  // invisible to the DM. An unknown chapter is one of the five reference
-  // refusals, and the app builds its sentence from the code (decisions/constraints).
-  await page.goto(SCENE_URL);
-  const dialog = await openProperties(page);
-  await dialog.getByLabel(ui("properties.scene.chapter.label")).fill("99-nowhere");
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-
-  // The catalog sentence for the code, and the dialog stays open on the
-  // typed value.
-  await expect(
-    dialog.getByText(ui("server.chapter_unknown", { value: "99-nowhere" })),
-  ).toBeVisible();
-  await expect(dialog.getByText(ui("write.properties.failed"))).toHaveCount(0);
-  await expect(dialog.getByLabel(ui("properties.scene.chapter.label"))).toHaveValue("99-nowhere");
-});
-
-test("a CLEARED chapter blocks the save in the dialog — no round trip", async ({
-  page,
-  api,
-}) => {
-  // A scene always belongs to a chapter, so the server refuses a patch that
-  // removes it. The form says so under the field and the save button stays
-  // disabled, instead of a save that leaves and comes back as a toast.
-  await page.goto(SCENE_URL);
-  const dialog = await openProperties(page);
-  await dialog.getByLabel(ui("properties.scene.chapter.label")).fill("");
-  await expect(
-    dialog.getByText(ui("properties.issue.chapterRequired")),
-  ).toBeVisible();
-  await expect(dialog.getByRole("button", { name: ui("common.save") })).toBeDisabled();
-  // Typing the chapter back takes the line away again (the button stays
-  // disabled because there is nothing left to save), and the stored scene
-  // never moved.
-  await dialog.getByLabel(ui("properties.scene.chapter.label")).fill("01-salzhafen");
-  await expect(
-    dialog.getByText(ui("properties.issue.chapterRequired")),
-  ).toHaveCount(0);
-  expect(await getScene(api, SCENE)).toHaveProperty("chapter", "01-salzhafen");
-});
-
-/**
- * The dialog's conflict line with its two actions.
- *
- * The force action's label contains the dialog's own save label, so the save
- * button has to be addressed exactly — otherwise the two match as one.
- */
+/** The dialog's conflict line with its two actions — the only alert of the app. */
 function conflict(dialog: Locator) {
-  const line = dialog.getByRole("alert").filter({ hasText: CONFLICT_LINE });
+  const line = dialog.getByRole("alert");
   return {
     line,
     reload: line.getByRole("button", { name: ui("editConflict.reload") }),
@@ -334,144 +76,42 @@ function conflict(dialog: Locator) {
   };
 }
 
-test("a second writer: the dialog offers reloading, and it shows what is stored", async ({
-  page,
-  api,
-}) => {
-  const before = await sceneSplit(api);
-  const externalTitle = `${SCENE_TITLE} (by hand)`;
-  const externalBody = "\n## Flow\n\nChanged by a second writer.\n";
-
-  await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
-  const dialog = await openProperties(page);
-
-  const tags = dialog.getByLabel(ui("properties.scene.tags.label"));
-  await tags.fill("conflict");
-  await tags.press("Enter");
-  await expect(dialog.getByRole("button", { name: ui("properties.field.remove.aria", { item: "conflict" }) })).toBeVisible();
-
-  // A second writer changes title AND body under the open dialog — in ONE
-  // request, because that is what the scene's one write path is. A fresh
-  // token, so it succeeds; the dialog holds the version its editing session
-  // started from, so the version poll cannot make the DM's write succeed
-  // silently.
-  await patchScene(api, SCENE, { title: externalTitle, body: externalBody });
-
-  const save = dialog.getByRole("button", { name: ui("common.save"), exact: true });
-  await save.click();
-
-  // Refused, with both answers under the fields that still hold the draft.
-  const conflicted = conflict(dialog);
-  await expect(conflicted.line).toBeVisible();
-  await expect(conflicted.reload).toBeVisible();
-  await expect(conflicted.force).toBeVisible();
-  // The dialog stays open and the typed chip survives — that is the point.
-  await expect(dialog.getByRole("button", { name: ui("properties.field.remove.aria", { item: "conflict" }) })).toBeVisible();
-  await expect(dialog.getByLabel(ui("properties.scene.title.label"))).toHaveValue(SCENE_TITLE);
-  // Nothing was written: the other writer's content stands, untouched.
-  const stored = await sceneSplit(api);
-  expect(stored.fields.tags).not.toContain("conflict");
-  expect(stored.fields.title).toBe(externalTitle);
-  expect(stored.body).toBe(externalBody);
-
-  // Reloading shows the CURRENT values: the external title is in the field, the
-  // draft chip is gone, and nothing was written on the way.
-  await conflicted.reload.click();
-  await expect(conflicted.line).toHaveCount(0);
-  await expect(dialog.getByLabel(ui("properties.scene.title.label"))).toHaveValue(externalTitle);
-  await expect(dialog.getByRole("button", { name: ui("properties.field.remove.aria", { item: "conflict" }) })).toHaveCount(0);
-  expect(await sceneSplit(api)).toEqual(stored);
-
-  // From the adopted version the DM's chip saves in one click, and the save is
-  // still a patch of the dialog's fields only: the external body survives.
-  await tags.fill("conflict");
-  await tags.press("Enter");
-  await save.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await expect.poll(async () => (await getScene(api, SCENE)).tags).toContain("conflict");
-  const after = await sceneSplit(api);
-  expect(after.fields.tags).toEqual([...(before.fields.tags as string[]), "conflict"]);
-  expect(after.fields.title).toBe(externalTitle);
-  expect(after.body).toBe(externalBody);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(externalTitle);
-  await expect(page.getByRole("article")).toContainText(ui("sceneArticle.tag", { tag: "conflict" }));
-});
-
-test("a forced save writes the dialog's fields only — a concurrent body survives", async ({
-  page,
-  api,
-}) => {
-  const before = await sceneSplit(api);
-  const externalBody = "\n## Flow\n\nChanged by a second writer.\n";
-
-  await page.goto(SCENE_URL);
-  const dialog = await openProperties(page);
-
-  const tags = dialog.getByLabel(ui("properties.scene.tags.label"));
-  await tags.fill("forced");
-  await tags.press("Enter");
-  await expect(dialog.getByRole("button", { name: ui("properties.field.remove.aria", { item: "forced" }) })).toBeVisible();
-
-  // The second writer touches only the TEXT — the dialog's own fields are not
-  // in its request at all.
-  await patchScene(api, SCENE, { body: externalBody });
-
-  await dialog.getByRole("button", { name: ui("common.save"), exact: true }).click();
-  const conflicted = conflict(dialog);
-  await expect(conflicted.line).toBeVisible();
-
-  // Forcing writes the refused fields on top of the row as it stands. This
-  // dialog carries no text, so the body it never saw is untouched.
-  await conflicted.force.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await expect.poll(async () => (await getScene(api, SCENE)).tags).toContain("forced");
-  const after = await sceneSplit(api);
-  expect(after.fields.tags).toEqual([...(before.fields.tags as string[]), "forced"]);
-  expect(after.fields.title).toBe(before.fields.title);
-  // The assertion this test exists for, read back through the API.
-  expect(after.body).toBe(externalBody);
-  await expect(page.getByRole("article")).toContainText(ui("sceneArticle.tag", { tag: "forced" }));
-});
-
 test("a location's dialog: a second writer is the conflict line, and a forced save keeps the text", async ({
   page,
   api,
 }) => {
   // The location is its own resource (decisions/resources): its dialog writes the
   // location's PATCH, fields flat, against the location's `rev`.
-  const before = await getLocation(api, "leuchtturm");
-  const externalBody = "\n## Who is here\n\nChanged by a second writer.\n";
+  const before = await getLocation(api, LOCATION);
+  const theirs = "\n## Who is here\n\nChanged by a second writer.\n";
+  const roll20 = "Lighthouse (night)";
 
-  await page.goto("/campaigns/beispiel/locations/leuchtturm");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LIGHTHOUSE);
-  const dialog = await openProperties(page);
-  await expect(dialog).toContainText(propertiesTitle("location"));
-  await dialog.getByLabel(ui("properties.location.roll20.label")).fill("Lighthouse (night)");
+  await page.goto(LOCATION_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
+  const dialog = await openProperties(page, "kind.location");
+  await dialog.getByLabel(ui("properties.location.roll20.label")).fill(roll20);
 
   // The second writer touches only the TEXT.
-  await patchLocation(api, "leuchtturm", { body: externalBody });
+  await patchLocation(api, LOCATION, { body: theirs });
 
-  await dialog.getByRole("button", { name: ui("common.save"), exact: true }).click();
+  await saveButton(dialog).click();
   const conflicted = conflict(dialog);
   await expect(conflicted.line).toBeVisible();
   await expect(conflicted.reload).toBeVisible();
   // Nothing was written by the refused save.
-  expect((await getLocation(api, "leuchtturm")).roll20Page).toBe(before.roll20Page);
+  expect((await getLocation(api, LOCATION)).roll20Page).toBe(before.roll20Page);
 
   // Forcing writes the dialog's field on top of the row as it stands — the
   // text it never saw survives.
   await conflicted.force.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect.poll(async () => (await getLocation(api, "leuchtturm")).roll20Page).toBe("Lighthouse (night)");
-  const after = await getLocation(api, "leuchtturm");
-  expect(after.body).toBe(externalBody);
+  await expect.poll(async () => (await getLocation(api, LOCATION)).roll20Page).toBe(roll20);
+  const after = await getLocation(api, LOCATION);
+  expect(after.body).toBe(theirs);
   expect(after.name).toBe(before.name);
   expect(after.atmosphere).toBe(before.atmosphere);
   await expect(page.getByRole("article")).toContainText(
-    ui("entity.location.roll20", { value: "Lighthouse (night)" }),
+    ui("entity.location.roll20", { value: roll20 }),
   );
 });
 
@@ -482,19 +122,18 @@ test("an npc's dialog: a second writer is the conflict line, and a forced save k
   // The npc is its own resource (decisions/resources): its dialog writes the npc's
   // PATCH, fields flat, against the npc's `rev`.
   const before = await getNpc(api, NPC);
-  const externalBody = "\n## Knows\n\nChanged by a second writer.\n";
-  const role = "Harbourmistress, at odds with the council";
+  const theirs = "\n## Knows\n\nChanged by a second writer.\n";
+  const role = "Harbour master, at odds with the council";
 
   await page.goto(NPC_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
-  const dialog = await openProperties(page);
-  await expect(dialog).toContainText(propertiesTitle("npc"));
+  const dialog = await openProperties(page, "kind.npc");
   await dialog.getByLabel(ui("properties.npc.role.label")).fill(role);
 
   // The second writer touches only the TEXT.
-  await patchNpc(api, NPC, { body: externalBody });
+  await patchNpc(api, NPC, { body: theirs });
 
-  await dialog.getByRole("button", { name: ui("common.save"), exact: true }).click();
+  await saveButton(dialog).click();
   const conflicted = conflict(dialog);
   await expect(conflicted.line).toBeVisible();
   await expect(conflicted.reload).toBeVisible();
@@ -507,11 +146,59 @@ test("an npc's dialog: a second writer is the conflict line, and a forced save k
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect.poll(async () => (await getNpc(api, NPC)).role).toBe(role);
   const after = await getNpc(api, NPC);
-  expect(after.body).toBe(externalBody);
+  expect(after.body).toBe(theirs);
   expect(after.name).toBe(before.name);
   expect(after.motivation).toBe(before.motivation);
   expect(after.quickstats).toEqual(before.quickstats);
   await expect(page.getByRole("article")).toContainText(role);
+});
+
+test("a second writer: reloading shows what is stored, and the next save keeps the other text", async ({
+  page,
+  api,
+}) => {
+  const before = await getNpc(api, NPC);
+  const theirName = "Harbour master Jorna (renamed elsewhere)";
+  const theirs = "\n## Knows\n\nChanged by a second writer.\n";
+  const role = "Harbour master, after the reload";
+
+  await page.goto(NPC_URL);
+  const dialog = await openProperties(page, "kind.npc");
+  const roleField = dialog.getByLabel(ui("properties.npc.role.label"));
+  const nameField = dialog.getByLabel(requiredLabel("properties.npc.name.label"), { exact: true });
+  await roleField.fill("A role that is never written");
+
+  // A second writer changes name AND body under the open dialog — in ONE
+  // request, because that is what the npc's one write path is.
+  await patchNpc(api, NPC, { name: theirName, body: theirs });
+  await saveButton(dialog).click();
+
+  // Refused: the typed value stays, nothing was written.
+  const conflicted = conflict(dialog);
+  await expect(conflicted.line).toBeVisible();
+  await expect(roleField).toHaveValue("A role that is never written");
+  await expect(nameField).toHaveValue(NPC_NAME);
+  const stored = await getNpc(api, NPC);
+  expect(stored.role).toBe(before.role);
+  expect(stored.name).toBe(theirName);
+
+  // Reloading shows the CURRENT values and writes nothing on the way.
+  await conflicted.reload.click();
+  await expect(conflicted.line).toHaveCount(0);
+  await expect(nameField).toHaveValue(theirName);
+  await expect(roleField).toHaveValue(String(before.role));
+  expect(await getNpc(api, NPC)).toEqual(stored);
+
+  // From the adopted version the DM's change saves in one click, and it is
+  // still a patch of the dialog's fields only: the other writer's text stays.
+  await roleField.fill(role);
+  await saveButton(dialog).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect.poll(async () => (await getNpc(api, NPC)).role).toBe(role);
+  const after = await getNpc(api, NPC);
+  expect(after.name).toBe(theirName);
+  expect(after.body).toBe(theirs);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(theirName);
 });
 
 test("the npc's PATCH: a stale rev is a 409 with the npc, an unknown field a 400 naming it", async ({
@@ -537,74 +224,74 @@ test("the npc's PATCH: a stale rev is a 409 with the npc, an unknown field a 400
 
   // A key that is no field of an npc is a 400 that names it, and writes
   // nothing either.
-  const unknown = await patch({ rev: moved.rev, title: "Harbourmistress" });
+  const unknown = await patch({ rev: moved.rev, title: "Harbour master" });
   expect(unknown.status).toBe(400);
   expect(((await unknown.json()) as { error: string }).error).toContain('"title"');
   expect(await getNpc(api, NPC)).toEqual(moved);
+});
+
+test("a rejected save shows the SERVER sentence, not the generic one", async ({ page }) => {
+  // The shared write layer answers a non-conflict rejection with the sentence
+  // for the server's code: an unknown chapter is one of the reference
+  // refusals, and the app builds its sentence from the code (decisions/constraints).
+  await page.goto(NPC_URL);
+  const dialog = await openProperties(page, "kind.npc");
+  const chapter = dialog.getByLabel(ui("properties.npc.chapter.label"));
+  await chapter.fill("99-nowhere");
+  await saveButton(dialog).click();
+
+  // The catalog sentence for the code, and the dialog stays open on the
+  // typed value.
+  await expect(
+    dialog.getByText(ui("server.chapter_unknown", { value: "99-nowhere" })),
+  ).toBeVisible();
+  await expect(dialog.getByText(ui("write.properties.failed"))).toHaveCount(0);
+  await expect(chapter).toHaveValue("99-nowhere");
 });
 
 test("clearing a field deletes the key instead of writing an empty value", async ({
   page,
   api,
 }) => {
-  const before = await sceneSplit(api);
-  expect(before.fields.location).toBe("leuchtturm");
-  expect(before.fields.handouts).toEqual(["Karte von Salzhafen"]);
+  const before = await getNpc(api, NPC);
+  expect(before.statblock).toBe("Roll20: Jorna");
 
-  await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
-  const dialog = await openProperties(page);
+  await page.goto(NPC_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
+  const dialog = await openProperties(page, "kind.npc");
 
-  // The X of a chip removes it — the last one empties the list …
-  const chip = dialog.getByRole("button", {
-    name: ui("properties.field.remove.aria", { item: "Karte von Salzhafen" }),
-  });
-  await chip.click();
-  await expect(chip).toHaveCount(0);
-  // … and an emptied input clears its field.
-  await dialog.getByLabel(ui("properties.scene.location.label")).fill("");
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-
-  // The chip row keeps standing (the tags are still there), the two cleared
-  // values are gone from it.
+  // An emptied input clears its field.
+  await dialog.getByLabel(ui("properties.npc.statblock.label")).fill("");
+  await saveButton(dialog).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const article = page.getByRole("article");
-  await expect(article).toContainText(ui("sceneArticle.tag", { tag: "social" }));
-  // No handout chip at all — the label without a value is its prefix.
-  await expect(article).not.toContainText(ui("sceneArticle.handout", { handout: "" }).trim());
-  await expect(article.getByText(LIGHTHOUSE, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article")).not.toContainText(
+    ui("entity.npc.statblock", { value: "Roll20: Jorna" }),
+  );
 
-  // In the stored row the location is GONE, not an empty string, and the list
-  // is empty. (The dialog closes only after the write answered, so the scene
-  // is settled here.)
-  const after = await sceneSplit(api);
-  expect(after.fields.location).toBeUndefined();
-  expect(after.fields.handouts).toEqual([]);
-  // Everything else stands, the body byte-identical.
-  expect(after.fields.tags).toEqual(["social", "travel"]);
-  expect(after.fields.status).toBe("ready");
-  expect(after.fields.npcs).toEqual(["jorna"]);
-  expect(after.body).toBe(before.body);
+  // In the stored row the statblock is GONE, not an empty string, and every
+  // other field stands, the body byte-identical.
+  await expect.poll(async () => Object.hasOwn(await getNpc(api, NPC), "statblock")).toBe(false);
+  const { rev: _before, statblock: _cleared, ...rest } = before;
+  const { rev: _after, ...after } = await getNpc(api, NPC);
+  expect(after).toEqual(rest);
 });
 
-test("NPC properties: role, status and a quickstat round-trip into the header", async ({
+test("npc fields: role, status and a quickstat round-trip into the header", async ({
   page,
   api,
 }) => {
   const before = await getNpc(api, NPC);
-  const role = "Patron, on the council since autumn";
+  const role = "Patron, on the council since the autumn";
 
   await page.goto(NPC_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
 
-  const dialog = await openProperties(page);
-  await expect(dialog).toContainText(propertiesTitle("npc"));
-  await expect(dialog).toContainText("jorna");
-  // The NPC form has its own field list — the scene's keys are not in it.
+  const dialog = await openProperties(page, "kind.npc");
+  // The id is context, not a field: it is fixed at creation.
+  await expect(dialog).toContainText(NPC);
+  // The npc's dialog has its own field list — the scene's keys are not in it.
   await expect(dialog.getByLabel(ui("properties.scene.tags.label"))).toHaveCount(0);
-  await expect(dialog.getByLabel(ui("properties.npc.role.label"))).toHaveValue(
-    "Auftraggeberin, Hafenmeisterin von Salzhafen",
-  );
+  await expect(dialog.getByLabel(ui("properties.npc.role.label"))).toHaveValue(String(before.role));
 
   // An npc always has a status (its column is NOT NULL): the select offers
   // the four values and no empty choice.
@@ -621,12 +308,10 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await dialog.getByLabel(ui("properties.npc.role.label")).fill(role);
   await status.selectOption("missing");
   // Quickstats are free key/value rows — jorna has two, this is the third.
-  const save = dialog.getByRole("button", { name: ui("common.save") });
-  await dialog.getByRole("button", { name: ui("properties.field.addRow") }).click();
+  const save = saveButton(dialog);
   const quickstats = ui("properties.npc.quickstats.label");
-  const statName = dialog.getByLabel(
-    ui("properties.field.row.name.aria", { label: quickstats, row: 3 }),
-  );
+  await dialog.getByRole("button", { name: ui("properties.field.addRow") }).click();
+  const statName = dialog.getByLabel(ui("properties.field.row.name.aria", { label: quickstats, row: 3 }));
   const statValue = dialog.getByLabel(
     ui("properties.field.row.value.aria", { label: quickstats, row: 3 }),
   );
@@ -634,13 +319,13 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   // dropping it (a value with no name) or silently swallowing the first of two
   // rows with the SAME name would both lose what the DM typed.
   await statValue.fill("+1");
-  await expect(dialog).toContainText(ui("properties.issue.namelessRow"));
+  await expect(dialog.getByText(ui("properties.issue.namelessRow"))).toBeVisible();
   await expect(save).toBeDisabled();
   await statName.fill("insight");
-  await expect(dialog).toContainText(ui("properties.issue.duplicateName", { name: "insight" }));
+  await expect(dialog.getByText(ui("properties.issue.duplicateName", { name: "insight" }))).toBeVisible();
   await expect(save).toBeDisabled();
   await statName.fill("deception");
-  await expect(dialog).not.toContainText(ui("properties.issue.namelessRow"));
+  await expect(dialog.getByText(ui("properties.issue.namelessRow"))).toHaveCount(0);
   // Enter in a quickstat cell is NOT the form's submit: the dialog would save
   // and close in the middle of typing the next stat.
   await statName.press("Enter");
@@ -649,17 +334,15 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(save).toBeEnabled();
   await save.click();
 
-  // The NPC header carries all three.
+  // The npc header carries all three.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const article = page.getByRole("article");
   await expect(article).toContainText(role);
   await expect(article).toContainText(ui("status.npc.missing"));
   await expect(article).toContainText("deception +1");
   // Untouched header values stand.
-  await expect(article).toContainText("knapp, wetterrau, duzt jeden");
-  await expect(article).toContainText(
-    ui("entity.npc.statblock", { value: String(before.statblock) }),
-  );
+  await expect(article).toContainText(String(before.voice));
+  await expect(article).toContainText(ui("entity.npc.statblock", { value: "Roll20: Jorna" }));
 
   await expect.poll(async () => (await getNpc(api, NPC)).status).toBe("missing");
   const after = await getNpc(api, NPC);
@@ -667,131 +350,130 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   // A DM-typed relative value stays the STRING it was typed as; the numbers
   // already stored stay numbers.
   expect(after.quickstats).toEqual({ insight: 2, "passive-perception": 12, deception: "+1" });
-  expect(after.id).toBe("jorna");
+  expect(after.id).toBe(NPC);
   expect(after.name).toBe(NPC_NAME);
-  expect(after.voice).toBe("knapp, wetterrau, duzt jeden");
+  expect(after.voice).toBe(before.voice);
   expect(after.body).toBe(before.body);
 });
 
-test("Cancel and Esc ask before they throw typed values away", async ({ page, api }) => {
-  const before = await sceneSplit(api);
+test("cancel and Esc ask before they throw typed values away", async ({ page, api }) => {
+  const before = await getNpc(api, NPC);
+  const discard = page.getByRole("dialog", { name: ui("properties.discard.title") });
 
-  await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
+  await page.goto(NPC_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
 
   // Nothing typed, nothing to lose: the cancel action is immediate.
-  let dialog = await openProperties(page);
+  let dialog = await openProperties(page, "kind.npc");
   await dialog.getByRole("button", { name: ui("common.cancel") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // With something typed, Esc asks first — and keeping on editing keeps it.
-  dialog = await openProperties(page);
-  const title = dialog.getByLabel(ui("properties.scene.title.label"));
-  await title.fill(`${SCENE_TITLE}, never saved`);
+  dialog = await openProperties(page, "kind.npc");
+  const role = dialog.getByLabel(ui("properties.npc.role.label"));
+  await role.fill("A role that is never saved");
   await page.keyboard.press("Escape");
-  const confirm = page.getByRole("dialog").filter({ hasText: ui("properties.discard.title") });
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
-  await expect(confirm).toHaveCount(0);
-  await expect(title).toHaveValue(`${SCENE_TITLE}, never saved`);
+  await expect(discard).toBeVisible();
+  await discard.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
+  await expect(discard).toHaveCount(0);
+  await expect(role).toHaveValue("A role that is never saved");
 
   // Cancelling asks the same question, and discarding closes everything.
   await dialog.getByRole("button", { name: ui("common.cancel") }).click();
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: ui("common.discard") }).click();
+  await expect(discard).toBeVisible();
+  await discard.getByRole("button", { name: ui("common.discard") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The reading view is as it was, and nothing was written.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
-  expect(await sceneSplit(api)).toEqual(before);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
+  expect(await getNpc(api, NPC)).toEqual(before);
 });
 
-test("navigating away closes the dialog — no diff of scene A lands in npc B", async ({
+test("navigating away closes the dialog — no change of location A lands in npc B", async ({
   page,
   api,
 }) => {
-  const scene = await sceneSplit(api);
+  const location = await getLocation(api, LOCATION);
   const role = "Patron, saved after the ⌘K navigation";
 
-  await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
+  await page.goto(LOCATION_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
 
-  // Type into the SCENE's form, then leave the scene WITHOUT closing it: the
-  // ⌘K hotkey is a window listener, so the palette opens over the modal and
-  // navigates the route underneath it — this is a click path, not a theory.
-  const sceneDialog = await openProperties(page);
-  await sceneDialog.getByLabel(ui("properties.scene.title.label")).fill("A title that must never be written");
+  // Type into the LOCATION's dialog, then leave the location WITHOUT closing
+  // it: the ⌘K hotkey is a window listener, so the palette opens over the
+  // modal and navigates the route underneath it — a click path, not a theory.
+  const locationDialog = await openProperties(page, "kind.location");
+  await locationDialog
+    .getByLabel(ui("properties.location.name.label"))
+    .fill("A name that must never be written");
   await page.keyboard.press("ControlOrMeta+KeyK");
-  const search = page.getByPlaceholder(ui("palette.placeholder"));
+  const search = page.getByRole("combobox");
   await expect(search).toBeFocused();
-  await search.fill(NPC_NAME);
+  await search.fill("Hafenmeisterin");
   await page.getByRole("option").filter({ hasText: NPC_NAME }).first().click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
 
-  // The dialog is gone with its scene — it may not stand over another reading
-  // view, holding the frozen values (and the rev) of the one it left.
+  // The dialog is gone with its location — it may not stand over another
+  // reading view, holding the frozen values (and the rev) of the one it left.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // And the NPC's own dialog opens fresh: its fields, no carried-over diff.
-  const npcDialog = await openProperties(page);
-  await expect(npcDialog).toContainText(propertiesTitle("npc"));
-  await expect(npcDialog.getByLabel(ui("properties.scene.title.label"))).toHaveCount(0);
-  // Anchored: the quickstat rows carry a suffixed name label as well.
-  await expect(
-    npcDialog.getByLabel(new RegExp(`^${escapeStringRegexp(ui("properties.npc.name.label"))}`)),
-  ).toHaveValue(NPC_NAME);
-  await expect(npcDialog.getByRole("button", { name: ui("common.save") })).toBeDisabled();
+  // And the npc's own dialog opens fresh: its fields, no carried-over change.
+  const npcDialog = await openProperties(page, "kind.npc");
+  await expect(npcDialog.getByLabel(ui("properties.location.roll20.label"))).toHaveCount(0);
+  await expect(npcDialog.getByLabel(requiredLabel("properties.npc.name.label"), { exact: true })).toHaveValue(
+    NPC_NAME,
+  );
+  await expect(saveButton(npcDialog)).toBeDisabled();
 
   // A save from here writes THIS npc only.
   await npcDialog.getByLabel(ui("properties.npc.role.label")).fill(role);
-  await npcDialog.getByRole("button", { name: ui("common.save") }).click();
+  await saveButton(npcDialog).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   await expect.poll(async () => (await getNpc(api, NPC)).role).toBe(role);
-  expect(await sceneSplit(api)).toEqual(scene);
+  expect(await getLocation(api, LOCATION)).toEqual(location);
 });
 
-test("location and chapter have the form too — the campaign brings its own", async ({
+test("npc, location and chapter have the dialog — a scene edits in place, the campaign brings its own", async ({
   page,
 }) => {
-  // The four entities with a reading view offer it, each on its own route
+  // The entities with a fields dialog offer it, each on its own route
   // (decisions/resources) …
-  const withForm: [string, string, "scene" | "npc" | "location" | "chapter"][] = [
-    ["scenes/smuggler-captured", "Von den Schmugglern erwischt", "scene"],
-    ["npcs/fenn", "Fenn", "npc"],
-    ["locations/leuchtturm", LIGHTHOUSE, "location"],
-    ["chapters/01-salzhafen", CHAPTER_TITLE, "chapter"],
+  const withDialog: [string, string, "kind.npc" | "kind.location" | "kind.chapter"][] = [
+    ["npcs/fenn", "Fenn", "kind.npc"],
+    ["locations/leuchtturm", LOCATION_NAME, "kind.location"],
+    ["chapters/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "kind.chapter"],
   ];
-  for (const [route, heading, kind] of withForm) {
+  for (const [route, heading, kind] of withDialog) {
     await page.goto(`/campaigns/beispiel/${route}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
-    const dialog = await openProperties(page);
-    await expect(dialog).toContainText(propertiesTitle(kind));
+    const dialog = await openProperties(page, kind);
     // Clean exit — nothing changed, nothing written.
     await dialog.getByRole("button", { name: ui("common.cancel") }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // The lists have no reading view (decisions/resources), so there is none on which a
-  // form could be missing.
+  // … a scene does not: its fields are part of its edit mode.
+  await page.goto("/campaigns/beispiel/scenes/smuggler-captured");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Von den Schmugglern erwischt");
+  await expect(page.getByRole("button", { name: ui("properties.action") })).toHaveCount(0);
 
   // The campaign's route is the chapter overview, and its one edit action in
   // the header opens its own dialog over name, description and text.
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LIGHTHOUSE);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
   await page.getByRole("button", { name: ui("common.edit"), exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText(ui("campaignEdit.title"));
+  await expect(page.getByRole("dialog", { name: ui("campaignEdit.title") })).toBeVisible();
 });
 
 test("a status outside the closed list is refused and writes nothing", async ({ api }) => {
   // The four status columns and the scene type are CHECK constraints of their
-  // columns (decisions/constraints), so the scene's write refuses a foreign value with a
-  // 400 and its own code instead of letting SQLite fail. The form can only
-  // ever offer the allowed positions — this asserts the rule on the endpoint,
-  // which is what protects the column against the generator and a direct
-  // write as well.
-  const before = await sceneSplit(api);
+  // columns (decisions/constraints), so the scene's write refuses a foreign
+  // value with a 400 and its own code instead of letting SQLite fail. The
+  // edit mode can only ever offer the allowed positions — this asserts the
+  // rule on the endpoint, which is what protects the column against the
+  // generator and a direct write as well.
   const current = await getScene(api, SCENE);
   const response = await api.fetch(scenePath(api, SCENE), {
     method: "PATCH",
@@ -808,41 +490,37 @@ test("a status outside the closed list is refused and writes nothing", async ({ 
     allowed: ["draft", "ready", "played", "dropped"],
   });
   // A refusal writes nothing — no field moved, and the guard token stands.
-  expect(await sceneSplit(api)).toEqual(before);
-  expect((await getScene(api, SCENE)).rev).toBe(current.rev);
+  expect(await getScene(api, SCENE)).toEqual(current);
 });
 
-// Critical path 8: the same form at phone size. The dialog is the only place
-// in the reading view where the DM types more than one field, so it has to
-// work here — the header action row wraps to a second line for it.
+// Critical path 8: the same dialog at phone size. It is where the DM types
+// more than one field of an npc, so it has to work here.
 test.describe("at 390px", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("the properties dialog opens, edits and saves at phone size", async ({ page, api }) => {
-    const before = await sceneSplit(api);
-    const title = `${SCENE_TITLE} by night`;
+  test("the fields dialog opens, edits and saves at phone size", async ({ page, api }) => {
+    const before = await getNpc(api, NPC);
+    const name = "Harbour master Jorna at night";
 
-    await page.goto(SCENE_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
+    await page.goto(NPC_URL);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
 
-    const dialog = await openProperties(page);
-    await expect(dialog).toContainText(propertiesTitle("scene"));
+    const dialog = await openProperties(page, "kind.npc");
     // Nothing may scroll the page sideways while the dialog stands.
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
 
-    const titleInput = dialog.getByLabel(ui("properties.scene.title.label"));
-    await titleInput.fill(title);
-    await dialog.getByRole("button", { name: ui("common.save") }).click();
+    await dialog.getByLabel(requiredLabel("properties.npc.name.label"), { exact: true }).fill(name);
+    await saveButton(dialog).click();
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
 
-    await expect.poll(() => getScene(api, SCENE)).toHaveProperty("title", title);
-    const after = await sceneSplit(api);
-    expect(after.fields.status).toBe("ready");
+    await expect.poll(async () => (await getNpc(api, NPC)).name).toBe(name);
+    const after = await getNpc(api, NPC);
+    expect(after.status).toBe(before.status);
     expect(after.body).toBe(before.body);
   });
 });

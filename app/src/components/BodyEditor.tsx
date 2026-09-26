@@ -17,6 +17,11 @@
 // over every fixture body. Saving works from either surface — the save path below only
 // ever sees `draftBody(draft)`.
 //
+// The framed text surface on its own is `BodyEditorSurface`: an edit mode
+// that owns its save and cancel elsewhere on the page (the scene's, with its
+// actions in the page header) puts only the surface into its layout and
+// reads what blocks a save from `useDraftIssues`.
+//
 // What the DM sees stays the same page: the header (title, chips, status
 // control) keeps standing, only the body below it becomes editable. Beside
 // the text the surface carries the PROSE FIELDS its caller puts there — an
@@ -41,6 +46,7 @@ import { PenLine } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { BlockComposer, ComposerModeToggle } from "@/components/BlockComposer";
+import { DiscardChangesDialog } from "@/components/DiscardChangesDialog";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
 import {
@@ -49,13 +55,6 @@ import {
   MarkdownEditorToggle,
 } from "@/components/MarkdownEditor";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useT } from "@/i18n";
 import {
   composerDraft,
@@ -131,6 +130,18 @@ export function useBodyDraft(seed: string): BodyDraft {
   };
 }
 
+/**
+ * What the block list would break if it were written now, per block. The raw
+ * surface has no such state: its text IS the row's.
+ */
+export function useDraftIssues(draft: ComposerDraft): Record<string, string> {
+  const t = useT();
+  return useMemo(
+    () => (draft.mode === "blocks" ? composerIssues(draft.blocks, t) : EMPTY_ISSUES),
+    [draft, t],
+  );
+}
+
 /** The prose fields beside the text: their controls, labels, and what changed in them. */
 export interface BodyEditFields<F extends object> {
   controls: ReactNode;
@@ -154,9 +165,84 @@ export interface BodyEditSession<F extends object = Record<string, unknown>> {
 // --- the surface --------------------------------------------------------------------
 
 /**
+ * The framed text surface: the mode switch, the preview toggle of the raw
+ * surface, the caller's toolbar actions and the prose fields, over the block
+ * composer or the textarea.
+ */
+export function BodyEditorSurface({
+  editorKey,
+  label,
+  draft: state,
+  issues,
+  actions,
+  fields,
+}: {
+  /** What the DOM ids are built from — unique per edited row. */
+  editorKey: string;
+  /** How the surface is named for assistive technology. */
+  label: string;
+  draft: BodyDraft;
+  /** From `useDraftIssues` — shown at the block they belong to. */
+  issues: Record<string, string>;
+  /** The caller's actions at the right end of the toolbar. */
+  actions?: ReactNode;
+  /** The prose fields' controls, above the text. */
+  fields?: ReactNode;
+}) {
+  const t = useT();
+  const { draft, setDraft } = state;
+  // Textarea (true) or rendered preview (false) — the markdown surface's own
+  // toggle. The block surface has no preview of its own: every card already
+  // shows its content.
+  const [editing, setEditing] = useState(true);
+  const textareaId = textareaIdFor(editorKey);
+  return (
+    <EditorShell
+      controls={
+        <>
+          <ComposerModeToggle
+            mode={draft.mode}
+            onModeChange={(mode) => setDraft(withDraftMode(draft, mode))}
+          />
+          {draft.mode === "markdown" && (
+            <MarkdownEditorToggle
+              editing={editing}
+              onToggleEditing={() => setEditing((wasEditing) => !wasEditing)}
+              controlsId={textareaId}
+            />
+          )}
+        </>
+      }
+      actions={actions}
+    >
+      {fields !== undefined && (
+        <div className="mt-3.5 flex flex-col gap-3.5 border-b border-border pb-4">{fields}</div>
+      )}
+      {draft.mode === "blocks" ? (
+        <BlockComposer
+          blocks={draft.blocks}
+          onChange={(blocks) => setDraft(withDraftBlocks(blocks))}
+          idPrefix={textareaId}
+          label={label}
+          issues={issues}
+        />
+      ) : (
+        <MarkdownEditorSurface
+          value={draft.text}
+          onChange={(text) => setDraft(withDraftText(text))}
+          editing={editing}
+          id={textareaId}
+          label={t("bodyEditor.markdown.aria", { path: label })}
+        />
+      )}
+    </EditorShell>
+  );
+}
+
+/**
  * The editing surface itself, the same on every reading view: the text on
- * two surfaces over one draft, the prose fields beside it, the conflict line
- * and the discard guard.
+ * two surfaces over one draft, the prose fields beside it, save and cancel in
+ * its toolbar, the conflict line and the discard guard.
  */
 export function BodyEditor<F extends object>({
   editorKey,
@@ -177,47 +263,27 @@ export function BodyEditor<F extends object>({
   onClose: () => void;
 }) {
   const t = useT();
-  const { draft, setDraft } = state;
   const write = bodyEditorChange(state.baseline, state.body, fields?.change);
-  // Textarea (true) or rendered preview (false) — the markdown surface's own
-  // toggle, unchanged. The block surface has no preview of its own: every card
-  // already shows its content.
-  const [editing, setEditing] = useState(true);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const { isSaving, message } = edit;
   const dirty = hasBodyEditChange(write);
-  // What the block list would break if it were written now, per block — the
-  // same seam a dialog uses for a field: the card says it, the button waits. The raw surface has no such state: its text IS
-  // the row's.
-  const issues = useMemo(
-    () => (draft.mode === "blocks" ? composerIssues(draft.blocks, t) : EMPTY_ISSUES),
-    [draft, t],
-  );
+  // What the block list would break if it were written now: the card says
+  // it, the button waits.
+  const issues = useDraftIssues(state.draft);
   const blocked = Object.keys(issues).length > 0;
   const cancel = () => {
     if (dirty) setConfirmDiscard(true);
     else onClose();
   };
-  const textareaId = textareaIdFor(editorKey);
 
   return (
     <div>
-      <EditorShell
-        controls={
-          <>
-            <ComposerModeToggle
-              mode={draft.mode}
-              onModeChange={(mode) => setDraft(withDraftMode(draft, mode))}
-            />
-            {draft.mode === "markdown" && (
-              <MarkdownEditorToggle
-                editing={editing}
-                onToggleEditing={() => setEditing((wasEditing) => !wasEditing)}
-                controlsId={textareaId}
-              />
-            )}
-          </>
-        }
+      <BodyEditorSurface
+        editorKey={editorKey}
+        label={label}
+        draft={state}
+        issues={issues}
+        fields={fields?.controls}
         actions={
           <>
             <Button
@@ -240,30 +306,7 @@ export function BodyEditor<F extends object>({
             </Button>
           </>
         }
-      >
-        {fields !== undefined && (
-          <div className="mt-3.5 flex flex-col gap-3.5 border-b border-border pb-4">
-            {fields.controls}
-          </div>
-        )}
-        {draft.mode === "blocks" ? (
-          <BlockComposer
-            blocks={draft.blocks}
-            onChange={(blocks) => setDraft(withDraftBlocks(blocks))}
-            idPrefix={textareaId}
-            label={label}
-            issues={issues}
-          />
-        ) : (
-          <MarkdownEditorSurface
-            value={draft.text}
-            onChange={(text) => setDraft(withDraftText(text))}
-            editing={editing}
-            id={textareaId}
-            label={t("bodyEditor.markdown.aria", { path: label })}
-          />
-        )}
-      </EditorShell>
+      />
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-[12px] text-faint">
           {fields === undefined
@@ -281,47 +324,17 @@ export function BodyEditor<F extends object>({
           both answers stand right under the editor that holds it. */}
       {edit.conflict !== undefined && (
         <div className="mt-1">
-          <EditConflict
-            onReload={edit.reload}
-            onForce={edit.forceSave}
-            busy={isSaving}
-          />
+          <EditConflict onReload={edit.reload} onForce={edit.forceSave} busy={isSaving} />
         </div>
       )}
       {confirmDiscard && (
-        <Dialog
-          open
-          onOpenChange={(isOpen) => {
-            if (!isOpen) setConfirmDiscard(false);
+        <DiscardChangesDialog
+          onKeep={() => setConfirmDiscard(false)}
+          onDiscard={() => {
+            setConfirmDiscard(false);
+            onClose();
           }}
-        >
-          <DialogContent aria-describedby={undefined} className="max-w-[420px]">
-            <DialogTitle>{t("bodyEditor.discard.title")}</DialogTitle>
-            <DialogDescription>{t("bodyEditor.discard.description")}</DialogDescription>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <DialogClose asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-                >
-                  {t("properties.discard.keepEditing")}
-                </Button>
-              </DialogClose>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => {
-                  setConfirmDiscard(false);
-                  onClose();
-                }}
-                className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
-              >
-                {t("common.discard")}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        />
       )}
     </div>
   );

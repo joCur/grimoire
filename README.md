@@ -1,92 +1,91 @@
-# Grimoire — Datenmodell & Konventionen
+# Grimoire — data model & conventions
 
-Grimoire speichert eine Kampagne in einer SQLite-Datenbank
-(`GRIMOIRE_DATA/grimoire.db`). Jede Entität — **Kampagne**, **Kapitel**,
-**Szene**, **NPC**, **Ort**, **Faden** (ein Handlungsstrang, den ein Kapitel
-trägt), **Idee**, **Glossar-Begriff**, **Kampagnenwissen** (jede
-Namenskonvention, jeder Fakt, jede Stilregel für sich) und die **Session**
-mit ihren **Pausen** und **Log-Zeilen** — ist eine Zeile ihrer eigenen
-Tabelle und ihre eigene Ressource mit ihren eigenen
-Feldern ([decisions/resources](docs/decisions/resources.md)). Kampagne, Kapitel, Szene, NPC und Ort haben unter ihren
-Feldern einen `body`: ihren **Text** in Markdown.
+Grimoire stores a campaign in an SQLite database
+(`GRIMOIRE_DATA/grimoire.db`). Every entity — **campaign**, **chapter**,
+**scene**, **NPC**, **location**, **thread** (a plot thread a chapter
+carries), **idea**, **glossary term**, **campaign knowledge** (every naming
+convention, every fact, every style rule on its own) and the **session**
+with its **pauses** and **log lines** — is a row of its own table and its own
+resource with its own
+fields ([decisions/resources](docs/decisions/resources.md)). Campaign, chapter, scene, NPC and location have among their
+fields a `body`: their **text** in Markdown.
 
-Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
-README beschreibt, was in den Feldern stehen darf und was der Text
-enthalten kann. Alle Feldnamen sind Englisch (stabil, maschinenlesbar), alle
-Inhalte Deutsch.
+The storage shape is stated exactly once, in `server/src/db/schema.ts`; this
+README describes what the fields may hold and what the text can contain.
+All field names are English (stable, machine-readable), all content is
+German.
 
-Grundprinzip: **Das Format degradiert, es validiert nicht.** Eine unbekannte
-Überschrift oder ein unbekannter Callout im Text wird als normaler Text
-gezeigt; nichts bricht.
+Ground rule: **the format degrades, it does not validate.** An unknown
+heading or an unknown callout in the text is shown as normal text; nothing
+breaks.
 
-## Ressourcen
+## Resources
 
-Jede Entität ist ihre eigene **Ressource** mit ihrem eigenen Typ aus genau
-einem zod-Schema in `shared/src/<entität>.ts` ([decisions/resources](docs/decisions/resources.md)). Die URL nennt die
-Entität und ihre `id`; eine Antwort trägt alle Felder der Entität
-nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
+Every entity is its own **resource** with its own type from exactly one zod
+schema in `shared/src/<entity>.ts` ([decisions/resources](docs/decisions/resources.md)). The URL names the entity and
+its `id`; a response carries all fields of the entity side by side, `body`
+included, without `kind`, without `path`:
 
-| Entität | Lesen/Ändern | Anlegen/Liste | App-Route |
-| ------- | ------------ | ------------- | --------- |
-| Kampagne | `GET/PATCH /api/campaigns/<kampagne>` | `POST /api/campaigns` | `/campaigns/<kampagne>` |
-| Kapitel | `GET/PATCH /api/campaigns/<kampagne>/chapters/<id>` | `GET/POST /api/campaigns/<kampagne>/chapters` | `/campaigns/<kampagne>/chapters/<id>` |
-| Szene | `GET/PATCH /api/campaigns/<kampagne>/scenes/<id>` | `GET/POST /api/campaigns/<kampagne>/scenes` | `/campaigns/<kampagne>/scenes/<id>` |
-| NPC | `GET/PATCH /api/campaigns/<kampagne>/npcs/<id>` | `GET/POST /api/campaigns/<kampagne>/npcs` | `/campaigns/<kampagne>/npcs/<id>` |
-| Ort | `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>` |
-| Faden | `GET/PATCH/DELETE /api/campaigns/<kampagne>/threads/<id>` | `GET/POST /api/campaigns/<kampagne>/threads` | in der Kapitelübersicht `/campaigns/<kampagne>` |
-| Idee | `GET/PATCH /api/campaigns/<kampagne>/ideas/<id>` | `GET/POST /api/campaigns/<kampagne>/ideas` | in der Nachbereitung und auf der Mobil-Startfläche |
-| Glossar-Begriff | `GET/PATCH/DELETE /api/campaigns/<kampagne>/glossary-terms/<id>` | `GET/POST /api/campaigns/<kampagne>/glossary-terms` | auf der Glossar-Seite `/campaigns/<kampagne>/glossary` |
-| Kampagnenwissen | `GET/PATCH/DELETE /api/campaigns/<kampagne>/knowledge-items/<id>` | `GET/POST /api/campaigns/<kampagne>/knowledge-items` | auf der Wissens-Seite `/campaigns/<kampagne>/knowledge` |
-| Session | `GET/PATCH/DELETE /api/campaigns/<kampagne>/sessions/<id>` | `GET/POST /api/campaigns/<kampagne>/sessions` | `/campaigns/<kampagne>/sessions/<id>`, live `/campaigns/<kampagne>/live` |
-| Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in der Session |
-| Log-Zeile | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in der Session und der Nachbereitung |
+| Entity | Read/change | Create/list | App route |
+| ------ | ----------- | ----------- | --------- |
+| Campaign | `GET/PATCH /api/campaigns/<campaign>` | `POST /api/campaigns` | `/campaigns/<campaign>` |
+| Chapter | `GET/PATCH /api/campaigns/<campaign>/chapters/<id>` | `GET/POST /api/campaigns/<campaign>/chapters` | `/campaigns/<campaign>/chapters/<id>` |
+| Scene | `GET/PATCH /api/campaigns/<campaign>/scenes/<id>` | `GET/POST /api/campaigns/<campaign>/scenes` | `/campaigns/<campaign>/scenes/<id>` |
+| NPC | `GET/PATCH /api/campaigns/<campaign>/npcs/<id>` | `GET/POST /api/campaigns/<campaign>/npcs` | `/campaigns/<campaign>/npcs/<id>` |
+| Location | `GET/PATCH /api/campaigns/<campaign>/locations/<id>` | `GET/POST /api/campaigns/<campaign>/locations` | `/campaigns/<campaign>/locations/<id>` |
+| Thread | `GET/PATCH/DELETE /api/campaigns/<campaign>/threads/<id>` | `GET/POST /api/campaigns/<campaign>/threads` | in the chapter overview `/campaigns/<campaign>` |
+| Idea | `GET/PATCH /api/campaigns/<campaign>/ideas/<id>` | `GET/POST /api/campaigns/<campaign>/ideas` | in the debrief and on the mobile start surface |
+| Glossary term | `GET/PATCH/DELETE /api/campaigns/<campaign>/glossary-terms/<id>` | `GET/POST /api/campaigns/<campaign>/glossary-terms` | on the glossary page `/campaigns/<campaign>/glossary` |
+| Campaign knowledge | `GET/PATCH/DELETE /api/campaigns/<campaign>/knowledge-items/<id>` | `GET/POST /api/campaigns/<campaign>/knowledge-items` | on the knowledge page `/campaigns/<campaign>/knowledge` |
+| Session | `GET/PATCH/DELETE /api/campaigns/<campaign>/sessions/<id>` | `GET/POST /api/campaigns/<campaign>/sessions` | `/campaigns/<campaign>/sessions/<id>`, live `/campaigns/<campaign>/live` |
+| Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
+| Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
 
-Die Kapitelübersicht bleibt `/campaigns/<kampagne>`; die Liste der Kampagnen
-(`GET /api/campaigns`) antwortet mit ihrer eigenen Form, dem Namen neben der
-jüngsten Session.
+The chapter overview stays `/campaigns/<campaign>`; the list of campaigns
+(`GET /api/campaigns`) responds with its own shape, the name next to the
+most recent session.
 
-Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
-Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
-Referenz-Schlüssel in URLs, Links und `[[id]]`-Referenzen und ändert sich
-danach nie mehr ([decisions/constraints](docs/decisions/constraints.md)). Der Felder-Dialog („Eigenschaften“) zeigt sie, bietet aber
-keine Änderung.
+The `id` is derived from the typed name on creation, by exactly one rule
+(`@grimoire/shared/slug`), and is fixed from then on: it is the reference
+key in URLs, links and `[[id]]` references and never changes afterwards
+([decisions/constraints](docs/decisions/constraints.md)). The fields dialog of an NPC, a location or a chapter shows it
+without offering a change; a scene's edit mode has no id field at all.
 
-Die Kapitelübersicht ist eine durchgehende Liste der Szenen eines Kapitels
-in der **Reihenfolge, die der DM setzt** ([decisions/scene-order](docs/decisions/scene-order.md)); der Ort steht mit
-seinem Namen in der Metazeile der einzelnen Szene — hat eine Szene keinen,
-fehlt dort schlicht der Ortsteil —, Eventualszenen stehen als eigener Block
-am Ende. Diese Reihenfolge ist **kein Feld** — sie ist
-eine Aussage des Kapitels über seine Szenen, nicht einer Szene über sich
-selbst, und steht deshalb in keiner Feldtabelle dieses Dokuments. Gepflegt
-wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
-Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
-Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
-übernommen werden ([decisions/scene-order](docs/decisions/scene-order.md)).
+The chapter overview is one continuous list of a chapter's scenes in the
+**order the DM sets** ([decisions/scene-order](docs/decisions/scene-order.md)); the location appears by its name in the
+meta line of each scene — if a scene has none, the location part is simply
+missing there —, contingency scenes stand as a block of their own at the
+end. This order is **not a field** — it is a statement of the chapter about
+its scenes, not of a scene about itself, and therefore appears in no field
+table of this document. It is maintained via up/down in the chapter
+overview; a new scene lands at the end of its chapter. The scenes of a
+generator run keep the order of its outline, even when they are accepted
+one by one and out of order ([decisions/scene-order](docs/decisions/scene-order.md)).
 
-Glossar-Begriffe und Kampagnenwissen bekommt der Generator als Kontext; beide
-werden auf ihren eigenen Seiten gepflegt.
+The generator gets glossary terms and campaign knowledge as context; both
+are maintained on their own pages.
 
-Alles Kampagnenabhängige hängt unter der Kampagne — in der API
-`/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` ([decisions/resources](docs/decisions/resources.md)).
-Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
+Everything that depends on a campaign hangs under the campaign — in the API
+`/api/campaigns/<campaign>/…`, in the app `/campaigns/<campaign>/…` ([decisions/resources](docs/decisions/resources.md)).
+Without a campaign stay `/api/campaigns`, `/api/settings` and `/settings`.
 
-## Felder
+## Fields
 
-Was eine Ansicht als Daten braucht, ist ein Feld einer Entität oder eine
-Zeile einer Liste, nie ein Abschnitt, der über seine Überschrift gefunden
-wird ([decisions/data-shape](docs/decisions/data-shape.md)).
+Whatever a view needs as data is a field of an entity or a row of a list,
+never a section found by its heading
+([decisions/data-shape](docs/decisions/data-shape.md)).
 
-Geschrieben wird jede Entität mit `PATCH` auf ihrer Ressource und
-`{ rev, force?, …Teilmenge der Felder }`: nur die genannten Felder ändern
-sich, `null` löscht ein optionales Feld, und ein Feld, das die Entität nicht
-kennt, oder ein Wert der falschen Form ist eine 400, die das Feld nennt. Ein
-veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource.
+Every entity is written with `PATCH` on its resource and
+`{ rev, force?, …subset of the fields }`: only the named fields change,
+`null` clears an optional field, and a field the entity does not know, or a
+value of the wrong shape, is a 400 that names the field. A stale `rev` is
+409 with the current state of the resource.
 
-### Kampagne
+### Campaign
 
-Die Kampagne ist ihre eigene Ressource mit ihrem eigenen Typ (`Campaign`, aus
-dem zod-Schema in `shared/src/campaign.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
-/api/campaigns/<kampagne>` antwortet mit ihr:
+The campaign is its own resource with its own type (`Campaign`, from the zod
+schema in `shared/src/campaign.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
+/api/campaigns/<campaign>` responds with it:
 
 ```json
 {
@@ -99,35 +98,35 @@ dem zod-Schema in `shared/src/campaign.ts`, [decisions/resources](docs/decisions
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil, der Schlüssel in jeder URL |
-| `name` | Anzeigename in der UI; fehlt er, ist der Anzeigename die id |
-| `description` | Kurzbeschreibung, eine Zeile; optional |
-| `body` | Markdown der Kampagne: freier Notizraum für Kampagnenweites |
-| `glossaryIntro` | Markdown über den Glossar-Begriffen, das zu keinem Begriff gehört; leer, wenn es keines gibt |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, the key in every URL |
+| `name` | display name in the UI; if missing, the display name is the id |
+| `description` | short description, one line; optional |
+| `body` | Markdown of the campaign: free note space for campaign-wide matters |
+| `glossaryIntro` | Markdown above the glossary terms that belongs to no term; empty if there is none |
+| `rev` | row version, the guard of every write |
 
-Geschrieben wird mit `PATCH /api/campaigns/<kampagne>` und `{ rev, force?,
-…Teilmenge von name, description, body, glossaryIntro }` — `null` löscht die
-Beschreibung, ein veralteter `rev` ist 409 mit der aktuellen Kampagne.
-`glossaryIntro` wird gespeichert wie `body`. Die Reihenfolge des
-Kampagnenwissens hat ihren eigenen Wächter an der Kampagne (siehe
-Kampagnenwissen); ein Schreibzugriff auf die Kampagne bewegt ihn nicht.
-`POST /api/campaigns { name, description?, id? }` legt eine Kampagne an und
-antwortet mit ihr: die `id` entsteht aus dem Namen, wenn die Anfrage keine
-setzt, und eine vergebene ist eine 409 `slug_taken` mit Vorschlag. Die
-Fixture ist die Kampagne ohne `rev`.
+It is written with `PATCH /api/campaigns/<campaign>` and `{ rev, force?,
+…subset of name, description, body, glossaryIntro }` — `null` clears the
+description, a stale `rev` is 409 with the current campaign.
+`glossaryIntro` is stored like `body`. The order of the campaign knowledge
+has its own guard on the campaign (see campaign knowledge); a write to the
+campaign does not move it.
+`POST /api/campaigns { name, description?, id? }` creates a campaign and
+responds with it: the `id` is derived from the name if the request sets
+none, and a taken one is a 409 `slug_taken` with a suggestion. The fixture
+is the campaign without `rev`.
 
-Der Kopf der Kapitelübersicht zeigt den Text unter der Kurzbeschreibung:
-ganz und gerendert, auf wenige Zeilen begrenzt und aufklappbar. Ohne Text
-steht dort nichts.
+The header of the chapter overview shows the text below the short
+description: whole and rendered, limited to a few lines and expandable.
+Without text, nothing is shown there.
 
-### Kapitel
+### Chapter
 
-Ein Kapitel ist seine eigene Ressource mit seinem eigenen Typ (`Chapter`, aus
-dem zod-Schema in `shared/src/chapter.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
-/api/campaigns/<kampagne>/chapters/<id>` antwortet mit ihm:
+A chapter is its own resource with its own type (`Chapter`, from the zod
+schema in `shared/src/chapter.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
+/api/campaigns/<campaign>/chapters/<id>` responds with it:
 
 ```json
 {
@@ -139,58 +138,57 @@ dem zod-Schema in `shared/src/chapter.ts`, [decisions/resources](docs/decisions/
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil; das Feld `chapter` einer Szene, eines NPC und eines Orts nennt es |
-| `title` | Anzeigename; ohne eigenen Titel zeigt das Kapitel seine id |
-| `status` | `planned`, `active` oder `done`; optional |
-| `body` | Markdown des Kapitels: worum es geht und was die Gruppe erreichen soll |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable; the `chapter` field of a scene, an NPC and a location names it |
+| `title` | display name; without a title of its own the chapter shows its id |
+| `status` | `planned`, `active` or `done`; optional |
+| `body` | Markdown of the chapter: what it is about and what the group should achieve |
+| `rev` | row version, the guard of every write |
 
-`active` markiert das **eine** Kapitel, das die Session-Ansicht öffnet: je
-Kampagne ist höchstens ein Kapitel aktiv. Aktiviert wird mit `PATCH
-…/chapters/<id> { rev, status: "active" }` oder mit `POST …/chapters` und
-`status: "active"`; der Server setzt das bisher aktive Kapitel im selben
-Vorgang auf `planned`, und dessen `rev` bewegt sich mit. Die API schreibt nur
-diese drei Werte (400 `status_not_allowed` sonst), und die Spalte selbst
-lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint
-([decisions/constraints](docs/decisions/constraints.md)), kein degradierendes Freitextfeld. `null` löscht den Status.
+`active` marks the **one** chapter the session view opens: at most one
+chapter per campaign is active. It is activated with `PATCH
+…/chapters/<id> { rev, status: "active" }` or with `POST …/chapters` and
+`status: "active"`; the server sets the previously active chapter to
+`planned` in the same operation, and its `rev` moves along. The API writes
+only these three values (400 `status_not_allowed` otherwise), and the column
+itself admits no other — `status` is a `CHECK` constraint
+([decisions/constraints](docs/decisions/constraints.md)), not a degrading free-text field. `null` clears the status.
 
-Geschrieben wird mit `PATCH …/chapters/<id>` und `{ rev, force?, …Teilmenge
-von title, status, body }`; ein veralteter `rev` ist 409 mit dem aktuellen
-Kapitel. Weder die Szenenreihenfolge noch ein Faden des Kapitels bewegt sich
-dabei — jede hat ihren eigenen Wächter. `POST …/chapters { title, id?,
-status?, body? }` legt ein Kapitel an und antwortet mit ihm: die `id` entsteht
-aus dem Titel, wenn die Anfrage keine setzt, der Status ist `planned`, wenn
-sie keinen nennt, und das Kapitel steht am Ende der Kampagne. Der `body` aus
-„Kapitel anlegen“ wird der Text so, wie er getippt wurde — getrimmt, mit
-einem abschließenden Zeilenumbruch, ohne Überschrift davor. Eine vergebene
-`id` ist eine 409 `slug_taken` mit Vorschlag. Die Fixture ist das Kapitel
-ohne `rev`; ein Lauf „Neues Kapitel“ legt sein Kapitel als `planned` mit der
-Beschreibung aus seiner Gliederung als `body` an (siehe Generator).
+It is written with `PATCH …/chapters/<id>` and `{ rev, force?, …subset of
+title, status, body }`; a stale `rev` is 409 with the current chapter.
+Neither the scene order nor a thread of the chapter moves with it — each has
+its own guard. `POST …/chapters { title, id?, status?, body? }` creates a
+chapter and responds with it: the `id` is derived from the title if the
+request sets none, the status is `planned` if it names none, and the chapter
+stands at the end of the campaign. The `body` from the create-chapter
+dialog becomes the text as it was typed — trimmed, with a trailing line
+break, without a heading before it. A taken `id` is a 409 `slug_taken` with
+a suggestion. The fixture is the chapter without `rev`; a new-chapter run
+creates its chapter as `planned` with the description from its outline as
+`body` (see generator).
 
-Die Kapitelübersicht zeigt den Text unter dem Titel, ganz und gerendert wie
-jeder Text, auf wenige Zeilen begrenzt und aufklappbar; ob und welche
-Überschriften er hat, ändert daran nichts ([decisions/data-shape](docs/decisions/data-shape.md)).
+The chapter overview shows the text below the title, whole and rendered like
+any text, limited to a few lines and expandable; whether and which headings
+it has changes nothing about that ([decisions/data-shape](docs/decisions/data-shape.md)).
 
-Die **Fäden** — die Handlungsstränge, die das Kapitel trägt — sind weder
-Text noch Feld des Kapitels, sondern jeder seine eigene Ressource, die ihr
-Kapitel nennt (siehe Faden). Ein `## Offene Fäden` im Text eines älteren
-Kapitels bleibt freier Text; nichts liest ihn als Faden.
+The **threads** — the plot threads the chapter carries — are neither text
+nor a field of the chapter, but each is its own resource that names its
+chapter (see thread). A `## Offene Fäden` in the text of an older chapter
+stays free text; nothing reads it as a thread.
 
-### Szene
+### Scene
 
-Eine Szene ist ihre eigene Ressource mit ihrem eigenen Typ (`Scene`, aus dem
-zod-Schema in `shared/src/scene.ts`, [decisions/resources](docs/decisions/resources.md)). Sie liegt flach unter ihrer
-Kampagne: ihre `id` ist je Kampagne eindeutig, und ihr Kapitel ist ein Feld,
-das sich ändern kann.
+A scene is its own resource with its own type (`Scene`, from the zod schema
+in `shared/src/scene.ts`, [decisions/resources](docs/decisions/resources.md)). It lies flat under its campaign: its `id`
+is unique per campaign, and its chapter is a field that can change.
 
-| Lesen/Ändern | Anlegen/Liste | App-Route |
-| ------------ | ------------- | --------- |
-| `GET/PATCH /api/campaigns/<kampagne>/scenes/<id>` | `GET/POST /api/campaigns/<kampagne>/scenes` | `/campaigns/<kampagne>/scenes/<id>` |
+| Read/change | Create/list | App route |
+| ----------- | ----------- | --------- |
+| `GET/PATCH /api/campaigns/<campaign>/scenes/<id>` | `GET/POST /api/campaigns/<campaign>/scenes` | `/campaigns/<campaign>/scenes/<id>` |
 
-`GET` antwortet mit der Szene selbst — ohne `kind`, ohne `path`, alle Felder
-nebeneinander:
+`GET` responds with the scene itself — without `kind`, without `path`, all
+fields side by side:
 
 ```json
 {
@@ -208,52 +206,59 @@ nebeneinander:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil, wird referenziert (`sceneId` einer Log-Zeile, `[[id]]`) |
-| `title` | Anzeigename, frei änderbar; ohne eigenen Titel zeigt die Szene ihre id |
-| `type` | `planned` oder `contingency` (Eventualszene) |
-| `trigger` | nur bei `contingency`: wann feuert sie? Freitext; optional |
-| `chapter` | Kapitel-id; immer gesetzt, muss existieren |
-| `location` | Orts-id, wo die Szene spielt; optional, muss existieren |
-| `npcs` | Liste von NPC-ids in ihrer Reihenfolge; jede muss existieren |
-| `handouts` | Namen der Roll20-Handouts, nur Verweis |
-| `tags` | frei; empfohlen: `combat`, `social`, `stealth`, `travel` |
-| `status` | `draft`, `ready`, `played` oder `dropped`; immer gesetzt. Ob eine Szene gespielt ist, sagt allein `played` (siehe Session) |
-| `body` | Markdown der Szene |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, is referenced (`sceneId` of a log line, `[[id]]`) |
+| `title` | display name, freely changeable; without a title of its own the scene shows its id |
+| `type` | `planned` or `contingency` (contingency scene) |
+| `trigger` | only for `contingency`: when does it fire? Free text; optional |
+| `chapter` | chapter id; always set, must exist |
+| `location` | location id, where the scene takes place; optional, must exist |
+| `npcs` | list of NPC ids in their order; each must exist |
+| `handouts` | names of the Roll20 handouts, reference only |
+| `tags` | free; recommended: `combat`, `social`, `stealth`, `travel` |
+| `status` | `draft`, `ready`, `played` or `dropped`; always set. Whether a scene has been played is said by `played` alone (see session) |
+| `body` | Markdown of the scene |
+| `rev` | row version, the guard of every write |
 
-Ein optionales Feld ohne Wert fehlt in der Antwort; die drei Listen stehen
-immer da, leer, wenn die Szene nichts nennt. Geschrieben wird mit `PATCH
-…/scenes/<id>` und `{ rev, force?, …Teilmenge der Felder }` — `null` löscht
-`trigger` oder `location`, ein Feld, das eine Szene nicht hat, oder ein Wert
-der falschen Form ist eine 400, die das Feld nennt, ein `status` außerhalb
-der vier eine 400 `status_not_allowed`, ein `type` außerhalb der zwei eine
-400 `scene_type_not_allowed`. Das Kapitel lässt sich wechseln, aber nicht
-leeren (400 `chapter_required`); wechselt eine Szene das Kapitel, landet sie
-am Ende des Zielkapitels. Ein veralteter `rev` ist 409 mit der aktuellen
-Szene. Wo sie in ihrem Kapitel steht, ist kein Feld der Szene, sondern die
-Szenenreihenfolge des Kapitels (siehe Schreibregeln).
+An optional field without a value is missing from the response; the three
+lists are always present, empty if the scene names nothing. It is written
+with `PATCH …/scenes/<id>` and `{ rev, force?, …subset of the fields }` —
+`null` clears `trigger` or `location`, a field a scene does not have, or a
+value of the wrong shape, is a 400 that names the field, a `status` outside
+the four a 400 `status_not_allowed`, a `type` outside the two a 400
+`scene_type_not_allowed`. The chapter can be changed but not cleared (400
+`chapter_required`); when a scene changes its chapter, it lands at the end
+of the target chapter. A stale `rev` is 409 with the current scene. Where it
+stands in its chapter is not a field of the scene but the chapter's scene
+order (see writing rules).
 
-`POST …/scenes { title, chapter, id? }` legt eine Szene an und antwortet mit
-ihr: die `id` entsteht aus dem Titel, wenn die Anfrage keine setzt, das
-Kapitel muss existieren, und die Szene steht als `draft` am Ende ihres
-Kapitels. Eine vergebene `id` ist eine 409 `slug_taken` mit Vorschlag.
-Fixture und Generator-Vorschlag sind die Szene ohne `rev`. Ergänzen hängt an
-der Szene: `POST …/scenes/<id>/augment` startet den Lauf, `POST
-…/scenes/<id>/augment/apply` übernimmt ihn.
+In the app a scene is edited in its **edit mode**, in place on its reading
+route: title and trigger inline, the status beside the heading, the short
+fields (type, location, NPCs, tags, handouts, chapter) as a row of chips,
+and the text below. Saving sends one `PATCH` with only the fields that
+changed; a 409 shows the conflict line above the title, with a reload and a
+save anyway that again writes only the changed fields.
+
+`POST …/scenes { title, chapter, id? }` creates a scene and responds with
+it: the `id` is derived from the title if the request sets none, the
+chapter must exist, and the scene stands as `draft` at the end of its
+chapter. A taken `id` is a 409 `slug_taken` with a suggestion. Fixture and
+generator proposal are the scene without `rev`. Augmenting hangs on the
+scene: `POST …/scenes/<id>/augment` starts the run, `POST
+…/scenes/<id>/augment/apply` accepts it.
 
 ### NPC
 
-Ein NPC ist seine eigene Ressource mit seinem eigenen Typ (`Npc`, aus dem
-zod-Schema in `shared/src/npc.ts`, [decisions/resources](docs/decisions/resources.md)):
+An NPC is its own resource with its own type (`Npc`, from the zod schema in
+`shared/src/npc.ts`, [decisions/resources](docs/decisions/resources.md)):
 
-| Lesen/Ändern | Anlegen/Liste | App-Route |
-| ------------ | ------------- | --------- |
-| `GET/PATCH /api/campaigns/<kampagne>/npcs/<id>` | `GET/POST /api/campaigns/<kampagne>/npcs` | `/campaigns/<kampagne>/npcs/<id>` |
+| Read/change | Create/list | App route |
+| ----------- | ----------- | --------- |
+| `GET/PATCH /api/campaigns/<campaign>/npcs/<id>` | `GET/POST /api/campaigns/<campaign>/npcs` | `/campaigns/<campaign>/npcs/<id>` |
 
-`GET` antwortet mit dem NPC selbst — ohne `kind`, ohne `path`, alle Felder
-nebeneinander:
+`GET` responds with the NPC itself — without `kind`, without `path`, all
+fields side by side:
 
 ```json
 {
@@ -272,59 +277,60 @@ nebeneinander:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil, wird referenziert |
-| `name` | Anzeigename, Pflicht; ohne eigenen Namen zeigt der NPC seine id |
-| `role` | Einzeiler; optional |
-| `chapter` | Kapitel-id, wo eingeführt; optional, muss existieren |
-| `status` | `alive`, `dead`, `missing` oder `unknown`; immer gesetzt |
-| `statblock` | Verweis auf das Roll20-Sheet (`"Roll20: <Sheet-Name>"`), keine Kopie; optional |
-| `quickstats` | Kurzwerte, frei — nur was am Tisch sozial gebraucht wird (`{ "insight": "+2" }`); optional |
-| `voice` | wie klingt er/sie; optional |
-| `appearance` | ein bis zwei Merkmale; optional |
-| `motivation` | was die Figur will, ein bis drei Sätze — zeigen NPC-Karte und Vorschau (Beschriftung „Will“); optional |
-| `body` | Markdown des NPC |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, is referenced |
+| `name` | display name, required; without a name of its own the NPC shows its id |
+| `role` | one-liner; optional |
+| `chapter` | chapter id where introduced; optional, must exist |
+| `status` | `alive`, `dead`, `missing` or `unknown`; always set |
+| `statblock` | reference to the Roll20 sheet (`"Roll20: <sheet name>"`), not a copy; optional |
+| `quickstats` | short values, free — only what is needed socially at the table (`{ "insight": "+2" }`); optional |
+| `voice` | how he/she sounds; optional |
+| `appearance` | one or two features; optional |
+| `motivation` | what the character wants, one to three sentences — shown by the NPC card and the preview (under the "wants" label); optional |
+| `body` | Markdown of the NPC |
+| `rev` | row version, the guard of every write |
 
-Ein optionales Feld ohne Wert fehlt in der Antwort. Geschrieben wird mit
-`PATCH …/npcs/<id>` und `{ rev, force?, …Teilmenge der Felder }` — `null`
-löscht ein optionales Feld, ein Feld, das ein NPC nicht hat (etwa
-`atmosphere`), oder ein Wert der falschen Form ist eine 400, die das Feld
-nennt, ein `status` außerhalb der vier eine 400 `status_not_allowed`; ein
-veralteter `rev` ist 409 mit dem aktuellen NPC.
+An optional field without a value is missing from the response. It is
+written with `PATCH …/npcs/<id>` and `{ rev, force?, …subset of the fields }`
+— `null` clears an optional field, a field an NPC does not have (such as
+`atmosphere`), or a value of the wrong shape, is a 400 that names the field,
+a `status` outside the four a 400 `status_not_allowed`; a stale `rev` is 409
+with the current NPC.
 
-`POST …/npcs { name, id?, body? }` legt einen NPC an und antwortet mit ihm:
-die `id` entsteht aus dem Namen, wenn die Anfrage keine setzt, `body` ist
-sein Text, und `status` ist `unknown`. Ein NPC, der unter der `id` schon
-besteht und nichts hält als seine id, wird mit Name und Text gefüllt; einer
-mit Inhalt ist eine 409 `slug_taken` mit Vorschlag, und nichts wird
-geschrieben. Fixture und Generator-Vorschlag sind der NPC ohne `rev`.
-Ergänzen hängt am NPC: `POST …/npcs/<id>/augment` startet den Lauf, `POST
-…/npcs/<id>/augment/apply` übernimmt ihn.
+`POST …/npcs { name, id?, body? }` creates an NPC and responds with it: the
+`id` is derived from the name if the request sets none, `body` is its text,
+and `status` is `unknown`. An NPC that already exists under the `id` and
+holds nothing but its id is filled with name and text; one with content is a
+409 `slug_taken` with a suggestion, and nothing is written. Fixture and
+generator proposal are the NPC without `rev`. Augmenting hangs on the NPC:
+`POST …/npcs/<id>/augment` starts the run, `POST …/npcs/<id>/augment/apply`
+accepts it.
 
-`motivation` wird auf der Bearbeiten-Fläche gepflegt, neben dem Markdown,
-nicht im Felder-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige
-als aktueller Name, wie im Text — eine Anzeige, keine Referenz.
+In the app an NPC's fields are edited in its fields dialog; `motivation` is
+maintained on the text editing surface, next to the Markdown, not in the
+fields dialog. An `[[id]]` in it appears as the current name when shown,
+like in the text — a display, not a reference.
 
-Text-Abschnitte frei; empfohlen: `## Weiß` (`[!secret]`-Callouts),
-`## Beziehungen` (je Gegenpart eine Zeile; einen Gegenpart verlinkt `[[id]]`
-wie überall im Text). Keine Überschrift hat für die App eine Bedeutung.
+Text sections are free; recommended: `## Weiß` (`[!secret]` callouts),
+`## Beziehungen` (one line per counterpart; a counterpart is linked with
+`[[id]]` as everywhere in the text). No heading has a meaning for the app.
 
-Kleinst-NPCs bekommen keinen NPC, bis sie wiederkehren. Bis dahin: Zeile
-im Szenentext oder `#npc`-Notiz im Log.
+Minor NPCs get no NPC until they recur. Until then: a line in the scene text
+or a `#npc` note in the log.
 
-### Ort
+### Location
 
-Ein Ort ist seine eigene Ressource mit seinem eigenen Typ (`Location`, aus
-dem zod-Schema in `shared/src/location.ts`, [decisions/resources](docs/decisions/resources.md)):
+A location is its own resource with its own type (`Location`, from the zod
+schema in `shared/src/location.ts`, [decisions/resources](docs/decisions/resources.md)):
 
-| Lesen/Ändern | Anlegen/Liste | App-Route |
-| ------------ | ------------- | --------- |
-| `GET/PATCH /api/campaigns/<kampagne>/locations/<id>` | `GET/POST /api/campaigns/<kampagne>/locations` | `/campaigns/<kampagne>/locations/<id>`, Liste `/campaigns/<kampagne>/locations` |
+| Read/change | Create/list | App route |
+| ----------- | ----------- | --------- |
+| `GET/PATCH /api/campaigns/<campaign>/locations/<id>` | `GET/POST /api/campaigns/<campaign>/locations` | `/campaigns/<campaign>/locations/<id>`, list `/campaigns/<campaign>/locations` |
 
-`GET` antwortet mit dem Ort selbst — ohne `kind`, ohne `path`, alle Felder
-nebeneinander:
+`GET` responds with the location itself — without `kind`, without `path`,
+all fields side by side:
 
 ```json
 {
@@ -338,40 +344,41 @@ nebeneinander:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil, wird referenziert |
-| `name` | Anzeigename, Pflicht; ohne eigenen Namen zeigt der Ort seine id |
-| `chapter` | Kapitel-id, optional; muss existieren |
-| `roll20Page` | Verweis auf die Roll20-Seite, keine Karten-Kopie; optional |
-| `atmosphere` | was der Ort über sich verrät, ein bis drei Sätze — zeigen Ort-Karte und Vorschau; optional |
-| `body` | Markdown des Orts |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, is referenced |
+| `name` | display name, required; without a name of its own the location shows its id |
+| `chapter` | chapter id, optional; must exist |
+| `roll20Page` | reference to the Roll20 page, not a copy of the map; optional |
+| `atmosphere` | what the place reveals about itself, one to three sentences — shown by the location card and the preview; optional |
+| `body` | Markdown of the location |
+| `rev` | row version, the guard of every write |
 
-Ein optionales Feld ohne Wert fehlt in der Antwort. Geschrieben wird mit
-`PATCH …/locations/<id>` und `{ rev, force?, …Teilmenge von name, chapter,
-roll20Page, atmosphere, body }` — `null` löscht ein optionales Feld, ein Feld,
-das ein Ort nicht hat (etwa `status`), oder ein Wert der falschen Form ist
-eine 400, die das Feld nennt; ein veralteter `rev` ist 409 mit dem aktuellen
-Ort. `POST …/locations` legt einen Ort an und antwortet mit ihm. Fixture und
-Generator-Vorschlag sind der Ort ohne `rev`. Ergänzen hängt am Ort: `POST
-…/locations/<id>/augment` startet den Lauf, `POST …/locations/<id>/augment/apply`
-übernimmt ihn.
+An optional field without a value is missing from the response. It is
+written with `PATCH …/locations/<id>` and `{ rev, force?, …subset of name,
+chapter, roll20Page, atmosphere, body }` — `null` clears an optional field,
+a field a location does not have (such as `status`), or a value of the wrong
+shape, is a 400 that names the field; a stale `rev` is 409 with the current
+location. `POST …/locations` creates a location and responds with it.
+Fixture and generator proposal are the location without `rev`. Augmenting
+hangs on the location: `POST …/locations/<id>/augment` starts the run, `POST
+…/locations/<id>/augment/apply` accepts it.
 
-`atmosphere` wird wie `motivation` beim NPC auf der Bearbeiten-Fläche
-gepflegt, neben dem Markdown, und ein `[[id]]` darin erscheint als Name. Ohne `atmosphere`
-zeigt die Ort-Karte die Roll20-Seite.
+In the app a location's fields are edited in its fields dialog;
+`atmosphere`, like an NPC's `motivation`, is maintained on the text editing
+surface, next to the Markdown, and an `[[id]]` in it appears as a name.
+Without `atmosphere` the location card shows the Roll20 page.
 
-Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
-`[!readaloud]`), `## Wer ist hier` (Figuren am Ort, mit id als `[[id]]`).
+Text sections are free; recommended: `## Beim ersten Betreten` (with
+`[!readaloud]`), `## Wer ist hier` (characters at the place, with the id as
+`[[id]]`).
 
-### Faden
+### Thread
 
-Ein Faden ist ein Handlungsstrang, den ein Kapitel trägt, und seine eigene
-Ressource mit seinem eigenen Typ (`Thread`, aus dem zod-Schema in
-`shared/src/thread.ts`, [decisions/resources](docs/decisions/resources.md)). Er liegt flach unter der Kampagne, sein
-Kapitel ist ein Feld: `GET /api/campaigns/<kampagne>/threads/<id>` antwortet
-mit ihm.
+A thread is a plot thread a chapter carries, and its own resource with its
+own type (`Thread`, from the zod schema in `shared/src/thread.ts`,
+[decisions/resources](docs/decisions/resources.md)). It lies flat under the campaign, its chapter is a field: `GET
+/api/campaigns/<campaign>/threads/<id>` responds with it.
 
 ```json
 {
@@ -383,38 +390,36 @@ mit ihm.
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil und opak, vergibt der Server beim Anlegen |
-| `chapter` | Kapitel-id, Pflicht; muss existieren (400 `chapter_unknown` sonst) |
-| `text` | der Handlungsstrang, eine Zeile |
-| `done` | abgehakt oder offen |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable and opaque, assigned by the server on creation |
+| `chapter` | chapter id, required; must exist (400 `chapter_unknown` otherwise) |
+| `text` | the plot thread, one line |
+| `done` | ticked off or open |
+| `rev` | row version, the guard of every write |
 
-- `GET …/threads` antwortet mit allen Fäden der Kampagne, `GET
-  …/threads?chapter=<kapitel>` mit denen eines Kapitels — in der Reihenfolge,
-  in der sie angelegt wurden. Umsortiert wird nichts.
-- `POST …/threads { chapter, text }` legt einen offenen Faden am Ende an und
-  antwortet mit ihm (201); er trägt **kein** `rev`, denn ein neuer Faden
-  überschreibt nichts. Der Text ist eine Zeile: getrimmt, Zeilenumbrüche
-  werden zu Leerzeichen, leer ist 400.
-- Abhaken, Wiederöffnen, Umformulieren und der Wechsel des Kapitels sind
-  `PATCH …/threads/<id> { rev, force?, …Teilmenge von chapter, text, done }`;
-  gelöscht wird mit `DELETE …/threads/<id> { rev }` (204). Ein veralteter
-  `rev` ist 409 mit dem aktuellen Faden unter `thread`, eine unbekannte id
-  404, ein Feld, das ein Faden nicht hat, eine 400, die es nennt.
-- Kein Schreibzugriff auf einen Faden berührt Text oder `rev` seines
-  Kapitels, und ein Kapitel-Write bewegt keinen Faden. Gepflegt werden die
-  Fäden in der Kapitelübersicht unter dem Text des Kapitels: anlegen,
-  abhaken, umformulieren, löschen. Die Nachbereitung legt sie an
-  („Als Handlungsstrang übernehmen").
+- `GET …/threads` responds with all threads of the campaign, `GET
+  …/threads?chapter=<chapter>` with those of one chapter — in the order in
+  which they were created. Nothing is reordered.
+- `POST …/threads { chapter, text }` creates an open thread at the end and
+  responds with it (201); it carries **no** `rev`, because a new thread
+  overwrites nothing. The text is one line: trimmed, line breaks become
+  spaces, empty is 400.
+- Ticking off, reopening, rewording and changing the chapter are `PATCH
+  …/threads/<id> { rev, force?, …subset of chapter, text, done }`; it is
+  deleted with `DELETE …/threads/<id> { rev }` (204). A stale `rev` is 409
+  with the current thread under `thread`, an unknown id 404, a field a
+  thread does not have a 400 that names it.
+- No write to a thread touches the text or `rev` of its chapter, and a
+  chapter write moves no thread. The threads are maintained in the chapter
+  overview below the chapter's text: create, tick off, reword, delete. The
+  debrief creates them (its accept-as-plot-thread action).
 
-### Idee
+### Idea
 
-Eine Idee ist ein Einfall, den der DM unterwegs einwirft, und ihre eigene
-Ressource mit ihrem eigenen Typ (`Idea`, aus dem zod-Schema in
-`shared/src/idea.ts`, [decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<kampagne>/ideas/<id>`
-antwortet mit ihr:
+An idea is a notion the DM drops in along the way, and its own resource with
+its own type (`Idea`, from the zod schema in `shared/src/idea.ts`,
+[decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<campaign>/ideas/<id>` responds with it:
 
 ```json
 {
@@ -425,31 +430,28 @@ antwortet mit ihr:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil und opak, vergibt der Server beim Anlegen |
-| `text` | die Idee, wie sie getippt wurde, Hashtags eingeschlossen; eine Zeile |
-| `done` | abgehakt oder offen |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable and opaque, assigned by the server on creation |
+| `text` | the idea as it was typed, hashtags included; one line |
+| `done` | ticked off or open |
+| `rev` | row version, the guard of every write |
 
-- `GET …/ideas` antwortet mit allen Ideen in der Reihenfolge, in der sie
-  eingeworfen wurden, abgehakte eingeschlossen; keine Ideen sind eine leere
-  Liste (200).
-- `POST …/ideas { text }` legt eine offene Idee am Ende an und antwortet mit
-  ihr (201), ohne `rev`.
-- Abhaken ist `PATCH …/ideas/<id> { rev, force?, done }`. Der Text einer Idee
-  wird einmal geschrieben: `done` ist das einzige Feld, das ein `PATCH` trägt,
-  jedes andere — `text` eingeschlossen — ist eine 400, die es nennt. Ein
-  veralteter `rev` ist 409 mit der aktuellen Idee unter `idea`, eine
-  unbekannte id 404.
+- `GET …/ideas` responds with all ideas in the order in which they were
+  dropped in, ticked-off ones included; no ideas is an empty list (200).
+- `POST …/ideas { text }` creates an open idea at the end and responds with
+  it (201), without `rev`.
+- Ticking off is `PATCH …/ideas/<id> { rev, force?, done }`. The text of an
+  idea is written once: `done` is the only field a `PATCH` carries, every
+  other — `text` included — is a 400 that names it. A stale `rev` is 409
+  with the current idea under `idea`, an unknown id 404.
 
-### Glossar-Begriff
+### Glossary term
 
-Ein Glossar-Begriff ist ein Begriff des Quellmaterials und die Schreibweise
-dieser Kampagne, seine eigene Ressource mit seinem eigenen Typ
-(`GlossaryTerm`, aus dem zod-Schema in `shared/src/glossary-term.ts`,
-[decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<kampagne>/glossary-terms/<id>` antwortet mit
-ihm:
+A glossary term is a term of the source material and this campaign's way of
+writing it, its own resource with its own type (`GlossaryTerm`, from the zod
+schema in `shared/src/glossary-term.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
+/api/campaigns/<campaign>/glossary-terms/<id>` responds with it:
 
 ```json
 {
@@ -460,38 +462,36 @@ ihm:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil und opak, vergibt der Server beim Anlegen |
-| `term` | der Begriff, wie das Quellmaterial ihn schreibt; je Kampagne einmal |
-| `explanation` | wie diese Kampagne ihn sagt; darf mehrere Zeilen haben |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable and opaque, assigned by the server on creation |
+| `term` | the term as the source material writes it; once per campaign |
+| `explanation` | how this campaign says it; may have several lines |
+| `rev` | row version, the guard of every write |
 
-- `GET …/glossary-terms` antwortet mit allen Begriffen in der Reihenfolge, in
-  der sie angelegt wurden; umsortiert wird nichts. Die Glossar-Seite zeigt sie
-  alphabetisch.
-- `POST …/glossary-terms { term, explanation? }` legt einen Begriff am Ende an
-  und antwortet mit ihm (201), ohne `rev`. `term` wird getrimmt, leer ist 400.
-  Einen Begriff, den das Glossar schon hat, beantwortet der Server mit 409
-  `glossary_term_taken` und schreibt nichts — auch beim Umformulieren.
-- Geändert wird mit `PATCH …/glossary-terms/<id> { rev, force?, …Teilmenge
-  von term, explanation }`, gelöscht mit `DELETE …/glossary-terms/<id>
-  { rev }` (204). Ein veralteter `rev` ist 409 mit dem aktuellen Begriff unter
-  `glossaryTerm`, eine unbekannte id 404, ein Feld, das ein Begriff nicht
-  hat, eine 400, die es nennt.
-- Die Suche findet jeden Begriff; der Treffer nennt sich mit `kind:
-  "glossary-term"` und seiner `id` und öffnet die Glossar-Seite. Der Text über
-  den Begriffen ist kein Begriff, sondern das Feld `glossaryIntro` der
-  Kampagne.
+- `GET …/glossary-terms` responds with all terms in the order in which they
+  were created; nothing is reordered. The glossary page shows them
+  alphabetically.
+- `POST …/glossary-terms { term, explanation? }` creates a term at the end
+  and responds with it (201), without `rev`. `term` is trimmed, empty is
+  400. A term the glossary already has is answered by the server with 409
+  `glossary_term_taken`, and nothing is written — also when rewording.
+- It is changed with `PATCH …/glossary-terms/<id> { rev, force?, …subset of
+  term, explanation }`, deleted with `DELETE …/glossary-terms/<id> { rev }`
+  (204). A stale `rev` is 409 with the current term under `glossaryTerm`, an
+  unknown id 404, a field a term does not have a 400 that names it.
+- The search finds every term; the hit names itself with `kind:
+  "glossary-term"` and its `id` and opens the glossary page. The text above
+  the terms is not a term but the campaign's `glossaryIntro` field.
 
-### Kampagnenwissen
+### Campaign knowledge
 
-Das Kampagnenwissen sind die Namenskonventionen, Fakten und Stilregeln, die
-der Generator verbindlich anwendet, auch wenn das Quellmaterial etwas anderes
-sagt. Jedes Stück davon ist seine eigene Ressource mit seinem eigenen Typ
-(`KnowledgeItem`, aus dem zod-Schema in `shared/src/knowledge-item.ts`,
-[decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<kampagne>/knowledge-items/<id>` antwortet mit
-ihm:
+The campaign knowledge is the naming conventions, facts and style rules the
+generator applies bindingly, even when the source material says otherwise.
+Each piece of it is its own resource with its own type (`KnowledgeItem`,
+from the zod schema in `shared/src/knowledge-item.ts`,
+[decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<campaign>/knowledge-items/<id>` responds with
+it:
 
 ```json
 {
@@ -504,38 +504,38 @@ ihm:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil und opak, vergibt der Server beim Anlegen |
-| `kind` | `naming` (Namenskonvention), `fact` (Fakt) oder `style` (Stilregel) |
-| `from` / `to` | bei `naming`: die Schreibweise des Quellmaterials und die dieser Kampagne; sonst leer |
-| `text` | bei `fact` und `style`: der Satz; sonst leer |
-| `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable and opaque, assigned by the server on creation |
+| `kind` | `naming` (naming convention), `fact` or `style` (style rule) |
+| `from` / `to` | for `naming`: the source material's spelling and this campaign's; empty otherwise |
+| `text` | for `fact` and `style`: the sentence; empty otherwise |
+| `rev` | row version, the guard of every write |
 
-- `GET …/knowledge-items` antwortet mit allem Kampagnenwissen in seiner
-  Reihenfolge — der Reihenfolge im Prompt.
-- `POST …/knowledge-items { kind, from?, to?, text? }` legt ein Stück am Ende
-  an und antwortet mit ihm (201), ohne `rev`; ein weggelassenes Feld ist leer.
-  Eine halbe Namenskonvention wird gespeichert, der Prompt überspringt sie.
-- Geändert wird mit `PATCH …/knowledge-items/<id> { rev, force?, …Teilmenge
-  der Felder }`, gelöscht mit `DELETE …/knowledge-items/<id> { rev }` (204).
-  Jedes Textfeld ist eine Zeile (400 sonst). Ein veralteter `rev` ist 409 mit
-  dem aktuellen Stand unter `knowledgeItem`, eine unbekannte id 404.
-- Die **Reihenfolge** setzt der DM (Hoch/Runter auf der Wissens-Seite). Sie
-  ist kein Feld eines Stücks, sondern hat ihren eigenen Schreibweg: `GET`/`PUT
-  /api/campaigns/<kampagne>/knowledge-item-order` mit `{ items, rev }`, wobei
-  `items` jede id des Kampagnenwissens genau einmal nennt (400 sonst). Das
-  `rev` ist der Wächter der Reihenfolge an der Kampagne; ein alter Stand ist
-  409 mit der aktuellen Reihenfolge unter `knowledgeItemOrder`. Weder das
-  `rev` eines Stücks noch das der Kampagne bewegt sich dabei. Anlegen und
-  Löschen ändern die Reihenfolge mit und bewegen ihren Wächter.
+- `GET …/knowledge-items` responds with all campaign knowledge in its
+  order — the order in the prompt.
+- `POST …/knowledge-items { kind, from?, to?, text? }` creates a piece at the
+  end and responds with it (201), without `rev`; an omitted field is empty.
+  A half naming convention is stored; the prompt skips it.
+- It is changed with `PATCH …/knowledge-items/<id> { rev, force?, …subset of
+  the fields }`, deleted with `DELETE …/knowledge-items/<id> { rev }` (204).
+  Every text field is one line (400 otherwise). A stale `rev` is 409 with the
+  current state under `knowledgeItem`, an unknown id 404.
+- The **order** is set by the DM (up/down on the knowledge page). It is not
+  a field of a piece but has its own write path: `GET`/`PUT
+  /api/campaigns/<campaign>/knowledge-item-order` with `{ items, rev }`,
+  where `items` names every id of the campaign knowledge exactly once (400
+  otherwise). The `rev` is the guard of the order on the campaign; a stale
+  state is 409 with the current order under `knowledgeItemOrder`. Neither
+  the `rev` of a piece nor that of the campaign moves. Creating and deleting
+  change the order along with them and move its guard.
 
 ### Session
 
-Eine Session ist ein Spielabend und ihre eigene Ressource mit ihrem eigenen
-Typ (`Session`, aus dem zod-Schema in `shared/src/session.ts`, [decisions/resources](docs/decisions/resources.md)).
-`GET /api/campaigns/<kampagne>/sessions/<id>` antwortet mit ihr, ihre
-Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
+A session is a game evening and its own resource with its own type
+(`Session`, from the zod schema in `shared/src/session.ts`, [decisions/resources](docs/decisions/resources.md)).
+`GET /api/campaigns/<campaign>/sessions/<id>` responds with it, its children
+embedded — each with its own `id` and its own `rev`:
 
 ```json
 {
@@ -551,148 +551,145 @@ Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
 }
 ```
 
-| Feld | Bedeutung |
-| ---- | --------- |
-| `id` | stabil und opak, vergibt der Server beim Start; Reihenfolge und Datum kommen aus `started` |
-| `started` / `startedMs` | Start, sekundengenau, zonenlose Lokalzeit des Servers (`yyyy-mm-ddTHH:MM:SS`), daneben die Epochen-Lesung des Servers |
-| `ended` / `endedMs` | Ende, ebenso; beide fehlen, solange die Session läuft |
-| `body` | freier Markdown-Text der Session |
-| `pauses` | ihre Pausen (siehe Pause) |
-| `log` | ihre Log-Zeilen (siehe Log-Zeile) |
-| `rev` | Zeilenversion der Session; jedes Kind trägt sein eigenes |
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable and opaque, assigned by the server on start; order and date come from `started` |
+| `started` / `startedMs` | start, to the second, zoneless local time of the server (`yyyy-mm-ddTHH:MM:SS`), next to it the server's epoch reading |
+| `ended` / `endedMs` | end, likewise; both are missing while the session is running |
+| `body` | free Markdown text of the session |
+| `pauses` | its pauses (see pause) |
+| `log` | its log lines (see log line) |
+| `rev` | row version of the session; every child carries its own |
 
-- **Zeit:** Nur der Server weiß, zu welcher Uhr die zonenlosen Zeitstempel
-  gehören, darum liefert er die Epochen-Lesung daneben (`…Ms`), und der
-  Client rechnet nur mit Zahlen: Laufzeit = (`endedMs` ?? jetzt) −
-  `startedMs` − Summe der geschlossenen Pausen. Einen Zeitpunkt schreibt der
-  Client ebenfalls als Epochen-Wert; der Server speichert dessen Lesung in
-  seiner Zeitzone.
-- `GET …/sessions` antwortet mit allen Sessions, **neueste zuerst** (nach
-  `started`, bei Gleichstand nach der Reihenfolge des Anlegens), jede mit
-  ihren Kindern. Die erste ist die zuletzt gestartete, beendet oder nicht —
-  die Session der Nachbereitung, auch wenn der Abend über Mitternacht ging.
-- `GET …/sessions?running=true` antwortet mit der **laufenden** Session oder
-  keiner: der zuletzt gestarteten, die nicht beendet ist — heute oder früher
-  gestartet, eine Session über Mitternacht läuft also weiter. Welche Session
-  läuft, sagt immer der Server, nie das Datum des Browsers.
-- `POST …/sessions {}` startet eine Session jetzt und antwortet mit ihr
-  (201). Läuft schon eine, die heute gestartet wurde, kommt sie unverändert
-  zurück (200); läuft eine von einem früheren Tag, ist das 409
-  `session_running` mit ihrer `id`, und nichts startet. Beenden ist endgültig:
-  ein Start danach ist eine neue Session, auch am selben Tag.
-- `PATCH …/sessions/<id> { rev, force?, startedMs?, endedMs? }` beendet die
-  Session (`endedMs`), lässt sie weiterlaufen (`endedMs: null`) oder
-  korrigiert ihren Start. Beenden schließt eine offene Pause im selben
-  Vorgang, und deren `rev` bewegt sich mit. Die Kinder schreibt ein
-  Session-`PATCH` nicht; ein Feld, das er nicht nimmt, ist eine 400, die es
-  nennt, ein veralteter `rev` 409 mit der aktuellen Session unter `session`.
-- `DELETE …/sessions/<id> { rev }` verwirft eine **leere** Session (204) —
-  das Rückgängig eines versehentlichen Starts. Hat sie eine Log-Zeile oder
-  Text, ist das 409 `session_not_empty`: sie wird beendet, nicht gelöscht.
-- Eine beendete Session nimmt keine neue Pause oder Log-Zeile an (409
-  `session_ended`); ihre Pausen korrigieren und ihre Log-Zeilen sichten geht
-  weiter.
-- **Gespielt** ist eine Szene allein über ihren `status` (`played`); eine
-  Session hält keine eigene Liste gespielter Szenen, und
-  `POST …/sessions/<session>/played-scenes` antwortet 404. In der
-  Live-Ansicht steht links neben „Nächste Szene“ ein Kästchen „gespielt“:
-  angehakt setzt „Nächste Szene“ die **verlassene** Szene mit `PATCH
-  …/scenes/<id> { rev, status: "played" }` auf gespielt, bevor die nächste
-  öffnet; nicht angehakt öffnet es nur die nächste. Das Kästchen ist
-  angehakt, wenn die Session eine Log-Zeile mit der `sceneId` der offenen
-  Szene hat, und der DM kann es umstellen; geschrieben wird erst beim Klick.
-  Ist die Szene inzwischen anderswo geändert (409), öffnet die nächste nicht,
-  die Szene wird neu geladen, und der nächste Klick schreibt gegen ihren
-  frischen `rev`. Eine Notiz allein und das Beenden der Session ändern keinen
-  Status.
-- Die Leseseite einer Session zeigt die Szenen, in denen ihre Log-Zeilen
-  notiert wurden — jede einmal, in der Reihenfolge ihrer ersten Notiz.
+- **Time:** only the server knows which clock the zoneless timestamps belong
+  to, so it delivers the epoch reading next to them (`…Ms`), and the client
+  only computes with numbers: running time = (`endedMs` ?? now) −
+  `startedMs` − sum of the closed pauses. The client writes a point in time
+  as an epoch value as well; the server stores its reading in its time
+  zone.
+- `GET …/sessions` responds with all sessions, **newest first** (by
+  `started`, on a tie by order of creation), each with its children. The
+  first is the most recently started, ended or not — the debrief's session,
+  even when the evening went past midnight.
+- `GET …/sessions?running=true` responds with the **running** session or
+  none: the most recently started one that is not ended — started today or
+  earlier, so a session past midnight keeps running. Which session is
+  running is always said by the server, never by the browser's date.
+- `POST …/sessions {}` starts a session now and responds with it (201). If
+  one started today is already running, it comes back unchanged (200); if
+  one from an earlier day is running, that is 409 `session_running` with its
+  `id`, and nothing starts. Ending is final: a start afterwards is a new
+  session, even on the same day.
+- `PATCH …/sessions/<id> { rev, force?, startedMs?, endedMs? }` ends the
+  session (`endedMs`), lets it keep running (`endedMs: null`) or corrects
+  its start. Ending closes an open pause in the same operation, and its
+  `rev` moves along. A session `PATCH` does not write the children; a field
+  it does not take is a 400 that names it, a stale `rev` 409 with the
+  current session under `session`.
+- `DELETE …/sessions/<id> { rev }` discards an **empty** session (204) — the
+  undo of an accidental start. If it has a log line or text, that is 409
+  `session_not_empty`: it is ended, not deleted.
+- An ended session accepts no new pause or log line (409 `session_ended`);
+  correcting its pauses and reviewing its log lines still works.
+- A scene is **played** solely through its `status` (`played`); a session
+  holds no list of played scenes of its own, and
+  `POST …/sessions/<session>/played-scenes` responds 404. In the live view a
+  played checkbox sits to the left of the next-scene action: checked, the
+  next-scene action sets the scene being **left** to played with `PATCH
+  …/scenes/<id> { rev, status: "played" }` before the next one opens;
+  unchecked, it only opens the next one. The checkbox is checked when the
+  session has a log line with the `sceneId` of the open scene, and the DM
+  can change it; the write happens only on the click. If the scene was
+  changed elsewhere in the meantime (409), the next one does not open, the
+  scene is reloaded, and the next click writes against its fresh `rev`. A
+  note alone and ending the session change no status.
+- The reading page of a session shows the scenes in which its log lines
+  were noted — each once, in the order of its first note.
 
 ### Pause
 
-Eine Pause ist ein Intervall, in dem die Uhr der Session steht, und ihre
-eigene Ressource (`Pause`, aus `shared/src/pause.ts`) unter ihrer Session:
-`{ id, from, fromMs?, to?, toMs?, rev }`. Eine Pause ohne `to` ist die
-laufende.
+A pause is an interval in which the session's clock stands still, and its
+own resource (`Pause`, from `shared/src/pause.ts`) under its session:
+`{ id, from, fromMs?, to?, toMs?, rev }`. A pause without `to` is the
+running one.
 
-- `POST …/sessions/<session>/pauses {}` beginnt eine Pause jetzt (201). Eine
-  Session hat höchstens eine offene Pause: ist schon eine offen, kommt sie
-  unverändert zurück (200).
+- `POST …/sessions/<session>/pauses {}` begins a pause now (201). A session
+  has at most one open pause: if one is already open, it comes back
+  unchanged (200).
 - `PATCH …/sessions/<session>/pauses/<id> { rev, force?, fromMs?, toMs? }`
-  beendet sie (`toMs`) oder korrigiert ein Ende, als Epochen-Wert. Ein
-  veralteter `rev` ist 409 mit der aktuellen Pause unter `pause`.
-- Eine Pause schreibt **keine** Log-Zeile, und kein Schreibzugriff auf eine
-  Pause bewegt das `rev` der Session.
+  ends it (`toMs`) or corrects an end, as an epoch value. A stale `rev` is
+  409 with the current pause under `pause`.
+- A pause writes **no** log line, and no write to a pause moves the
+  session's `rev`.
 
-### Log-Zeile
+### Log line
 
-Eine Log-Zeile ist eine Schnellnotiz des DM und ihre eigene Ressource
-(`LogEntry`, aus `shared/src/log-entry.ts`) unter ihrer Session:
+A log line is a quick note of the DM and its own resource (`LogEntry`, from
+`shared/src/log-entry.ts`) under its session:
 `{ id, at, sceneId?, text, reviewed, rev }`.
 
-- Eine Log-Zeile sind **Spalten**, keine Markdown-Zeile: `at` (`HH:mm`, die
-  Uhr des Servers) und `sceneId` setzt die Anlage, die Hashtags stehen im
-  `text`. `id` ist stabil und opak.
-- `POST …/sessions/<session>/log { text, sceneId? }` legt eine Zeile am Ende
-  an (201). Der Text ist eine Zeile (getrimmt, Zeilenumbrüche werden zu
-  Leerzeichen, leer ist 400); `sceneId` muss eine Szene nennen (400
-  `log_scene_unknown` sonst).
-- Das Log ist append-only: `PATCH …/sessions/<session>/log/<id> { rev,
-  force?, reviewed }` ist die einzige Änderung — die Nachbereitung sichtet
-  die Zeile. Jedes andere Feld, `text` eingeschlossen, ist eine 400; ein
-  veralteter `rev` ist 409 mit der aktuellen Zeile unter `logEntry`.
+- A log line is **columns**, not a Markdown line: `at` (`HH:mm`, the
+  server's clock) and `sceneId` are set on creation, the hashtags are in the
+  `text`. `id` is stable and opaque.
+- `POST …/sessions/<session>/log { text, sceneId? }` creates a line at the
+  end (201). The text is one line (trimmed, line breaks become spaces, empty
+  is 400); `sceneId` must name a scene (400 `log_scene_unknown` otherwise).
+- The log is append-only: `PATCH …/sessions/<session>/log/<id> { rev,
+  force?, reviewed }` is the only change — the debrief reviews the line.
+  Every other field, `text` included, is a 400; a stale `rev` is 409 with
+  the current line under `logEntry`.
 
-## Referenzen zeigen auf vorhandene Zeilen
+## References point to existing rows
 
-Eine Referenz nennt eine Zeile, die es gibt. Wer in `npcs:` einer Szene,
-in `location:`, in `chapter:` oder in einer Log-Zeile eine id einträgt, zu
-der es keinen NPC, keinen Ort, kein Kapitel oder keine Szene gibt, bekommt 400 mit dem Hinweis, sie zuerst anzulegen — es
-entsteht nichts nebenbei. Kapitel, Szenen, NPCs und Orte entstehen über
-„Neu anlegen" und über das Übernehmen eines Generator-Vorschlags, sonst
-nirgends.
+A reference names a row that exists. Whoever enters an id in a scene's
+`npcs:`, in `location:`, in `chapter:` or in a log line for which there is no
+NPC, no location, no chapter or no scene gets a 400 with the hint to create
+it first — nothing comes into being on the side. Chapters, scenes, NPCs and
+locations come into being through the create actions and through accepting
+a generator proposal, nowhere else.
 
-`location:` verlangt eine id in Slug-Form (400 sonst). Jede Szene gehört zu
-einem Kapitel; `chapter:` lässt sich nicht leeren.
+`location:` requires an id in slug form (400 otherwise). Every scene belongs
+to a chapter; `chapter:` cannot be cleared.
 
-Eine Nennung im **Text** ist keine Referenz in diesem Sinn: `[[id]]` und was
-unter `## Beziehungen` steht bleiben sichtbarer Text. Ein `[[id]]`, zu dem
-es keinen NPC, keinen Ort und keine Szene gibt, wird als Text angezeigt —
-kein Fehler, und nichts wird angelegt. Ein leerer NPC oder Ort ist übrigens
-normal: angelegt und noch nicht gefüllt, er erscheint als dünne Karte und
-lässt sich jederzeit füllen.
+A mention in the **text** is not a reference in this sense: `[[id]]` and
+whatever stands under `## Beziehungen` remain visible text. An `[[id]]` for
+which there is no NPC, no location and no scene is shown as text — no error,
+and nothing is created. An empty NPC or location is normal, by the way:
+created and not yet filled, it appears as a thin card and can be filled at
+any time.
 
 ## Text
 
-Der Text (`body`) einer Kampagne, eines Kapitels, einer Szene, eines NPCs oder
-eines Orts ist Markdown. Was der Renderer versteht — und was der
-Generator produzieren muss:
+The text (`body`) of a campaign, a chapter, a scene, an NPC or a location is
+Markdown. What the renderer understands — and what the generator must
+produce:
 
-### Abschnitte (H2)
+### Sections (H2)
 
-| Überschrift | Bedeutung |
-| ----------- | --------- |
-| `## Flow` | Standardablauf, wenn nichts Besonderes passiert |
-| `## If: <Bedingung>` | Verzweigung; Bedingung ist Freitext (Deutsch), wird einklappbar gerendert |
-| alles andere | normaler Abschnitt, keine Sonderbehandlung |
+| Heading | Meaning |
+| ------- | ------- |
+| `## Flow` | standard course when nothing special happens |
+| `## If: <condition>` | branch; the condition is free text (German), rendered collapsible |
+| everything else | normal section, no special treatment |
 
-### Callouts (Obsidian-Syntax)
+### Callouts (Obsidian syntax)
 
-| Callout | Bedeutung / Rendering |
-| ------- | --------------------- |
-| `> [!readaloud]` | Vorlesetext — groß, serifig, Copy-Button für den Roll20-Chat |
-| `> [!check]` | Würfelmechanik (DCs, Contested Checks) — farblich auffällig |
-| `> [!secret]` | Info, die die Spieler NICHT haben |
-| `> [!outcome]` | Konsequenz über die Szene hinaus — Kandidat für einen Handlungsstrang |
-| `> [!loot]` | Beute / Gegenstände |
-| `> [!note]` | Freitext-Marginal des DM |
+| Callout | Meaning / rendering |
+| ------- | ------------------- |
+| `> [!readaloud]` | read-aloud text — large, serif, copy button for the Roll20 chat |
+| `> [!check]` | dice mechanics (DCs, contested checks) — visually prominent |
+| `> [!secret]` | information the players do NOT have |
+| `> [!outcome]` | consequence beyond the scene — a candidate for a plot thread |
+| `> [!loot]` | loot / items |
+| `> [!note]` | free-text marginal note of the DM |
 
-### Tabellen (GFM-Pipe-Tabellen)
+### Tables (GFM pipe tables)
 
-Das einzige aus GFM übernommene Konstrukt — für Zufallstabellen und
-Begegnungslisten, die als Prosa unlesbar wären. Syntax: **Kopfzeile**,
-**Trennzeile** aus `|---|` (eine Zelle je Spalte) und **Rand-Pipes** links und
-rechts in jeder Zeile. Tabellen gelten in jedem Text, in **jedem Callout** und
-in `## If:`-Abschnitten.
+The only construct taken over from GFM — for random tables and encounter
+lists that would be unreadable as prose. Syntax: a **header row**, a
+**separator row** of `|---|` (one cell per column) and **edge pipes** left and
+right in every row. Tables apply in every text, in **every callout** and in
+`## If:` sections.
 
 ```markdown
 > [!note] Zufallsbegegnung an der Bucht
@@ -704,178 +701,173 @@ in `## If:`-Abschnitten.
 > | 5–6 | Eine Laterne, das Glas rußgeschwärzt |
 ```
 
-(Im Callout steht die Tabelle unter demselben `>`-Block wie der Text — siehe
-die Szene „Ankunft am Leuchtturm",
+(In a callout the table stands in the same `>` block as the text — see the
+scene `lighthouse-arrival`,
 `fixtures/beispiel/scenes/lighthouse-arrival.json`.)
 
-- **Nur Tabellen.** Kein Durchgestrichen (`~~x~~`), **keine Aufgabenlisten**,
-  keine Auto-Links, keine Fußnoten. `- [x]` bleibt bewusst normaler
-  Listentext: es ist die Abhak-Syntax der Ideen, kein Kontrollkästchen.
-- **Degradation wie überall**: Eine Zeile mit Pipes ohne gültige Trennzeile
-  ist keine Tabelle, sondern Text.
-- **Anzeige**: Die Tabelle scrollt in einem eigenen Container; auf dem Handy
-  scrollt die Tabelle, nie die Seite.
-- **Block-Composer**: Eine Tabelle ist kein eigener Blocktyp, sondern Teil des
-  Text- bzw. Callout-Blocks; sie wird als Markdown bearbeitet.
+- **Tables only.** No strikethrough (`~~x~~`), **no task lists**, no
+  autolinks, no footnotes. `- [x]` deliberately stays normal list text: it is
+  the tick-off syntax of the ideas, not a checkbox.
+- **Degradation as everywhere**: a line with pipes without a valid separator
+  row is not a table but text.
+- **Display**: the table scrolls in a container of its own; on a phone the
+  table scrolls, never the page.
+- **Block composer**: a table is not a block type of its own but part of the
+  text or callout block; it is edited as Markdown.
 
-### Referenzen im Fließtext: `[[id]]`
+### References in running text: `[[id]]`
 
-`[[jorna]]` im Text ist eine Referenz auf einen NPC, einen Ort oder eine Szene. Sie gilt in jedem
-Text (Szene, NPC, Ort, Kapitel, Kampagne) und in jedem Callout.
+`[[jorna]]` in the text is a reference to an NPC, a location or a scene. It
+applies in every text (scene, NPC, location, chapter, campaign) and in every
+callout.
 
-- **Gespeichert wird immer die id**, nie der Name. Den aktuellen Anzeigenamen
-  setzt erst die Anzeige ein — ändert sich ein Name oder Titel, stimmt der
-  Text überall, ohne dass eine andere Zeile angefasst wird.
-- Referenzierbar sind **NPC, Ort und Szene**. Kollidieren ids über Arten
-  hinweg, gewinnt **NPC > Ort > Szene**. Kapitel sind nicht referenzierbar.
-- In den Klammern steht **nur die id** in kebab-case (`[[alte-mole]]`); es
-  gibt **keinen Anzeigetext** (`[[jorna|Jorna]]` ist normaler Text). Endungen
-  stehen außerhalb: `[[jorna]]s Boot` → „Jornas Boot".
-- **Code ist keine Prosa**: In Code-Blöcken und in `` `[[jorna]]` `` bleibt die
-  Schreibweise wörtlich stehen — nicht aufgelöst und nicht indexiert.
-- In der Kopfzeile eines `## If:`-Zweigs erscheint der aufgelöste **Name als
-  Text** (kein Link): der Klick faltet den Zweig.
-- **Degradation**: Eine id, zu der es nichts gibt, bleibt als `[[id]]` sichtbar
-  stehen — kein Fehler, und sie wird lebendig, sobald es sie gibt.
-- Klick: in der Leseansicht ein Link zum Ziel, in der Session-Ansicht
-  öffnet er die Detail-Schublade, ohne die Session zu verlassen.
-- Überfahren oder Tastatur-Fokus zeigt eine kurze **Vorschau** des Ziels
-  (Art, Status und die Zeilen der Kompakt-Karte); ein `[[id]]` in deren
-  Auszug steht dort — wie auf den NPC- und Ort-Karten — als Name. Auf
-  Touch-Geräten gibt es keine Vorschau.
-- Namen als normaler Text sind weiterhin erlaubt — sie bleiben aber stehen,
-  wenn sich der Name oder Titel ändert.
+- **The id is always what is stored**, never the name. Only the display puts
+  in the current display name — if a name or title changes, the text is
+  right everywhere without any other row being touched.
+- Referenceable are **NPC, location and scene**. If ids collide across
+  kinds, **NPC > location > scene** wins. Chapters are not referenceable.
+- The brackets hold **only the id** in kebab case (`[[alte-mole]]`); there is
+  **no display text** (`[[jorna|Jorna]]` is normal text). Endings stand
+  outside: `[[jorna]]s Boot` → "Jornas Boot".
+- **Code is not prose**: in code blocks and in `` `[[jorna]]` `` the spelling
+  stays literal — not resolved and not indexed.
+- In the header line of an `## If:` branch the resolved **name appears as
+  text** (not a link): the click folds the branch.
+- **Degradation**: an id for which nothing exists stays visible as `[[id]]` —
+  no error, and it comes alive as soon as it exists.
+- Click: in the reading view a link to the target; in the session view it
+  opens the detail drawer without leaving the session.
+- Hovering or keyboard focus shows a short **preview** of the target (kind,
+  status and the lines of the compact card); an `[[id]]` in its excerpt
+  appears there — as on the NPC and location cards — as a name. On touch
+  devices there is no preview.
+- Names as normal text are still allowed — but they stay as they are when
+  the name or title changes.
 
-### Hashtags im Log
+### Hashtags in the log
 
-`#thread` offener Faden · `#npc` improvisierter NPC · `#loot` Beute ·
-`#decision` Spieler-Entscheidung · `#date` In-Game-Datum (z. B. `#date Tag 4`)
+`#thread` open thread · `#npc` improvised NPC · `#loot` loot ·
+`#decision` player decision · `#date` in-game date (e.g. `#date Tag 4`)
 
-`#pc` Notiz zu einem Spielercharakter. Ein optionaler zweiter Tag benennt den
-Charakter (`#pc #kaela`); die Namen sind frei, es gibt keine PC-Entität und
-nichts zu pflegen. Die Nachbereitung sammelt solche Zeilen im Abschnitt
-„Spielercharaktere", gruppiert nach dem zweiten Tag (ohne zweiten Tag:
-„Allgemein"). `#pc` gewinnt gegen die übrigen Tags: die Zeile wird nicht als
-Handlungsstrang oder NPC angeboten, sondern nur abgehakt („Erledigt") oder
-offen gelassen („Behalten") — PC-Notizen sind Erinnerungen für den Tisch,
-kein Kampagneninhalt.
+`#pc` note about a player character. An optional second tag names the
+character (`#pc #kaela`); the names are free, there is no PC entity and
+nothing to maintain. The debrief collects such lines in its player
+characters section, grouped by the second tag (without a second tag: under
+a general heading). `#pc` wins over the other tags: the line is not offered
+as a plot thread or NPC, but only ticked off (done) or left open (keep) —
+PC notes are reminders for the table, not campaign content.
 
-## Ideen
+## Ideas
 
-Ideen werden eingeworfen und danach nur noch abgehakt, sessionunabhängig und
-mit denselben Hashtags wie das Log. Jede ist ihre eigene Ressource (siehe
-Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
+Ideas are dropped in and afterwards only ticked off, independent of sessions
+and with the same hashtags as the log. Each is its own resource (see idea);
+the debrief shows the open ones together with the log.
 
-## Nachbereitung
+## Debrief
 
-- „Als Handlungsstrang übernehmen" legt einen Faden des aktiven Kapitels an
-  (`POST …/threads { chapter, text }`); Text und `rev` des Kapitels bleiben
-  unberührt. Gepflegt werden die Fäden in der Kapitelübersicht: abhaken,
-  umformulieren, löschen, von Hand ergänzen.
-- „NPC anlegen" legt den NPC über `POST …/npcs { name, id, body }` an, mit
-  `status: unknown` (die Log-Zeile sagt nichts über seinen Zustand); sein
-  Text ist genau der Log-Text, ohne Überschrift. Ein NPC, der unter der id
-  nichts hält als seine id, wird gefüllt. Hält er schon etwas, ist das eine
-  409 mit Vorschlag: nichts wird geschrieben, die Nachbereitung zeigt den
-  Konflikt, und die Log-Zeile bleibt offen.
-- „Idee abhaken" setzt `done` an der Idee (`PATCH …/ideas/<id> { rev, done }`),
-  damit sie nicht in jeder künftigen Nachbereitung wieder auftaucht.
+- The accept-as-plot-thread action creates a thread of the active chapter
+  (`POST …/threads { chapter, text }`); the chapter's text and `rev` stay
+  untouched. The threads are maintained in the chapter overview: tick off,
+  reword, delete, add by hand.
+- The create-NPC action creates the NPC via `POST …/npcs { name, id, body }`,
+  with `status: unknown` (the log line says nothing about its state); its
+  text is exactly the log text, without a heading. An NPC that holds nothing
+  but its id under that id is filled. If it already holds something, that is
+  a 409 with a suggestion: nothing is written, the debrief shows the
+  conflict, and the log line stays open.
+- Ticking off an idea sets `done` on the idea (`PATCH …/ideas/<id> { rev,
+  done }`), so that it does not reappear in every future debrief.
 
-## Schreibregeln
+## Writing rules
 
-- Geschrieben wird ausschließlich über die API (jeder Endpoint ist an seiner
-  Route dokumentiert, im Modul seiner Ressource
-  `server/src/routes/<ressource>.ts`): Log, Nachbereitung,
-  Generator-Vorschläge — und für jede Entität ihr eigener `PATCH` auf ihrer
-  Ressource, der jede Teilmenge ihrer Felder, `body` eingeschlossen, in einem
-  Zug schreibt ([decisions/writes](docs/decisions/writes.md), [decisions/resources](docs/decisions/resources.md)); Faden, Idee, Glossar-Begriff,
-  Kampagnenwissen, Pause und Log-Zeile eingeschlossen, die keinen `body`
-  haben. Keine Liste wird als Ganzes getauscht.
-- Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
-  der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
-  409 und die App sagt „Inzwischen geändert — neu laden" statt still zu
-  überschreiben.
-- Die **Szenenreihenfolge** eines Kapitels hat ihren eigenen Schreibweg und
-  ihren eigenen Wächter: `PUT
-  /api/campaigns/<kampagne>/chapters/<kapitel>/scene-order` mit
-  `{ scenes, rev }`, wobei `scenes` die vollständige Liste der Szenen-ids
-  dieses Kapitels ist (sonst 400). Das `rev` ist `scene_order_rev`, das der
-  Kapitel-Knoten mitliefert — nicht der `rev` einer Szene und nicht der des
-  Kapitels; passt es nicht, ist das 409. Geschrieben wird nur die
-  Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
-  offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
-  Konflikt läuft ([decisions/scene-order](docs/decisions/scene-order.md)). Dieselbe Bauart hat die Reihenfolge des
-  Kampagnenwissens (`PUT …/knowledge-item-order { items, rev }`, siehe
-  Kampagnenwissen).
-- Das Log ist append-only ([decisions/writes](docs/decisions/writes.md)): eine Log-Zeile wird einmal geschrieben
-  und danach nur noch gesichtet. Eine Idee wird einmal geschrieben und
-  danach nur noch abgehakt.
+- Writes go exclusively through the API (every endpoint is documented at its
+  route, in the module of its resource `server/src/routes/<resource>.ts`):
+  log, debrief, generator proposals — and for every entity its own `PATCH`
+  on its resource, which writes any subset of its fields, `body` included,
+  in one go ([decisions/writes](docs/decisions/writes.md), [decisions/resources](docs/decisions/resources.md)); thread, idea, glossary term,
+  campaign knowledge, pause and log line included, which have no `body`. No
+  list is swapped as a whole.
+- Conflict protection: every write carries the row version `rev` that the
+  read delivered. If it no longer matches, the server responds 409 and the
+  app shows its changed-in-the-meantime conflict line with a reload instead
+  of silently overwriting.
+- The **scene order** of a chapter has its own write path and its own guard:
+  `PUT /api/campaigns/<campaign>/chapters/<chapter>/scene-order` with
+  `{ scenes, rev }`, where `scenes` is the complete list of the scene ids of
+  that chapter (400 otherwise). The `rev` is `scene_order_rev`, which the
+  chapter node delivers — not the `rev` of a scene and not that of the
+  chapter; if it does not match, that is 409. Only the order is written:
+  neither `scenes.rev` nor `chapters.rev` moves, so that an open scene or
+  chapter editor does not run into a conflict because of a reordering
+  ([decisions/scene-order](docs/decisions/scene-order.md)). The order of the campaign knowledge is built the same way
+  (`PUT …/knowledge-item-order { items, rev }`, see campaign knowledge).
+- The log is append-only ([decisions/writes](docs/decisions/writes.md)): a log line is written once and
+  afterwards only reviewed. An idea is written once and afterwards only
+  ticked off.
 
 ## Generator
 
-Siehe `generator/README.md`. Kurzfassung: Quelltext (EN) rein →
-vorgeschlagene Szenen (DE, dieses Format) raus, immer `status: draft`, immer
-mit „Entwürfe prüfen" vor dem Übernehmen.
+See `generator/README.md`. Short version: source text (EN) in → proposed
+scenes (DE, this format) out, always `status: draft`, always with a review of
+the proposals before accepting.
 
-Ein Szenen-Lauf ist eine **Pipeline**: ein Gliederungs-Aufruf legt die
-Szenen und ihre ids fest, danach wird jede Szene und jeder neue NPC und Ort
-einzeln geschrieben. Ein Formfehler kostet nur den betroffenen Teil, fertige
-Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
-wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
-angezeigt. Legt der Lauf sein Kapitel neu an, beschreibt die Gliederung es aus
-dem Quellmaterial; „Entwürfe prüfen“ zeigt diese Beschreibung, und das
-Übernehmen legt das Kapitel mit ihr als Text an. Den Text eines bestehenden
-Kapitels ändert kein Lauf.
+A scene run is a **pipeline**: an outline call fixes the scenes and their
+ids, after which every scene and every new NPC and location is written
+separately. A shape error costs only the affected part, finished scenes can
+be reviewed right away, and a broken part can be retried on its own. The
+outline is an internal step — it is never shown. If the run creates its
+chapter, the outline describes it from the source material; the review of
+the proposals shows this description, and accepting creates the chapter
+with it as its text. No run changes the text of an existing chapter.
 
-**Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
-über die Provider-API **erzwingt**. Ein Szenen-, NPC- oder Orts-Aufruf
-(Anlegen wie Ergänzen) liefert die Szene, den NPC bzw. den Ort ohne `rev`,
-alle Felder nebeneinander, dazu die Hinweise für den DM unter `warnings`;
-eine neue Szene ist dabei immer `draft`, und `quickstats` eines NPC reist als
-Liste von Paaren `{ key, value }`. Szene, NPC und Ort leiten ihr Schema
-selbst aus ihrem zod-Schema ab (`z.toJSONSchema`, [decisions/resources](docs/decisions/resources.md)), und was das
-Modell über ihre Felder wissen muss, steht in ihrem Prompt
+**Every** call responds with a JSON object whose schema the server
+**enforces** via the provider API. A scene, NPC or location call (creating
+as well as augmenting) returns the scene, the NPC or the location without
+`rev`, all fields side by side, plus the hints for the DM under `warnings`;
+a new scene is always `draft`, and an NPC's `quickstats` travel as a list of
+pairs `{ key, value }`. Scene, NPC and location derive their schema
+themselves from their zod schema (`z.toJSONSchema`, [decisions/resources](docs/decisions/resources.md)), and what the
+model needs to know about their fields is in their prompt
 (`generator/system-prompt.md`, `generator/npc-system-prompt.md`,
-`generator/location-system-prompt.md`). Ein Job listet die vorgeschlagenen
-Szenen unter `result.scenes`, die NPCs unter `result.npcs` und die Orte unter
-`result.locations`; ein NPC-Lauf trägt seinen einen NPC unter
-`npcResult.npc`. Änderungen des DM an einem Vorschlag liegen je Szene unter
-`sceneEdits` und je NPC unter `npcEdits`. Der Job ist seine eigene Ressource
-(`…/generator-jobs/<id>`, höchstens einer je Kampagne): geprüft und
-übernommen wird mit `PATCH` auf ihn, verworfen mit `DELETE`. Details in
-`generator/README.md`.
+`generator/location-system-prompt.md`). A job lists the proposed scenes
+under `result.scenes`, the NPCs under `result.npcs` and the locations under
+`result.locations`; an NPC run carries its one NPC under `npcResult.npc`.
+The DM's changes to a proposal are kept per scene under `sceneEdits` and per
+NPC under `npcEdits`. The job is its own resource (`…/generator-jobs/<id>`,
+at most one per campaign): it is reviewed and accepted with `PATCH` on it,
+discarded with `DELETE`. Details in `generator/README.md`.
 
-Die mechanische Prüfung liest die Felder und den Text, aber keine
-Überschrift ([decisions/data-shape](docs/decisions/data-shape.md)): die Abschnitte eines Vorschlags sind die Empfehlung
-der Prompts. Jedes `[[id]]` in einem erzeugten Text nennt einen NPC, einen
-Ort oder eine Szene der Kampagne oder einen Vorschlag desselben Laufs, sonst geht
-die Antwort als Korrektur-Turn zurück. Im Ergänzen-Lauf gilt das für die
-Verweise, die der Vorschlag neu bringt; was im bestehenden Text schon steht,
-bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
+The mechanical check reads the fields and the text, but no heading
+([decisions/data-shape](docs/decisions/data-shape.md)): the sections of a proposal are the prompts' recommendation.
+Every `[[id]]` in a generated text names an NPC, a location or a scene of
+the campaign or a proposal of the same run; otherwise the response goes back
+as a correction turn. In an augment run this applies to the references the
+proposal newly brings; what already stands in the existing text is left to
+the DM. An `[[id]]` in code does not count as a reference, as everywhere.
 
 ## Fixtures
 
-Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/`, ein Objekt je
-Datei, genau in der Form, die die API spricht. Jede Entität mit eigener
-Ressource liegt in ihrem eigenen Verzeichnis, jede Datei genau das Objekt,
-das ihre Ressource liefert, ohne `rev` ([decisions/resources](docs/decisions/resources.md)): die Kampagne unter
-`fixtures/beispiel/campaigns/<id>.json`, ein Kapitel unter
-`fixtures/beispiel/chapters/<id>.json`, eine Szene unter
-`fixtures/beispiel/scenes/<id>.json`, ein NPC unter
-`fixtures/beispiel/npcs/<id>.json`, ein Ort unter
-`fixtures/beispiel/locations/<id>.json`, ein Faden unter
-`fixtures/beispiel/threads/<id>.json`, eine Idee unter
-`fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
-`fixtures/beispiel/glossary-terms/<id>.json`, ein Stück Kampagnenwissen
-unter `fixtures/beispiel/knowledge-items/<id>.json` und eine Session unter
-`fixtures/beispiel/sessions/<id>.json`, ihre Pausen und Log-Zeilen
-eingebettet, ohne `rev` und ohne die Epochen-Lesungen —
-die sind die Lesung des Servers in seiner Zeitzone. Sie ist die Referenz für Callouts und die einzige
-Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
+The example campaign lies as JSON under `fixtures/beispiel/`, one object per
+file, exactly in the shape the API speaks. Every entity with its own
+resource lies in its own directory, every file exactly the object its
+resource returns, without `rev` ([decisions/resources](docs/decisions/resources.md)): the campaign under
+`fixtures/beispiel/campaigns/<id>.json`, a chapter under
+`fixtures/beispiel/chapters/<id>.json`, a scene under
+`fixtures/beispiel/scenes/<id>.json`, an NPC under
+`fixtures/beispiel/npcs/<id>.json`, a location under
+`fixtures/beispiel/locations/<id>.json`, a thread under
+`fixtures/beispiel/threads/<id>.json`, an idea under
+`fixtures/beispiel/ideas/<id>.json`, a glossary term under
+`fixtures/beispiel/glossary-terms/<id>.json`, a piece of campaign knowledge
+under `fixtures/beispiel/knowledge-items/<id>.json` and a session under
+`fixtures/beispiel/sessions/<id>.json`, its pauses and log lines embedded,
+without `rev` and without the epoch readings — those are the server's
+reading in its time zone. It is the reference for callouts and the only
+source for tests and E2E; the bodies are therefore never reformatted.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest
-`<dir>/<kampagne>/*.json` samt den Verzeichnissen `campaigns/`, `chapters/`,
-`scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`, `glossary-terms/`,
-`knowledge-items/` und `sessions/` darunter und
-schreibt die Zeilen über die Store-Schicht in eine Datenbank. Der Server
-selbst seedet nichts — eine frische Instanz startet leer.
+`grimoire seed <dir>` is the dev/E2E tool for it: it reads
+`<dir>/<campaign>/*.json` together with the directories `campaigns/`,
+`chapters/`, `scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`,
+`glossary-terms/`, `knowledge-items/` and `sessions/` below it and writes
+the rows into a database through the store layer. The server itself seeds
+nothing — a fresh instance starts empty.

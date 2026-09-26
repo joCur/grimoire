@@ -20,6 +20,11 @@ export interface FieldCopy {
   required?: boolean;
   /** What blocks the save in THIS field. */
   issue?: string;
+  /**
+   * The label is for assistive technology only — where a heading right above
+   * the field already names it on screen (a field chip's editor).
+   */
+  labelHidden?: boolean;
 }
 
 /** Label, control, hint — the same three lines for every field. */
@@ -28,6 +33,7 @@ export function FieldRow({
   hint,
   required,
   issue,
+  labelHidden = false,
   labelFor,
   children,
 }: FieldCopy & {
@@ -37,7 +43,7 @@ export function FieldRow({
 }) {
   const t = useT();
   const text = (
-    <span className="text-[12px] text-body-secondary">
+    <span className={labelHidden ? "sr-only" : "text-[12px] text-body-secondary"}>
       {label}
       {required === true && <span className="text-faint">{t("properties.field.required")}</span>}
     </span>
