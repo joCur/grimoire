@@ -11,22 +11,30 @@
 // own (the same rows the live view would have written — path 4 covers the
 // writing itself).
 //
-// The review reads rows and names them back by their id — a log row with
-// `POST /review/seen { sessionId, logId }`, an idea on its own resource — and
-// adopting a thread creates a thread of the chapter. So every assertion about
+// The review harvests the first session of the list (`GET …/sessions`,
+// newest first) and writes each row on its own resource, with its own guard —
+// a log entry with `PATCH …/sessions/:id/log/:logId { rev, reviewed }`, an
+// idea with `PATCH …/ideas/:id { rev, done }` — and adopting a thread creates
+// a thread of the chapter. So every assertion about
 // what was harvested reads a row, not a rendered text, and the chapter's own
 // text and `rev` stay exactly as they were.
 //
 // The source chip of a log row names the SCENE by its title (resolved via
 // the tree), not by the row's `sceneId`.
 
+import type { SessionSeed } from "@grimoire/shared/session";
+
 import { expect, test } from "../support/test";
-import type { SeedSession } from "../../server/src/db/seed";
 import { underCampaign, type Api } from "../support/api";
 import { getChapter } from "../support/chapter";
 import { getIdeas, ideaPath } from "../support/idea";
 import { createNpc, getNpc, npcExists } from "../support/npc";
-import { getSession, sessionExists, todaySessionId } from "../support/session";
+import {
+  getSession,
+  logEntryPath,
+  sessionExists,
+  todaySessionId,
+} from "../support/session";
 import { getThreads, patchThread, threadPath } from "../support/thread";
 
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
@@ -38,26 +46,32 @@ const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
 const PC_TEXT = "Geburtstags-Item für Kaela vorbereiten";
 
 /** Today's session with the three tagged log rows the review harvests. */
-function reviewedSession(id: string): SeedSession {
+function reviewedSession(id: string): SessionSeed {
   return {
-    kind: "session",
-    properties: {
-      id,
-      started: `${id}T19:30:00`,
-      ended: `${id}T22:45:00`,
-      scenes_played: ["lighthouse-arrival"],
-    },
+    id,
+    started: `${id}T19:30:00`,
+    ended: `${id}T22:45:00`,
+    body: "",
+    pauses: [],
     log: [
       {
+        id: "spuren",
         at: "19:52",
         sceneId: "lighthouse-arrival",
         text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+        reviewed: false,
       },
-      { at: "21:10", sceneId: "lighthouse-arrival", text: `${NPC_TEXT} #npc` },
+      {
+        id: "metta",
+        at: "21:10",
+        sceneId: "lighthouse-arrival",
+        text: `${NPC_TEXT} #npc`,
+        reviewed: false,
+      },
       // No scene: the source chip of this row stays bare.
-      { at: "22:40", text: `${THREAD_TEXT} #thread` },
+      { id: "lichter", at: "22:40", text: `${THREAD_TEXT} #thread`, reviewed: false },
     ],
-    body: "",
+    playedScenes: [{ id: "ankunft", sceneId: "lighthouse-arrival" }],
   };
 }
 
@@ -72,16 +86,14 @@ const PAST_MIDNIGHT = (() => {
   const d = new Date(`${today}T12:00:00`);
   d.setDate(d.getDate() - 1);
   const yesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const session: SeedSession = {
-    kind: "session",
-    properties: {
-      id: yesterday,
-      started: `${yesterday}T21:30:00`,
-      ended: `${today}T01:40:00`,
-      scenes_played: ["lighthouse-arrival"],
-    },
-    log: [{ at: "22:40", text: `${THREAD_TEXT} #thread` }],
+  const session: SessionSeed = {
+    id: yesterday,
+    started: `${yesterday}T21:30:00`,
+    ended: `${today}T01:40:00`,
     body: "",
+    pauses: [],
+    log: [{ id: "lichter", at: "22:40", text: `${THREAD_TEXT} #thread`, reviewed: false }],
+    playedScenes: [{ id: "ankunft", sceneId: "lighthouse-arrival" }],
   };
   return { id: yesterday, session };
 })();
@@ -440,7 +452,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
   }) => {
     // The evening of yesterday was ENDED after midnight, so `ended` sits on
     // YESTERDAY's session and there is none for today at all: the server is
-    // what names the session (GET /session?includeEnded=1), not the date.
+    // what names the session (the first of `GET …/sessions`), not the date.
     const yesterday = PAST_MIDNIGHT.id;
 
     await page.goto("/campaigns/beispiel/review");
@@ -460,4 +472,101 @@ test.describe("with yesterday's session, ended after midnight", () => {
       .poll(async () => (await getThreads(api, "01-salzhafen")).map((row) => row.text))
       .toContain(THREAD_TEXT);
   });
+});
+
+// --- the log entry is its own resource under its session ---------------------
+
+test("a log entry is reviewed on its own resource: unknown id 404, stale rev 409, the old address 404", async ({
+  api,
+}) => {
+  const id = todaySessionId();
+  const sessionBefore = await getSession(api, id);
+  const before = sessionBefore.log.find((row) => row.id === "metta");
+  expect(before?.reviewed).toBe(false);
+  const patchRaw = (logId: string, body: unknown) =>
+    api.fetch(logEntryPath(api, id, logId), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // Reviewing answers the ONE entry, with its guard moved on.
+  const reviewed = await patchRaw("metta", { rev: before!.rev, reviewed: true });
+  expect(reviewed.status).toBe(200);
+  const entry = await reviewed.json();
+  expect(entry).toEqual({ ...before, reviewed: true, rev: before!.rev + 1 });
+  // An id the session does not hold is 404 — no silent 200.
+  expect((await patchRaw("no-such-entry", { rev: 1, reviewed: true })).status).toBe(404);
+  // A stale `rev` is 409, writes nothing and hands back the current entry.
+  const stale = await patchRaw("metta", { rev: before!.rev, reviewed: false });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ code: "rev_conflict", logEntry: entry });
+  expect((await getSession(api, id)).log.find((row) => row.id === "metta")).toEqual(entry);
+  // The note itself is written once: its text is no field of the PATCH.
+  expect((await patchRaw("metta", { rev: entry.rev, text: "neu" })).status).toBe(400);
+
+  // The old action endpoint answers nothing any more.
+  const seen = await api.fetch(`${underCampaign(api, "review", "seen")}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: id, logId: "metta" }),
+  });
+  expect(seen.status).toBe(404);
+  // …and the session's own guard never moved for it.
+  expect((await getSession(api, id)).rev).toBe(sessionBefore.rev);
+});
+
+test("a log entry changed elsewhere: the card says so, nothing is written, the next click works", async ({
+  page,
+  api,
+}) => {
+  const id = todaySessionId();
+  await page.goto("/campaigns/beispiel/review");
+  const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
+  await expect(progress).toHaveText("0 von 4 gesichtet");
+  const card = page.locator("div").filter({ hasText: "Spuren gefunden" }).last();
+  await expect(card.getByRole("button", { name: "Verwerfen" })).toBeVisible();
+
+  // Another writer moves the entry's guard, and the card is clicked in the
+  // SAME turn, so the version poll cannot bring the fresh guard into the page
+  // in between: the page still holds the `rev` it read, and the write is 409.
+  const entry = (await getSession(api, id)).log.find((row) => row.id === "spuren")!;
+  const written = await page.evaluate(
+    async ({ url, body, text }) => {
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const cards = [...document.querySelectorAll("div")].filter((div) =>
+        div.textContent?.includes(text),
+      );
+      const button = [...(cards.at(-1)?.querySelectorAll("button") ?? [])].find(
+        (candidate) => candidate.textContent === "Verwerfen",
+      );
+      button?.click();
+      return res.status;
+    },
+    {
+      url: api.url(logEntryPath(api, id, "spuren")),
+      body: { rev: entry.rev, reviewed: false },
+      text: "Spuren gefunden",
+    },
+  );
+  expect(written).toBe(200);
+  await expect(
+    card.getByText("Diese Notiz wurde inzwischen anderswo geändert. Die Session ist neu geladen."),
+  ).toBeVisible();
+  // Nothing was written by the page: the entry is the other writer's.
+  const after = (await getSession(api, id)).log.find((row) => row.id === "spuren")!;
+  expect(after).toEqual({ ...entry, rev: entry.rev + 1 });
+  await expect(progress).toHaveText("0 von 4 gesichtet");
+
+  // The session was read again, so the next click carries the current guard.
+  await card.getByRole("button", { name: "Verwerfen" }).click();
+  await expect(card.getByText("Verworfen")).toBeVisible();
+  await expect(progress).toHaveText("1 von 4 gesichtet");
+  await expect
+    .poll(async () => (await getSession(api, id)).log.find((row) => row.id === "spuren")?.reviewed)
+    .toBe(true);
 });

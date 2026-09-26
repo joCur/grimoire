@@ -4,21 +4,17 @@
 // Mobile is search, reading view and ideas (UI-BRIEF) — exactly that, checked
 // at 390×844 (iPhone size), including what the server stored.
 
+import type { SessionSeed } from "@grimoire/shared/session";
+
 import { expect, test } from "../support/test";
-import type { SeedSession } from "../../server/src/db/seed";
 import { getIdeas } from "../support/idea";
 
 /** A session that started YESTERDAY and was never ended. */
-const OPEN_SESSION: SeedSession = (() => {
+const OPEN_SESSION: SessionSeed = (() => {
   const d = new Date(Date.now() - 24 * 3600_000);
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  return {
-    kind: "session",
-    properties: { id, started: `${id}T22:30:00`, scenes_played: [] },
-    log: [],
-    body: "",
-  };
+  return { id, started: `${id}T22:30:00`, body: "", pauses: [], log: [], playedScenes: [] };
 })();
 
 test.use({ viewport: { width: 390, height: 844 } });

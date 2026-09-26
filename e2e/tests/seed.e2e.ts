@@ -130,39 +130,46 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const session = await getSession(api, "2026-01-15");
   expect(session.started).toBe("2026-01-15T19:30:00");
   expect(session.ended).toBe("2026-01-15T22:45:00");
-  expect(session.scenesPlayed).toEqual(["lighthouse-arrival"]);
+  expect(session.playedScenes).toEqual([
+    { id: "ankunft", sceneId: "lighthouse-arrival", rev: expect.any(Number) },
+  ]);
   // The log arrives as rows, with the columns the fixture spells — nothing is
   // parsed back out of a rendered line.
   expect(session.log).toEqual([
     {
-      id: expect.any(String),
+      id: "spuren-gefunden",
       at: "19:52",
       sceneId: "lighthouse-arrival",
       text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
       reviewed: false,
+      rev: expect.any(Number),
     },
     {
-      id: expect.any(String),
+      id: "old-metta",
       at: "21:10",
       sceneId: "lighthouse-arrival",
       text: "Improvisiert: Fischerin „Old Metta“ am Steg #npc",
       reviewed: false,
+      rev: expect.any(Number),
     },
     {
-      id: expect.any(String),
+      id: "lichter-in-der-bucht",
       at: "22:40",
       text: "Cliffhanger: Lichter in der Bucht gesichtet #thread",
       reviewed: false,
+      rev: expect.any(Number),
     },
   ]);
   // A pause is an INTERVAL, with the server's epoch reading beside each
   // wall clock.
   expect(session.pauses).toEqual([
     {
+      id: "abendessen",
       from: "2026-01-15T20:30:00",
       fromMs: expect.any(Number),
       to: "2026-01-15T21:10:00",
       toMs: expect.any(Number),
+      rev: expect.any(Number),
     },
   ]);
 

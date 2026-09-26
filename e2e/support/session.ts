@@ -11,6 +11,23 @@ export function sessionPath(api: Api, id?: string): string {
   return id === undefined ? underCampaign(api, "sessions") : underCampaign(api, "sessions", id);
 }
 
+/** The request path of a session's log, or of one of its entries. */
+export function logEntryPath(api: Api, sessionId: string, id?: string): string {
+  const base = `${sessionPath(api, sessionId)}/log`;
+  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+}
+
+/** The request path of a session's pauses, or of one of them. */
+export function pausePath(api: Api, sessionId: string, id?: string): string {
+  const base = `${sessionPath(api, sessionId)}/pauses`;
+  return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
+}
+
+/** The request path of a session's played scenes. */
+export function playedScenesPath(api: Api, sessionId: string): string {
+  return `${sessionPath(api, sessionId)}/played-scenes`;
+}
+
 /** Every session of the campaign, newest first, each with its children. */
 export function listSessions(api: Api): Promise<Session[]> {
   return api.get<Session[]>(sessionPath(api));
