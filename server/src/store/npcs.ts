@@ -8,13 +8,19 @@
 // Creating one, a generator proposal and the review's "this note becomes an
 // npc" therefore FILL an npc that holds nothing rather than colliding with it
 // (`isEmptyNpcRow`), and answer 409 for one that holds something.
+//
+// An npc in the trash (decisions/trash) is there for nothing but its
+// restore: every read here asks for live npcs (`npcRowOf`), and only the
+// trash's own paths and the id checks of a create see the rest
+// (`storedNpcRowOf`). Its id stays taken, and it is never filled.
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import {
   freeSlug,
   npcPatchSchema,
   npcProposalSchema,
   type Npc,
+  type NpcDelete,
   type NpcPatch,
   type NpcProposal,
 } from "@grimoire/shared";
@@ -22,21 +28,28 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { generateJobs, npcs, packJson, unpackJson } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertChapterRef } from "./chapters";
-import { indexEntity } from "./fts";
+import { assertChapterRef, chapterBlocker, storedChapterRowOf } from "./chapters";
+import { dropEntity, indexEntity } from "./fts";
 import { getDb } from "./handle";
 import { expandCampaignBodyRefs } from "./refs";
 import type { NpcRow } from "./render";
+import { liveScenesNamingNpc } from "./scenes";
 import { indexedProse, reindexReferrers } from "./search-index";
 import {
   assertNpcStatus,
+  isRestore,
   normalizeBody,
   parseRequest,
   resolveNewId,
+  restoreBlocked,
   revConflict,
   slugTaken,
+  trashBlocked,
+  trashMoment,
   unknownRef,
+  type TrashBlocker,
 } from "./shared";
+import { deletedField } from "./time";
 
 /**
  * The `npcs.status` column default (schema.ts) — "nothing is claimed". Named
@@ -67,6 +80,7 @@ export function renderNpc(row: NpcRow): Npc {
     ...(row.appearance === null ? {} : { appearance: row.appearance }),
     ...(row.motivation === null ? {} : { motivation: row.motivation }),
     body: row.body,
+    ...deletedField(row.deletedAt),
     rev: row.rev,
   };
 }
@@ -101,10 +115,14 @@ export function isEmptyNpcRow(row: NpcRow): boolean {
   );
 }
 
-/** True when a proposal would land on an npc that already holds something. */
+/**
+ * True when an npc under this id may not be filled: one that holds something,
+ * and one in the trash, empty or not — its id stays taken until the purge,
+ * and nothing writes into a row there (decisions/trash).
+ */
 export function npcTaken(tx: GrimoireDb, campaign: string, id: string): boolean {
-  const row = npcRowOf(tx, campaign, id);
-  return row !== undefined && !isEmptyNpcRow(row);
+  const row = storedNpcRowOf(tx, campaign, id);
+  return row !== undefined && (row.deletedAt !== null || !isEmptyNpcRow(row));
 }
 
 /** The same question outside a transaction — an NPC run asks it before a job exists. */
@@ -127,14 +145,28 @@ export async function readNpc(campaign: string, id: string): Promise<Npc> {
   return npcIn(await getDb(), campaign, id);
 }
 
-/** GET /api/campaigns/:campaign/npcs — every npc, by name. */
-export async function listNpcs(campaign: string): Promise<Npc[]> {
+/**
+ * GET /api/campaigns/:campaign/npcs[?deleted=true] — every live npc, by name.
+ * `deleted` lists the npcs in the trash instead, the latest to go there
+ * first.
+ */
+export async function listNpcs(campaign: string, deleted = false): Promise<Npc[]> {
   await requireCampaign(campaign);
   const db = await getDb();
+  if (deleted) {
+    return (
+      db
+        .select()
+        .from(npcs)
+        .where(and(eq(npcs.campaignId, campaign), isNotNull(npcs.deletedAt)))
+        .orderBy(desc(npcs.deletedAt), asc(npcs.id))
+        .all() as NpcRow[]
+    ).map(renderNpc);
+  }
   const rows = db
     .select()
     .from(npcs)
-    .where(eq(npcs.campaignId, campaign))
+    .where(and(eq(npcs.campaignId, campaign), isNull(npcs.deletedAt)))
     .orderBy(asc(npcs.id))
     .all() as NpcRow[];
   return rows
@@ -193,16 +225,26 @@ export async function patchNpc(
  * `chapter` has to name a chapter that exists (400 otherwise), and the id
  * never changes (decisions/constraints): a patch may echo it, never alter it. A patch that
  * names no field is a 400 `nothing_to_write`.
+ *
+ * An npc in the trash takes exactly one patch, `deletedMs: null`, which
+ * restores it (`restoreNpcIn`); any other is a 404, as if it were not there.
+ * On a live npc `deletedMs: null` changes nothing.
  */
 export function patchNpcIn(tx: GrimoireDb, campaign: string, id: string, patch: NpcPatch): Npc {
-  const { rev, force, id: patchedId, ...fields } = patch;
+  const { rev, force, id: patchedId, deletedMs, ...fields } = patch;
+  const row = storedNpcRowOf(tx, campaign, id);
+  if (row?.deletedAt != null) {
+    if (!isRestore(deletedMs, fields) || (patchedId !== undefined && patchedId !== id)) {
+      throw new ApiError(404, "npc not found");
+    }
+    return restoreNpcIn(tx, campaign, row, force === true ? row.rev : rev);
+  }
   const named = Object.values(fields).some((value) => value !== undefined);
   if (!named && patchedId === undefined) {
     throw new ApiError(400, "nothing to write — send at least one field", {
       code: "nothing_to_write",
     });
   }
-  const row = npcRowOf(tx, campaign, id);
   if (row === undefined) throw new ApiError(404, "npc not found");
   const guard = force === true ? row.rev : rev;
   if (row.rev !== guard) {
@@ -245,6 +287,107 @@ export function patchNpcIn(tx: GrimoireDb, campaign: string, id: string, patch: 
     .run();
   indexNpc(tx, campaign, next);
   return renderNpc(next);
+}
+
+// --- the trash ----------------------------------------------------------------
+
+/** An npc as the trash's refusals name it. */
+function npcBlocker(row: { id: string; name: string }): TrashBlocker {
+  return { kind: "npc", id: row.id, name: row.name === "" ? row.id : row.name };
+}
+
+/**
+ * DELETE /api/campaigns/:campaign/npcs/:id `{ rev }` — the npc goes to the
+ * trash (decisions/trash): it keeps its id and its fields, and its `rev`
+ * moves. It leaves the search index, and its name leaves the indexed text of
+ * every row that mentions it. An npc a live scene names stays where it is:
+ * 409 `trash_blocked` with those scenes, and nothing is written. A stale
+ * `rev` is 409 with the current npc; an npc that is not there, or already in
+ * the trash, is 404.
+ */
+export async function trashNpc(campaign: string, id: string, request: NpcDelete): Promise<Npc> {
+  return mutate(campaign, (tx) => {
+    const row = npcRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(404, "npc not found");
+    if (row.rev !== request.rev) throw revConflict(row.rev, "npc changed", { npc: renderNpc(row) });
+    const blockers = liveScenesNamingNpc(tx, campaign, row.id);
+    if (blockers.length > 0) throw trashBlocked("npc", row.id, blockers);
+    const next: NpcRow = { ...row, deletedAt: trashMoment(), rev: row.rev + 1 };
+    tx.update(npcs)
+      .set({ deletedAt: next.deletedAt, rev: next.rev })
+      .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
+      .run();
+    dropEntity(tx, campaign, "npc", row.id);
+    reindexReferrers(tx, campaign, row.id);
+    return renderNpc(next);
+  });
+}
+
+/**
+ * The restore of one npc, INSIDE the caller's transaction, against `guard`.
+ * An npc whose chapter is in the trash would name a chapter that is not
+ * there: 409 `restore_blocked` with that chapter, and nothing is written.
+ */
+function restoreNpcIn(tx: GrimoireDb, campaign: string, row: NpcRow, guard: number): Npc {
+  if (row.rev !== guard) throw revConflict(row.rev, "npc changed", { npc: renderNpc(row) });
+  const chapter =
+    row.chapterId === null ? undefined : storedChapterRowOf(tx, campaign, row.chapterId);
+  if (chapter !== undefined && chapter.deletedAt !== null) {
+    throw restoreBlocked("npc", row.id, [chapterBlocker(chapter)]);
+  }
+  const next: NpcRow = { ...row, deletedAt: null, rev: row.rev + 1 };
+  tx.update(npcs)
+    .set({ deletedAt: null, rev: next.rev })
+    .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
+    .run();
+  indexNpc(tx, campaign, next);
+  return renderNpc(next);
+}
+
+/** The live npcs introduced in this chapter — what keeps it out of the trash. */
+export function liveNpcsOfChapter(tx: GrimoireDb, campaign: string, chapter: string): TrashBlocker[] {
+  return tx
+    .select({ id: npcs.id, name: npcs.name })
+    .from(npcs)
+    .where(and(eq(npcs.campaignId, campaign), eq(npcs.chapterId, chapter), isNull(npcs.deletedAt)))
+    .orderBy(asc(npcs.id))
+    .all()
+    .map(npcBlocker);
+}
+
+/** Those of these npcs that are in the trash — what keeps a scene there. */
+export function trashedNpcBlockers(
+  tx: GrimoireDb,
+  campaign: string,
+  ids: readonly string[],
+): TrashBlocker[] {
+  if (ids.length === 0) return [];
+  return tx
+    .select({ id: npcs.id, name: npcs.name })
+    .from(npcs)
+    .where(
+      and(eq(npcs.campaignId, campaign), inArray(npcs.id, [...ids]), isNotNull(npcs.deletedAt)),
+    )
+    .orderBy(asc(npcs.id))
+    .all()
+    .map(npcBlocker);
+}
+
+/**
+ * Remove for good every npc that went to the trash before `cutoff`, across
+ * all campaigns — after the scenes that name it, before its chapter
+ * (./trash.ts). Returns the campaign of each removed npc.
+ */
+export function purgeNpcs(tx: GrimoireDb, cutoff: string): string[] {
+  const expired = and(isNotNull(npcs.deletedAt), lt(npcs.deletedAt, cutoff));
+  const campaigns = tx
+    .select({ campaignId: npcs.campaignId })
+    .from(npcs)
+    .where(expired)
+    .all()
+    .map((row) => row.campaignId);
+  tx.delete(npcs).where(expired).run();
+  return campaigns;
 }
 
 // --- taking over a proposal ---------------------------------------------------
@@ -303,8 +446,10 @@ export function insertNpcProposal(tx: GrimoireDb, campaign: string, proposal: Np
  * sends the note there, and it is stored as it was typed, with its closing
  * newline. An npc the DM created and left empty is FILLED with the name and
  * the body; an npc that holds something is a 409 `slug_taken` with a free
- * proposal, and nothing is written. `status` keeps the column default
- * (`unknown`): nothing in a name or a note says whether the figure lives.
+ * proposal, and nothing is written — and so is an npc in the trash, empty or
+ * not: its id stays taken, and it is never filled. `status` keeps the column
+ * default (`unknown`): nothing in a name or a note says whether the figure
+ * lives.
  */
 export async function createNpc(
   campaign: string,
@@ -315,12 +460,16 @@ export async function createNpc(
   const id = resolveNewId(explicitId, name, "npc", "name");
   const text = normalizeBody(body ?? "");
   return mutate(campaign, (tx) => {
-    const existing = npcRowOf(tx, campaign, id);
-    if (existing !== undefined && !isEmptyNpcRow(existing)) {
-      // Any existing row is taken for the PROPOSAL — an empty one too: the
-      // DM created that id, so proposing it would hand them somebody else's
-      // npc under a name they never typed (store/shared.ts, rule 2).
-      const suggestion = freeSlug(id, (candidate) => npcRowOf(tx, campaign, candidate) !== undefined);
+    const existing = storedNpcRowOf(tx, campaign, id);
+    if (npcTaken(tx, campaign, id)) {
+      // Any existing row is taken for the PROPOSAL — an empty one and one in
+      // the trash too: the DM created that id, so proposing it would hand
+      // them somebody else's npc under a name they never typed
+      // (store/shared.ts, rule 2).
+      const suggestion = freeSlug(
+        id,
+        (candidate) => storedNpcRowOf(tx, campaign, candidate) !== undefined,
+      );
       throw slugTaken("npc", id, suggestion);
     }
     // `name: ""` means "the id is the name" (`renderNpc` applies that
@@ -343,8 +492,20 @@ export async function createNpc(
 
 // --- loading and checking an npc row -------------------------------------------
 
-/** One npc row by id, read through `tx` (the database or a transaction). */
+/**
+ * One LIVE npc row by id, read through `tx` (the database or a transaction)
+ * — an npc in the trash is not there for any read of content.
+ */
 export function npcRowOf(tx: GrimoireDb, campaign: string, id: string): NpcRow | undefined {
+  return tx
+    .select()
+    .from(npcs)
+    .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id), isNull(npcs.deletedAt)))
+    .all()[0] as NpcRow | undefined;
+}
+
+/** One npc row by id, live or in the trash — for the trash and for id checks. */
+export function storedNpcRowOf(tx: GrimoireDb, campaign: string, id: string): NpcRow | undefined {
   return tx
     .select()
     .from(npcs)

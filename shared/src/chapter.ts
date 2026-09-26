@@ -27,25 +27,27 @@ export type ChapterStatus = (typeof CHAPTER_STATUSES)[number];
  * its stable key — the `chapter` a scene, an npc or a location names —,
  * `title` the display name (the id stands in for a chapter that has none),
  * `status` where it stands in the campaign, `body` its markdown — what the
- * chapter is about —, and `rev` the row version a PATCH sends back as its
- * guard.
+ * chapter is about —, `deletedMs` when it went to the trash — absent while
+ * it is live (decisions/trash) —, and `rev` the row version a PATCH sends back
+ * as its guard.
  */
 export const chapterSchema = z.strictObject({
   id: z.string(),
   title: z.string(),
   status: z.enum(CHAPTER_STATUSES).optional(),
   body: z.string(),
+  deletedMs: z.number().optional(),
   rev: z.number(),
 });
 
 export type Chapter = z.infer<typeof chapterSchema>;
 
 /**
- * A chapter without its guard: what a fixture holds
- * (`fixtures/<campaign>/chapters/<id>.json`) and what a new-chapter run
- * creates when it is accepted.
+ * A chapter without its guard and without a trash moment: what a fixture
+ * holds (`fixtures/<campaign>/chapters/<id>.json`) and what a new-chapter run
+ * creates when it is accepted — each of them a live chapter.
  */
-export const chapterProposalSchema = chapterSchema.omit({ rev: true });
+export const chapterProposalSchema = chapterSchema.omit({ rev: true, deletedMs: true });
 
 export type ChapterProposal = z.infer<typeof chapterProposalSchema>;
 
@@ -53,18 +55,28 @@ export type ChapterProposal = z.infer<typeof chapterProposalSchema>;
  * The body of `PATCH /api/campaigns/:c/chapters/:id`: the guard, the optional
  * `force`, and any subset of the fields — `body` is one of them, and `null`
  * clears the status. `status: "active"` makes the chapter the active one. The
- * id may be echoed, never changed. Strict like the schema it comes from: a
- * key that is none of these is a 400 naming it.
+ * id may be echoed, never changed. `deletedMs: null` takes the chapter out of
+ * the trash; putting it there is its DELETE, so no other value is taken.
+ * Strict like the schema it comes from: a key that is none of these is a 400
+ * naming it.
  */
 export const chapterPatchSchema = chapterProposalSchema
   .extend({ status: z.enum(CHAPTER_STATUSES).nullable() })
   .partial()
-  .extend({ rev: z.number(), force: z.boolean().optional() });
+  .extend({ rev: z.number(), force: z.boolean().optional(), deletedMs: z.null().optional() });
 
 export type ChapterPatch = z.infer<typeof chapterPatchSchema>;
 
-/** The fields of one chapter write, guard and `force` aside — what an editing surface builds. */
-export const chapterChangeSchema = chapterPatchSchema.omit({ rev: true, force: true });
+/** The fields of one chapter write, guard, `force` and the trash aside — what an editing surface builds. */
+export const chapterChangeSchema = chapterPatchSchema.omit({ rev: true, force: true, deletedMs: true });
+
+/**
+ * The body of `DELETE /api/campaigns/:c/chapters/:id`, which puts the chapter
+ * in the trash: the guard the chapter was read with.
+ */
+export const chapterDeleteSchema = chapterSchema.pick({ rev: true });
+
+export type ChapterDelete = z.infer<typeof chapterDeleteSchema>;
 
 export type ChapterChange = z.infer<typeof chapterChangeSchema>;
 

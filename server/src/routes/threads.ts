@@ -6,6 +6,11 @@
 // or moves the chapter's text or its `rev`, so a thread adopted in the review
 // does not 409 an open chapter editor. Threads stand in the order they were
 // created; there is no order to write.
+//
+// A thread's DELETE removes it. It goes to the trash only with its chapter
+// and comes back with it (decisions/trash, ./chapters.ts); until then it is
+// not there for any route here, and a chapter in the trash is none a thread
+// can name (400 { code: "chapter_unknown" }).
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";

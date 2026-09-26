@@ -43,6 +43,16 @@ export function requireRev(value: unknown): number {
 }
 
 /**
+ * The `deleted` filter of a list (decisions/trash): `true` lists the rows in
+ * the trash, absent the live ones. Any other value is a 400.
+ */
+export function deletedFilter(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  if (value === "true") return true;
+  throw new ApiError(400, "deleted must be true — or left out for the live rows");
+}
+
+/**
  * Normalize free text destined for a single markdown list line: trim and
  * collapse any internal newline (plus surrounding spaces) to one space.
  * Returns undefined for non-strings and for text that is empty after

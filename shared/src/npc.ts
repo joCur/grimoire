@@ -24,8 +24,9 @@ export type NpcStatus = (typeof NPC_STATUSES)[number];
  * (never a copy), `quickstats` the few values the table needs socially (a
  * free key/value set, `{ "insight": "+2" }`), `voice` and `appearance` how it
  * comes across, `motivation` what it wants — shown on the npc card and in the
- * reference preview —, `body` its markdown, and `rev` the row version a PATCH
- * sends back as its guard.
+ * reference preview —, `body` its markdown, `deletedMs` when it went to the
+ * trash — absent while it is live (decisions/trash) —, and `rev` the row
+ * version a PATCH sends back as its guard.
  */
 export const npcSchema = z.strictObject({
   id: z.string(),
@@ -39,20 +40,21 @@ export const npcSchema = z.strictObject({
   appearance: z.string().optional(),
   motivation: z.string().optional(),
   body: z.string(),
+  deletedMs: z.number().optional(),
   rev: z.number(),
 });
 
 export type Npc = z.infer<typeof npcSchema>;
 
-/** The fields of an npc by name, its guard aside. */
-export type NpcFields = Omit<Npc, "rev">;
+/** The fields of an npc by name, its guard and its trash moment aside. */
+export type NpcFields = Omit<Npc, "rev" | "deletedMs">;
 
 /**
- * An npc without its guard: what a fixture holds
+ * An npc without its guard and without a trash moment: what a fixture holds
  * (`fixtures/<campaign>/npcs/<id>.json`), what a generator run proposes and
- * what accepting that proposal writes.
+ * what accepting that proposal writes — each of them a live npc.
  */
-export const npcProposalSchema = npcSchema.omit({ rev: true });
+export const npcProposalSchema = npcSchema.omit({ rev: true, deletedMs: true });
 
 export type NpcProposal = z.infer<typeof npcProposalSchema>;
 
@@ -70,18 +72,28 @@ const clearableNpcFields = {
 /**
  * The body of `PATCH /api/campaigns/:c/npcs/:id`: the guard, the optional
  * `force`, and any subset of the fields — `body` is one of them, and `null`
- * clears an optional one. The id may be echoed, never changed. Strict like
- * the schema it comes from: a key that is none of these is a 400 naming it.
+ * clears an optional one. The id may be echoed, never changed.
+ * `deletedMs: null` takes the npc out of the trash; putting it there is its
+ * DELETE, so no other value is taken. Strict like the schema it comes from: a
+ * key that is none of these is a 400 naming it.
  */
 export const npcPatchSchema = npcProposalSchema
   .extend(clearableNpcFields)
   .partial()
-  .extend({ rev: z.number(), force: z.boolean().optional() });
+  .extend({ rev: z.number(), force: z.boolean().optional(), deletedMs: z.null().optional() });
 
 export type NpcPatch = z.infer<typeof npcPatchSchema>;
 
-/** The fields of one npc write, guard and `force` aside — what an editing surface builds. */
-export const npcChangeSchema = npcPatchSchema.omit({ rev: true, force: true });
+/** The fields of one npc write, guard, `force` and the trash aside — what an editing surface builds. */
+export const npcChangeSchema = npcPatchSchema.omit({ rev: true, force: true, deletedMs: true });
+
+/**
+ * The body of `DELETE /api/campaigns/:c/npcs/:id`, which puts the npc in the
+ * trash: the guard the npc was read with.
+ */
+export const npcDeleteSchema = npcSchema.pick({ rev: true });
+
+export type NpcDelete = z.infer<typeof npcDeleteSchema>;
 
 export type NpcChange = z.infer<typeof npcChangeSchema>;
 

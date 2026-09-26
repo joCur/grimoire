@@ -6,24 +6,32 @@
 // per campaign, and its chapter is a field. Where a scene stands in its
 // chapter is the chapter's scene order (`PUT …/chapters/:chapter/scene-order`,
 // ./chapters.ts).
+//
+// A scene in the trash (decisions/trash) is not there for any of these but
+// the list with `?deleted=true` and its restore, a PATCH of
+// `deletedMs: null`.
 
 import { Hono } from "hono";
-import { sceneCreateSchema } from "@grimoire/shared";
+import { sceneCreateSchema, sceneDeleteSchema } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { serializeJob, startJob } from "../generator-jobs";
 import { obtainProvider } from "../generator";
 import { applySceneAugment } from "../scene-augment";
-import { createScene, listScenes, patchScene, readScene } from "../store/scenes";
+import { createScene, listScenes, patchScene, readScene, trashScene } from "../store/scenes";
 import { parseRequest } from "../store/shared";
-import { jsonBody, optionalText, requiredText } from "./http";
+import { deletedFilter, jsonBody, optionalText, requiredText } from "./http";
 
 export const sceneRoutes = new Hono();
 
-// GET /api/campaigns/:campaign/scenes -> Scene[] — every scene of the
-// campaign, chapter by chapter in the chapters' order and inside a chapter in
-// the order the DM set, each exactly as its own GET answers it.
+// GET /api/campaigns/:campaign/scenes[?deleted=true] -> Scene[] — every live
+// scene of the campaign, chapter by chapter in the chapters' order and inside
+// a chapter in the order the DM set, each exactly as its own GET answers it.
+// `?deleted=true` answers the scenes in the trash instead, each with its
+// `deletedMs`, the latest to go there first — the scenes that went with a
+// chapter share its moment and stand in their order. Any other value of
+// `deleted` is a 400.
 sceneRoutes.get("/campaigns/:campaign/scenes", async (c) =>
-  c.json(await listScenes(c.req.param("campaign"))),
+  c.json(await listScenes(c.req.param("campaign"), deletedFilter(c.req.query("deleted")))),
 );
 
 // GET /api/campaigns/:campaign/scenes/:id -> Scene
@@ -31,7 +39,7 @@ sceneRoutes.get("/campaigns/:campaign/scenes", async (c) =>
 // status, body, rev }` — every field of the scene flat, an optional one
 // absent when the scene does not carry it, the three lists empty when the
 // scene names nothing, and `rev` the guard its PATCH sends back. 404 for an
-// unknown campaign or scene.
+// unknown campaign or scene, and for a scene in the trash.
 sceneRoutes.get("/campaigns/:campaign/scenes/:id", async (c) =>
   c.json(await readScene(c.req.param("campaign"), c.req.param("id"))),
 );
@@ -41,9 +49,11 @@ sceneRoutes.get("/campaigns/:campaign/scenes/:id", async (c) =>
 // required and must exist (400 { code: "chapter_unknown" }) — a scene belongs
 // to a chapter, and chapters are never created by being named (decisions/constraints). The
 // scene is appended to the END of its chapter and holds its title and nothing
-// else. A taken id is 409 { code: "slug_taken", kind, id, suggestion } and
-// writes nothing. A key that is none of the three, or a value of the wrong
-// shape, is a 400 that names it.
+// else. A taken id — by a scene in the trash, too — is 409 { code:
+// "slug_taken", kind, id, suggestion } and writes nothing. A chapter in the
+// trash is no chapter to create a scene in (400 { code: "chapter_unknown" }).
+// A key that is none of the three, or a value of the wrong shape, is a 400
+// that names it.
 sceneRoutes.post("/campaigns/:campaign/scenes", async (c) => {
   const request = parseRequest(sceneCreateSchema, await jsonBody(c, null), "scene");
   const title = requiredText(request.title, "title");
@@ -56,7 +66,7 @@ sceneRoutes.post("/campaigns/:campaign/scenes", async (c) => {
 
 // PATCH /api/campaigns/:campaign/scenes/:id
 //   { rev, force?, id?, title?, type?, trigger?, chapter?, location?, npcs?,
-//     handouts?, tags?, status?, body? } -> Scene
+//     handouts?, tags?, status?, body?, deletedMs? } -> Scene
 // THE write of one scene (decisions/writes): any subset of its fields — `body` is one
 // of them — in ONE row update against ONE `rev`, checked against the scene's
 // schema. `null` clears an optional field (`trigger`, `location`); a key that
@@ -68,7 +78,8 @@ sceneRoutes.post("/campaigns/:campaign/scenes", async (c) => {
 //
 // Every reference has to name something that exists, or the write is 400
 // with the create-this-first code (`chapter_unknown`, `location_unknown`,
-// `npc_unknown`); a `location` that is not an id at all is 400
+// `npc_unknown`) — a row in the trash is none to name; a `location` that is
+// not an id at all is 400
 // { code: "location_not_an_id", suggestion }. The `chapter` can change but
 // never be cleared (400 { code: "chapter_required" }). A scene that changes
 // chapter lands at the END of the new one; the scene order's own guard
@@ -79,9 +90,34 @@ sceneRoutes.post("/campaigns/:campaign/scenes", async (c) => {
 // fields on top of that current row instead: only what this request carries
 // is written, so a field changed in between survives a forced save of the
 // text. 404 for an unknown campaign or scene.
+//
+// RESTORE. `{ rev, force?, deletedMs: null }` and nothing else takes a scene
+// out of the trash: it comes back at the END of its chapter's order, back in
+// the search, with its `rev` moved. Its chapter in the trash is 409 { code:
+// "chapter_in_trash", kind, id, blockers } — restoring the chapter brings the
+// scenes that went with it —, and a location or npc of it in the trash is
+// 409 { code: "restore_blocked", kind, id, blockers }; either writes
+// nothing. Any other patch of a scene in the trash is 404. `deletedMs` takes
+// no other value (400): the trash is entered by DELETE. On a live scene
+// `deletedMs: null` changes nothing.
 sceneRoutes.patch("/campaigns/:campaign/scenes/:id", async (c) => {
   const body = await jsonBody(c, null);
   return c.json(await patchScene(c.req.param("campaign"), c.req.param("id"), body));
+});
+
+// DELETE /api/campaigns/:campaign/scenes/:id { rev } -> Scene
+// Puts the scene in the TRASH (decisions/trash) and answers it with its
+// `deletedMs` and its moved `rev`: it keeps its id, its fields and its
+// references, leaves the chapter's order, the search, the tree and every
+// `[[id]]` (which then reads like one that names nothing), and is removed for
+// good after the trash's retention. A scene a log entry names stays: 409
+// { code: "trash_blocked", kind, id, blockers } with those entries (`kind:
+// "log-entry"`, the note as `name`, its `session`), and nothing is written.
+// A stale `rev` is 409 { code: "rev_conflict", rev, scene }. 404 for an
+// unknown campaign or scene, and for one already in the trash.
+sceneRoutes.delete("/campaigns/:campaign/scenes/:id", async (c) => {
+  const request = parseRequest(sceneDeleteSchema, await jsonBody(c, null), "scene delete");
+  return c.json(await trashScene(c.req.param("campaign"), c.req.param("id"), request));
 });
 
 // POST /api/campaigns/:campaign/scenes/:id/augment { sourceText?, instruction? }
@@ -95,7 +131,8 @@ sceneRoutes.patch("/campaigns/:campaign/scenes/:id", async (c) => {
 //
 // Synchronous, before a job exists: 400 for a malformed body and when
 // NEITHER sourceText nor instruction carries text; 404 for an unknown
-// campaign or scene; 503 without a configured provider.
+// campaign or scene, and for one in the trash; 503 without a configured
+// provider.
 sceneRoutes.post("/campaigns/:campaign/scenes/:id/augment", async (c) => {
   const body = await jsonBody(c, ["sourceText", "instruction"]);
   const campaign = c.req.param("campaign");

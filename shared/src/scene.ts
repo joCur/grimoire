@@ -28,9 +28,10 @@ export type SceneType = (typeof SCENE_TYPES)[number];
  * `chapter` the chapter it belongs to (always one), `location` the location
  * it plays at, `npcs` the npcs it names in their order, `handouts` the Roll20
  * handouts it refers to (never copies), `tags` free words, `status` where it
- * stands in the campaign, `body` its markdown, and `rev` the row version a
- * PATCH sends back as its guard. The three lists are always there, empty when
- * the scene names nothing.
+ * stands in the campaign, `body` its markdown, `deletedMs` when it went to
+ * the trash — absent while it is live (decisions/trash) —, and `rev` the row
+ * version a PATCH sends back as its guard. The three lists are always there,
+ * empty when the scene names nothing.
  */
 export const sceneSchema = z.strictObject({
   id: z.string(),
@@ -44,17 +45,18 @@ export const sceneSchema = z.strictObject({
   tags: z.array(z.string()),
   status: z.enum(SCENE_STATUSES),
   body: z.string(),
+  deletedMs: z.number().optional(),
   rev: z.number(),
 });
 
 export type Scene = z.infer<typeof sceneSchema>;
 
 /**
- * A scene without its guard: what a fixture holds
+ * A scene without its guard and without a trash moment: what a fixture holds
  * (`fixtures/<campaign>/scenes/<id>.json`), what a generator run proposes and
- * what accepting that proposal writes.
+ * what accepting that proposal writes — each of them is a live scene.
  */
-export const sceneProposalSchema = sceneSchema.omit({ rev: true });
+export const sceneProposalSchema = sceneSchema.omit({ rev: true, deletedMs: true });
 
 export type SceneProposal = z.infer<typeof sceneProposalSchema>;
 
@@ -62,8 +64,10 @@ export type SceneProposal = z.infer<typeof sceneProposalSchema>;
  * The body of `PATCH /api/campaigns/:c/scenes/:id`: the guard, the optional
  * `force`, and any subset of the fields — `body` is one of them, and `null`
  * clears an optional one. The chapter can change but never be cleared, and
- * the id may be echoed, never changed. Strict like the schema it comes from:
- * a key that is none of these is a 400 naming it.
+ * the id may be echoed, never changed. `deletedMs: null` takes the scene out
+ * of the trash; putting it there is its DELETE, so no other value is taken.
+ * Strict like the schema it comes from: a key that is none of these is a 400
+ * naming it.
  */
 export const scenePatchSchema = sceneProposalSchema
   .extend({
@@ -71,12 +75,20 @@ export const scenePatchSchema = sceneProposalSchema
     location: z.string().nullable(),
   })
   .partial()
-  .extend({ rev: z.number(), force: z.boolean().optional() });
+  .extend({ rev: z.number(), force: z.boolean().optional(), deletedMs: z.null().optional() });
 
 export type ScenePatch = z.infer<typeof scenePatchSchema>;
 
-/** The fields of one scene write, guard and `force` aside — what an editing surface builds. */
-export const sceneChangeSchema = scenePatchSchema.omit({ rev: true, force: true });
+/** The fields of one scene write, guard, `force` and the trash aside — what an editing surface builds. */
+export const sceneChangeSchema = scenePatchSchema.omit({ rev: true, force: true, deletedMs: true });
+
+/**
+ * The body of `DELETE /api/campaigns/:c/scenes/:id`, which puts the scene in
+ * the trash: the guard the scene was read with.
+ */
+export const sceneDeleteSchema = sceneSchema.pick({ rev: true });
+
+export type SceneDelete = z.infer<typeof sceneDeleteSchema>;
 
 export type SceneChange = z.infer<typeof sceneChangeSchema>;
 

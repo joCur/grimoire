@@ -9,8 +9,13 @@
 // to its endpoint — and the order of a chapter's scenes: the chapter's
 // statement about its scenes, with its own guard (decisions/scene-order). A scene itself
 // is its own resource (./scenes.ts), and so is a thread (./threads.ts).
+//
+// A chapter in the trash (decisions/trash) takes its scenes and threads with
+// it and brings back exactly those; everything else here reads live rows
+// only (`chapterRowOf`), and only the trash's own paths and the id checks of
+// a create see the rest (`storedChapterRowOf`).
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import {
   chapterCreateSchema,
   chapterPatchSchema,
@@ -20,6 +25,7 @@ import {
   type CampaignTree,
   type Chapter,
   type ChapterCreate,
+  type ChapterDelete,
   type ChapterNode,
   type ChapterPatch,
   type ChapterProposal,
@@ -37,9 +43,19 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { chapters, locations, npcs, scenes } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { indexEntity } from "./fts";
+import { dropEntity, indexEntity } from "./fts";
+import { liveLocationsOfChapter } from "./locations";
+import { logEntriesNamingScenes } from "./log-entries";
+import { liveNpcsOfChapter } from "./npcs";
 import { expandCampaignBodyRefs } from "./refs";
-import { refNpcs, refTags } from "./scenes";
+import {
+  liveSceneIdsOf,
+  refNpcs,
+  refTags,
+  restoreScenesOfChapter,
+  trashedReferencesOfChapterScenes,
+  trashScenesOfChapter,
+} from "./scenes";
 import { getDb } from "./handle";
 import type { ChapterRow, LocationRow, NpcRow, SceneRow } from "./render";
 import { sessionSummaries } from "./sessions";
@@ -47,14 +63,21 @@ import {
   assertChapterStatus,
   assertSafeChapterId,
   guardRev,
+  isRestore,
   nextPos,
   normalizeBody,
   parseRequest,
   resolveNewId,
+  restoreBlocked,
   revConflict,
   slugTaken,
+  trashBlocked,
+  trashMoment,
   unknownRef,
+  type TrashBlocker,
 } from "./shared";
+import { restoreThreadsOfChapter, trashThreadsOfChapter } from "./threads";
+import { deletedField } from "./time";
 
 // --- the one active chapter ---------------------------------------------------
 
@@ -76,10 +99,11 @@ const CHAPTER_ACTIVE = "active";
 const CHAPTER_PLANNED = "planned";
 
 /**
- * Take `active` off every OTHER chapter of the campaign and put it back to
- * `planned` — the swap half of "at most one active chapter". Each of those
+ * Take `active` off every OTHER live chapter of the campaign and put it back
+ * to `planned` — the swap half of "at most one active chapter". Each of those
  * chapters is written, so its `rev` moves with it: an editor open on it sees
- * that it changed.
+ * that it changed. A chapter in the trash is left as it went there; its
+ * restore keeps the rule (`restoreChapterIn`).
  *
  * Every write that can make a chapter active calls this inside its own
  * transaction — the PATCH, the create, and taking over a chapter proposal —
@@ -89,7 +113,13 @@ function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string
   const previous = tx
     .select()
     .from(chapters)
-    .where(and(eq(chapters.campaignId, campaign), eq(chapters.status, CHAPTER_ACTIVE)))
+    .where(
+      and(
+        eq(chapters.campaignId, campaign),
+        eq(chapters.status, CHAPTER_ACTIVE),
+        isNull(chapters.deletedAt),
+      ),
+    )
     .all() as ChapterRow[];
   for (const row of previous) {
     if (row.id === keep) continue;
@@ -111,14 +141,22 @@ function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string
  * the campaign while saying nothing about where the scene sits among its
  * siblings. Every path that brings a scene into a chapter uses this one —
  * creating it, moving one here from another chapter, and accepting a
- * generated scene, which uses it through the run's start below.
+ * generated scene, which uses it through the run's start below — and
+ * restoring one from the trash. The chapter's live scenes count; a scene in
+ * the trash has no place in the order.
  */
 export function nextScenePos(tx: GrimoireDb, campaign: string, chapter: string): number {
   return nextPos(
     tx
       .select({ pos: scenes.pos })
       .from(scenes)
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter)))
+      .where(
+        and(
+          eq(scenes.campaignId, campaign),
+          eq(scenes.chapterId, chapter),
+          isNull(scenes.deletedAt),
+        ),
+      )
       .all(),
   );
 }
@@ -215,7 +253,7 @@ function sceneOrderMismatch(
  * so it counts its own writes, exactly like the knowledge-item order on
  * `campaigns`.
  *
- * The list has to be EXACTLY the chapter's scenes — a missing, a foreign or
+ * The list has to be EXACTLY the chapter's live scenes — a missing, a foreign or
  * a repeated id is 400 `scene_order_mismatch` and nothing is written. A
  * partial order would have to invent positions for the scenes it does not
  * mention, and inventing is the thing this endpoint exists to stop.
@@ -232,14 +270,7 @@ export async function writeSceneOrder(
     if (chapterRow === undefined) throw new ApiError(404, "chapter not found");
     guardRev(chapterRow.sceneOrderRev, rev, "scene order changed");
 
-    const present = new Set(
-      tx
-        .select({ id: scenes.id })
-        .from(scenes)
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter)))
-        .all()
-        .map((r) => r.id),
-    );
+    const present = new Set(liveSceneIdsOf(tx, campaign, chapter));
     const seen = new Set<string>();
     const unknown: string[] = [];
     const duplicate: string[] = [];
@@ -288,6 +319,7 @@ export function renderChapter(row: ChapterRow): Chapter {
     // express.
     ...(row.status === null ? {} : { status: row.status as ChapterStatus }),
     body: row.body,
+    ...deletedField(row.deletedAt),
     rev: row.rev,
   };
 }
@@ -308,18 +340,26 @@ export async function readChapter(campaign: string, id: string): Promise<Chapter
 }
 
 /**
- * GET /api/campaigns/:campaign/chapters — every chapter of the campaign in
- * the campaign's order (`pos`, the id as the tie-break).
+ * GET /api/campaigns/:campaign/chapters[?deleted=true] — every live chapter
+ * of the campaign in the campaign's order (`pos`, the id as the tie-break).
+ * `deleted` lists the chapters in the trash instead, the latest to go there
+ * first.
  */
-export async function listChapters(campaign: string): Promise<Chapter[]> {
+export async function listChapters(campaign: string, deleted = false): Promise<Chapter[]> {
   await requireCampaign(campaign);
   const db = await getDb();
+  const order = [asc(chapters.pos), asc(chapters.id)];
   return (
     db
       .select()
       .from(chapters)
-      .where(eq(chapters.campaignId, campaign))
-      .orderBy(asc(chapters.pos), asc(chapters.id))
+      .where(
+        and(
+          eq(chapters.campaignId, campaign),
+          deleted ? isNotNull(chapters.deletedAt) : isNull(chapters.deletedAt),
+        ),
+      )
+      .orderBy(...(deleted ? [desc(chapters.deletedAt), ...order] : order))
       .all() as ChapterRow[]
   ).map(renderChapter);
 }
@@ -362,6 +402,10 @@ export async function patchChapter(campaign: string, id: string, raw: unknown): 
  * held it, in this transaction (`clearOtherActiveChapters`). The scene
  * order's guard does not move: the order is no field of the chapter
  * (decisions/scene-order).
+ *
+ * A chapter in the trash takes exactly one patch, `deletedMs: null`, which
+ * restores it (`restoreChapterIn`); any other is a 404, as if it were not
+ * there. On a live chapter `deletedMs: null` changes nothing.
  */
 export function patchChapterIn(
   tx: GrimoireDb,
@@ -369,14 +413,20 @@ export function patchChapterIn(
   id: string,
   patch: ChapterPatch,
 ): Chapter {
-  const { rev, force, id: patchedId, ...fields } = patch;
+  const { rev, force, id: patchedId, deletedMs, ...fields } = patch;
+  const row = storedChapterRowOf(tx, campaign, id);
+  if (row?.deletedAt != null) {
+    if (!isRestore(deletedMs, fields) || (patchedId !== undefined && patchedId !== id)) {
+      throw new ApiError(404, "chapter not found");
+    }
+    return restoreChapterIn(tx, campaign, row, force === true ? row.rev : rev);
+  }
   const named = Object.values(fields).some((value) => value !== undefined);
   if (!named && patchedId === undefined) {
     throw new ApiError(400, "nothing to write — send at least one field", {
       code: "nothing_to_write",
     });
   }
-  const row = chapterRowOf(tx, campaign, id);
   if (row === undefined) throw new ApiError(404, "chapter not found");
   const guard = force === true ? row.rev : rev;
   if (row.rev !== guard) {
@@ -401,6 +451,122 @@ export function patchChapterIn(
   return renderChapter(next);
 }
 
+// --- the trash ----------------------------------------------------------------
+
+/** A chapter as the trash's refusals name it. */
+export function chapterBlocker(row: ChapterRow): TrashBlocker {
+  return { kind: "chapter", id: row.id, name: row.title === "" ? row.id : row.title };
+}
+
+/**
+ * DELETE /api/campaigns/:campaign/chapters/:id `{ rev }` — the chapter goes to
+ * the trash (decisions/trash), and its live scenes and threads go with it:
+ * one moment for all of them, each keeping its fields and its place, each
+ * `rev` moving. A chapter stays where it is while a live npc or location
+ * names it, or while a log entry names one of its scenes: 409 `trash_blocked`
+ * with those rows, and nothing is written. A stale `rev` is 409 with the
+ * current chapter; a chapter that is not there, or already in the trash, is
+ * 404.
+ */
+export async function trashChapter(
+  campaign: string,
+  id: string,
+  request: ChapterDelete,
+): Promise<Chapter> {
+  return mutate(campaign, (tx) => {
+    const row = chapterRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(404, "chapter not found");
+    if (row.rev !== request.rev) {
+      throw revConflict(row.rev, "chapter changed", { chapter: renderChapter(row) });
+    }
+    const blockers = [
+      ...liveNpcsOfChapter(tx, campaign, row.id),
+      ...liveLocationsOfChapter(tx, campaign, row.id),
+      ...logEntriesNamingScenes(tx, campaign, liveSceneIdsOf(tx, campaign, row.id)),
+    ];
+    if (blockers.length > 0) throw trashBlocked("chapter", row.id, blockers);
+    const next: ChapterRow = { ...row, deletedAt: trashMoment(), rev: row.rev + 1 };
+    tx.update(chapters)
+      .set({ deletedAt: next.deletedAt, rev: next.rev })
+      .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+      .run();
+    dropEntity(tx, campaign, "chapter", row.id);
+    trashScenesOfChapter(tx, campaign, row.id, next.deletedAt as string);
+    trashThreadsOfChapter(tx, campaign, row.id, next.deletedAt as string);
+    return renderChapter(next);
+  });
+}
+
+/**
+ * The restore of one chapter, INSIDE the caller's transaction, against
+ * `guard`: the chapter and exactly the scenes and threads that went to the
+ * trash with it — the ones carrying its moment —, the scenes at the places
+ * they had.
+ *
+ * A scene that would come back naming a location or an npc that is in the
+ * trash keeps the whole chapter there: 409 `restore_blocked` with those rows.
+ * A chapter that went to the trash `active` comes back `planned` when another
+ * chapter has become the active one meanwhile — at most one is active, and
+ * the one the DM activated since is the one that stays.
+ */
+function restoreChapterIn(
+  tx: GrimoireDb,
+  campaign: string,
+  row: ChapterRow,
+  guard: number,
+): Chapter {
+  if (row.rev !== guard) {
+    throw revConflict(row.rev, "chapter changed", { chapter: renderChapter(row) });
+  }
+  const at = row.deletedAt as string;
+  const blockers = trashedReferencesOfChapterScenes(tx, campaign, row.id, at);
+  if (blockers.length > 0) throw restoreBlocked("chapter", row.id, blockers);
+  const otherActive =
+    tx
+      .select({ id: chapters.id })
+      .from(chapters)
+      .where(
+        and(
+          eq(chapters.campaignId, campaign),
+          eq(chapters.status, CHAPTER_ACTIVE),
+          isNull(chapters.deletedAt),
+        ),
+      )
+      .all().length > 0;
+  const next: ChapterRow = {
+    ...row,
+    status: row.status === CHAPTER_ACTIVE && otherActive ? CHAPTER_PLANNED : row.status,
+    deletedAt: null,
+    rev: row.rev + 1,
+  };
+  tx.update(chapters)
+    .set({ status: next.status, deletedAt: null, rev: next.rev })
+    .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+    .run();
+  restoreScenesOfChapter(tx, campaign, row.id, at);
+  restoreThreadsOfChapter(tx, campaign, row.id, at);
+  indexChapter(tx, campaign, next);
+  return renderChapter(next);
+}
+
+/**
+ * Remove for good every chapter that went to the trash before `cutoff`,
+ * across all campaigns — after the scenes, npcs and locations that name it
+ * (./trash.ts). Its threads go with it. Returns the campaign of each removed
+ * chapter.
+ */
+export function purgeChapters(tx: GrimoireDb, cutoff: string): string[] {
+  const expired = and(isNotNull(chapters.deletedAt), lt(chapters.deletedAt, cutoff));
+  const campaigns = tx
+    .select({ campaignId: chapters.campaignId })
+    .from(chapters)
+    .where(expired)
+    .all()
+    .map((row) => row.campaignId);
+  tx.delete(chapters).where(expired).run();
+  return campaigns;
+}
+
 // --- taking over a proposal ---------------------------------------------------
 
 /**
@@ -413,9 +579,12 @@ export function readChapterProposal(raw: unknown, what: string): ChapterProposal
   return parseRequest(chapterProposalSchema, raw, what);
 }
 
-/** True when a proposal would land on a chapter that already exists. */
+/**
+ * True when a proposal would land on a chapter that already exists — in the
+ * trash too: its id stays taken until the purge (decisions/trash).
+ */
 export function chapterTaken(tx: GrimoireDb, campaign: string, id: string): boolean {
-  return chapterRowOf(tx, campaign, id) !== undefined;
+  return storedChapterRowOf(tx, campaign, id) !== undefined;
 }
 
 /** The `pos` a chapter appended to the campaign gets: one past the last. */
@@ -494,17 +663,19 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   await requireCampaign(campaign);
   const db = await getDb();
 
+  // The tree is the campaign as it is played and prepared: rows in the trash
+  // are not part of it (decisions/trash).
   const chapterRows = db
     .select()
     .from(chapters)
-    .where(eq(chapters.campaignId, campaign))
+    .where(and(eq(chapters.campaignId, campaign), isNull(chapters.deletedAt)))
     .orderBy(asc(chapters.pos), asc(chapters.id))
     .all() as ChapterRow[];
 
   const sceneRows = db
     .select()
     .from(scenes)
-    .where(eq(scenes.campaignId, campaign))
+    .where(and(eq(scenes.campaignId, campaign), isNull(scenes.deletedAt)))
     .orderBy(asc(scenes.pos), asc(scenes.id))
     .all() as SceneRow[];
 
@@ -513,7 +684,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   const locationRows = db
     .select()
     .from(locations)
-    .where(eq(locations.campaignId, campaign))
+    .where(and(eq(locations.campaignId, campaign), isNull(locations.deletedAt)))
     .all() as LocationRow[];
   const locationNames = new Map(
     locationRows.map((row) => [row.id, row.name === "" ? row.id : row.name] as const),
@@ -537,7 +708,11 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   });
 
   const npcList: NpcSummary[] = (
-    db.select().from(npcs).where(eq(npcs.campaignId, campaign)).all() as NpcRow[]
+    db
+      .select()
+      .from(npcs)
+      .where(and(eq(npcs.campaignId, campaign), isNull(npcs.deletedAt)))
+      .all() as NpcRow[]
   )
     .map((row) => {
       // No address: an npc is its own resource (decisions/resources).
@@ -632,8 +807,11 @@ export async function createChapter(
   const id = resolveNewId(request.id, request.title, "chapter", "title");
   assertSafeChapterId(id);
   return mutate(campaign, (tx) => {
-    if (chapterRowOf(tx, campaign, id) !== undefined) {
-      const suggestion = freeSlug(id, (candidate) => chapterRowOf(tx, campaign, candidate) !== undefined);
+    if (storedChapterRowOf(tx, campaign, id) !== undefined) {
+      const suggestion = freeSlug(
+        id,
+        (candidate) => storedChapterRowOf(tx, campaign, candidate) !== undefined,
+      );
       throw slugTaken("chapter", id, suggestion);
     }
     insertChapterProposal(tx, campaign, {
@@ -660,7 +838,9 @@ export async function createChapter(
  * so the chapter and every scene in it would be unreachable.
  *
  * Idempotent and quiet: false when the chapter is already there, and false
- * for an id that is no entity slug — `assertChapterRef` then answers for it.
+ * for an id that is no entity slug or whose chapter is in the trash — a
+ * trashed chapter is never written over, and `assertChapterRef` then answers
+ * for it.
  * `planned`: a chapter the run brought is upcoming, never the active one.
  */
 export function ensureChapterRow(
@@ -670,7 +850,7 @@ export function ensureChapterRow(
   title?: string,
 ): boolean {
   if (!ENTITY_SLUG.test(id)) return false;
-  if (chapterRowOf(tx, campaign, id) !== undefined) return false;
+  if (storedChapterRowOf(tx, campaign, id) !== undefined) return false;
   const display = title?.trim();
   tx.insert(chapters)
     .values({
@@ -688,8 +868,24 @@ export function ensureChapterRow(
 
 // --- loading and checking a chapter row ----------------------------------------
 
-/** One chapter row by id, read through `tx` (the database or a transaction). */
+/**
+ * One LIVE chapter row by id, read through `tx` (the database or a
+ * transaction) — a chapter in the trash is not there for any read of content.
+ */
 export function chapterRowOf(tx: GrimoireDb, campaign: string, id: string): ChapterRow | undefined {
+  return tx
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, id), isNull(chapters.deletedAt)))
+    .all()[0] as ChapterRow | undefined;
+}
+
+/** One chapter row by id, live or in the trash — for the trash and for id checks. */
+export function storedChapterRowOf(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+): ChapterRow | undefined {
   return tx
     .select()
     .from(chapters)

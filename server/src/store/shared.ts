@@ -1,10 +1,12 @@
 // The helpers of the store that have no domain of their own.
 //
 // The 400 of a request an entity's zod schema refuses, the append order of a
-// row, the closed-field and reference 400s, the `rev` guard's 409, the stored
-// form of a body and the ids a create endpoint hands out. None of them
-// touches the database, so this module imports nothing from the store.
+// row, the closed-field and reference 400s, the `rev` guard's 409, the
+// trash's 409s, the stored form of a body and the ids a create endpoint hands
+// out. None of them touches the database, so this module imports nothing from
+// the store but the stored shape of a point in time (./time.ts).
 
+import { format } from "date-fns";
 import type { z } from "zod";
 import {
   CHAPTER_STATUSES,
@@ -18,6 +20,7 @@ import {
   type ErrorKind,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
+import { LOCAL_DATE_TIME_SECONDS } from "./time";
 
 // --- a request an entity's schema refuses -------------------------------------
 
@@ -157,6 +160,75 @@ export function revConflict(
 
 export function guardRev(current: number, sent: number, what: string): void {
   if (current !== sent) throw revConflict(current, what);
+}
+
+// --- the trash -----------------------------------------------------------------
+//
+// A row in the trash keeps its id and its references, and it is there for
+// nothing but its restore (decisions/trash). What keeps a row out of the
+// trash, or in it, is answered as a 409 that names the rows in the way, so
+// the app can say which ones in a whole sentence; nothing is written.
+
+/** The kinds a trash refusal can name as being in the way. */
+export type TrashBlockerKind = "chapter" | "scene" | "npc" | "location" | "log-entry";
+
+/**
+ * One row in the way of a trash or a restore: its kind, its id and the name
+ * the DM knows it by — a log entry by its text, beside its `session`.
+ */
+export interface TrashBlocker {
+  kind: TrashBlockerKind;
+  id: string;
+  name: string;
+  session?: string;
+}
+
+/** The kinds that go to the trash on their own. */
+export type TrashKind = "chapter" | "scene" | "npc" | "location" | "idea";
+
+/** The moment a row goes to the trash: now, in the stored shape (./time.ts). */
+export function trashMoment(now: Date = new Date()): string {
+  return format(now, LOCAL_DATE_TIME_SECONDS);
+}
+
+/** 409 `trash_blocked`: rows still hang on the one that was to go to the trash. */
+export function trashBlocked(kind: TrashKind, id: string, blockers: TrashBlocker[]): ApiError {
+  return new ApiError(409, `${kind} "${id}" is still referenced — nothing was moved to the trash`, {
+    code: "trash_blocked",
+    kind,
+    id,
+    blockers,
+  });
+}
+
+/** 409 `restore_blocked`: the row references rows that are in the trash. */
+export function restoreBlocked(kind: TrashKind, id: string, blockers: TrashBlocker[]): ApiError {
+  return new ApiError(409, `${kind} "${id}" references rows in the trash — nothing was restored`, {
+    code: "restore_blocked",
+    kind,
+    id,
+    blockers,
+  });
+}
+
+/** 409 `chapter_in_trash`: the scene's chapter is in the trash. */
+export function chapterInTrash(id: string, chapter: TrashBlocker): ApiError {
+  return new ApiError(409, `the chapter of scene "${id}" is in the trash — restore it first`, {
+    code: "chapter_in_trash",
+    kind: "scene",
+    id,
+    blockers: [chapter],
+  });
+}
+
+/**
+ * The one PATCH a row in the trash takes: `deletedMs: null` and nothing else
+ * — the guard, `force` and an echoed id aside. `fields` are the patch's
+ * fields without those. Any other patch of such a row answers 404, as if the
+ * row were not there.
+ */
+export function isRestore(deletedMs: null | undefined, fields: Record<string, unknown>): boolean {
+  return deletedMs === null && Object.values(fields).every((value) => value === undefined);
 }
 
 // --- a chapter id ------------------------------------------------------------

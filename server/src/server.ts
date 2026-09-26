@@ -16,6 +16,24 @@ import { getAppDistDir, getDbFile, PORT } from "./config";
 import { api } from "./routes/api";
 import { mountStaticApp } from "./static-files";
 import { initStore } from "./store/handle";
+import { purgeTrash } from "./store/trash";
+
+/** How often the running server purges the trash, in milliseconds. */
+const TRASH_PURGE_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Remove what has been in the trash for longer than its retention
+ * (decisions/trash) and say so when there was anything. A failure is logged,
+ * not thrown: the next run tries again.
+ */
+async function purgeExpiredTrash(): Promise<void> {
+  try {
+    const removed = await purgeTrash();
+    if (removed > 0) console.log(`Trash: ${removed} row(s) past their retention removed.`);
+  } catch (error) {
+    console.error("Trash purge failed:", error);
+  }
+}
 
 export const app = new Hono();
 app.route("/api", api);
@@ -47,6 +65,11 @@ if (import.meta.main) {
         "marked as failed (restart the run).",
     );
   }
+
+  // The trash is purged at boot and then every hour, so a row leaves it
+  // once its retention is over whether or not the server was restarted.
+  await purgeExpiredTrash();
+  setInterval(() => void purgeExpiredTrash(), TRASH_PURGE_INTERVAL_MS);
 
   // Production: serve the Vite build from the same process (deployment is one
   // container, decisions/stack). In dev app/dist does not exist — Vite serves the
