@@ -23,7 +23,7 @@
 // environments, mostly).
 //
 // `min-h` keeps an empty field a legible target. The CEILING is 60vh: past
-// that the field pushes its own „Speichern" off the screen, so a rule that
+// that the field pushes its own save button off the screen, so a rule that
 // long scrolls inside itself instead of scrolling the form away.
 
 import { useCallback, useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";

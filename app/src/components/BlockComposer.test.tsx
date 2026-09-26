@@ -19,6 +19,7 @@ import {
   type SceneBlock,
 } from "@/lib/blocks";
 import { translator } from "@/i18n/format";
+import type { MessageKey } from "@/i18n/messages";
 import { composerIssues, setBlockText } from "@/lib/composer";
 
 import {
@@ -38,6 +39,19 @@ function fixtureBlocks(name: string): SceneBlock[] {
   return parseBlocks(body);
 }
 
+// Rendered outside a provider, the composer speaks the default language.
+const t = translator("de");
+
+/** The `aria-label` attribute a catalog key renders to. */
+function aria(key: MessageKey, params?: Record<string, string | number>): string {
+  return `aria-label="${t(key, params)}"`;
+}
+
+/** The accessible name of a card: its type label plus its position. */
+function card(labelKey: MessageKey, position: number): string {
+  return t("composer.card.name", { label: t(labelKey), position });
+}
+
 const ARRIVAL = "scenes/lighthouse-arrival.json";
 const SMUGGLERS = "scenes/smuggler-captured.json";
 
@@ -47,7 +61,7 @@ function composer(blocks: SceneBlock[], issues: Record<string, string> = {}): st
       blocks={blocks}
       onChange={() => {}}
       idPrefix="body-scene"
-      label="szene"
+      label="scene"
       issues={issues}
     />,
   );
@@ -69,6 +83,11 @@ function occurrences(html: string, needle: string): number {
   return html.split(needle).length - 1;
 }
 
+/** One option of the heading level select. */
+function level(depth: number): string {
+  return `>${t("composer.heading.level", { depth })}</option>`;
+}
+
 function firstSection(blocks: SceneBlock[]): IfSectionBlock {
   const found = blocks.find((block): block is IfSectionBlock => block.type === "ifSection");
   if (found === undefined) throw new Error("expected an If-section");
@@ -78,10 +97,17 @@ function firstSection(blocks: SceneBlock[]): IfSectionBlock {
 describe("the block list", () => {
   test("names every block of the reference scene in the reading view's words", () => {
     const html = composer(fixtureBlocks(ARRIVAL));
-    for (const label of ["Überschrift", "Text", "Vorlesetext", "Probe", "Geheim", "Notiz"]) {
-      expect(html).toContain(label);
+    for (const key of [
+      "composer.blockType.heading",
+      "composer.blockType.text",
+      "markdown.callout.readaloud",
+      "markdown.callout.check",
+      "markdown.callout.secret",
+      "markdown.callout.note",
+    ] as const) {
+      expect(html).toContain(t(key));
     }
-    // A collapsed card shows its own content, not the markdown markers.
+    // A collapsed card shows its own content (the seed scene's text), not the markdown markers.
     expect(html).toContain("Der Turm ragt schwarz");
     expect(html).not.toContain("&gt; [!readaloud]");
     // …and no form is open until the DM asks for one.
@@ -90,40 +116,49 @@ describe("the block list", () => {
 
   test("every card carries move and delete buttons, named by type and position", () => {
     const html = composer(fixtureBlocks(ARRIVAL));
-    expect(html).toContain('aria-label="Vorlesetext 3 nach oben"');
-    expect(html).toContain('aria-label="Vorlesetext 3 nach unten"');
-    expect(html).toContain('aria-label="Vorlesetext 3 bearbeiten"');
-    expect(html).toContain('aria-label="Vorlesetext 3 löschen"');
-    // AK 4: no drag-and-drop anywhere — the controls are buttons.
+    const name = card("markdown.callout.readaloud", 3);
+    expect(html).toContain(aria("composer.card.moveUp.aria", { name }));
+    expect(html).toContain(aria("composer.card.moveDown.aria", { name }));
+    expect(html).toContain(aria("composer.card.edit.aria", { name }));
+    expect(html).toContain(aria("composer.card.delete.aria", { name }));
+    // No drag-and-drop anywhere — the controls are buttons.
     expect(html).not.toContain("draggable");
   });
 
   test("the ends of the list have nothing to swap with", () => {
     const html = composer(fixtureBlocks(ARRIVAL));
-    expect(html).toContain('aria-label="Überschrift 1 nach oben" disabled');
-    expect(html).toContain('aria-label="Notiz 6 nach unten" disabled');
-    expect(html).not.toContain('aria-label="Überschrift 1 nach unten" disabled');
+    const heading = card("composer.blockType.heading", 1);
+    const note = card("markdown.callout.note", 6);
+    expect(html).toContain(`${aria("composer.card.moveUp.aria", { name: heading })} disabled`);
+    expect(html).toContain(`${aria("composer.card.moveDown.aria", { name: note })} disabled`);
+    expect(html).not.toContain(`${aria("composer.card.moveDown.aria", { name: heading })} disabled`);
   });
 
   test("there is an insert slot before, between and after the blocks", () => {
     const blocks = fixtureBlocks(ARRIVAL);
     const html = composer(blocks);
-    expect(occurrences(html, 'aria-label="Block an Position')).toBe(blocks.length + 1);
-    expect(html).toContain('aria-label="Block an Position 1 einfügen"');
-    expect(html).toContain(`aria-label="Block an Position ${blocks.length + 1} einfügen"`);
+    const slots = Array.from({ length: blocks.length + 1 }, (_, i) =>
+      aria("composer.insert.aria", { position: i + 1 }),
+    );
+    expect(slots.reduce((sum, slot) => sum + occurrences(html, slot), 0)).toBe(blocks.length + 1);
+    expect(html).toContain(aria("composer.insert.aria", { position: 1 }));
+    expect(html).toContain(aria("composer.insert.aria", { position: blocks.length + 1 }));
+    expect(html).not.toContain(aria("composer.insert.aria", { position: blocks.length + 2 }));
   });
 
   test("an empty body invites the first block instead of showing nothing", () => {
     const html = composer([]);
-    expect(html).toContain('aria-label="Block an Position 1 einfügen"');
-    expect(html).toContain("Noch keine Blöcke");
+    expect(html).toContain(aria("composer.insert.aria", { position: 1 }));
+    expect(html).toContain(t("composer.empty"));
   });
 
   test("an unknown callout stays a raw block and says which kind it was", () => {
-    const html = composer(parseBlocks("> [!warning] Kein bekannter Typ\n"));
-    expect(html).toContain("Markdown-Block");
+    const html = composer(parseBlocks("> [!warning] Not a known type\n"));
+    expect(html).toContain(t("composer.blockType.markdown"));
     expect(html).toContain("[!warning]");
-    expect(html).toContain('aria-label="Markdown-Block 1 bearbeiten"');
+    expect(html).toContain(
+      aria("composer.card.edit.aria", { name: card("composer.blockType.markdown", 1) }),
+    );
   });
 });
 
@@ -132,22 +167,25 @@ describe("If-sections", () => {
   const html = composer(blocks);
 
   test("the section shows its condition and nests its children as cards", () => {
-    expect(html).toContain("Falls-Abschnitt");
+    expect(html).toContain(t("composer.blockType.ifSection"));
+    // The condition and the children's text come from the seed scene.
     expect(html).toContain("sie geben zu, für Jorna zu arbeiten");
     // The children of the first section: two text blocks and a note.
     expect(html).toContain("die morschen Bretter");
-    expect(html).toContain('aria-label="Notiz 3 bearbeiten"');
+    expect(html).toContain(
+      aria("composer.card.edit.aria", { name: card("markdown.callout.note", 3) }),
+    );
   });
 
   test("children have their own insert slots and moves", () => {
     const children = firstSection(blocks).children;
-    expect(html).toContain('aria-label="Block im Falls-Abschnitt an Position 1 einfügen"');
-    expect(html).toContain(
-      `aria-label="Block im Falls-Abschnitt an Position ${children.length + 1} einfügen"`,
-    );
+    expect(html).toContain(aria("composer.insert.section.aria", { position: 1 }));
+    expect(html).toContain(aria("composer.insert.section.aria", { position: children.length + 1 }));
     // A child at the top of its section cannot move further up — moving out of
     // the section is not part of this slice.
-    expect(html).toContain('aria-label="Text 1 nach oben" disabled');
+    expect(html).toContain(
+      `${aria("composer.card.moveUp.aria", { name: card("composer.blockType.text", 1) })} disabled`,
+    );
   });
 });
 
@@ -156,33 +194,33 @@ describe("the type picker", () => {
     const html = renderToStaticMarkup(
       <BlockTypePicker scope="body" onPick={() => {}} onCancel={() => {}} />,
     );
-    for (const label of [
-      "Vorlesetext",
-      "Probe",
-      "Geheim",
-      "Ergebnis",
-      "Beute",
-      "Notiz",
-      "Überschrift",
-      "Text",
-      "Falls-Abschnitt",
-    ]) {
-      expect(html).toContain(`>${label}</button>`);
+    for (const key of [
+      "markdown.callout.readaloud",
+      "markdown.callout.check",
+      "markdown.callout.secret",
+      "markdown.callout.outcome",
+      "markdown.callout.loot",
+      "markdown.callout.note",
+      "composer.blockType.heading",
+      "composer.blockType.text",
+      "composer.blockType.ifSection",
+    ] as const) {
+      expect(html).toContain(`>${t(key)}</button>`);
     }
-    expect(html).toContain("Block einfügen");
-    expect(html).toContain('aria-label="Einfügen abbrechen"');
+    expect(html).toContain(t("composer.picker.title"));
+    expect(html).toContain(aria("composer.picker.cancel.aria"));
   });
 
   test("offers no nested section inside a section", () => {
     const html = renderToStaticMarkup(
       <BlockTypePicker scope="section" onPick={() => {}} onCancel={() => {}} />,
     );
-    expect(html).toContain(">Vorlesetext</button>");
-    expect(html).not.toContain(">Falls-Abschnitt</button>");
+    expect(html).toContain(`>${t("markdown.callout.readaloud")}</button>`);
+    expect(html).not.toContain(`>${t("composer.blockType.ifSection")}</button>`);
   });
 
   test("closed by default — the slot is a quiet plus, not a permanent panel", () => {
-    expect(composer(fixtureBlocks(ARRIVAL))).not.toContain("Block einfügen");
+    expect(composer(fixtureBlocks(ARRIVAL))).not.toContain(t("composer.picker.title"));
   });
 });
 
@@ -191,7 +229,9 @@ describe("the per-block forms", () => {
     const readaloud = fixtureBlocks(ARRIVAL)[2];
     if (readaloud === undefined) throw new Error("expected the readaloud callout");
     const html = fields(readaloud);
-    expect(html).toContain('aria-label="Inhalt: Vorlesetext"');
+    expect(html).toContain(
+      aria("composer.block.content.aria", { label: t("markdown.callout.readaloud") }),
+    );
     expect(html).toContain("Der Turm ragt schwarz");
     expect(html).not.toContain("&gt;");
     // The kind is fixed — a callout cannot be turned into another type here.
@@ -200,49 +240,53 @@ describe("the per-block forms", () => {
 
   test("a heading gets its level and its text", () => {
     const html = fields(makeHeading(2, "Flow"));
-    expect(html).toContain('aria-label="Ebene der Überschrift"');
-    expect(html).toContain(">Ebene 1</option>");
-    expect(html).toContain(">Ebene 6</option>");
-    expect(html).toContain('aria-label="Text der Überschrift"');
+    expect(html).toContain(aria("composer.heading.level.aria"));
+    expect(html).toContain(level(1));
+    expect(html).toContain(level(6));
+    expect(html).toContain(aria("composer.heading.text.aria"));
     expect(html).toContain('value="Flow"');
   });
 
   test("inside a section a heading cannot become one that ends the section", () => {
-    const html = fields(makeHeading(3, "Danach"), "section");
-    expect(html).toContain(">Ebene 3</option>");
-    expect(html).not.toContain(">Ebene 2</option>");
+    const html = fields(makeHeading(3, "After"), "section");
+    expect(html).toContain(level(3));
+    expect(html).not.toContain(level(2));
   });
 
   test("a level the body already carries stays selectable", () => {
     // A hand-written `## Flow` inside a section cannot exist (it would end the
-    // section), but a `# Titel` at document level and any other hand-written
+    // section), but a `# Title` at document level and any other hand-written
     // level must never silently jump to another value.
     const html = fields(makeHeading(2, "Flow"), "section");
-    expect(occurrences(html, ">Ebene 2</option>")).toBe(1);
+    expect(occurrences(html, level(2))).toBe(1);
     expect(html).toContain('<select id="body-scene-');
   });
 
   test("a section's form is its condition", () => {
     const html = fields(firstSection(fixtureBlocks(SMUGGLERS)));
-    expect(html).toContain('aria-label="Bedingung des Falls-Abschnitts"');
+    expect(html).toContain(aria("composer.ifSection.condition.aria"));
     expect(html).toContain("sie geben zu, für Jorna zu arbeiten");
     expect(html).toContain("## If:");
   });
 
   test("a text block is edited as markdown, a raw block with its markers", () => {
-    const text = parseBlocks("- eins\n- zwei\n")[0];
-    const raw = parseBlocks("> Nur ein Zitat\n")[0];
+    const text = parseBlocks("- one\n- two\n")[0];
+    const raw = parseBlocks("> Just a quote\n")[0];
     if (text === undefined || raw === undefined) throw new Error("expected two blocks");
 
     const textHtml = fields(text);
-    expect(textHtml).toContain('aria-label="Inhalt: Text"');
-    expect(textHtml).toContain("- eins");
+    expect(textHtml).toContain(
+      aria("composer.block.content.aria", { label: t("composer.blockType.text") }),
+    );
+    expect(textHtml).toContain("- one");
 
     const rawHtml = fields(raw);
-    expect(rawHtml).toContain('aria-label="Inhalt: Markdown-Block"');
-    expect(rawHtml).toContain("&gt; Nur ein Zitat");
+    expect(rawHtml).toContain(
+      aria("composer.block.content.aria", { label: t("composer.blockType.markdown") }),
+    );
+    expect(rawHtml).toContain("&gt; Just a quote");
     expect(rawHtml).toContain("font-mono");
-    expect(rawHtml).toContain("Markdown mit Markern");
+    expect(rawHtml).toContain(t("composer.markdown.hint"));
   });
 });
 
@@ -253,21 +297,22 @@ describe("a block that would break the body", () => {
     const child = firstSection(blocks).children[0];
     if (child === undefined) throw new Error("expected a child");
     const next = setBlockText(blocks, child.id, "## Flow");
-    return { blocks: next, issues: composerIssues(next, translator("de")) };
+    return { blocks: next, issues: composerIssues(next, t) };
   }
 
   test("the hint stands at the offending card, not somewhere in the page", () => {
     const { blocks, issues } = escaped();
     const html = composer(blocks, issues);
-    expect(html).toContain("beendet den Falls-Abschnitt");
+    const hint = t("composer.issue.sectionEscape");
+    expect(html).toContain(hint);
     // Exactly once — one card owns the problem.
-    expect(occurrences(html, "beendet den Falls-Abschnitt")).toBe(1);
+    expect(occurrences(html, hint)).toBe(1);
     // …and it is announced, like the properties form's field errors.
     expect(html).toContain('aria-live="polite"');
   });
 
   test("without issues no card carries a hint", () => {
-    expect(composer(fixtureBlocks(SMUGGLERS))).not.toContain("beendet den Falls-Abschnitt");
+    expect(composer(fixtureBlocks(SMUGGLERS))).not.toContain(t("composer.issue.sectionEscape"));
   });
 });
 
@@ -285,7 +330,7 @@ describe("re-render discipline", () => {
     const blocks = fixtureBlocks(ARRIVAL);
     const target = blocks[2];
     if (target === undefined) throw new Error("expected a block");
-    const next = setBlockText(blocks, target.id, "Der Turm steht still.");
+    const next = setBlockText(blocks, target.id, "The tower stands still.");
     // React's shallow compare sees the same `block` prop for every other card,
     // so only the edited one re-renders (the callbacks are stable, the rest of
     // a card's props are booleans and strings).
@@ -301,7 +346,7 @@ describe("re-render discipline", () => {
     const section = firstSection(blocks);
     const child = section.children[1];
     if (child === undefined) throw new Error("expected a child");
-    const next = setBlockText(blocks, child.id, "- neu");
+    const next = setBlockText(blocks, child.id, "- new");
 
     expect(next[0]).toBe(blocks[0]);
     expect(next[1]).toBe(blocks[1]);
@@ -318,18 +363,18 @@ describe("re-render discipline", () => {
 });
 
 describe("the mode toggle", () => {
-  test("Blöcke is pressed while the composer is on screen", () => {
+  test("blocks is pressed while the composer is on screen", () => {
     const html = renderToStaticMarkup(
       <ComposerModeToggle mode="blocks" onModeChange={() => {}} />,
     );
-    expect(html).toContain('aria-label="Editiermodus"');
-    expect(html).toContain('aria-pressed="true">Blöcke</button>');
-    expect(html).toContain('aria-pressed="false">Markdown</button>');
+    expect(html).toContain(aria("composer.mode.aria"));
+    expect(html).toContain(`aria-pressed="true">${t("composer.mode.blocks")}</button>`);
+    expect(html).toContain(`aria-pressed="false">${t("composer.mode.markdown")}</button>`);
   });
 
   test("…and Markdown is pressed on the fallback surface", () => {
     const html = renderToStaticMarkup(<ComposerModeToggle mode="markdown" onModeChange={() => {}} />);
-    expect(html).toContain('aria-pressed="false">Blöcke</button>');
-    expect(html).toContain('aria-pressed="true">Markdown</button>');
+    expect(html).toContain(`aria-pressed="false">${t("composer.mode.blocks")}</button>`);
+    expect(html).toContain(`aria-pressed="true">${t("composer.mode.markdown")}</button>`);
   });
 });

@@ -20,6 +20,7 @@
 
 export const de = {
   // --- shared verbs ---------------------------------------------------------
+  "common.close": "Schließen",
   "common.cancel": "Abbrechen",
   "common.discard": "Verwerfen",
   "common.save": "Speichern",

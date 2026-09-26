@@ -10,6 +10,7 @@ import type { Messages } from "./messages";
 
 export const en: Messages = {
   // --- shared verbs ---------------------------------------------------------
+  "common.close": "Close",
   "common.cancel": "Cancel",
   "common.discard": "Discard",
   "common.save": "Save",

@@ -1,117 +1,122 @@
 # UI-BRIEF — Grimoire
 
-## Subjekt und Job
+## Subject and job
 
-Grimoire ist das digitale Zauberbuch eines Spielleiters. Nutzer: genau eine
-Person, abends, oft bei gedimmtem Licht, während sie gleichzeitig spricht,
-zuhört und Roll20 bedient. Der eine Job jeder Ansicht: **die nächste
-Information in unter drei Sekunden liefern, ohne den Erzählfluss zu brechen.**
+Grimoire is a game master's digital spellbook. User: exactly one person, in
+the evening, often in dim light, while they are talking, listening and
+operating Roll20 at the same time. The one job of every view: **deliver the
+next piece of information in under three seconds without breaking the flow
+of the story.**
 
-Grimoire ist ein Werkzeug mit Charakter, kein Fantasy-Themepark.
-Die Metapher (Buch, Seiten, vorbereitete Zauber) darf in Material und
-Typografie spürbar sein — niemals in Ornament-Rahmen, Pergament-Texturen,
-Drachen-Deko oder Fraktur.
+Grimoire is a tool with character, not a fantasy theme park. The metaphor
+(book, pages, prepared spells) may be felt in material and typography —
+never in ornamental frames, parchment textures, dragon decor or blackletter.
 
-## Design-Richtung
+## Design direction
 
-**Stimmung:** ruhige Bibliothek bei Kerzenlicht, nicht Dungeon. Dunkler
-Primärmodus (Abend-Sessions), warm statt kalt — tiefes Anthrazit mit
-braunem Unterton statt Blau-Schwarz. Eine einzige Akzentfarbe im Bereich
-gedämpftes Gold/Messing (an Buchschnitt und Lesebändchen orientiert),
-sparsam eingesetzt: aktive Szene, Fokus, Primäraktion. Semantische Farben
-(Erfolg/Warnung/Gefahr) nur für Status, nie zur Dekoration.
+**Mood:** a quiet library by candlelight, not a dungeon. Dark primary mode
+(evening sessions), warm rather than cold — deep anthracite with a brown
+undertone instead of blue-black. A single accent color in the range of muted
+gold/brass (taken from gilt page edges and ribbon bookmarks), used
+sparingly: active scene, focus, primary action. Semantic colors
+(success/warning/danger) only for status, never for decoration.
 
-**Typografie trägt die Persönlichkeit:**
-- Read-Aloud-Text ist der Star: eine literarische Serif
-  (z. B. Source Serif 4 oder Literata), 18–20px, großzügiger Zeilenabstand.
-  Das ist der Text, der laut vorgelesen wird — er muss aussehen wie aus
-  einem Buch, nicht wie aus einem Admin-Panel.
-- UI-Chrome: eine unaufgeregte Sans (z. B. Inter oder system-ui), klein
-  und leise. Die UI flüstert, der Inhalt spricht.
-- Monospace nur für ids und Quickstats-Badges.
+**Typography carries the personality:**
+- Read-aloud text is the star: a literary serif
+  (e.g. Source Serif 4 or Literata), 18–20px, generous line spacing.
+  This is the text that is read out loud — it has to look like it comes from
+  a book, not from an admin panel.
+- UI chrome: an unexcited sans (e.g. Inter or system-ui), small and quiet.
+  The UI whispers, the content speaks.
+- Monospace only for ids and quick-stats badges.
 
-**Signatur-Element (die eine mutige Entscheidung):** Der Read-Aloud-Block.
-Er wird als „Buchseite im Interface" behandelt — leicht abgesetzter,
-etwas hellerer/wärmerer Hintergrund, Serif, ein feines Lesebändchen-Detail
-als linke Akzentlinie, Copy-Button (für Roll20) erst bei Hover/Fokus.
-Alles andere im Interface ist bewusst still, damit dieser Block trägt.
+**Signature element (the one bold decision):** the read-aloud block. It is
+treated as a "book page inside the interface" — a slightly set-off,
+somewhat lighter/warmer background, serif, a fine ribbon-bookmark detail as
+the left accent line, and a copy button (for Roll20) only on hover/focus.
+Everything else in the interface is deliberately quiet so that this block
+carries the page.
 
-**Ikonografie:** Lucide für Funktionales (Navigation, Aktionen, Status).
-game-icons.net (CC BY, als eigene React-Komponenten eingecheckt) NUR als
-Typ-Marker: Szene, NPC, Ort, Eventualszene und die sechs Callout-Typen.
-Monochrom, in Textfarbe, 16–20px. Keine bunten Icon-Illustrationen.
+**Iconography:** Lucide for the functional (navigation, actions, status).
+game-icons.net (CC BY, checked in as React components of our own) ONLY as
+type markers: scene, NPC, location, contingency scene and the six callout
+types. Monochrome, in the text color, 16–20px. No colorful icon
+illustrations.
 
-## Die Ansichten
+## The views
 
-### 1. Kapitel (Prep-Modus, Desktop; Route `/campaigns/:id`)
-Job: Überblick und Ordnung. Kapitel > Szenen als ruhige Liste
-(keine Karten-Grids), Status als dezente Marker, Eventualszenen visuell
-als eigene Gruppe („Eventualszenen"). Die Liste steht in der Reihenfolge,
-die der DM gelegt hat — der Ort ist keine Ebene mehr über den Szenen,
-sondern ein Wort in der Metazeile der Zeile, neben Typ und Tags.
-Umgelegt wird die Reihenfolge genau hier, mit Hoch/Runter an der Zeile:
-leise wie alles andere, spürbar an der Zeile, die gerade dran ist, und
-nicht als Dauerbeschriftung neben jeder Szene. Filter über Tags/Status,
-globale Suche prominent (Cmd/Ctrl-K). Von hier: Szene öffnen,
-Session starten, Generator aufrufen.
+### 1. Chapters (prep mode, desktop; route `/campaigns/:id`)
+Job: overview and order. Chapter > scenes as a quiet list (no card grids),
+status as subtle markers, contingency scenes visually as their own group
+(the UI calls them "Eventualszenen"). The list stands in the order the DM
+laid down — the location is not a level above the scenes but a word in the
+row's meta line, next to type and tags. The order is rearranged right here,
+with up/down on the row: quiet like everything else, noticeable on the row
+currently being moved, and not as a permanent label next to every scene.
+Filter by tags/status, global search prominent (Cmd/Ctrl-K). From here:
+open a scene, start a session, open the generator.
 
-### 2. Szene (Lesen)
-Job: eine Szene vollständig erfassen. Eigenschaften als kompakte Kopfzeile
-(Typ, Trigger, Ort, Tags), NPC-Karten der Szene rechts (voice, Will,
-Kurzwerte — genau diese drei), Body mit gerendertem Flow, einklappbaren
-`If:`-Verzweigungen und den Callout-Blöcken. Read-Aloud siehe Signatur.
-`[!check]` klar erkennbar (Akzentrahmen), `[!secret]` mit Auge-Marker
-und leicht abgedunkelt — Geheimnisse sehen geheim aus.
+### 2. Scene (reading)
+Job: take in a scene completely. Properties as a compact header line (type,
+trigger, location, tags), the scene's NPC cards on the right (voice, will,
+quick stats — exactly these three), the body with the rendered flow,
+collapsible `If:` branches and the callout blocks. Read-aloud: see the
+signature element. `[!check]` clearly recognizable (accent frame),
+`[!secret]` with an eye marker and slightly dimmed — secrets look secret.
 
-### 3. Session-Ansicht (Session-Modus, Desktop; Route `live`)
-Job: moderieren ohne suchen. Drei ruhige Zonen: links Szenenliste des
-Kapitels in der Reihenfolge aus der Vorbereitung (geplant oben,
-Eventualszenen darunter; umgelegt wird sie in der Kapitelübersicht, nicht
-hier), Mitte aktuelle Szene, rechts NPCs + Schnellnotiz-Feld (immer
-fokussierbar, Enter sendet). Der rote Faden des Abends ist ein einziger
-Schritt unter der offenen Szene: „Nächste Szene: <Titel>" — er sagt, wohin
-der DM als nächstes greift, ohne dass er die Liste absuchen muss. Beim
-Betreten steht die erste Szene an, die noch nicht gespielt ist.
-Kopfzeile: Sessionzeit (berechnet aus `started`), Pause,
-Session beenden. Die Schnellnotiz ist nach dem Read-Aloud das
-zweitwichtigste Element — nichts darf sie verdecken.
+### 3. Session view (session mode, desktop; route `live`)
+Job: moderate without searching. Three quiet zones: on the left the
+chapter's scene list in the order from the preparation (planned on top,
+contingency scenes below; it is rearranged in the chapter overview, not
+here), in the middle the current scene, on the right NPCs + the quick-note
+field (always focusable, Enter sends). The evening's common thread is a
+single step below the open scene: the next-scene link (the UI says
+"Nächste Szene: <title>") — it says where the DM reaches next without having
+to search the list. On entry, the first scene that has not been played yet
+is up. Header line: session time (computed from `started`), pause, end
+session. After the read-aloud, the quick note is the second most important
+element — nothing may cover it.
 
-### 4. Mobil
-Job: nachschlagen und einwerfen, nicht moderieren. Zwei Dinge auf der
-Startfläche: Suche und Ideen-Eingabe. Szenen/NPCs als reine Leseansicht.
-Keine Session-Ansicht auf Mobil erzwingen.
+### 4. Mobile
+Job: look things up and drop things in, not moderate. Two things on the
+start surface: search and idea input. Scenes/NPCs as a pure reading view.
+Never force the session view onto mobile.
 
-### 5. Nachbereitung (nach der Session; Route `review`)
-Job: fünf Minuten Nachbereitung (der frühere Begriff „Ernte" ist in der UI
-abgelöst — unklare Metaphorik). Notizen und Ideen mit `#thread`/`#npc`
-gefiltert, je Notiz Ein-Klick-Aktionen (Handlungsstrang übernehmen,
-vorgeschlagenen NPC anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
+### 5. Session review (after the session; route `review`)
+Job: five minutes of follow-up (the former term "Ernte", harvest, has been
+replaced in the UI — its metaphor was unclear). Notes and ideas filtered by
+`#thread`/`#npc`, one-click actions per note (adopt the storyline, create
+the suggested NPC, discard). Progress visible (the UI says e.g.
+"3 von 7 gesichtet", 3 of 7 reviewed).
 
-## Ton der UI-Texte
+## Tone of the UI copy
 
-Deutsch, Sätze klein, Verben zuerst („Session starten", „Szene öffnen").
-Keine Ausrufezeichen, kein Fantasy-Sprech in Funktionstexten
-(kein „Beschwöre eine neue Szene"). Leere Zustände laden zum Handeln ein
-(„Noch keine Szenen in diesem Kapitel — erste Szene anlegen").
+In German: short sentences, verbs first (e.g. "Session starten",
+"Szene öffnen"). No exclamation marks, no fantasy speak in functional copy
+(never something like "Beschwöre eine neue Szene", summon a new scene).
+Empty states invite action (e.g. "Noch keine Szenen in diesem Kapitel —
+erste Szene anlegen", no scenes in this chapter yet — create the first
+scene).
 
-### Begriffe in der UI
+### Terms in the UI
 
-Jede Ansicht und jede Aktion heißt nach ihrer Funktion — keine internen
-Namen, keine Metaphern, keine Anglizismen, wo ein deutsches Wort trägt.
-Routen, Query-Keys, Katalog-Keys und Format-Token (`inbox`-Liste, Hashtags,
-Callout-Typen, Status-Werte) bleiben davon unberührt.
+Every view and every action is named after its function — no internal
+names, no metaphors, and in the German UI no anglicisms where a German word
+does the job. Routes, query keys, catalog keys and format tokens (the
+`inbox` list, hashtags, callout types, status values) are not affected by
+this.
 
-| UI sagt (de) | UI sagt (en) | früher |
+| UI says (de) | UI says (en) | formerly |
 |---|---|---|
 | Kapitel | Chapters | Pool |
 | Session-Ansicht | Session view | Live-Modus / Live-Ansicht |
 | Nachbereitung | Session review | Ernte, Wrap-up |
-| Ideen ohne Tag | Ideas without a tag | Ungetaggte Einträge, Notizen (Sektion der Nachbereitung) |
+| Ideen ohne Tag | Ideas without a tag | Ungetaggte Einträge, Notizen (section of the session review) |
 | Ideen | Ideas | Inbox |
-| Entwürfe prüfen | Check drafts | Review (Generator) |
-| Vorschlag prüfen | Check the proposal | Review (NPC-Generator) |
+| Entwürfe prüfen | Check drafts | Review (generator) |
+| Vorschlag prüfen | Check the proposal | Review (NPC generator) |
 | Vorgeschlagene NPCs und Orte | Suggested NPCs and locations | Vorgeschlagene Einträge, Stubs |
-| Eventualszene | Contingency scene | Kontingenz, „Falls es schiefgeht" |
+| Eventualszene | Contingency scene | Kontingenz, "Falls es schiefgeht" |
 | Probe | Check | Check (de) |
 | Ergebnis | Outcome | Konsequenz |
 | Markdown-Block | Markdown block | Roh-Block |
@@ -120,15 +125,15 @@ Callout-Typen, Status-Werte) bleiben davon unberührt.
 | Eigenschaften | Properties | Frontmatter |
 | Text | Text | Body |
 
-## Nicht-Ziele
+## Non-goals
 
-Keine Statblocks, kein Würfeln, keine Initiative, keine Spieler-Ansicht,
-keine Ornament-Grafiken, keine Parallax-/Scroll-Effekte. Motion nur als
-kurze, funktionale Übergänge (Einklappen, Fokuswechsel);
-`prefers-reduced-motion` schaltet sie ab.
+No stat blocks, no dice rolling, no initiative, no player view, no
+ornamental graphics, no parallax/scroll effects. Motion only as short,
+functional transitions (collapsing, focus changes);
+`prefers-reduced-motion` turns them off.
 
-## Abnahme-Test je Ansicht
+## Acceptance test per view
 
-„Findet der DM mitten im Satz sprechend die Information, ohne den Satz
-zu unterbrechen?" Wenn eine Design-Entscheidung diese Frage nicht
-verbessert, ist sie Dekoration — weglassen.
+"Does the DM, in the middle of a spoken sentence, find the information
+without interrupting the sentence?" If a design decision does not improve
+the answer to that question, it is decoration — leave it out.

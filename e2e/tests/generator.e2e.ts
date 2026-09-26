@@ -11,6 +11,10 @@
 // background job, the server calls a real HTTP endpoint
 // (e2e/fixtures/stub-llm.ts) through the real OpenAICompatProvider and
 // validates the reply mechanically exactly as in production.
+//
+// The German strings matched below are the content of the stub's replies
+// (e2e/fixtures/replies.ts) and of the seeded example campaign — data the
+// model and the seed wrote, not UI text. UI text comes from the catalog.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -39,6 +43,9 @@ import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation, locationExists } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
+import { ui, uiExact } from "../support/ui";
+import type { MessageKey } from "../../app/src/i18n/messages";
+import type { MessageParams } from "../../app/src/i18n/format";
 
 /** How the review names the proposed scene: its resource segment and id. */
 const SCENE_LABEL = `scenes/${SCENE_ID}`;
@@ -51,23 +58,89 @@ of the north bay. He has seen strangers carrying crates at night and keeps
 quiet out of fear.`;
 
 /** A title no reply fixture spells, so only a DM edit can put it on screen. */
-const EDITED_TITLE = "Nachtwache am Kai, im Regen";
+const EDITED_TITLE = "Night watch on the quay, in the rain";
+
+/**
+ * The opening words of the stub scene's read-aloud (e2e/fixtures/replies.ts):
+ * reply content the model wrote, matched as data.
+ */
+const READALOUD_OPENING = "Die Flut zieht sich";
+
+/** What the DM's edit puts in place of READALOUD_OPENING. */
+const EDITED_READALOUD = "The tide goes out in the rain";
+
+/** The two paragraphs of the stub's new-chapter description. */
+const [DESCRIPTION_FIRST, DESCRIPTION_SECOND] = CHAPTER_DESCRIPTION.split("\n\n") as [
+  string,
+  string,
+];
+
+/** The opening clause of that description, as the overview shows it under the title. */
+const DESCRIPTION_OPENING = DESCRIPTION_FIRST.split(",")[0]!;
+
+/** The seeded title of the active chapter (fixtures/beispiel/chapters). */
+const ACTIVE_CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+
+/** The seeded name of the npc `fenn` (fixtures/beispiel/npcs). */
+const FENN = "Fenn";
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * A catalog text whose token count varies: the `tokens` parameter matches any
+ * grouped number, everything else is the catalog's own wording.
+ */
+function usagePattern(key: MessageKey, params: MessageParams): RegExp {
+  const marker = "\u0000";
+  const [before = "", after = ""] = ui(key, { ...params, tokens: marker }).split(marker);
+  return new RegExp(`${escapeRegExp(before)}[\\d.]+${escapeRegExp(after)}`);
+}
+
+/** The pending line of a scene run's review: its summary, nothing written yet. */
+function pendingSummary(scenes: number, stubs: number): string {
+  return ui("generate.review.pending", {
+    summary: ui("generate.review.summary", { scenes, stubs }),
+  });
+}
+
+/** The bulk accept button, naming exactly what it writes. */
+function applyAllName(scenes: number, stubs: number): RegExp {
+  return uiExact("generate.review.apply", {
+    count: ui("generate.review.summary", { scenes, stubs }),
+  });
+}
+
+/** The bulk accept button, whatever it counts. */
+const APPLY_ANY = (() => {
+  const marker = "\u0000";
+  const [before = ""] = ui("generate.review.apply", { count: marker }).split(marker);
+  return new RegExp(`^${escapeRegExp(before)}`);
+})();
+
+/** The accessible name of a `[[ref]]` to an npc. */
+function npcRefName(name: string): string {
+  return ui("markdown.ref.aria", { kind: ui("kind.npc"), name });
+}
 
 /** One stored change of a proposed scene: the fields the DM set. */
 type SceneEdit = Record<string, unknown>;
 
 /**
- * The raw text surface of an open draft editor. „Bearbeiten" lands on the block
- * cards (the default surface), so the textarea costs one more click on the mode
- * toggle of the text region.
+ * The raw text surface of an open draft editor. The edit action lands on the
+ * block cards (the default surface), so the textarea costs one more click on
+ * the mode toggle of the text region.
  */
 async function markdownTextarea(card: Locator): Promise<Locator> {
-  const text = card.getByRole("region", { name: "Text" });
+  const text = card.getByRole("region", { name: ui("generate.review.bodyHeading") });
   await text
-    .getByRole("group", { name: "Editiermodus" })
-    .getByRole("button", { name: "Markdown" })
+    .getByRole("group", { name: ui("composer.mode.aria") })
+    .getByRole("button", { name: ui("composer.mode.markdown") })
     .click();
-  return text.getByRole("textbox", { name: `Text von ${SCENE_LABEL}` });
+  return text.getByRole("textbox", {
+    name: ui("generate.review.bodyLabel", { path: SCENE_LABEL }),
+  });
 }
 
 test("scene run: job, review, apply — the draft is stored and in the chapter overview", async ({
@@ -75,77 +148,81 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   api,
 }) => {
   await page.goto("/campaigns/beispiel/generate");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    ui("generate.input.title.scene"),
+  );
 
   // The active chapter is preselected, and the context hint names what travels.
-  await expect(
-    page.getByRole("button", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: ACTIVE_CHAPTER_TITLE })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   // The knowledge count is part of that line; the example
   // campaign has none, so it says so. The knowledge path itself is
   // campaign-knowledge.e2e.ts.
   // Two locations: each location a scene names has an entry of its own,
   // because a reference creates nothing (decisions/constraints).
-  await expect(page.getByText("2 NPCs · 2 Orte")).toBeVisible();
+  await expect(
+    page.getByText(ui("generate.input.contextEntities", { npcs: 2, locations: 2 })),
+  ).toBeVisible();
   // The knowledge and the glossary halves are LINKS to their own pages —
   // this line is where the DM notices a rule is missing, so the fix is one
   // click from here.
-  await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toHaveAttribute(
+  await expect(
+    page.getByRole("link", { name: ui("generate.input.knowledgeCount", { count: 0 }) }),
+  ).toHaveAttribute(
     "href",
     "/campaigns/beispiel/knowledge",
   );
-  await expect(page.getByRole("link", { name: "Glossar", exact: true })).toHaveAttribute(
+  await expect(
+    page.getByRole("link", { name: ui("generate.input.glossary"), exact: true }),
+  ).toHaveAttribute(
     "href",
     "/campaigns/beispiel/glossary",
   );
 
-  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-
   // The review of the finished job (the working state may flash by).
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
-    timeout: 30_000,
-  });
-  await expect(page.getByText("1 Szene · 2 vorgeschlagene NPCs und Orte · noch nichts geschrieben")).toBeVisible();
+  await startSceneRun(page, SOURCE);
+  await expect(page.getByText(pendingSummary(1, 2))).toBeVisible();
   // What the run cost: it is summed over every CALL of the
   // pipeline — the outline plus the one scene plus the npc and the location.
   // Not one correction among them: the scene and the location name
   // `[[grella]]`, an npc only this run proposes, and a reference to a
   // proposal is valid.
-  await expect(page.getByText(/~[\d.]+ Tokens · 4 Aufrufe/)).toBeVisible();
-  // The model's warning is shown, not swallowed.
+  await expect(page.getByText(usagePattern("generate.pipeline.cost", { calls: 4 }))).toBeVisible();
+  // The model's warning is shown, not swallowed (the stub's warning text).
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
 
   // The scene's card: title, label, status pill, rendered body.
   const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
   // The status chip shows the LABEL, not the raw property value.
-  await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
-  await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
-  await expect(card.locator("[data-callout='loot']")).toContainText("Beute");
+  await expect(card.getByText(ui("status.scene.draft"), { exact: true })).toBeVisible();
+  await expect(card.locator("[data-callout='readaloud']")).toContainText(READALOUD_OPENING);
+  await expect(card.locator("[data-callout='loot']")).toContainText(ui("markdown.callout.loot"));
   await expect(card.locator("details[data-if-section]")).toHaveCount(2);
   // The draft's prose uses `[[slug]]` and the review resolves it —
   // `[[fenn]]` becomes the NPC's current name as a link, while `[[grella]]`
   // (only proposed by this run, nothing stored yet) stays visible as source
   // text.
-  await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toHaveText("Fenn");
+  await expect(card.getByRole("link", { name: npcRefName(FENN) }).first()).toHaveText(FENN);
   await expect(card).toContainText("[[grella]]");
 
   // Nothing is stored before the accept.
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
 
   // Proposed npcs and locations are decided one by one. An undecided row is
-  // the innermost div that carries its label AND its own "Ablehnen" button.
+  // the innermost div that carries its label AND its own reject button.
   const acceptProposal = async (targetPath: string, name: string) => {
     const row = page
       .locator("div")
       .filter({ hasText: targetPath })
-      .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+      .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
       .last();
     await expect(row).toContainText(name);
-    await row.getByRole("button", { name: "Annehmen" }).click();
+    await row.getByRole("button", { name: ui("generate.stub.accept") }).click();
   };
-  await expect(page.getByText("Vorgeschlagene NPCs und Orte — einzeln entscheiden")).toBeVisible();
+  await expect(page.getByText(ui("generate.review.stubsHeading"))).toBeVisible();
   // The run's proposed scenes, npcs and locations are each their own typed
   // list (decisions/resources): the scene, the npc and the location themselves, no kind,
   // no path, no properties map.
@@ -189,13 +266,13 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   ]);
   await acceptProposal(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
   await acceptProposal(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
-  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: ui("generate.stub.accepted") })).toHaveCount(2);
 
-  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene NPCs und Orte\)$/ }).click();
+  await page.getByRole("button", { name: applyAllName(1, 2) }).click();
 
   // Done state lists exactly what was written, each by its resource segment
   // and id.
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   const writtenList = page.getByRole("listitem");
   await expect(writtenList.getByText(SCENE_LABEL, { exact: true })).toBeVisible();
   await expect(writtenList.getByText(`npcs/${NPC_STUB_ID}`, { exact: true })).toBeVisible();
@@ -223,15 +300,17 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // The co-proposed npc's reference arrived as written, and now resolves.
   expect(writtenLocation.body).toContain(`[[${NPC_STUB_ID}]]`);
 
-  // Back in the chapter overview the draft shows up with the German status label.
-  await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
+  // Back in the chapter overview the draft shows up with its status label.
+  await page.getByRole("button", { name: ui("generate.written.toChapters") }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   const row = page.getByRole("link", { name: new RegExp(SCENE_TITLE) });
   await expect(row).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Status ändern, aktuell Entwurf" }),
+    page.getByRole("button", {
+      name: ui("status.change.aria", { current: ui("status.scene.draft") }),
+    }),
   ).toBeVisible();
-  await expect(page.getByText("1 Kapitel · 3 Szenen")).toBeVisible();
+  await expect(page.getByText(overviewCount(1, 3))).toBeVisible();
 });
 
 /**
@@ -262,14 +341,14 @@ test("the review appears as soon as the job is done — even with the start requ
   await start;
 
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await page.getByLabel(ui("generate.input.sourceLabel")).fill(SOURCE);
+  await page.getByRole("button", { name: ui("generate.input.submit.scene") }).click();
   // The honest state right after the click: no job of this run is readable yet.
-  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
+  await expect(page.getByText(ui("generate.working.title"))).toBeVisible();
 
   // …and the first poll that answers carries the finished run, so THIS is the
   // review — no reload, and long before the 202 of the same run.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 6_000,
   });
   expect(released).toBe(false);
@@ -278,7 +357,7 @@ test("the review appears as soon as the job is done — even with the start requ
   // Let the held response go, so nothing is left hanging when the test ends —
   // and the arrival of the 202 must not throw the review away again.
   await expect(async () => expect(released).toBe(true)).toPass({ timeout: 10_000 });
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"));
 });
 
 /**
@@ -297,29 +376,20 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   api,
 }) => {
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.asciiQuotes}`);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
-    timeout: 30_000,
-  });
+  await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.asciiQuotes}`);
   // One scene, nothing else proposed — and, the point of the case, exactly TWO
   // calls: the outline and the one scene. A correction turn would be a third.
-  await expect(
-    page.getByText("1 Szene · 0 vorgeschlagene NPCs und Orte · noch nichts geschrieben"),
-  ).toBeVisible();
-  await expect(page.getByText(/~[\d.]+ Tokens · 2 Aufrufe/)).toBeVisible();
+  await expect(page.getByText(pendingSummary(1, 0))).toBeVisible();
+  await expect(page.getByText(usagePattern("generate.pipeline.cost", { calls: 2 }))).toBeVisible();
   // Nothing failed, so no error block and no retry action.
-  await expect(page.getByRole("button", { name: "Erneut versuchen" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: ui("generate.pipeline.retry") })).toHaveCount(0);
 
   // The read-aloud carries the mixed quotation marks, rendered as written.
   const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
   await expect(card.locator("[data-callout='readaloud']")).toContainText(ASCII_QUOTE_LINE);
 
-  await page
-    .getByRole("button", { name: /^Übernehmen \(1 Szene · 0 vorgeschlagene NPCs und Orte\)$/ })
-    .click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  await page.getByRole("button", { name: applyAllName(1, 0) }).click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   // …and they are stored byte for byte: the server corrects no typography.
   const stored = (await getScene(api, SCENE_ID)).body;
   expect(stored).toContain(ASCII_QUOTE_LINE);
@@ -327,44 +397,57 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
 
 test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByRole("button", { name: "NPC", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPC generieren");
+  await page.getByRole("button", { name: ui("generate.input.mode.npc"), exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    ui("generate.input.title.npc"),
+  );
 
-  await page.getByLabel("Quelltext", { exact: true }).fill(NPC_SOURCE);
-  await page.getByLabel("Kennung (optional)").fill("brakk");
-  await expect(page.getByText("wird angelegt als: npcs/brakk")).toBeVisible();
+  await page.getByLabel(ui("generate.input.npc.sourceLabel"), { exact: true }).fill(NPC_SOURCE);
+  await page.getByLabel(ui("generate.input.npc.idLabel")).fill("brakk");
+  await expect(
+    page.getByText(ui("generate.input.npc.idPreview", { id: "brakk" })),
+  ).toBeVisible();
 
-  await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
+  await page
+    .getByRole("button", { name: ui("generate.input.submit.npc"), exact: true })
+    .click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vorschlag prüfen", {
-    timeout: 30_000,
-  });
-  await expect(page.getByText("1 NPC · noch nichts geschrieben")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    ui("generate.review.titleNpc"),
+    { timeout: 30_000 },
+  );
+  await expect(page.getByText(ui("generate.review.pendingNpc"))).toBeVisible();
   const card = page.locator("div").filter({ hasText: "npcs/brakk" }).last();
   await expect(page.getByRole("heading", { level: 2, name: NPC_DEFAULT_NAME })).toBeVisible();
-  await expect(card).toContainText("Lebendig");
+  await expect(card).toContainText(ui("status.npc.alive"));
   await expect(card).toContainText(NPC_ROLE);
-  // Quoted quickstats survive as strings — the plus is still there.
+  // Quoted quickstats survive as strings — the plus is still there (the
+  // stub's quickstats, like the secret and the relation below).
   await expect(card).toContainText("insight +1");
   await expect(card.locator("[data-callout='secret']")).toContainText("Hat gesehen");
   // The motivation is a field of the proposed npc, shown like on the NPC
   // card — its `[[fenn]]` as the current name.
-  await expect(card).toContainText("Will: Dass die Boote wieder sicher rausfahren können");
+  await expect(card).toContainText(
+    `${ui("npcCard.will.inline")} ${NPC_MOTIVATION.split(" — ")[0]!}`,
+  );
   await expect(card).toContainText("traut Fenn nicht");
 
-  // „Bearbeiten" offers it beside the text, where the npc's editor does —
+  // The edit action offers it beside the text, where the npc's editor does —
   // and an edit there is one of the npc's changes the accept writes.
-  await card.getByRole("button", { name: "Bearbeiten" }).click();
-  const text = card.getByRole("region", { name: "Text" });
-  const motivation = text.getByRole("textbox", { name: "Will", exact: true });
+  await card.getByRole("button", { name: ui("common.edit") }).click();
+  const text = card.getByRole("region", { name: ui("generate.review.bodyHeading") });
+  const motivationLabel = ui("properties.npc.motivation.label");
+  const motivation = text.getByRole("textbox", { name: motivationLabel, exact: true });
   await expect(motivation).toHaveValue(NPC_MOTIVATION);
   await expect(
-    card.getByRole("region", { name: "Eigenschaften" }).getByRole("textbox", { name: "Will" }),
+    card
+      .getByRole("region", { name: ui("generate.review.propertiesHeading") })
+      .getByRole("textbox", { name: motivationLabel }),
   ).toHaveCount(0);
-  const edited = `${NPC_MOTIVATION} Und er will seinen Bruder zurück.`;
+  const edited = `${NPC_MOTIVATION} And he wants his brother back.`;
   await motivation.fill(edited);
   await motivation.blur();
-  await expect(page.getByText("Gespeichert")).toBeVisible();
+  await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
 
   // The run's npc is the npc itself (decisions/resources) — no properties map, no `null`
   // — and the DM's change travels as an npc edit by id, the one field that
@@ -381,21 +464,21 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   expect(job.sceneEdits).toEqual({});
 
   expect(await npcExists(api, "brakk")).toBe(false);
-  await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
+  await page.getByRole("button", { name: ui("generate.review.applyNpc"), exact: true }).click();
 
-  await expect(page.getByText("Geschrieben — NPC angelegt")).toBeVisible();
+  await expect(page.getByText(ui("generate.written.title.npc"))).toBeVisible();
   await expect(page.getByRole("listitem").getByText("npcs/brakk", { exact: true })).toBeVisible();
   const npc = await getNpc(api, "brakk");
   expect(npc.id).toBe("brakk");
   expect(npc.status).toBe("alive");
   // Quoted quickstats stay STRINGS — a relative value is not read as a number.
   expect(npc.quickstats).toMatchObject({ insight: "+1" });
-  // The edited motivation, as a field — the text carries no `## Will`.
+  // The edited motivation, as a field — the text carries no section for it.
   expect(npc.motivation).toBe(edited);
-  expect(npc.body).not.toContain("## Will");
+  expect(npc.body).not.toContain(`## ${motivationLabel}`);
 
-  // "NPC ansehen" opens the npc that now exists, on its own route.
-  await page.getByRole("button", { name: "NPC ansehen" }).click();
+  // The open action goes to the npc that now exists, on its own route.
+  await page.getByRole("button", { name: ui("generate.written.openNpc") }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
@@ -408,23 +491,29 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
   // server sends it back as a correction turn and the second reply is the
   // good one. The DM only ever sees the corrected draft.
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByRole("button", { name: "NPC", exact: true }).click();
-  await page.getByLabel("Quelltext", { exact: true }).fill(`${NPC_SOURCE}\n\n${TRIGGER.unknownRef}`);
-  await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
+  await page.getByRole("button", { name: ui("generate.input.mode.npc"), exact: true }).click();
+  await page
+    .getByLabel(ui("generate.input.npc.sourceLabel"), { exact: true })
+    .fill(`${NPC_SOURCE}\n\n${TRIGGER.unknownRef}`);
+  await page
+    .getByRole("button", { name: ui("generate.input.submit.npc"), exact: true })
+    .click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vorschlag prüfen", {
-    timeout: 30_000,
-  });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    ui("generate.review.titleNpc"),
+    { timeout: 30_000 },
+  );
   // Two calls: the reply with the dangling reference and its correction.
-  await expect(page.getByText(/~[\d.]+ Tokens · 2 Versuche/)).toBeVisible();
+  await expect(page.getByText(usagePattern("generate.usage", { attempts: 2 }))).toBeVisible();
   const card = page.locator("div").filter({ hasText: `npcs/${NPC_DEFAULT_ID}` }).last();
   await expect(card).not.toContainText(UNKNOWN_REF_ID);
-  // The relation to an npc the campaign has stayed, as a link.
+  // The relation to an npc the campaign has stayed, as a link (the stub's
+  // relation text).
   await expect(card).toContainText("kennt ihn vom Kai");
-  await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toBeVisible();
+  await expect(card.getByRole("link", { name: npcRefName(FENN) }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
-  await expect(page.getByText("Geschrieben — NPC angelegt")).toBeVisible();
+  await page.getByRole("button", { name: ui("generate.review.applyNpc"), exact: true }).click();
+  await expect(page.getByText(ui("generate.written.title.npc"))).toBeVisible();
   const { body } = await getNpc(api, NPC_DEFAULT_ID);
   expect(body).toContain("- [[fenn]]: kennt ihn vom Kai");
   expect(body).not.toContain(UNKNOWN_REF_ID);
@@ -435,33 +524,37 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   api,
 }) => {
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.invalid}`);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await page.getByLabel(ui("generate.input.sourceLabel")).fill(`${SOURCE}\n\n${TRIGGER.invalid}`);
+  await page.getByRole("button", { name: ui("generate.input.submit.scene") }).click();
 
   // The run fails after the correction turn (LLM_CORRECTION_TURNS=1) and the
   // view goes back to the form WITH the server's 422 body above it.
-  const block = page.getByText("Das Modell hat die Formprüfung nicht bestanden — nichts generiert.");
+  const block = page.getByText(ui("generate.error.validation"));
   await expect(block).toBeVisible({ timeout: 30_000 });
   // The reply is read by the scene's own schema, which holds a new scene to
-  // `draft` — its sentence names the field.
-  await expect(
-    page.getByText('"status": Ungültige Eingabe: erwartet "draft"', { exact: false }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Quelltext kürzen oder klarer strukturieren und erneut generieren."),
-  ).toBeVisible();
+  // `draft` — the failed job's validation error names the field and the value
+  // it expects, and the block lists it as the server wrote it.
+  const failedBody = (await getGeneratorJob(api)).error?.body as
+    | { validationErrors?: string[] }
+    | undefined;
+  const statusError = failedBody?.validationErrors?.find((error) =>
+    error.includes('"status"'),
+  );
+  expect(statusError).toContain('"draft"');
+  await expect(page.getByRole("listitem").filter({ hasText: statusError! })).toBeVisible();
+  await expect(page.getByText(ui("generate.error.validationHint"))).toBeVisible();
   // Three calls: the outline, then the scene part's initial call plus its
   // correction turn. The failure block still reports the attempt count,
   // because it reads the run's usage out of the error body.
-  await expect(page.getByText(/~[\d.]+ Tokens · 3 Versuche/)).toBeVisible();
+  await expect(page.getByText(usagePattern("generate.usage", { attempts: 3 }))).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
-  await page.getByText("Unverarbeitete Antwort anzeigen").click();
+  await page.getByText(ui("generate.error.rawReply")).click();
   await expect(page.locator("pre")).toContainText("night-watch-quay");
 
   // Nothing was written, and the form is usable again.
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
-  await expect(page.getByRole("button", { name: "Entwürfe generieren" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: ui("generate.input.submit.scene") })).toBeEnabled();
 });
 
 // --- the review state lives on the job ---------------------------------------
@@ -471,43 +564,36 @@ test("review state survives navigation and reload; parts are accepted one by one
   api,
 }) => {
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
-    timeout: 30_000,
-  });
+  await startSceneRun(page, SOURCE);
 
   // (1) Edit a field and the text of the proposed scene, leave the page, come
   // back: they are there. This is the loss being guarded against: component
   // state alone would not survive. The test touches one field and one line and
   // then reads the job back.
   const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
-  await card.getByRole("button", { name: "Bearbeiten" }).click();
+  await card.getByRole("button", { name: ui("common.edit") }).click();
 
-  const title = card.getByRole("region", { name: "Eigenschaften" }).getByLabel("Titel");
+  const title = titleField(card);
   await expect(title).toHaveValue(SCENE_TITLE);
   await title.fill(EDITED_TITLE);
   await title.blur();
 
   const textarea = await markdownTextarea(card);
-  const edited = (await textarea.inputValue()).replace(
-    "Die Flut zieht sich",
-    "Die Flut zieht sich im Regen",
-  );
+  const edited = (await textarea.inputValue()).replace(READALOUD_OPENING, EDITED_READALOUD);
   await textarea.fill(edited);
   // Blur flushes the debounce — the DM does not have to wait for a timer.
   await textarea.blur();
-  await expect(page.getByText("Gespeichert")).toBeVisible();
+  await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
 
   // The job row carries the scene's change under its id, field by field.
   const stored = await getGeneratorJob(api);
   expect(stored.sceneEdits[SCENE_ID]).toMatchObject({ title: EDITED_TITLE });
-  expect(stored.sceneEdits[SCENE_ID]!.body).toContain("Die Flut zieht sich im Regen");
+  expect(stored.sceneEdits[SCENE_ID]!.body).toContain(EDITED_READALOUD);
 
   await page.goto("/campaigns/beispiel");
   await page.goto("/campaigns/beispiel/generate");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
-  await expect(page.getByText("Die Flut zieht sich im Regen")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"));
+  await expect(page.getByText(EDITED_READALOUD)).toBeVisible();
   // The edited title is what the card is headed with now — the review reads
   // the edit, not the model's fields.
   await expect(page.getByRole("heading", { level: 2, name: EDITED_TITLE })).toBeVisible();
@@ -518,18 +604,23 @@ test("review state survives navigation and reload; parts are accepted one by one
     page
       .locator("div")
       .filter({ hasText: targetPath })
-      .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+      .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
       .last();
-  await proposalRow(`npcs/${NPC_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
-  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
+  const accepted = page.getByRole("button", { name: ui("generate.stub.accepted") });
+  await proposalRow(`npcs/${NPC_STUB_ID}`)
+    .getByRole("button", { name: ui("generate.stub.accept") })
+    .click();
+  await expect(accepted).toHaveCount(1);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
+  await expect(accepted).toHaveCount(1);
 
   // (3) The proposed location, decided as well: the scene NAMES both of
   // them, and a scene cannot be written while a reference names nothing
   // (decisions/constraints) — accepting is that decision, the write comes below.
-  await proposalRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
-  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
+  await proposalRow(`locations/${LOCATION_STUB_ID}`)
+    .getByRole("button", { name: ui("generate.stub.accept") })
+    .click();
+  await expect(accepted).toHaveCount(2);
   // Accepted is a decision, not a write.
   expect(await npcExists(api, NPC_STUB_ID)).toBe(false);
   const decided = await getGeneratorJob(api);
@@ -542,13 +633,13 @@ test("review state survives navigation and reload; parts are accepted one by one
     .locator("div")
     .filter({ hasText: SCENE_LABEL })
     .last()
-    .getByRole("button", { name: "Diesen übernehmen" })
+    .getByRole("button", { name: ui("generate.review.acceptOne") })
     .click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   // Both edits really are what was written — the accept takes the changed
   // fields and the model's value everywhere else.
   const written = await getScene(api, SCENE_ID);
-  expect(written.body).toContain("Die Flut zieht sich im Regen");
+  expect(written.body).toContain(EDITED_READALOUD);
   expect(written.title).toBe(EDITED_TITLE);
   expect(written.status).toBe("draft");
   expect(written.location).toBe(LOCATION_STUB_ID);
@@ -570,10 +661,10 @@ test("a field edit keeps the body the run produced", async ({ page, api }) => {
   const card = await runAndOpenDraftEditor(page);
   const bodyOfRun = await generatedSceneBody(api);
 
-  const title = card.getByRole("region", { name: "Eigenschaften" }).getByLabel("Titel");
+  const title = titleField(card);
   await title.fill(EDITED_TITLE);
   await title.blur();
-  await expect(page.getByText("Gespeichert")).toBeVisible();
+  await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
 
   // The form's fields are stored — the text is not among them.
   const edit = await storedSceneEdit(api);
@@ -588,14 +679,14 @@ test("a field edit keeps the body the run produced", async ({ page, api }) => {
 });
 
 test("a body-only edit keeps the fields the run produced", async ({ page, api }) => {
-  const OWN_LINE = "Eine Zeile, die nur der DM schrieb.";
+  const OWN_LINE = "A line only the DM wrote.";
   const card = await runAndOpenDraftEditor(page);
   const fieldsOfRun = await generatedSceneFields(api);
 
   const textarea = await markdownTextarea(card);
   await textarea.fill(`${await textarea.inputValue()}\n${OWN_LINE}\n`);
   await textarea.blur();
-  await expect(page.getByText("Gespeichert")).toBeVisible();
+  await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
 
   const edit = await storedSceneEdit(api);
   expect(Object.keys(edit)).toEqual(["body"]);
@@ -608,17 +699,37 @@ test("a body-only edit keeps the fields the run produced", async ({ page, api })
   expect(fields).toEqual(fieldsOfRun);
 });
 
-/** Start the standard run and open „Bearbeiten" on its scene draft. */
+/** Start the standard run and open the editor of its scene draft. */
 async function runAndOpenDraftEditor(page: Page): Promise<Locator> {
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await startSceneRun(page, SOURCE);
+  const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
+  await card.getByRole("button", { name: ui("common.edit") }).click();
+  return card;
+}
+
+/** Fill the scene form with `source`, start the run and wait for its review. */
+async function startSceneRun(page: Page, source: string): Promise<void> {
+  await page.getByLabel(ui("generate.input.sourceLabel")).fill(source);
+  await page.getByRole("button", { name: ui("generate.input.submit.scene") }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
-  const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
-  await card.getByRole("button", { name: "Bearbeiten" }).click();
-  return card;
+}
+
+/** The title field in the fields region of an open draft editor. */
+function titleField(card: Locator): Locator {
+  return card
+    .getByRole("region", { name: ui("generate.review.propertiesHeading") })
+    .getByLabel(ui("properties.scene.title.label"));
+}
+
+/** The chapter overview's count line: chapters, then scenes. */
+function overviewCount(chapters: number, scenes: number): string {
+  return `${ui("chapterOverview.chapterCount", { count: chapters })} · ${ui(
+    "chapterOverview.sceneCount",
+    { count: scenes },
+  )}`;
 }
 
 /** The proposed scene as the RUN produced it — the job's result, not the edits. */
@@ -653,37 +764,34 @@ async function acceptWholeRun(page: Page): Promise<void> {
     await page
       .locator("div")
       .filter({ hasText: targetPath })
-      .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+      .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
       .last()
-      .getByRole("button", { name: "Annehmen" })
+      .getByRole("button", { name: ui("generate.stub.accept") })
       .click();
   }
-  await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  await page.getByRole("button", { name: APPLY_ANY }).click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
 }
 
-test("„Verwerfen\" drops only the open rest — what was accepted stays", async ({ page, api }) => {
+test("discarding drops only the open rest — what was accepted stays", async ({ page, api }) => {
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
-    timeout: 30_000,
-  });
+  await startSceneRun(page, SOURCE);
 
   // The proposed npc is accepted and written — it references nothing new, so
   // it stands on its own — and the rest of the run is thrown away.
   const npcRow = page
     .locator("div")
     .filter({ hasText: `npcs/${NPC_STUB_ID}` })
-    .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+    .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
     .last();
-  await npcRow.getByRole("button", { name: "Annehmen" }).click();
+  await npcRow.getByRole("button", { name: ui("generate.stub.accept") }).click();
+  const acceptOne = ui("generate.review.acceptOne");
   await page
     .locator("div")
     .filter({ hasText: `npcs/${NPC_STUB_ID}` })
-    .filter({ has: page.getByRole("button", { name: "Diesen übernehmen" }) })
+    .filter({ has: page.getByRole("button", { name: acceptOne }) })
     .last()
-    .getByRole("button", { name: "Diesen übernehmen" })
+    .getByRole("button", { name: acceptOne })
     .click();
   // Once written, the row links to the npc's own route (decisions/resources).
   await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toHaveAttribute(
@@ -693,8 +801,10 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   const partial = await getGeneratorJob(api);
   expect(partial.review.writtenNpcs).toEqual([NPC_STUB_ID]);
 
-  await page.getByRole("button", { name: "Rest verwerfen" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
+  await page.getByRole("button", { name: ui("generate.review.discardRest") }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    ui("generate.input.title.scene"),
+  );
   // The accepted npc is stored now; the scene and the location never landed.
   expect((await getNpc(api, NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
@@ -716,30 +826,32 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   page,
   api,
 }) => {
-  const CHAPTER_ID = "02-die-schmugglerbucht";
-  const CHAPTER_TITLE = "Die Schmugglerbucht";
+  const CHAPTER_ID = "02-smuggler-cove";
+  const CHAPTER_TITLE = "Smuggler Cove";
 
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByRole("button", { name: "Neues Kapitel" }).click();
-  await page.getByLabel("Kapiteltitel").fill(CHAPTER_TITLE);
+  await page.getByRole("button", { name: ui("generate.input.newChapter") }).click();
+  await page.getByLabel(ui("generate.input.newTitleLabel")).fill(CHAPTER_TITLE);
   // The id is derived from the title and is the field that decides where the
   // drafts land.
-  await expect(page.getByLabel("Kapitel-Kennung")).toHaveValue(CHAPTER_ID);
+  await expect(page.getByLabel(ui("generate.input.chapterIdLabel"))).toHaveValue(CHAPTER_ID);
   // …and the line under it names the chapter by its resource segment and id.
-  await expect(page.getByText(`wird angelegt als: chapters/${CHAPTER_ID}`)).toBeVisible();
-  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
-    timeout: 30_000,
-  });
+  await expect(
+    page.getByText(ui("generate.input.chapterIdPreview", { id: CHAPTER_ID })),
+  ).toBeVisible();
+  await startSceneRun(page, SOURCE);
   // The outline of a new-chapter run describes the chapter, and the review
   // shows it — read-only, rendered, above the drafts.
   const description = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { level: 2, name: "Beschreibung des Kapitels" }) });
-  await expect(description).toContainText("Nachts verschwinden Ladungen aus dem Hafen");
-  await expect(description).toContainText("Die Gruppe soll herausfinden, wer die Schmuggler deckt");
+    .filter({
+      has: page.getByRole("heading", {
+        level: 2,
+        name: ui("generate.review.chapterDescription"),
+      }),
+    });
+  await expect(description).toContainText(DESCRIPTION_FIRST);
+  await expect(description).toContainText(DESCRIPTION_SECOND);
   await expect(description.getByRole("textbox")).toHaveCount(0);
 
   // …and away. The review state is a row, so it is still there when we come
@@ -747,16 +859,16 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.goto("/campaigns/beispiel/generate");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
 
-  await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
+  await page.getByRole("button", { name: APPLY_ANY }).click();
   // The accept writes the scene, the chapter it hangs in and the npc and the
   // location the scene NAMES — a scene cannot be written while a
   // reference names nothing (decisions/constraints), so they come along. Nothing is left
   // open afterwards, so the review is done.
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
 
   // The point: the chapter exists, with the title the RUN was started with —
   // not the id, and not nothing — and the outline's description as its text,
@@ -768,16 +880,14 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   expect((await getScene(api, SCENE_ID)).chapter).toBe(CHAPTER_ID);
 
   // The overview lists the chapter with that title, and the scene inside it.
-  await page.getByRole("link", { name: "Kapitel", exact: true }).click();
+  await page.getByRole("link", { name: ui("topbar.nav.chapters"), exact: true }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("heading", { level: 2, name: CHAPTER_TITLE })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(CHAPTER_TITLE) }).click();
   await expect(page.getByRole("link", { name: new RegExp(SCENE_TITLE) })).toBeVisible();
-  await expect(page.getByText("2 Kapitel · 3 Szenen")).toBeVisible();
+  await expect(page.getByText(overviewCount(2, 3))).toBeVisible();
   // …and its text is what the overview shows under the chapter's title.
-  await expect(
-    page.getByText("Nachts verschwinden Ladungen aus dem Hafen", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText(DESCRIPTION_OPENING, { exact: false })).toBeVisible();
 });
 
 // A run into an EXISTING chapter never reaches that chapter's text: the
@@ -787,23 +897,21 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 test("a run into an existing chapter leaves the chapter's text alone", async ({ page, api }) => {
   const before = await getChapter(api, "01-salzhafen");
   await page.goto("/campaigns/beispiel/generate");
-  await page.getByLabel("Quelltext (EN)").fill(`${SOURCE} ${TRIGGER.describeAnyway}`);
-  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
-    timeout: 30_000,
-  });
-  await expect(page.getByRole("heading", { name: "Beschreibung des Kapitels" })).toHaveCount(0);
-  await expect(page.getByText("Nachts verschwinden Ladungen", { exact: false })).toHaveCount(0);
+  await startSceneRun(page, `${SOURCE} ${TRIGGER.describeAnyway}`);
+  await expect(
+    page.getByRole("heading", { name: ui("generate.review.chapterDescription") }),
+  ).toHaveCount(0);
+  await expect(page.getByText(DESCRIPTION_OPENING, { exact: false })).toHaveCount(0);
 
   // Accept the whole run: the proposed npc and location, then everything open.
-  const acceptEntry = page.getByRole("button", { name: "Annehmen" });
+  const acceptEntry = page.getByRole("button", { name: ui("generate.stub.accept") });
   await expect(acceptEntry).toHaveCount(2);
   await acceptEntry.first().click();
   await expect(acceptEntry).toHaveCount(1);
   await acceptEntry.first().click();
   await expect(acceptEntry).toHaveCount(0);
-  await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  await page.getByRole("button", { name: APPLY_ANY }).click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
 
   expect((await getScene(api, SCENE_ID)).chapter).toBe("01-salzhafen");
   expect((await getChapter(api, "01-salzhafen")).body).toBe(before.body);

@@ -32,7 +32,7 @@ export const CLAMP_LINES = 4;
 /**
  * Does a text of `contentHeight` pixels need the toggle at this line height?
  * One pixel of slack: sub-pixel line heights must not turn a text that fits
- * exactly into one with a „Mehr anzeigen" under it.
+ * exactly into one with a show-more toggle under it.
  */
 export function textOverflows(contentHeight: number, lineHeight: number, lines: number): boolean {
   if (!Number.isFinite(lineHeight) || lineHeight <= 0) return false;

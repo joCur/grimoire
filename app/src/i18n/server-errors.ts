@@ -199,7 +199,7 @@ export function serverErrorBodyMessage(
   if (isErrorCode(code)) {
     const params = paramsFor(code, body, t);
     if (params !== undefined) {
-      // One code, two sentences: „location_not_an_id" reads differently with
+      // One code, two sentences: `location_not_an_id` reads differently with
       // and without a proposal, and a placeholder with no value would show
       // as the literal `{suggestion}`.
       if (code === "location_not_an_id" && params.suggestion === undefined) {
@@ -216,7 +216,8 @@ export function serverErrorBodyMessage(
 /**
  * The sentence a failed request shows. Falls back through: catalog entry for
  * the code -> the server's English `error` text -> `fallback` (the view's own
- * „… — Server prüfen", which is what a network error or a 500 deserves).
+ * "… — check the server" sentence, which is what a network error or a 500
+ * deserves).
  */
 export function serverErrorMessage(error: unknown, t: Translate, fallback: MessageKey): string {
   if (!(error instanceof ApiError)) return t(fallback);

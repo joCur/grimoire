@@ -17,6 +17,7 @@ import { X } from "lucide-react";
 import * as React from "react";
 
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 const Sheet = Dialog;
@@ -27,6 +28,7 @@ function SheetContent({
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  const t = useT();
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
@@ -38,7 +40,7 @@ function SheetContent({
         {...props}
       >
         <DialogPrimitive.Close
-          aria-label="Schließen"
+          aria-label={t("common.close")}
           className="absolute top-3.5 right-4 z-10 rounded-md p-1 text-muted-foreground hover:text-foreground"
         >
           <X aria-hidden size={16} />
