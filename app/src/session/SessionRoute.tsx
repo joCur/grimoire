@@ -15,8 +15,9 @@ import type { Pause } from "@grimoire/shared/pause";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
-import { fetchTree } from "@/api";
+import { fetchTree, isNotFound } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
 import { hasScene, sceneTitle } from "@/lib/campaign";
@@ -48,6 +49,7 @@ export function SessionRoute({
   }
   const data = session.data;
   if (data === undefined) {
+    if (isNotFound(session.error)) return <NotFound campaign={campaign} />;
     return (
       <p className="mx-auto max-w-[680px] px-5 pt-8 text-muted-foreground md:px-7 md:pt-10">
         {t("session.page.notLoadable")}

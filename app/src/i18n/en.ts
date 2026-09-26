@@ -19,6 +19,13 @@ export const en: Messages = {
   "common.serverDown":
     "Server unreachable — start the Grimoire server on port 3000.",
 
+  // --- not-found view (components/NotFound.tsx) -----------------------------
+  "notFound.title": "This page does not exist",
+  "notFound.body":
+    "There is nothing at this address. The link may be mistyped, or what it pointed to was deleted.",
+  "notFound.toCampaign": "To the chapter overview",
+  "notFound.toStart": "Back to the start",
+
   // --- language switch ------------------------------------------------------
   "language.heading": "Language",
   "language.de": "Deutsch",
