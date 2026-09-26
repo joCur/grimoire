@@ -1,6 +1,6 @@
-// A session in the suite: its resource `…/sessions/:id` (ADR #31), every
-// field flat, its pauses and log entries embedded — each child with its own
-// id and rev. Its type is the one `@grimoire/shared/session`
+// A session in the suite: its resource `…/sessions/:id` (decisions/resources),
+// every field flat, its pauses and log entries embedded — each child with its
+// own id and rev. Its type is the one `@grimoire/shared/session`
 // derives from the session's schema.
 
 import type { Session } from "@grimoire/shared/session";

@@ -21,7 +21,7 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
   abzuschalten.
 
 **Szenen-, NPC- und Orts-Antworten.** Szene, NPC und Ort sind jeweils ihre
-eigene Ressource mit eigenem Typ (ADR #31). Szenen-Teil und Szenen-Ergänzung
+eigene Ressource mit eigenem Typ (decisions/resources). Szenen-Teil und Szenen-Ergänzung
 antworten mit der Szene selbst ohne `rev`, NPC-Teil, NPC-Lauf und
 NPC-Ergänzung mit dem NPC, Orts-Teil und Orts-Ergänzung mit dem Ort — alle
 Felder nebeneinander, `body` eines davon — und daneben `warnings`. Eine
@@ -239,7 +239,7 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 Was das dem DM bringt: ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar und übernehmbar, und ein defekter Teil lässt sich
 einzeln wiederholen (`PATCH …/generator-jobs/:id/parts/:key { status: "running" }`). Das
-Job-Modell dazu steht in `docs/DECISIONS.md` (ADR #10).
+Job-Modell dazu steht in `docs/decisions/generator.md`.
 
 **Prompt-Caching:** Der konstante Teil des Prompts — System-Prompt,
 Kampagnenwissen, Glossar, Kontextlisten, Few-Shot, Gliederung — steht bei
@@ -283,7 +283,7 @@ Szenen-Aufruf, jeden NPC- und Orts-Aufruf und die Ein-Aufruf-Läufe:
      der NPC selbst)? Im Ergänzen-Lauf zählen nur Verweise, die der
      Vorschlag neu bringt; `[[id]]` in Code ist kein Verweis.
    - nur bekannte Callout-Typen?
-   Keine Prüfung sucht eine Überschrift (ADR #29): `## Weiß`,
+   Keine Prüfung sucht eine Überschrift (decisions/data-shape): `## Weiß`,
    `## Beziehungen` & Co. sind Empfehlungen der Prompts, freier Text.
    Fehler gehen als Korrektur-Turn zurück ans LLM (konfigurierbar
    über LLM_CORRECTION_TURNS, 0–2, Default 1),

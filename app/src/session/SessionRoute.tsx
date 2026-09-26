@@ -3,8 +3,9 @@
 // The page is READ-ONLY and shows exactly what the server stored — when the
 // evening started and ended, the pauses, the log in the order it was written,
 // and the scenes its notes were taken in (./session-scenes.ts) as links back
-// into the campaign. The session reads its children embedded (ADR #31). Where
-// a scene lives is the scene's to say: the page is handed that link.
+// into the campaign. The session reads its children embedded
+// (decisions/resources). Where a scene lives is the scene's to say: the page
+// is handed that link.
 //
 // The log row renders the way the live panel's rows do: the wall-clock time in
 // mono, then the scene it was written under, then the text with its hashtags

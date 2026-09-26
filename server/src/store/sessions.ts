@@ -1,6 +1,6 @@
 // Sessions: the session resource.
 //
-// A session is its own resource with its own type (ADR #31,
+// A session is its own resource with its own type (decisions/resources,
 // @grimoire/shared/session): listed, read, started, ended and deleted here,
 // typed by its one zod schema. It answers with its children embedded — its
 // pauses (./pauses.ts) and its log (./log-entries.ts) —, but each child is

@@ -132,7 +132,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(chapter).toBeDefined();
     expect(chapter!.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
     expect(chapter!.status).toBe("active");
-    // No address: a chapter is its own resource (ADR #31).
+    // No address: a chapter is its own resource (decisions/resources).
     expect(Object.hasOwn(chapter!, "path")).toBe(false);
   });
 
@@ -153,7 +153,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // display name the meta line shows.
     expect(arrival.location).toBe("leuchtturm");
     expect(arrival.locationName).toBe("Der Leuchtturm von Salzhafen");
-    // A scene is its own resource and carries no address (ADR #31).
+    // A scene is its own resource and carries no address (decisions/resources).
     expect(Object.hasOwn(arrival, "path")).toBe(false);
     expect(chapter.scenes[1]!.type).toBe("contingency");
     // The order carries its own guard token, separate from the chapter's

@@ -5,7 +5,7 @@
 // the Schnellnotiz.
 //
 // The scenes stand in the order the DM arranged in the chapter overview
-// (ADR #27) — this view moderates that order and never reorders it. Which
+// (decisions/scene-order) — this view moderates that order and never reorders it. Which
 // scene it opens on, and where the "next scene" step under the open one
 // leads, are both read out of that order (lib/scene-order.ts).
 //
@@ -116,7 +116,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
   // The chapter's scenes in the order the DM arranged in the overview — this
-  // view moderates that order, it does not make one of its own (ADR #27).
+  // view moderates that order, it does not make one of its own (decisions/scene-order).
   const scenes = chapter?.scenes ?? [];
   // The scene STATUS splits the plan: `played`/`dropped` scenes
   // drop out of "Geplant" into the collapsed "Gespielt" group below.
@@ -261,7 +261,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
               </p>
               {knownLocation !== undefined ? (
                 // The tree knows the location: the card reads it from its
-                // own resource by its id (ADR #31).
+                // own resource by its id (decisions/resources).
                 <LocationCard campaign={campaign} id={knownLocation.id} onOpen={setDrawerTarget} />
               ) : (
                 // A free-text location (no entry behind it) is exactly

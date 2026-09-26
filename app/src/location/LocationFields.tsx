@@ -1,5 +1,5 @@
 // The fields of a location as form controls: the ones its dialog edits, and
-// the `atmosphere` its edit surface writes beside the text (ADR #29). Plain
+// the `atmosphere` its edit surface writes beside the text (decisions/data-shape). Plain
 // rendering over the form's values (./location-form.ts).
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";

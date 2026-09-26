@@ -1,6 +1,6 @@
 // CI smoke: the SQLite foundation on BOTH runtimes.
 //
-// This file is the early-warning system ADR #13 asks for. The server's
+// This file is the early-warning system decisions/sqlite calls for. The server's
 // database layer runs on `node:sqlite` in production and on `bun:sqlite`
 // under `bun test` (see src/db/driver.ts for why), so the three things the
 // store layer depends on have to be proven on each of them:

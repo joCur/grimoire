@@ -1,4 +1,4 @@
-// The idea resource (ADR #31): `GET/POST …/ideas`, `GET/PATCH …/ideas/:id`,
+// The idea resource (decisions/resources): `GET/POST …/ideas`, `GET/PATCH …/ideas/:id`,
 // every field of an idea flat — `{ id, text, done, rev }`. An idea is written
 // once; ticking it off is a PATCH of its `done` against its own `rev`, and
 // its text never changes.

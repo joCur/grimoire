@@ -1,7 +1,7 @@
 // THE SLUG RULE — one place, both sides.
 //
 // Entity ids are kebab-case slugs: the README calls them the stable reference
-// keys of the format, set once and never changed (ADR #21), the database uses
+// keys of the format, set once and never changed (decisions/constraints), the database uses
 // them as primary keys, and every resource URL names a row by one. The app
 // DERIVES an id from a typed title and shows it before the create, and the
 // server derives the same one and proposes a free variant on a collision, so

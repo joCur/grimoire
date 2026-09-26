@@ -1,5 +1,5 @@
 // "/campaigns/:campaign/chapters/:id" — the reading view of ONE chapter, its
-// own resource with its own type (ADR #31): the context line on top (the
+// own resource with its own type (decisions/resources): the context line on top (the
 // chapter itself, linking to the chapter overview where its scenes stand),
 // the article, and the two quiet actions in its header — edit (the text) and
 // the dialog over its other fields. Each is its own editing session over the

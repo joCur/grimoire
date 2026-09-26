@@ -1,5 +1,5 @@
 // A knowledge item in the suite: its resource `…/knowledge-items/:id`
-// (ADR #31), every field flat — `{ id, kind, from, to, text, rev }` — and the
+// (decisions/resources), every field flat — `{ id, kind, from, to, text, rev }` — and the
 // order of the items on `…/knowledge-item-order`. The types are the ones
 // `@grimoire/shared/knowledge-item` derives from the item's schema.
 

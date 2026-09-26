@@ -2,11 +2,11 @@
 // write is involved.
 //
 // The surface edits a text and, beside it, the PROSE fields its caller puts
-// there — an npc's `motivation`, a location's `atmosphere` (ADR #29). One
+// there — an npc's `motivation`, a location's `atmosphere` (decisions/data-shape). One
 // save carries what changed, and the caller's editing session turns it into
 // its own write. Every other field is deliberately not part of this surface:
 // the status control and the dialog own those, and a request that does not
-// name them leaves them untouched — a forced save included (ADR #23).
+// name them leaves them untouched — a forced save included (decisions/writes).
 //
 // Everything in this module is pure, so the rules are unit-testable.
 

@@ -1,6 +1,6 @@
 // Ideas: the idea resource.
 //
-// An idea is its own resource with its own type (ADR #31,
+// An idea is its own resource with its own type (decisions/resources,
 // @grimoire/shared/idea): listed, read, created and written here, typed by
 // its one zod schema. An idea is written once; the one change after that is
 // ticking it off (`done`), and every idea carries its own guard `rev`. Ideas

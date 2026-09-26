@@ -1,4 +1,4 @@
-// The knowledge-item resource (ADR #31): `GET/POST …/knowledge-items`,
+// The knowledge-item resource (decisions/resources): `GET/POST …/knowledge-items`,
 // `GET/PATCH/DELETE …/knowledge-items/:id`, every field of an item flat —
 // `{ id, kind, from, to, text, rev }` — and the ORDER of the items on its own
 // endpoint, `GET/PUT …/knowledge-item-order`, with its own guard.

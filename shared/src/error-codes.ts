@@ -1,11 +1,9 @@
 // THE error-code contract between server and app.
 //
-// The server is LANGUAGE-FREE. Until this module existed, a handful of error
-// bodies carried German sentences and the app printed them verbatim — which
-// meant an English UI showed German errors, and the copy for those errors
-// lived in a place no catalog review would ever look at.
+// The server is LANGUAGE-FREE: a sentence the DM reads lives in the app's
+// catalog, in both languages, and never in a server response.
 //
-// So every error body a HUMAN reads now carries a stable `code` next to its
+// So every error body a HUMAN reads carries a stable `code` next to its
 // `error` text:
 //
 //     { code: "slug_taken", error: "npc \"holm\" already exists …", kind, id, suggestion }
@@ -31,10 +29,9 @@ export const ERROR_CODES = [
   /** 409, create: the derived id is taken. `{ kind, id, suggestion }` */
   "slug_taken",
   /**
-   * NO LONGER SENT. It was the 409 for a chapter id that collided with a
-   * segment of the entry addresses; every entity is its own resource
-   * (ADR #31), so no id collides with a path. The string stays because codes
-   * are APPEND-ONLY.
+   * NOT SENT: the 409 for a chapter id that collides with a segment of an
+   * address. Every entity is its own resource (decisions/resources), so no id
+   * collides with a path. The string stays because codes are APPEND-ONLY.
    */
   "slug_reserved",
   /** 400, create: the typed name yields no id at all. `{ kind, field }` */
@@ -71,10 +68,10 @@ export const ERROR_CODES = [
    */
   "played_scene_unknown",
   /**
-   * NO LONGER SENT. It was the 400 for a whole-glossary write that named one
-   * term twice; every glossary term is its own resource (ADR #31), and a
-   * term that is already there answers `glossary_term_taken` below. The
-   * string stays because codes are APPEND-ONLY.
+   * NOT SENT: the 400 for a whole-glossary write that names one term twice.
+   * Every glossary term is its own resource (decisions/resources), and a term
+   * that is already there answers `glossary_term_taken` below. The string
+   * stays because codes are APPEND-ONLY.
    */
   "glossary_duplicate_term",
   /**
@@ -109,21 +106,20 @@ export const ERROR_CODES = [
    */
   "nothing_to_write",
   /**
-   * NO LONGER SENT. It was the 400 for a `body` sent to a session, the ideas
-   * or the glossary, none of which has a text field, and each of them has
-   * endpoints of its own that take no `body`. The string stays because codes
-   * are APPEND-ONLY — an app catalog that still holds it is not wrong, it is
-   * just unreachable.
+   * NOT SENT: the 400 for a `body` sent to a session, an idea or a glossary
+   * term, none of which has a text field; each of them has endpoints of its
+   * own that take no `body`. The string stays because codes are APPEND-ONLY —
+   * an app catalog that holds it is not wrong, it is just unreachable.
    */
   "body_not_editable",
   /** 503, generator: the server was restarted while the job was running. */
   "job_restarted",
   /**
-   * NO LONGER SENT. It was the 409 for a job whose drafts predated the
-   * current draft format (ADR #24); every supported database already holds
-   * its drafts in that format (ADR #28), so no boot fails a job with it any
-   * more. The string stays because codes are APPEND-ONLY — and a job an
-   * older version failed with it still carries it in its error body.
+   * NOT SENT: the 409 for a job whose drafts are not in the current draft
+   * format (decisions/generator). Every supported database holds its drafts
+   * in that format (decisions/sqlite), so no boot fails a job with it. The
+   * string stays because codes are APPEND-ONLY — and a job stored with it
+   * still carries it in its error body.
    */
   "job_draft_format",
   /** 422, generator: the model's reply hit the token ceiling. `{ maxTokens }` */
@@ -133,9 +129,9 @@ export const ERROR_CODES = [
   /**
    * 400, a chapter, scene or npc write: `status` carries a value the column
    * does not accept.
-   * The four status columns are CLOSED (ADR #25), so a value outside the list
-   * can only be a typo. `{ kind, value, allowed }` — `allowed` is the list in
-   * order, so the app can name the positions without knowing the kind.
+   * The four status columns are CLOSED (decisions/constraints), so a value
+   * outside the list can only be a typo. `{ kind, value, allowed }` —
+   * `allowed` is the list in order, so the app can name the positions without knowing the kind.
    */
   "status_not_allowed",
   /**
@@ -145,11 +141,11 @@ export const ERROR_CODES = [
    */
   "scene_type_not_allowed",
   /**
-   * NO LONGER SENT. It was the 400 for a session or pause timestamp written as
-   * a string outside the one shape those columns hold. A moment is written as
-   * an epoch value, which the server reads into that shape itself, so there
-   * is no string from the wire left to refuse. The string stays because codes
-   * are APPEND-ONLY.
+   * NOT SENT: the 400 for a session or pause timestamp written as a string
+   * outside the one shape those columns hold. A moment is written as an epoch
+   * value, which the server reads into that shape itself, so there is no
+   * string from the wire to refuse. The string stays because codes are
+   * APPEND-ONLY.
    */
   "timestamp_not_allowed",
   /**

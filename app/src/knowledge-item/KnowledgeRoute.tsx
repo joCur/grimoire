@@ -2,7 +2,7 @@
 // conventions, facts and style rules that travel with every generator run and
 // hold even when the source material says otherwise.
 //
-// Each knowledge item is its own resource (ADR #31): a save writes that one
+// Each knowledge item is its own resource (decisions/resources): a save writes that one
 // item against its own `rev`. The ORDER is the order of the prompt
 // (server/src/store/knowledge-items.ts), so it is the DM's to arrange — this
 // is the list with up/down, and a move writes the whole order against the

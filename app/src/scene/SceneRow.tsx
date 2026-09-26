@@ -36,7 +36,7 @@ export function SceneRow({
   // The location is a word of the scene, not a heading above it — the NAME
   // the server resolved, degraded to the id it could not resolve. A scene
   // without one simply has no location part: no placeholder, no dangling
-  // separator (ADR #27).
+  // separator (decisions/scene-order).
   const meta = [scene.locationName ?? scene.location, scene.tags.map((tag) => `#${tag}`).join(" ")]
     .filter((part) => part !== undefined && part !== "")
     .join(" · ");

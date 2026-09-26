@@ -36,7 +36,7 @@ import { getSession } from "../support/session";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
-/** The npc of the example campaign the npc cases edit — its own resource (ADR #31). */
+/** The npc of the example campaign the npc cases edit — its own resource (decisions/resources). */
 const NPC = "jorna";
 const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
@@ -77,7 +77,7 @@ test("scene properties: chips, reference and status land in the scene — nothin
 }) => {
   const pristine = await sceneSplit(api);
   // The location the scene is moved into below has to EXIST — a reference
-  // names an entry, and nothing is created by naming it (ADR #19). Creating
+  // names an entry, and nothing is created by naming it (decisions/constraints). Creating
   // one is the app's own path (tested in create.e2e.ts); here it is one call.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   // Entered from the chapter overview, so there is a history entry BEHIND the
@@ -135,7 +135,7 @@ test("scene properties: chips, reference and status land in the scene — nothin
 
   // An id nothing holds stays typeable, and the hint says the save would be
   // refused — a typo is visible before the click instead of in a toast after
-  // it (ADR #19).
+  // it (decisions/constraints).
   await location.fill("gibt-es-nicht");
   await expect(referenceHint(dialog, "Unbekannt — Ort muss existieren.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
@@ -162,12 +162,12 @@ test("scene properties: chips, reference and status land in the scene — nothin
   await expect(article).toContainText("#nachtszene");
   await expect(article.getByText("Nordbucht", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
-  // The scene is reached by its id (ADR #31): a new location is a field, and
+  // The scene is reached by its id (decisions/resources): a new location is a field, and
   // the route stays where it is.
   await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
 
   // The chapter overview does NOT re-sort: the location is a word of the row
-  // now, not a group over it (ADR #27). So the row keeps its place in the
+  // now, not a group over it (decisions/scene-order). So the row keeps its place in the
   // order and names the new location — with the NAME of the location entry,
   // never its id.
   await page.goto("/campaigns/beispiel");
@@ -209,7 +209,7 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
   // A scene's `location` holds an id — but the DM types a name, and the form
   // reads it as the id it means.
   // What the save cannot do is invent the entry: a reference names something
-  // that exists (ADR #19), so a name no location holds is refused until that
+  // that exists (decisions/constraints), so a name no location holds is refused until that
   // location is there — and then the very same save lands.
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
@@ -258,7 +258,7 @@ test("a rejected save shows the SERVER sentence, not the generic one", async ({ 
   // The shared write layer answered every non-conflict rejection with its
   // caller's generic wording, so a 400 that names exactly what is wrong was
   // invisible to the DM. An unknown chapter is one of the five reference
-  // refusals, and the app builds its sentence from the code (ADR #19).
+  // refusals, and the app builds its sentence from the code (decisions/constraints).
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
   await dialog.getByLabel("Kapitel").fill("99-nirgendwo");
@@ -422,7 +422,7 @@ test("a location's dialog: a second writer is the conflict line, and a forced sa
   page,
   api,
 }) => {
-  // The location is its own resource (ADR #31): its dialog writes the
+  // The location is its own resource (decisions/resources): its dialog writes the
   // location's PATCH, fields flat, against the location's `rev`.
   const before = await getLocation(api, "leuchtturm");
   const externalBody = "\n## Wer ist hier\n\nVon einem zweiten Schreiber geändert.\n";
@@ -461,7 +461,7 @@ test("an npc's dialog: a second writer is the conflict line, and a forced save k
   page,
   api,
 }) => {
-  // The npc is its own resource (ADR #31): its dialog writes the npc's
+  // The npc is its own resource (decisions/resources): its dialog writes the npc's
   // PATCH, fields flat, against the npc's `rev`.
   const before = await getNpc(api, NPC);
   const externalBody = "\n## Weiß\n\nVon einem zweiten Schreiber geändert.\n";
@@ -726,7 +726,7 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
   page,
 }) => {
   // The four entities with a reading view offer it, each on its own route
-  // (ADR #31) …
+  // (decisions/resources) …
   const withForm: [string, string, string][] = [
     ["scenes/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn", "Fenn", "NPC"],
@@ -743,7 +743,7 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // The lists have no reading view (ADR #26), so there is none on which a
+  // The lists have no reading view (decisions/resources), so there is none on which a
   // form could be missing.
 
   // The campaign's route is the chapter overview, and its one edit action in
@@ -758,7 +758,7 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
 
 test("a status outside the closed list is refused and writes nothing", async ({ api }) => {
   // The four status columns and the scene type are CHECK constraints of their
-  // columns (ADR #25), so the scene's write refuses a foreign value with a
+  // columns (decisions/constraints), so the scene's write refuses a foreign value with a
   // 400 and its own code instead of letting SQLite fail. The form can only
   // ever offer the allowed positions — this asserts the rule on the endpoint,
   // which is what protects the column against the generator and a direct

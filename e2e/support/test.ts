@@ -9,7 +9,7 @@
 //   - an `api` handle on that server (api.ts), and a `db` helper that opens
 //     the test's `grimoire.db` with the server's own driver layer
 //
-// The database is the only truth (ADR #13): nothing writes campaign content
+// The database is the only truth (decisions/sqlite): nothing writes campaign content
 // to disk, so there is nothing next to the server to read an assertion back
 // from. Every claim about stored state goes through the API or, where a spec
 // really means storage, through `db`.
@@ -26,7 +26,7 @@
 // An object whose id a fixture already has REPLACES that fixture, any other
 // adds one. The campaign, a chapter, a scene, an npc, a location, a thread, an
 // idea, a glossary term, a knowledge item and a session are each their own
-// resource (ADR #31) and have a directory of their own
+// resource (decisions/resources) and have a directory of their own
 // (`campaigns/<id>.json`, `chapters/<id>.json`, …, `sessions/<id>.json`): the
 // fixture is the entity itself, every field flat, without a guard — a session
 // with its pauses and log entries embedded.
@@ -114,7 +114,7 @@ export interface ServerHandle {
 /**
  * What a test changes about the fixtures its database is seeded from, entity
  * by entity. Each list ADDS its objects, and one whose id a fixture already
- * has REPLACES that fixture. Every entity with its own resource (ADR #31) is
+ * has REPLACES that fixture. Every entity with its own resource (decisions/resources) is
  * typed with its own type from `@grimoire/shared/<entity>` — the entity as its
  * resource answers it, without the guard.
  */
@@ -288,7 +288,7 @@ export async function startGrimoireServer(
       label: `server:${port}`,
       env: {
         PORT: String(port),
-        // The only truth (ADR #13) — the boot reads nothing else.
+        // The only truth (decisions/sqlite) — the boot reads nothing else.
         GRIMOIRE_DATA: dataDir,
         APP_DIST,
         // The provider path runs for real — only the endpoint is canned.

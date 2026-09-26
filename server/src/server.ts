@@ -6,7 +6,7 @@
 // comment per endpoint, no second list.
 //
 // Runs on Bun (bun run src/server.ts). No Bun-only runtime APIs are used
-// (DECISIONS #5/#7): Bun picks up the default { port, fetch } export below;
+// (decisions/stack): Bun picks up the default { port, fetch } export below;
 // on Node >= 20 the same app runs via @hono/node-server instead:
 //   import { serve } from "@hono/node-server"; serve({ fetch: app.fetch, port: PORT });
 
@@ -49,7 +49,7 @@ if (import.meta.main) {
   }
 
   // Production: serve the Vite build from the same process (deployment is one
-  // container, DECISIONS #5). In dev app/dist does not exist — Vite serves the
+  // container, decisions/stack). In dev app/dist does not exist — Vite serves the
   // app and proxies /api — so this stays inactive and the server is API-only.
   const dist = getAppDistDir();
   if (existsSync(dist)) {

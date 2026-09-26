@@ -1,4 +1,4 @@
-// The API client of a scene (ADR #31): its resource — read, create, write —
+// The API client of a scene (decisions/resources): its resource — read, create, write —
 // its write conflict, and the augment run on it. Built from the shared HTTP
 // helpers (../api.ts).
 

@@ -4,17 +4,17 @@
 // server reports, and the chapter overview is the first thing the DM sees — campaign
 // header with the campaign's text, the active chapter with its text, its
 // scenes as ONE list in
-// the order the DM arranged (ADR #27) and the contingency block at the end.
+// the order the DM arranged (decisions/scene-order) and the contingency block at the end.
 //
 // The order is the DM's, so it is also editable here: up/down per row, one
 // write for the whole chapter, with a guard of its own. That guard is why a
 // reorder never collides with an open editor — the two write different things
-// (ADR #27), and both halves of that promise are checked below.
+// (decisions/scene-order), and both halves of that promise are checked below.
 //
 // The campaign chrome lives on this path as well: a scene row resolves its
 // location to the location's NAME, the topbar carries the npc and location
 // navigation, and the campaign's name, description and text are editable from
-// the header — the campaign's route IS the chapter overview (ADR #31).
+// the header — the campaign's route IS the chapter overview (decisions/resources).
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -85,7 +85,7 @@ const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /**
  * A scene that names NO location — its row simply has no location part
- * (ADR #27). The example campaign has none, so the test that needs one
+ * (decisions/scene-order). The example campaign has none, so the test that needs one
  * seeds it.
  */
 const SCENE_WITHOUT_LOCATION: SceneProposal = {
@@ -170,7 +170,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   await expect(page.getByRole("button", { name: "Mehr anzeigen" })).toHaveCount(0);
 
   // The planned scene is a ROW of the chapter's one list — no location
-  // heading over it any more (ADR #27). The location stands in the row's meta
+  // heading over it (decisions/scene-order). The location stands in the row's meta
   // line, and it stands there with the NAME of its entry: the bare slug
   // `leuchtturm` is no location for the reader and appears nowhere.
   await expect(
@@ -198,7 +198,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   );
 
   // Opening a row is the chapter overview's job — the scene's own reading
-  // view takes over from here (ADR #31).
+  // view takes over from here (decisions/resources).
   await planned.click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -310,7 +310,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("banner").getByText("Orte", { exact: true }),
   ).toHaveCount(1);
 
-  // The npc list is the npc's own route (ADR #31).
+  // The npc list is the npc's own route (decisions/resources).
   await nav.getByRole("link", { name: "NPCs" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
@@ -1179,7 +1179,7 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   await dialog.getByLabel("Titel").fill("Kapitel 1: Salzhafen");
   await dialog.getByRole("button", { name: "Speichern" }).click();
   // The other writer moved the chapter, so the frozen rev is stale: the first
-  // attempt is the 409 of ADR #4, nothing written. The typed title stays and
+  // attempt is the 409 of decisions/writes, nothing written. The typed title stays and
   // the next attempt writes on top of what is stored — with the status STILL
   // untouched, which is the point of this test.
   await expect(dialog).toContainText("Inzwischen geändert");
@@ -1233,7 +1233,7 @@ test("the chapter's dialog offers the enum and its Aktiv makes the chapter the a
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
 });
 
-// --- the scene order: one list, up/down, one guard of its own (ADR #27) -----
+// --- the scene order: one list, up/down, one guard of its own (decisions/scene-order) -----
 
 /** The chapter of the example campaign — the one that holds an order. */
 const CHAPTER = "01-salzhafen";
@@ -1400,7 +1400,7 @@ test.describe("the scene order of a chapter", () => {
 
   test("a scene's own write leaves the order's guard alone", async ({ api }) => {
     // The other direction of the three guards: writing a scene bumps its own
-    // `rev` and nothing of the chapter's order (ADR #27).
+    // `rev` and nothing of the chapter's order (decisions/scene-order).
     const node = await orderNode(api);
     const before = await getScene(api, "order-keller");
     const written = await patchScene(api, "order-keller", { title: "Der Keller, neu vermessen" });
@@ -1433,7 +1433,7 @@ test.describe("the scene order of a chapter", () => {
     await api.send("PUT", ORDER_PATH, { scenes: reordered, rev: node.sceneOrderRev });
 
     // It bumped its OWN guard and nobody else's: neither the scene's row
-    // version nor the chapter's moved, so neither editor is stale (ADR #27).
+    // version nor the chapter's moved, so neither editor is stale (decisions/scene-order).
     expect((await orderNode(api)).sceneOrderRev).not.toBe(node.sceneOrderRev);
     expect((await getScene(api, scene)).rev).toBe(sceneBefore.rev);
     expect((await getChapter(api, CHAPTER)).rev).toBe(chapterBefore.rev);

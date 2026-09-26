@@ -7,8 +7,8 @@
 // `locations/<id>.json`, a thread `threads/<id>.json`, an idea
 // `ideas/<id>.json`, a glossary term `glossary-terms/<id>.json`, a knowledge
 // item `knowledge-items/<id>.json` and a session `sessions/<id>.json` with
-// its pauses and log entries embedded — each exactly what its
-// resource answers, without the guard (ADR #31). The seed is therefore not a
+// its pauses and log entries embedded — each exactly what its resource
+// answers, without the guard (decisions/resources). The seed is therefore not a
 // second data format — it is the API's own shape written down, which is what
 // makes it readable next to a response and reviewable in a diff.
 //
@@ -24,7 +24,7 @@
 //      handouts and the search index are maintained by the same code a
 //      create endpoint runs.
 //   2. A REFERENCE TO SOMETHING THAT DOES NOT EXIST IS AN ERROR. Every
-//      reference is a foreign key (ADR #19) and nothing creates a row
+//      reference is a foreign key (decisions/constraints) and nothing creates a row
 //      because something mentioned it, so a seed that names a missing row
 //      throws instead of degrading. That is the one place the format's
 //      degrade rule does not apply: a fixture is loaded whole or not at all.

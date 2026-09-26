@@ -86,12 +86,12 @@ export function App() {
         <Route path="settings" element={<SettingsRoute />} />
         {/* Everything campaign-scoped hangs under the campaign, so no
             campaign id is ever a first path segment and no route above can
-            collide with one (ADR #22). */}
+            collide with one (decisions/resources). */}
         <Route path="campaigns/:campaign" element={<CampaignScope />}>
           <Route index element={<ChapterOverviewRoute />} />
           {/* The campaign is its own resource, and its route is the chapter
               overview above. A chapter, a scene, an npc and a location are
-              each their own resource as well (ADR #31): their reading views
+              each their own resource as well (decisions/resources): their reading views
               live at their own routes, and so do the npc and location lists,
               reached from the topbar's quiet npc and location links and the
               mobile lookup rows. The scene's reading view is handed the npc

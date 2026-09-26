@@ -5,7 +5,7 @@
 // `score` meaning "0 is a perfect match, values grow toward 1".
 //
 // The search is truly mixed, so a hit names its entity by `kind` and `id`
-// (ADR #31): the app opens the resource of that entity from those — or, for a
+// (decisions/resources): the app opens the resource of that entity from those — or, for a
 // glossary term, the glossary page, where the terms are kept.
 //
 // The two properties the reference queries depend on:

@@ -1,4 +1,4 @@
-// The API client of a session (ADR #31): its resource — list, read, start,
+// The API client of a session (decisions/resources): its resource — list, read, start,
 // end, delete. Built from the shared HTTP helpers (../api.ts). Its children
 // — pauses and log entries — are written on their own resources under it
 // (./pause-api.ts, ./log-entry-api.ts) and read embedded in it.

@@ -1,4 +1,4 @@
-// The proposed locations of a scene run (ADR #31): their own typed list
+// The proposed locations of a scene run (decisions/resources): their own typed list
 // `result.locations`, decided by id (`review.locations`), accepted by id
 // (`review.writtenLocations` on the job's PATCH), which is also the record of
 // what is written.

@@ -11,8 +11,8 @@
 //                  its `chapterDescription`).
 //                  Deriving it means a test does not have to hand-write an
 //                  outline to say something about a scene — and a batch reply
-//                  whose ids are unusable still fails the run, now at the
-//                  outline step, with the same message.
+//                  whose ids are unusable fails the run at the outline
+//                  step.
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
@@ -130,7 +130,7 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
  * The REPLY OBJECT of a scripted entry plus the script's warnings — what a
  * schema-forced provider delivers.
  *
- * A scene, an npc and a location reply with their own fields (ADR #31): the
+ * A scene, an npc and a location reply with their own fields (decisions/resources): the
  * script's fields stand beside `body` and `warnings`, and an optional field
  * the script leaves out is `null` — "not given", exactly as a strict
  * provider delivers it. A scene's lists are `[]` then, its type `planned`,

@@ -2,7 +2,7 @@
 //
 // A knowledge item — a naming convention, a fact or a style rule the DM keeps
 // on the campaign's knowledge page (/campaigns/:id/knowledge) — is its own
-// resource with its own type (ADR #31, @grimoire/shared/knowledge-item):
+// resource with its own type (decisions/resources, @grimoire/shared/knowledge-item):
 // listed, read, created, written and deleted here, typed by its one zod
 // schema. Every item carries its own guard `rev`.
 //

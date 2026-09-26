@@ -3,7 +3,7 @@
 //
 // Adopt a thread → a thread of the chapter, `POST …/threads`; tick off an
 // idea → `PATCH …/ideas/:id { rev, done }`; create an NPC from a note — on
-// the npc's own resource, `POST …/npcs` (ADR #31) — and the progress counter.
+// the npc's own resource, `POST …/npcs` (decisions/resources) — and the progress counter.
 // The threads themselves — their guard and the chapter overview that keeps
 // them — are threads.e2e.ts.
 //
@@ -356,7 +356,7 @@ test("creating an NPC from a #npc log row", async ({ page, api }) => {
 
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
   // The npc's own resource answers it — flat, no kind, no path, no
-  // properties map (ADR #31).
+  // properties map (decisions/resources).
   const npc = await getNpc(api, "old-metta");
   expect(npc.id).toBe("old-metta");
   expect(npc.name).toBe("Old Metta");
@@ -503,7 +503,7 @@ test("a log entry is reviewed on its own resource: unknown id 404, stale rev 409
   // The note itself is written once: its text is no field of the PATCH.
   expect((await patchRaw("metta", { rev: entry.rev, text: "neu" })).status).toBe(400);
 
-  // The old action endpoint answers nothing any more.
+  // The action endpoint `review/seen` answers nothing.
   const seen = await api.fetch(`${underCampaign(api, "review", "seen")}`, {
     method: "POST",
     headers: { "content-type": "application/json" },

@@ -2,7 +2,7 @@
 // opens, and the app route it lives at.
 //
 // Three kinds of target — a scene, an npc and a location, each its own
-// resource with its own route (ADR #31). The target names which one it is,
+// resource with its own route (decisions/resources). The target names which one it is,
 // so nothing has to guess a route from an id; the route itself comes from the
 // slice of the one it names.
 

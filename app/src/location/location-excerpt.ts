@@ -1,6 +1,6 @@
 // The short form of a location — what its aside card, the hover preview of a
 // `[[slug]]` reference and its reading view show of it, read off its own
-// fields (ADR #31), never off a section of its text (ADR #29).
+// fields (decisions/resources), never off a section of its text (decisions/data-shape).
 //
 // A reference INSIDE the atmosphere reads as the current display name, plain
 // text (a short form is no place for a second link); an unresolved slug keeps

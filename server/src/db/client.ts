@@ -11,7 +11,7 @@
 // nothing runtime-specific and only duck-types its client, so the twenty
 // lines of `construct()` from that driver are reproduced here against our own
 // `SqliteClient`. Same dialect, same session, same migrator — the only thing
-// that changes is who opens the database file. See ADR #13.
+// that changes is who opens the database file. See decisions/sqlite.
 
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
@@ -72,7 +72,7 @@ function buildDrizzle(client: SqliteClient): GrimoireDb {
  * wraps the whole run in a transaction and keeps its bookkeeping in
  * `__drizzle_migrations`.
  *
- * The first migration is the v0.7 baseline (ADR #28). A migration runs only
+ * The first migration is the v0.7 baseline (decisions/sqlite). A migration runs only
  * when its journal `when` is newer than the last one the database recorded,
  * so a database started with v0.7 or later skips the baseline and an empty
  * one gets it.

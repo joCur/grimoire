@@ -1,7 +1,7 @@
 // The client half of the version poll: GET /api/campaigns/:campaign/version, then invalidate
 // the campaign's read queries when the counter changes (every server-side
 // write bumps it in its own transaction — nothing else changes the campaign,
-// DECISIONS #9/#13). No UI — data just refreshes.
+// decisions/polling, decisions/sqlite). No UI — data just refreshes.
 //
 // The same response carries the server's build id, so this one
 // poll doubles as the version handshake: every tick hands the id to
@@ -59,7 +59,7 @@ export function useCampaignVersion(campaign: string): void {
     if (previous.version === data.version) return;
     // Something changed on the server — refetch everything read from this
     // campaign. The campaign's, a chapter's, a scene's, an npc's and a
-    // location's reads name their own key roots in their slices (ADR #31). So
+    // location's reads name their own key roots in their slices (decisions/resources). So
     // do the sessions: the running one, the list and each evening share one
     // root — a session ended in another tab must reach the global live
     // indicator without a reload. The ideas and each chapter's threads name

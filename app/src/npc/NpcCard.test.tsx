@@ -51,7 +51,7 @@ describe("NpcCard — a reference inside the excerpt", () => {
     ["bucht", { kind: "location", slug: "bucht", name: "Die Nordbucht" }],
   ]);
 
-  /** An npc card over a cached npc — the npc's own resource (ADR #31). */
+  /** An npc card over a cached npc — the npc's own resource (decisions/resources). */
   function renderNpc(fields: Partial<Npc>, card: ReactNode): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const npc: Npc = { id: "grella", name: "Grella", status: "unknown", body: "", rev: 1, ...fields };

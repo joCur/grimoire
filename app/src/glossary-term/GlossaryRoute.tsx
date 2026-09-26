@@ -3,7 +3,7 @@
 // A glossary is a REFERENCE: term → wording. So the page reads like one —
 // alphabetical, one line per term, a filter above it — and not like a form.
 // The order of creation carries no meaning here, which is why the list has no
-// up/down. Each term is its own resource (ADR #31): a save writes that one
+// up/down. Each term is its own resource (decisions/resources): a save writes that one
 // term against its own `rev`.
 //
 // The fields follow what goes in them: the term is one line, the explanation

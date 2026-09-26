@@ -1,5 +1,5 @@
 // A SESSION — one evening at the table — its one zod schema and the forms
-// derived from it (ADR #31).
+// derived from it (decisions/resources).
 //
 // `sessionSchema` is the session as `GET /api/campaigns/:c/sessions/:id`
 // answers it: its own fields with its children embedded — the pauses

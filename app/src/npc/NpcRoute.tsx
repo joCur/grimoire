@@ -1,5 +1,5 @@
 // "/campaigns/:campaign/npcs/:id" — the reading view of ONE npc, its own
-// resource with its own type (ADR #31). The page is the scene route's
+// resource with its own type (decisions/resources). The page is the scene route's
 // sibling: the context line on top (the npc list), the article, and the
 // three quiet actions in its header — edit (the text with the `motivation`
 // beside it), the dialog over the other fields, and the augment run.

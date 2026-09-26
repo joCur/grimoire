@@ -11,7 +11,7 @@
 //   const npc = await getNpc(api, "fenn");
 //   await patchScene(api, "lighthouse-arrival", { status: "played" });
 //
-// The database is the truth (ADR #13), and the API is how a spec looks at it
+// The database is the truth (decisions/sqlite), and the API is how a spec looks at it
 // — the same way the app does.
 
 import { CAMPAIGN } from "./paths";

@@ -1,6 +1,6 @@
 // Threads: the thread resource.
 //
-// A thread is its own resource with its own type (ADR #31,
+// A thread is its own resource with its own type (decisions/resources,
 // @grimoire/shared/thread): listed, read, created, written and deleted here,
 // typed by its one zod schema. It lies flat under its campaign, and the
 // chapter that carries it is a field — so nothing here reads or writes a

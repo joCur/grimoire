@@ -1,7 +1,7 @@
 // Taking over what a generator run produced.
 //
 // A run proposes entities, each the entity itself without its guard
-// (ADR #31): the chapter a new-chapter run creates is a
+// (decisions/resources): the chapter a new-chapter run creates is a
 // `ChapterProposal`, a proposed scene a `SceneProposal`, a proposed npc an
 // `NpcProposal` and a proposed location a `LocationProposal`. This is the
 // write behind the accept of a generator job: one transaction for the whole
@@ -58,7 +58,7 @@ export async function writeGenerated(
     npcs?: NpcProposal[];
     locations?: LocationProposal[];
     /**
-     * The chapters the run decided on (ADR #18): each is written here if it
+     * The chapters the run decided on (decisions/scene-order): each is written here if it
      * is not there yet — the net under a new-chapter run, whose chapter
      * usually comes along. Any other chapter a scene names has to exist.
      */
@@ -163,7 +163,7 @@ function duplicateIds(ids: readonly string[]): string[] {
 }
 
 /**
- * A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13) — the
+ * A UNIQUE/PRIMARY KEY violation from either SQLite backend (decisions/sqlite) — the
  * race the conflict check above cannot close, and the only constraint failure
  * that means "the target is taken".
  *

@@ -3,9 +3,9 @@
 Ein Container, ein Prozess: der Hono-Server liefert `/api` **und** den
 gebauten Frontend-Bundle aus `app/dist`. Die Kampagnendaten liegen außerhalb
 des Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht
-App-Sache — Standard ist Tailscale (siehe DECISIONS #3 und #5).
+App-Sache — Standard ist Tailscale (siehe [decisions/scope](decisions/scope.md), [decisions/stack](decisions/stack.md)).
 
-> **Die Kampagnen-Wahrheit ist eine SQLite-Datei (ADR #13):**
+> **Die Kampagnen-Wahrheit ist eine SQLite-Datei ([decisions/sqlite](decisions/sqlite.md)):**
 > `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container. Das ist die
 > **einzige** Datenquelle: der Server liest beim Start keine andere Quelle,
 > eine frische Instanz startet **leer** und wird in der UI gefüllt. Zu sichern
@@ -53,7 +53,7 @@ Der Container selbst hat keinen Zustand — der steht im `/data`-Volume.
 
 Das Produktivsystem muss nicht selbst bauen — Images liegen in der GitHub
 Container Registry. Der Release-Workflow ist der **einzige** Schreiber dieser
-Registry — ein main-Merge veröffentlicht nichts (DECISIONS #12). Es gibt daher genau zwei Tag-Sorten:
+Registry — ein main-Merge veröffentlicht nichts ([decisions/release](decisions/release.md)). Es gibt daher genau zwei Tag-Sorten:
 
 | Tag | Woher | Wofür |
 | --- | ----- | ----- |
@@ -160,7 +160,7 @@ $GRIMOIRE_DATA/
 - Schema-Migrationen laufen beim Start automatisch (in einer Transaktion,
   Buchführung in `__drizzle_migrations`). Ein **Downgrade** wird nicht
   unterstützt: der Rückweg bei Problemen ist die eigene Volume-Sicherung plus
-  Image-Rollback auf den alten Tag (DECISIONS #12). Eine Migration, die
+  Image-Rollback auf den alten Tag ([decisions/release](decisions/release.md)). Eine Migration, die
   Inhalt umschreibt, bekommt einen eigenen Abschnitt.
 - Installationen vor v0.7 werden nicht unterstützt.
 - **WAL auf Bind-Mounts:** WAL braucht funktionierendes `mmap`/Locking im
@@ -236,7 +236,7 @@ repariert), und was übrig bleibt, repariert ein Modell mit Fehlerliste fast
 immer im ersten Turn — ein zweiter kostet nur. `0` schaltet Korrektur-Turns
 ganz ab (billigster, strengster Modus), `2` ist das Maximum.
 
-**Generierungen laufen im Hintergrund** (DECISIONS #10): `POST
+**Generierungen laufen im Hintergrund** ([decisions/generator](decisions/generator.md)): `POST
 /api/campaigns/:campaign/generator-jobs` startet einen Job und antwortet mit
 `202` und dem Job; die App liest ihn über `GET
 /api/campaigns/:campaign/generator-jobs`. Ein Job pro Kampagne (zweiter Start →
@@ -289,7 +289,7 @@ docker run --env-file /srv/grimoire/.env … grimoire
 
 ## 3. Erreichbarkeit: Tailscale zuerst
 
-Grimoire hat kein Login (DECISIONS #3). Es darf deshalb **nicht** offen im
+Grimoire hat kein Login ([decisions/scope](decisions/scope.md)). Es darf deshalb **nicht** offen im
 Internet stehen. Zwei erprobte Muster:
 
 **A) Tailscale auf dem Host (einfachster Weg)**
@@ -314,7 +314,7 @@ service:tailscale`). Dann veröffentlicht Grimoire selbst keinen Port nach
 außen. Zustand des Sidecars (`/var/lib/tailscale`) in ein Volume legen,
 sonst muss nach jedem Neustart neu authentifiziert werden.
 
-**Alternativen** (falls Tailscale nicht in Frage kommt, DECISIONS #3/#7):
+**Alternativen** (falls Tailscale nicht in Frage kommt, [decisions/scope](decisions/scope.md), [decisions/stack](decisions/stack.md)):
 Reverse Proxy davor — Caddy/nginx/Traefik mit Basic Auth für den
 Minimalfall, oder Forward Auth gegen Authelia/authentik, wenn echte Sessions
 und 2FA gewünscht sind. In beiden Fällen bleibt der App-Code unverändert;
@@ -337,9 +337,9 @@ Verzeichnis kopieren) und die Wiederherstellung.
   `docker inspect --format '{{.State.Health.Status}}' grimoire`.
 - Aktualisierung im Browser: jeder Write zählt `campaigns.version` in
   derselben Transaktion hoch, die App pollt `GET /api/campaigns/:campaign/version`
-  (DECISIONS #9). Es gibt keinen Datei-Watcher mehr — Edits im Dateibaum
-  wirken NICHT, die Datenbank ist die Wahrheit (ADR #13).
-- Generator-Jobs überleben einen Neustart (ADR #10-Nachtrag): ein fertiger
+  ([decisions/polling](decisions/polling.md)). Es gibt keinen Datei-Watcher — Edits im Dateibaum
+  wirken NICHT, die Datenbank ist die Wahrheit ([decisions/sqlite](decisions/sqlite.md)).
+- Generator-Jobs überleben einen Neustart ([decisions/generator](decisions/generator.md)): ein fertiger
   Job ist nach dem Boot noch da und übernehmbar. War ein Job im Lauf, steht im
   Log `N generate job(s) were running at the last shutdown — marked as
   failed`, und die App zeigt „Server wurde während des Laufs neu gestartet —
@@ -356,7 +356,7 @@ Verzeichnis kopieren) und die Wiederherstellung.
 - Entwicklung ist davon unberührt: dort läuft der Vite-Dev-Server und proxied
   `/api` auf `localhost:3000` (`app/vite.config.ts`); ohne `app/dist` serviert
   der Server nichts Statisches.
-- Runtime-Wechsel bleibt offen (DECISIONS #7): server/ und shared/ liegen als
+- Runtime-Wechsel bleibt offen ([decisions/stack](decisions/stack.md)): server/ und shared/ liegen als
   TypeScript-Quelle im Image, es werden keine Bun-only-Laufzeit-APIs benutzt.
   Ein Node-Image mit `@hono/node-server` wäre ein Deployment-Umbau, kein
   Code-Umbau.

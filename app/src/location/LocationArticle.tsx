@@ -1,4 +1,4 @@
-// The reading view of a LOCATION (ADR #31): its name, the `atmosphere` line,
+// The reading view of a LOCATION (decisions/resources): its name, the `atmosphere` line,
 // the Roll20 page reference and its text — the same column and the same
 // markdown pipeline as every other article.
 //

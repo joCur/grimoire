@@ -1,4 +1,4 @@
-// A thread in the suite: its resource `…/threads/:id` (ADR #31), every field
+// A thread in the suite: its resource `…/threads/:id` (decisions/resources), every field
 // flat — `{ id, chapter, text, done, rev }` —, its chapter a field. Its type
 // is the one `@grimoire/shared/thread` derives from the thread's schema.
 

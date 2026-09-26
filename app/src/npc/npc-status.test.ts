@@ -25,7 +25,7 @@ describe("npcStatusLabel", () => {
   test("a value from outside the four is not a status at all", () => {
     // `unknown` above is one of the four — the NPC nobody has placed yet — and
     // the only other case there could be is a foreign value, which the column
-    // cannot hold (ADR #25). The type is what says so.
+    // cannot hold (decisions/constraints). The type is what says so.
     // @ts-expect-error not one of alive | dead | missing | unknown
     const foreign: NpcStatus = "verschollen im Nebel";
     expect(NPC_STATUSES as readonly string[]).not.toContain(foreign);

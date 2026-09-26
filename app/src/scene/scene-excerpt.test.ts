@@ -11,7 +11,7 @@ import { sceneExcerpt } from "./scene-excerpt";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
 
-/** A scene fixture — the scene as its resource answers it (ADR #31). */
+/** A scene fixture — the scene as its resource answers it (decisions/resources). */
 function fixture(id: string): SceneProposal {
   return JSON.parse(
     readFileSync(path.join(FIXTURES, "scenes", `${id}.json`), "utf8"),

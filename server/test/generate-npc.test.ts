@@ -7,7 +7,7 @@
 // What is asserted here: the NPC run uses the SAME mechanics as the scene run
 // (correction turns, truncation fail-fast, usage summing, JSON extraction,
 // one job per campaign) with its own prompt assets, its own context (no
-// chapter), its own reply — the npc's own fields, flat (ADR #31) — and its
+// chapter), its own reply — the npc's own fields, flat (decisions/resources) — and its
 // own validation rules.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";

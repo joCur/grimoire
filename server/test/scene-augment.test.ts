@@ -1,4 +1,4 @@
-// Augmenting a scene on its own resource (ADR #31): `POST …/scenes/:id/augment`
+// Augmenting a scene on its own resource (decisions/resources): `POST …/scenes/:id/augment`
 // starts the run, the job carries the scene as read and as proposed, and
 // `POST …/scenes/:id/augment/apply` writes what the DM took.
 

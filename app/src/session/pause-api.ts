@@ -1,4 +1,4 @@
-// The API client of a pause (ADR #31): its resource under its session —
+// The API client of a pause (decisions/resources): its resource under its session —
 // begin and end. A pause is an interval of the session's clock: while one is
 // open, the clock stands.
 

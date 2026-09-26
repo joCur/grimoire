@@ -1,4 +1,4 @@
-// Where a scene lives in the app and how it names itself (ADR #31): its
+// Where a scene lives in the app and how it names itself (decisions/resources): its
 // reading view, the context line of that view, and the label it carries in a
 // run's review beside the npcs and locations of the same run.
 

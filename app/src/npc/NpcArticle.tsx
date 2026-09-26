@@ -1,4 +1,4 @@
-// The reading view of an NPC (ADR #31): its name and status, the lines the
+// The reading view of an NPC (decisions/resources): its name and status, the lines the
 // table needs — role, voice, appearance, what it wants (`motivation`), the
 // quick stats and the Roll20 sheet it refers to — and its text. The same
 // column and the same markdown pipeline as every other article.

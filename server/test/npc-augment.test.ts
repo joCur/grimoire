@@ -1,4 +1,4 @@
-// Augmenting an npc on its own resource (ADR #31): `POST …/npcs/:id/augment`
+// Augmenting an npc on its own resource (decisions/resources): `POST …/npcs/:id/augment`
 // starts the run, the job carries the npc as read and as proposed, and
 // `POST …/npcs/:id/augment/apply` writes what the DM took.
 

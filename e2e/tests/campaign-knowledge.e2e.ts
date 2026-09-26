@@ -20,7 +20,7 @@
 // open ONE row at a time with fields that fit the content, save that row on
 // its own against its own guard, confirm a deletion — and the 409 of a row
 // and of the order of the knowledge items. Each glossary term and each
-// knowledge item is its own resource (ADR #31).
+// knowledge item is its own resource (decisions/resources).
 
 import type { Page } from "@playwright/test";
 
@@ -85,7 +85,7 @@ function content<T extends { id: string; rev: number }>(row: T): Omit<T, "id" | 
 }
 
 test("the former list addresses name nothing; every term and item answers flat", async ({ api }) => {
-  // No list is swapped as a whole any more: GET and PUT on the old addresses
+  // No list is swapped as a whole: GET and PUT on the list addresses
   // are 404, without a redirect.
   for (const list of ["glossary", "knowledge"]) {
     expect((await api.fetch(underCampaign(api, list))).status).toBe(404);

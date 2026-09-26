@@ -1,10 +1,10 @@
-# Grimoire — one container: Hono API + the built frontend (issue #13).
-# Operations doc: docs/DEPLOYMENT.md. Deployment shape per DECISIONS #3/#5.
+# Grimoire — one container: Hono API + the built frontend.
+# Operations doc: docs/DEPLOYMENT.md. Deployment shape per decisions/scope, decisions/stack.
 #
 #   docker build -t grimoire .
 #   docker run -d -p 3000:3000 -v /srv/grimoire/data:/data grimoire
 #
-# No TypeScript build step for server/ and shared/ (DECISIONS #8): Bun runs
+# No TypeScript build step for server/ and shared/ (decisions/stack): Bun runs
 # the sources directly. The only build output is the Vite bundle in app/dist,
 # which the server then serves statically (server/src/static-files.ts).
 
@@ -12,7 +12,7 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
 
-# Build id of this image (issue #24): the release workflow passes the version
+# Build id of this image: the release workflow passes the version
 # tag (--build-arg GRIMOIRE_BUILD=v1.2.3); a local `docker build` without it
 # gets "dev", which switches the app's version handshake off. Exported as env
 # so the Vite build below can bake it into the bundle.
@@ -72,7 +72,7 @@ COPY generator ./generator
 COPY --from=build /app/app/dist ./app/dist
 
 # GRIMOIRE_DATA is the only data setting left: the server reads and writes
-# GRIMOIRE_DATA/grimoire.db and knows no other source (ADR #13).
+# GRIMOIRE_DATA/grimoire.db and knows no other source (decisions/sqlite).
 ENV GRIMOIRE_DATA=/data \
     PORT=3000
 

@@ -9,7 +9,7 @@ build/
 # Echte Kampagnendaten — bleiben lokal (die Beispielkampagne liegt in fixtures/)
 /campaigns/
 
-# GRIMOIRE_DATA: die SQLite-Datenbank samt WAL-Begleitdateien (ADR #13).
+# GRIMOIRE_DATA: die SQLite-Datenbank samt WAL-Begleitdateien (decisions/sqlite).
 # Dev-Default ist ./data; im Betrieb liegt das Verzeichnis im Docker-Volume.
 /data/
 *.db

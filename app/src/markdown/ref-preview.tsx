@@ -52,7 +52,7 @@ import { sceneQuery } from "@/scene/scene-query";
 
 import type { ResolvedRef } from "./refs";
 
-/** The query the preview of a target reads — its own, from its slice (ADR #31). */
+/** The query the preview of a target reads — its own, from its slice (decisions/resources). */
 function previewQuery(
   campaign: string,
   target: ResolvedRef,

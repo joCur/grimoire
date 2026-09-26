@@ -1,6 +1,6 @@
 // The scenes: list, read, create, write and the AI augment run.
 //
-// A SCENE IS ITS OWN RESOURCE (ADR #31): `…/scenes` and `…/scenes/:id`,
+// A SCENE IS ITS OWN RESOURCE (decisions/resources): `…/scenes` and `…/scenes/:id`,
 // answering the `Scene` type — every field of the scene flat, `body` among
 // them, beside its `rev`. It lies flat under its campaign: its id is unique
 // per campaign, and its chapter is a field. Where a scene stands in its
@@ -39,7 +39,7 @@ sceneRoutes.get("/campaigns/:campaign/scenes/:id", async (c) =>
 // POST /api/campaigns/:campaign/scenes { title, chapter, id? } -> 201 Scene
 // The id is derived from `title` unless the request sets it. `chapter` is
 // required and must exist (400 { code: "chapter_unknown" }) — a scene belongs
-// to a chapter, and chapters are never created by being named (ADR #19). The
+// to a chapter, and chapters are never created by being named (decisions/constraints). The
 // scene is appended to the END of its chapter and holds its title and nothing
 // else. A taken id is 409 { code: "slug_taken", kind, id, suggestion } and
 // writes nothing. A key that is none of the three, or a value of the wrong
@@ -57,7 +57,7 @@ sceneRoutes.post("/campaigns/:campaign/scenes", async (c) => {
 // PATCH /api/campaigns/:campaign/scenes/:id
 //   { rev, force?, id?, title?, type?, trigger?, chapter?, location?, npcs?,
 //     handouts?, tags?, status?, body? } -> Scene
-// THE write of one scene (ADR #23): any subset of its fields — `body` is one
+// THE write of one scene (decisions/writes): any subset of its fields — `body` is one
 // of them — in ONE row update against ONE `rev`, checked against the scene's
 // schema. `null` clears an optional field (`trigger`, `location`); a key that
 // is not a field of a scene, or a value of the wrong shape, is a 400 that

@@ -1,6 +1,6 @@
 // The glossary terms: list, read, create, write and delete.
 //
-// A GLOSSARY TERM IS ITS OWN RESOURCE (ADR #31): `…/glossary-terms` and
+// A GLOSSARY TERM IS ITS OWN RESOURCE (decisions/resources): `…/glossary-terms` and
 // `…/glossary-terms/:id`, answering the `GlossaryTerm` type —
 // `{ id, term, explanation, rev }`. Every term carries its own guard, and a
 // term stands in the glossary once. Terms stand in the order they were

@@ -23,7 +23,7 @@
 //      re-validates server-side instead of trusting the client.
 //
 // A proposed scene, npc or location is a `SceneProposal`, an `NpcProposal`
-// or a `LocationProposal` — the entity without its guard (ADR #31): nothing
+// or a `LocationProposal` — the entity without its guard (decisions/resources): nothing
 // here renders one into one markdown text and nothing parses one back.
 //
 // Steps 1-4 run in the BACKGROUND: `POST …/generator-jobs` starts a job
@@ -81,11 +81,11 @@ import {
 } from "./llm-provider";
 
 /**
- * Upper bound for correction turns after the initial call (DECISIONS #6:
+ * Upper bound for correction turns after the initial call (decisions/generator:
  * "max. 2"). The number is configurable BELOW that bound and the default
- * is 1: the non-fixable triggers are gone
- * (truncation, prose around the JSON), and a model that gets an explicit
- * error list back repairs the remaining form errors in the first turn
+ * is 1: the non-fixable triggers never reach a correction turn (truncation
+ * fails fast, prose around the JSON is extracted), and a model that gets an
+ * explicit error list back repairs the remaining form errors in the first turn
  * almost always — the second one only costs money.
  */
 export const MAX_CORRECTION_TURNS = 2;
@@ -553,7 +553,7 @@ export function validateSceneProposal(input: {
  * callouts, and every `[[id]]` of the body naming something of the campaign
  * or the npc itself. The DM can pin a different id via the request's `id`.
  *
- * No rule looks for a heading (ADR #29): the sections of an npc body are the
+ * No rule looks for a heading (decisions/data-shape): the sections of an npc body are the
  * prompt's recommendation, and the text under them is the model's prose.
  */
 export function validateNpcReply(

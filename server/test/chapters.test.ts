@@ -1,4 +1,4 @@
-// The chapter resource (ADR #31): `GET …/chapters`, `GET` and `PATCH
+// The chapter resource (decisions/resources): `GET …/chapters`, `GET` and `PATCH
 // …/chapters/:id`, every field of a chapter flat — `body` among them —
 // beside its `rev`, and every write checked against the chapter's schema. The
 // address the chapter once had under `…/entries/` names nothing.

@@ -151,7 +151,7 @@ export function BlockTypePicker({
  *               be a different block) and named by the card's label.
  *   heading     level select plus the text — the two things a heading is.
  *   ifSection   the condition only; its children are cards of their own.
- *   text/raw    markdown as text (ticket non-goal: no WYSIWYG). A raw block's
+ *   text/raw    markdown as text (no WYSIWYG). A raw block's
  *               text INCLUDES its `>` markers, so it stays exactly editable
  *               without ever being reinterpreted.
  */
@@ -483,7 +483,7 @@ export const InsertSlot = memo(function InsertSlot({
     );
   }
   // Two whole sentences instead of a glued-in fragment: which list the "+"
-  // inserts into changes the word order in other languages (ADR #15).
+  // inserts into changes the word order in other languages (decisions/i18n).
   const position = at.index + 1;
   return (
     <button

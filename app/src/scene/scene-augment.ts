@@ -1,4 +1,4 @@
-// A scene's augment proposal, field by field (ADR #31): what the model
+// A scene's augment proposal, field by field (decisions/resources): what the model
 // changes against the scene as the run read it. Pure, so the rule is
 // unit-testable.
 

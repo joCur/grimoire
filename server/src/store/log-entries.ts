@@ -1,6 +1,6 @@
 // Log entries: the log entry resource.
 //
-// A log entry is its own resource with its own type (ADR #31,
+// A log entry is its own resource with its own type (decisions/resources,
 // @grimoire/shared/log-entry), hanging under its session: taken and reviewed
 // here, typed by its one zod schema. The log is append-only — a note is
 // written once, as COLUMNS (time, scene, text), and the one change after that

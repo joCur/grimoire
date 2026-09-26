@@ -1,5 +1,5 @@
 // A PAUSE — an interval of a session in which its clock stands — its one zod
-// schema and the forms derived from it (ADR #31).
+// schema and the forms derived from it (decisions/resources).
 //
 // `pauseSchema` is the pause as the session embeds it and as
 // `POST`/`PATCH /api/campaigns/:c/sessions/:s/pauses[/:id]` answer it. The

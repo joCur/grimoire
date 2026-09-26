@@ -16,7 +16,7 @@
 // The other create surfaces get their own tests below: the NPC and location
 // lists (including the collision, which is the one branch that must not
 // write), the ID LINE with its pencil — the create dialog is the one place an
-// id may be personalised (ADR #21) — the same lists at 390px, because creating
+// id may be personalised (decisions/constraints) — the same lists at 390px, because creating
 // one has to work on a phone, and the TOPBAR SWITCHER, where the SECOND
 // campaign is created — it is the UI's only entry point for one.
 
@@ -162,7 +162,7 @@ test("cold start: empty instance → campaign → chapter → scene → usable i
   expect(sceneDoc.chapter).toBe("01-salzhafen");
 
   // --- a second scene goes to the END of the chapter ------------------------
-  // The order is the DM's, and a new scene is appended to it (ADR #27). This
+  // The order is the DM's, and a new scene is appended to it (decisions/scene-order). This
   // title sorts BEFORE the first one alphabetically, which is exactly what
   // must not decide anything: it lands behind it, where it was created.
   await page.goto(`/campaigns/${CAMPAIGN_ID}`);
@@ -264,7 +264,7 @@ test("npc and location are created from their lists; a collision writes nothing"
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // --- create the npc -------------------------------------------------------
-  // The npc list is the npc's own route (ADR #31).
+  // The npc list is the npc's own route (decisions/resources).
   await page.goto(`/campaigns/${CAMPAIGN_ID}/npcs`);
   await expect(page.getByText("Noch keine NPCs.")).toBeVisible();
   await page.getByRole("button", { name: "NPC anlegen" }).click();
@@ -280,7 +280,7 @@ test("npc and location are created from their lists; a collision writes nothing"
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
   // The create answers the npc itself: every field flat, no kind, no path,
-  // no properties map (ADR #31).
+  // no properties map (decisions/resources).
   const created = await getNpc(api, "hafenmeisterin-jorna");
   expect(created.name).toBe("Hafenmeisterin Jorna");
   expect(created.status).toBe("unknown");
@@ -338,7 +338,7 @@ test("npc and location are created from their lists; a collision writes nothing"
   expect(await npcExists(api, "holm")).toBe(false);
 
   // --- create the location --------------------------------------------------
-  // The location list is the location's own route (ADR #31).
+  // The location list is the location's own route (decisions/resources).
   await page.goto(`/campaigns/${CAMPAIGN_ID}/locations`);
   await page.getByRole("button", { name: "Ort anlegen" }).click();
   const locationName = page.getByLabel("Name");
@@ -413,7 +413,7 @@ test("the second campaign is created in the top bar's switcher", async ({ page, 
 });
 
 test("the id can be set by hand in the create dialog", async ({ page, server }) => {
-  // The id is permanent (ADR #21), and the create dialog is the one place that
+  // The id is permanent (decisions/constraints), and the create dialog is the one place that
   // may personalise it. So the quiet preview line carries a pencil: it opens
   // as a field prefilled with the id on screen, the name stops feeding it once
   // something is typed, and an id the slug rule rejects never reaches the
