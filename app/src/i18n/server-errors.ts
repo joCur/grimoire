@@ -108,8 +108,8 @@ function paramsFor(
       const suggestion = text(body.suggestion);
       if (id === undefined || suggestion === undefined) return undefined;
       // `kind` is optional on purpose: an older server sends none, and the
-      // sentence reads fine with the generic „Der Eintrag".
-      const kind = isKind(body.kind) ? t(KIND_KEY[body.kind]) : t("server.kind.entry");
+      // sentence reads fine with the generic subject, the ID itself.
+      const kind = isKind(body.kind) ? t(KIND_KEY[body.kind]) : t("server.kind.fallback");
       return { id, suggestion, kind };
     }
     case "slug_empty": {
@@ -144,7 +144,7 @@ function paramsFor(
       // The two refusals of a closed column share one shape: the value that
       // was written and the positions the column accepts. `kind` rides along
       // on `status_not_allowed` to say WHICH status column refused, but the
-      // sentence does not need it — the DM is looking at that entry, and the
+      // sentence does not need it — the DM is looking at that row, and the
       // enumerated positions already say which list this is.
       const value = text(body.value);
       const allowed = list(body.allowed);
@@ -199,7 +199,7 @@ export function serverErrorBodyMessage(
   if (isErrorCode(code)) {
     const params = paramsFor(code, body, t);
     if (params !== undefined) {
-      // One code, two sentences: „location_not_an_id" reads differently with
+      // One code, two sentences: `location_not_an_id` reads differently with
       // and without a proposal, and a placeholder with no value would show
       // as the literal `{suggestion}`.
       if (code === "location_not_an_id" && params.suggestion === undefined) {
@@ -216,7 +216,8 @@ export function serverErrorBodyMessage(
 /**
  * The sentence a failed request shows. Falls back through: catalog entry for
  * the code -> the server's English `error` text -> `fallback` (the view's own
- * „… — Server prüfen", which is what a network error or a 500 deserves).
+ * "… — check the server" sentence, which is what a network error or a 500
+ * deserves).
  */
 export function serverErrorMessage(error: unknown, t: Translate, fallback: MessageKey): string {
   if (!(error instanceof ApiError)) return t(fallback);

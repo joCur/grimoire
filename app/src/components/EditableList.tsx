@@ -537,9 +537,9 @@ function EditableListBody<T extends EditableRow, V>({
           }}
         >
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
-            <DialogTitle>{t("editableList.confirmDelete.title")}</DialogTitle>
+            <DialogTitle>{t("editableList.confirmDelete.title", { name: rowTitle(confirmDelete) })}</DialogTitle>
             <DialogDescription>
-              {t("editableList.confirmDelete.body", { name: rowTitle(confirmDelete) })}
+              {t("editableList.confirmDelete.body")}
             </DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>

@@ -48,9 +48,15 @@ import {
 } from "./generator-job-state";
 
 // The copy comes from the catalog and the translator is passed in — so a
-// test says which language it asserts.
+// test says which language it formats in, and the expectations are catalog
+// entries formatted with the parameters the helper is expected to hand over.
 const t = translator("de");
 const tEn = translator("en");
+
+/** A number grouped by thousands with the separator of `tr`'s catalog. */
+function grouped(tr: typeof t, ...groups: string[]): string {
+  return groups.join(tr("generate.usage.group"));
+}
 
 describe("mergeEdits", () => {
   test("a patch merges per id AND per field", () => {
@@ -71,23 +77,29 @@ describe("labels", () => {
   // A count and its noun agree through an ICU plural inside the catalog
   // keys, so it is asserted through the two functions that consume them.
   test("applySummary reads like the prototype's button", () => {
-    expect(applySummary(1, 1, t)).toBe("1 Szene · 1 vorgeschlagener Eintrag");
-    expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 vorgeschlagene Einträge");
-    expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 vorgeschlagene Einträge");
+    expect(applySummary(1, 1, t)).toBe(t("generate.review.summary", { scenes: 1, stubs: 1 }));
+    expect(applySummary(2, 0, t)).toBe(t("generate.review.summary", { scenes: 2, stubs: 0 }));
+    expect(applySummary(0, 3, t)).toBe(t("generate.review.summary", { scenes: 0, stubs: 3 }));
   });
 
   test("contextHint names the two counts the tree carries", () => {
-    expect(contextHint(2, 1, t)).toBe("2 NPCs \u00b7 1 Ort");
-    expect(contextHint(1, 0, t)).toBe("1 NPC \u00b7 0 Orte");
+    expect(contextHint(2, 1, t)).toBe(
+      t("generate.input.contextEntities", { npcs: 2, locations: 1 }),
+    );
+    expect(contextHint(1, 0, t)).toBe(
+      t("generate.input.contextEntities", { npcs: 1, locations: 0 }),
+    );
   });
 
-  test("knowledgeHint COUNTS the knowledge entries", () => {
+  test("knowledgeHint COUNTS the knowledge items", () => {
     // A count, not a yes/no: the DM comes here right after writing a rule and
     // the number is what confirms it travels. Zero says so in words — the
     // line has to read as a sentence either way.
-    expect(knowledgeHint(0, t)).toBe("kein Kampagnenwissen");
-    expect(knowledgeHint(1, t)).toBe("1 Wissens-Eintrag");
-    expect(knowledgeHint(3, t)).toBe("3 Wissens-Eintr\u00e4ge");
+    expect(knowledgeHint(0, t)).toBe(t("generate.input.knowledgeCount", { count: 0 }));
+    expect(knowledgeHint(0, t)).not.toContain("0");
+    expect(knowledgeHint(1, t)).toBe(t("generate.input.knowledgeCount", { count: 1 }));
+    expect(knowledgeHint(3, t)).toBe(t("generate.input.knowledgeCount", { count: 3 }));
+    expect(knowledgeHint(3, t)).toContain("3");
   });
 });
 
@@ -101,7 +113,7 @@ describe("stringList", () => {
 
 describe("stringField", () => {
   test("keeps a non-empty string, drops everything else", () => {
-    expect(stringField("Rohantwort")).toBe("Rohantwort");
+    expect(stringField("raw reply")).toBe("raw reply");
     expect(stringField("")).toBeUndefined();
     expect(stringField(42)).toBeUndefined();
     expect(stringField(undefined)).toBeUndefined();
@@ -109,30 +121,31 @@ describe("stringField", () => {
 });
 
 describe("usageLabel", () => {
-  test("sums the tokens and groups them the German way", () => {
+  test("sums the tokens and groups them by thousands", () => {
     expect(usageLabel({ inputTokens: 11400, outputTokens: 1000, attempts: 1 }, t)).toBe(
-      "~12.400 Tokens · 1 Versuch",
+      t("generate.usage", { tokens: grouped(t, "12", "400"), attempts: 1 }),
     );
     expect(usageLabel({ inputTokens: 40000, outputTokens: 1234, attempts: 3 }, t)).toBe(
-      "~41.234 Tokens · 3 Versuche",
+      t("generate.usage", { tokens: grouped(t, "41", "234"), attempts: 3 }),
     );
-    // below the grouping threshold, and the plural of 0
+    // below the grouping threshold
     expect(usageLabel({ inputTokens: 800, outputTokens: 20, attempts: 2 }, t)).toBe(
-      "~820 Tokens · 2 Versuche",
+      t("generate.usage", { tokens: "820", attempts: 2 }),
     );
     expect(usageLabel({ inputTokens: 1000000, outputTokens: 0, attempts: 1 }, t)).toBe(
-      "~1.000.000 Tokens · 1 Versuch",
+      t("generate.usage", { tokens: grouped(t, "1", "000", "000"), attempts: 1 }),
     );
   });
 
   // The separator is catalog data (generate.usage.group), so the other
   // language has to be proven too — not just the German rule.
   test("the thousands separator comes from the catalog", () => {
+    expect(tEn("generate.usage.group")).not.toBe(t("generate.usage.group"));
     expect(usageLabel({ inputTokens: 11400, outputTokens: 1000, attempts: 1 }, tEn)).toBe(
-      "~12,400 tokens · 1 attempt",
+      tEn("generate.usage", { tokens: grouped(tEn, "12", "400"), attempts: 1 }),
     );
     expect(usageLabel({ inputTokens: 1000000, outputTokens: 0, attempts: 3 }, tEn)).toBe(
-      "~1,000,000 tokens · 3 attempts",
+      tEn("generate.usage", { tokens: grouped(tEn, "1", "000", "000"), attempts: 3 }),
     );
   });
 
@@ -146,8 +159,11 @@ describe("usageLabel", () => {
   });
 
   test("survives a partial usage object instead of printing NaN", () => {
-    expect(usageLabel({ attempts: 1 }, t)).toBe("~0 Tokens · 1 Versuch");
-    expect(usageLabel({ inputTokens: 500, attempts: "viele" }, t)).toBe("~500 Tokens · 0 Versuche");
+    expect(usageLabel({ attempts: 1 }, t)).toBe(t("generate.usage", { tokens: "0", attempts: 1 }));
+    expect(usageLabel({ inputTokens: 500, attempts: "many" }, t)).toBe(
+      t("generate.usage", { tokens: "500", attempts: 0 }),
+    );
+    expect(usageLabel({ inputTokens: 500, attempts: "many" }, t)).not.toContain("NaN");
   });
 });
 
@@ -211,7 +227,7 @@ describe("runJobArrived", () => {
 });
 
 /**
- * The sequence of the stall reported on 15.09.: the click, a GET
+ * The sequence of a stall: the click, a GET
  * that overtakes the new row (404 -> null), and then a poll that already sees
  * the finished run — all while `POST /generate` is STILL in flight, which is
  * the normal case with a fast model. The review has to be on the screen at
@@ -270,7 +286,7 @@ describe("jobErrorBody", () => {
     expect(jobErrorBody(undefined)).toBeUndefined();
     expect(jobErrorBody(null)).toBeUndefined();
     expect(jobErrorBody(failed(undefined))).toBeUndefined();
-    expect(jobErrorBody(failed({ status: 500, body: "kaputt" }))).toBeUndefined();
+    expect(jobErrorBody(failed({ status: 500, body: "broken" }))).toBeUndefined();
     expect(
       jobErrorBody({
         id: "j2",
@@ -307,7 +323,7 @@ describe("jobMode", () => {
   test("everything else is scene mode — also a payload without kind", () => {
     expect(jobMode(job("scene"))).toBe("scene");
     expect(jobMode(job())).toBe("scene");
-    expect(jobMode(job("etwas-neues"))).toBe("scene");
+    expect(jobMode(job("something-new"))).toBe("scene");
     expect(jobMode(null)).toBe("scene");
     expect(jobMode(undefined)).toBe("scene");
   });
@@ -373,7 +389,7 @@ describe("review state mapping", () => {
       ...over,
     }) as GeneratorJob;
 
-  test("a payload without a review degrades to „nothing decided yet“", () => {
+  test("a payload without a review degrades to 'nothing decided yet'", () => {
     expect(reviewOf(job())).toEqual({
       droppedScenes: [],
       fields: {},
@@ -414,12 +430,12 @@ describe("review state mapping", () => {
   });
 
   test("a scene's and an npc's change merge field by field", () => {
-    let next = mergeReviewPatch(job(), { npcEdits: { grella: { role: "Fischerin" } } });
-    next = mergeReviewPatch(next, { npcEdits: { grella: { body: "Neu.\n" } } });
-    expect(next.npcEdits).toEqual({ grella: { role: "Fischerin", body: "Neu.\n" } });
-    next = mergeReviewPatch(next, { sceneEdits: { a: { title: "Am Kai" } } });
+    let next = mergeReviewPatch(job(), { npcEdits: { grella: { role: "Fisherwoman" } } });
+    next = mergeReviewPatch(next, { npcEdits: { grella: { body: "New.\n" } } });
+    expect(next.npcEdits).toEqual({ grella: { role: "Fisherwoman", body: "New.\n" } });
+    next = mergeReviewPatch(next, { sceneEdits: { a: { title: "At the quay" } } });
     next = mergeReviewPatch(next, { sceneEdits: { a: { location: null } } });
-    expect(next.sceneEdits).toEqual({ a: { title: "Am Kai", location: null } });
+    expect(next.sceneEdits).toEqual({ a: { title: "At the quay", location: null } });
   });
 
   test("`droppedScenes` is a set sent whole, not a merge", () => {
@@ -478,7 +494,7 @@ describe("review state mapping", () => {
     expect(jobNpcs(npcRun)).toEqual(["brakk"]);
   });
 
-  test("progress counts the written parts — „2 von 3 übernommen“", () => {
+  test("progress counts the written parts — '2 of 3 applied'", () => {
     expect(jobProgress(job())).toEqual({ written: 0, total: 3 });
     const partly = job({
       review: {
@@ -502,23 +518,23 @@ describe("review state mapping", () => {
       result: {
         scenes: [proposed("a")],
         npcs: [],
-        locations: [{ id: "alte-mole", name: "Alte Mole", body: "m" }],
+        locations: [{ id: "old-mole", name: "Old Mole", body: "m" }],
         warnings: [],
       },
     });
-    expect(locationState(withLocation, "alte-mole")).toBe("open");
-    expect(openLocations(withLocation)).toEqual(["alte-mole"]);
+    expect(locationState(withLocation, "old-mole")).toBe("open");
+    expect(openLocations(withLocation)).toEqual(["old-mole"]);
     expect(jobProgress(withLocation)).toEqual({ written: 0, total: 2 });
-    const rejected = mergeReviewPatch(withLocation, { review: { locations: { "alte-mole": "rejected" } } });
-    expect(locationState(rejected, "alte-mole")).toBe("rejected");
+    const rejected = mergeReviewPatch(withLocation, { review: { locations: { "old-mole": "rejected" } } });
+    expect(locationState(rejected, "old-mole")).toBe("rejected");
     expect(openLocations(rejected)).toEqual([]);
-    const reopened = mergeReviewPatch(rejected, { review: { locations: { "alte-mole": null } } });
+    const reopened = mergeReviewPatch(rejected, { review: { locations: { "old-mole": null } } });
     expect(reopened.review?.locations).toEqual({});
     const written = job({
       ...withLocation,
-      review: { ...reviewOf(withLocation), writtenLocations: ["alte-mole"] },
+      review: { ...reviewOf(withLocation), writtenLocations: ["old-mole"] },
     });
-    expect(locationState(written, "alte-mole")).toBe("written");
+    expect(locationState(written, "old-mole")).toBe("written");
     expect(jobProgress(written)).toEqual({ written: 1, total: 2 });
   });
 
@@ -563,7 +579,7 @@ describe("the run's parts", () => {
           key: `scene:s${i}`,
           kind: "scene" as const,
           id: `s${i}`,
-          title: `Szene ${i}`,
+          title: `Scene ${i}`,
           status,
         })),
         totals: { inputTokens: 11_000, outputTokens: 1_400, calls: 5 },
@@ -625,7 +641,7 @@ describe("the run's parts", () => {
     expect(generateJobQueryOptions("").enabled).toBe(false);
   });
 
-  test("„noch offen“ is pending or running, never failed", () => {
+  test("'still open' is pending or running, never failed", () => {
     expect(partsStillRunning(job(["done", "running", "pending"]))).toBe(true);
     // A failed part is settled: it waits for the DM, not for the model.
     expect(partsStillRunning(job(["done", "failed", "done"]))).toBe(false);
@@ -634,17 +650,17 @@ describe("the run's parts", () => {
 
   test("the progress line counts the SCENES and disappears when the run is over", () => {
     expect(pipelineProgress(job(["done", "running", "pending"]), t)).toBe(
-      "1 von 3 Szenen fertig",
+      t("generate.pipeline.progress", { done: 1, total: 3 }),
     );
     expect(pipelineProgress(job(["done", "done", "running"]), tEn)).toBe(
-      "2 of 3 scenes finished",
+      tEn("generate.pipeline.progress", { done: 2, total: 3 }),
     );
     // Nothing open any more, and a single-call run: no line at all.
     expect(pipelineProgress(job(["done", "done", "failed"]), t)).toBeUndefined();
     expect(pipelineProgress(null, t)).toBeUndefined();
   });
 
-  test("„übernommen“ counts against every part of the RUN", () => {
+  test("'applied' counts against every part of the RUN", () => {
     // Two of three parts answered, and the DM took one of them.
     const run = job(["done", "done", "running"], {
       result: {
@@ -667,7 +683,9 @@ describe("the run's parts", () => {
     // What the run PRODUCED — and why that number confused the chip.
     expect(jobProgress(run)).toEqual({ written: 1, total: 2 });
     expect(acceptProgress(run)).toEqual({ written: 1, total: 3 });
-    expect(t("topbar.generator.progress", acceptProgress(run))).toBe("1 von 3 übernommen");
+    expect(t("topbar.generator.progress", acceptProgress(run))).toBe(
+      t("topbar.generator.progress", { written: 1, total: 3 }),
+    );
     // A run without a pipeline (a single call) is left exactly as it was.
     const single = { ...run, pipeline: undefined };
     expect(acceptProgress(single)).toEqual(jobProgress(single));
@@ -696,12 +714,18 @@ describe("the run's parts", () => {
   });
 
   test("the cost line sums the run's tokens and COUNTS CALLS", () => {
-    expect(pipelineCostLabel(job(["done"]), t)).toBe("~12.400 Tokens · 5 Aufrufe");
-    expect(pipelineCostLabel(job(["done"]), tEn)).toBe("~12,400 tokens · 5 calls");
+    expect(pipelineCostLabel(job(["done"]), t)).toBe(
+      t("generate.pipeline.cost", { tokens: grouped(t, "12", "400"), calls: 5 }),
+    );
+    expect(pipelineCostLabel(job(["done"]), tEn)).toBe(
+      tEn("generate.pipeline.cost", { tokens: grouped(tEn, "12", "400"), calls: 5 }),
+    );
     // A run whose endpoint reports no tokens still reports its calls.
     const quiet = job(["done"]);
     quiet.pipeline!.totals = { inputTokens: 0, outputTokens: 0, calls: 2 };
-    expect(pipelineCostLabel(quiet, t)).toBe("~0 Tokens · 2 Aufrufe");
+    expect(pipelineCostLabel(quiet, t)).toBe(
+      t("generate.pipeline.cost", { tokens: "0", calls: 2 }),
+    );
     // …and a run with nothing at all reports nothing.
     quiet.pipeline!.totals = { inputTokens: 0, outputTokens: 0, calls: 0 };
     expect(pipelineCostLabel(quiet, t)).toBeUndefined();

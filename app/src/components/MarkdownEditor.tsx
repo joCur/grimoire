@@ -59,7 +59,7 @@ export interface MarkdownEditorSurfaceProps {
   editing: boolean;
   /** id of the textarea; the toggle's aria-controls target. */
   id: string;
-  /** aria-label of the textarea; include the entry/draft name so labels stay unique. */
+  /** aria-label of the textarea; include the name of what is edited so labels stay unique. */
   label: string;
   /**
    * Leaving the textarea. The generator review uses it to FLUSH its

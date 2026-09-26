@@ -1,5 +1,4 @@
-// A textarea that is exactly as tall as its text (issue #53, PO feedback on
-// PR #87).
+// A textarea that is exactly as tall as its text.
 //
 // The campaign-content forms hold sentences, not words: a glossary explanation
 // runs to a line or three, a style rule to a paragraph. A fixed `rows={2}` box
@@ -13,18 +12,18 @@
 //
 // WHEN: on every value change, in a layout effect, so the height is right in
 // the same frame the character appears in (an `onChange` handler would miss
-// the programmatic changes — opening an entry, a reload after a conflict) —
+// the programmatic changes — opening a text, a reload after a conflict) —
 // AND on every change of the field's own WIDTH. The second one is not
 // optional: the number of lines a paragraph takes depends on how wide the box
 // is, so rotating a phone, opening a sidebar or dragging a window narrower
 // re-wraps the text inside a box that was measured for the old width, and the
-// bottom lines end up clipped (PO finding on PR #87). A ResizeObserver on the
+// bottom lines end up clipped. A ResizeObserver on the
 // element sees all of those, including the ones no window event reports; the
 // `window.resize` fallback is for engines without it (jsdom-style test
 // environments, mostly).
 //
 // `min-h` keeps an empty field a legible target. The CEILING is 60vh: past
-// that the field pushes its own „Speichern" off the screen, so a rule that
+// that the field pushes its own save button off the screen, so a rule that
 // long scrolls inside itself instead of scrolling the form away.
 
 import { useCallback, useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";

@@ -10,6 +10,7 @@ import type { Messages } from "./messages";
 
 export const en: Messages = {
   // --- shared verbs ---------------------------------------------------------
+  "common.close": "Close",
   "common.cancel": "Cancel",
   "common.discard": "Discard",
   "common.save": "Save",
@@ -141,11 +142,11 @@ export const en: Messages = {
   "properties.action": "Properties",
   "properties.title": "{kind}: properties",
   "properties.description":
-    "Every property of this entry. Only what you changed is saved — everything else stays exactly as it is.",
+    "Only what you changed is saved — everything else stays exactly as it is.",
   "properties.id": "ID",
   "properties.discard.title": "Discard changes?",
   "properties.discard.close":
-    "The changed properties are not saved. Discarding closes the dialog and leaves the entry as it is stored.",
+    "The changes are not saved. Discarding closes the dialog and keeps what is stored.",
   "properties.discard.keepEditing": "Keep editing",
   "unsaved.description":
     "This page has unsaved changes. They are lost if you leave now.",
@@ -160,7 +161,6 @@ export const en: Messages = {
   "properties.field.row.name.aria": "{label}, row {row}: name",
   "properties.field.row.value.aria": "{label}, row {row}: value",
   "properties.ref.unknownChapter": "Unknown — the chapter has to exist.",
-  "properties.ref.unknown": "Unknown — the entry has to exist.",
   "properties.ref.unknownLocation": "Unknown — the location has to exist.",
   "properties.issue.locationUnusable":
     'Not a usable name — “{value}” yields no location ID.',
@@ -180,7 +180,7 @@ export const en: Messages = {
   "properties.scene.location.hint":
     "Pick a location from the list — the scene names it in its meta line, in the reading view and in the session view.",
   "properties.scene.npcs.label": "NPCs",
-  "properties.scene.npcs.hint": "Ids only — the npc has to have an entry already.",
+  "properties.scene.npcs.hint": "IDs only — the NPC has to exist already.",
   "properties.scene.handouts.label": "Handouts",
   "properties.scene.handouts.hint": "Name of the Roll20 handout, a reference only.",
   "properties.scene.tags.label": "Tags",
@@ -240,9 +240,9 @@ export const en: Messages = {
   "editableList.moveDown": "Move down",
   "editableList.edit": "Edit “{name}”",
   "editableList.remove": "Delete \u201c{name}\u201d",
-  "editableList.removed": "Entry deleted",
-  "editableList.confirmDelete.title": "Delete this entry?",
-  "editableList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
+  "editableList.removed": "Deleted",
+  "editableList.confirmDelete.title": "Delete “{name}”?",
+  "editableList.confirmDelete.body": "This cannot be undone.",
   "editableList.confirmDelete.confirm": "Delete",
 
   "knowledge.title": "Campaign knowledge",
@@ -250,9 +250,9 @@ export const en: Messages = {
     "Naming conventions, facts and style rules of this campaign. Travels with every generator run and is binding \u2014 even when the source material says otherwise. The order here is the order in the prompt. References like [[fenn]] are resolved to the name.",
   "knowledge.filter": "Filter the knowledge",
   "knowledge.empty":
-    "No campaign knowledge yet \u2014 add the first entry (a naming convention, say).",
-  "knowledge.noMatch": "No entry matches the filter.",
-  "knowledge.add": "New entry",
+    "No campaign knowledge yet. Start with a naming convention, a fact or a style rule.",
+  "knowledge.noMatch": "Nothing matches the filter.",
+  "knowledge.add": "Add knowledge",
   "knowledge.blank": "Nothing filled in yet",
   "knowledge.kindLabel": "Kind",
   "knowledge.kind.naming": "Naming convention",
@@ -293,7 +293,7 @@ export const en: Messages = {
   "server.played_scene_unknown":
     'Played scene “{value}” does not exist — create it first.',
   "server.glossary_duplicate_term":
-    'Glossary term “{term}” appears more than once — please merge the entries.',
+    'Glossary term “{term}” appears more than once — please merge them.',
   "server.glossary_term_taken":
     "The glossary already has the term “{term}” — please edit that one instead.",
   "server.scene_order_mismatch":
@@ -304,7 +304,7 @@ export const en: Messages = {
     "This session has already ended, so nothing was saved. Start a new session to carry on.",
   "server.rev_conflict": "Changed in the meantime — reload before saving.",
   "server.nothing_to_write": "Nothing to save.",
-  "server.body_not_editable": "This entry has no editable text — it is maintained as a list.",
+  "server.body_not_editable": "This list has no editable text — it is maintained row by row.",
   "server.job_restarted": "The server was restarted while the job was running — start it again.",
   "server.job_draft_format":
     "This run predates the current draft format and cannot be accepted any more — generate it again.",
@@ -319,7 +319,7 @@ export const en: Messages = {
     // placeholder behind it and the sentence would read `{value}` verbatim.
     "Timestamp ''{value}'' is not of the form yyyy-mm-ddThh:mm:ss.",
 
-  "server.kind.entry": "The entry",
+  "server.kind.fallback": "The ID",
   "server.kind.campaign": "Campaign",
   "server.kind.chapter": "Chapter",
   "server.kind.scene": "Scene",
@@ -401,8 +401,8 @@ export const en: Messages = {
   "browse.empty.locations": "No locations yet.",
 
   // --- the reading views (scene/, chapter/, npc/, location/) ----------------
-  "scene.loading": "Loading entry …",
-  "scene.notLoadable": "Entry not loadable — check the path or start the server.",
+  "reading.loading": "Loading …",
+  "reading.notLoadable": "Not loadable — check the server and reload.",
   "scene.npcs.heading": "NPCs in this scene",
 
   // --- context line + mobile back row ---------------------------------------
@@ -444,7 +444,7 @@ export const en: Messages = {
   "live.scene.noNpcs": "No NPCs in this scene.",
 
   "live.log.heading": "Log",
-  "live.log.empty": "No entries yet — the quick note below lands here.",
+  "live.log.empty": "No notes yet — the quick note below lands here.",
   "live.note.aria": "Quick note",
   "live.note.placeholder": "Quick note … #thread #npc #loot",
   "live.note.hint": "Enter sends · time and scene are set automatically",
@@ -473,7 +473,7 @@ export const en: Messages = {
   // --- live detail drawer (components/LiveDrawer.tsx) ------------------------
   "live.drawer.loading": "Loading details …",
   "live.drawer.unloadable": "Not loadable — check {path}.",
-  "live.drawer.open": "Open entry",
+  "live.drawer.open": "Open in full",
 
 
   // --- review (the session review; the harvest metaphor lives in the code,
@@ -484,11 +484,11 @@ export const en: Messages = {
   "review.noSession": "There is no session to review.",
   "review.backToChapters": "Back to the chapters",
   "review.lead":
-    "Go through the entries of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
+    "Go through the notes of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters).
   "review.progress": "{seen} of {total} reviewed",
-  "review.loading": "Loading entries …",
-  "review.empty": "No tagged entries in this session — nothing to review.",
+  "review.loading": "Loading notes …",
+  "review.empty": "No tagged notes in this session — nothing to review.",
 
   // The card's source chip — the scene travels INSIDE the sentence.
   "review.source.log": "Log",
@@ -510,14 +510,14 @@ export const en: Messages = {
   "review.done.resolved": "Done",
   "review.done.seen": "reviewed",
 
-  "review.notes.title": "Untagged entries",
+  "review.notes.title": "Ideas without a tag",
   "review.notes.lead":
-    "Untagged entries from the ideas — adopt them, create an NPC or tick them off.",
+    "Thrown in on the go, without a tag — adopt them, create an NPC or tick them off.",
 
   // Player-character notes: `#pc` lines from the log and the ideas.
   "review.pc.title": "Player characters",
   "review.pc.lead":
-    "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next review.",
+    "Notes and ideas tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next review.",
   "review.pc.groupTag": "#{tag}",
   "review.pc.groupGeneral": "General",
   "review.action.keep": "Keep",
@@ -582,7 +582,7 @@ export const en: Messages = {
   "bodyEditor.blocked": "One block still needs a decision — see the note on the block.",
   "bodyEditor.discard.title": "Discard changes?",
   "bodyEditor.discard.description":
-    "The changes are not saved. Discarding closes the editor and shows the entry as it is stored again.",
+    "The changes are not saved. Discarding closes the editor and shows what is stored again.",
 
 
   // --- entity-kind labels ---------------------------------------------------
@@ -605,7 +605,7 @@ export const en: Messages = {
   "generate.input.lead.scene":
     "English source material in, German scene drafts out. Always status draft, always with a check — nothing is written before you apply.",
   "generate.input.lead.npc":
-    "Source material about a character in, one NPC entry in format out — wants, knows, relations. Always with a check; nothing is written before you apply.",
+    "Source material about a character in, one NPC in format out — wants, knows, relations. Always with a check; nothing is written before you apply.",
   "generate.input.modeGroup": "Generator mode",
   "generate.input.mode.scene": "Scenes",
   "generate.input.mode.npc": "NPC",
@@ -632,7 +632,7 @@ export const en: Messages = {
   "generate.input.contextEntities":
     "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# location} other {# locations}}",
   "generate.input.knowledgeCount":
-    "{count, plural, =0 {no campaign knowledge} one {# knowledge entry} other {# knowledge entries}}",
+    "{count, plural, =0 {no campaign knowledge} one {# piece of campaign knowledge} other {# pieces of campaign knowledge}}",
   "generate.input.glossary": "glossary",
   "generate.input.noGlossary": "no glossary",
   "generate.input.submit.scene": "Generate drafts",
@@ -649,7 +649,7 @@ export const en: Messages = {
   "generate.input.npcId.space": "No spaces — separate words with a hyphen.",
   "generate.input.npcId.charset":
     "Lowercase letters, digits and hyphens only; no hyphen at the start.",
-  "generate.input.npcId.exists": "NPC already exists — existing entries are never overwritten.",
+  "generate.input.npcId.exists": "NPC already exists — an existing NPC is never overwritten.",
 
   // --- generator: the run's own errors (routes/generate.tsx) ---------------
   "generate.error.treeScene": "Chapters not loadable — start the Grimoire server on port 3000.",
@@ -657,7 +657,7 @@ export const en: Messages = {
   "generate.error.lostJob": "The run is gone (server restart?) — start it again.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY missing — see server/.env",
   "generate.error.npcExists":
-    "NPC already exists — pick another ID; existing entries are never overwritten.",
+    "NPC already exists — pick another ID; an existing NPC is never overwritten.",
   "generate.error.chapterMissing": "Chapter not found — pick another target.",
   "generate.error.failed": "Not generated — check the server.",
   "generate.error.validation": "The model failed the format check — nothing generated.",
@@ -675,25 +675,25 @@ export const en: Messages = {
 
   // --- generator: review (routes/generate.tsx, generator-job-state.ts) -------
   "generate.review.title": "Check drafts",
-  // The NPC run reviews ONE suggested entry, not a set of drafts.
+  // The NPC run reviews ONE proposed NPC, not a set of drafts.
   "generate.review.titleNpc": "Check the proposal",
   "generate.review.summary":
-    "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# suggested entry} other {# suggested entries}}",
+    "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# suggested NPC or location} other {# suggested NPCs and locations}}",
   "generate.review.pending": "{summary} · nothing written yet",
   "generate.review.pendingNpc": "1 NPC · nothing written yet",
   "generate.review.lead":
-    "Check, adjust, decide the suggested entries one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
+    "Check, adjust, decide on the suggested NPCs and locations one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
   "generate.review.leadNpc":
-    "Check and adjust. Only “Apply” writes the entry — existing NPCs are never overwritten.",
-  "generate.review.stubsHeading": "Suggested entries — decide one by one",
+    "Check and adjust. Only “Apply” writes the NPC — existing NPCs are never overwritten.",
+  "generate.review.stubsHeading": "Suggested NPCs and locations — decide one by one",
   // --- naming hints of the post-run check -----------------------------------
   "generate.review.namingHeading":
     "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
   "generate.review.namingHint": '“{from}” is still there — the convention says “{to}”',
   "generate.review.namingWhereBody": "{path}, line {line}",
   "generate.review.namingWhereField": "{path}, field {field}",
-  "generate.review.conflicts": "These entries already exist — nothing written:",
-  "generate.review.conflictsNpc": "This entry already exists — nothing written:",
+  "generate.review.conflicts": "These scenes, NPCs or locations already exist — nothing written:",
+  "generate.review.conflictsNpc": "This NPC already exists — nothing written:",
   "generate.review.applyFailed": "Not written — check the server.",
   "generate.review.applyStale":
     "Not written — the run has moved on. Reloading the view.",
@@ -754,11 +754,11 @@ export const en: Messages = {
 
   // --- generator: what was written (routes/generate.tsx) ------------------
   "generate.written.title.scene": "Written — all as draft",
-  "generate.written.title.npc": "Written — NPC entry created",
+  "generate.written.title.npc": "Written — NPC created",
   "generate.written.hint.scene":
-    "The scenes show up under their chapter with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
+    "The scenes show up under their chapter with status “draft”. Existing scenes, NPCs and locations are never overwritten — on a conflict the server writes nothing.",
   "generate.written.hint.npc":
-    "The NPC shows up in the NPC list and in search. Existing entries are never overwritten — on a conflict the server writes nothing.",
+    "The NPC shows up in the NPC list and in search. Existing NPCs are never overwritten — on a conflict the server writes nothing.",
   "generate.written.openNpc": "Open NPC",
   "generate.written.toChapters": "To the chapters",
 
@@ -830,7 +830,7 @@ export const en: Messages = {
   "sceneArticle.handout": "Handout: {handout}",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
-  "npcCard.noId": "{id} — not an NPC ID, so not an entry.",
+  "npcCard.noId": "{id} is not an NPC ID, so there is no NPC for it.",
   "npcCard.unloadable": "{id} — NPC not loadable, check the server.",
   "npcCard.will.inline": "Wants:",
   "npcCard.will": "Wants",

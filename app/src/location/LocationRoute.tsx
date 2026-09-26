@@ -52,7 +52,7 @@ export function LocationRoute({
   if (isPending) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
-        {t("scene.loading")}
+        {t("reading.loading")}
       </p>
     );
   }
@@ -62,7 +62,7 @@ export function LocationRoute({
     if (isNotFound(error)) return <NotFound campaign={campaign} />;
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
-        {t("scene.notLoadable")}
+        {t("reading.notLoadable")}
       </p>
     );
   }

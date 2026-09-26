@@ -3,8 +3,9 @@
 // proposal.
 //
 // The sentence is built from the server's error CODE through the catalog, so
-// these assertions are what the DM reads in German — with the body's English
-// `error` text as the documented fallback for an unknown code.
+// the expectations are catalog entries formatted with the body's parameters —
+// with the body's English `error` text as the documented fallback for an
+// unknown code.
 
 import { describe, expect, test } from "bun:test";
 
@@ -12,10 +13,10 @@ import { ApiError } from "@/api";
 import { canCreate, createConflict, createErrorMessage, derivedId } from "@/lib/create";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in: the helpers take the
-// translator as an argument, so a test says so explicitly instead of leaning
-// on a default.
+// The language the assertions below run in: the helpers take the translator as
+// an argument, so a test says so explicitly instead of leaning on a default.
 const t = translator("de");
+const en = translator("en");
 
 const conflictError = (details: Record<string, unknown>) =>
   new ApiError(409, "already exists", {
@@ -25,8 +26,8 @@ const conflictError = (details: Record<string, unknown>) =>
 
 describe("derivedId", () => {
   test("shows the id a name will produce", () => {
-    expect(derivedId("Alte Fischerin")).toBe("alte-fischerin");
-    expect(derivedId("Ankunft am Leuchtturm")).toBe("ankunft-am-leuchtturm");
+    expect(derivedId("Old Fisherwoman")).toBe("old-fisherwoman");
+    expect(derivedId("Arrival at the Lighthouse")).toBe("arrival-at-the-lighthouse");
   });
 
   test("yields nothing where a name carries no id at all", () => {
@@ -37,7 +38,7 @@ describe("derivedId", () => {
 
 describe("canCreate", () => {
   test("a name has to yield an id", () => {
-    expect(canCreate("Hafen")).toBe(true);
+    expect(canCreate("Harbor")).toBe(true);
     expect(canCreate("")).toBe(false);
     expect(canCreate("   ")).toBe(false);
     expect(canCreate("???")).toBe(false);
@@ -75,7 +76,7 @@ describe("createErrorMessage", () => {
         conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
         t,
       ),
-    ).toBe('NPC „holm“ existiert schon — Vorschlag: „holm-2“');
+    ).toBe(t("server.slug_taken", { kind: t("server.kind.npc"), id: "holm", suggestion: "holm-2" }));
     expect(
       createErrorMessage(
         new ApiError(400, "x", {
@@ -86,30 +87,30 @@ describe("createErrorMessage", () => {
         }),
         t,
       ),
-    ).toBe("Der Name ergibt keine Kennung — bitte Buchstaben oder Ziffern verwenden.");
+    ).toBe(t("server.slug_empty", { field: t("server.field.name") }));
   });
 
-  test("a body with no kind reads as a GRAMMATICAL German sentence", () => {
-    // The generic kind carries its article, so the sentence is built around a
-    // nominative — an accusative construction would read wrong in German.
-    expect(
-      createErrorMessage(conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }), t),
-    ).toBe('Der Eintrag „holm“ existiert schon — Vorschlag: „holm-2“');
-    expect(
-      createErrorMessage(
-        conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),
-        translator("en"),
-      ),
-    ).toBe("The entry “holm” already exists — suggestion: “holm-2”");
+  test("a body with no kind names the generic subject in every language", () => {
+    // The generic kind is its own catalog entry carrying its article, so the
+    // sentence stays grammatical without a kind.
+    const body = { code: "slug_taken", id: "holm", suggestion: "holm-2" };
+    for (const tr of [t, en]) {
+      expect(createErrorMessage(conflictError(body), tr)).toBe(
+        tr("server.slug_taken", { kind: tr("server.kind.fallback"), id: "holm", suggestion: "holm-2" }),
+      );
+    }
   });
 
   test("an English translation is really the English one", () => {
     expect(
       createErrorMessage(
         conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
-        translator("en"),
+        en,
       ),
-    ).toBe("NPC “holm” already exists — suggestion: “holm-2”");
+    ).toBe(en("server.slug_taken", { kind: en("server.kind.npc"), id: "holm", suggestion: "holm-2" }));
+    expect(en("server.slug_taken", { kind: "x", id: "y", suggestion: "z" })).not.toBe(
+      t("server.slug_taken", { kind: "x", id: "y", suggestion: "z" }),
+    );
   });
 
   test("an unknown code degrades to the body's English text, never to nothing", () => {
@@ -127,9 +128,9 @@ describe("createErrorMessage", () => {
 
   test("everything else degrades to one honest sentence", () => {
     expect(createErrorMessage(new ApiError(500, "x", { error: "internal server error" }), t)).toBe(
-      "Nicht angelegt — Server prüfen.",
+      t("create.failed"),
     );
-    expect(createErrorMessage(new ApiError(404, "x", {}), t)).toBe("Nicht angelegt — Server prüfen.");
-    expect(createErrorMessage(new Error("offline"), t)).toBe("Nicht angelegt — Server prüfen.");
+    expect(createErrorMessage(new ApiError(404, "x", {}), t)).toBe(t("create.failed"));
+    expect(createErrorMessage(new Error("offline"), t)).toBe(t("create.failed"));
   });
 });
