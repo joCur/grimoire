@@ -150,11 +150,11 @@ export const de = {
   "properties.action": "Eigenschaften",
   "properties.title": "{kind}: Eigenschaften",
   "properties.description":
-    "Alle Eigenschaften dieses Eintrags. Gespeichert wird nur, was du geändert hast — alles andere bleibt unverändert stehen.",
+    "Gespeichert wird nur, was du geändert hast — alles andere bleibt unverändert stehen.",
   "properties.id": "Kennung",
   "properties.discard.title": "Änderungen verwerfen?",
   "properties.discard.close":
-    "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen schließt das Fenster und lässt den Eintrag so, wie er gespeichert ist.",
+    "Die Änderungen sind nicht gespeichert. Verwerfen schließt das Fenster, und es bleibt beim gespeicherten Stand.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
   // The same question for LEAVING A PAGE whose save is explicit
   // (components/UnsavedChangesGuard.tsx); the title is shared.
@@ -172,7 +172,6 @@ export const de = {
   "properties.field.row.name.aria": "{label}, Zeile {row}: Name",
   "properties.field.row.value.aria": "{label}, Zeile {row}: Wert",
   "properties.ref.unknownChapter": "Unbekannt — Kapitel muss existieren.",
-  "properties.ref.unknown": "Unbekannt — Eintrag muss existieren.",
   "properties.ref.unknownLocation": "Unbekannt — Ort muss existieren.",
   "properties.issue.locationUnusable":
     'Kein verwendbarer Name — „{value}“ ergibt keine Orts-Kennung.',
@@ -198,7 +197,7 @@ export const de = {
   "properties.scene.location.hint":
     "Ort aus der Liste wählen — die Szene nennt ihn in ihrer Metazeile, in der Leseansicht und in der Session-Ansicht.",
   "properties.scene.npcs.label": "NPCs",
-  "properties.scene.npcs.hint": "Nur ids — der NPC muss schon einen Eintrag haben.",
+  "properties.scene.npcs.hint": "Nur Kennungen — den NPC muss es schon geben.",
   "properties.scene.handouts.label": "Handouts",
   "properties.scene.handouts.hint": "Name des Roll20-Handouts, nur ein Verweis.",
   "properties.scene.tags.label": "Tags",
@@ -264,9 +263,9 @@ export const de = {
   "editableList.moveDown": "Nach unten",
   "editableList.edit": "„{name}“ bearbeiten",
   "editableList.remove": "„{name}“ löschen",
-  "editableList.removed": "Eintrag gelöscht",
-  "editableList.confirmDelete.title": "Eintrag löschen?",
-  "editableList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
+  "editableList.removed": "Gelöscht",
+  "editableList.confirmDelete.title": "„{name}“ löschen?",
+  "editableList.confirmDelete.body": "Das lässt sich nicht rückgängig machen.",
   "editableList.confirmDelete.confirm": "Löschen",
 
   "knowledge.title": "Kampagnenwissen",
@@ -274,9 +273,9 @@ export const de = {
     "Namenskonventionen, Fakten und Stilregeln dieser Kampagne. Geht bei jedem Generator-Lauf mit und gilt verbindlich — auch wenn das Quellmaterial etwas anderes sagt. Die Reihenfolge ist die Reihenfolge im Prompt. Referenzen wie [[fenn]] werden zum Namen aufgelöst.",
   "knowledge.filter": "Wissen filtern",
   "knowledge.empty":
-    "Noch kein Kampagnenwissen — ersten Eintrag anlegen (z. B. eine Namenskonvention).",
-  "knowledge.noMatch": "Kein Eintrag passt zum Filter.",
-  "knowledge.add": "Neuer Eintrag",
+    "Noch kein Kampagnenwissen — lege das erste an, zum Beispiel eine Namenskonvention.",
+  "knowledge.noMatch": "Nichts passt zum Filter.",
+  "knowledge.add": "Wissen hinzufügen",
   "knowledge.blank": "Noch nichts eingetragen",
   "knowledge.kindLabel": "Art",
   "knowledge.kind.naming": "Namenskonvention",
@@ -332,7 +331,7 @@ export const de = {
   "server.rev_conflict": "Inzwischen geändert — neu laden vor dem Speichern.",
   "server.nothing_to_write": "Nichts zu speichern.",
   "server.body_not_editable":
-    "Dieser Eintrag hat keinen bearbeitbaren Text — er wird als Liste gepflegt.",
+    "Diese Liste hat keinen bearbeitbaren Text — sie wird Zeile für Zeile gepflegt.",
   "server.job_restarted": "Server wurde während des Laufs neu gestartet — Job neu starten.",
   "server.job_draft_format":
     "Dieser Lauf stammt aus einem älteren Entwurfsformat und kann nicht mehr übernommen werden — bitte neu erzeugen.",
@@ -345,7 +344,7 @@ export const de = {
   "server.timestamp_not_allowed":
     'Zeitangabe „{value}“ hat nicht die Form JJJJ-MM-TTThh:mm:ss.',
 
-  "server.kind.entry": "Der Eintrag",
+  "server.kind.fallback": "Die Kennung",
   "server.kind.campaign": "Kampagne",
   "server.kind.chapter": "Kapitel",
   "server.kind.scene": "Szene",
@@ -446,8 +445,8 @@ export const de = {
   "browse.empty.locations": "Noch keine Orte.",
 
   // --- the reading views (scene/, chapter/, npc/, location/) ----------------
-  "scene.loading": "Lade Eintrag …",
-  "scene.notLoadable": "Eintrag nicht ladbar — Pfad prüfen oder Server starten.",
+  "reading.loading": "Wird geladen …",
+  "reading.notLoadable": "Nicht ladbar — Server prüfen und neu laden.",
   "scene.npcs.heading": "NPCs dieser Szene",
 
   // --- context line + mobile back row ---------------------------------------
@@ -486,7 +485,7 @@ export const de = {
   "live.scene.noNpcs": "Keine NPCs in dieser Szene.",
 
   "live.log.heading": "Log",
-  "live.log.empty": "Noch keine Einträge — die Schnellnotiz unten landet hier.",
+  "live.log.empty": "Noch keine Notizen — die Schnellnotiz unten landet hier.",
   "live.note.aria": "Schnellnotiz",
   "live.note.placeholder": "Schnellnotiz … #thread #npc #loot",
   "live.note.hint": "Enter sendet · Zeit und Szene werden automatisch gesetzt",
@@ -511,7 +510,7 @@ export const de = {
   // An idea ticked off against a stale state: nothing was written, the ideas
   // were read again (review and live aside).
   "idea.tick.stale": "Diese Idee wurde inzwischen geändert. Die Liste ist neu geladen.",
-  // A log entry reviewed against a stale state: nothing was written, the
+  // A log line reviewed against a stale state: nothing was written, the
   // session was read again (review and live aside).
   "session.log.review.stale":
     "Diese Notiz wurde inzwischen anderswo geändert. Die Session ist neu geladen.",
@@ -519,7 +518,7 @@ export const de = {
   // --- live detail drawer (components/LiveDrawer.tsx) ------------------------
   "live.drawer.loading": "Lade Details …",
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
-  "live.drawer.open": "Eintrag öffnen",
+  "live.drawer.open": "Vollständig öffnen",
 
   // --- review (the session wrap-up; the harvest metaphor lives in the code
   // names only, not in the UI)
@@ -529,11 +528,11 @@ export const de = {
   "review.noSession": "Es gibt keine Session zum Sichten.",
   "review.backToChapters": "Zurück zu den Kapiteln",
   "review.lead":
-    "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
+    "Die Notizen der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters).
   "review.progress": "{seen} von {total} gesichtet",
-  "review.loading": "Lade Einträge …",
-  "review.empty": "Keine markierten Einträge in dieser Session — nichts zu sichten.",
+  "review.loading": "Lade Notizen …",
+  "review.empty": "Keine markierten Notizen in dieser Session — nichts zu sichten.",
 
   // The card's source chip — the scene travels INSIDE the sentence.
   "review.source.log": "Log",
@@ -556,14 +555,14 @@ export const de = {
   "review.done.seen": "gesichtet",
 
   // The untagged inbox lines — ideas thrown in on the go.
-  "review.notes.title": "Ungetaggte Einträge",
+  "review.notes.title": "Ideen ohne Tag",
   "review.notes.lead":
-    "Einträge aus den Ideen ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
+    "Unterwegs eingeworfen, ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
   // Player-character notes: `#pc` lines from the log and the ideas.
   "review.pc.title": "Spielercharaktere",
   "review.pc.lead":
-    "Einträge mit #pc — Erinnerungen für den Tisch, kein Kampagneninhalt. Abhaken oder für die nächste Nachbereitung behalten.",
+    "Notizen und Ideen mit #pc — Erinnerungen für den Tisch, kein Kampagneninhalt. Abhaken oder für die nächste Nachbereitung behalten.",
   "review.pc.groupTag": "#{tag}",
   "review.pc.groupGeneral": "Allgemein",
   "review.action.keep": "Behalten",
@@ -605,7 +604,7 @@ export const de = {
   "palette.results.aria": "Suchergebnisse",
   "palette.empty": "Nichts gefunden.",
   // The kind label of a NAVIGATION row: a page of this campaign,
-  // not an entry the index found.
+  // not a row the search index found.
   "palette.kind.page": "Seite",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
@@ -631,7 +630,7 @@ export const de = {
   "bodyEditor.blocked": "Ein Block muss noch geklärt werden — siehe Hinweis am Block.",
   "bodyEditor.discard.title": "Änderungen verwerfen?",
   "bodyEditor.discard.description":
-    "Die Änderungen sind nicht gespeichert. Verwerfen schließt den Editor und zeigt den Eintrag wieder so, wie er gespeichert ist.",
+    "Die Änderungen sind nicht gespeichert. Verwerfen schließt den Editor und zeigt wieder den gespeicherten Stand.",
 
   // --- entity-kind labels ---------------------------------------------------
   // ONE set for every place a kind is named to the DM: the ⌘K result rows
@@ -654,7 +653,7 @@ export const de = {
   "generate.input.lead.scene":
     "Englisches Quellmaterial rein, deutsche Szenen-Entwürfe raus. Immer als Entwurf, immer mit Prüfung — geschrieben wird erst beim Übernehmen.",
   "generate.input.lead.npc":
-    "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Prüfung; geschrieben wird erst beim Übernehmen.",
+    "Quellmaterial zu einer Figur rein, ein NPC nach Format raus — Will, Weiß, Beziehungen. Immer mit Prüfung; geschrieben wird erst beim Übernehmen.",
   "generate.input.modeGroup": "Generator-Modus",
   "generate.input.mode.scene": "Szenen",
   "generate.input.mode.npc": "NPC",
@@ -686,7 +685,7 @@ export const de = {
   // The knowledge COUNT — the number is what tells the DM
   // whether the rules they just wrote arrived.
   "generate.input.knowledgeCount":
-    "{count, plural, =0 {kein Kampagnenwissen} one {# Wissens-Eintrag} other {# Wissens-Eintr\u00e4ge}}",
+    "{count, plural, =0 {kein Kampagnenwissen} one {# Punkt Kampagnenwissen} other {# Punkte Kampagnenwissen}}",
   "generate.input.glossary": "Glossar",
   "generate.input.noGlossary": "kein Glossar",
   "generate.input.submit.scene": "Entwürfe generieren",
@@ -705,7 +704,7 @@ export const de = {
   "generate.input.npcId.charset":
     "Nur Kleinbuchstaben, Ziffern und Bindestriche; Anfang keine Bindestriche.",
   "generate.input.npcId.exists":
-    "NPC existiert schon — bestehende Einträge werden nie überschrieben.",
+    "NPC existiert schon — ein bestehender NPC wird nie überschrieben.",
 
   // --- generator: the run's own errors (routes/generate.tsx) ---------------
   // The failed JOB's body is rendered by serverErrorBodyMessage (server.*) —
@@ -716,7 +715,7 @@ export const de = {
     "Der Lauf ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY fehlt — siehe server/.env",
   "generate.error.npcExists":
-    "NPC existiert schon — andere Kennung wählen; bestehende Einträge werden nie überschrieben.",
+    "NPC existiert schon — andere Kennung wählen; ein bestehender NPC wird nie überschrieben.",
   "generate.error.chapterMissing": "Kapitel nicht gefunden — anderes Ziel wählen.",
   "generate.error.failed": "Nicht generiert — Server prüfen.",
   "generate.error.validation":
@@ -736,17 +735,17 @@ export const de = {
 
   // --- generator: review (routes/generate.tsx, generator-job-state.ts) -------
   "generate.review.title": "Entwürfe prüfen",
-  // The NPC run reviews ONE suggested entry, not a set of drafts.
+  // The NPC run reviews ONE proposed NPC, not a set of drafts.
   "generate.review.titleNpc": "Vorschlag prüfen",
   "generate.review.summary":
-    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# vorgeschlagener Eintrag} other {# vorgeschlagene Einträge}}",
+    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# vorgeschlagener NPC oder Ort} other {# vorgeschlagene NPCs und Orte}}",
   "generate.review.pending": "{summary} · noch nichts geschrieben",
   "generate.review.pendingNpc": "1 NPC · noch nichts geschrieben",
   "generate.review.lead":
-    "Prüfen, anpassen, vorgeschlagene Einträge einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Entwürfe, nie überschreibend.",
+    "Prüfen, anpassen, über vorgeschlagene NPCs und Orte einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Entwürfe, nie überschreibend.",
   "generate.review.leadNpc":
-    "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
-  "generate.review.stubsHeading": "Vorgeschlagene Einträge — einzeln entscheiden",
+    "Prüfen und anpassen. Erst „Übernehmen“ schreibt den NPC — bestehende NPCs werden nie überschrieben.",
+  "generate.review.stubsHeading": "Vorgeschlagene NPCs und Orte — einzeln entscheiden",
   // --- naming hints of the post-run check -----------------------------------
   // Deliberately NOT a warning: the check is a plain text search and the DM
   // decides. So the heading counts and the row states the finding plus where
@@ -757,8 +756,8 @@ export const de = {
   "generate.review.namingHint": '„{from}“ steht noch da — vereinbart ist „{to}“',
   "generate.review.namingWhereBody": "{path}, Zeile {line}",
   "generate.review.namingWhereField": "{path}, Feld {field}",
-  "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
-  "generate.review.conflictsNpc": "Dieser Eintrag existiert schon — nichts geschrieben:",
+  "generate.review.conflicts": "Diese Szenen, NPCs oder Orte gibt es schon — nichts geschrieben:",
+  "generate.review.conflictsNpc": "Diesen NPC gibt es schon — nichts geschrieben:",
   "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",
   // A 409 that is not a rev conflict: the run moved on, this part is no
   // longer open or has nothing finished yet. Nothing was written.
@@ -788,8 +787,8 @@ export const de = {
   "generate.review.plannedScene": "Geplante Szene",
   "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",
-  // The draft editor of a review card: the properties in the form of the
-  // properties dialog, the body on the surfaces of the entry editor.
+  // The editor of a review card: the fields in the form of the fields
+  // dialog, the body on the surfaces of the body editor.
   "generate.review.propertiesHeading": "Eigenschaften",
   "generate.review.bodyHeading": "Text",
   "generate.review.bodyLabel": "Text von {path}",
@@ -801,7 +800,7 @@ export const de = {
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
   "generate.usage.group": ".",
   // --- generator: the pipeline ---------------------------------------------
-  // A run is the outline call plus one call per scene and per entry, so the
+  // A run is the outline call plus one call per scene and per proposed npc or location, so the
   // review fills up while the run is still going. What the DM reads is the
   // PARTS — the outline itself is never shown.
   "generate.pipeline.cost":
@@ -809,7 +808,7 @@ export const de = {
   "generate.pipeline.progress":
     "{done} von {total, plural, one {# Szene} other {# Szenen}} fertig",
   // Counted over EVERY part of the run — so the wording says parts rather
-  // than scenes as soon as the run has suggested entries next to its scenes.
+  // than scenes as soon as the run has proposed npcs or locations next to its scenes.
   "generate.pipeline.progressParts":
     "{done} von {total, plural, one {# Teil} other {# Teilen}} fertig",
   "generate.pipeline.partRunning": "wird geschrieben …",
@@ -842,11 +841,11 @@ export const de = {
 
   // --- generator: what was written (routes/generate.tsx) ------------------
   "generate.written.title.scene": "Geschrieben — alles als Entwurf",
-  "generate.written.title.npc": "Geschrieben — NPC-Eintrag angelegt",
+  "generate.written.title.npc": "Geschrieben — NPC angelegt",
   "generate.written.hint.scene":
-    "Die Szenen erscheinen unter ihrem Kapitel mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+    "Die Szenen erscheinen unter ihrem Kapitel mit Status „Entwurf“. Bestehende Szenen, NPCs und Orte werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.hint.npc":
-    "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+    "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende NPCs werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.openNpc": "NPC ansehen",
   "generate.written.toChapters": "Zu den Kapiteln",
 
@@ -931,7 +930,7 @@ export const de = {
   "sceneArticle.handout": "Handout: {handout}",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
-  "npcCard.noId": "{id} — keine NPC-Kennung, deshalb kein Eintrag.",
+  "npcCard.noId": "{id} ist keine NPC-Kennung, deshalb gibt es dazu keinen NPC.",
   "npcCard.unloadable": "{id} — NPC nicht ladbar, Server prüfen.",
   "npcCard.will.inline": "Will:",
   "npcCard.will": "Will",

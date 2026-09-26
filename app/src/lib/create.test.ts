@@ -94,13 +94,13 @@ describe("createErrorMessage", () => {
     // nominative — an accusative construction would read wrong in German.
     expect(
       createErrorMessage(conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }), t),
-    ).toBe('Der Eintrag „holm“ existiert schon — Vorschlag: „holm-2“');
+    ).toBe('Die Kennung „holm“ existiert schon — Vorschlag: „holm-2“');
     expect(
       createErrorMessage(
         conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),
         translator("en"),
       ),
-    ).toBe("The entry “holm” already exists — suggestion: “holm-2”");
+    ).toBe("The ID “holm” already exists — suggestion: “holm-2”");
   });
 
   test("an English translation is really the English one", () => {

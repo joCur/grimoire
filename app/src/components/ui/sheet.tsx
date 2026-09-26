@@ -9,7 +9,7 @@
 // Like ./dialog there is NO enter/leave animation: the quality floor asks for
 // prefers-reduced-motion safety, and in the live mode (the NPC and
 // location drawer) a panel that is simply THERE is the calmer answer while the
-// DM is mid-sentence. The panel scrolls internally, so a long NPC entry never
+// DM is mid-sentence. The panel scrolls internally, so a long NPC text never
 // pushes the live layout around.
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";

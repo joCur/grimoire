@@ -1,7 +1,7 @@
 // The constant topbar (design reference: 56px, hairline below).
 //
 // THE CHROME IS GLOBAL AND STABLE. Every campaign-scoped
-// view — chapter overview, browse lists, entry/scene, generator, review — shows the very
+// view — chapter overview, browse lists, reading views, generator, review — shows the very
 // same left block:
 //
 //     Grimoire │ campaign switcher: <name> ⌄ │ chapters · NPCs · locations
@@ -10,7 +10,7 @@
 // difference is which nav entry is marked as the current section
 // (lib/topbar-nav.ts). There are NO breadcrumbs in the topbar: one would
 // repeat the campaign name the switcher already carries, compete with the nav
-// next to it, and on an entry view claim a chapter path that is misleading for
+// next to it, and on a reading view claim a chapter path that is misleading for
 // an NPC opened from the NPC list. Hierarchical context lives in the page
 // header instead (components/PageContext.tsx) — where it belongs, next to the
 // title it describes. The campaign name appears exactly ONCE in the chrome.
@@ -30,7 +30,7 @@
 // state), the session chip (one click starts a session and enters
 // /campaigns/:campaign/live), the harvest progress on the
 // review with a quiet chapter overview link into it while today's session
-// still has unharvested entries, and the generator entry on the chapter
+// still has unharvested log lines, and the generator entry on the chapter
 // overview with its run indicator.
 
 import { useQuery } from "@tanstack/react-query";
@@ -223,7 +223,7 @@ export function Topbar() {
         {/* ONE campaign context for every campaign-scoped view: the switcher
             trigger, always the same element in the same place. There are no
             breadcrumbs next to it: one would spell the campaign name again
-            and, on an entry, claim a chapter path that is plain misleading for
+            and, on a reading view, claim a chapter path that is plain misleading for
             an NPC opened from the NPC list. Hierarchical context lives in the
             page header (components/PageContext.tsx). */}
         {campaign !== "" && <CampaignSwitcher campaign={campaign} />}
@@ -322,10 +322,10 @@ export function Topbar() {
         )}
 
         {/* Quiet review affordance — only while the harvested session still
-            has unharvested entries; otherwise nothing is shown.
+            has unharvested log lines; otherwise nothing is shown.
             "The harvested session" is the server's last STARTED one, the same
-            entry the review page works on: after a session that ran past
-            midnight, today's date names no entry at all. */}
+            session the review page works on: after a session that ran past
+            midnight, today's date names no session at all. */}
         {isChapterOverview && <ChapterOverviewReviewLink campaign={campaign} />}
 
         {/* Quiet entry into the generator — chapter overview only, next to the brass
@@ -540,7 +540,7 @@ function ReviewProgress({ campaign }: { campaign: string }) {
 }
 
 /** Chapter overview affordance into the review: only when the harvested session (the
- *  server's last started one) still has entries — nothing to see otherwise. */
+ *  server's last started one) still has log lines to review — nothing to see otherwise. */
 function ChapterOverviewReviewLink({ campaign }: { campaign: string }) {
   const t = useT();
   const review = useReviewCards(campaign);

@@ -71,9 +71,9 @@ describe("labels", () => {
   // A count and its noun agree through an ICU plural inside the catalog
   // keys, so it is asserted through the two functions that consume them.
   test("applySummary reads like the prototype's button", () => {
-    expect(applySummary(1, 1, t)).toBe("1 Szene · 1 vorgeschlagener Eintrag");
-    expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 vorgeschlagene Einträge");
-    expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 vorgeschlagene Einträge");
+    expect(applySummary(1, 1, t)).toBe("1 Szene · 1 vorgeschlagener NPC oder Ort");
+    expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 vorgeschlagene NPCs und Orte");
+    expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 vorgeschlagene NPCs und Orte");
   });
 
   test("contextHint names the two counts the tree carries", () => {
@@ -81,13 +81,13 @@ describe("labels", () => {
     expect(contextHint(1, 0, t)).toBe("1 NPC \u00b7 0 Orte");
   });
 
-  test("knowledgeHint COUNTS the knowledge entries", () => {
+  test("knowledgeHint COUNTS the knowledge items", () => {
     // A count, not a yes/no: the DM comes here right after writing a rule and
     // the number is what confirms it travels. Zero says so in words — the
     // line has to read as a sentence either way.
     expect(knowledgeHint(0, t)).toBe("kein Kampagnenwissen");
-    expect(knowledgeHint(1, t)).toBe("1 Wissens-Eintrag");
-    expect(knowledgeHint(3, t)).toBe("3 Wissens-Eintr\u00e4ge");
+    expect(knowledgeHint(1, t)).toBe("1 Punkt Kampagnenwissen");
+    expect(knowledgeHint(3, t)).toBe("3 Punkte Kampagnenwissen");
   });
 });
 

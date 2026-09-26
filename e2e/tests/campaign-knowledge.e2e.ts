@@ -71,7 +71,7 @@ async function saveEntry(page: Page): Promise<void> {
 async function deleteRow(page: Page, name: RegExp): Promise<void> {
   await page.getByRole("button", { name }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Eintrag löschen?");
+  await expect(dialog).toContainText(/„.+“ löschen\?/);
   await dialog.getByRole("button", { name: "Löschen" }).click();
   await expect(dialog).toHaveCount(0);
 }
@@ -169,7 +169,7 @@ test("the knowledge page: add, edit, reorder, delete — one item at a time", as
   await expect(page.getByText("Noch kein Kampagnenwissen", { exact: false })).toBeVisible();
 
   // --- creating: a naming convention ----------------------------------------
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   // The naming convention is the default kind, so the old/new pair is there —
   // each on its own full-width line.
   await expect(page.getByLabel("Art")).toHaveValue("naming");
@@ -180,7 +180,7 @@ test("the knowledge page: add, edit, reorder, delete — one item at a time", as
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveCount(0);
 
   // --- anlegen: a style rule; switching the kind swaps the fields -----------
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   await page.getByLabel("Art").selectOption("style");
   await page
     .getByLabel("Stilregel für generierte Texte")
@@ -385,7 +385,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
 
   // An entry that has been typed into blocks the way out.
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   await page.getByLabel("Alt (im Quellmaterial)").fill("Nicht verlieren");
   await page.getByRole("link", { name: "Kapitel" }).first().click();
   const dialog = page.getByRole("dialog");
@@ -405,7 +405,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
 test("switching the kind carries the text into the new form", async ({ page, api }) => {
   await openKnowledge(page);
 
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   // A half-typed convention is flagged as incomplete — it is stored, but the
   // prompt skips it, so the form says so instead of looking like it is in force.
   await page.getByLabel("Alt (im Quellmaterial)").fill("Salt Harbour");
@@ -478,7 +478,7 @@ test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px"
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
 
   // The page works at the mobile floor: a new entry, typed and saved.
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   const from = page.getByLabel("Alt (im Quellmaterial)");
   await from.fill("Mobil");
   await expect(from).toHaveValue("Mobil");
@@ -507,18 +507,18 @@ test("the generator run: the knowledge travels, the naming check flags the draft
 }) => {
   // The rules, written the way the DM writes them.
   await openKnowledge(page);
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzmarsch");
   await saveEntry(page);
-  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByRole("button", { name: "Wissen hinzufügen" }).click();
   await page.getByLabel("Art").selectOption("fact");
   await page.getByLabel("Fakt, der gilt").fill("[[fenn]] führt die Schmuggler.");
   await saveEntry(page);
 
   // --- the generator names the COUNT in the sent-context summary -----------
   await page.goto("/campaigns/beispiel/generate");
-  await expect(page.getByRole("link", { name: "2 Wissens-Einträge" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "2 Punkte Kampagnenwissen" })).toBeVisible();
 
   // --- the run: the stub answers in the forbidden spelling ------------------
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.oldName}`);

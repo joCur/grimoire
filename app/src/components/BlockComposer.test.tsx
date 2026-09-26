@@ -32,7 +32,7 @@ import {
 
 const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 
-/** The blocks the phase-1 parser makes of a fixture entry's body. */
+/** The blocks the phase-1 parser makes of a fixture scene's body. */
 function fixtureBlocks(name: string): SceneBlock[] {
   const { body } = JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body: string };
   return parseBlocks(body);

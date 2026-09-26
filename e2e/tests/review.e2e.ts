@@ -246,7 +246,7 @@ test("an untagged idea is reviewable and can be ticked off", async ({
   await page.goto("/campaigns/beispiel/review");
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
   await expect(progress).toHaveText("0 von 5 gesichtet");
-  await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ideen ohne Tag" })).toBeVisible();
 
   const noteCard = page.locator("div").filter({ hasText: NOTE_TEXT }).last();
   await expect(noteCard).toContainText("Idee");
@@ -307,7 +307,7 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await keep.click();
   await expect(keep).toHaveAttribute("aria-pressed", "false");
   // …and it does not turn up among the untagged notes either.
-  await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ideen ohne Tag" })).toHaveCount(0);
 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();

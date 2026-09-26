@@ -1,4 +1,4 @@
-// An entry's text shown on a few lines under a title — the chapter overview
+// A markdown text shown on a few lines under a title — the chapter overview
 // shows a chapter's text in its accordion and the campaign's text in the
 // header this way.
 //
@@ -44,7 +44,7 @@ export function ClampedText({
   lines = CLAMP_LINES,
   className,
 }: {
-  /** The entry's markdown text. Blank renders nothing at all. */
+  /** The markdown text. Blank renders nothing at all. */
   children: string;
   lines?: number;
   className?: string;
@@ -65,8 +65,8 @@ export function ClampedText({
 
   const blank = children.trim() === "";
   // Before paint, so a long text never flashes at full height first. Keyed on
-  // `blank` because a blank text renders no box to observe: the text of a
-  // lazily read entry arrives a render later.
+  // `blank` because a blank text renders no box to observe: a lazily read
+  // text arrives a render later.
   useLayoutEffect(() => {
     const text = textRef.current?.querySelector<HTMLElement>(".md-body");
     if (text === null || text === undefined) return;

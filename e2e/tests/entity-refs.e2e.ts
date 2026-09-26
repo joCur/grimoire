@@ -127,7 +127,7 @@ test("live view: a reference opens the drawer instead of leaving the session", a
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
   // The way out leads to the npc's own route (ADR #31).
-  await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
+  await expect(drawer.getByRole("link", { name: "Vollständig öffnen" })).toHaveAttribute(
     "href",
     "/campaigns/beispiel/npcs/jorna",
   );

@@ -216,7 +216,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
 
   // Fresh session: the log is empty and says where entries come from.
   await expect(
-    page.getByText("Noch keine Einträge — die Schnellnotiz unten landet hier."),
+    page.getByText("Noch keine Notizen — die Schnellnotiz unten landet hier."),
   ).toBeVisible();
 
   await expect.poll(async () => (await getSession(api, sessionId)).playedScenes).toEqual([]);
@@ -273,7 +273,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   // The whole npc, not the card excerpt — and the way out into the npc's
   // own route (ADR #31).
-  await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
+  await expect(drawer.getByRole("link", { name: "Vollständig öffnen" })).toHaveAttribute(
     "href",
     "/campaigns/beispiel/npcs/jorna",
   );

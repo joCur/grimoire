@@ -106,7 +106,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
-  await expect(page.getByText("1 Szene · 2 vorgeschlagene Einträge · noch nichts geschrieben")).toBeVisible();
+  await expect(page.getByText("1 Szene · 2 vorgeschlagene NPCs und Orte · noch nichts geschrieben")).toBeVisible();
   // What the run cost: it is summed over every CALL of the
   // pipeline — the outline plus the one scene plus the npc and the location.
   // Not one correction among them: the scene and the location name
@@ -145,7 +145,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
     await expect(row).toContainText(name);
     await row.getByRole("button", { name: "Annehmen" }).click();
   };
-  await expect(page.getByText("Vorgeschlagene Einträge — einzeln entscheiden")).toBeVisible();
+  await expect(page.getByText("Vorgeschlagene NPCs und Orte — einzeln entscheiden")).toBeVisible();
   // The run's proposed scenes, npcs and locations are each their own typed
   // list (ADR #31): the scene, the npc and the location themselves, no kind,
   // no path, no properties map.
@@ -191,7 +191,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   await acceptProposal(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
 
-  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene Einträge\)$/ }).click();
+  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene NPCs und Orte\)$/ }).click();
 
   // Done state lists exactly what was written, each by its resource segment
   // and id.
@@ -306,7 +306,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   // One scene, nothing else proposed — and, the point of the case, exactly TWO
   // calls: the outline and the one scene. A correction turn would be a third.
   await expect(
-    page.getByText("1 Szene · 0 vorgeschlagene Einträge · noch nichts geschrieben"),
+    page.getByText("1 Szene · 0 vorgeschlagene NPCs und Orte · noch nichts geschrieben"),
   ).toBeVisible();
   await expect(page.getByText(/~[\d.]+ Tokens · 2 Aufrufe/)).toBeVisible();
   // Nothing failed, so no error block and no retry action.
@@ -317,7 +317,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   await expect(card.locator("[data-callout='readaloud']")).toContainText(ASCII_QUOTE_LINE);
 
   await page
-    .getByRole("button", { name: /^Übernehmen \(1 Szene · 0 vorgeschlagene Einträge\)$/ })
+    .getByRole("button", { name: /^Übernehmen \(1 Szene · 0 vorgeschlagene NPCs und Orte\)$/ })
     .click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   // …and they are stored byte for byte: the server corrects no typography.
@@ -383,7 +383,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   expect(await npcExists(api, "brakk")).toBe(false);
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 
-  await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
+  await expect(page.getByText("Geschrieben — NPC angelegt")).toBeVisible();
   await expect(page.getByRole("listitem").getByText("npcs/brakk", { exact: true })).toBeVisible();
   const npc = await getNpc(api, "brakk");
   expect(npc.id).toBe("brakk");
@@ -424,7 +424,7 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
   await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
-  await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
+  await expect(page.getByText("Geschrieben — NPC angelegt")).toBeVisible();
   const { body } = await getNpc(api, NPC_DEFAULT_ID);
   expect(body).toContain("- [[fenn]]: kennt ihn vom Kai");
   expect(body).not.toContain(UNKNOWN_REF_ID);

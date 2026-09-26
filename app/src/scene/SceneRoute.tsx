@@ -90,7 +90,7 @@ export function SceneRoute({
   if (isPending) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
-        {t("scene.loading")}
+        {t("reading.loading")}
       </p>
     );
   }
@@ -102,7 +102,7 @@ export function SceneRoute({
   if (data === undefined) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
-        {t("scene.notLoadable")}
+        {t("reading.notLoadable")}
       </p>
     );
   }
