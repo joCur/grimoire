@@ -1,191 +1,182 @@
-# LLM-Generator
+# LLM generator
 
-## Entscheidung
+## Decision
 
-Der Generator ist eine Pipeline mit Prüfschritt: er schreibt nie direkt in
-die Kampagne. Was ein Lauf vorschlägt, wartet im Job, bis der DM es
-übernimmt; eine vorgeschlagene Szene steht immer auf `status: "draft"`.
-Ablauf, Prompts und Few-Shot beschreibt [generator/README.md](../../generator/README.md).
+The generator is a pipeline with a review step: it never writes directly into
+the campaign. What a run proposes waits in the job until the DM applies it; a
+proposed scene is always at `status: "draft"`. The flow, prompts and few-shot
+examples are described in [generator/README.md](../../generator/README.md).
 
-### Provider und Antwort
+### Provider and response
 
-- Der Provider hängt hinter einer Schnittstelle (`server/src/llm-provider.ts`):
-  Standard ist die Claude API, `LLM_PROVIDER` schaltet auf einen
-  OpenAI-kompatiblen Endpunkt um (`lmstudio`, `openai`, `openrouter`).
-- **Jede Modell-Antwort ist ein per Schema erzwungenes JSON-Objekt** — die
-  Gliederung ihr eigenes (`shared/schema/outline.schema.json`), ein Aufruf
-  für eine Entität das Antwort-Schema dieser Entität.
-- **`jsonrepair`** (exakt gepinnt) repariert jede Antwort deterministisch vor
-  der Validierung. Die Regeln der Validierung bleiben unangetastet, und ein
-  reparierter Lauf trägt eine Warnung.
-- Nach der Generierung prüft eine mechanische Validierung die Antwort; Fehler
-  gehen als Korrektur-Turn zurück ans Modell. `LLM_CORRECTION_TURNS` legt fest,
-  wie viele ein Lauf ausgeben darf: 0–2, Default 1.
-- **Das Antwort-Schema einer Entität ist ihr Typ ohne `rev`** in der strengen
-  Form der Provider, abgeleitet aus ihrem zod-Schema mit `z.toJSONSchema`
-  (`decisions/resources`): null-fähig statt optional,
-  `additionalProperties: false`, jedes Feld in `required`, kein `pattern`,
-  kein `format`, keine Grenzen. Das Schema trägt allein die Form, keine
-  `description`; was das Modell über die Felder wissen muss und das Schema
-  nicht sagen kann, steht in ihrem Prompt unter `generator/` und wird in der
-  Validierung geprüft. Ein Test prüft genau die Regeln des strict mode an den
-  abgeleiteten Schemata.
-- **Jedes `[[id]]` in einem erzeugten Text** nennt einen NPC, Ort oder eine
-  Szene der Kampagne oder einen Vorschlag desselben Laufs (die Gliederung
-  eines Szenen-Laufs, im NPC-Lauf der NPC selbst) — sonst geht die Antwort als
-  Korrektur-Turn zurück. Die Regel gilt für Szenen, NPCs und Orte im neuen
-  Lauf und im Ergänzen-Lauf, dort nur für Verweise, die der Vorschlag neu
-  bringt: ein Verweis im bestehenden Text gehört dem DM. Gelesen wird mit der
-  Grammatik von Anzeige und Suche (`shared/src/refs.ts`): nur eine
-  kebab-case-id in doppelten Klammern, nichts in Code. Geprüft wird der Text;
-  `motivation` und `atmosphere` zeigen ein `[[id]]` ohne Zeile als Text. Das
-  ist eine Regel für die Antwort des Modells, keine Referenz: „Übernehmen" und
-  der Schreibweg prüfen sie nicht.
+- The provider sits behind an interface (`server/src/llm-provider.ts`): the
+  default is the Claude API, `LLM_PROVIDER` switches to an OpenAI-compatible
+  endpoint (`lmstudio`, `openai`, `openrouter`).
+- **Every model response is a schema-enforced JSON object** — the outline its
+  own (`shared/schema/outline.schema.json`), a call for an entity that
+  entity's response schema.
+- **`jsonrepair`** (pinned exactly) repairs every response deterministically
+  before validation. The validation rules stay untouched, and a repaired run
+  carries a warning.
+- After generation a mechanical validation checks the response; errors go
+  back to the model as a correction turn. `LLM_CORRECTION_TURNS` sets how many
+  a run may spend: 0–2, default 1.
+- **An entity's response schema is its type without `rev`** in the providers'
+  strict form, derived from its zod schema with `z.toJSONSchema`
+  (`decisions/resources`): nullable instead of optional,
+  `additionalProperties: false`, every field in `required`, no `pattern`, no
+  `format`, no bounds. The schema carries only the shape, no `description`;
+  what the model must know about the fields and the schema cannot say is
+  stated in their prompt under `generator/` and checked in the validation. A
+  test checks exactly the strict-mode rules on the derived schemas.
+- **Every `[[id]]` in a generated text** names an NPC, location or scene of
+  the campaign or a proposal of the same run (the outline of a scene run, in
+  the NPC run the NPC itself) — otherwise the response goes back as a
+  correction turn. The rule applies to scenes, NPCs and locations in a new run
+  and in an augment run, there only to references the proposal newly brings:
+  a reference in the existing text belongs to the DM. It is read with the
+  grammar of display and search (`shared/src/refs.ts`): only a kebab-case id
+  in double brackets, nothing in code. The text is checked; `motivation` and
+  `atmosphere` show an `[[id]]` without a row as text. This is a rule for the
+  model's response, not a reference: „Übernehmen" (apply) and the write path
+  do not check it.
 
-### Kein Markdown-Zwischenformat
+### No Markdown intermediate format
 
-Ein Vorschlag ist von der Antwort des Modells bis in die Zeile der Typ seiner
-Entität ohne `rev`. Der Server setzt nirgends einen Text mit vorangestellten
-Feldern zusammen und liest nirgends einen zurück: die Antwort liefert die
-Felder, die Validierung liest sie, der Prüfschritt zeigt sie, und die
-Schreibschicht bekommt sie unverändert. Der bestehende Stand, den ein
-Ergänzen-Lauf dem Modell zeigt, ist Prompt-Formatierung und wird dort gebaut,
-wo der Prompt gebaut wird (`server/src/llm-provider.ts`) — kein
-Speicherformat. Nichts im Repo parst Felder aus Text; es gibt keinen
-Frontmatter-Parser und keine YAML-Abhängigkeit.
+A proposal is, from the model's response to the row, its entity's type
+without `rev`. Nowhere does the server assemble a text with prepended fields
+or read one back: the response delivers the fields, the validation reads
+them, the review step shows them, and the write layer receives them
+unchanged. The existing state that an augment run shows the model is prompt
+formatting and is built where the prompt is built
+(`server/src/llm-provider.ts`) — not a storage format. Nothing in the repo
+parses fields out of text; there is no frontmatter parser and no YAML
+dependency.
 
-### Jobs laufen serverseitig und sind Zeilen
+### Jobs run server-side and are rows
 
-Jede Operation, die länger als ein paar Sekunden dauern kann, läuft als
-serverseitiger Job: der Start antwortet sofort mit dem Job, Status und
-Ergebnis werden gepollt, und die UI stellt den Zustand nach Navigation,
-Reload oder Tab-Schließen vollständig wieder her. Nichts ist an einen offenen
-Browser-Tab oder eine offene HTTP-Verbindung gebunden.
+Every operation that can take longer than a few seconds runs as a
+server-side job: the start answers immediately with the job, status and
+result are polled, and the UI fully restores the state after navigation,
+reload or closing the tab. Nothing is bound to an open browser tab or an open
+HTTP connection.
 
-- Jobs sind Zeilen der Tabelle `generate_jobs`, **höchstens einer je
-  Kampagne**; die Liste `GET …/generator-jobs` ist leer oder hat genau einen
-  Eintrag.
-- `POST …/generator-jobs { kind, … }` startet einen Szenen- oder NPC-Lauf.
-  Ein Ergänzen-Lauf hängt an seiner Ressource: `POST …/<ressource>/:id/augment`
-  startet ihn und antwortet mit seinem Job, `POST
-  …/<ressource>/:id/augment/apply` übernimmt ihn. Sein Vorschlag ist der
-  gelesene Stand neben dem vorgeschlagenen, beide im Typ der Entität ohne
-  `rev`.
-- Ein Job-Ergebnis listet `scenes`, `npcs` und `locations` als eigene
-  getypte Listen, jede im Typ ihrer Entität ohne `rev`. Prüfen, Entscheiden
-  und Übernehmen laufen je Entität und `id`.
-- **Neustart:** Ein fertiger Job (`done`/`failed`) übersteht ihn vollständig —
-  Ergebnis, Fehlerbody und Prüfzustand — und bleibt übernehmbar. Ein
-  laufender kann es nicht, weil sein Provider-Call mit dem Prozess stirbt:
-  der Boot schreibt jede übrig gebliebene `running`-Zeile auf `failed`
-  (`failInterruptedJobs` in `server/src/db/job-boot.ts`), mit 503 und dem Code
-  `job_restarted` im Fehlerbody, statt die App ins endlose Pollen zu schicken.
+- Jobs are rows of the `generate_jobs` table, **at most one per campaign**;
+  the list `GET …/generator-jobs` is empty or has exactly one entry.
+- `POST …/generator-jobs { kind, … }` starts a scene or NPC run. An augment
+  run hangs on its resource: `POST …/<resource>/:id/augment` starts it and
+  answers with its job, `POST …/<resource>/:id/augment/apply` applies it. Its
+  proposal is the read state next to the proposed one, both in the entity's
+  type without `rev`.
+- A job result lists `scenes`, `npcs` and `locations` as separate typed
+  lists, each in its entity's type without `rev`. Reviewing, deciding and
+  applying happen per entity and `id`.
+- **Restart:** A finished job (`done`/`failed`) survives it completely —
+  result, error body and review state — and stays applicable. A running one
+  cannot, because its provider call dies with the process: boot writes every
+  leftover `running` row to `failed` (`failInterruptedJobs` in
+  `server/src/db/job-boot.ts`), with 503 and the code `job_restarted` in the
+  error body, instead of sending the app into endless polling.
 
-### Ein Szenen-Lauf ist eine Pipeline aus Teilen
+### A scene run is a pipeline of parts
 
-Ein Gliederungs-Aufruf legt fest, welche Szenen es gibt; die Gliederung ist
-ein systeminterner Schritt und wird dem DM nie zum Bearbeiten angeboten.
-Danach ist jede Szene und jeder neue NPC oder Ort ein eigener Aufruf, drei
-gleichzeitig. NPC- und Ergänzen-Lauf sind Ein-Aufruf-Läufe ohne Teile.
+An outline call determines which scenes exist; the outline is an internal
+step and is never offered to the DM for editing. After that, every scene and
+every new NPC or location is a call of its own, three at a time. NPC and
+augment runs are single-call runs without parts.
 
-- Die Zeile trägt die Gliederung, die Teile mit Status je Teil
-  (`pending | running | done | failed`), Fehlertext und Token-Verbrauch je
-  Teil sowie Token- und Aufruf-Summe des Laufs (Spalte `pipeline`), dazu den
-  Quelltext des Laufs, weil ein Teil-Neustart denselben Ausschnitt erneut
-  schicken muss.
-- **Ein fertiger Teil ist sofort prüfbar und übernehmbar,** während andere
-  noch laufen: der Job bleibt `running`, das Ergebnis füllt sich, und die
-  Prüfseite zeigt Teile in Gliederungsreihenfolge. Der Job wird `done`, sobald
-  ein Teil etwas produziert hat, und `failed` nur, wenn kein einziger Teil
-  durchkam. Übernehmen verlangt deshalb keinen fertigen Job, sondern ein
-  Ergebnis: 409 ist es für einen gescheiterten Lauf und für einen, der noch
-  keinen fertigen Teil hat.
-- Beim Neustart werden laufende und wartende Teile `failed`; fertige Teile
-  bleiben stehen und übernehmbar.
-- **„Erneut versuchen" je Teil:** `PATCH …/generator-jobs/:id/parts/:key
-  { status: "running" }` startet genau diesen Teil neu, aus der gespeicherten
-  Gliederung, in **einer Transaktion** über der neu gelesenen Zeile, die nur
-  diesen Teil anfasst — ein Rückschreiben der ganzen `pipeline`-Spalte
-  überschriebe einen Geschwister-Teil, der inzwischen fertig wurde. Ein noch
-  `pending` Teil ist 409: er gehört dem Pool des Laufs und liefe sonst
-  zweimal.
-- Wo die übernommenen Szenen im Kapitel stehen, regelt
+- The row carries the outline, the parts with a status per part
+  (`pending | running | done | failed`), error text and token usage per part,
+  and the run's token and call totals (column `pipeline`), plus the run's
+  source text, because a part restart must send the same excerpt again.
+- **A finished part can be reviewed and applied immediately,** while others
+  are still running: the job stays `running`, the result fills up, and the
+  review page shows parts in outline order. The job becomes `done` as soon as
+  one part has produced something, and `failed` only if not a single part got
+  through. Applying therefore requires not a finished job but a result: it is
+  409 for a failed run and for one that has no finished part yet.
+- On restart, running and pending parts become `failed`; finished parts
+  remain and stay applicable.
+- **„Erneut versuchen" (retry) per part:** `PATCH
+  …/generator-jobs/:id/parts/:key { status: "running" }` restarts exactly this
+  part, from the stored outline, in **one transaction** over the freshly read
+  row that touches only this part — writing back the whole `pipeline` column
+  would overwrite a sibling part that has finished in the meantime. A part
+  still `pending` is 409: it belongs to the run's pool and would otherwise run
+  twice.
+- Where the applied scenes stand in the chapter is governed by
   `decisions/scene-order`.
 
-### Der Prüfzustand liegt am Job
+### The review state lives on the job
 
-Alles, was der DM im Prüfschritt tut — Felder und Text bearbeiten,
-vorgeschlagene NPCs und Orte annehmen oder ablehnen, Szenen aus dem Lauf
-nehmen, je Feld übernehmen oder behalten —, steht in `generate_jobs.review`,
-nicht im Browser. Die App liest ihren Zustand aus dem Job und schreibt jede
-Änderung zurück: Texteingaben debounced (~600 ms) und spätestens beim
-Verlassen des Feldes, Entscheidungen sofort.
+Everything the DM does in the review step — editing fields and text,
+accepting or rejecting proposed NPCs and locations, taking scenes out of the
+run, taking or keeping per field — lives in `generate_jobs.review`, not in the
+browser. The app reads its state from the job and writes every change back:
+text input debounced (~600 ms) and at the latest on leaving the field,
+decisions immediately.
 
-- Änderungen des DM werden **je Entität und id** gespeichert (`sceneEdits`,
-  `npcEdits`): eine Änderung nennt die Felder, die sie setzt, `null` löscht
-  ein optionales, und jedes andere Feld behält den Wert des Modells.
-- Geprüft und übernommen wird mit `PATCH …/generator-jobs/:id { rev, … }`.
-  Der Job hat sein eigenes `rev`; ein veralteter ist 409 `rev_conflict` mit
-  dem aktuellen Job, und die App lädt neu, statt die Entscheidung eines
-  anderen Tabs still zu überschreiben (`decisions/writes`).
-- **Übernehmen** heißt, Vorschläge in `review.writtenScenes`, `writtenNpcs`
-  oder `writtenLocations` zu nennen. Es schreibt genau diese in einer
-  Transaktion (Konfliktprüfung darin, Suchindex und Referenzen folgen) und
-  vermerkt sie im selben Commit am Job. Es ist kein Weg an den Schreibregeln
-  vorbei (`decisions/writes`), und eine übernommene Szene nimmt die
-  Vorschläge mit, die sie nennt (`decisions/constraints`). Ist nichts mehr
-  offen, ist der Job erledigt, und die Antwort ist sein letzter Stand.
-- **Verwerfen** (`DELETE …/generator-jobs/:id { rev }`) stoppt die offenen
-  Teile und nimmt nur den offenen Rest mit. Was übernommen wurde, ist eine
-  Zeile der Kampagne und kein Teil des Jobs; es wird im normalen Editor
-  weiterbearbeitet.
-- Es gibt keinen Undo-Verlauf und kein Zusammenführen zweier Bearbeiter.
+- The DM's changes are stored **per entity and id** (`sceneEdits`,
+  `npcEdits`): a change names the fields it sets, `null` clears an optional
+  one, and every other field keeps the model's value.
+- Reviewing and applying use `PATCH …/generator-jobs/:id { rev, … }`. The job
+  has its own `rev`; a stale one is 409 `rev_conflict` with the current job,
+  and the app reloads instead of silently overwriting another tab's decision
+  (`decisions/writes`).
+- **Applying** means naming proposals in `review.writtenScenes`,
+  `writtenNpcs` or `writtenLocations`. It writes exactly these in one
+  transaction (conflict check inside it, search index and references follow)
+  and records them on the job in the same commit. It is no way around the
+  write rules (`decisions/writes`), and an applied scene takes along the
+  proposals it names (`decisions/constraints`). If nothing is left open, the
+  job is complete, and the response is its final state.
+- **Discarding** (`DELETE …/generator-jobs/:id { rev }`) stops the open parts
+  and takes only the open remainder with it. What was applied is a row of the
+  campaign and not part of the job; it is edited further in the normal editor.
+- There is no undo history and no merging of two editors.
 
-### Das Kapitel eines „Neues Kapitel"-Laufs entsteht aus dem Lauf
+### The chapter of a „Neues Kapitel" run comes from the run
 
-- Der Titel wird beim Start am Job vermerkt
-  (`generate_jobs.new_chapter_title`), und die erste Übernahme legt das
-  Kapitel daraus an — idempotent und im selben Vorgang wie die Szenen, auch
-  wenn kein übernommener Teil es nennt: das Kapitel gehört dem Lauf. Eine
-  generierte Szene bekommt ihr Kapitel im selben Schreibvorgang; ist die
-  Kapitel-id kein Slug, ist das 400.
-- Die Gliederung trägt `chapterDescription` (nullable). Nur der
-  Gliederungs-Aufruf eines Laufs, der sein Kapitel anlegt, erfährt das
-  (Kontextzeile `neues Kapitel: ja`) und beschreibt das Kapitel aus dem
-  Quellmaterial. „Entwürfe prüfen" zeigt die Beschreibung lesend, und das
-  Übernehmen legt das Kapitel mit ihr als `body` an. Für einen Lauf in ein
-  bestehendes Kapitel verwirft die Validierung das Feld, und der Text eines
-  Kapitels, das beim Übernehmen schon existiert, bleibt unberührt. Fehlt die
-  Beschreibung, beginnt das Kapitel mit leerem Text; das kostet keinen
-  Korrektur-Turn.
-- In den Dialogen muss ein Kapitel, das der DM tippt, existieren (400
-  `chapter_unknown`): dort ist ein unbekanntes Kapitel ein Tippfehler.
+- The title is recorded on the job at start
+  (`generate_jobs.new_chapter_title`), and the first apply creates the chapter
+  from it — idempotently and in the same operation as the scenes, even if no
+  applied part names it: the chapter belongs to the run. A generated scene
+  gets its chapter in the same write; if the chapter id is not a slug, that is
+  400.
+- The outline carries `chapterDescription` (nullable). Only the outline call
+  of a run that creates its chapter learns this (context line
+  `neues Kapitel: ja`) and describes the chapter from the source material.
+  „Entwürfe prüfen" (review drafts) shows the description read-only, and
+  applying creates the chapter with it as `body`. For a run into an existing
+  chapter the validation discards the field, and the text of a chapter that
+  already exists at apply time stays untouched. If the description is
+  missing, the chapter starts with empty text; that costs no correction turn.
+- In the dialogs, a chapter the DM types must exist (400
+  `chapter_unknown`): there an unknown chapter is a typo.
 
-## Warum
+## Why
 
-- Ein Lauf kostet Geld und Minuten. Ist er an einen Tab oder eine Verbindung
-  gebunden, vernichtet ein Browser-Zurück oder ein Space-Wechsel ein bezahltes
-  Ergebnis; das darf konstruktionsbedingt nicht möglich sein. Auch ein Deploy
-  zwischen „fertig" und „Übernehmen" darf kein Ergebnis wegwerfen, deshalb
-  ist der Job eine Zeile.
-- Der Prüfschritt ist Arbeit, die der DM selbst hineinsteckt; flüchtiger als
-  das Ergebnis, das sie bearbeitet, darf sie nicht sein. Ein zweiter Speicher
-  im Browser verbietet sich (`decisions/scope`).
-- Ein Endpunkt, der `response_format` annimmt und ignoriert, liefert trotzdem
-  Handgeschriebenes, und dort sind die Fehler mechanisch (Komma am Ende,
-  einfache Anführungszeichen): eine deterministische Reparatur ist deutlich
-  billiger als eine Korrekturrunde, die den ganzen Prompt erneut sendet.
-- Ein Text mit vorangestellten Feldern, der durch Job und Prüfschritt
-  getragen und beim Übernehmen wieder zerlegt wird, kann nur verlieren: ein
-  Feld, das als YAML anders zurückkommt (ein Datum, ein `+2`, ein Doppelpunkt
-  in einem Satz), ein Block, der beim Parsen degradiert.
-- Das Kapitel eines Laufs darf nicht im Browser liegen: die Übernahme
-  passiert regelmäßig nach Navigation oder Reload.
+- A run costs money and minutes. If it is bound to a tab or a connection, a
+  browser back or a space switch destroys a paid-for result; that must be
+  impossible by construction. A deploy between "done" and „Übernehmen" must
+  not throw away a result either, which is why the job is a row.
+- The review step is work the DM puts in themselves; it must not be more
+  volatile than the result it edits. A second store in the browser is out of
+  the question (`decisions/scope`).
+- An endpoint that accepts and ignores `response_format` still delivers
+  hand-written output, and there the errors are mechanical (trailing comma,
+  single quotes): a deterministic repair is much cheaper than a correction
+  round that resends the whole prompt.
+- A text with prepended fields that is carried through job and review step
+  and taken apart again on apply can only lose: a field that comes back
+  differently as YAML (a date, a `+2`, a colon in a sentence), a block that
+  degrades when parsed.
+- A run's chapter must not live in the browser: the apply regularly happens
+  after navigation or reload.
 
-## Folgen
+## Consequences
 
-- Ändert sich die Form einer Entität, werden gespeicherte Jobs, deren
-  Nutzlast sie in der alten Form trägt, nicht überführt: die Migration löscht
-  sie per SQL. Ein Lauf kostet ein paar Token, ein halb überführter Vorschlag
-  eine falsche Zeile in der Kampagne.
-- Zwei Tabs sind ein Konflikt, den man meldet, keiner, den man zusammenführt.
+- If the shape of an entity changes, stored jobs whose payload carries it in
+  the old shape are not converted: the migration deletes them via SQL. A run
+  costs a few tokens, a half-converted proposal a wrong row in the campaign.
+- Two tabs are a conflict to report, not one to merge.

@@ -1,28 +1,28 @@
-# Client-Aktualisierung über Polling
+# Client refresh via polling
 
-## Entscheidung
+## Decision
 
-Änderungen werden in der App sichtbar, ohne manuell neu zu laden. Jeder Write
-zählt `campaigns.version` in **derselben** Transaktion hoch. Die App pollt
-`GET /api/campaigns/:campaign/version` (Antwort `{ version, build }`) und
-invalidiert ihre Queries, wenn sich `version` ändert. Das Poll-Intervall ist
-rein clientseitig.
+Changes become visible in the app without a manual reload. Every write
+increments `campaigns.version` in the **same** transaction. The app polls
+`GET /api/campaigns/:campaign/version` (response `{ version, build }`) and
+invalidates its queries when `version` changes. The poll interval is purely
+client-side.
 
-`build` ist die Build-Id (`GRIMOIRE_BUILD`), die das Release-Image in Bundle
-und Server einbrennt (`decisions/release`); weicht sie vom geladenen Bundle
-ab, zeigt die App den Reload-Banner.
+`build` is the build id (`GRIMOIRE_BUILD`) that the release image burns into
+bundle and server (`decisions/release`); if it differs from the loaded
+bundle, the app shows the reload banner.
 
-## Warum
+## Why
 
-Für einen Einzelnutzer (`decisions/scope`) reicht Polling. Weil die Version
-in derselben Transaktion steigt wie die Änderung, kann ein Poll keine erhöhte
-Version ohne die zugehörige Änderung sehen. SSE oder WebSockets lassen sich
-später ohne API-Bruch nachrüsten; der Versionszähler bleibt dann als
-Fallback gültig.
+For a single user (`decisions/scope`) polling is enough. Because the version
+rises in the same transaction as the change, a poll cannot see an increased
+version without the corresponding change. SSE or WebSockets can be added
+later without breaking the API; the version counter then remains valid as a
+fallback.
 
-## Folgen
+## Consequences
 
-- `campaigns.version` ist ein Signal für die Aktualisierung, kein Wächter:
-  Schreibzugriffe prüfen das `rev` ihrer Zeile (`decisions/writes`).
-- Laufende Generator-Jobs pollt die App über ihre eigene Ressource
+- `campaigns.version` is a signal for refreshing, not a guard: writes check
+  the `rev` of their row (`decisions/writes`).
+- The app polls running generator jobs via their own resource
   (`decisions/generator`).

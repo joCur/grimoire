@@ -1,74 +1,70 @@
-# Release: release-please, Versions-Tags, `:latest` nur bei Releases
+# Release: release-please, version tags, `:latest` only on releases
 
-## Entscheidung
+## Decision
 
-Ein Deploy ist ein bewusstes Ereignis mit Changelog. `main` ist per Definition
-deploybar, veröffentlicht aber nichts: Images entstehen nur beim Release.
+A deploy is a deliberate event with a changelog. `main` is deployable by
+definition but publishes nothing: images are created only on release.
 
-- **Conventional Commits sind Pflicht,** sie erzeugen den Changelog: `feat:`
-  (Minor), `fix:` (Patch), `docs:`/`chore:`/`refactor:`/`test:`/`ci:` (kein
-  Bump); ein Breaking Change ist `feat!:` oder ein `BREAKING CHANGE:`-Footer.
-  Das gilt auch für den PR-Titel, weil der Squash-Merge ihn als
-  Commit-Betreff übernimmt.
+- **Conventional Commits are mandatory;** they generate the changelog:
+  `feat:` (minor), `fix:` (patch), `docs:`/`chore:`/`refactor:`/`test:`/`ci:`
+  (no bump); a breaking change is `feat!:` or a `BREAKING CHANGE:` footer.
+  This also applies to the PR title, because the squash merge takes it as the
+  commit subject.
 - **release-please** (`googleapis/release-please-action@v4` in
-  `.github/workflows/release.yml`) läuft bei jedem Push auf `main` und hält aus
-  den Commits einen Release-PR. Die Konfiguration liegt im Root
-  (`release-please-config.json`, `.release-please-manifest.json`): ein Package
-  `"."`, `release-type: node`, `include-component-in-tag: false` und ein
-  **leerer `package-name`** — nicht ein leeres `component`; sonst fällt die
-  Komponente still auf den Paketnamen zurück, der gemergte Release-PR wird
-  nicht getaggt, und jeder folgende Release ist blockiert. Die Version steht
-  in der Root-`package.json` und wird über `extra-files` in die
-  Workspace-Manifeste kopiert.
-- **Der Merge des Release-PRs** (mit PO-Approval wie jeder PR) ist das einzige
-  Release-Ereignis: Tag `vX.Y.Z`, GitHub-Release, `CHANGELOG.md` und das Image.
-  Manuell wird nie getaggt, und `CHANGELOG.md` und
-  `.release-please-manifest.json` werden nie von Hand editiert.
-- **CI-Gate:** `require-green-ci` löst den Tag zum Commit auf, sucht dessen
-  `ci`-Push-Run und wartet mit `gh run watch --exit-status`. Ein fehlender
-  Lauf ist kein bestandener Lauf — dann wird nichts veröffentlicht.
-  release-please selbst ist nicht gegated.
-- **`publish-image`** baut mit Checkout **am Tag** (nicht am Branch-Head) und
-  pusht `ghcr.io/jocur/grimoire` mit dem Versions-Tag und `:latest`.
-  `:latest` heißt „letzter Release", nicht „letzter Merge". Das Compose-File
-  referenziert `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine
-  festgenagelte Version.
-- **Die Build-Id** `GRIMOIRE_BUILD` brennt das Release-Image als Tag ein —
-  derselbe Wert in Bundle und Server, damit der Reload-Banner nur bei einem
-  echten Versionswechsel erscheint (`decisions/polling`).
-- Der PO pullt selbst einen Versions-Tag; Rollback ist ein älterer
-  Versions-Tag.
-- Nicht dabei: Multi-Arch (`linux/amd64` genügt) und Auto-Deploy.
+  `.github/workflows/release.yml`) runs on every push to `main` and keeps a
+  release PR from the commits. The configuration lives in the root
+  (`release-please-config.json`, `.release-please-manifest.json`): one package
+  `"."`, `release-type: node`, `include-component-in-tag: false` and an
+  **empty `package-name`** — not an empty `component`; otherwise the component
+  silently falls back to the package name, the merged release PR is not
+  tagged, and every following release is blocked. The version lives in the
+  root `package.json` and is copied into the workspace manifests via
+  `extra-files`.
+- **Merging the release PR** (with PO approval like every PR) is the only
+  release event: tag `vX.Y.Z`, GitHub release, `CHANGELOG.md` and the image.
+  Nothing is ever tagged manually, and `CHANGELOG.md` and
+  `.release-please-manifest.json` are never edited by hand.
+- **CI gate:** `require-green-ci` resolves the tag to its commit, looks up
+  that commit's `ci` push run and waits with `gh run watch --exit-status`. A
+  missing run is not a passed run — then nothing is published.
+  release-please itself is not gated.
+- **`publish-image`** builds with a checkout **at the tag** (not at the branch
+  head) and pushes `ghcr.io/jocur/grimoire` with the version tag and
+  `:latest`. `:latest` means "last release", not "last merge". The compose
+  file references `${GRIMOIRE_VERSION:-latest}`; a pinned version is
+  recommended.
+- **The build id** `GRIMOIRE_BUILD` is burned into the release image as the
+  tag — the same value in bundle and server, so that the reload banner appears
+  only on a real version change (`decisions/polling`).
+- The PO pulls a version tag themselves; rollback is an older version tag.
+- Not included: multi-arch (`linux/amd64` suffices) and auto-deploy.
 
-### CI baut zur Prüfung, publiziert nie
+### CI builds for checking, never publishes
 
-**Der Release-Workflow ist der einzige Schreiber der GHCR-Registry;**
-`.github/workflows/ci.yml` pusht kein Image. Es hat aber einen Job
-`image-build` (`docker/build-push-action` mit `push: false`, ohne
-Registry-Login und ohne `packages: write` — er kann nicht publizieren). Er
-läuft auf PRs und main-Pushes, hängt nur an `test` und nutzt denselben
-GHA-Cache wie der Release-Build. `GRIMOIRE_BUILD` bekommt dort den Commit-SHA
-als Wegwerf-Wert.
+**The release workflow is the only writer to the GHCR registry;**
+`.github/workflows/ci.yml` pushes no image. It does have an `image-build` job
+(`docker/build-push-action` with `push: false`, without registry login and
+without `packages: write` — it cannot publish). It runs on PRs and main
+pushes, depends only on `test` and uses the same GHA cache as the release
+build. There, `GRIMOIRE_BUILD` gets the commit SHA as a throwaway value.
 
-## Warum
+## Why
 
-Der PO will gezielt einen bekannten guten Stand vor einer Session deployen und
-im Problemfall trivial zurückrollen. Ein Tag, das bei jedem Merge unter dem
-laufenden Betrieb mutiert, verhindert beides. Ein SHA-Push bei jedem Merge
-hielte das Paket dauerhaft „gerade aktualisiert" und verwässerte die
-Release-Semantik; zu einem Versions-Tag gehört ein Changelog, zu einem SHA
-nicht.
+The PO wants to deploy a known good state deliberately before a session and
+roll back trivially if there is a problem. A tag that mutates under running
+operation on every merge prevents both. A SHA push on every merge would keep
+the package permanently "just updated" and dilute the release semantics; a
+version tag comes with a changelog, a SHA does not.
 
-release-please bleibt ungegated, weil der Release-PR auch bei rotem `main`
-gepflegt werden muss: er ist das Werkzeug, mit dem der Zustand gelesen und
-repariert wird.
+release-please stays ungated because the release PR must be maintained even
+when `main` is red: it is the tool with which the state is read and repaired.
 
-Der Prüf-Build in CI lässt einen Fehler im Dockerfile im Review auffallen und
-nicht erst im Release-Lauf, wo der Tag schon existiert; der Release-Build
-findet den Cache zusätzlich warm vor. Ein paar Runner-Minuten pro PR sind
-billiger als ein Patch-Release, das nur ein kaputtes Image repariert.
+The check build in CI makes an error in the Dockerfile surface in review and
+not only in the release run, where the tag already exists; the release build
+additionally finds the cache warm. A few runner minutes per PR are cheaper
+than a patch release that only repairs a broken image.
 
-## Folgen
+## Consequences
 
-- CI prüft, Release publiziert.
-- Die Deploy-Schritte stehen in [docs/DEPLOYMENT.md](../DEPLOYMENT.md).
+- CI checks, release publishes.
+- The deploy steps are in [docs/DEPLOYMENT.md](../DEPLOYMENT.md).

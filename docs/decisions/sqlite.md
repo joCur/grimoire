@@ -1,99 +1,94 @@
-# SQLite ist die Quelle der Wahrheit
+# SQLite is the source of truth
 
-## Entscheidung
+## Decision
 
-Eine SQLite-Datenbank ist die **alleinige** Quelle der Wahrheit für
-Kampagneninhalte: `GRIMOIRE_DATA/grimoire.db`. Es gibt keinen Spiegel auf das
-Dateisystem, keinen Auto-Export und keinen Zwei-Wege-Abgleich.
+One SQLite database is the **sole** source of truth for campaign content:
+`GRIMOIRE_DATA/grimoire.db`. There is no mirror to the file system, no
+auto-export and no two-way sync.
 
-- **Markdown ist das Inhaltsformat der `body`-Spalten** — und sonst nichts in
-  der Speicherung. Das Body-Vokabular aus README.md (Callouts, `## If:`,
-  Hashtags) ist normativ, und das Format degradiert statt zu validieren:
-  unbekannte Callouts und Überschriften sind normaler Text, nie ein Fehler.
-- **Ein Body ist ein Markdown-Feld** und in der UI als Markdown editierbar.
-  „Blöcke als Zeilen" ist eine offen gelassene Option; das Schema verbaut sie
-  nicht.
-- **Das Glossar ist eine strukturierte Tabelle** (Begriff → Erklärung), kein
-  Markdown-Blob.
-- **Der Server liest keine Kampagnendateien.** Eine frische Instanz startet
-  **leer**: der Boot öffnet die Datenbank, setzt die PRAGMAs, wendet die
-  Schema-Migrationen an und meldet unterbrochene Generator-Jobs als
-  gescheitert (`decisions/generator`), sonst nichts. Der Kaltstart einer
-  echten Kampagne läuft in der UI.
-- **`grimoire seed <dir>`** ist das Dev- und E2E-Werkzeug, das Zeilen in eine
-  leere Datenbank schreibt (`bun run --filter @grimoire/server seed`, Report
-  auf stdout). Es lädt die JSON-Fixtures über die Store-Schicht
-  (`decisions/data-shape`). Außer ihm schreibt nur die App.
-- **`GRIMOIRE_DATA`** (Default `./data`) hält `grimoire.db` samt `-wal`/`-shm`
-  — die einzige Dateneinstellung überhaupt.
+- **Markdown is the content format of the `body` columns** — and nothing else
+  in storage. The body vocabulary from README.md (callouts, `## If:`,
+  hashtags) is normative, and the format degrades instead of validating:
+  unknown callouts and headings are plain text, never an error.
+- **A body is a Markdown field** and editable as Markdown in the UI.
+  "Blocks as rows" is an option left open; the schema does not rule it out.
+- **The glossary is a structured table** (term → explanation), not a
+  Markdown blob.
+- **The server reads no campaign files.** A fresh instance starts **empty**:
+  boot opens the database, sets the PRAGMAs, applies the schema migrations and
+  reports interrupted generator jobs as failed (`decisions/generator`),
+  nothing else. The cold start of a real campaign happens in the UI.
+- **`grimoire seed <dir>`** is the dev and E2E tool that writes rows into an
+  empty database (`bun run --filter @grimoire/server seed`, report on
+  stdout). It loads the JSON fixtures through the store layer
+  (`decisions/data-shape`). Apart from it, only the app writes.
+- **`GRIMOIRE_DATA`** (default `./data`) holds `grimoire.db` together with
+  `-wal`/`-shm` — the only data setting there is.
 - **PRAGMAs:** `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`.
-- **Die Sicherung der DB-Datei ist Sache des Stack-Owners** (Volume-Backup,
-  Hinweis in [docs/DEPLOYMENT.md](../DEPLOYMENT.md)); ein eigenes
-  Backup-System ist kein Feature.
-- **Treiber:** `node:sqlite` oder `bun:sqlite` hinter
-  `server/src/db/driver.ts`, die eine eingetragene Bun-Kopplung
-  (`decisions/stack`).
+- **Backing up the DB file is the stack owner's job** (volume backup, note in
+  [docs/DEPLOYMENT.md](../DEPLOYMENT.md)); a backup system of our own is not a
+  feature.
+- **Driver:** `node:sqlite` or `bun:sqlite` behind `server/src/db/driver.ts`,
+  the one registered Bun coupling (`decisions/stack`).
 
-### Drizzle und Migrationen
+### Drizzle and migrations
 
-- **ORM ist Drizzle** (`drizzle-orm`, `drizzle-kit` als Dev-Dependency).
-  `server/src/db/schema.ts` ist die eine Quelle der Speicherform.
-- **Migrationen sind generierte, committete SQL-Dateien** unter
-  `server/src/db/migrations/` und werden beim Boot in einer Transaktion
-  angewandt. Neue Migrationen entstehen über `drizzle-kit generate`.
-- **Downgrade wird nicht unterstützt.** Der Rückweg ist die Volume-Sicherung
-  plus ein Image-Rollback auf einen älteren Versions-Tag (`decisions/release`).
-- **Die Kette beginnt mit einer Baseline,** `0000_baseline.sql`, dem Schema
-  von v0.7. v0.7 ist die erste unterstützte Version; eine ältere Datenbank
-  erkennt der Server nicht und behandelt sie nicht gesondert — es gibt keinen
-  Versions-Riegel. Drizzles Migrator wendet eine Migration nur an, wenn ihr
-  `when` im Journal größer ist als der `created_at` der zuletzt
-  eingetragenen, und vergleicht keine Hashes. Deshalb ändern sich die
-  `when`-Werte von `0000_baseline` (`1789757329900`) und
-  `0001_scene_pos_per_chapter` (`1789760000000`) nie.
-- **Migrationen werden nicht getestet.** Getestet wird das Verhalten, das sie
-  ermöglichen — etwa der Constraint-Fehler am Schreibpfad —, nicht ihr SQL.
+- **The ORM is Drizzle** (`drizzle-orm`, `drizzle-kit` as a dev dependency).
+  `server/src/db/schema.ts` is the one source of the storage shape.
+- **Migrations are generated, committed SQL files** under
+  `server/src/db/migrations/` and are applied at boot in one transaction. New
+  migrations are created via `drizzle-kit generate`.
+- **Downgrade is not supported.** The way back is the volume backup plus an
+  image rollback to an older version tag (`decisions/release`).
+- **The chain starts with a baseline,** `0000_baseline.sql`, the schema of
+  v0.7. v0.7 is the first supported version; the server does not recognize an
+  older database and does not treat it specially — there is no version lock.
+  Drizzle's migrator applies a migration only if its `when` in the journal is
+  greater than the `created_at` of the last recorded one, and compares no
+  hashes. That is why the `when` values of `0000_baseline` (`1789757329900`)
+  and `0001_scene_pos_per_chapter` (`1789760000000`) never change.
+- **Migrations are not tested.** What is tested is the behavior they enable —
+  such as the constraint error on the write path — not their SQL.
 
-### Regeln für jede Migration
+### Rules for every migration
 
-1. **Datenänderungen stehen in der Migration selbst.** Umzüge,
-   Umformatierungen und Aufteilungen sind SQL der Migration und laufen in
-   derselben Transaktion wie die Schemaänderung. Es gibt keinen Datenschritt
-   vor oder nach dem Migrator, keine Vorabprüfung und keinen Boot-Durchgang.
-2. **Nicht eindeutig Übertragbares entscheidet die Migration fest und
-   verlustfrei** — etwa `NULL` setzen, den Wert sichtbar in den Text
-   übernehmen oder ihn als eigenen Abschnitt anhängen. Die Migration
-   entscheidet nachvollziehbar und dokumentiert, statt still zu raten; die
-   Entscheidung steht in der Datei unter `docs/decisions/`, die die Änderung
-   betrifft.
-3. **Kein Code, der nur für eine Migration existiert.** Übergangscode gibt es
-   nicht: ein Umbau wird so geschnitten, dass weder Adapter noch Doppelwege
-   entstehen.
-4. **Ungültige Daten entstehen gar nicht erst.** Das leisten CHECK-Constraints,
-   Fremdschlüssel und die 400 am Schreibpfad (`decisions/constraints`).
-   Deshalb braucht es keine Vorabprüfung.
+1. **Data changes live in the migration itself.** Moves, reformatting and
+   splits are the migration's SQL and run in the same transaction as the
+   schema change. There is no data step before or after the migrator, no
+   preflight check and no boot pass.
+2. **Whatever cannot be carried over unambiguously, the migration decides
+   fixedly and losslessly** — for example setting `NULL`, carrying the value
+   visibly into the text, or appending it as a section of its own. The
+   migration decides traceably and documented instead of silently guessing;
+   the decision lives in the file under `docs/decisions/` that the change
+   concerns.
+3. **No code that exists only for a migration.** There is no transition code:
+   a rework is cut so that neither adapters nor duplicate paths arise.
+4. **Invalid data never comes into being.** CHECK constraints, foreign keys
+   and the 400 on the write path ensure that (`decisions/constraints`). That
+   is why no preflight check is needed.
 
-### Suche
+### Search
 
-**FTS5** ist der Suchindex, angelegt als handgeschriebene Custom-Migration
-(Tokenizer `unicode61 remove_diacritics 2`, Ranking
-`bm25(search_fts, 10, 6, 4, 1)`) und explizit aus der Store-Schicht gepflegt.
+**FTS5** is the search index, created as a hand-written custom migration
+(tokenizer `unicode61 remove_diacritics 2`, ranking
+`bm25(search_fts, 10, 6, 4, 1)`) and maintained explicitly from the store
+layer.
 
-## Warum
+## Why
 
-Gepflegt wird in der App (`decisions/writes`), also gehört die Wahrheit
-hinter ihre API. Ein Spiegel oder Abgleich mit Dateien erzeugt eine ganze
-Klasse von Konfliktproblemen; sie wird nicht gebaut.
+Content is maintained in the app (`decisions/writes`), so the truth belongs
+behind its API. A mirror of or sync with files creates a whole class of
+conflict problems; it is not built.
 
-Eine Baseline statt einer langen Kette hält neue Instanzen einfach: sie
-brauchen nur den Endstand, und Code, der ältere Stände über eine Schwelle
-bringt, hätte keinen Anwendungsfall, aber Pflegekosten. Aus demselben Grund
-steht jede Datenänderung in der Migration: ein Datenschritt daneben ist
-Übergangscode, der bleibt.
+A baseline instead of a long chain keeps new instances simple: they need only
+the final state, and code that lifts older states over a threshold would have
+no use case but maintenance cost. For the same reason every data change lives
+in the migration: a data step beside it is transition code that stays.
 
-## Folgen
+## Consequences
 
-- Kein Code liest Kampagneninhalte von woanders als aus der Datenbank.
-- Nicht Teil der Entscheidung: Export/Import, ein Trigram-Tokenizer für
-  tippfehlertolerante Suche, Auto-Backups und Mehrnutzer-Betrieb
+- No code reads campaign content from anywhere other than the database.
+- Not part of the decision: export/import, a trigram tokenizer for
+  typo-tolerant search, auto-backups and multi-user operation
   (`decisions/scope`).

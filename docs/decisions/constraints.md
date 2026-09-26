@@ -1,129 +1,123 @@
-# Die Datenbank hält die Regeln über ihre Spalten
+# The database holds the rules about its columns
 
-## Entscheidung
+## Decision
 
-### Jede Referenz ist ein Fremdschlüssel
+### Every reference is a foreign key
 
-Jede gespeicherte Referenz hat einen zusammengesetzten Fremdschlüssel
-`(campaign_id, <referenz>)` mit `ON UPDATE CASCADE` und
-`ON DELETE NO ACTION`. Eine Referenz nennt damit eine Zeile, die es gibt, und
-die Datenbank garantiert das.
+Every stored reference has a composite foreign key
+`(campaign_id, <reference>)` with `ON UPDATE CASCADE` and
+`ON DELETE NO ACTION`. A reference thus names a row that exists, and the
+database guarantees it.
 
-| Referenz | Ziel | Pflicht |
-| -------- | ---- | ------- |
-| `scenes.chapter_id` | `chapters` | ja — eine Szene gehört zu einem Kapitel |
-| `scenes.location` | `locations` | nein |
-| `scene_npcs.npc_id` | `npcs` | ja |
-| `npcs.chapter_id` | `chapters` | nein |
-| `locations.chapter_id` | `chapters` | nein |
-| `threads.chapter_id` | `chapters` | ja |
-| `log_entries.scene_id` | `scenes` | nein |
-| `played_scenes.scene_id` | `scenes` | ja |
+| Reference | Target | Required |
+| --------- | ------ | -------- |
+| `scenes.chapter_id` | `chapters` | yes — a scene belongs to a chapter |
+| `scenes.location` | `locations` | no |
+| `scene_npcs.npc_id` | `npcs` | yes |
+| `npcs.chapter_id` | `chapters` | no |
+| `locations.chapter_id` | `chapters` | no |
+| `threads.chapter_id` | `chapters` | yes |
+| `log_entries.scene_id` | `scenes` | no |
+| `played_scenes.scene_id` | `scenes` | yes |
 
-`generate_jobs.chapter` hat keinen Fremdschlüssel: ein Lauf mit „Neues
-Kapitel" nennt das Kapitel, das er beim Übernehmen selbst anlegt
+`generate_jobs.chapter` has no foreign key: a run with „Neues Kapitel" (new
+chapter) names the chapter that it creates itself when applied
 (`decisions/generator`).
 
-**Eine Nennung legt nichts an.** Eine Zeile entsteht über ihren
-Anlege-Endpunkt (dazu gehört „NPC anlegen" aus einer Log-Zeile in der
-Nachbereitung) und über das Übernehmen eines Generator-Vorschlags, sonst
-nirgends — und dazu gehört das Kapitel eines „Neues Kapitel"-Laufs. Eine
-übernommene Szene nimmt die vorgeschlagenen NPCs und Orte desselben Laufs
-mit, die sie nennt: sie sind Teil desselben Vorschlags. Was der DM abgelehnt
-hat, bleibt abgelehnt; dann wird die Szene abgewiesen und nennt die fehlende
-Zeile.
+**Naming creates nothing.** A row comes into being through its create
+endpoint (which includes „NPC anlegen" (create NPC) from a log line in the
+post-session review) and through applying a generator proposal, nowhere
+else — and that includes the chapter of a „Neues Kapitel" run. An applied
+scene takes along the proposed NPCs and locations of the same run that it
+names: they are part of the same proposal. What the DM has rejected stays
+rejected; then the scene is refused and names the missing row.
 
-Wer in `npcs`, `location` oder `chapter`, in einer Log-Zeile oder in einer
-gespielten Szene etwas nennt, das keine Zeile hat, bekommt 400 mit eigenem
-Code (`npc_unknown`, `location_unknown`, `chapter_unknown`,
-`log_scene_unknown`, `played_scene_unknown`) und dem Hinweis, die Zeile zuerst
-anzulegen; geschrieben wird nichts. Der Ort einer Szene ist eine Orts-id oder
-leer; Freitext ist 400 `location_not_an_id`.
+Whoever names something in `npcs`, `location` or `chapter`, in a log line or
+in a played scene that has no row gets a 400 with its own code
+(`npc_unknown`, `location_unknown`, `chapter_unknown`,
+`log_scene_unknown`, `played_scene_unknown`) and the hint to create the row
+first; nothing is written. The location of a scene is a location id or
+empty; free text is 400 `location_not_an_id`.
 
-**Eine Nennung im Text ist keine Referenz.** `[[id]]` und die Zeilen unter
-`## Beziehungen` sind sichtbarer Text. Es gibt keine Tabelle für Beziehungen,
-weil nichts in der Speicherung aus Text abgeleitet wird; eine Beziehung als
-Daten wäre ein Feld im Dialog und im Generator, kein geparster Abschnitt
-(`decisions/data-shape`). Ein `[[id]]` ohne Zeile wird als Text angezeigt,
-ohne Fehler.
+**A mention in the text is not a reference.** `[[id]]` and the lines under
+`## Beziehungen` (relationships) are visible text. There is no table for
+relationships, because nothing in storage is derived from text; a
+relationship as data would be a field in the dialog and in the generator, not
+a parsed section (`decisions/data-shape`). An `[[id]]` without a row is shown
+as text, without an error.
 
-### Eine leere Zeile ist kein Fehler
+### An empty row is not an error
 
-Eine Zeile ohne Inhalt, etwa ein NPC, der nur seine id trägt, zeigt eine
-dünne Karte, ist normal befüllbar und bekommt keinen „fehlt"-Platzhalter. Das
-Übernehmen eines Generator-Vorschlags füllt einen leeren NPC oder Ort; einer
-mit Inhalt ist ein Konflikt.
+A row without content, such as an NPC that carries only its id, shows a thin
+card, can be filled normally and gets no „fehlt" (missing) placeholder.
+Applying a generator proposal fills an empty NPC or location; one with
+content is a conflict.
 
-Ein NPC ist leer, wenn alle seine Felder auf ihrem Default stehen
-(`isEmptyNpcRow` in `server/src/store/npcs.ts`); ein `status` außer dem
-Default zählt als Inhalt. Ein Anlegen oder Übernehmen derselben id füllt einen
-leeren NPC, statt zu kollidieren. Ein NPC mit Inhalt ist 409 `slug_taken` mit
-einem freien Vorschlag, und geschrieben wird nichts. Der Text eines NPC, der
-aus einer Log-Zeile entsteht, ist genau die Notiz, ohne Überschrift; ohne
-Notiz bleibt er leer.
+An NPC is empty when all its fields are at their default
+(`isEmptyNpcRow` in `server/src/store/npcs.ts`); a `status` other than the
+default counts as content. Creating or applying the same id fills an empty
+NPC instead of colliding. An NPC with content is 409 `slug_taken` with a free
+suggestion, and nothing is written. The text of an NPC created from a log
+line is exactly the note, without a heading; without a note it stays empty.
 
-### Status und Typ sind CHECK-Constraints
+### Status and type are CHECK constraints
 
-Die vier geschlossenen Felder — `scenes.status`, `scenes.type`, `npcs.status`,
-`chapters.status` — sind `CHECK`-Constraints ihrer Spalten. Die erlaubten
-Werte stehen **einmal**, in den Modulen ihrer Entität (`SCENE_STATUSES` und
-`SCENE_TYPES` in `shared/src/scene.ts`, `NPC_STATUSES` in `shared/src/npc.ts`,
-`CHAPTER_STATUSES` in `shared/src/chapter.ts`); das Schema baut die
-Constraints aus genau diesen Listen. Ein fremder Wert auf dem Schreibweg ist
-400 `status_not_allowed` (`{ kind, value, allowed }`) bzw.
-`scene_type_not_allowed` (`{ value, allowed }`), nicht ein
-`CHECK constraint failed` aus SQLite.
+The four closed fields — `scenes.status`, `scenes.type`, `npcs.status`,
+`chapters.status` — are `CHECK` constraints on their columns. The allowed
+values are stated **once**, in the modules of their entity (`SCENE_STATUSES`
+and `SCENE_TYPES` in `shared/src/scene.ts`, `NPC_STATUSES` in
+`shared/src/npc.ts`, `CHAPTER_STATUSES` in `shared/src/chapter.ts`); the
+schema builds the constraints from exactly these lists. A foreign value on
+the write path is 400 `status_not_allowed` (`{ kind, value, allowed }`) or
+`scene_type_not_allowed` (`{ value, allowed }`), not a
+`CHECK constraint failed` from SQLite.
 
-Die Zeitstempel einer Session und ihrer Pausen haben genau eine Form,
-`yyyy-mm-ddTHH:MM:SS` als zonenlose Lokalzeit (`server/src/store/time.ts`).
-Der Server bildet sie aus dem Epochen-Wert, den der Client schreibt
-(`decisions/resources`), und der Leser liest nur sie.
+The timestamps of a session and its pauses have exactly one form,
+`yyyy-mm-ddTHH:MM:SS` as zoneless local time (`server/src/store/time.ts`).
+The server derives them from the epoch value the client writes
+(`decisions/resources`), and the reader reads only them.
 
-### ids sind unveränderlich
+### ids are immutable
 
-Die `id` einer Zeile wird beim Anlegen gesetzt und ändert sich danach nie.
-Der Eigenschaften-Dialog zeigt sie als Kontext, bietet aber keine Änderung;
-kein Schreibzugriff ändert sie. Die Personalisierung der id passiert einmal,
-im Anlege-Dialog.
+The `id` of a row is set on creation and never changes afterwards. The
+properties dialog shows it as context but offers no change; no write changes
+it. Personalizing the id happens once, in the create dialog.
 
-## Warum
+## Why
 
-Eine Regel, die nur die API einhält, ist eine Absprache: sie gilt an den
-Stellen, an denen jemand daran gedacht hat. Ein Tippfehler aus dem Generator
-oder aus einem direkten Schreibzugriff käme in der Spalte an und wäre danach
-ein Wert, den die Leseansicht wörtlich anzeigt und niemand als Fehler
-erkennt. Die Zeile ist die Wahrheit (`decisions/sqlite`), also gehört eine
-Regel über den Inhalt einer Spalte in die Spalte — Referenzen als
-Fremdschlüssel, geschlossene Wertelisten als CHECK.
+A rule that only the API enforces is an agreement: it holds at the places
+where someone thought of it. A typo from the generator or from a direct write
+would arrive in the column and afterwards be a value that the reading view
+shows verbatim and nobody recognizes as an error. The row is the truth
+(`decisions/sqlite`), so a rule about the content of a column belongs in the
+column — references as foreign keys, closed value lists as CHECK.
 
-„Format degradiert" widerspricht dem nicht. Degradieren ist eine Regel für
-den **Leser**: ein unbekannter Callout und eine unbekannte Überschrift werden
-angezeigt und werfen nie. Geschlossen ist der **Schreibweg**.
+"The format degrades" does not contradict this. Degrading is a rule for the
+**reader**: an unknown callout and an unknown heading are displayed and never
+throw. What is closed is the **write path**.
 
-Die id ist der Referenz-Schlüssel des ganzen Modells: sie steht in jeder URL,
-in jedem Fremdschlüssel und in jedem `[[id]]` im Text. Ein Apparat, der sie
-nachträglich überall mitzieht, wäre der teuerste Teil der Schreibschicht und
-würde praktisch nie gebraucht. Ein besserer **Titel** braucht keine neue id:
-`[[id]]` löst immer auf den aktuellen Anzeigenamen auf.
+The id is the reference key of the whole model: it appears in every URL, in
+every foreign key and in every `[[id]]` in the text. A mechanism that carries
+it along everywhere after the fact would be the most expensive part of the
+write layer and would practically never be needed. A better **title** needs
+no new id: `[[id]]` always resolves to the current display name.
 
-Ein NPC existiert als Referenz-Schlüssel oft lange, bevor er etwas enthält;
-eine Szene nennt ihn, und der DM füllt ihn später. Deshalb füllt ein Anlegen
-die leere Zeile, statt an ihr zu scheitern.
+An NPC often exists as a reference key long before it contains anything; a
+scene names it, and the DM fills it later. That is why creating fills the
+empty row instead of failing on it.
 
-## Folgen
+## Consequences
 
-- Es gibt keinen Endpunkt, der eine id ändert, keine Referenz-Kaskade und
-  keinen Verwendungs-Bericht. Die `ON UPDATE CASCADE`-Fremdschlüssel bleiben
-  im Schema: sie halten Kind-Zeilen ehrlich und kosten nichts.
-- Anzeigenamen sind frei änderbar; der Suchindex zieht die referierenden
-  Zeilen dabei nach (`server/src/store/refs.ts`).
-- Ein neuer Wert in einer der Wertelisten ist eine Migration, keine Änderung
-  an einer Konstante allein: eine fünfte Position im Status ist eine
-  Entscheidung über das Datenmodell.
-- Die App braucht für jeden Fehlercode einen Katalog-Eintrag; ohne ihn
-  degradiert sie auf den englischen `error`-Satz (`decisions/i18n`).
-- Nicht Teil der Entscheidung: ein Löschweg für Kapitel, Szenen, NPCs und
-  Orte (es gibt keinen; `ON DELETE NO ACTION` sagt nur, dass ein solcher Weg
-  eine eigene Entscheidung braucht) und Referenzen zwischen Kampagnen (die
-  Fremdschlüssel schließen sie aus, weil `campaign_id` Teil jeder Referenz
-  ist).
+- There is no endpoint that changes an id, no reference cascade and no usage
+  report. The `ON UPDATE CASCADE` foreign keys stay in the schema: they keep
+  child rows honest and cost nothing.
+- Display names can be changed freely; the search index updates the
+  referring rows along with it (`server/src/store/refs.ts`).
+- A new value in one of the value lists is a migration, not a change to a
+  constant alone: a fifth status position is a decision about the data model.
+- The app needs a catalog entry for every error code; without one it degrades
+  to the English `error` sentence (`decisions/i18n`).
+- Not part of the decision: a delete path for chapters, scenes, NPCs and
+  locations (there is none; `ON DELETE NO ACTION` only says that such a path
+  needs a decision of its own) and references between campaigns (the foreign
+  keys rule them out, because `campaign_id` is part of every reference).

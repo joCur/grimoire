@@ -1,80 +1,74 @@
-# Schreiben: in der App, mit Wächter, ein Weg je Entität
+# Writing: in the app, with a guard, one path per entity
 
-## Entscheidung
+## Decision
 
 ### App-first
 
-Bearbeitet wird in der App. Das Zielbild sind alle Pflege-Operationen aus der
-App heraus, und die Priorisierung richtet sich danach. Die Datenbank ist die
-Wahrheit (`decisions/sqlite`); einen Datenpfad an der App vorbei, etwa einen
-externen Editor, gibt es nicht. Schreibzugriffe der App laufen nur über die
-dokumentierte API.
+Editing happens in the app. The target is every maintenance operation from
+within the app, and prioritization follows from that. The database is the
+truth (`decisions/sqlite`); there is no data path that bypasses the app, such
+as an external editor. The app's writes go only through the documented API.
 
-Log-Zeilen und Ideen sind append-only: sie werden einmal geschrieben. Die
-einzigen Änderungen danach sind das Sichten einer Log-Zeile (`reviewed`) und
-das Abhaken einer Idee (`done`); ein anderes Feld im Patch ist 400.
+Log lines and ideas are append-only: they are written once. The only changes
+afterwards are reviewing a log line (`reviewed`) and checking off an idea
+(`done`); any other field in the patch is 400.
 
-### Ein Wächter je Zeile
+### One guard per row
 
-Jede Entität trägt ihr eigenes `rev`, die Zeilenversion. Ein Schreibzugriff
-gilt nur bei unverändertem `rev`, bewegt nur das `rev` der Zeile, die er
-schreibt, und sonst ist er 409. Einen Zähler über alle Zeilen einer Art gibt
-es nicht. Eine Reihenfolge hat ihren eigenen Wächter (`decisions/resources`,
-`decisions/scene-order`).
+Every entity carries its own `rev`, the row version. A write applies only if
+`rev` is unchanged, moves only the `rev` of the row it writes, and is 409
+otherwise. There is no counter across all rows of a kind. An order has its
+own guard (`decisions/resources`, `decisions/scene-order`).
 
-### Ein Schreibweg je Entität
+### One write path per entity
 
-Jede Entität hat genau einen Schreibweg, `PATCH` auf ihrer eigenen Ressource
-mit `{ rev, force?, …Teilmenge ihrer Felder }`, geprüft gegen das Schema der
-Entität.
+Every entity has exactly one write path, `PATCH` on its own resource with
+`{ rev, force?, …subset of its fields }`, validated against the entity's
+schema.
 
-- Mindestens ein Feld muss dabei sein, sonst 400 `nothing_to_write`. Alle
-  Felder zusammen sind **ein** Schreibvorgang in einer Transaktion, gegen
-  **einen** `rev`: eine Zeilen-Änderung, ein Schritt von `rev`, ein
-  Versions-Zähler, ein Index-Lauf. Wie viel eine Anfrage trägt, ist an `rev`
-  nicht ablesbar.
-- `null` löscht ein optionales Feld. Ein Feld, das die Entität nicht hat, oder
-  ein Wert der falschen Form ist eine 400, die das Feld nennt. Die `id` wird
-  nie geändert (`decisions/constraints`).
-- Ein veralteter `rev` ist 409 `rev_conflict` und trägt neben dem aktuellen
-  `rev` den **aktuellen Stand** der Ressource unter dem Namen der Entität
-  (`{ thread }`, `{ idea }`, `{ glossaryTerm }` …): der Konfliktdialog zeigt,
-  was im Weg steht, ohne nachzuladen. Dieselbe 409-Form gilt für jeden
-  Schreibzugriff mit Wächter.
-- `force: true` schreibt auf die Zeile, wie sie jetzt ist, und schreibt nur
-  die mitgeschickten Felder: ein fremd geänderter Status übersteht ein
-  erzwungenes Text-Speichern.
-- Anlegen antwortet mit dem Typ der Entität, auch `POST /api/campaigns`
-  (`Campaign`), und trägt kein `rev`, denn eine neue Zeile überschreibt
-  nichts. `DELETE` trägt `{ rev }` wie jeder Schreibzugriff mit Wächter.
-- Die App hält den `rev` der laufenden Bearbeitung und schickt ihn mit, statt
-  ihn einzufrieren und zu raten.
+- At least one field must be present, otherwise 400 `nothing_to_write`. All
+  fields together are **one** write in one transaction, against **one**
+  `rev`: one row change, one step of `rev`, one version counter, one index
+  run. How much a request carries cannot be read from `rev`.
+- `null` clears an optional field. A field the entity does not have, or a
+  value of the wrong shape, is a 400 that names the field. The `id` never
+  changes (`decisions/constraints`).
+- A stale `rev` is 409 `rev_conflict` and carries, besides the current `rev`,
+  the **current state** of the resource under the entity's name
+  (`{ thread }`, `{ idea }`, `{ glossaryTerm }` …): the conflict dialog shows
+  what is in the way without reloading. The same 409 shape applies to every
+  guarded write.
+- `force: true` writes onto the row as it is now, and writes only the fields
+  sent: a status changed elsewhere survives a forced text save.
+- Creating answers with the entity's type, including `POST /api/campaigns`
+  (`Campaign`), and carries no `rev`, because a new row overwrites nothing.
+  `DELETE` carries `{ rev }` like every guarded write.
+- The app holds the `rev` of the ongoing edit and sends it along, instead of
+  freezing it and guessing.
 
-### Konfliktzeile in der App
+### Conflict line in the app
 
-Ein Dialog oder Editor zeigt bei 409 die Konfliktzeile mit zwei Aktionen:
-„Neu laden" verwirft den Entwurf und übernimmt den gespeicherten Stand,
-„Trotzdem speichern" schreibt mit `force` nur die Felder, die sich geändert
-haben — eine fremd geänderte Eigenschaft bleibt.
+On 409 a dialog or editor shows the conflict line with two actions:
+„Neu laden" (reload) discards the draft and takes the saved state,
+„Trotzdem speichern" (save anyway) writes with `force` only the fields that
+have changed — a property changed elsewhere stays.
 
-## Warum
+## Why
 
-Alle Felder einer Entität, `body` eingeschlossen, liegen in einer Zeile und
-teilen einen Wächter. Zwei Schreibwege auf dieselbe Zeile machten die erste
-Antwort durch den zweiten Aufruf selbst ungültig, und die App müsste den
-nächsten `rev` erraten, statt ihn zu kennen.
+All fields of an entity, `body` included, live in one row and share one
+guard. Two write paths onto the same row would make the first response
+invalid through the second call itself, and the app would have to guess the
+next `rev` instead of knowing it.
 
-Stilles Überschreiben ist der eine Fehler, den ein Einzelnutzer mit zwei Tabs
-trotzdem hat. Der Wächter fängt ihn ab; `force` mit nur den geänderten
-Feldern hält den bewussten Überschreib-Fall so schmal wie möglich.
+Silent overwriting is the one error that a single user with two tabs still
+has. The guard catches it; `force` with only the changed fields keeps the
+deliberate overwrite case as narrow as possible.
 
-## Folgen
+## Consequences
 
-- Weil alle Felder einer Szene eine Zeile und einen Wächter teilen, ist auch
-  ein reiner Status-Write eines Zweitschreibers ein Konflikt für einen offenen
-  Texteditor.
-- Das Übernehmen eines Generator-Vorschlags ist kein Weg an diesen Regeln
-  vorbei: es prüft dieselben Felder und Referenzen wie das Anlegen seiner
-  Entität (`decisions/generator`).
-- Jeder Schreibzugriff zählt zusätzlich `campaigns.version` hoch
-  (`decisions/polling`); das ist kein Wächter.
+- Because all fields of a scene share one row and one guard, even a pure
+  status write by a second writer is a conflict for an open text editor.
+- Applying a generator proposal is no way around these rules: it checks the
+  same fields and references as creating its entity (`decisions/generator`).
+- Every write additionally increments `campaigns.version`
+  (`decisions/polling`); that is not a guard.

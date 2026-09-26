@@ -1,80 +1,76 @@
-# Tech-Stack
+# Tech stack
 
-## Entscheidung
+## Decision
 
-**Frontend:** Vite + React 19 + Tailwind v4 + shadcn/ui. Server-State hält
-TanStack Query (Caching, Refetch nach Mutation, 409-Handling), lokaler
-UI-State ist plain React — kein Zustand, kein Redux. Markdown rendert
-react-markdown mit einem eigenen Remark-Plugin für `[!callout]`-Blöcke und
-`## If:`-Überschriften. GFM nur für Tabellen: `micromark-extension-gfm-table`
-und `mdast-util-gfm-table` statt `remark-gfm`. Kein Electron, kein Tauri —
-eine Web-App hinter Tailscale reicht.
+**Frontend:** Vite + React 19 + Tailwind v4 + shadcn/ui. TanStack Query holds
+server state (caching, refetch after mutation, 409 handling); local UI state
+is plain React — no Zustand, no Redux. Markdown is rendered by react-markdown
+with a custom remark plugin for `[!callout]` blocks and `## If:` headings. GFM
+for tables only: `micromark-extension-gfm-table` and `mdast-util-gfm-table`
+instead of `remark-gfm`. No Electron, no Tauri — a web app behind Tailscale is
+enough.
 
-**Backend:** Bun + Hono, SQLite über Drizzle (`server/src/db/`), Suche als
-FTS5-Index (`decisions/sqlite`).
+**Backend:** Bun + Hono, SQLite via Drizzle (`server/src/db/`), search as an
+FTS5 index (`decisions/sqlite`).
 
-**Icons:** Lucide für UI-Chrome (konsistent mit shadcn); game-icons.net
-(CC BY) für thematische Marker (Entitäts- und Callout-Typen). Benötigte SVGs
-werden als eigene Komponenten eingecheckt.
+**Icons:** Lucide for UI chrome (consistent with shadcn); game-icons.net
+(CC BY) for thematic markers (entity and callout types). The SVGs needed are
+checked in as components of their own.
 
-**Deployment:** ein Docker-Container (Bun-Image) mit einem Volume auf
-`GRIMOIRE_DATA`, erreichbar nur über Tailscale. Details stehen in
+**Deployment:** one Docker container (Bun image) with a volume on
+`GRIMOIRE_DATA`, reachable only via Tailscale. Details are in
 [docs/DEPLOYMENT.md](../DEPLOYMENT.md).
 
-### Monorepo mit Bun-Workspaces
+### Monorepo with Bun workspaces
 
-Das Repo ist ein Bun-Workspace-Monorepo aus `shared/` (Entitäts-Typen,
-`@grimoire/shared`), `server/` und `app/`. Server und Frontend importieren
-dieselben Typen; das Datenformat ist damit genau einmal in Code beschrieben
-(`decisions/resources`). `shared/` wird ohne Build-Schritt als
-TypeScript-Quelle konsumiert — Bun und Vite können das nativ, unter Node
-läuft es über tsx. Test-Runner ist `bun test`.
+The repo is a Bun workspace monorepo of `shared/` (entity types,
+`@grimoire/shared`), `server/` and `app/`. Server and frontend import the
+same types; the data format is thus described in code exactly once
+(`decisions/resources`). `shared/` is consumed as TypeScript source without a
+build step — Bun and Vite handle that natively, under Node it runs via tsx.
+The test runner is `bun test`.
 
-### Node-Portabilität: Bun-only-APIs nur mit Eintrag hier
+### Node portability: Bun-only APIs only with an entry here
 
-Hono läuft unverändert auf Bun und Node. Ein Wechsel der Runtime ist eine
-Änderung am Deployment, kein Code-Umbau, solange keine Bun-only-API im
-Laufzeit-Code steht. Deshalb gilt: **Eine Bun-only-API braucht einen Eintrag
-in dieser Datei.** Die Regel betrifft Laufzeit-APIs; `bun test` als
-Dev-Werkzeug fällt nicht darunter.
+Hono runs unchanged on Bun and Node. Switching the runtime is a deployment
+change, not a code rework, as long as no Bun-only API appears in runtime
+code. Hence: **a Bun-only API requires an entry in this file.** The rule
+covers runtime APIs; `bun test` as a dev tool does not fall under it.
 
-Eingetragen ist genau eine:
+Exactly one is registered:
 
-- **`bun:sqlite` als Fallback hinter `server/src/db/driver.ts`.** Der Treiber
-  nimmt `node:sqlite`, wo die Runtime es anbietet, und sonst `bun:sqlite`.
-  Bun implementiert `node:sqlite` nicht (geprüft mit Bun 1.3.14, der in CI
-  gepinnten Version), und drizzle-orm 0.45.2 hat keinen `node-sqlite`-Treiber.
-  Auf Node (≥ 22.16, wegen `setReturnArrays`) läuft der Server damit ohne
-  native Abhängigkeit; auf Bun, der Runtime des Images, läuft `bun:sqlite`.
-  Beide hängen hinter einer Schnittstelle mit identischer Parameter- und
-  Zeilenbehandlung. `server/test/db-smoke.test.ts` beweist FTS5,
-  Transaktionen und UPSERT auf beiden Laufzeiten; der CI-Job `db-smoke-node`
-  fährt dieselbe Datei auf Node. Driftet ein Treiber, ist das das
-  Frühwarnsignal. Fielen beide aus, wäre `better-sqlite3` hinter derselben
-  Schnittstelle der Ersatz; implementiert ist er nicht.
+- **`bun:sqlite` as a fallback behind `server/src/db/driver.ts`.** The driver
+  uses `node:sqlite` where the runtime offers it, and `bun:sqlite` otherwise.
+  Bun does not implement `node:sqlite` (checked with Bun 1.3.14, the version
+  pinned in CI), and drizzle-orm 0.45.2 has no `node-sqlite` driver. On Node
+  (≥ 22.16, because of `setReturnArrays`) the server thus runs without a
+  native dependency; on Bun, the image's runtime, `bun:sqlite` runs. Both sit
+  behind one interface with identical parameter and row handling.
+  `server/test/db-smoke.test.ts` proves FTS5, transactions and UPSERT on both
+  runtimes; the CI job `db-smoke-node` runs the same file on Node. If a driver
+  drifts, that is the early warning. Should both fail, `better-sqlite3` behind
+  the same interface would be the replacement; it is not implemented.
 
-## Warum
+## Why
 
-- Hono statt Express oder Fastify: minimal, typsicher, und es läuft auf Bun
-  und Node.
-- `remark-gfm` ließe sich nicht auf Tabellen beschränken: Aufgabenlisten
-  machten ein `- [ ]` im Text des DM zu einem Bedienelement, das nichts
-  schreibt.
-- Ein `shared/`-Paket ohne Build-Schritt hält Server und App auf demselben
-  Typ, ohne dass eine generierte Kopie veralten kann.
+- Hono instead of Express or Fastify: minimal, type-safe, and it runs on Bun
+  and Node.
+- `remark-gfm` cannot be restricted to tables: task lists would turn a
+  `- [ ]` in the DM's text into a control that writes nothing.
+- A `shared/` package without a build step keeps server and app on the same
+  type, with no generated copy that can go stale.
 
-## Folgen
+## Consequences
 
-Bun/Hono ist keine „nur für klein"-Entscheidung; die Grenzen sind benannt:
+Bun/Hono is not a "small only" decision; the limits are named:
 
-- **App-Level-Auth:** erst Forward Auth im Proxy, sonst Hono-Middleware
-  (`decisions/scope`).
-- **Mehr Daten, komplexere Queries:** SQLite ist die Quelle der Wahrheit
+- **App-level auth:** first Forward Auth in the proxy, otherwise Hono
+  middleware (`decisions/scope`).
+- **More data, more complex queries:** SQLite is the source of truth
   (`decisions/sqlite`).
-- **Bun-spezifisches Risiko:** begrenzt auf die eine eingetragene Kopplung
-  oben.
-- **Mehrnutzer- und Rechte-Anforderungen:** dann ist nicht die Runtime das
-  Problem, sondern Datenmodell und Auth-Modell (`decisions/scope`).
+- **Bun-specific risk:** limited to the one registered coupling above.
+- **Multi-user and permission requirements:** then the runtime is not the
+  problem, but the data model and the auth model (`decisions/scope`).
 
-Für neue Abhängigkeiten gilt `decisions/dependencies`; eintragspflichtig
-bleiben allein Bun-only-APIs.
+New dependencies follow `decisions/dependencies`; only Bun-only APIs still
+require an entry.

@@ -1,109 +1,106 @@
-# Daten sind Felder und Zeilen, nie Text-Abschnitte
+# Data is fields and rows, never text sections
 
-## Entscheidung
+## Decision
 
-Was eine Ansicht, ein Schreibweg oder eine Prüfung als Daten braucht, ist ein
-**Feld** einer Entität oder eine **eigene Zeile** (`decisions/resources`) —
-nie ein Abschnitt, der über den Text seiner Überschrift gefunden wird.
-Überschriften im Text gliedern ihn für den DM; eine Bedeutung für den Code
-hat allein `## If:`, ein Element des Renderers (README.md). Im Code von
-`app/`, `server/` und `shared/` sucht allein `## If:` eine Überschrift per
-Text.
+What a view, a write path or a check needs as data is a **field** of an
+entity or a **row of its own** (`decisions/resources`) — never a section that
+is found by the text of its heading. Headings in the text structure it for
+the DM; only `## If:`, an element of the renderer (README.md), has a meaning
+for the code. In the code of `app/`, `server/` and `shared/`, only `## If:`
+looks up a heading by its text.
 
-Eine Zeile ist ihre Spalten: kein Markdown in der Zeile, kein Leser, der Text
-in Zeilen zurückparst, und keine Skelett-Zeilen, die nur ein Text bräuchte
-(Überschriften, Marker). Eine Pause ist eine Zeile der Pausen einer Session
-und keine Log-Zeile: Pausieren schreibt keine Log-Zeile.
+A row is its columns: no Markdown in the row, no reader that parses text back
+into rows, and no skeleton rows that only a text would need (headings,
+markers). A pause is a row of a session's pauses and not a log line: pausing
+writes no log line.
 
-Eine Migration, die ein solches Feld oder eine solche Zeile einführt,
-**überträgt nichts** aus dem Text: ein bestehender Abschnitt bleibt freier
-Text (`decisions/sqlite`, Regel 2).
+A migration that introduces such a field or such a row **carries nothing
+over** from the text: an existing section stays free text
+(`decisions/sqlite`, rule 2).
 
-### Motivation und Atmosphäre
+### Motivation and atmosphere
 
-- `npcs.motivation` und `locations.atmosphere` sind Spalten und damit Felder
-  (`motivation`, `atmosphere`). NPC-Karte, Ort-Karte, Hover-Vorschau und
-  Leseansicht lesen sie; ein `## Will` oder `## Atmosphäre` im Text hat darauf
-  keinen Einfluss. Ein `[[id]]` im Wert erscheint bei der Anzeige als
-  aktueller Name, ohne Referenz zu sein (`decisions/constraints`); ohne Zeile
-  steht es als Text da. Die Suche indexiert beide Felder mit aufgelösten
-  Namen.
-- Bearbeitet werden sie im Bearbeiten-Modus der Leseansicht neben dem Text,
-  nicht im Eigenschaften-Dialog. Sie teilen den einen Wächter der Zeile
+- `npcs.motivation` and `locations.atmosphere` are columns and thus fields
+  (`motivation`, `atmosphere`). NPC card, location card, hover preview and
+  reading view read them; a `## Will` or `## Atmosphäre` in the text has no
+  influence on them. An `[[id]]` in the value appears as the current name
+  when displayed, without being a reference (`decisions/constraints`); without
+  a row it stands as text. Search indexes both fields with resolved names.
+- They are edited in the edit mode of the reading view next to the text, not
+  in the properties dialog. They share the row's one guard
   (`decisions/writes`).
-- Der Generator liefert beide Felder über das Antwort-Schema, nullable wie
-  `voice` und `appearance`; NPC- und Ort-Prompt beschreiben sie als Feld.
+- The generator delivers both fields via the response schema, nullable like
+  `voice` and `appearance`; the NPC and location prompts describe them as
+  fields.
 
-### Die Fäden eines Kapitels
+### The threads of a chapter
 
-- Ein Faden ist eine Zeile der Tabelle `threads` und nie eine Checkliste im
-  Kapiteltext: `campaign_id`, eine opake `id` (eindeutig je Kampagne, nicht je
-  Kapitel und nicht die Position), das Kapitel `chapter_id` als
-  Fremdschlüssel, `text`, `done`, `pos`. Ein Faden liegt flach unter der
-  Kampagne, sein Kapitel ist ein Feld, und er hat sein eigenes `rev`. Ein
-  weiterer Anker (Szene, Kampagne) wäre eine weitere Besitzer-Spalte.
-- Anlegen trägt kein `rev`, wie Idee und Log-Zeile: ein Anhängen
-  überschreibt nichts, und ein Wächter würde „Handlungsstrang übernehmen" nur
-  deshalb abweisen, weil sich in einem anderen Tab etwas bewegt hat.
-- **Getrennte Wächter:** kein Schreibzugriff auf einen Faden berührt Text oder
-  `rev` des Kapitels, und ein Kapitel-Write bewegt keinen Faden.
-- „Handlungsstrang übernehmen" in der Nachbereitung legt einen Faden im
-  aktiven Kapitel an; die Kapitelübersicht zeigt die Fäden unter dem
-  Kapiteltext, in der Reihenfolge des Anlegens, und pflegt sie (anlegen,
-  abhaken, umformulieren, löschen).
-- Fäden werden nicht indexiert, wie die Ideen, und erreichen keinen
-  Generator-Prompt; ein Szenen-Lauf kennt vom Kapitel nur die id.
-- Ein Abschnitt `## Offene Fäden` im Kapiteltext ist freier Text.
+- A thread is a row of the `threads` table and never a checklist in the
+  chapter text: `campaign_id`, an opaque `id` (unique per campaign, not per
+  chapter and not the position), the chapter `chapter_id` as a foreign key,
+  `text`, `done`, `pos`. A thread lies flat under the campaign, its chapter is
+  a field, and it has its own `rev`. A further anchor (scene, campaign) would
+  be a further owner column.
+- Creating carries no `rev`, like idea and log line: appending overwrites
+  nothing, and a guard would refuse „Handlungsstrang übernehmen" (adopt plot
+  thread) merely because something moved in another tab.
+- **Separate guards:** no write to a thread touches the chapter's text or
+  `rev`, and a chapter write moves no thread.
+- „Handlungsstrang übernehmen" in the post-session review creates a thread in
+  the active chapter; the chapter overview shows the threads below the chapter
+  text, in order of creation, and maintains them (create, check off,
+  rephrase, delete).
+- Threads are not indexed, like ideas, and reach no generator prompt; a scene
+  run knows only the chapter's id.
+- A section `## Offene Fäden` (open threads) in the chapter text is free text.
 
-### Kapitel und Kampagne zeigen ihren ganzen Text
+### Chapter and campaign show their whole text
 
-- Die Kapitelübersicht zeigt den **ganzen Text** des Kapitels, ihr Kopf unter
-  der Kurzbeschreibung den ganzen Text der Kampagne — beide durch denselben
-  Renderer wie jeder Text (Callouts, `## If:`, `[[id]]`), auf wenige Zeilen
-  begrenzt und aufklappbar. Ob der Text länger ist, wird gemessen; „Mehr
-  anzeigen" steht nur dann da. Ausgewählt wird nichts, und keine Überschrift
-  hat für die Anzeige eine Bedeutung.
-- „Kapitel anlegen" schreibt die Beschreibung aus dem Dialog als `body` des
-  Kapitels (`POST …/chapters { title, id?, status?, body? }`), so wie sie
-  getippt wurde — getrimmt, mit einem abschließenden Zeilenumbruch, ohne
-  Überschrift davor.
-- Ein Kapitel mit `## Ziel des Kapitels` zeigt diese Überschrift als Teil
-  seines Textes.
+- The chapter overview shows the **whole text** of the chapter, its header
+  below the short description the whole text of the campaign — both through
+  the same renderer as every text (callouts, `## If:`, `[[id]]`), limited to a
+  few lines and expandable. Whether the text is longer is measured; „Mehr
+  anzeigen" (show more) appears only then. Nothing is selected, and no heading
+  has a meaning for the display.
+- „Kapitel anlegen" (create chapter) writes the description from the dialog as
+  the chapter's `body` (`POST …/chapters { title, id?, status?, body? }`), as
+  it was typed — trimmed, with a trailing line break, without a heading in
+  front.
+- A chapter with `## Ziel des Kapitels` (goal of the chapter) shows this
+  heading as part of its text.
 
-### Fixtures sind die Form der API
+### Fixtures are the shape of the API
 
-Es gibt genau ein Fixture-Format, und es ist die Form der API: die
-Beispielkampagne liegt unter `fixtures/` als die Objekte, die ihre
-Ressourcen liefern, eine Datei je Entität und id unter
-`fixtures/<kampagne>/<ressource>/<id>.json` (etwa
-`fixtures/beispiel/locations/leuchtturm.json`), jede ohne `rev`. Auch
-Sessions (mit Pausen, Log-Zeilen und gespielten Szenen), Ideen und
-Glossar-Begriffe liegen strukturiert vor, nicht als Text. Jede Beispielszene
-nennt ihren Ort selbst. `grimoire seed <dir>` liest sie und schreibt sie über
-die Store-Schicht. Einen Importer gibt es nicht. Die Bodies bleiben Zeichen
-für Zeichen, wie sie sind; ihr Format ist Vertrag.
+There is exactly one fixture format, and it is the shape of the API: the
+example campaign lies under `fixtures/` as the objects its resources return,
+one file per entity and id under `fixtures/<campaign>/<resource>/<id>.json`
+(for example `fixtures/beispiel/locations/leuchtturm.json`), each without
+`rev`. Sessions (with pauses, log lines and played scenes), ideas and
+glossary terms are also structured, not text. Every example scene names its
+location itself. `grimoire seed <dir>` reads them and writes them through the
+store layer. There is no importer. The bodies stay character for character
+as they are; their format is a contract.
 
-## Warum
+## Why
 
-Ein Abschnitt, den Code über den Text seiner `##`-Überschrift findet, ist eine
-Absprache mit dem DM, die still bricht: Leser und Schreiber erkennen
-Überschriften leicht nach verschiedenen Regeln (Groß/Klein, CRLF), und was der
-DM anders schreibt, fällt still heraus oder entsteht doppelt. Die Speicherung
-leitet nichts aus Text ab (`decisions/constraints`); dasselbe gilt für
-Anzeige, Schreibwege und Prüfungen. Einen Wert bei einer Migration aus einem
-Markdown-Abschnitt zu schneiden, wäre genau der Leser, den diese
-Entscheidung ausschließt.
+A section that code finds by the text of its `##` heading is an agreement
+with the DM that breaks silently: reader and writer easily recognize headings
+by different rules (case, CRLF), and whatever the DM writes differently
+silently drops out or comes into being twice. Storage derives nothing from
+text (`decisions/constraints`); the same holds for display, write paths and
+checks. Cutting a value out of a Markdown section during a migration would be
+exactly the reader this decision rules out.
 
-Kein Produktivpfad importiert, und wer die App frisch installiert, legt seine
-Kampagne in der UI an. Ein Seed, der durch einen Parser läuft, prüfte den
-Parser statt den Speicher; Fixtures in der Form der API sind zugleich die
-Referenz dafür, was die API antwortet.
+No production path imports, and whoever installs the app fresh creates their
+campaign in the UI. A seed that runs through a parser would test the parser
+instead of the storage; fixtures in the shape of the API are at the same time
+the reference for what the API answers.
 
-## Folgen
+## Consequences
 
-- Keine Prüfung des Generators und kein Anlegen eines NPC verzweigt über eine
-  Überschrift (`decisions/generator`, `decisions/constraints`). `## Weiß` und
-  `## Beziehungen` sind Empfehlungen der NPC-Prompts, freier Text; ebenso ein
-  Abschnitt `## Notizen`.
-- Die Fixtures sind der Seed für Dev, Tests und E2E und die Referenz für
-  Callouts.
+- No generator check and no NPC creation branches on a heading
+  (`decisions/generator`, `decisions/constraints`). `## Weiß` (knows) and
+  `## Beziehungen` (relationships) are recommendations of the NPC prompts,
+  free text; so is a section `## Notizen` (notes).
+- The fixtures are the seed for dev, tests and E2E and the reference for
+  callouts.

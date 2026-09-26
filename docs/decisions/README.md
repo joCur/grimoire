@@ -1,46 +1,48 @@
-# Entscheidungen
+# Decisions
 
-Die Architektur-Entscheidungen von Grimoire, eine Datei je Thema. Sie sind
-bindend; eine Abweichung braucht eine geänderte oder neue Datei.
+Grimoire's architecture decisions, one file per topic. They are binding; a
+deviation requires a changed or new file.
 
-## Wie Entscheidungen geführt werden
+## How decisions are kept
 
-- Eine Datei hält nur Zielentscheidungen fest: was heute gilt. Es gibt keine
-  befristeten Entscheidungen und keine Zwischenstände; der Zwischenstand eines
-  in Scheiben geschnittenen Umbaus steht allein im Ticket.
-- Jede Datei hat einen sprechenden Namen, keine Nummer und kein Datum, und
-  gliedert sich in `## Entscheidung`, `## Warum` und `## Folgen`.
-- Eine Änderung schreibt die betroffene Datei um oder legt eine neue an. Eine
-  Regel steht in genau einer Datei; berührt sie ein anderes Thema, verweist
-  die andere Datei auf sie.
-- Die Geschichte einer Entscheidung steht in git, nicht in der Datei.
-- Zitiert wird in Code-Kommentaren als `decisions/<name>`, in Dokumenten als
-  Link auf `docs/decisions/<name>.md`.
+- Decisions are written in English.
+- A file records only target decisions: what holds today. There are no
+  temporary decisions and no intermediate states; the intermediate state of a
+  rework cut into slices lives only in the ticket.
+- Each file has a descriptive name, no number and no date, and is structured
+  into `## Decision`, `## Why` and `## Consequences`.
+- A change rewrites the affected file or creates a new one. A rule lives in
+  exactly one file; where it touches another topic, the other file refers to
+  it.
+- The history of a decision lives in git, not in the file.
+- Code comments cite a decision as `decisions/<name>`, documents as a link to
+  `docs/decisions/<name>.md`.
 
-## Dateien
+## Files
 
-- [scope.md](scope.md) — Einzelnutzer-Werkzeug für den DM: kein VTT, kein
-  Wiki, keine Spieler-Ansicht, kein Roll20-Sync, Zugriffsschutz vor der App.
-- [stack.md](stack.md) — Tech-Stack, Bun-Workspace-Monorepo mit `shared/`,
-  Node-Portabilität und die eine eingetragene Bun-only-API, Wachstumspfad.
-- [dependencies.md](dependencies.md) — etablierte Pakete statt Eigenbau.
-- [sqlite.md](sqlite.md) — eine SQLite-Datei ist die Quelle der Wahrheit:
-  Markdown als Body-Format, Drizzle, Migrationen ab der Baseline, FTS5,
-  `GRIMOIRE_DATA`, Seed-Werkzeug.
-- [constraints.md](constraints.md) — Referenzen als Fremdschlüssel, Status
-  und Typ als CHECK, unveränderliche ids, leere Zeilen.
-- [resources.md](resources.md) — eine Ressource, ein Typ, ein zod-Modul je
-  Entität; URL-Schema, Kinder einer Session, Reihenfolgen, App-Slices.
-- [writes.md](writes.md) — App-first, Wächter `rev`, 409 mit aktuellem Stand,
-  ein Schreibweg je Entität, `force`.
-- [data-shape.md](data-shape.md) — Daten sind Felder und Zeilen, nie
-  Text-Abschnitte; Fäden; Fixtures in der Form der API.
-- [scene-order.md](scene-order.md) — Kapitel-Status und ein aktives Kapitel,
-  der Ort einer Szene, die Szenenreihenfolge mit eigenem Wächter.
-- [generator.md](generator.md) — LLM-Generator: Provider, Antwort-Schema,
-  serverseitige Jobs, Pipeline aus Teilen, Prüfzustand am Job, Übernehmen.
-- [polling.md](polling.md) — Client-Aktualisierung über den Versionszähler.
-- [i18n.md](i18n.md) — typisierter Katalog, ICU über `intl-messageformat`,
-  sprachfreier Server, Lint-Gate.
-- [release.md](release.md) — release-please, Conventional Commits,
-  Versions-Tags, `:latest` nur beim Release, CI publiziert nie.
+- [scope.md](scope.md) — single-user tool for the DM: no VTT, no wiki, no
+  player view, no Roll20 sync, access control in front of the app.
+- [stack.md](stack.md) — tech stack, Bun workspace monorepo with `shared/`,
+  Node portability and the one registered Bun-only API, growth path.
+- [dependencies.md](dependencies.md) — established packages instead of
+  building our own.
+- [sqlite.md](sqlite.md) — one SQLite file is the source of truth: Markdown
+  as the body format, Drizzle, migrations from the baseline, FTS5,
+  `GRIMOIRE_DATA`, seed tool.
+- [constraints.md](constraints.md) — references as foreign keys, status and
+  type as CHECK, immutable ids, empty rows.
+- [resources.md](resources.md) — one resource, one type, one zod module per
+  entity; URL scheme, children of a session, orders, app slices.
+- [writes.md](writes.md) — app-first, guard `rev`, 409 with the current state,
+  one write path per entity, `force`.
+- [data-shape.md](data-shape.md) — data is fields and rows, never text
+  sections; threads; fixtures in the shape of the API.
+- [scene-order.md](scene-order.md) — chapter status and one active chapter,
+  the location of a scene, the scene order with its own guard.
+- [generator.md](generator.md) — LLM generator: provider, response schema,
+  server-side jobs, pipeline of parts, review state on the job, applying.
+- [polling.md](polling.md) — client refresh via the version counter.
+- [i18n.md](i18n.md) — typed catalog, ICU via `intl-messageformat`,
+  language-free server, lint gate.
+- [release.md](release.md) — release-please, Conventional Commits, version
+  tags, `:latest` only on release, CI never publishes.

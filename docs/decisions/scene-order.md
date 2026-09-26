@@ -1,146 +1,141 @@
-# Kapitel, Ort und Reihenfolge der Szenen
+# Chapter, location and order of scenes
 
-## Entscheidung
+## Decision
 
-### Der Kapitel-Status ist ein Enum, höchstens ein Kapitel ist aktiv
+### The chapter status is an enum, at most one chapter is active
 
-Der Status eines Kapitels ist `planned | active | done`, genau einmal in
-`shared/src/chapter.ts` definiert (`CHAPTER_STATUSES`), mit den Labels de
-„Geplant / Aktiv / Abgeschlossen", en „Planned / Active / Done". Die Spalte ist
-ein CHECK-Constraint, ein anderer Wert ist 400 (`decisions/constraints`). Ein
-neu angelegtes Kapitel startet auf `planned`.
+A chapter's status is `planned | active | done`, defined exactly once in
+`shared/src/chapter.ts` (`CHAPTER_STATUSES`), with the labels de
+„Geplant / Aktiv / Abgeschlossen", en "Planned / Active / Done". The column is
+a CHECK constraint; any other value is 400 (`decisions/constraints`). A newly
+created chapter starts at `planned`.
 
-`active` ist eine Entscheidung über zwei Kapitel, und „höchstens ein aktives
-Kapitel je Kampagne" gehört dem **Feld, nicht einem Endpunkt**: jeder
-Schreibweg, der `active` setzt — `PATCH …/chapters/:id { rev, status:
-"active" }` mit Wächter wie jeder Schreibzugriff und `POST …/chapters` mit
-`status: "active"` —, setzt das zuvor aktive Kapitel in derselben Transaktion
-auf `planned`, und dessen `rev` bewegt sich mit.
+`active` is a decision about two chapters, and "at most one active chapter
+per campaign" belongs to the **field, not to an endpoint**: every write path
+that sets `active` — `PATCH …/chapters/:id { rev, status: "active" }`, guarded
+like every write, and `POST …/chapters` with `status: "active"` — sets the
+previously active chapter to `planned` in the same transaction, and that
+chapter's `rev` moves along.
 
-In der Kapitelübersicht ist die Status-Anzeige das Bedienelement (wie beim
-Szenen-Status, gemeinsames Markup in `app/src/components/StatusMenu.tsx`):
-jede Auswahl patcht das Kapitel, die Auswahl des Werts, der schon angezeigt
-wird, schreibt nichts. Mobil bleibt der Status Anzeige: unter `md` rendert die
-Route die Startfläche statt der Kapitelübersicht.
+In the chapter overview the status display is the control (as with the scene
+status, shared markup in `app/src/components/StatusMenu.tsx`): every
+selection patches the chapter, selecting the value already shown writes
+nothing. On mobile the status stays a display: below `md` the route renders
+the start screen instead of the chapter overview.
 
-### Der Ort einer Szene steht in einer Spalte
+### The location of a scene lives in one column
 
-Der Ort einer Szene steht in genau einer Spalte, `location`; eine Gruppe
-daneben gibt es nicht. `location` ist eine Orts-id oder leer
-(`decisions/constraints`). Aus `location` wird nichts abgeleitet: weder die
-URL der Szene noch eine Gruppierung.
+The location of a scene lives in exactly one column, `location`; there is no
+group beside it. `location` is a location id or empty
+(`decisions/constraints`). Nothing is derived from `location`: neither the
+scene's URL nor a grouping.
 
-### Die Reihenfolge der Szenen setzt der DM
+### The DM sets the order of scenes
 
-Ein Kapitel hat eine Szenenreihenfolge, und die setzt der DM. `scenes.pos` ist
-diese Reihenfolge, fortlaufend innerhalb des Kapitels, gepflegt über
-Hoch/Runter an der Zeile. Die Kapitelübersicht zeigt genau sie: eine
-durchgehende Liste ohne Ortsgruppen, der Ort steht mit seinem Namen in der
-Metazeile der Szene. Eventualszenen sind ein eigener Block am Ende, derselbe
-`pos`-Lauf, nur getrennt gezeigt.
+A chapter has a scene order, and the DM sets it. `scenes.pos` is this order,
+consecutive within the chapter, maintained via up/down on the row. The
+chapter overview shows exactly that: one continuous list without location
+groups, the location appears by name in the scene's meta line. Contingency
+scenes are a block of their own at the end, the same `pos` run, only shown
+separately.
 
-- **Lesen:** `ChapterNode.scenes: SceneSummary[]`
-  (`shared/src/campaign-tree.ts`), sortiert nach `pos, id`. `SceneSummary`
-  trägt neben der Orts-id den aufgelösten Ortsnamen (`locationName`).
-- **Schreiben:** `PUT /api/campaigns/:campaign/chapters/:chapter/scene-order`
-  mit `{ scenes: string[], rev }`. `scenes` ist die vollständige neue
-  Reihenfolge; ist sie nicht exakt die Menge der Szenen-ids dieses Kapitels —
-  eine fehlt, eine doppelt sich, eine gehört woanders hin —, ist das 400, und
-  es wird nichts geschrieben. Der Write schreibt die Positionen dicht neu.
-- **Der Wächter ist `chapters.scene_order_rev`,** ein eigener Zähler, der nur
-  die Writes dieser Liste zählt und den `ChapterNode` mitliefert; das `rev`
-  im Rumpf ist seiner. Ein alter Stand ist 409 `rev_conflict`. Der Write
-  bewegt `scene_order_rev` und `campaigns.version` — weder `scenes.rev` noch
+- **Read:** `ChapterNode.scenes: SceneSummary[]`
+  (`shared/src/campaign-tree.ts`), sorted by `pos, id`. Besides the location
+  id, `SceneSummary` carries the resolved location name (`locationName`).
+- **Write:** `PUT /api/campaigns/:campaign/chapters/:chapter/scene-order`
+  with `{ scenes: string[], rev }`. `scenes` is the complete new order; if it
+  is not exactly the set of this chapter's scene ids — one missing, one
+  duplicated, one belonging elsewhere — that is 400, and nothing is written.
+  The write rewrites the positions densely.
+- **The guard is `chapters.scene_order_rev`,** a counter of its own that
+  counts only the writes of this list and that `ChapterNode` delivers; the
+  `rev` in the body is its. A stale state is 409 `rev_conflict`. The write
+  moves `scene_order_rev` and `campaigns.version` — neither `scenes.rev` nor
   `chapters.rev`.
-- **Neue Szenen landen am Ende** ihres Kapitels. Wechselt eine Szene das
-  Kapitel, landet sie am Ende des Zielkapitels.
-- **Die Szenen eines Generator-Laufs** stehen an **Startwert des Laufs +
-  Nummer der Szene in der Gliederung**, damit die Reihenfolge des Laufs auch
-  über mehrere Teil-Übernahmen in beliebiger Reihenfolge hält. `pos` ist ein
-  Sortierschlüssel und verträgt Lücken.
-  - Die Nummer ist der Index der Szene unter den Szenen-Teilen der Gliederung.
-    Eine verworfene oder gescheiterte Szene behält ihre Nummer und hinterlässt
-    eine Lücke; ein Retry ändert die Nummer nicht.
-  - Der Startwert ist das Kapitelende bei der **ersten Szenen-Übernahme** des
-    Laufs. Er wird im selben Commit am Job gespeichert (neben der Gliederung,
-    übersteht also einen Neustart) und für diesen Lauf nie neu berechnet. Eine
-    Szene, die der DM zwischen Start und erster Übernahme von Hand anlegt,
-    steht so vor dem Lauf; ein neues Kapitel beginnt bei 0.
-  - **Die Handsortierung gewinnt.** Mit dem Startwert speichert der Job den
-    `scene_order_rev` des Kapitels. Hat der sich seitdem bewegt, hängt jede
-    weitere Übernahme dieses Laufs ans Kapitelende wie jede andere neue Szene.
-  - Ein Gleichstand (der DM legt mitten in der Prüfung eine Szene an) löst
-    sich über die Sortierung `pos, id`.
-  - Wer alles in einem Aufruf übernimmt, bekommt dieselbe Reihenfolge. Keine
-    Übernahme bewegt `scene_order_rev`, `chapters.rev` oder das `rev` einer
-    bestehenden Szene. Ein neuer Lauf bekommt seinen eigenen Startwert; ein
-    Einsortieren über Läufe hinweg gibt es nicht.
-- **Die Session-Ansicht liest dieselbe Reihenfolge.** Sie öffnet die erste
-  Szene, deren Status weder `played` noch `dropped` ist, sonst die erste;
-  unter der offenen Szene steht der Schritt „Nächste Szene: <Titel>".
-- **`pos` ist kein Feld der Szene.** Es steht nicht im Typ der Szene, nicht in
-  den Fixtures und nicht im Eigenschaften-Dialog. Reihenfolge wohnt in einer
-  `pos`-Spalte: `scene_npcs.pos` hält die der NPCs einer Szene,
-  `chapters.pos` die der Kapitel, keine davon ist eine Eigenschaft.
+- **New scenes land at the end** of their chapter. If a scene changes
+  chapter, it lands at the end of the target chapter.
+- **The scenes of a generator run** stand at **the run's start value + the
+  scene's number in the outline**, so that the run's order holds even across
+  several partial applies in any order. `pos` is a sort key and tolerates
+  gaps.
+  - The number is the scene's index among the outline's scene parts. A
+    discarded or failed scene keeps its number and leaves a gap; a retry does
+    not change the number.
+  - The start value is the chapter end at the run's **first scene apply**. It
+    is stored on the job in the same commit (next to the outline, so it
+    survives a restart) and never recomputed for this run. A scene the DM
+    creates by hand between start and first apply thus stands before the run;
+    a new chapter starts at 0.
+  - **Manual sorting wins.** Together with the start value the job stores the
+    chapter's `scene_order_rev`. If that has moved since, every further apply
+    of this run appends to the chapter end like any other new scene.
+  - A tie (the DM creates a scene in the middle of the review) resolves via
+    the sort `pos, id`.
+  - Applying everything in one call yields the same order. No apply moves
+    `scene_order_rev`, `chapters.rev` or the `rev` of an existing scene. A new
+    run gets its own start value; there is no sorting across runs.
+- **The session view reads the same order.** It opens the first scene whose
+  status is neither `played` nor `dropped`, otherwise the first; below the
+  open scene stands the step „Nächste Szene: <Titel>" (next scene: <title>).
+- **`pos` is not a field of the scene.** It is not in the scene's type, not in
+  the fixtures and not in the properties dialog. Order lives in a `pos`
+  column: `scene_npcs.pos` holds that of a scene's NPCs, `chapters.pos` that
+  of the chapters; none of them is a property.
 
-Am Kapitel stehen damit drei Schreibwege mit drei Wächtern: die Szene mit
-`scenes.rev` (ihre Felder samt Text), das Kapitel mit `chapters.rev` (Titel,
-Status, Kapiteltext) und die Reihenfolge mit `chapters.scene_order_rev`.
+The chapter thus has three write paths with three guards: the scene with
+`scenes.rev` (its fields including the text), the chapter with `chapters.rev`
+(title, status, chapter text) and the order with `chapters.scene_order_rev`.
 
-## Warum
+## Why
 
-**Ein Wert, eine Quelle.** Eine Gruppe neben `location` wäre ein zweiter Wert
-für dieselbe Sache: korrigiert der DM den Ort, bliebe die Gruppe stehen, und
-die Anzeige widerspräche dem Feld. Auch eine abgeleitete Spalte hätte jeden
-Schreibpfad verpflichtet, sie mitzuziehen. Zwei Quellen für eine Wahrheit
-driften immer; die Reparatur ist, eine abzuschaffen. Dasselbe gilt für die
-Reihenfolge: sie hat genau eine Quelle, `pos`.
+**One value, one source.** A group beside `location` would be a second value
+for the same thing: if the DM corrects the location, the group would remain,
+and the display would contradict the field. A derived column, too, would have
+obliged every write path to update it. Two sources for one truth always
+drift; the repair is to abolish one. The same holds for the order: it has
+exactly one source, `pos`.
 
-**Gesetzt statt abgeleitet.** Eine Ordnung nach id oder Ortsname fiele an,
-statt gesetzt zu werden. Die id entsteht aus dem getippten Namen und steht
-danach fest; der Name ist Dramaturgie, und wer dramaturgisch benennt,
-sortiert nicht. Übrig bliebe, ids zu Nummern zu machen (`01-ankunft`) — eine
-Reihenfolge, die beim ersten Umstellen falsch wird. Die Kapitelübersicht ist
-das Werkzeug der Vorbereitung, und Vorbereitung heißt: in welcher Reihenfolge
-erzähle ich das. Der Ort ist eine Eigenschaft der Szene, keine
-Gliederungsebene über ihr; zwei Szenen am selben Ort können dramaturgisch weit
-auseinanderliegen.
+**Set, not derived.** An order by id or location name would fall out
+incidentally instead of being set. The id arises from the typed name and is
+fixed afterwards; the name is dramaturgy, and whoever names dramaturgically
+does not sort. What would remain is turning ids into numbers (`01-ankunft`) —
+an order that becomes wrong at the first rearrangement. The chapter overview
+is the tool of preparation, and preparation means: in which order do I tell
+this. The location is a property of the scene, not an outline level above
+it; two scenes at the same location can lie far apart dramaturgically.
 
-**Die ganze Liste.** Eine Reihenfolge ist eine Aussage über eine Menge; ein
-Umsortieren ändert immer mehrere Positionen. Eine Teilliste ohne Positionen
-anzunehmen hieße, den Rest irgendwohin zu sortieren. Dem Hoch/Runter liegt die
-vollständige Liste ohnehin vor. Die eine Teilliste mit ausdrücklichen
-Positionen ist die eines Generator-Laufs. Ein je Übernahme neu berechnetes
-„ans Ende" wanderte mit, und eine später übernommene frühere Szene landete
-wieder hinten; ein neuer Startwert nach einer Handsortierung sortierte nur
-wieder um die Ordnung des DM herum.
+**The whole list.** An order is a statement about a set; a reordering always
+changes several positions. Accepting a partial list without positions would
+mean sorting the rest somewhere. Up/down has the complete list at hand
+anyway. The one partial list with explicit positions is that of a generator
+run. An "at the end" recomputed per apply would move along, and an earlier
+scene applied later would land at the back again; a new start value after a
+manual sort would only sort around the DM's order again.
 
-**Ein eigener Wächter.** Die Reihenfolge gehört dem Kapitel, ist aber nicht
-das Kapitel. Mit `chapters.rev` als Wächter triebe ein Umsortieren einen
-offenen Kapiteltext in eine 409 und umgekehrt — Konflikte über etwas, das
-sich nicht widerspricht. Ein Wächter, der auf fremde Writes anspringt,
-erzieht dazu, die Konfliktzeile wegzuklicken, und fängt dann die echte
-Überschreibung nicht. Ein Wächter zählt deshalb nur die Writes,
-gegen die er schützt.
+**A guard of its own.** The order belongs to the chapter but is not the
+chapter. With `chapters.rev` as its guard, a reordering would drive an open
+chapter text into a 409 and vice versa — conflicts over things that do not
+contradict each other. A guard that fires on unrelated writes trains the
+user to click the conflict line away, and then does not catch the real
+overwrite. A guard therefore counts only the writes it protects against.
 
-**Kein Positionsfeld.** Felder sind, was eine Szene über sich selbst aussagt.
-Wo sie in einer Liste steht, sagt die Liste über sie aus. Eine Positionszahl
-im Eigenschaften-Dialog wäre obendrein unbedienbar.
+**No position field.** Fields are what a scene states about itself. Where it
+stands in a list is what the list states about it. A position number in the
+properties dialog would moreover be unusable.
 
-**Hoch/Runter statt Drag & Drop.** Hoch/Runter ist mit Tastatur und
-Zeigegerät dieselbe Bedienung, auf dem Handy nicht kaputt, braucht keine
-Bibliothek und keine Greiffläche, die mit der „ruhigen Liste" aus
-[docs/UI-BRIEF.md](../UI-BRIEF.md) ringt. Drag & Drop wäre später eine andere
-Geste an demselben Endpunkt.
+**Up/down instead of drag and drop.** Up/down is the same operation with
+keyboard and pointing device, not broken on the phone, needs no library and
+no grab handle that fights the "calm list" from
+[docs/UI-BRIEF.md](../UI-BRIEF.md). Drag and drop would later be another
+gesture on the same endpoint.
 
-**Ein aktives Kapitel am Feld.** Hinge die Regel an einem Endpunkt, wäre der
-Eigenschaften-Dialog eine zweite Tür daran vorbei.
+**One active chapter on the field.** If the rule hung on an endpoint, the
+properties dialog would be a second door around it.
 
-## Folgen
+## Consequences
 
-- Nicht Teil der Entscheidung: eine Reihenfolge über Kapitelgrenzen hinweg
-  (die Kapitel haben ihre eigene, `chapters.pos`) und Sortieren nach Status,
-  Tag oder Ort als Ansicht — die Kapitelübersicht filtert, sie sortiert nicht
-  um.
-- Das Kampagnenwissen hat dasselbe Muster mit eigenem Wächter
+- Not part of the decision: an order across chapter boundaries (the chapters
+  have their own, `chapters.pos`) and sorting by status, tag or location as a
+  view — the chapter overview filters, it does not reorder.
+- Campaign knowledge follows the same pattern with a guard of its own
   (`decisions/resources`).

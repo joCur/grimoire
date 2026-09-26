@@ -1,30 +1,31 @@
-# Abhängigkeiten statt Eigenbau
+# Dependencies instead of building our own
 
-## Entscheidung
+## Decision
 
-Für allgemeine Aufgaben wird ein etabliertes Paket eingebunden, nicht selbst
-gebaut — Validierung, Schemata, Datum und Zeit, Diffs, das Lesen gängiger
-Formate und was sonst nicht Grimoire-spezifisch ist. Selbst geschrieben wird,
-was nur Grimoire hat: das Datenmodell, die Schreibregeln, das Text-Vokabular,
-die Oberfläche.
+For general tasks an established package is brought in, not built in-house —
+validation, schemas, date and time, diffs, reading common formats and
+whatever else is not specific to Grimoire. What we write ourselves is what
+only Grimoire has: the data model, the write rules, the text vocabulary, the
+interface.
 
-## Warum
+## Why
 
-Was wir nicht selbst pflegen, müssen wir nicht bedenken und nicht testen. Ein
-Hand-Helfer für eine Standardaufgabe kostet jedes Mal dasselbe: Randfälle, die
-das Paket längst kennt, eigene Tests dafür und eine Stelle mehr, die beim
-nächsten Umbau mitgezogen werden will. Ein etabliertes Paket bringt das mit,
-ist dokumentiert und von vielen geprüft. Die Kosten einer Abhängigkeit — ein
-Eintrag im Lockfile, gelegentlich ein Update — sind kleiner als die eines
-eigenen Nachbaus.
+What we do not maintain ourselves we need not think about or test. A
+hand-written helper for a standard task costs the same every time: edge cases
+the package has long known, tests of our own for them, and one more place
+that has to be carried along in the next rework. An established package
+brings all that, is documented and reviewed by many. The cost of a
+dependency — an entry in the lockfile, an occasional update — is smaller than
+that of a rebuild of our own.
 
-## Folgen
+## Consequences
 
-- Eine neue Abhängigkeit braucht keinen Eintrag in `docs/decisions/`.
-  Eintragspflichtig bleiben allein Bun-only-APIs (`decisions/stack`).
-- „Etabliert" heißt: verbreitet, gepflegt, mit Typen. Versionen stehen im
-  Lockfile und werden bewusst angehoben; wo ein Paket exakt gepinnt werden
-  muss, steht der Grund an seiner Stelle (`jsonrepair`, `decisions/generator`).
-- Anwendungen: `date-fns` für Datum und Zeit, `zod` für das Schema jeder
-  Entität (`decisions/resources`), `intl-messageformat` für Plural und
-  Interpolation (`decisions/i18n`).
+- A new dependency requires no entry in `docs/decisions/`. Only Bun-only APIs
+  still require an entry (`decisions/stack`).
+- "Established" means: widespread, maintained, with types. Versions live in
+  the lockfile and are raised deliberately; where a package must be pinned
+  exactly, the reason is stated at its place (`jsonrepair`,
+  `decisions/generator`).
+- Applications: `date-fns` for date and time, `zod` for the schema of every
+  entity (`decisions/resources`), `intl-messageformat` for plurals and
+  interpolation (`decisions/i18n`).

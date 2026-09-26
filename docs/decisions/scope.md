@@ -1,44 +1,42 @@
-# Umfang: ein Werkzeug für einen Spielleiter
+# Scope: a tool for one game master
 
-## Entscheidung
+## Decision
 
-Grimoire ist ein selbst gehostetes Einzelnutzer-Werkzeug für einen
-D&D-Spielleiter: Session-Vorbereitung und Live-Moderation über einer
-Kampagnen-Datenbank. Es ist kein VTT, kein Kampagnen-Wiki und hat keine
-Spieler-Ansicht.
+Grimoire is a self-hosted single-user tool for a D&D game master: session
+preparation and live running of the game on top of a campaign database. It is
+not a VTT, not a campaign wiki, and has no player view.
 
-### Kein Roll20-Sync
+### No Roll20 sync
 
-Grimoire hält, was nur der DM sieht: Read-Alouds, Notizen, Geheimnisse,
-Logs. Roll20 hält, was Spieler sehen und anfassen: Karten, Tokens,
-Spieler-Handouts, Statblocks. Die Brücke ist unidirektional und manuell
-(Copy-Button, Handout-Verweise per Name). Einen bidirektionalen Sync gibt es
-nicht.
+Grimoire holds what only the DM sees: read-alouds, notes, secrets, logs.
+Roll20 holds what players see and touch: maps, tokens, player handouts, stat
+blocks. The bridge is unidirectional and manual (copy button, handout
+references by name). There is no bidirectional sync.
 
-### Zugriffsschutz vor der App, nicht in der App
+### Access control in front of the app, not in the app
 
-Es gibt kein Account-System. Zugriffsschutz ist eine Entscheidung des
-Deployments: Tailscale als Standard, alternativ Basic Auth oder Forward Auth
-(Authelia, authentik) im Reverse Proxy. Die App selbst ist auth-agnostisch.
-Die einzige Folge in der App: alle Schreibzugriffe laufen über den Server,
-und es gibt keinen persistenten Browser-State.
+There is no account system. Access control is a deployment decision:
+Tailscale by default, alternatively Basic Auth or Forward Auth (Authelia,
+authentik) in the reverse proxy. The app itself is auth-agnostic. The only
+consequence inside the app: all writes go through the server, and there is no
+persistent browser state.
 
-## Warum
+## Why
 
-Die Trennung zu Roll20 folgt der Sichtbarkeit: was Spieler sehen, lebt dort,
-wo die Spieler sind. Ein bidirektionaler Sync bräuchte Konfliktauflösung,
-eine Umwandlung zwischen HTML und Markdown und eine offizielle REST-API, die
-Roll20 nicht hat.
+The split from Roll20 follows visibility: what players see lives where the
+players are. A bidirectional sync would need conflict resolution, a
+conversion between HTML and Markdown, and an official REST API, which Roll20
+does not have.
 
-Für einen einzelnen Nutzer ist ein Account-System Aufwand ohne Gegenwert;
-ein Proxy davor schützt genauso und kostet keinen App-Code.
+For a single user an account system is effort without benefit; a proxy in
+front protects just as well and costs no app code.
 
-## Folgen
+## Consequences
 
-- Wird App-seitige Authentifizierung doch nötig, wird zuerst geprüft, ob
-  Forward Auth im Proxy reicht; das deckt auch den Zugriff von fremden
-  Geräten ab. Sonst ist es ein Middleware-Layer in Hono (Basic Auth, JWT,
-  Sessions), kein Umbau.
-- Echte Mehrnutzer- oder Rechte-Anforderungen betreffen Datenmodell und
-  Auth-Modell; an dem Punkt wird neu entschieden statt angebaut.
-- Kein localStorage für Daten: der Server ist die Wahrheit.
+- If app-side authentication does become necessary, the first check is
+  whether Forward Auth in the proxy suffices; it also covers access from
+  other devices. Otherwise it is a middleware layer in Hono (Basic Auth, JWT,
+  sessions), not a rework.
+- Real multi-user or permission requirements affect the data model and the
+  auth model; at that point the decision is made anew instead of bolted on.
+- No localStorage for data: the server is the truth.
