@@ -829,6 +829,30 @@ export const en: Messages = {
   "sceneArticle.tag": "#{tag}",
   "sceneArticle.handout": "Handout: {handout}",
 
+  // --- edit mode of a reading view (components/EditMode.tsx, components/FieldChips.tsx)
+  "editMode.changes": "{count, plural, one {# change} other {# changes}}",
+  "editMode.chip.aria": "{field}: {value}",
+  "editMode.chip.changedAria": "{field}: {value}, changed",
+  "editMode.chip.unset": "not set",
+  "editMode.allFields.chip": "All fields · {count}",
+  "editMode.allFields.title": "All fields",
+  "editMode.done": "Done",
+  "editMode.blocked.fields": "A field cannot be saved like this — the marked chip says why.",
+
+  // --- edit mode of a scene (scene/SceneEditMode.tsx) ------------------------
+  "sceneEdit.heading": "Edit scene",
+  "sceneEdit.title.aria": "Scene title",
+  "sceneEdit.blocked.title": "A scene needs a title.",
+  "sceneEdit.trigger.placeholder": "When does the scene happen?",
+  "sceneEdit.trigger.add": "Trigger",
+  "sceneEdit.type.planned.hint": "stands in the chapter's order",
+  "sceneEdit.type.contingency.hint": "happens when something occurs",
+  "sceneEdit.location.none": "No location",
+  "sceneEdit.location.search": "Search locations",
+  "sceneEdit.location.noMatch": "No location matches the search.",
+  "sceneEdit.npcs.title": "NPCs in this order",
+  "sceneEdit.handouts.title": "Handouts in Roll20",
+
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} is not an NPC ID, so there is no NPC for it.",
   "npcCard.unloadable": "{id} — NPC not loadable, check the server.",

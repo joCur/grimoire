@@ -14,9 +14,45 @@
 // opens the campaign's route (the chapter overview), the chapter's, the
 // scene's, the npc's and the location's route and the glossary page.
 // Sessions and ideas are not indexed at all, so no query can produce one.
+//
+// Search queries and the titles hits are filtered by are words of the example
+// campaign in fixtures/, which is German.
+
+import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 import { getGlossaryTerm } from "../support/glossary-term";
+import { ui, uiExact } from "../support/ui";
+
+const CAMPAIGN_NAME = "Der Leuchtturm von Salzhafen";
+const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+const SCENE_TITLE = "Ankunft am Leuchtturm";
+
+function escaped(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Opens the palette with the global shortcut and returns its input.
+ *
+ * The shortcut listens only once the top bar has mounted the palette, which
+ * is also when the top bar's search button is there — so the button is the
+ * signal to wait for. The press is repeated until the input shows, because the
+ * listener is attached in an effect right after that render.
+ */
+async function openPalette(page: Page) {
+  await expect(
+    page
+      .getByRole("banner")
+      .getByRole("button", { name: new RegExp(`^${escaped(ui("topbar.search"))}`) }),
+  ).toBeVisible();
+  const input = page.getByRole("combobox");
+  await expect(async () => {
+    if (!(await input.isVisible())) await page.keyboard.press("ControlOrMeta+KeyK");
+    await expect(input).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  return input;
+}
 
 test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page, api }) => {
   // On the wire a scene hit is `{ kind: "scene", id, title }` and no `path`.
@@ -28,22 +64,18 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page, api }) => {
   expect(sceneHit).not.toHaveProperty("path");
 
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Der Leuchtturm von Salzhafen",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
 
   // The global shortcut (⌘K on macOS, Ctrl-K elsewhere).
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  const input = page.getByRole("combobox");
+  const input = await openPalette(page);
   await expect(input).toBeFocused();
-  await expect(input).toHaveAttribute("placeholder", "Szenen, NPCs, Orte durchsuchen …");
-
+  await expect(input).toHaveAttribute("placeholder", ui("palette.placeholder"));
   await input.fill("leucht");
 
   const options = page.getByRole("option");
   // Scene, location and the campaign entry all match "leucht".
-  await expect(options.filter({ hasText: "Ankunft am Leuchtturm" })).toHaveCount(1);
-  await expect(options.filter({ hasText: "Szene" })).not.toHaveCount(0);
+  await expect(options.filter({ hasText: SCENE_TITLE })).toHaveCount(1);
+  await expect(options.filter({ hasText: ui("kind.scene") })).not.toHaveCount(0);
   await expect(options.first()).toHaveAttribute("aria-selected", "true");
 
   // Keyboard navigation moves the active option and wraps around.
@@ -56,7 +88,7 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page, api }) => {
   await expect(options.first()).toHaveAttribute("aria-selected", "true");
 
   // Navigate to the scene row explicitly, then open it with Enter.
-  const scene = options.filter({ hasText: "Ankunft am Leuchtturm" });
+  const scene = options.filter({ hasText: SCENE_TITLE });
   for (let i = 0; i < count; i++) {
     if ((await scene.getAttribute("aria-selected")) === "true") break;
     await page.keyboard.press("ArrowDown");
@@ -65,7 +97,7 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page, api }) => {
   await page.keyboard.press("Enter");
 
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
   // The palette closed on pick.
   await expect(page.getByRole("combobox")).toHaveCount(0);
 });
@@ -76,7 +108,7 @@ test("content the APP just wrote is findable right away", async ({
 }) => {
   // A word that appears nowhere in the example campaign, so a hit can only
   // come from the paragraph typed below.
-  const WORD = "Zwirbelmuschel";
+  const WORD = "Twirlshell";
   const SCENE = "lighthouse-arrival";
 
   // Not findable before — proven through the search endpoint itself.
@@ -85,23 +117,24 @@ test("content the APP just wrote is findable right away", async ({
   );
   expect(before.results).toEqual([]);
 
-  // The DM writes it in the editor: „Bearbeiten" → „Markdown" → save.
+  // The DM writes it in the editor: edit → raw markdown → save.
   await page.goto(`/campaigns/beispiel/scenes/${SCENE}`);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
-  await page.getByRole("button", { name: "Markdown", exact: true }).click();
-  const textarea = page.getByRole("textbox", { name: "Markdown-Text von" });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(SCENE_TITLE);
+  await page.getByRole("button", { name: ui("common.edit") }).click();
+  await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
+  const textarea = page.getByRole("textbox", {
+    name: ui("bodyEditor.markdown.aria", { path: SCENE_TITLE }),
+  });
   const body = await textarea.inputValue();
-  await textarea.fill(`${body}\nAm Steg liegt eine ${WORD} im Tang.\n`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await textarea.fill(`${body}\nA ${WORD} lies in the kelp by the jetty.\n`);
+  await page.getByRole("button", { name: ui("common.save"), exact: true }).click();
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(WORD);
 
   // ⌘K finds it in the same breath — no reload, no watcher, no index lag.
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  const input = page.getByRole("combobox");
+  const input = await openPalette(page);
   await input.fill(WORD);
-  const hit = page.getByRole("option").filter({ hasText: "Ankunft am Leuchtturm" });
+  const hit = page.getByRole("option").filter({ hasText: SCENE_TITLE });
   await expect(hit).toHaveCount(1);
   // … and the row opens the scene the word was typed into.
   await hit.click();
@@ -123,8 +156,7 @@ test("an npc hit opens the npc's own route — its kind and id, no address", asy
   expect(npc).not.toHaveProperty("path");
 
   await page.goto("/campaigns/beispiel");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Ausstieg");
+  await (await openPalette(page)).fill("Ausstieg");
   const hit = page.getByRole("option").filter({ hasText: "Fenn" });
   await expect(hit).toHaveCount(1);
   await hit.click();
@@ -132,21 +164,22 @@ test("an npc hit opens the npc's own route — its kind and id, no address", asy
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/fenn$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   // The context line points at the npc list, on its own route too.
-  await expect(page.getByRole("link", { name: "NPCs" }).first()).toHaveAttribute(
-    "href",
-    "/campaigns/beispiel/npcs",
-  );
+  await expect(
+    page.getByRole("link", { name: ui("topbar.nav.npcs") }).first(),
+  ).toHaveAttribute("href", "/campaigns/beispiel/npcs");
 });
 
 test("the palette's NPC list entry opens the npc list on its own route", async ({ page }) => {
   await page.goto("/campaigns/beispiel");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("NPCs");
-  const option = page.getByRole("option").filter({ hasText: "NPCs" }).filter({ hasText: "Seite" });
+  await (await openPalette(page)).fill(ui("browse.title.npcs"));
+  const option = page
+    .getByRole("option")
+    .filter({ hasText: ui("browse.title.npcs") })
+    .filter({ hasText: ui("palette.kind.page") });
   await expect(option.first()).toBeVisible();
   await option.first().click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.npcs"));
   // The list links every npc to its own route.
   await expect(page.getByRole("link", { name: /Fenn/ }).first()).toHaveAttribute(
     "href",
@@ -168,19 +201,17 @@ test("a location hit opens the location's own route — its kind and id, no addr
   expect(location).not.toHaveProperty("path");
 
   await page.goto("/campaigns/beispiel");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Lampen");
-  const hit = page.getByRole("option").filter({ hasText: "Der Leuchtturm von Salzhafen" });
+  await (await openPalette(page)).fill("Lampen");
+  const hit = page.getByRole("option").filter({ hasText: CAMPAIGN_NAME });
   await expect(hit).toHaveCount(1);
   await hit.click();
 
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations\/leuchtturm$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   // The context line points at the location list, on its own route too.
-  await expect(page.getByRole("link", { name: "Orte" }).first()).toHaveAttribute(
-    "href",
-    "/campaigns/beispiel/locations",
-  );
+  await expect(
+    page.getByRole("link", { name: ui("topbar.nav.locations") }).first(),
+  ).toHaveAttribute("href", "/campaigns/beispiel/locations");
 });
 
 test("a chapter hit opens the chapter's own route, a campaign hit the chapter overview", async ({
@@ -196,28 +227,22 @@ test("a chapter hit opens the chapter's own route, a campaign hit the chapter ov
   expect(chapter).not.toHaveProperty("path");
 
   await page.goto("/campaigns/beispiel");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Leuchtfeuer");
-  const hit = page
-    .getByRole("option")
-    .filter({ hasText: "Kapitel 1: Der Leuchtturm von Salzhafen" });
+  await (await openPalette(page)).fill("Leuchtfeuer");
+  const hit = page.getByRole("option").filter({ hasText: CHAPTER_TITLE });
   await expect(hit).toHaveCount(1);
   await hit.click();
 
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/chapters\/01-salzhafen$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Kapitel 1: Der Leuchtturm von Salzhafen",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
   await expect(page.getByRole("article")).toContainText("Herausfinden, warum das Leuchtfeuer");
   // The context line leads back to the chapter overview, where its scenes are.
   await expect(
-    page.getByRole("navigation", { name: "Kontext" }).getByRole("link"),
+    page.getByRole("navigation", { name: ui("context.aria") }).getByRole("link"),
   ).toHaveAttribute("href", "/campaigns/beispiel");
   // The topbar marks the chapters section.
-  await expect(page.getByRole("link", { name: "Kapitel", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(
+    page.getByRole("link", { name: uiExact("topbar.nav.chapters") }),
+  ).toHaveAttribute("aria-current", "page");
 
   // The campaign's own hit opens the campaign's route: the chapter overview.
   const campaignHits = await api.get<{ results: { kind: string; id: string }[] }>(
@@ -227,16 +252,15 @@ test("a chapter hit opens the chapter's own route, a campaign hit the chapter ov
     kind: "campaign",
     id: "beispiel",
   });
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Kampagnenweite");
+  await (await openPalette(page)).fill("Kampagnenweite");
   const campaignHit = page
     .getByRole("option")
-    .filter({ hasText: "Kampagne" })
-    .filter({ hasText: "Der Leuchtturm von Salzhafen" });
+    .filter({ hasText: ui("kind.campaign") })
+    .filter({ hasText: CAMPAIGN_NAME });
   await expect(campaignHit).toHaveCount(1);
   await campaignHit.click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
 });
 
 test("a glossary hit opens the glossary page — no address, and none needed", async ({
@@ -259,11 +283,10 @@ test("a glossary hit opens the glossary page — no address, and none needed", a
   // In the palette: the term shows with the glossary's label and opens the
   // glossary page, where the terms are kept.
   await page.goto("/campaigns/beispiel");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("smugglers");
+  await (await openPalette(page)).fill("smugglers");
   const hit = page.getByRole("option").filter({ hasText: TERM });
   await expect(hit).toHaveCount(1);
-  await expect(hit).toContainText("Glossar");
+  await expect(hit).toContainText(ui("kind.glossary"));
   await hit.click();
 
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
@@ -286,10 +309,9 @@ test("sessions and ideas are not in the index, so they never turn up", async ({ 
 
 test("⌘K says so when nothing matches, and Esc closes it", async ({ page }) => {
   await page.goto("/campaigns/beispiel");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  const input = page.getByRole("combobox");
+  const input = await openPalette(page);
   await input.fill("zzzqqq");
-  await expect(page.getByText("Nichts gefunden.")).toBeVisible();
+  await expect(page.getByText(ui("palette.empty"))).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("combobox")).toHaveCount(0);
 });

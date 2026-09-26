@@ -10,19 +10,19 @@
 // so the chapter and the location live here, right above the title they
 // belong to.
 //
-// The header carries the scene's quiet actions — edit (the text), the dialog
-// over its other fields and the augment run — and its status control. The
-// edit action turns the body into the editor while header, chips and status
-// control keep standing; the dialog stays available beside it. Each is its
-// own editing session over the one row, so a save from one while the other
-// stands asks what to do instead of overwriting it.
+// The header carries the scene's quiet actions — edit and the augment run —
+// and its status control. Edit switches the page into the scene's edit mode
+// (./SceneEditMode.tsx): the same article, every field of the scene editable
+// in place and saved together. The npc cards step aside while it stands, so
+// the text gets the width.
 //
 // The npc cards and the augment action are not this slice's to draw: the
 // route is handed them (`npcCard`, `augmentAction`), so the scene never
 // reaches into the npc's slice or the generator job's.
 //
 // Edit mode is remembered BY SCENE: this route stays mounted across a
-// navigation, and an editor seeded from another scene would be a lie.
+// navigation, and an editor seeded from another scene would be a lie. A
+// navigation away from unsaved work asks first (UnsavedChangesGuard).
 
 import type { Scene } from "@grimoire/shared/scene";
 import { useQuery } from "@tanstack/react-query";
@@ -34,21 +34,34 @@ import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
+import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
+import { cn } from "@/lib/utils";
 
 import { SceneArticle } from "./SceneArticle";
-import { SceneBodyEditor, SceneFieldsAction } from "./SceneActions";
+import { SceneEditMode } from "./SceneEditMode";
 import { SceneStatusControl } from "./SceneStatusMenu";
 import { scenePageCrumbs } from "./scene-links";
 import { sceneQuery } from "./scene-query";
 
-export function SceneRoute({
-  npcCard,
-  augmentAction,
-}: {
+export function SceneRoute(props: {
   /** The card of one npc the scene names — drawn by the npc, not by the scene. */
   npcCard: (campaign: string, id: string) => ReactNode;
   /** The augment run on this scene — the generator job's dialog. */
+  augmentAction: (campaign: string, scene: Scene) => ReactNode;
+}) {
+  return (
+    <UnsavedChangesGuard>
+      <ScenePage {...props} />
+    </UnsavedChangesGuard>
+  );
+}
+
+function ScenePage({
+  npcCard,
+  augmentAction,
+}: {
+  npcCard: (campaign: string, id: string) => ReactNode;
   augmentAction: (campaign: string, scene: Scene) => ReactNode;
 }) {
   const t = useT();
@@ -66,10 +79,10 @@ export function SceneRoute({
     enabled: campaign !== "",
   });
 
-  // Edit mode ENDS at a navigation. Leaving the scene drops the draft, so
-  // coming back must not re-open the editor unasked: an editor seeded from
-  // the server looks exactly like the one the DM left, and the paragraph they
-  // typed would be silently gone from it.
+  // Edit mode ENDS at a navigation. Leaving the scene drops the draft (after
+  // the guard asked, when there was one), so coming back must not re-open the
+  // editor unasked: an editor seeded from the server looks exactly like the
+  // one the DM left, and the paragraph they typed would be silently gone.
   useEffect(() => {
     setEditingId(undefined);
   }, [campaign, id]);
@@ -110,53 +123,56 @@ export function SceneRoute({
   }
 
   const editing = editingId === data.id;
-  // While the body editor runs, the edit trigger is gone (the editor's own
-  // toggle owns the mode) and so is the augment run: two writers on one text
-  // is not a review. The augment action is desktop-only (mobile is the
-  // reading surface).
-  const actions = (
-    <>
-      {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
-      <SceneFieldsAction campaign={campaign} scene={data} tree={tree.data} />
-      {editing ? null : augmentAction(campaign, data)}
-    </>
-  );
-  const body = editing ? (
-    <SceneBodyEditor
-      key={data.id}
-      campaign={campaign}
-      scene={data}
-      onClose={() => setEditingId(undefined)}
-    />
-  ) : undefined;
 
   return (
     <>
       <MobileBackRow campaign={campaign} />
-      <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
-        <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
+      <div
+        className={cn(
+          "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",
+          // Room for the save bar at the bottom of the phone's screen.
+          editing ? "pb-[140px] md:pb-[100px]" : "pb-[100px]",
+        )}
+      >
+        <div className={cn("w-full min-w-0 flex-1", editing ? "lg:max-w-[820px]" : "lg:max-w-[680px]")}>
           <PageContext crumbs={scenePageCrumbs(campaign, data, tree.data)} />
-          <SceneArticle
-            scene={data}
-            tree={tree.data}
-            variant="scene"
-            actions={actions}
-            body={body}
-            // The status display IS the control here. The rev comes from the
-            // scene on screen, so the write carries exactly the version the
-            // DM was looking at.
-            statusControl={
-              <SceneStatusControl
-                campaign={campaign}
-                id={data.id}
-                status={data.status}
-                rev={data.rev}
-                variant="pill"
-              />
-            }
-          />
+          {editing ? (
+            <SceneEditMode
+              key={data.id}
+              campaign={campaign}
+              scene={data}
+              tree={tree.data}
+              onClose={() => setEditingId(undefined)}
+            />
+          ) : (
+            <SceneArticle
+              scene={data}
+              tree={tree.data}
+              variant="scene"
+              // The augment action is desktop-only (mobile is the reading
+              // surface).
+              actions={
+                <>
+                  <BodyEditAction onEdit={() => setEditingId(data.id)} />
+                  {augmentAction(campaign, data)}
+                </>
+              }
+              // The status display IS the control here. The rev comes from the
+              // scene on screen, so the write carries exactly the version the
+              // DM was looking at.
+              statusControl={
+                <SceneStatusControl
+                  campaign={campaign}
+                  id={data.id}
+                  status={data.status}
+                  rev={data.rev}
+                  variant="pill"
+                />
+              }
+            />
+          )}
         </div>
-        {data.npcs.length > 0 && (
+        {!editing && data.npcs.length > 0 && (
           <aside className="flex w-full flex-none flex-col gap-3.5 lg:sticky lg:top-0 lg:w-[280px]">
             <h2 className="text-[12px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
               {t("scene.npcs.heading")}
