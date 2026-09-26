@@ -1,6 +1,5 @@
-// The form of a location — what the dialog and the edit surface of its
-// reading view start with, and the write a save sends. Pure, so every rule is
-// unit-testable.
+// The form of a location — what the edit mode of its reading view starts
+// with, and the write a save sends. Pure, so every rule is unit-testable.
 //
 // Only what the DM CHANGED is written: a field nobody touched keeps its
 // stored value, whitespace around a value is no change, and a field left

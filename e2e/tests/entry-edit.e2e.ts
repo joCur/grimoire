@@ -23,11 +23,9 @@
 // adopts the stored scene, forcing writes only the fields this request
 // carries, so the other writer's status survives a forced text save.
 //
-// A location keeps one prose FIELD beside its text — `atmosphere`
-// (decisions/data-shape) — and the edit surface carries it, saved in the same
-// write as the text; the fields dialog does not show it. An npc's text is
-// edited in its edit mode together with all of its fields
-// (tests/npc-edit-mode.e2e.ts covers those); this spec covers the text half.
+// The texts of an npc and a location are edited in their edit modes together
+// with all of their fields (tests/npc-edit-mode.e2e.ts and
+// tests/location-edit-mode.e2e.ts cover those); this spec covers the text half.
 //
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
@@ -47,7 +45,6 @@ import type { Api } from "../support/api";
 import { campaignPath, getCampaign } from "../support/campaign";
 import { chapterPath, getChapter, patchChapter } from "../support/chapter";
 import { createGlossaryTerm, getGlossaryTerms } from "../support/glossary-term";
-import { getLocation } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { expect, test } from "../support/test";
@@ -779,38 +776,4 @@ test("a glossary term is a row of its own, kept on the glossary page", async ({ 
       name: uiPattern("bodyEditor.markdown.aria", { path: /.*/ }, { exact: true }),
     }),
   ).toHaveCount(0);
-});
-
-// --- the prose field beside the text ------------------------------------------
-
-test("the location edit surface carries the atmosphere; the fields dialog does not", async ({
-  page,
-  api,
-}) => {
-  const before = await getLocation(api, "lighthouse");
-  const mine = "Cold lamp oil, and the wind whistles through the spiral stairs.";
-  const atmosphere = ui("properties.location.atmosphere.label");
-
-  await page.goto("/campaigns/example/locations/lighthouse");
-  // Not in the dialog: it is edited where the prose is edited.
-  await page.getByRole("button", { name: ui("properties.action") }).click();
-  const dialog = page.getByRole("dialog", {
-    name: ui("properties.title", { kind: ui("kind.location") }),
-  });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("textbox", { name: atmosphere })).toHaveCount(0);
-  await dialog.getByRole("button", { name: ui("common.cancel") }).click();
-  await expect(dialog).toHaveCount(0);
-
-  await openMarkdownEditor(page);
-  const field = page.getByRole("textbox", { name: atmosphere, exact: true });
-  await expect(field).toHaveValue(String(before.atmosphere));
-  await field.fill(mine);
-  await saveButton(page).click();
-  await expect(field).toHaveCount(0);
-  await expect(page.getByRole("article")).toContainText(mine);
-  const after = await getLocation(api, "lighthouse");
-  expect(after.atmosphere).toBe(mine);
-  // The text was not touched, so it was not sent.
-  expect(after.body).toBe(before.body);
 });

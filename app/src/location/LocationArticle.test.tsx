@@ -36,7 +36,7 @@ describe("LocationArticle", () => {
     expect(html).toContain("Fog, gulls, wet wood.");
   });
 
-  test("the actions stay ONE spaced group; an editor replaces the text", () => {
+  test("the actions stay ONE spaced group", () => {
     const html = renderToStaticMarkup(
       <LocationArticle
         location={location({ body: "The saved text.\n" })}
@@ -47,12 +47,12 @@ describe("LocationArticle", () => {
             <button type="button">{"Second"}</button>
           </>
         }
-        body={<textarea defaultValue={"Draft"} />}
       />,
     );
     expect(html).toMatch(
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>First<\/button><button[^>]*>Second<\/button><\/span>/,
     );
-    expect(html).not.toContain("The saved text.");
+    // The text stands below the header.
+    expect(html).toContain("The saved text.");
   });
 });

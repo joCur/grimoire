@@ -1,10 +1,10 @@
-// Critical path 7: the fields dialog of a location and a chapter — one dialog
-// per entity over all of its typed fields, including the 409 conflict. It
-// also touches path 2 (the reading view must show the new values the moment
-// the dialog closes) and path 8 (the dialog has to be usable at 390px). A
-// scene and an npc have no such dialog: their fields are edited in their edit
-// modes (tests/scene-edit-mode.e2e.ts, tests/npc-edit-mode.e2e.ts). See
-// CLAUDE.md.
+// Critical path 7: the fields dialog of a chapter — one dialog over its typed
+// fields, including the 409 conflict. It also touches path 2 (the reading
+// view must show the new values the moment the dialog closes) and path 8
+// (the dialog has to be usable at 390px). A scene, an npc and a location have
+// no such dialog: their fields are edited in their edit modes
+// (tests/scene-edit-mode.e2e.ts, tests/npc-edit-mode.e2e.ts,
+// tests/location-edit-mode.e2e.ts). See CLAUDE.md.
 //
 // The sibling spec on this path is tests/status-control.e2e.ts: the status
 // control patches ONE key, this dialog patches any of them. What makes the
@@ -28,36 +28,26 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { getLocation, patchLocation } from "../support/location";
+import { getChapter, patchChapter } from "../support/chapter";
+import { CAMPAIGN } from "../support/paths";
 import { getScene, scenePath } from "../support/scene";
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
-import { CAMPAIGN } from "../support/paths";
 
 const SCENE = "lighthouse-arrival";
-const LOCATION = "lighthouse";
-const LOCATION_URL = `/campaigns/${CAMPAIGN}/locations/${LOCATION}`;
-const LOCATION_NAME = "The Lighthouse of Salt Harbour";
-/** The example campaign shares its name with the lighthouse. */
-const CAMPAIGN_NAME = LOCATION_NAME;
-/** The other location of the example campaign. */
-const OTHER_LOCATION = "cove";
-const OTHER_LOCATION_NAME = "The North Cove";
-
-/** The name of an entity's fields dialog. */
-function dialogName(kind: "kind.location" | "kind.chapter"): string {
-  return ui("properties.title", { kind: ui(kind) });
-}
-
-/** The label of a field that cannot be emptied — it carries the marker that says so. */
-function requiredLabel(key: "properties.location.name.label"): string {
-  return `${ui(key)}${ui("properties.field.required")}`;
-}
+const CHAPTER = "01-salt-harbour";
+const CHAPTER_URL = `/campaigns/${CAMPAIGN}/chapters/${CHAPTER}`;
+const CHAPTER_TITLE = "Chapter 1: The Lighthouse of Salt Harbour";
+/** A second chapter, seeded where a test needs one to navigate to. */
+const OTHER_CHAPTER = "02-the-reef";
+const OTHER_CHAPTER_TITLE = "Chapter 2: The Reef";
 
 /** Open the header's fields action and hand back the dialog. */
-async function openProperties(page: Page, kind: "kind.location" | "kind.chapter") {
+async function openProperties(page: Page) {
   await page.getByRole("button", { name: ui("properties.action") }).click();
-  const dialog = page.getByRole("dialog", { name: dialogName(kind) });
+  const dialog = page.getByRole("dialog", {
+    name: ui("properties.title", { kind: ui("kind.chapter") }),
+  });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -67,9 +57,16 @@ function saveButton(dialog: Locator) {
   return dialog.getByRole("button", { name: ui("common.save"), exact: true });
 }
 
-/** The location's name field in its dialog. */
-function nameField(dialog: Locator) {
-  return dialog.getByLabel(requiredLabel("properties.location.name.label"), { exact: true });
+/** The chapter's title field — it cannot be emptied, so its label carries the marker that says so. */
+function titleField(dialog: Locator) {
+  return dialog.getByLabel(
+    `${ui("properties.chapter.title.label")}${ui("properties.field.required")}`,
+    { exact: true },
+  );
+}
+
+function statusField(dialog: Locator) {
+  return dialog.getByLabel(ui("properties.chapter.status.label"));
 }
 
 /** The dialog's conflict line with its two actions — the only alert of the app. */
@@ -82,161 +79,133 @@ function conflict(dialog: Locator) {
   };
 }
 
-test("a location's dialog: a second writer is the conflict line, and a forced save keeps the text", async ({
+async function openChapter(page: Page) {
+  await page.goto(CHAPTER_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
+}
+
+test("a chapter's dialog: a second writer is the conflict line, and a forced save keeps the text", async ({
   page,
   api,
 }) => {
-  // The location is its own resource (decisions/resources): its dialog writes the
-  // location's PATCH, fields flat, against the location's `rev`.
-  const before = await getLocation(api, LOCATION);
-  const theirs = "\n## Who is here\n\nChanged by a second writer.\n";
-  const roll20 = "Lighthouse (night)";
+  // The chapter is its own resource (decisions/resources): its dialog writes
+  // the chapter's PATCH, fields flat, against the chapter's `rev`.
+  const before = await getChapter(api, CHAPTER);
+  const theirs = "Changed by a second writer.\n";
+  const title = "Chapter 1: The beacon goes dark";
 
-  await page.goto(LOCATION_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
-  const dialog = await openProperties(page, "kind.location");
-  await dialog.getByLabel(ui("properties.location.roll20.label")).fill(roll20);
+  await openChapter(page);
+  const dialog = await openProperties(page);
+  await titleField(dialog).fill(title);
 
   // The second writer touches only the TEXT.
-  await patchLocation(api, LOCATION, { body: theirs });
+  await patchChapter(api, CHAPTER, { body: theirs });
 
   await saveButton(dialog).click();
   const conflicted = conflict(dialog);
   await expect(conflicted.line).toBeVisible();
   await expect(conflicted.reload).toBeVisible();
   // Nothing was written by the refused save.
-  expect((await getLocation(api, LOCATION)).roll20Page).toBe(before.roll20Page);
+  expect((await getChapter(api, CHAPTER)).title).toBe(before.title);
 
   // Forcing writes the dialog's field on top of the row as it stands — the
   // text it never saw survives.
   await conflicted.force.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect.poll(async () => (await getLocation(api, LOCATION)).roll20Page).toBe(roll20);
-  const after = await getLocation(api, LOCATION);
+  await expect.poll(async () => (await getChapter(api, CHAPTER)).title).toBe(title);
+  const after = await getChapter(api, CHAPTER);
   expect(after.body).toBe(theirs);
-  expect(after.name).toBe(before.name);
-  expect(after.atmosphere).toBe(before.atmosphere);
-  await expect(page.getByRole("article")).toContainText(
-    ui("entity.location.roll20", { value: roll20 }),
-  );
+  expect(after.status).toBe(before.status);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
 });
 
 test("a second writer: reloading shows what is stored, and the next save keeps the other text", async ({
   page,
   api,
 }) => {
-  const before = await getLocation(api, LOCATION);
-  const theirName = "The lighthouse (renamed elsewhere)";
-  const theirs = "\n## Who is here\n\nChanged by a second writer.\n";
-  const roll20 = "Lighthouse, after the reload";
+  const theirTitle = "Chapter 1 (renamed elsewhere)";
+  const theirs = "Changed by a second writer.\n";
 
-  await page.goto(LOCATION_URL);
-  const dialog = await openProperties(page, "kind.location");
-  const roll20Field = dialog.getByLabel(ui("properties.location.roll20.label"));
-  await roll20Field.fill("A page that is never written");
+  await openChapter(page);
+  const dialog = await openProperties(page);
+  await titleField(dialog).fill("A title that is never written");
 
-  // A second writer changes name AND body under the open dialog — in ONE
-  // request, because that is what the location's one write path is.
-  await patchLocation(api, LOCATION, { name: theirName, body: theirs });
+  // A second writer changes title AND body under the open dialog — in ONE
+  // request, because that is what the chapter's one write path is.
+  await patchChapter(api, CHAPTER, { title: theirTitle, body: theirs });
   await saveButton(dialog).click();
 
   // Refused: the typed value stays, nothing was written.
   const conflicted = conflict(dialog);
   await expect(conflicted.line).toBeVisible();
-  await expect(roll20Field).toHaveValue("A page that is never written");
-  await expect(nameField(dialog)).toHaveValue(LOCATION_NAME);
-  const stored = await getLocation(api, LOCATION);
-  expect(stored.roll20Page).toBe(before.roll20Page);
-  expect(stored.name).toBe(theirName);
+  await expect(titleField(dialog)).toHaveValue("A title that is never written");
+  const stored = await getChapter(api, CHAPTER);
+  expect(stored.title).toBe(theirTitle);
 
   // Reloading shows the CURRENT values and writes nothing on the way.
   await conflicted.reload.click();
   await expect(conflicted.line).toHaveCount(0);
-  await expect(nameField(dialog)).toHaveValue(theirName);
-  await expect(roll20Field).toHaveValue(String(before.roll20Page));
-  expect(await getLocation(api, LOCATION)).toEqual(stored);
+  await expect(titleField(dialog)).toHaveValue(theirTitle);
+  await expect(statusField(dialog)).toHaveValue("active");
+  expect(await getChapter(api, CHAPTER)).toEqual(stored);
 
   // From the adopted version the DM's change saves in one click, and it is
   // still a patch of the dialog's fields only: the other writer's text stays.
-  await roll20Field.fill(roll20);
+  await statusField(dialog).selectOption("done");
   await saveButton(dialog).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect.poll(async () => (await getLocation(api, LOCATION)).roll20Page).toBe(roll20);
-  const after = await getLocation(api, LOCATION);
-  expect(after.name).toBe(theirName);
+  await expect.poll(async () => (await getChapter(api, CHAPTER)).status).toBe("done");
+  const after = await getChapter(api, CHAPTER);
+  expect(after.title).toBe(theirTitle);
   expect(after.body).toBe(theirs);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(theirName);
-});
-
-test("a rejected save shows the SERVER sentence, not the generic one", async ({ page }) => {
-  // The shared write layer answers a non-conflict rejection with the sentence
-  // for the server's code: an unknown chapter is one of the reference
-  // refusals, and the app builds its sentence from the code (decisions/constraints).
-  await page.goto(LOCATION_URL);
-  const dialog = await openProperties(page, "kind.location");
-  const chapter = dialog.getByLabel(ui("properties.location.chapter.label"));
-  await chapter.fill("99-nowhere");
-  await saveButton(dialog).click();
-
-  // The catalog sentence for the code, and the dialog stays open on the
-  // typed value.
-  await expect(
-    dialog.getByText(ui("server.chapter_unknown", { value: "99-nowhere" })),
-  ).toBeVisible();
-  await expect(dialog.getByText(ui("write.properties.failed"))).toHaveCount(0);
-  await expect(chapter).toHaveValue("99-nowhere");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(theirTitle);
 });
 
 test("clearing a field deletes the key instead of writing an empty value", async ({
   page,
   api,
 }) => {
-  const before = await getLocation(api, LOCATION);
-  expect(before.roll20Page).toBe("Lighthouse");
+  const before = await getChapter(api, CHAPTER);
+  expect(before.status).toBe("active");
 
-  await page.goto(LOCATION_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
-  const dialog = await openProperties(page, "kind.location");
+  await openChapter(page);
+  const dialog = await openProperties(page);
 
-  // An emptied input clears its field.
-  await dialog.getByLabel(ui("properties.location.roll20.label")).fill("");
+  // The empty choice clears its field.
+  await statusField(dialog).selectOption("");
   await saveButton(dialog).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("article")).not.toContainText(
-    ui("entity.location.roll20", { value: "Lighthouse" }),
-  );
 
-  // In the stored row the page is GONE, not an empty string, and every other
-  // field stands, the body byte-identical.
+  // In the stored row the status is GONE, not an empty string, and every
+  // other field stands, the body byte-identical.
   await expect
-    .poll(async () => Object.hasOwn(await getLocation(api, LOCATION), "roll20Page"))
+    .poll(async () => Object.hasOwn(await getChapter(api, CHAPTER), "status"))
     .toBe(false);
-  const { rev: _before, roll20Page: _cleared, ...rest } = before;
-  const { rev: _after, ...after } = await getLocation(api, LOCATION);
+  const { rev: _before, status: _cleared, ...rest } = before;
+  const { rev: _after, ...after } = await getChapter(api, CHAPTER);
   expect(after).toEqual(rest);
 });
 
 test("cancel and Esc ask before they throw typed values away", async ({ page, api }) => {
-  const before = await getLocation(api, LOCATION);
+  const before = await getChapter(api, CHAPTER);
   const discard = page.getByRole("dialog", { name: ui("properties.discard.title") });
 
-  await page.goto(LOCATION_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
+  await openChapter(page);
 
   // Nothing typed, nothing to lose: the cancel action is immediate.
-  let dialog = await openProperties(page, "kind.location");
+  let dialog = await openProperties(page);
   await dialog.getByRole("button", { name: ui("common.cancel") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // With something typed, Esc asks first — and keeping on editing keeps it.
-  dialog = await openProperties(page, "kind.location");
-  const roll20 = dialog.getByLabel(ui("properties.location.roll20.label"));
-  await roll20.fill("A page that is never saved");
+  dialog = await openProperties(page);
+  const title = titleField(dialog);
+  await title.fill("A title that is never saved");
   await page.keyboard.press("Escape");
   await expect(discard).toBeVisible();
   await discard.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
   await expect(discard).toHaveCount(0);
-  await expect(roll20).toHaveValue("A page that is never saved");
+  await expect(title).toHaveValue("A title that is never saved");
 
   // Cancelling asks the same question, and discarding closes everything.
   await dialog.getByRole("button", { name: ui("common.cancel") }).click();
@@ -245,73 +214,81 @@ test("cancel and Esc ask before they throw typed values away", async ({ page, ap
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The reading view is as it was, and nothing was written.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
-  expect(await getLocation(api, LOCATION)).toEqual(before);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
+  expect(await getChapter(api, CHAPTER)).toEqual(before);
 });
 
-test("navigating away closes the dialog — no change of location A lands in location B", async ({
-  page,
-  api,
-}) => {
-  const location = await getLocation(api, LOCATION);
-  const roll20 = "North cove, saved after the ⌘K navigation";
+test.describe("with a second chapter", () => {
+  test.use({
+    seed: {
+      chapters: [
+        {
+          id: OTHER_CHAPTER,
+          title: OTHER_CHAPTER_TITLE,
+          status: "planned",
+          body: "What waits in the north cove.\n",
+        },
+      ],
+    },
+  });
 
-  await page.goto(LOCATION_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
+  test("navigating away closes the dialog — no change of chapter A lands in chapter B", async ({
+    page,
+    api,
+  }) => {
+    const chapter = await getChapter(api, CHAPTER);
+    const title = "Chapter 2, saved after the ⌘K navigation";
 
-  // Type into the first location's dialog, then leave it WITHOUT closing it:
-  // the ⌘K hotkey is a window listener, so the palette opens over the modal
-  // and navigates the route underneath it — a click path, not a theory.
-  const firstDialog = await openProperties(page, "kind.location");
-  await nameField(firstDialog).fill("A name that must never be written");
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  const search = page.getByRole("combobox");
-  await expect(search).toBeFocused();
-  await search.fill("North Cove");
-  await page.getByRole("option").filter({ hasText: OTHER_LOCATION_NAME }).first().click();
-  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/locations/${OTHER_LOCATION}$`));
+    await openChapter(page);
 
-  // The dialog is gone with its location — it may not stand over another
-  // reading view, holding the frozen values (and the rev) of the one it left.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(OTHER_LOCATION_NAME);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+    // Type into the first chapter's dialog, then leave it WITHOUT closing it:
+    // the ⌘K hotkey is a window listener, so the palette opens over the modal
+    // and navigates the route underneath it — a click path, not a theory.
+    const firstDialog = await openProperties(page);
+    await titleField(firstDialog).fill("A title that must never be written");
+    await page.keyboard.press("ControlOrMeta+KeyK");
+    const search = page.getByRole("combobox");
+    await expect(search).toBeFocused();
+    await search.fill("Reef");
+    await page.getByRole("option").filter({ hasText: OTHER_CHAPTER_TITLE }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/chapters/${OTHER_CHAPTER}$`));
 
-  // And the other location's own dialog opens fresh: no carried-over change.
-  const otherDialog = await openProperties(page, "kind.location");
-  await expect(nameField(otherDialog)).toHaveValue(OTHER_LOCATION_NAME);
-  await expect(saveButton(otherDialog)).toBeDisabled();
-
-  // A save from here writes THIS location only.
-  await otherDialog.getByLabel(ui("properties.location.roll20.label")).fill(roll20);
-  await saveButton(otherDialog).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await expect.poll(async () => (await getLocation(api, OTHER_LOCATION)).roll20Page).toBe(roll20);
-  expect(await getLocation(api, LOCATION)).toEqual(location);
-});
-
-test("location and chapter have the dialog — a scene and an npc edit in place, the campaign brings its own", async ({
-  page,
-}) => {
-  // The entities with a fields dialog offer it, each on its own route
-  // (decisions/resources) …
-  const withDialog: [string, string, "kind.location" | "kind.chapter"][] = [
-    [`locations/${LOCATION}`, LOCATION_NAME, "kind.location"],
-    ["chapters/01-salt-harbour", "Chapter 1: The Lighthouse of Salt Harbour", "kind.chapter"],
-  ];
-  for (const [route, heading, kind] of withDialog) {
-    await page.goto(`/campaigns/${CAMPAIGN}/${route}`);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
-    const dialog = await openProperties(page, kind);
-    // Clean exit — nothing changed, nothing written.
-    await dialog.getByRole("button", { name: ui("common.cancel") }).click();
+    // The dialog is gone with its chapter — it may not stand over another
+    // reading view, holding the frozen values (and the rev) of the one it left.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(OTHER_CHAPTER_TITLE);
     await expect(page.getByRole("dialog")).toHaveCount(0);
-  }
 
-  // … a scene and an npc do not: their fields are part of their edit modes.
+    // And the other chapter's own dialog opens fresh: no carried-over change.
+    const otherDialog = await openProperties(page);
+    await expect(titleField(otherDialog)).toHaveValue(OTHER_CHAPTER_TITLE);
+    await expect(saveButton(otherDialog)).toBeDisabled();
+
+    // A save from here writes THIS chapter only.
+    await titleField(otherDialog).fill(title);
+    await saveButton(otherDialog).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await expect.poll(async () => (await getChapter(api, OTHER_CHAPTER)).title).toBe(title);
+    expect(await getChapter(api, CHAPTER)).toEqual(chapter);
+  });
+});
+
+test("only the chapter has the dialog — scene, npc and location edit in place, the campaign brings its own", async ({
+  page,
+}) => {
+  // The chapter offers its fields dialog on its own route (decisions/resources) …
+  await openChapter(page);
+  const dialog = await openProperties(page);
+  // Clean exit — nothing changed, nothing written.
+  await dialog.getByRole("button", { name: ui("common.cancel") }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // … a scene, an npc and a location do not: their fields are part of their
+  // edit modes.
   for (const [route, heading] of [
     ["scenes/smuggler-captured", "Caught by the Smugglers"],
     ["npcs/fenn", "Fenn"],
+    ["locations/lighthouse", "The Lighthouse of Salt Harbour"],
   ] as const) {
     await page.goto(`/campaigns/${CAMPAIGN}/${route}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
@@ -322,7 +299,7 @@ test("location and chapter have the dialog — a scene and an npc edit in place,
   // The campaign's route is the chapter overview, and its one edit action in
   // the header opens its own dialog over name, description and text.
   await page.goto(`/campaigns/${CAMPAIGN}`);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("The Lighthouse of Salt Harbour");
   await page.getByRole("button", { name: ui("common.edit"), exact: true }).click();
   await expect(page.getByRole("dialog", { name: ui("campaignEdit.title") })).toBeVisible();
 });
@@ -358,28 +335,27 @@ test.describe("at 390px", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test("the fields dialog opens, edits and saves at phone size", async ({ page, api }) => {
-    const before = await getLocation(api, LOCATION);
-    const name = "The lighthouse at night";
+    const before = await getChapter(api, CHAPTER);
+    const title = "Chapter 1 at night";
 
-    await page.goto(LOCATION_URL);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
+    await openChapter(page);
 
-    const dialog = await openProperties(page, "kind.location");
+    const dialog = await openProperties(page);
     // Nothing may scroll the page sideways while the dialog stands.
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
 
-    await nameField(dialog).fill(name);
+    await titleField(dialog).fill(title);
     await saveButton(dialog).click();
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
 
-    await expect.poll(async () => (await getLocation(api, LOCATION)).name).toBe(name);
-    const after = await getLocation(api, LOCATION);
-    expect(after.roll20Page).toBe(before.roll20Page);
+    await expect.poll(async () => (await getChapter(api, CHAPTER)).title).toBe(title);
+    const after = await getChapter(api, CHAPTER);
+    expect(after.status).toBe(before.status);
     expect(after.body).toBe(before.body);
   });
 });

@@ -1,12 +1,15 @@
 // "/campaigns/:campaign/locations/:id" — the reading view of ONE location,
-// its own resource with its own type (decisions/resources). The page is the scene
-// route's sibling: the context line on top (the location list), the
-// article, and the three quiet actions in its header — edit (the text with
-// the `atmosphere` beside it), the dialog over the other fields, and the
-// augment run.
+// its own resource with its own type (decisions/resources). The page is the
+// scene route's sibling: the context line on top (the location list), the
+// article, and the quiet actions in its header — edit and the augment run.
+//
+// Edit switches the page into the location's edit mode
+// (./LocationEditMode.tsx): the same article, every field of the location
+// editable in place and saved together.
 //
 // Edit mode is remembered BY LOCATION: this route stays mounted across a
-// navigation, and an editor seeded from another location would be a lie.
+// navigation, and an editor seeded from another location would be a lie. A
+// navigation away from unsaved work asks first (UnsavedChangesGuard).
 
 import type { Location } from "@grimoire/shared/location";
 import { useQuery } from "@tanstack/react-query";
@@ -18,17 +21,29 @@ import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
+import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
+import { cn } from "@/lib/utils";
 
 import { LocationArticle } from "./LocationArticle";
-import { LocationBodyEditor, LocationFieldsAction } from "./LocationActions";
+import { LocationEditMode } from "./LocationEditMode";
 import { locationPageCrumbs } from "./location-links";
 import { locationQuery } from "./location-query";
 
-export function LocationRoute({
+export function LocationRoute(props: {
+  /** The augment run on this location — the generator job's dialog, handed in. */
+  augmentAction: (campaign: string, location: Location) => ReactNode;
+}) {
+  return (
+    <UnsavedChangesGuard>
+      <LocationPage {...props} />
+    </UnsavedChangesGuard>
+  );
+}
+
+function LocationPage({
   augmentAction,
 }: {
-  /** The augment run on this location — the generator job's dialog, handed in. */
   augmentAction: (campaign: string, location: Location) => ReactNode;
 }) {
   const t = useT();
@@ -68,29 +83,38 @@ export function LocationRoute({
   }
 
   const editing = editingId === data.id;
-  const actions = (
-    <>
-      {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
-      <LocationFieldsAction campaign={campaign} location={data} tree={tree.data} />
-      {editing ? null : augmentAction(campaign, data)}
-    </>
-  );
-  const body = editing ? (
-    <LocationBodyEditor
-      key={data.id}
-      campaign={campaign}
-      location={data}
-      onClose={() => setEditingId(undefined)}
-    />
-  ) : undefined;
 
   return (
     <>
       <MobileBackRow campaign={campaign} />
-      <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
-        <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
+      <div
+        className={cn(
+          "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",
+          // Room for the save bar at the bottom of the phone's screen.
+          editing ? "pb-[140px] md:pb-[100px]" : "pb-[100px]",
+        )}
+      >
+        <div className={cn("w-full min-w-0 flex-1", editing ? "lg:max-w-[820px]" : "lg:max-w-[680px]")}>
           <PageContext crumbs={locationPageCrumbs(campaign, t)} />
-          <LocationArticle location={data} actions={actions} body={body} />
+          {editing ? (
+            <LocationEditMode
+              key={data.id}
+              campaign={campaign}
+              location={data}
+              tree={tree.data}
+              onClose={() => setEditingId(undefined)}
+            />
+          ) : (
+            <LocationArticle
+              location={data}
+              actions={
+                <>
+                  <BodyEditAction onEdit={() => setEditingId(data.id)} />
+                  {augmentAction(campaign, data)}
+                </>
+              }
+            />
+          )}
         </div>
       </div>
     </>
