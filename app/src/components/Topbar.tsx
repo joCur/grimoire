@@ -15,42 +15,15 @@
 // header instead (components/PageContext.tsx) — where it belongs, next to the
 // title it describes. The campaign name appears exactly ONCE in the chrome.
 //
-// ONE SESSION CHIP. The running session is a SINGLE chip
-// (SessionChip) in a fixed slot — right behind the campaign switcher, the
-// same place on EVERY campaign-scoped route, /live included:
-//
-//     Grimoire │ campaign switcher: <name> ⌄ │ ● 0:12:33 │ chapters · NPCs · locations
-//
-// The chip is the state: brass/amber (the accent token) means "a session is
-// running", so there is no "Live" label to read. It carries the running
-// time as H:MM:SS, ticking every second — a coarser tick looks frozen, which
-// is the one thing a live clock must not do.
-// Off /live a click on it navigates back into the session; ON /live it opens
-// a small menu with the three session actions (pause/resume — which really
-// stops and restarts the runtime —, end, discard —
-// the last only while the session is still empty). Below md,
-// where the topbar is not the chrome, the very same chip sits in its own slim
-// row (in link mode: there is no mobile live mode), so a session is never
-// invisible and never moves.
-//
-// Consequence: the start action appears NOWHERE while a session is running —
-// there is nothing to start, only something to return to. What "running"
-// means is the server's answer (GET /campaigns/:campaign/session), not a date the app
-// computes: a session that goes past midnight stays the running one.
+// ONE SESSION CHIP. The running session is a SINGLE chip in a fixed slot —
+// right behind the campaign switcher, the same place on EVERY campaign-scoped
+// route, /live included. The session draws it (session/SessionChip.tsx); the
+// topbar only says where it sits and which state the route allows.
 //
 // Deviation from design/ (which keeps a separate live topbar): stability of
 // the session control beats the prototype's two layouts. The
 // live chapter label lives in the live view's own scene nav, next to the
 // scenes it describes.
-//
-// ONE CHIP FOR EVERY SESSION STATE. The chip
-// is not only the running session's control — it is THE session control, in
-// the same slot, with the same geometry, in every state: it offers the start
-// action while nothing runs, shows the ticking clock while one does, and reads
-// an unknown-status label, dimmed and inert, when the session lookup failed.
-// There is no separate brass start button and no bare unknown-status sentence;
-// only content and colour change, so nothing in the chrome moves when the
-// state does.
 //
 // The right side stays per-view: the ⌘K search chip (opens the palette;
 // hidden without a campaign in the URL — "/" only ever shows the empty
@@ -60,21 +33,9 @@
 // still has unharvested entries, and the generator entry on the chapter
 // overview with its run indicator.
 
-import type { SessionResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  Pause,
-  Play,
-  Plus,
-  Search,
-  Settings,
-  Sparkles,
-  Square,
-  Trash2,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, ChevronDown, Plus, Search, Settings, Sparkles } from "lucide-react";
+import { useState } from "react";
 import {
   Link,
   matchPath,
@@ -83,23 +44,10 @@ import {
   useSearchParams,
 } from "react-router";
 
-import {
-  continueSession,
-  endSession,
-  fetchCampaigns,
-  fetchTree,
-  pauseSession,
-} from "@/api";
+import { fetchCampaigns } from "@/api";
 import { CampaignCreateDialog } from "@/campaign/CampaignCreate";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,7 +62,6 @@ import {
   campaignLabel,
   settingsCampaign,
 } from "@/lib/campaign";
-import { sessionElapsedLabel, sessionIsEmpty, sessionIsPaused } from "@/lib/session";
 import { locationsHref } from "@/location/location-links";
 import { npcsHref } from "@/npc/npc-links";
 import { navSection } from "@/lib/topbar-nav";
@@ -122,12 +69,9 @@ import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
-import {
-  useActiveSession,
-  useSessionDiscard,
-  useSessionStartFlow,
-  useSessionWrite,
-} from "@/lib/use-session";
+import { MobileSessionRow, SessionChip, sessionChipState } from "@/session/SessionChip";
+import { reviewHref } from "@/session/session-links";
+import { useRunningSession } from "@/session/use-session";
 
 /** The campaign of a `matchPath` result, or undefined when nothing matched. */
 function campaignOf(
@@ -236,7 +180,7 @@ export function Topbar() {
 
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.
-  const session = useActiveSession(campaign, campaign !== "");
+  const session = useRunningSession(campaign, campaign !== "");
   const live = session.data ?? undefined;
 
   return (
@@ -620,7 +564,7 @@ function ChapterOverviewReviewLink({ campaign }: { campaign: string }) {
   const label = t("topbar.review.pending", { count: review.pendingCount });
   return (
     <Link
-      to={`/campaigns/${campaign}/review`}
+      to={reviewHref(campaign)}
       aria-label={label}
       className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
     >

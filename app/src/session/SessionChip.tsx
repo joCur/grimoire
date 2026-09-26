@@ -1,7 +1,69 @@
+// THE session control of the chrome: ONE chip in ONE slot for EVERY state.
+//
+// The topbar places it right behind the campaign switcher, the same place on
+// EVERY campaign-scoped route, /live included:
+//
+//     Grimoire │ campaign switcher: <name> ⌄ │ ● 0:12:33 │ chapters · NPCs · locations
+//
+// The chip is the state: brass/amber (the accent token) means "a session is
+// running", so there is no "Live" label to read. It carries the running time
+// as H:MM:SS, ticking every second — a coarser tick looks frozen, which is the
+// one thing a live clock must not do. Off /live a click on it navigates back
+// into the session; ON /live it opens a small menu with the three session
+// actions (pause/resume — which really stops and restarts the runtime —, end,
+// discard — the last only while the session is still empty). Below md, where
+// the topbar is not the chrome, the very same chip sits in its own slim row
+// (in link mode: there is no mobile live mode), so a session is never
+// invisible and never moves.
+//
+// It offers the start action while nothing runs, shows the ticking clock while
+// one does, and reads an unknown-status label, dimmed and inert, when the
+// lookup of the running session failed. There is no separate brass start
+// button and no bare unknown-status sentence; only content and colour change,
+// so nothing in the chrome moves when the state does. The start action appears
+// NOWHERE while a session is running — there is nothing to start, only
+// something to return to. What "running" means is the server's answer
+// (`?running=true`), not a date the app computes: a session that goes past
+// midnight stays the running one.
+
+import type { Session } from "@grimoire/shared/session";
+import { isSessionEmpty } from "@grimoire/shared/session";
+import { ChevronDown, Pause, Play, Square, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useT } from "@/i18n";
+import { serverErrorMessage } from "@/i18n/server-errors";
+import { cn } from "@/lib/utils";
+
+import { liveHref, reviewHref } from "./session-links";
+import { sessionElapsedLabel, sessionIsPaused } from "./session-time";
+import {
+  usePauseToggle,
+  useSessionDelete,
+  useSessionEnd,
+  useSessionStartFlow,
+} from "./use-session";
+
 /**
  * The running time of the session as `H:MM:SS`, re-rendered every second.
  *
- * Every epoch reading comes from the SERVER (lib/session.ts): the format
+ * Every epoch reading comes from the SERVER (./session-time.ts): the format
  * is zone-less, so a browser in another timezone than the server would
  * otherwise show a runtime that is hours off. PAUSED time is deducted and the
  * clock STANDS while a pause runs — the number on the chip is the time
@@ -9,7 +71,7 @@
  * at its `ended` (the chip is gone by then, but a cache race must not tick
  * backwards).
  */
-function useElapsedLabel(session: SessionResponse): string | undefined {
+function useElapsedLabel(session: Session): string | undefined {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1_000);
@@ -51,7 +113,7 @@ const SESSION_CHIP_TONE = {
 } as const;
 
 /** Which of the chip's states the session query puts it in. */
-type SessionChipState = "hidden" | "start" | "running" | "error";
+export type SessionChipState = "hidden" | "start" | "running" | "error";
 
 /**
  * The chip's state, straight from the server's answer — and from nothing
@@ -66,12 +128,12 @@ type SessionChipState = "hidden" | "start" | "running" | "error";
  *             cannot work.
  *   hidden  — pending, or a route that offers neither.
  */
-function sessionChipState({
+export function sessionChipState({
   session,
   offersStart,
   showsError,
 }: {
-  session: { data: SessionResponse | null | undefined; isError: boolean };
+  session: { data: Session | null | undefined; isError: boolean };
   offersStart: boolean;
   showsError: boolean;
 }): SessionChipState {
@@ -114,14 +176,14 @@ function SessionDot({ paused = false }: { paused?: boolean }) {
  * The accessible name always carries the STATE plus the running time — the
  * colour alone is not information.
  */
-function SessionChip({
+export function SessionChip({
   campaign,
   session,
   state,
   mode,
 }: {
   campaign: string;
-  session: SessionResponse | undefined;
+  session: Session | undefined;
   state: SessionChipState;
   mode: "link" | "menu";
 }) {
@@ -154,7 +216,7 @@ function SessionRunningChip({
   mode,
 }: {
   campaign: string;
-  session: SessionResponse;
+  session: Session;
   mode: "link" | "menu";
 }) {
   const t = useT();
@@ -171,7 +233,7 @@ function SessionRunningChip({
   if (mode === "link") {
     return (
       <Link
-        to={`/campaigns/${campaign}/live`}
+        to={liveHref(campaign)}
         aria-label={t("session.chip.link.aria", { label })}
         data-session-chip={paused ? "paused" : "running"}
         className={cn(
@@ -211,7 +273,7 @@ function SessionRunningChip({
 function SessionStartChip({ campaign }: { campaign: string }) {
   const t = useT();
   const navigate = useNavigate();
-  const toLive = () => void navigate(`/campaigns/${campaign}/live`);
+  const toLive = () => void navigate(liveHref(campaign));
   const { enter, entering, conflict, failed } = useSessionStartFlow(
     campaign,
     toLive,
@@ -258,7 +320,7 @@ function SessionMenuChip({
   paused,
 }: {
   campaign: string;
-  session: SessionResponse;
+  session: Session;
   label: string;
   elapsed: string | undefined;
   paused: boolean;
@@ -266,20 +328,15 @@ function SessionMenuChip({
   const t = useT();
   const navigate = useNavigate();
   const [discardOpen, setDiscardOpen] = useState(false);
-  // ONE entry, two directions: the pause endpoints open and
-  // close a `pauses` interval in the session — the log row comes with it, and
-  // the runtime really stops instead of only being annotated.
-  const pause = useSessionWrite(campaign, () =>
-    paused ? continueSession(campaign) : pauseSession(campaign),
-  );
+  // ONE entry, two directions: a pause begins or the running one ends. The
+  // runtime really stops instead of only being annotated, and no log entry
+  // comes with it.
+  const pause = usePauseToggle(campaign);
   // Ending a session leads into the review, not back to the chapter overview
   // (prototype: endSession → review) — the harvest is the next step.
-  const end = useSessionWrite(
-    campaign,
-    () => endSession(campaign),
-    () => void navigate(`/campaigns/${campaign}/review`),
-  );
+  const end = useSessionEnd(campaign, () => void navigate(reviewHref(campaign)));
   const busy = pause.isPending || end.isPending;
+  const failure = pause.error ?? end.error;
 
   return (
     <>
@@ -301,7 +358,7 @@ function SessionMenuChip({
           <ChevronDown aria-hidden size={13} className="flex-none opacity-70" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[210px] text-[13px]">
-          <DropdownMenuItem onSelect={() => pause.mutate()}>
+          <DropdownMenuItem onSelect={() => pause.mutate(session)}>
             {paused ? (
               <Play
                 aria-hidden
@@ -317,7 +374,7 @@ function SessionMenuChip({
             )}
             {t(paused ? "session.menu.continue" : "session.menu.pause")}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => end.mutate()}>
+          <DropdownMenuItem onSelect={() => end.mutate(session)}>
             <Square
               aria-hidden
               size={14}
@@ -327,7 +384,7 @@ function SessionMenuChip({
           </DropdownMenuItem>
           {/* Only while the session is EMPTY — the mis-click's undo, gone
               the moment the evening has content. */}
-          {sessionIsEmpty(session) && (
+          {isSessionEmpty(session) && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -341,13 +398,14 @@ function SessionMenuChip({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {(pause.isError || end.isError) && (
+      {failure !== null && (
         <span className="flex-none text-[12.5px] text-destructive">
-          {t("session.write.failed")}
+          {serverErrorMessage(failure, t, "session.write.failed")}
         </span>
       )}
       <DiscardSessionDialog
         campaign={campaign}
+        session={session}
         open={discardOpen}
         onOpenChange={setDiscardOpen}
       />
@@ -362,12 +420,12 @@ function SessionMenuChip({
  * action mobile needs. Mobile is for looking things up and throwing ideas in,
  * and this is exactly the way back out of a lookup.
  */
-function MobileSessionRow({
+export function MobileSessionRow({
   campaign,
   session,
 }: {
   campaign: string;
-  session: SessionResponse;
+  session: Session;
 }) {
   const t = useT();
   return (
@@ -385,7 +443,6 @@ function MobileSessionRow({
   );
 }
 
-
 /**
  * The discard action: deletes the session that has nothing in it — the undo
  * of a start that was a mis-click. It lives in the session menu (last entry,
@@ -399,16 +456,18 @@ function MobileSessionRow({
  */
 function DiscardSessionDialog({
   campaign,
+  session,
   open,
   onOpenChange,
 }: {
   campaign: string;
+  session: Session;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useT();
   const navigate = useNavigate();
-  const discard = useSessionDiscard(campaign, () => {
+  const discard = useSessionDelete(campaign, () => {
     onOpenChange(false);
     void navigate(`/campaigns/${campaign}`);
   });
@@ -438,7 +497,7 @@ function DiscardSessionDialog({
           <Button
             type="button"
             disabled={discard.isPending}
-            onClick={() => discard.mutate()}
+            onClick={() => discard.mutate(session)}
             className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
           >
             {t("common.discard")}

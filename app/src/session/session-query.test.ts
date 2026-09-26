@@ -77,7 +77,7 @@ describe("putSession", () => {
     putSession(client, "c", ended);
     expect(client.getQueryData(runningSessionKey("c"))).toBeNull();
     expect(client.getQueryData<Session[]>(sessionsKey("c"))).toEqual([ended]);
-    expect(client.getQueryData(sessionKey("c", "s"))).toEqual(ended);
+    expect(client.getQueryData<Session>(sessionKey("c", "s"))).toEqual(ended);
   });
 
   test("a started session is the running one", () => {

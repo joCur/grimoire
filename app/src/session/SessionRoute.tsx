@@ -1,35 +1,35 @@
 // "/campaigns/:campaign/sessions/:id" — the reading page of ONE evening.
 //
-// A session is not an entry: it has no prose to maintain, it has ROWS. So this
-// page is READ-ONLY and shows exactly what the server stored — when the
+// The page is READ-ONLY and shows exactly what the server stored — when the
 // evening started and ended, the pauses, the log in the order it was written,
-// and the scenes that were played as links back into the campaign.
+// and the scenes that were played as links back into the campaign. The
+// session reads its children embedded (ADR #31). Where a scene lives is the
+// scene's to say: the page is handed that link.
 //
 // The log row renders the way the live panel's rows do: the wall-clock time in
 // mono, then the scene it was written under, then the text with its hashtags
 // still in it — the tags are part of what the DM wrote down, and this page is
 // the record, not the wrap-up.
 
+import type { Pause } from "@grimoire/shared/pause";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
-
-import type { SessionPauseInterval } from "@grimoire/shared/types";
 
 import { fetchTree } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
 import { hasScene, sceneTitle } from "@/lib/campaign";
-import {
-  formatDuration,
-  sessionDateLabel,
-  sessionElapsedMs,
-  sessionTimeLabel,
-} from "@/lib/session";
-import { useSession } from "@/lib/use-session";
-import { sceneHref } from "@/scene/scene-links";
 
-export function SessionRoute() {
+import { formatDuration, sessionDateLabel, sessionElapsedMs, sessionTimeLabel } from "./session-time";
+import { useSession } from "./use-session";
+
+export function SessionRoute({
+  sceneHref,
+}: {
+  /** The route of a scene of the campaign. */
+  sceneHref: (campaign: string, id: string) => string;
+}) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const session = useSession(campaign, id);
@@ -65,7 +65,7 @@ export function SessionRoute() {
   // A pause is shown once it is over AND the server could read both of its
   // wall clocks — only then is there a duration to print.
   const closedPauses = data.pauses.filter(
-    (pause): pause is SessionPauseInterval & { fromMs: number; toMs: number } =>
+    (pause): pause is Pause & { fromMs: number; toMs: number } =>
       pause.fromMs !== undefined && pause.toMs !== undefined,
   );
 
@@ -155,7 +155,7 @@ export function SessionRoute() {
             </h2>
             <ul className="flex flex-col gap-1">
               {closedPauses.map((pause) => (
-                <li key={pause.from} className="font-mono text-[12.5px] text-body-secondary">
+                <li key={pause.id} className="font-mono text-[12.5px] text-body-secondary">
                   {t("session.page.pauseRow", {
                     from: sessionTimeLabel(pause.from) ?? pause.from,
                     to: sessionTimeLabel(pause.to) ?? (pause.to ?? ""),
@@ -174,14 +174,14 @@ export function SessionRoute() {
           >
             {t("session.page.scenes")}
           </h2>
-          {data.scenesPlayed.length === 0 ? (
+          {data.playedScenes.length === 0 ? (
             <p className="text-[13.5px] text-muted-foreground">{t("session.page.scenes.empty")}</p>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {data.scenesPlayed.map((sceneId) => {
+              {data.playedScenes.map(({ id: playedId, sceneId }) => {
                 const title = sceneTitle(tree.data, sceneId) ?? sceneId;
                 return (
-                  <li key={sceneId} className="text-[14px]">
+                  <li key={playedId} className="text-[14px]">
                     {!hasScene(tree.data, sceneId) ? (
                       <span className="text-body-secondary">{title}</span>
                     ) : (
