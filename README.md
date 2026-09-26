@@ -701,7 +701,12 @@ in the trash by kind, each row with the days it has left, and restores it;
 a scene that went there with its chapter is part of the chapter's row. It is
 reached from the chapter overview's lookup line, ⌘K and the mobile start
 surface. Deleting an idea in the debrief asks for no confirmation: a notice
-offers to undo it.
+offers to undo it. A chapter, a scene, an NPC or a location is deleted from
+its edit mode, after a confirmation that says what goes to the trash with it
+(a chapter's scenes and threads) and that unsaved changes are discarded; the
+page then leads to the chapter overview (chapter, scene) or the list (NPC,
+location), and a notice offers to undo it. A refused delete names what is in
+the way in the dialog and writes nothing.
 
 ## References point to existing rows
 

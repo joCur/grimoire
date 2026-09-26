@@ -1,6 +1,6 @@
 // The API client of a location (decisions/resources): its resource — read, list,
-// create, write — its write conflict, the augment run on it, and its way out
-// of the trash (decisions/trash). Built from the shared HTTP helpers (../api.ts).
+// create, write — its write conflict, the augment run on it and its way into and
+// out of the trash (decisions/trash). Built from the shared HTTP helpers (../api.ts).
 
 import type { Location, LocationPatch } from "@grimoire/shared/location";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
@@ -115,6 +115,20 @@ export function applyLocationAugment(
   input: Omit<LocationPatch, "force" | "id"> & { jobId?: string },
 ): Promise<Location> {
   return postJson<Location>(`${locationsUrl(campaign, id)}/augment/apply`, input);
+}
+
+/**
+ * Put ONE location in the trash against the `rev` it was read with. The answer
+ * is the location with its `deletedMs` and its moved `rev` — the guard its
+ * restore sends back. A location a live scene plays at is 409 `trash_blocked`
+ * with the scenes in the way; a stale `rev` is 409 with the current location.
+ * Nothing is written on a refusal.
+ */
+export function trashLocation(
+  campaign: string,
+  location: Pick<Location, "id" | "rev">,
+): Promise<Location> {
+  return sendJson<Location>("DELETE", locationsUrl(campaign, location.id), { rev: location.rev });
 }
 
 /** The locations in the trash, the latest to go there first, each with its `deletedMs`. */

@@ -22,8 +22,14 @@
 //
 // Leaving with unsaved work asks first — the cancel action here, and a
 // navigation through the page's unsaved-changes guard.
+//
+// The quiet delete action in the header puts the scene in the trash after a
+// confirmation (decisions/trash) and leads back to the chapter overview, where
+// the undo notice brings it back to its place (lib/use-trash-row.ts). A scene
+// a log line names was played and stays; the dialog says so.
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
 import { SCENE_TYPES, type Scene, type SceneChange, type SceneType } from "@grimoire/shared/scene";
 import { Bookmark, GitFork, MapPin, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -38,11 +44,14 @@ import { fieldId } from "@/components/fields/FieldRow";
 import { useFieldsForm } from "@/components/fields/use-fields-form";
 import { PickList } from "@/components/fields/PickList";
 import type { FieldOption } from "@/components/fields/SelectField";
+import { TrashDialog } from "@/components/TrashDialog";
 import { useUnsavedChanges } from "@/components/UnsavedChangesGuard";
 import { useT, type MessageKey } from "@/i18n";
 import { locationName } from "@/lib/campaign";
+import { useTrashRow } from "@/lib/use-trash-row";
 
 import { SceneStatusMenu } from "./SceneStatusMenu";
+import { restoreScene, trashScene } from "./scene-api";
 import {
   canSubmitSceneForm,
   sceneFormChange,
@@ -54,6 +63,7 @@ import {
   type SceneListKey,
   type ScenePendingChips,
 } from "./scene-form";
+import { sceneKey } from "./scene-query";
 import { useSceneEdit } from "./use-scene-edit";
 
 /**
@@ -104,6 +114,16 @@ export function SceneEditMode({
       draft.reseed(stored.body);
     },
     invalidateOnSuccess: staleAfterWrite(campaign),
+  });
+  const name = scene.title === "" ? scene.id : scene.title;
+  const remove = useTrashRow({
+    campaign,
+    row: { id: scene.id, rev: edit.rev },
+    name,
+    trash: (row) => trashScene(campaign, row),
+    restore: (trashed) => restoreScene(campaign, trashed),
+    rowKey: sceneKey(campaign, scene.id),
+    leaveTo: `/campaigns/${campaign}`,
   });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // The trigger line appears when the scene turns into a contingency one
@@ -345,6 +365,7 @@ export function SceneEditMode({
           onSave: () => edit.save(change),
           onCancel: cancel,
         }}
+        onDelete={remove.ask}
       />
       <EditTitleInput
         value={values.title}
@@ -391,6 +412,19 @@ export function SceneEditMode({
           issues={draftIssues}
         />
       </div>
+      {remove.asking && (
+        <TrashDialog
+          title={t("sceneEdit.delete.title")}
+          sentences={[
+            t("sceneEdit.delete.description", { title: name, days: TRASH_RETENTION_DAYS }),
+          ]}
+          unsaved={dirty}
+          error={remove.error}
+          busy={remove.isPending}
+          onConfirm={remove.confirm}
+          onCancel={remove.cancel}
+        />
+      )}
       {confirmDiscard && (
         <DiscardChangesDialog
           onKeep={() => setConfirmDiscard(false)}

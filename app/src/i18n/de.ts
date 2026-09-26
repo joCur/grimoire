@@ -364,6 +364,8 @@ export const de = {
     "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. Starte eine neue Session, um weiterzumachen.",
   "server.trash_blocked":
     "Das kann nicht in den Papierkorb, solange {blockers} darauf {count, plural, one {verweist} other {verweisen}}. Entferne erst diese Verweise.",
+  "server.trash_blocked.played":
+    "Das kann nicht in den Papierkorb, weil es in einer Session gespielt wurde: {blockers} {count, plural, one {verweist} other {verweisen}} darauf. Was gespielt wurde, bleibt stehen.",
   "server.chapter_in_trash":
     'Diese Szene kann nicht zurückgeholt werden, weil ihr Kapitel „{chapter}“ im Papierkorb liegt. Hol zuerst das Kapitel zurück.',
   "server.restore_blocked":
@@ -989,6 +991,19 @@ export const de = {
   "editMode.allFields.title": "Alle Felder",
   "editMode.done": "Fertig",
   "editMode.blocked.fields": "Ein Feld lässt sich so nicht speichern — der markierte Chip sagt, warum.",
+  // Putting the row in the trash from its edit mode (components/TrashDialog.tsx);
+  // the title and the sentence of the dialog are the entity's own.
+  "editMode.delete": "Löschen",
+  "editMode.delete.confirm": "In den Papierkorb legen",
+  "editMode.delete.deleting": "Lege in den Papierkorb …",
+  "editMode.delete.unsaved": "Deine ungespeicherten Änderungen gehen dabei verloren.",
+  "editMode.delete.done": "„{name}“ liegt im Papierkorb.",
+  "editMode.delete.stale":
+    "„{name}“ wurde inzwischen anderswo geändert, deshalb ist nichts gelöscht. Brich die Bearbeitung ab und öffne sie neu, um den gespeicherten Stand zu sehen.",
+  "editMode.delete.gone": "„{name}“ wurde inzwischen anderswo gelöscht.",
+  "editMode.delete.failed": "Es wurde nichts gelöscht. Prüf den Server und versuch es noch einmal.",
+  "editMode.restore.failed":
+    "„{name}“ konnte nicht zurückgeholt werden und liegt weiter im Papierkorb. Dort kannst du „{name}“ selbst zurückholen.",
 
   // --- edit mode of a scene (scene/SceneEditMode.tsx) ------------------------
   // Field labels are the shared `properties.scene.*.label`, the type labels
@@ -1005,6 +1020,9 @@ export const de = {
   "sceneEdit.location.noMatch": "Kein Ort passt zur Suche.",
   "sceneEdit.npcs.title": "NPCs in dieser Reihenfolge",
   "sceneEdit.handouts.title": "Handouts in Roll20",
+  "sceneEdit.delete.title": "Diese Szene löschen?",
+  "sceneEdit.delete.description":
+    "„{title}“ kommt in den Papierkorb. Dort liegt die Szene {days} Tage, bis dahin kannst du sie zurückholen.",
 
   // --- edit mode of an npc (npc/NpcEditMode.tsx, components/FieldSection.tsx)
   // Field labels and hints are the shared `properties.npc.*`.
@@ -1014,6 +1032,9 @@ export const de = {
   "npcEdit.chapter.none": "Kein Kapitel",
   "npcEdit.profile.title": "Steckbrief",
   "npcEdit.profile.empty": "Der Steckbrief ist noch leer.",
+  "npcEdit.delete.title": "Diesen NPC löschen?",
+  "npcEdit.delete.description":
+    "„{name}“ kommt in den Papierkorb. Dort liegt der NPC {days} Tage, bis dahin kannst du ihn zurückholen.",
 
   // --- edit mode of a location (location/LocationEditMode.tsx)
   // Field labels and hints are the shared `properties.location.*`.
@@ -1022,6 +1043,9 @@ export const de = {
   "locationEdit.blocked.name": "Ein Ort braucht einen Namen.",
   "locationEdit.chapter.none": "Kein Kapitel",
   "locationEdit.atmosphere.empty": "Die Atmosphäre ist noch nicht beschrieben.",
+  "locationEdit.delete.title": "Diesen Ort löschen?",
+  "locationEdit.delete.description":
+    "„{name}“ kommt in den Papierkorb. Dort liegt der Ort {days} Tage, bis dahin kannst du ihn zurückholen.",
 
   // --- edit mode of a chapter (chapter/ChapterEditMode.tsx)
   // The status labels are the shared `properties.chapter.status.*`.
@@ -1030,6 +1054,17 @@ export const de = {
   "chapterEdit.blocked.title": "Ein Kapitel braucht einen Titel.",
   "chapterEdit.activate.hint":
     "Beim Speichern wird dieses Kapitel das aktive — das bisher aktive Kapitel steht danach wieder auf geplant.",
+  "chapterEdit.delete.title": "Dieses Kapitel löschen?",
+  "chapterEdit.delete.description":
+    "„{title}“ kommt in den Papierkorb. Dort liegt das Kapitel {days} Tage, bis dahin kannst du es zurückholen.",
+  // What goes to the trash with the chapter, as a sentence of its own after
+  // the one above; none of them when the chapter has neither.
+  "chapterEdit.delete.along.both":
+    "Seine {scenes, plural, one {# Szene} other {# Szenen}} und seine {threads, plural, one {# Handlungsstrang} other {# Handlungsstränge}} gehen mit und kommen mit ihm zurück.",
+  "chapterEdit.delete.along.scenes":
+    "{scenes, plural, one {Seine # Szene geht mit und kommt mit ihm zurück.} other {Seine # Szenen gehen mit und kommen mit ihm zurück.}}",
+  "chapterEdit.delete.along.threads":
+    "{threads, plural, one {Sein # Handlungsstrang geht mit und kommt mit ihm zurück.} other {Seine # Handlungsstränge gehen mit und kommen mit ihm zurück.}}",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} ist keine NPC-Kennung, deshalb gibt es dazu keinen NPC.",

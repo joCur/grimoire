@@ -328,6 +328,8 @@ export const en: Messages = {
     "This session has already ended, so nothing was saved. Start a new session to carry on.",
   "server.trash_blocked":
     "This cannot go to the trash while {blockers} still {count, plural, one {refers} other {refer}} to it. Remove those references first.",
+  "server.trash_blocked.played":
+    "This cannot go to the trash because it was played in a session: {blockers} {count, plural, one {refers} other {refer}} to it. What was played stays.",
   "server.chapter_in_trash":
     "This scene cannot be restored because its chapter “{chapter}” is in the trash. Restore the chapter first.",
   "server.restore_blocked":
@@ -875,6 +877,17 @@ export const en: Messages = {
   "editMode.allFields.title": "All fields",
   "editMode.done": "Done",
   "editMode.blocked.fields": "A field cannot be saved like this — the marked chip says why.",
+  "editMode.delete": "Delete",
+  "editMode.delete.confirm": "Move to trash",
+  "editMode.delete.deleting": "Moving to trash …",
+  "editMode.delete.unsaved": "Your unsaved changes will be discarded.",
+  "editMode.delete.done": "“{name}” is in the trash.",
+  "editMode.delete.stale":
+    "“{name}” was changed elsewhere in the meantime, so nothing was deleted. Cancel editing and open it again to see what is stored.",
+  "editMode.delete.gone": "“{name}” was deleted elsewhere in the meantime.",
+  "editMode.delete.failed": "Nothing was deleted. Check the server and try again.",
+  "editMode.restore.failed":
+    "“{name}” could not be restored and is still in the trash. You can restore “{name}” there yourself.",
 
   // --- edit mode of a scene (scene/SceneEditMode.tsx) ------------------------
   "sceneEdit.heading": "Edit scene",
@@ -889,6 +902,9 @@ export const en: Messages = {
   "sceneEdit.location.noMatch": "No location matches the search.",
   "sceneEdit.npcs.title": "NPCs in this order",
   "sceneEdit.handouts.title": "Handouts in Roll20",
+  "sceneEdit.delete.title": "Delete this scene?",
+  "sceneEdit.delete.description":
+    "“{title}” goes to the trash. The scene stays there for {days} days, and until then you can restore it.",
 
   // --- edit mode of an npc (npc/NpcEditMode.tsx, components/FieldSection.tsx)
   "npcEdit.heading": "Edit NPC",
@@ -897,6 +913,9 @@ export const en: Messages = {
   "npcEdit.chapter.none": "No chapter",
   "npcEdit.profile.title": "Profile",
   "npcEdit.profile.empty": "The profile is still empty.",
+  "npcEdit.delete.title": "Delete this NPC?",
+  "npcEdit.delete.description":
+    "“{name}” goes to the trash. The NPC stays there for {days} days, and until then you can restore it.",
 
   // --- edit mode of a location (location/LocationEditMode.tsx) --------------
   "locationEdit.heading": "Edit location",
@@ -904,6 +923,9 @@ export const en: Messages = {
   "locationEdit.blocked.name": "A location needs a name.",
   "locationEdit.chapter.none": "No chapter",
   "locationEdit.atmosphere.empty": "The atmosphere is not described yet.",
+  "locationEdit.delete.title": "Delete this location?",
+  "locationEdit.delete.description":
+    "“{name}” goes to the trash. The location stays there for {days} days, and until then you can restore it.",
 
   // --- edit mode of a chapter (chapter/ChapterEditMode.tsx) ----------------
   "chapterEdit.heading": "Edit chapter",
@@ -911,6 +933,15 @@ export const en: Messages = {
   "chapterEdit.blocked.title": "A chapter needs a title.",
   "chapterEdit.activate.hint":
     "Saving makes this chapter the active one — the chapter that was active until now goes back to planned.",
+  "chapterEdit.delete.title": "Delete this chapter?",
+  "chapterEdit.delete.description":
+    "“{title}” goes to the trash. The chapter stays there for {days} days, and until then you can restore it.",
+  "chapterEdit.delete.along.both":
+    "Its {scenes, plural, one {# scene} other {# scenes}} and its {threads, plural, one {# storyline} other {# storylines}} go with it and come back with it.",
+  "chapterEdit.delete.along.scenes":
+    "{scenes, plural, one {Its # scene goes with it and comes back with it.} other {Its # scenes go with it and come back with it.}}",
+  "chapterEdit.delete.along.threads":
+    "{threads, plural, one {Its # storyline goes with it and comes back with it.} other {Its # storylines go with it and come back with it.}}",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} is not an NPC ID, so there is no NPC for it.",

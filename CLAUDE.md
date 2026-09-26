@@ -428,7 +428,17 @@ The paths:
     row of the page, naming how many scenes come back with it, and its restore
     brings them back in their order; a restore that something in the trash
     stands in the way of (`restore_blocked`, `chapter_in_trash`) names what in
-    a whole sentence and writes nothing. The page fits 390px
+    a whole sentence and writes nothing. The page fits 390px. Plus deleting
+    from the edit mode of a scene, an NPC, a location or a chapter: its
+    delete action asks first (the dialog says what goes along — a chapter's
+    scenes and threads — and that unsaved changes are discarded, and the
+    unsaved-changes guard does not ask again), `DELETE …/<entity>/<id>
+    { rev }` → the chapter overview (scene, chapter) or the list (NPC,
+    location) without the row, and the undo notice restores it (a scene at
+    the end of its chapter, decisions/trash); a blocked delete
+    (`trash_blocked`, e.g. an NPC a live scene names) names what is in the
+    way in the dialog and writes nothing. The delete action is reachable at
+    390px
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same

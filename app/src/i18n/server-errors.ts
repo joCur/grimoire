@@ -96,6 +96,11 @@ function blockerList(blockers: readonly TrashBlocker[], t: Translate): string {
   return new Intl.ListFormat(INTL_TAG[t.locale], { type: "conjunction" }).format(names);
 }
 
+/** Whether every row in the way is a log line — the refused row was played. */
+function onlyPlayed(value: unknown): boolean {
+  return blockersOf(value)?.every((blocker) => blocker.kind === "log-entry") ?? false;
+}
+
 function isKind(value: unknown): value is ErrorKind {
   return typeof value === "string" && value in KIND_KEY;
 }
@@ -247,6 +252,12 @@ export function serverErrorBodyMessage(
       // as the literal `{suggestion}`.
       if (code === "location_not_an_id" && params.suggestion === undefined) {
         return t("server.location_not_an_id.noSuggestion", params);
+      }
+      // `trash_blocked` held up only by log lines is a row that was played:
+      // those lines stay, so the sentence says what was played instead of
+      // asking the DM to remove them.
+      if (code === "trash_blocked" && onlyPlayed(body.blockers)) {
+        return t("server.trash_blocked.played", params);
       }
       return t(CODE_KEY[code], params);
     }

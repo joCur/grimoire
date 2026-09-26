@@ -1,5 +1,5 @@
 // The API client of a scene (decisions/resources): its resource — read, create, write —
-// its write conflict, the augment run on it, and its way out of the trash
+// its write conflict, the augment run on it and its way into and out of the trash
 // (decisions/trash). Built from the shared HTTP helpers (../api.ts).
 
 import type { Scene, SceneCreate, ScenePatch } from "@grimoire/shared/scene";
@@ -107,6 +107,17 @@ export function applySceneAugment(
   input: Omit<ScenePatch, "force" | "id"> & { jobId?: string },
 ): Promise<Scene> {
   return postJson<Scene>(`${scenesUrl(campaign, id)}/augment/apply`, input);
+}
+
+/**
+ * Put ONE scene in the trash against the `rev` it was read with. The answer is
+ * the scene with its `deletedMs` and its moved `rev` — the guard its restore
+ * sends back. A scene a log line names is 409 `trash_blocked` with the lines in
+ * the way; a stale `rev` is 409 with the current scene. Nothing is written on a
+ * refusal.
+ */
+export function trashScene(campaign: string, scene: Pick<Scene, "id" | "rev">): Promise<Scene> {
+  return sendJson<Scene>("DELETE", scenesUrl(campaign, scene.id), { rev: scene.rev });
 }
 
 /**
