@@ -25,7 +25,7 @@ import type { GrimoireDb } from "../db/client";
 import { campaigns, sessions } from "../db/schema";
 import { indexEntity } from "./fts";
 import { getDb } from "./handle";
-import { expandBodyRefs } from "./refs";
+import { expandCampaignBodyRefs } from "./refs";
 import type { CampaignRow } from "./render";
 import { compareSessionsNewestFirst } from "./session-rows";
 import {
@@ -209,7 +209,7 @@ export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: "",
-    body: expandBodyRefs(tx, row.id, row.body),
+    body: expandCampaignBodyRefs(tx, row.id, row.body),
   });
 }
 

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { SearchResult } from "@grimoire/shared";
 import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
-import { expandBodyRefs, referrersOf } from "../src/store/refs";
+import { expandCampaignBodyRefs, referrersOf } from "../src/store/refs";
 import { dropStore, seedStore } from "./support/store";
 
 /** A scene of the example campaign we overwrite with reference prose — its own resource. */
@@ -96,27 +96,27 @@ async function search(q: string): Promise<SearchResult[]> {
 const findsScene = (results: SearchResult[]): boolean =>
   results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival");
 
-describe("expandBodyRefs", () => {
+describe("expandCampaignBodyRefs", () => {
   test("resolves the three kinds and leaves unknown slugs alone", async () => {
     const db = await getDb();
-    expect(expandBodyRefs(db, "beispiel", "[[jorna]] am [[leuchtturm]].")).toBe(
+    expect(expandCampaignBodyRefs(db, "beispiel", "[[jorna]] am [[leuchtturm]].")).toBe(
       "Hafenmeisterin Jorna am Der Leuchtturm von Salzhafen.",
     );
-    expect(expandBodyRefs(db, "beispiel", "Szene [[lighthouse-arrival]]")).toBe(
+    expect(expandCampaignBodyRefs(db, "beispiel", "Szene [[lighthouse-arrival]]")).toBe(
       "Szene Ankunft am Leuchtturm",
     );
-    expect(expandBodyRefs(db, "beispiel", "Wer ist [[niemand]]?")).toBe("Wer ist [[niemand]]?");
+    expect(expandCampaignBodyRefs(db, "beispiel", "Wer ist [[niemand]]?")).toBe("Wer ist [[niemand]]?");
   });
 
   test("a body without a reference is returned untouched", async () => {
     const db = await getDb();
-    expect(expandBodyRefs(db, "beispiel", "Nur Prosa.")).toBe("Nur Prosa.");
+    expect(expandCampaignBodyRefs(db, "beispiel", "Nur Prosa.")).toBe("Nur Prosa.");
   });
 
   test("code regions are indexed literally — the index says what the page shows", async () => {
     const db = await getDb();
     const body = "[[jorna]] winkt.\n\nDie Syntax: `[[jorna]]`.\n\n```\n[[jorna]]\n```\n";
-    expect(expandBodyRefs(db, "beispiel", body)).toBe(
+    expect(expandCampaignBodyRefs(db, "beispiel", body)).toBe(
       "Hafenmeisterin Jorna winkt.\n\nDie Syntax: `[[jorna]]`.\n\n```\n[[jorna]]\n```\n",
     );
   });
@@ -188,7 +188,7 @@ describe("referrersOf", () => {
     await createScene("Jorna", "01-salzhafen", "jorna");
     await patchLocation("leuchtturm", { body: "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n" });
     const db = await getDb();
-    expect(expandBodyRefs(db, "beispiel", "[[jorna]]")).toBe("Hafenmeisterin Jorna");
+    expect(expandCampaignBodyRefs(db, "beispiel", "[[jorna]]")).toBe("Hafenmeisterin Jorna");
     expect((await search("Hafenmeisterin")).some((r) => r.kind === "location")).toBe(true);
   });
 

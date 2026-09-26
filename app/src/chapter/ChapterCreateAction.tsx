@@ -1,4 +1,4 @@
-// "Kapitel anlegen" in the chapter overview header, next to the edit action —
+// The create-chapter action in the chapter overview header, next to the edit action —
 // the overview IS the chapter list, so this is where a chapter is missing
 // from. The dialog asks for a title (and, behind the pencil, the id) and an
 // optional description, which becomes the chapter's text. A created chapter
@@ -38,7 +38,6 @@ export function ChapterCreateAction({
           description={t("create.chapter.description")}
           nameLabel={t("create.chapter.nameLabel")}
           namePlaceholder={t("create.chapter.namePlaceholder")}
-          addressPrefix=""
           extra={{
             label: t("create.chapter.descriptionLabel"),
             placeholder: t("create.chapter.descriptionPlaceholder"),

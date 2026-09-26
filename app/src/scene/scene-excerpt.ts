@@ -11,7 +11,7 @@
 // Pure on purpose: the name lookups are passed in, so this runs without a
 // tree, a query or a DOM.
 
-import { expandBodyEntityRefs } from "@grimoire/shared/refs";
+import { expandBodyRefs } from "@grimoire/shared/refs";
 import type { SceneProposal, SceneStatus, SceneType } from "@grimoire/shared/scene";
 
 /** Current display name of a slug, or undefined when nothing owns it. */
@@ -40,7 +40,7 @@ export function sceneExcerpt(
     type,
     ...(trigger === undefined || trigger === ""
       ? {}
-      : { trigger: expandBodyEntityRefs(trigger, nameOf) }),
+      : { trigger: expandBodyRefs(trigger, nameOf) }),
     ...(location === undefined || location === ""
       ? {}
       : { location: locationName(location) ?? location }),

@@ -116,7 +116,7 @@ describe("player-character notes", () => {
     ];
     const grouped = groupByPcTag(rows, (row) => pcGroupTag(row.tags));
     expect(grouped.map((g) => g.tag)).toEqual(["kaela", "brann", undefined]);
-    expect(grouped[0]?.entries.map((e) => e.text)).toEqual([
+    expect(grouped[0]?.items.map((e) => e.text)).toEqual([
       "Geburtstags-Item für Kaela",
       "Karte für Kaela",
     ]);
@@ -127,7 +127,7 @@ describe("player-character notes", () => {
       [{ tag: "kaela" }, { tag: "kaela" }],
       (entry) => entry.tag,
     );
-    expect(grouped).toEqual([{ tag: "kaela", entries: [{ tag: "kaela" }, { tag: "kaela" }] }]);
+    expect(grouped).toEqual([{ tag: "kaela", items: [{ tag: "kaela" }, { tag: "kaela" }] }]);
   });
 
   test("an empty list yields no groups", () => {

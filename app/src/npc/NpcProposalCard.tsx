@@ -15,7 +15,7 @@ import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { NpcChange, NpcProposal } from "@grimoire/shared/npc";
 import { useState } from "react";
 
-import { DraftBodySection, DraftFieldsSection } from "@/components/DraftEditor";
+import { ProposalBodySection, ProposalFieldsSection } from "@/components/ProposalEditor";
 import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
 import { useT } from "@/i18n";
 import { useRefs } from "@/markdown/refs";
@@ -134,10 +134,10 @@ function NpcProposalEditor({
   };
   return (
     <div className="mt-3 flex flex-col gap-4">
-      <DraftFieldsSection label={label}>
+      <ProposalFieldsSection label={label}>
         <NpcFields values={values} issues={npcFormIssues(values, t)} tree={tree} onChange={edit} />
-      </DraftFieldsSection>
-      <DraftBodySection
+      </ProposalFieldsSection>
+      <ProposalBodySection
         label={label}
         body={npc.body}
         beside={

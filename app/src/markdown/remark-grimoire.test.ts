@@ -1,7 +1,7 @@
 // Transformation tests for the Grimoire remark plugin (bun:test — the
 // plugin operates on mdast only, no DOM involved).
 
-import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
+import { renderRefPieces, type RefPiece } from "@grimoire/shared/refs";
 import { CALLOUT_KINDS } from "@grimoire/shared/callouts";
 import { describe, expect, test } from "bun:test";
 import type { Blockquote, Root, RootContent } from "mdast";
@@ -11,8 +11,8 @@ import { unified } from "unified";
 
 import {
   COPY_PARTS_ATTR,
-  ENTITY_REF_ATTR,
-  ENTITY_REF_PLAIN_ATTR,
+  REF_ATTR,
+  REF_PLAIN_ATTR,
   remarkGrimoire,
 } from "./remark-grimoire";
 import { remarkTable } from "./remark-table";
@@ -75,7 +75,7 @@ describe("callouts", () => {
     ]);
     // What the DM copies == what the DM reads (Markdown.tsx resolves these).
     expect(
-      renderEntityRefPieces(copyPartsOf(tree.children[0]) as EntityRefPiece[], () => "Jorna"),
+      renderRefPieces(copyPartsOf(tree.children[0]) as RefPiece[], () => "Jorna"),
     ).toBe("Jorna winkt, [[jorna]] nicht.");
   });
 
@@ -212,9 +212,9 @@ describe("entity references (issue #68)", () => {
     const found: Array<{ slug: unknown; text: string }> = [];
     const walk = (n: unknown): void => {
       const typed = n as { type?: string; children?: unknown[] };
-      if (typed.type === "entityRef") {
+      if (typed.type === "ref") {
         found.push({
-          slug: dataOf(n as RootContent).hProperties?.[ENTITY_REF_ATTR],
+          slug: dataOf(n as RootContent).hProperties?.[REF_ATTR],
           text: mdastToString(n as RootContent),
         });
         return;
@@ -225,13 +225,13 @@ describe("entity references (issue #68)", () => {
     return found;
   }
 
-  /** The `data-entity-ref-plain` flag of every reference below a node. */
+  /** The `data-ref-plain` flag of every reference below a node. */
   function plainFlagsOf(node: unknown): unknown[] {
     const flags: unknown[] = [];
     const walk = (n: unknown): void => {
       const typed = n as { type?: string; children?: unknown[] };
-      if (typed.type === "entityRef") {
-        flags.push(dataOf(n as RootContent).hProperties?.[ENTITY_REF_PLAIN_ATTR]);
+      if (typed.type === "ref") {
+        flags.push(dataOf(n as RootContent).hProperties?.[REF_PLAIN_ATTR]);
         return;
       }
       for (const child of typed.children ?? []) walk(child);
@@ -299,7 +299,7 @@ describe("entity references (issue #68)", () => {
   });
 });
 
-// --- tables (issue #96) ------------------------------------------------------
+// --- tables -----------------------------------------------------------------
 
 describe("tables", () => {
   const W6 = "| W6 | Fund |\n| --- | --- |\n| 1 | [[jorna]]s Kompass |";
@@ -307,7 +307,7 @@ describe("tables", () => {
   test("a cell is walked by the reference pass like any other text", () => {
     const table = runWithTables(W6).children[0];
     const cell = childrenOf(childrenOf(childrenOf(table)[1])[1])[0];
-    expect(dataOf(cell).hProperties?.[ENTITY_REF_ATTR]).toBe("jorna");
+    expect(dataOf(cell).hProperties?.[REF_ATTR]).toBe("jorna");
   });
 
   test("a table inside a callout stays inside it — the callout keeps its tag", () => {

@@ -68,7 +68,7 @@ import { navSection } from "@/lib/topbar-nav";
 import { acceptProgress, pipelineProgress } from "@/generator-job/generator-job-state";
 import { useGenerateJob } from "@/generator-job/generator-job-query";
 import { cn } from "@/lib/utils";
-import { useReviewEntries } from "@/lib/use-review";
+import { useReviewCards } from "@/lib/use-review";
 import { MobileSessionRow, SessionChip, sessionChipState } from "@/session/SessionChip";
 import { reviewHref } from "@/session/session-links";
 import { useRunningSession } from "@/session/use-session";
@@ -524,7 +524,7 @@ function SettingsLink({
 
 /** The seen-of-total progress on the review view (prototype's isReview topbar). */
 function ReviewProgress({ campaign }: { campaign: string }) {
-  const review = useReviewEntries(campaign);
+  const review = useReviewCards(campaign);
   if (
     review.isPending ||
     review.noSession ||
@@ -543,7 +543,7 @@ function ReviewProgress({ campaign }: { campaign: string }) {
  *  server's last started one) still has entries — nothing to see otherwise. */
 function ChapterOverviewReviewLink({ campaign }: { campaign: string }) {
   const t = useT();
-  const review = useReviewEntries(campaign);
+  const review = useReviewCards(campaign);
   if (
     review.isPending ||
     review.noSession ||

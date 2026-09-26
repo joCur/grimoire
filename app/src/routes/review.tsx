@@ -40,8 +40,8 @@ import { createConflict } from "@/lib/create";
 import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
-import type { ReviewEntry } from "@/lib/use-review";
-import { pcGroups, useReviewEntries } from "@/lib/use-review";
+import type { ReviewCard } from "@/lib/use-review";
+import { pcGroups, useReviewCards } from "@/lib/use-review";
 import { isWriteConflict } from "@/lib/write-with-rev";
 import { NpcFromNoteDialog } from "@/npc/NpcFromNoteDialog";
 import { createNpc } from "@/npc/npc-api";
@@ -56,7 +56,7 @@ import { ThreadSummary } from "@/thread/ThreadSummary";
 type ActionKind = ReviewActionKind;
 
 interface ActVars {
-  entry: ReviewEntry;
+  card: ReviewCard;
   action: ActionKind;
   npc?: { id: string; name?: string };
 }
@@ -82,7 +82,7 @@ function npcFailure(error: unknown, t: Translate): string {
 
 function doneLabel(
   action: ActionKind | undefined,
-  section: ReviewEntry["section"],
+  section: ReviewCard["section"],
   t: Translate,
 ): string {
   switch (action) {
@@ -111,16 +111,16 @@ export function ReviewRoute() {
   const { adopted, remember } = useReviewMemory();
   const acted = useActedKeys(campaign);
   const adoptedHere = adopted[campaign] ?? [];
-  const [npcEntry, setNpcEntry] = useState<ReviewEntry>();
-  // The keep action writes nothing: the entry stays open (and counted) for the
+  const [npcCard, setNpcCard] = useState<ReviewCard>();
+  // The keep action writes nothing: the card stays open (and counted) for the
   // next wrap-up, the marker is cosmetic and lives for this sitting only.
   // Campaign-scoped like the rest of the review memory: the route param
   // changes without remounting this component, so an unscoped set would carry
   // a keep mark over into the NEXT campaign.
   const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const keptKey = (entry: ReviewEntry) => `${campaign}:${entry.key}`;
+  const keptKey = (card: ReviewCard) => `${campaign}:${card.key}`;
 
-  const model = useReviewEntries(campaign);
+  const model = useReviewCards(campaign);
 
   // The active chapter (fallback: the first) — the same rule as the live nav.
   const tree = useQuery({
@@ -132,12 +132,12 @@ export function ReviewRoute() {
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
 
   const act = useMutation({
-    mutationFn: async ({ entry, action, npc }: ActVars): Promise<ActResult> => {
+    mutationFn: async ({ card, action, npc }: ActVars): Promise<ActResult> => {
       let created: Npc | undefined;
       let thread: Thread | undefined;
       if (action === "thread") {
         if (chapter === undefined) throw new Error("no chapter to adopt into");
-        thread = await createThread(campaign, { chapter: chapter.id, text: entry.text });
+        thread = await createThread(campaign, { chapter: chapter.id, text: card.text });
       } else if (action === "npc") {
         if (npc === undefined) throw new Error("no npc id");
         // The note becomes the npc's text. An id whose npc already holds
@@ -147,7 +147,7 @@ export function ReviewRoute() {
           // An npc without a name of its own shows its id (README).
           name: npc.name ?? npc.id,
           id: npc.id,
-          body: entry.text,
+          body: card.text,
         });
       }
       const made = {
@@ -155,17 +155,17 @@ export function ReviewRoute() {
         ...(thread === undefined ? {} : { thread }),
       };
       // Only after the harvest succeeded is the source marked done.
-      if (entry.idea !== undefined) {
-        return { ...made, idea: await tickIdea(campaign, entry.idea) };
+      if (card.idea !== undefined) {
+        return { ...made, idea: await tickIdea(campaign, card.idea) };
       }
       // The session comes from the server (the last started one — which may
       // have started yesterday). Without it there is nothing to review.
-      if (entry.logEntry === undefined || model.sessionId === "") {
+      if (card.logEntry === undefined || model.sessionId === "") {
         throw new Error("no log entry to review");
       }
       return {
         ...made,
-        logEntry: await reviewLogEntry(campaign, model.sessionId, entry.logEntry),
+        logEntry: await reviewLogEntry(campaign, model.sessionId, card.logEntry),
       };
     },
     onSuccess: (result, vars) => {
@@ -196,51 +196,51 @@ export function ReviewRoute() {
         void queryClient.invalidateQueries({ queryKey: npcsKey(campaign) });
         void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
       }
-      remember(campaign, vars.entry.key, vars.action, thread?.id);
-      if (vars.action === "npc") setNpcEntry(undefined);
+      remember(campaign, vars.card.key, vars.action, thread?.id);
+      if (vars.action === "npc") setNpcCard(undefined);
     },
-    onError: (error, { entry }) => {
+    onError: (error, { card }) => {
       // The row moved since it was read: read it again, so the next attempt
       // carries its current guard.
       if (!isWriteConflict(error)) return;
       void queryClient.invalidateQueries({
-        queryKey: entry.idea !== undefined ? ideasKey(campaign) : sessionScopeKey(campaign),
+        queryKey: card.idea !== undefined ? ideasKey(campaign) : sessionScopeKey(campaign),
       });
     },
   });
 
-  const busyKey = act.isPending ? act.variables?.entry.key : undefined;
+  const busyKey = act.isPending ? act.variables?.card.key : undefined;
   // The dialog's own line: the id names an npc with content (nothing was
   // written, the note stays in the row), or any other refusal in the
   // server's words, or a server that did not answer.
   const npcError =
     act.isError && act.variables?.action === "npc" ? npcFailure(act.error, t) : undefined;
-  const cardError = (entry: ReviewEntry) =>
-    act.isError && act.variables?.action !== "npc" && act.variables?.entry.key === entry.key
+  const cardError = (card: ReviewCard) =>
+    act.isError && act.variables?.action !== "npc" && act.variables?.card.key === card.key
       ? t(
-          entry.logEntry !== undefined
+          card.logEntry !== undefined
             ? reviewFailureKey(act.error, "review.action.failed")
             : tickFailureKey(act.error, "review.action.failed"),
         )
       : undefined;
 
-  const harvest = model.entries.filter((entry) => entry.section === "harvest");
-  const notes = model.entries.filter((entry) => entry.section === "notes");
-  const pcs = pcGroups(model.entries);
+  const harvest = model.cards.filter((card) => card.section === "harvest");
+  const notes = model.cards.filter((card) => card.section === "notes");
+  const pcs = pcGroups(model.cards);
 
-  const renderCard = (entry: ReviewEntry) => (
-    <EntryCard
-      key={entry.key}
-      entry={entry}
-      action={acted.get(entry.key)}
-      busy={busyKey === entry.key}
-      error={cardError(entry)}
+  const renderCard = (card: ReviewCard) => (
+    <ReviewCardView
+      key={card.key}
+      card={card}
+      action={acted.get(card.key)}
+      busy={busyKey === card.key}
+      error={cardError(card)}
       canAdopt={chapter !== undefined}
-      kept={kept.has(keptKey(entry))}
+      kept={kept.has(keptKey(card))}
       onKeep={() =>
         setKept((current) => {
           const next = new Set(current);
-          const key = keptKey(entry);
+          const key = keptKey(card);
           if (next.has(key)) next.delete(key);
           else next.add(key);
           return next;
@@ -248,15 +248,15 @@ export function ReviewRoute() {
       }
       onThread={() => {
         act.reset();
-        act.mutate({ entry, action: "thread" });
+        act.mutate({ card, action: "thread" });
       }}
       onNpc={() => {
         act.reset();
-        setNpcEntry(entry);
+        setNpcCard(card);
       }}
       onDismiss={() => {
         act.reset();
-        act.mutate({ entry, action: "dismiss" });
+        act.mutate({ card, action: "dismiss" });
       }}
     />
   );
@@ -316,7 +316,7 @@ export function ReviewRoute() {
                               ? t("review.pc.groupGeneral")
                               : t("review.pc.groupTag", { tag: group.tag })}
                           </h3>
-                          {group.entries.map(renderCard)}
+                          {group.items.map(renderCard)}
                         </div>
                       ))}
                     </div>
@@ -356,19 +356,19 @@ export function ReviewRoute() {
         )}
       </div>
 
-      {npcEntry !== undefined && (
+      {npcCard !== undefined && (
         <NpcFromNoteDialog
-          key={npcEntry.key}
-          text={npcEntry.text}
+          key={npcCard.key}
+          text={npcCard.text}
           pending={act.isPending}
           error={npcError}
           onClose={() => {
             act.reset();
-            setNpcEntry(undefined);
+            setNpcCard(undefined);
           }}
           onSubmit={(npc) => {
             act.reset();
-            act.mutate({ entry: npcEntry, action: "npc", npc });
+            act.mutate({ card: npcCard, action: "npc", npc });
           }}
         />
       )}
@@ -378,8 +378,8 @@ export function ReviewRoute() {
 
 /** One harvest card per the prototype: source · mono time · mono tag chip,
  *  the text, then the action row — or the dimmed done row. */
-function EntryCard({
-  entry,
+function ReviewCardView({
+  card,
   action,
   busy,
   error,
@@ -390,7 +390,7 @@ function EntryCard({
   onDismiss,
   onKeep,
 }: {
-  entry: ReviewEntry;
+  card: ReviewCard;
   action: ActionKind | undefined;
   busy: boolean;
   error: string | undefined;
@@ -403,26 +403,26 @@ function EntryCard({
   onKeep: () => void;
 }) {
   const t = useT();
-  const label = doneLabel(action, entry.section, t);
+  const label = doneLabel(action, card.section, t);
   return (
     <div
       className={cn(
         "rounded-lg border border-border bg-card px-4 py-3.5",
-        entry.done && "opacity-55",
+        card.done && "opacity-55",
       )}
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[12px]">
-        <span className="text-muted-foreground">{entry.sourceLabel}</span>
-        {entry.meta !== undefined && <span className="font-mono text-faint">{entry.meta}</span>}
-        {entry.tag !== "" && (
+        <span className="text-muted-foreground">{card.sourceLabel}</span>
+        {card.meta !== undefined && <span className="font-mono text-faint">{card.meta}</span>}
+        {card.tag !== "" && (
           <span className="rounded-[4px] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-[7px] py-px font-mono text-[11.5px] text-primary-hover">
-            #{entry.tag}
+            #{card.tag}
           </span>
         )}
       </div>
-      <p className="mb-2.5 text-[14px] leading-[1.55] text-foreground">{entry.text}</p>
+      <p className="mb-2.5 text-[14px] leading-[1.55] text-foreground">{card.text}</p>
 
-      {entry.done ? (
+      {card.done ? (
         <p
           className={cn(
             "flex items-center gap-[7px] text-[12.5px]",
@@ -437,7 +437,7 @@ function EntryCard({
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
-            {entry.canThread && canAdopt && (
+            {card.canThread && canAdopt && (
               <Button
                 type="button"
                 variant="outline"
@@ -448,7 +448,7 @@ function EntryCard({
                 {t("review.action.thread")}
               </Button>
             )}
-            {entry.canNpc && (
+            {card.canNpc && (
               <Button
                 type="button"
                 variant="outline"
@@ -466,12 +466,12 @@ function EntryCard({
               onClick={onDismiss}
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              {entry.section === "harvest" ? t("common.discard") : t("review.action.resolve")}
+              {card.section === "harvest" ? t("common.discard") : t("review.action.resolve")}
             </Button>
-            {entry.section === "pc" && (
+            {card.section === "pc" && (
               // The keep action writes NOTHING — it is a marker for this
               // sitting, so it stays a toggle (aria-pressed) and never claims
-              // a recorded decision. The entry stays open either way.
+              // a recorded decision. The card stays open either way.
               <Button
                 type="button"
                 variant="outline"

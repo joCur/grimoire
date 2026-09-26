@@ -92,33 +92,33 @@ export function pcGroupTag(tags: readonly string[]): string | undefined {
 
 /** One group of the player-character section. */
 export interface PcGroup<T> {
-  /** The second tag, or undefined for the „Allgemein" group. */
+  /** The second tag, or undefined for the general group. */
   tag: string | undefined;
-  entries: T[];
+  items: T[];
 }
 
 /**
- * Group entries by their character tag, in first-appearance order; the
- * untagged („Allgemein") group always comes last, however early it appeared.
- * Pure and entry-shape agnostic — the caller says where the tag sits.
+ * Group items by their character tag, in first-appearance order; the
+ * untagged (general) group always comes last, however early it appeared.
+ * Pure and item-shape agnostic — the caller says where the tag sits.
  */
 export function groupByPcTag<T>(
-  entries: readonly T[],
-  tagOf: (entry: T) => string | undefined,
+  items: readonly T[],
+  tagOf: (item: T) => string | undefined,
 ): PcGroup<T>[] {
   const named = new Map<string, T[]>();
   const general: T[] = [];
-  for (const entry of entries) {
-    const tag = tagOf(entry);
+  for (const item of items) {
+    const tag = tagOf(item);
     if (tag === undefined || tag === "") {
-      general.push(entry);
+      general.push(item);
       continue;
     }
     const bucket = named.get(tag);
-    if (bucket === undefined) named.set(tag, [entry]);
-    else bucket.push(entry);
+    if (bucket === undefined) named.set(tag, [item]);
+    else bucket.push(item);
   }
-  const groups: PcGroup<T>[] = [...named].map(([tag, items]) => ({ tag, entries: items }));
-  if (general.length > 0) groups.push({ tag: undefined, entries: general });
+  const groups: PcGroup<T>[] = [...named].map(([tag, items]) => ({ tag, items }));
+  if (general.length > 0) groups.push({ tag: undefined, items: general });
   return groups;
 }

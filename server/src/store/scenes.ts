@@ -35,18 +35,14 @@ import {
   unpackStringArray,
 } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { nextScenePos } from "./chapters";
-import {
-  assertChapterRef,
-  assertLocationRef,
-  assertNpcRefs,
-  indexScene,
-  refNpcs,
-  refTags,
-  sceneRowOf,
-} from "./entity-rows";
+import { assertChapterRef, nextScenePos } from "./chapters";
+import { indexEntity } from "./fts";
+import { assertLocationRef } from "./locations";
+import { assertNpcRefs } from "./npcs";
 import { getDb } from "./handle";
+import { expandCampaignBodyRefs } from "./refs";
 import type { SceneRow } from "./render";
+import { reindexReferrers } from "./search-index";
 import {
   assertSafeChapterId,
   assertSceneClosedFields,
@@ -55,6 +51,7 @@ import {
   resolveNewId,
   revConflict,
   slugTaken,
+  unknownRef,
 } from "./shared";
 
 // --- rendering a row ----------------------------------------------------------
@@ -413,4 +410,64 @@ export async function createScene(
     indexScene(tx, campaign, row, []);
     return renderScene(row, [], []);
   });
+}
+
+// --- loading and checking a scene row ------------------------------------------
+
+/** One scene row by id, read through `tx` (the database or a transaction). */
+export function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | undefined {
+  return tx
+    .select()
+    .from(scenes)
+    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
+    .all()[0] as SceneRow | undefined;
+}
+
+/** The npc ids of a scene, in the order the DM gave them. */
+export function refNpcs(tx: GrimoireDb, campaign: string, sceneId: string): string[] {
+  return tx
+    .select({ npcId: sceneNpcs.npcId })
+    .from(sceneNpcs)
+    .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.sceneId, sceneId)))
+    .orderBy(asc(sceneNpcs.pos))
+    .all()
+    .map((r) => r.npcId);
+}
+
+/** The tags of a scene, in the order the DM gave them. */
+export function refTags(tx: GrimoireDb, campaign: string, sceneId: string): string[] {
+  return tx
+    .select({ tag: sceneTags.tag })
+    .from(sceneTags)
+    .where(and(eq(sceneTags.campaignId, campaign), eq(sceneTags.sceneId, sceneId)))
+    .orderBy(asc(sceneTags.pos))
+    .all()
+    .map((r) => r.tag);
+}
+
+/**
+ * The scene a session's log entry or played scene names — `code` says which
+ * of the two it is (`log_scene_unknown`, `played_scene_unknown`).
+ */
+export function assertSceneRef(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+  code: "log_scene_unknown" | "played_scene_unknown",
+): void {
+  if (sceneRowOf(tx, campaign, id) !== undefined) return;
+  throw unknownRef(code, "scene", id);
+}
+
+/** Rebuild a scene's search-index row, then the rows of what references it. */
+export function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: string[]): void {
+  indexEntity(tx, campaign, {
+    kind: "scene",
+    entityId: row.id,
+    title: row.title === "" ? row.id : row.title,
+    ref: row.id,
+    tags: tags.join(" "),
+    body: expandCampaignBodyRefs(tx, campaign, row.body),
+  });
+  reindexReferrers(tx, campaign, row.id);
 }

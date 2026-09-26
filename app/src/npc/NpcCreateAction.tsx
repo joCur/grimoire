@@ -34,7 +34,6 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
           description={t("create.npc.description")}
           nameLabel={t("create.npc.nameLabel")}
           namePlaceholder={t("create.npc.namePlaceholder")}
-          addressPrefix="npcs/"
           create={async (values: CreateValues) => {
             const created = await createNpc(campaign, {
               name: values.name,

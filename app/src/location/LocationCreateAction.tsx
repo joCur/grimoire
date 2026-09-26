@@ -34,7 +34,6 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
           description={t("create.location.description")}
           nameLabel={t("create.location.nameLabel")}
           namePlaceholder={t("create.location.namePlaceholder")}
-          addressPrefix="locations/"
           create={async (values: CreateValues) => {
             const created = await createLocation(campaign, {
               name: values.name,

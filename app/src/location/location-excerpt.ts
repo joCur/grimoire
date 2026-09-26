@@ -9,7 +9,7 @@
 // Pure on purpose: the name lookup is passed in, so this runs without a tree,
 // a query or a DOM.
 
-import { expandBodyEntityRefs } from "@grimoire/shared/refs";
+import { expandBodyRefs } from "@grimoire/shared/refs";
 import type { Location } from "@grimoire/shared/location";
 
 export interface LocationExcerpt {
@@ -28,7 +28,7 @@ export function locationExcerpt(
   return {
     ...(atmosphere === undefined || atmosphere === ""
       ? {}
-      : { mood: expandBodyEntityRefs(atmosphere, nameOf) }),
+      : { mood: expandBodyRefs(atmosphere, nameOf) }),
     ...(roll20Page === undefined || roll20Page === "" ? {} : { page: roll20Page }),
   };
 }

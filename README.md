@@ -1,16 +1,14 @@
 # Grimoire — Datenmodell & Konventionen
 
 Grimoire speichert eine Kampagne in einer SQLite-Datenbank
-(`GRIMOIRE_DATA/grimoire.db`). Ein **Eintrag** ist eine Kampagne, ein
-Kapitel, eine Szene, ein NPC oder ein Ort. Jeder Eintrag besteht aus
-**Eigenschaften** — seinen strukturierten Feldern (Titel, Status, Ort, …) —
-und einem **Text** in Markdown.
-
-Ein **Faden** — ein Handlungsstrang, den ein Kapitel trägt —, eine
-**Idee**, ein **Glossar-Begriff** und das **Kampagnenwissen** — jede
-Namenskonvention, jeder Fakt, jede Stilregel für sich — haben keinen Text; jeder ist seine eigene Ressource mit
-seinen eigenen Feldern ([decisions/resources](docs/decisions/resources.md)). Ebenso die **Session** mit ihren
-**Pausen**, **Log-Zeilen** und **gespielten Szenen**, die unter ihr hängen.
+(`GRIMOIRE_DATA/grimoire.db`). Jede Entität — **Kampagne**, **Kapitel**,
+**Szene**, **NPC**, **Ort**, **Faden** (ein Handlungsstrang, den ein Kapitel
+trägt), **Idee**, **Glossar-Begriff**, **Kampagnenwissen** (jede
+Namenskonvention, jeder Fakt, jede Stilregel für sich) und die **Session**
+mit ihren **Pausen**, **Log-Zeilen** und **gespielten Szenen** — ist eine
+Zeile ihrer eigenen Tabelle und ihre eigene Ressource mit ihren eigenen
+Feldern ([decisions/resources](docs/decisions/resources.md)). Kampagne, Kapitel, Szene, NPC und Ort haben unter ihren
+Feldern einen `body`: ihren **Text** in Markdown.
 
 Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
 README beschreibt, was in den Feldern stehen darf und was der Text
@@ -51,7 +49,7 @@ jüngsten Session.
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
 Referenz-Schlüssel in URLs, Links und `[[id]]`-Referenzen und ändert sich
-danach nie mehr ([decisions/constraints](docs/decisions/constraints.md)). Der Eigenschaften-Dialog zeigt sie, bietet aber
+danach nie mehr ([decisions/constraints](docs/decisions/constraints.md)). Der Felder-Dialog („Eigenschaften“) zeigt sie, bietet aber
 keine Änderung.
 
 Die Kapitelübersicht ist eine durchgehende Liste der Szenen eines Kapitels
@@ -307,7 +305,7 @@ Ergänzen hängt am NPC: `POST …/npcs/<id>/augment` startet den Lauf, `POST
 …/npcs/<id>/augment/apply` übernimmt ihn.
 
 `motivation` wird auf der Bearbeiten-Fläche gepflegt, neben dem Markdown,
-nicht im Eigenschaften-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige
+nicht im Felder-Dialog. Ein `[[id]]` darin erscheint bei der Anzeige
 als aktueller Name, wie im Text — eine Anzeige, keine Referenz.
 
 Text-Abschnitte frei; empfohlen: `## Weiß` (`[!secret]`-Callouts),
@@ -652,27 +650,30 @@ darin zweimal.
   gerade offene Szene nicht an: die gespielten Szenen wachsen nur über ihre
   eigene Ressource.
 
-## Referenzen zeigen auf vorhandene Einträge
+## Referenzen zeigen auf vorhandene Zeilen
 
-Eine Referenz nennt einen Eintrag, den es gibt. Wer in `npcs:` einer Szene,
+Eine Referenz nennt eine Zeile, die es gibt. Wer in `npcs:` einer Szene,
 in `location:`, in `chapter:`, in einer Log-Zeile oder in einer gespielten
-Szene etwas einträgt, das keinen Eintrag hat, bekommt 400 mit dem
-Hinweis, den Eintrag zuerst anzulegen — es entsteht nichts nebenbei.
-Einträge entstehen über „Neu anlegen" und über das Übernehmen eines
-Generator-Vorschlags, sonst nirgends.
+Szene eine id einträgt, zu der es keinen NPC, keinen Ort, kein Kapitel oder
+keine Szene gibt, bekommt 400 mit dem Hinweis, sie zuerst anzulegen — es
+entsteht nichts nebenbei. Kapitel, Szenen, NPCs und Orte entstehen über
+„Neu anlegen" und über das Übernehmen eines Generator-Vorschlags, sonst
+nirgends.
 
 `location:` verlangt eine id in Slug-Form (400 sonst). Jede Szene gehört zu
 einem Kapitel; `chapter:` lässt sich nicht leeren.
 
 Eine Nennung im **Text** ist keine Referenz in diesem Sinn: `[[id]]` und was
 unter `## Beziehungen` steht bleiben sichtbarer Text. Ein `[[id]]`, zu dem
-es keinen Eintrag gibt, wird als Text angezeigt — kein Fehler, kein neuer
-Eintrag. Ein leerer Eintrag ist übrigens normal: angelegt und noch nicht
-gefüllt, er erscheint als dünne Karte und lässt sich jederzeit füllen.
+es keinen NPC, keinen Ort und keine Szene gibt, wird als Text angezeigt —
+kein Fehler, und nichts wird angelegt. Ein leerer NPC oder Ort ist übrigens
+normal: angelegt und noch nicht gefüllt, er erscheint als dünne Karte und
+lässt sich jederzeit füllen.
 
 ## Text
 
-Der Text eines Eintrags ist Markdown. Was der Renderer versteht — und was der
+Der Text (`body`) einer Kampagne, eines Kapitels, einer Szene, eines NPCs oder
+eines Orts ist Markdown. Was der Renderer versteht — und was der
 Generator produzieren muss:
 
 ### Abschnitte (H2)
@@ -728,12 +729,12 @@ die Szene „Ankunft am Leuchtturm",
 
 ### Referenzen im Fließtext: `[[id]]`
 
-`[[jorna]]` im Text ist eine Referenz auf einen Eintrag. Sie gilt in jedem
+`[[jorna]]` im Text ist eine Referenz auf einen NPC, einen Ort oder eine Szene. Sie gilt in jedem
 Text (Szene, NPC, Ort, Kapitel, Kampagne) und in jedem Callout.
 
 - **Gespeichert wird immer die id**, nie der Name. Den aktuellen Anzeigenamen
-  setzt erst die Anzeige ein — ändert ein Eintrag seinen Titel, stimmt der
-  Text überall, ohne dass ein Eintrag angefasst wird.
+  setzt erst die Anzeige ein — ändert sich ein Name oder Titel, stimmt der
+  Text überall, ohne dass eine andere Zeile angefasst wird.
 - Referenzierbar sind **NPC, Ort und Szene**. Kollidieren ids über Arten
   hinweg, gewinnt **NPC > Ort > Szene**. Kapitel sind nicht referenzierbar.
 - In den Klammern steht **nur die id** in kebab-case (`[[alte-mole]]`); es
@@ -743,16 +744,16 @@ Text (Szene, NPC, Ort, Kapitel, Kampagne) und in jedem Callout.
   Schreibweise wörtlich stehen — nicht aufgelöst und nicht indexiert.
 - In der Kopfzeile eines `## If:`-Zweigs erscheint der aufgelöste **Name als
   Text** (kein Link): der Klick faltet den Zweig.
-- **Degradation**: Eine id, die kein Eintrag hat, bleibt als `[[id]]` sichtbar
-  stehen — kein Fehler, und sie wird lebendig, sobald der Eintrag existiert.
-- Klick: in der Leseansicht ein Link zum Eintrag, in der Session-Ansicht
+- **Degradation**: Eine id, zu der es nichts gibt, bleibt als `[[id]]` sichtbar
+  stehen — kein Fehler, und sie wird lebendig, sobald es sie gibt.
+- Klick: in der Leseansicht ein Link zum Ziel, in der Session-Ansicht
   öffnet er die Detail-Schublade, ohne die Session zu verlassen.
 - Überfahren oder Tastatur-Fokus zeigt eine kurze **Vorschau** des Ziels
   (Art, Status und die Zeilen der Kompakt-Karte); ein `[[id]]` in deren
   Auszug steht dort — wie auf den NPC- und Ort-Karten — als Name. Auf
   Touch-Geräten gibt es keine Vorschau.
 - Namen als normaler Text sind weiterhin erlaubt — sie bleiben aber stehen,
-  wenn ein Eintrag seinen Titel ändert.
+  wenn sich der Name oder Titel ändert.
 
 ### Hashtags im Log
 
@@ -760,7 +761,7 @@ Text (Szene, NPC, Ort, Kapitel, Kampagne) und in jedem Callout.
 `#decision` Spieler-Entscheidung · `#date` In-Game-Datum (z. B. `#date Tag 4`)
 
 `#pc` Notiz zu einem Spielercharakter. Ein optionaler zweiter Tag benennt den
-Charakter (`#pc #kaela`); die Namen sind frei, es gibt keinen PC-Eintrag und
+Charakter (`#pc #kaela`); die Namen sind frei, es gibt keine PC-Entität und
 nichts zu pflegen. Die Nachbereitung sammelt solche Zeilen im Abschnitt
 „Spielercharaktere", gruppiert nach dem zweiten Tag (ohne zweiten Tag:
 „Allgemein"). `#pc` gewinnt gegen die übrigen Tags: die Zeile wird nicht als
@@ -794,7 +795,7 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
 - Geschrieben wird ausschließlich über die API (jeder Endpoint ist an seiner
   Route dokumentiert, im Modul seiner Ressource
   `server/src/routes/<ressource>.ts`): Log, Nachbereitung,
-  Generator-Entwürfe — und für jede Entität ihr eigener `PATCH` auf ihrer
+  Generator-Vorschläge — und für jede Entität ihr eigener `PATCH` auf ihrer
   Ressource, der jede Teilmenge ihrer Felder, `body` eingeschlossen, in einem
   Zug schreibt ([decisions/writes](docs/decisions/writes.md), [decisions/resources](docs/decisions/resources.md)); Faden, Idee, Glossar-Begriff,
   Kampagnenwissen, Pause und Log-Zeile eingeschlossen, die keinen `body`
@@ -885,5 +886,5 @@ Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
 `<dir>/<kampagne>/*.json` samt den Verzeichnissen `campaigns/`, `chapters/`,
 `scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`, `glossary-terms/`,
 `knowledge-items/` und `sessions/` darunter und
-schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
+schreibt die Zeilen über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

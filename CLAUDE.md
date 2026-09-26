@@ -7,8 +7,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Pflichtlektüre vor jeder Aufgabe
 
-1. `README.md` — Datenmodell und Konventionen: Einträge, ihre
-   Eigenschaften und Adressen, das Text-Vokabular (Callouts,
+1. `README.md` — Datenmodell und Konventionen: die Entitäten, ihre
+   Felder und Adressen, das Text-Vokabular (Callouts,
    `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
    normativ.
 2. `docs/decisions/` — Architektur-Entscheidungen inkl. Tech-Stack, eine
@@ -330,7 +330,7 @@ Die Pfade:
    …/sessions/<id>/log/<log-id> { rev, reviewed }` — eine unbekannte id ist
    404, ein alter `rev` 409 mit der aktuellen Zeile, und die Karte sagt, dass
    die Notiz anderswo geändert wurde; `review/seen` antwortet 404
-6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen →
+6. Generator-Zyklus (Stub-LLM): Job → Vorschläge prüfen → Übernehmen →
    Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
    die Szene ohne `rev` (`result.scenes`, decisions/resources): „Bearbeiten" öffnet ihre
    Felder und ihren Text, gespeichert werden die geänderten Felder je Szene
@@ -349,13 +349,14 @@ Die Pfade:
    Listen-Adressen `…/glossary` und `…/knowledge` antworten 404 — und der
    Lauf danach:
    Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
-   Namens-Hinweise in „Entwürfe prüfen", „Übernehmen" trotzdem möglich und
+   Namens-Hinweise beim Prüfen der Vorschläge, „Übernehmen" trotzdem möglich und
    Server-Neustart (fertiger Job übersteht ihn und bleibt übernehmbar,
    laufender wird als `failed` gemeldet). Die Szenen eines Laufs stehen im
    Kapitel in Gliederungsreihenfolge, auch wenn sie einzeln und in
    umgekehrter Reihenfolge übernommen werden — Startwert bei der ersten
    Übernahme plus Nummer in der Gliederung (decisions/scene-order)
-7. Eigenschaften-Dialog/Status-Regler inkl. 409-Konflikt: der Dialog zeigt
+7. Felder-Dialog (im UI „Eigenschaften“)/Status-Regler inkl. 409-Konflikt: der
+   Dialog über die Felder einer Szene, eines NPCs, eines Orts oder eines Kapitels zeigt
    die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
    Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine
    gleichzeitige Textänderung übersteht das). Der Status-Regler selbst hat
@@ -367,11 +368,11 @@ Die Pfade:
    (`POST …/ideas`, antwortet mit `Idea`), am Ende, nichts abgehakt; läuft
    eine Session (`GET …/sessions?running=true`), zeigt die Startfläche ihren
    Chip als Weg zurück
-9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
-   sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe Konfliktzeile
-   statt still überschreiben. „Neu laden" verwirft den Entwurf und übernimmt
-   den gespeicherten Stand, „Trotzdem speichern" schreibt nur den Text, sodass
-   eine fremd geänderte Eigenschaft bleibt. Weil alle Felder einer Szene,
+9. Text einer Szene bearbeiten: öffnen → `body` ändern → speichern →
+   gerendert sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe
+   Konfliktzeile statt still überschreiben. „Neu laden" verwirft den
+   ungespeicherten Text und übernimmt den gespeicherten Stand, „Trotzdem
+   speichern" schreibt nur `body`, sodass ein fremd geändertes Feld bleibt. Weil alle Felder einer Szene,
    `body` eingeschlossen, EINE Zeile und EINEN Wächter teilen (decisions/writes), ist
    auch ein reiner Status-Write eines Zweitschreibers ein Konflikt — der
    Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit decisions/sqlite gibt

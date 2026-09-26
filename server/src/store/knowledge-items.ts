@@ -37,7 +37,7 @@ import type { GrimoireDb } from "../db/client";
 import { campaigns, knowledgeItems } from "../db/schema";
 import { mutate, requireCampaign, requireCampaignRow } from "./campaigns";
 import { getDb } from "./handle";
-import { expandBodyRefs } from "./refs";
+import { expandCampaignBodyRefs } from "./refs";
 import { nextPos, parseRequest, revConflict } from "./shared";
 
 /** One stored knowledge-item row. */
@@ -372,7 +372,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
   const lines: string[] = [];
   for (const item of knowledgeItemRows(db, campaign).map(renderKnowledgeItem)) {
     const resolve = (value: string): string =>
-      promptInline(expandBodyRefs(db, campaign, value));
+      promptInline(expandCampaignBodyRefs(db, campaign, value));
     if (item.kind === "naming") {
       if (item.from.trim() === "" || item.to.trim() === "") continue;
       lines.push(
@@ -393,7 +393,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
  *
  * REF-EXPANDED like the prompt lines: a rule written as
  * „[[fenn]]“ → „Fennwyn“ reaches the model as „Fenn“ → „Fennwyn“, so the
- * check has to search the drafts for „Fenn“ too — searching for the literal
+ * check has to search the proposals for „Fenn“ too — searching for the literal
  * „[[fenn]]“ would silently never match and make the rule look obeyed. Both
  * sides are expanded, because `to` is what the check uses to recognise the
  * already-correct spelling (naming-check.ts findRuleHits).
@@ -401,7 +401,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
 export async function namingRules(campaign: string): Promise<Array<{ from: string; to: string }>> {
   const db = await getDb();
   const expand = (value: string): string =>
-    promptInline(expandBodyRefs(db, campaign, value)).trim();
+    promptInline(expandCampaignBodyRefs(db, campaign, value)).trim();
   return knowledgeItemRows(db, campaign)
     .map(renderKnowledgeItem)
     .filter((item) => item.kind === "naming" && item.from.trim() !== "" && item.to.trim() !== "")

@@ -166,7 +166,6 @@ function ColdStart() {
               the pencil is where it gets settled by hand (decisions/constraints). The same
               component and the same label as the dialog surface. */}
           <IdField
-            prefix={t("create.campaign.idPrefix")}
             id={id}
             editing={idState.editing}
             invalid={idInvalid}

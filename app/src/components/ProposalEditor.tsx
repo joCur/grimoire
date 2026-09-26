@@ -47,7 +47,7 @@ function idFor(label: string): string {
 }
 
 /** The fields of a proposal: the heading, its label as read-only id, the controls. */
-export function DraftFieldsSection({ label, children }: { label: string; children: ReactNode }) {
+export function ProposalFieldsSection({ label, children }: { label: string; children: ReactNode }) {
   const t = useT();
   return (
     <section aria-label={t("generate.review.propertiesHeading")}>
@@ -66,7 +66,7 @@ export function DraftFieldsSection({ label, children }: { label: string; childre
  * The body of a proposal on the two surfaces, and — above them, as on the
  * body editor — the prose fields its caller edits beside the text.
  */
-export function DraftBodySection({
+export function ProposalBodySection({
   label,
   body,
   beside,

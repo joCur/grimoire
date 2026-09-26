@@ -26,7 +26,7 @@ import {
   type NpcAugmentResult,
   type NpcProposal,
 } from "@grimoire/shared";
-import { bodyEntityRefSlugs } from "@grimoire/shared/refs";
+import { bodyRefSlugs } from "@grimoire/shared/refs";
 import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
@@ -113,7 +113,7 @@ export function validateNpcAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  const known = new Set([...refIds, ...bodyEntityRefSlugs(stored.body)]);
+  const known = new Set([...refIds, ...bodyRefSlugs(stored.body)]);
   for (const msg of unknownRefErrors(npc.body, known)) errors.push(`${label}: ${msg}`);
   if (errors.length > 0) return { ok: false, errors };
   const current = withoutGuard(stored);

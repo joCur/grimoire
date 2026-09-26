@@ -106,6 +106,21 @@ export function assertNpcStatus(fields: Record<string, unknown>): void {
 }
 
 // --- references that name nothing --------------------------------------------
+//
+// A reference names a row that EXISTS — the database says so (schema.ts
+// rule 3), and the `assert…Ref` checks of the domain modules are what turn a
+// write that names something else into one readable sentence instead of a
+// constraint error.
+//
+// No check creates a row as a side effect. The paths that DO create one are
+// countable: the create endpoints of the domain modules — a `#npc` line the
+// DM turns into an npc with a click goes through the npc's own
+// (./npcs.ts `createNpc`) —, and accepting a generator proposal — including
+// `ensureChapterRow` inside that accept (./chapters.ts), which writes the
+// chapter the run itself decided on (decisions/scene-order). Nowhere else.
+//
+// A `[[slug]]` in a body is not a reference in this sense. It is text, it
+// stays text, and an unknown one renders as exactly what the DM typed.
 
 /**
  * The 400 a reference that names nothing answers — one shape for all of

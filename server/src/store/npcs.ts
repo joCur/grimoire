@@ -22,9 +22,12 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { generateJobs, npcs, packJson, unpackJson } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertChapterRef, indexNpc, npcRowOf } from "./entity-rows";
+import { assertChapterRef } from "./chapters";
+import { indexEntity } from "./fts";
 import { getDb } from "./handle";
+import { expandCampaignBodyRefs } from "./refs";
 import type { NpcRow } from "./render";
+import { indexedProse, reindexReferrers } from "./search-index";
 import {
   assertNpcStatus,
   normalizeBody,
@@ -32,6 +35,7 @@ import {
   resolveNewId,
   revConflict,
   slugTaken,
+  unknownRef,
 } from "./shared";
 
 /**
@@ -335,4 +339,43 @@ export async function createNpc(
     indexNpc(tx, campaign, row);
     return renderNpc(row);
   });
+}
+
+// --- loading and checking an npc row -------------------------------------------
+
+/** One npc row by id, read through `tx` (the database or a transaction). */
+export function npcRowOf(tx: GrimoireDb, campaign: string, id: string): NpcRow | undefined {
+  return tx
+    .select()
+    .from(npcs)
+    .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
+    .all()[0] as NpcRow | undefined;
+}
+
+/**
+ * Every id of a scene's `npcs` has to name an npc.
+ *
+ * This is also what answers a NAME typed where an id belongs ("Alte
+ * Fischerin"): no npc has that id, so the list names something that does not
+ * exist — one rule, one sentence, instead of a second error about the shape
+ * of the value.
+ */
+export function assertNpcRefs(tx: GrimoireDb, campaign: string, ids: readonly string[]): void {
+  for (const id of ids) {
+    if (id === "" || npcRowOf(tx, campaign, id) !== undefined) continue;
+    throw unknownRef("npc_unknown", "npc", id);
+  }
+}
+
+/** Rebuild an npc's search-index row, then the rows of what references it. */
+export function indexNpc(tx: GrimoireDb, campaign: string, row: NpcRow): void {
+  indexEntity(tx, campaign, {
+    kind: "npc",
+    entityId: row.id,
+    title: row.name === "" ? row.id : row.name,
+    ref: row.id,
+    tags: row.role ?? "",
+    body: expandCampaignBodyRefs(tx, campaign, indexedProse(row.motivation, row.body)),
+  });
+  reindexReferrers(tx, campaign, row.id);
 }

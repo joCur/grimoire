@@ -37,7 +37,9 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { chapters, locations, npcs, scenes } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { chapterRowOf, indexChapter, refNpcs, refTags } from "./entity-rows";
+import { indexEntity } from "./fts";
+import { expandCampaignBodyRefs } from "./refs";
+import { refNpcs, refTags } from "./scenes";
 import { getDb } from "./handle";
 import type { ChapterRow, LocationRow, NpcRow, SceneRow } from "./render";
 import { sessionSummaries } from "./sessions";
@@ -51,6 +53,7 @@ import {
   resolveNewId,
   revConflict,
   slugTaken,
+  unknownRef,
 } from "./shared";
 
 // --- the one active chapter ---------------------------------------------------
@@ -480,7 +483,7 @@ export function sceneSummaryRow(
   if (row.trigger !== null) summary.trigger = row.trigger;
   if (row.location !== null) {
     summary.location = row.location;
-    // A referenced entry always exists (schema.ts rule 3), and an unnamed
+    // A referenced row always exists (schema.ts rule 3), and an unnamed
     // one degrades to its id — still the word the DM typed.
     summary.locationName = locationNames.get(row.location) ?? row.location;
   }
@@ -681,4 +684,35 @@ export function ensureChapterRow(
   const row = chapterRowOf(tx, campaign, id);
   if (row !== undefined) indexChapter(tx, campaign, row);
   return true;
+}
+
+// --- loading and checking a chapter row ----------------------------------------
+
+/** One chapter row by id, read through `tx` (the database or a transaction). */
+export function chapterRowOf(tx: GrimoireDb, campaign: string, id: string): ChapterRow | undefined {
+  return tx
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, id)))
+    .all()[0] as ChapterRow | undefined;
+}
+
+/** A `chapter:` — of a scene, an npc, a location or a thread — has to name a chapter. */
+export function assertChapterRef(tx: GrimoireDb, campaign: string, declared: string | null): void {
+  if (declared === null) return;
+  if (chapterRowOf(tx, campaign, declared) !== undefined) return;
+  throw unknownRef("chapter_unknown", "chapter", declared);
+}
+
+// A chapter is NOT referenceable (@grimoire/shared/refs), so nothing has to be
+// re-indexed for it — but its body may CONTAIN references like any other.
+export function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
+  indexEntity(tx, campaign, {
+    kind: "chapter",
+    entityId: row.id,
+    title: row.title === "" ? row.id : row.title,
+    ref: row.id,
+    tags: "",
+    body: expandCampaignBodyRefs(tx, campaign, row.body),
+  });
 }

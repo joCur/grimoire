@@ -89,7 +89,6 @@ export const en: Messages = {
   "create.campaign.title": "Create campaign",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
-  "create.campaign.idPrefix": "ID: ",
   "create.campaign.descriptionLabel": "Description (optional)",
   "create.campaign.descriptionPlaceholder": "One sentence that places the campaign",
 

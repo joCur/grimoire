@@ -62,7 +62,6 @@ export function CampaignCreateDialog({ onClose }: { onClose: () => void }) {
       title={t("create.campaign.title")}
       nameLabel={t("create.campaign.nameLabel")}
       namePlaceholder={t("create.campaign.namePlaceholder")}
-      addressPrefix={t("create.campaign.idPrefix")}
       extra={{
         label: t("create.campaign.descriptionLabel"),
         placeholder: t("create.campaign.descriptionPlaceholder"),

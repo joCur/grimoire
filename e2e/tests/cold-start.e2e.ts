@@ -57,7 +57,7 @@ Die Gruppe erreicht den Fuß des Leuchtturms; das Feuer ist erloschen.
 > [!readaloud] Der Turm steht schwarz gegen den Abendhimmel.
 `;
 
-test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Session nutzbar", async ({
+test("cold start: empty instance → campaign → chapter → scene → usable in the session", async ({
   page,
   server,
 }) => {
@@ -78,7 +78,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await nameField.fill(CAMPAIGN_NAME);
   // The id is DERIVED and shown before it is created — it is permanent, so it
   // is never a surprise. Umlaut included: `Küste` → `kueste`.
-  await expect(page.getByText(`Kennung: ${CAMPAIGN_ID}`)).toBeVisible();
+  await expect(page.getByText(CAMPAIGN_ID, { exact: true })).toBeVisible();
   await page.getByLabel("Beschreibung (optional)").fill("Ein erloschener Leuchtturm.");
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
 
@@ -135,7 +135,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const sceneTitle = page.getByLabel("Titel");
   await expect(sceneTitle).toHaveAttribute("placeholder", "Titel der Szene");
   await sceneTitle.fill("Ankunft am Leuchtturm");
-  await expect(page.getByText("scenes/ankunft-am-leuchtturm", { exact: true })).toBeVisible();
+  await expect(page.getByText("ankunft-am-leuchtturm", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // A new scene OPENS IN THE EDITOR, on its own route — an empty scene is
@@ -253,7 +253,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
     .toEqual(["ankunft-am-leuchtturm"]);
 });
 
-test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", async ({
+test("npc and location are created from their lists; a collision writes nothing", async ({
   page,
   server,
 }) => {
@@ -271,7 +271,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   const npcName = page.getByLabel("Name");
   await expect(npcName).toHaveAttribute("placeholder", "Name des NPCs");
   await npcName.fill("Hafenmeisterin Jorna");
-  await expect(page.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
+  await expect(page.getByText("hafenmeisterin-jorna", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // The dialog only ever asks for a name — the npc's reading view on its
@@ -358,7 +358,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   );
 });
 
-test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, server }) => {
+test("the second campaign is created in the top bar's switcher", async ({ page, server }) => {
   const SECOND_NAME = "Das Moor von Grauwacht";
   const SECOND_ID = "das-moor-von-grauwacht";
   const first = apiFor(server.url, CAMPAIGN_ID);
@@ -389,7 +389,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   // before anything is written, optional description.
   await expect(nameField).toHaveAttribute("placeholder", "Name der Kampagne");
   await nameField.fill(SECOND_NAME);
-  await expect(dialog.getByText(`Kennung: ${SECOND_ID}`)).toBeVisible();
+  await expect(dialog.getByText(SECOND_ID, { exact: true })).toBeVisible();
   await dialog.getByLabel("Beschreibung (optional)").fill("Nebel, Torf und ein Verschwundener.");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
@@ -412,7 +412,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 });
 
-test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, server }) => {
+test("the id can be set by hand in the create dialog", async ({ page, server }) => {
   // The id is permanent (decisions/constraints), and the create dialog is the one place that
   // may personalise it. So the quiet preview line carries a pencil: it opens
   // as a field prefilled with the id on screen, the name stops feeding it once
@@ -425,7 +425,7 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   // --- the very first id of an instance, set by hand ------------------------
   const campaignName = page.getByLabel("Name der Kampagne");
   await campaignName.fill(CAMPAIGN_NAME);
-  await expect(page.getByText(`Kennung: ${CAMPAIGN_ID}`)).toBeVisible();
+  await expect(page.getByText(CAMPAIGN_ID, { exact: true })).toBeVisible();
   // The pencil is a real button with a name, and toggling moves focus into the
   // field — the whole line is usable from the keyboard alone.
   await page.getByRole("button", { name: "Kennung selbst setzen" }).click();
@@ -480,17 +480,15 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   // The derived id was never written — only the one that was typed.
   expect(await chapterExists(api, "erstes-kapitel")).toBe(false);
 
-  // --- an NPC: the prefix stays in front, only the id is typed -------------
+  // --- an NPC: only the id is typed ----------------------------------------
   await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/npcs`);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   const npcDialog = page.getByRole("dialog");
   await npcDialog.getByLabel("Name").fill("Hafenmeisterin Jorna");
-  await expect(npcDialog.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
+  await expect(npcDialog.getByText("hafenmeisterin-jorna", { exact: true })).toBeVisible();
   await npcDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
   const npcId = npcDialog.getByLabel("Kennung", { exact: true });
   await npcId.fill("jorna");
-  // The address prefix is context, outside the field — no half-typed address.
-  await expect(npcDialog.getByText("npcs/", { exact: true })).toBeVisible();
   await expect(npcId).toHaveValue("jorna");
   await npcDialog.getByRole("button", { name: "Anlegen" }).click();
 
@@ -520,7 +518,7 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   expect((await getNpc(api, "jorna-2")).name).toBe("Hafenarbeiter Holm");
 });
 
-test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server }) => {
+test("cold start and creating an npc work at 390px", async ({ page, server }) => {
   const api = apiFor(server.url, CAMPAIGN_ID);
   await page.setViewportSize({ width: 390, height: 780 });
 

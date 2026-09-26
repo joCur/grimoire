@@ -1,7 +1,7 @@
-// Entity references in BODY TEXT: `[[slug]]`.
+// References in BODY TEXT: `[[slug]]`.
 //
 // The format keeps the SLUG, forever — never the name. The name is looked up
-// when the text is RENDERED (app/src/markdown/remark-grimoire.ts + EntityRef),
+// when the text is RENDERED (app/src/markdown/remark-grimoire.ts + refs.tsx),
 // so a new display name is visible everywhere at once and prose mentions can
 // never carry a stale name.
 //
@@ -34,8 +34,8 @@
  * Chapters are deliberately NOT referenceable: nothing in
  * the reading flow points at a chapter mid-sentence.
  */
-export const ENTITY_REF_KINDS = ["npc", "location", "scene"] as const;
-export type EntityRefKind = (typeof ENTITY_REF_KINDS)[number];
+export const REF_KINDS = ["npc", "location", "scene"] as const;
+export type RefKind = (typeof REF_KINDS)[number];
 
 /** A kebab-case slug — the only thing `[[…]]` accepts (see the note above). */
 const REF_SLUG_SOURCE = "[a-z0-9]+(?:-[a-z0-9]+)*";
@@ -44,31 +44,31 @@ const REF_SLUG_SOURCE = "[a-z0-9]+(?:-[a-z0-9]+)*";
  * A fresh global matcher for `[[slug]]`; `[1]` is the slug. A new instance per
  * call on purpose — a shared global regex carries `lastIndex` between callers.
  */
-export function entityRefMatcher(): RegExp {
+export function refMatcher(): RegExp {
   return new RegExp(`\\[\\[(${REF_SLUG_SOURCE})\\]\\]`, "g");
 }
 
 /** Is this the whole text of one reference (used by tests and the composer)? */
-export function isEntityRefSlug(value: string): boolean {
+export function isRefSlug(value: string): boolean {
   return new RegExp(`^${REF_SLUG_SOURCE}$`).test(value);
 }
 
 /** How a reference is written — the one place that spells the brackets. */
-export function entityRefSource(slug: string): string {
+export function refSource(slug: string): string {
   return `[[${slug}]]`;
 }
 
 /** One piece of a body text: literal text, or a reference to a slug. */
-export type EntityRefPiece = { type: "text"; value: string } | { type: "ref"; slug: string };
+export type RefPiece = { type: "text"; value: string } | { type: "ref"; slug: string };
 
 /**
  * Split a text into literal pieces and references. Text without references
  * comes back as a single text piece (the renderer uses that to leave the
  * mdast node completely untouched).
  */
-export function splitEntityRefs(text: string): EntityRefPiece[] {
-  const pieces: EntityRefPiece[] = [];
-  const matcher = entityRefMatcher();
+export function splitRefs(text: string): RefPiece[] {
+  const pieces: RefPiece[] = [];
+  const matcher = refMatcher();
   let last = 0;
   for (let match = matcher.exec(text); match !== null; match = matcher.exec(text)) {
     const slug = match[1];
@@ -83,9 +83,9 @@ export function splitEntityRefs(text: string): EntityRefPiece[] {
 }
 
 /** Every referenced slug in a text, first-seen order, without duplicates. */
-export function entityRefSlugs(text: string): string[] {
+export function refSlugs(text: string): string[] {
   const slugs: string[] = [];
-  for (const piece of splitEntityRefs(text)) {
+  for (const piece of splitRefs(text)) {
     if (piece.type === "ref" && !slugs.includes(piece.slug)) slugs.push(piece.slug);
   }
   return slugs;
@@ -99,23 +99,23 @@ export function entityRefSlugs(text: string): string[] {
  * reads like the rendered page. An unresolved slug keeps its brackets, in the
  * index exactly as on screen.
  */
-export function expandEntityRefs(
+export function expandRefs(
   text: string,
   nameOf: (slug: string) => string | undefined,
 ): string {
-  return renderEntityRefPieces(splitEntityRefs(text), nameOf);
+  return renderRefPieces(splitRefs(text), nameOf);
 }
 
 /** Render already-split pieces — the resolution rule, once. */
-export function renderEntityRefPieces(
-  pieces: readonly EntityRefPiece[],
+export function renderRefPieces(
+  pieces: readonly RefPiece[],
   nameOf: (slug: string) => string | undefined,
 ): string {
   return pieces
     .map((piece) => {
       if (piece.type === "text") return piece.value;
       const name = nameOf(piece.slug);
-      return name === undefined || name === "" ? entityRefSource(piece.slug) : name;
+      return name === undefined || name === "" ? refSource(piece.slug) : name;
     })
     .join("");
 }
@@ -247,27 +247,27 @@ function mapProse(text: string, fn: (prose: string) => string): string {
 }
 
 /**
- * `expandEntityRefs` for a RAW body: references inside code regions keep
+ * `expandRefs` for a RAW body: references inside code regions keep
  * their brackets, so the indexed text says what the page shows.
  */
-export function expandBodyEntityRefs(
+export function expandBodyRefs(
   text: string,
   nameOf: (slug: string) => string | undefined,
 ): string {
-  return mapProse(text, (prose) => expandEntityRefs(prose, nameOf));
+  return mapProse(text, (prose) => expandRefs(prose, nameOf));
 }
 
 /**
  * Every slug the PROSE of a raw body references, first-seen order, without
- * duplicates — `entityRefSlugs` with code regions left out, because a
+ * duplicates — `refSlugs` with code regions left out, because a
  * reference inside them is literal text on the page.
  */
-export function bodyEntityRefSlugs(text: string): string[] {
+export function bodyRefSlugs(text: string): string[] {
   if (!text.includes("[[")) return [];
   const slugs: string[] = [];
   for (const segment of splitCodeSegments(text)) {
     if (segment.code) continue;
-    for (const slug of entityRefSlugs(segment.value)) {
+    for (const slug of refSlugs(segment.value)) {
       if (!slugs.includes(slug)) slugs.push(slug);
     }
   }
@@ -275,12 +275,12 @@ export function bodyEntityRefSlugs(text: string): string[] {
 }
 
 /** Does the PROSE of a raw body reference this slug? (Code does not count.) */
-export function bodyReferencesEntity(text: string, slug: string): boolean {
-  if (!text.includes(entityRefSource(slug))) return false;
+export function bodyReferencesSlug(text: string, slug: string): boolean {
+  if (!text.includes(refSource(slug))) return false;
   return splitCodeSegments(text).some(
     (segment) =>
       !segment.code &&
-      splitEntityRefs(segment.value).some(
+      splitRefs(segment.value).some(
         (piece) => piece.type === "ref" && piece.slug === slug,
       ),
   );
