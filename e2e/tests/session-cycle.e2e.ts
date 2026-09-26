@@ -1,6 +1,6 @@
 // Critical path 4: the session cycle; see CLAUDE.md.
 //
-// start → quick note → log row + scenesPlayed → NPC/location drawer → back
+// start → quick note → log row (and no played scene) → NPC/location drawer → back
 // into the session via the global live indicator → pause (the clock stops) →
 // resume (it ticks again) → end → review → and the restart: ending is FINAL,
 // so starting a session again on the same day opens a SECOND, separate
@@ -23,13 +23,14 @@
 // Every claim is checked twice: once in the UI and once in the stored session
 // (the server is the truth, the app keeps no state of its own).
 //
-// A session is a TABLE, not an entry (ADR #26): it has no address, and what
-// the session endpoints answer are rows — `log` with one row per note,
-// `pauses` as intervals, `scenesPlayed` as a sequence. So every claim about
-// storage here reads a field, never a rendered text.
+// A session is its own resource (ADR #31), and so is each of its children,
+// hanging under it: a log entry per note, a pause per interval, a played scene
+// per scene the DM LEFT with "Nächste Szene" after taking a note in it. The
+// session embeds them when it is read, so every claim about storage here reads
+// a field, never a rendered text.
 //
 // A session id is an OPAQUE random string, so this spec never spells one out:
-// it always comes from the server (`activeSessionId(api)`). That is also the
+// it always comes from the server (`runningSessionId(api)`). That is also the
 // honest test — the app itself never derives the session its notes land in
 // either.
 //
@@ -42,7 +43,15 @@ import type { SceneProposal } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { patchScene } from "../support/scene";
-import { activeSessionId, getSession, sessionExists } from "../support/session";
+import {
+  getSession,
+  logEntryPath,
+  pausePath,
+  playedScenesPath,
+  runningSessionId,
+  sessionExists,
+  sessionPath,
+} from "../support/session";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
 
@@ -143,7 +152,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await page.goto("/campaigns/beispiel");
 
   // No session running yet — the session row is created by the button.
-  expect(await activeSessionId(api)).toBeUndefined();
+  expect(await runningSessionId(api)).toBeUndefined();
 
   // ONE session control across ALL states: the offer to start and the running
   // session are the SAME chip in the SAME slot — same height, same right edge,
@@ -157,7 +166,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
 
   // WHICH session the notes land in is the server's answer — the id is
   // opaque and carries no date to reconstruct.
-  const sessionId = (await activeSessionId(api)) ?? "";
+  const sessionId = (await runningSessionId(api)) ?? "";
   expect(sessionId).not.toBe("");
 
   // The topbar carries ONE session control: the chip, brass, with the running
@@ -210,7 +219,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
     page.getByText("Noch keine Einträge — die Schnellnotiz unten landet hier."),
   ).toBeVisible();
 
-  await expect.poll(async () => (await getSession(api, sessionId)).scenesPlayed).toEqual([]);
+  await expect.poll(async () => (await getSession(api, sessionId)).playedScenes).toEqual([]);
 
   // …and while it is empty, the session menu offers to discard it.
   await expect(await sessionMenuItem(page, "Session verwerfen")).toBeVisible();
@@ -226,7 +235,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(log).toBeVisible();
   await expect(quickNote).toHaveValue("");
 
-  // …and the session gained one log ROW plus the played scene id. The row's
+  // …and the session gained one log ROW, with its own id and guard. Its
   // columns say what the old rendered line had to encode in a grammar: the
   // time, the scene it was taken in, and the note as the DM typed it.
   await expect.poll(async () => (await getSession(api, sessionId)).log).toEqual([
@@ -236,14 +245,14 @@ test("session start, quick note, pause, end — log and session row follow", asy
       sceneId: "lighthouse-arrival",
       text: NOTE,
       reviewed: false,
+      rev: expect.any(Number),
     },
   ]);
-  await expect
-    .poll(async () => (await getSession(api, sessionId)).scenesPlayed)
-    .toEqual(["lighthouse-arrival"]);
-
-  // The played checkmark comes from scenesPlayed — never faked client-side.
-  await expect(nav.getByText("Gespielt")).toBeAttached();
+  // A note plays nothing: the scene is recorded as played when the DM LEAVES
+  // it with "Nächste Szene" (the order block below), and the checkmark reads
+  // the played scenes — never faked client-side.
+  expect((await getSession(api, sessionId)).playedScenes).toEqual([]);
+  await expect(nav.getByText("Gespielt")).toHaveCount(0);
 
   // The session has content now — discarding it is no longer on offer; the
   // way out is ending it.
@@ -315,7 +324,12 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // A pause is ONE thing: an interval on the session, still open (no `to`
   // yet). It writes no log row, so the log is still the single note …
   await expect.poll(async () => (await getSession(api, sessionId)).pauses).toEqual([
-    { from: expect.stringMatching(/^[\d\-T:]+$/), fromMs: expect.any(Number) },
+    {
+      id: expect.any(String),
+      from: expect.stringMatching(/^[\d\-T:]+$/),
+      fromMs: expect.any(Number),
+      rev: expect.any(Number),
+    },
   ]);
   expect((await getSession(api, sessionId)).log).toHaveLength(1);
 
@@ -336,10 +350,12 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // The interval is closed (`to` written) …
   await expect.poll(async () => (await getSession(api, sessionId)).pauses).toEqual([
     {
+      id: expect.any(String),
       from: expect.stringMatching(/^[\d\-T:]+$/),
       fromMs: expect.any(Number),
       to: expect.stringMatching(/^[\d\-T:]+$/),
       toMs: expect.any(Number),
+      rev: expect.any(Number),
     },
   ]);
   // … the chip is brass again, and the clock ticks once more.
@@ -364,6 +380,9 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect
     .poll(async () => (await getSession(api, sessionId)).ended)
     .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+  // Ending records nothing as played: the scene open at the end, a note in it
+  // or not, may carry on next time.
+  expect((await getSession(api, sessionId)).playedScenes).toEqual([]);
 
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
@@ -388,14 +407,14 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
   // … it lives in its OWN row, under a DIFFERENT opaque id …
-  const secondId = (await activeSessionId(api)) ?? "";
+  const secondId = (await runningSessionId(api)) ?? "";
   expect(secondId).not.toBe("");
   expect(secondId).not.toBe(sessionId);
   const second = await getSession(api, secondId);
   expect(second.ended).toBeUndefined();
   expect(second.pauses).toEqual([]);
   expect(second.log).toEqual([]);
-  expect(second.scenesPlayed).toEqual([]);
+  expect(second.playedScenes).toEqual([]);
   // … and the first session is untouched: still ended, log and pauses intact.
   const first = await getSession(api, sessionId);
   expect(first.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
@@ -414,7 +433,12 @@ test("session start, quick note, pause, end — log and session row follow", asy
   expect((await getSession(api, sessionId)).log.map((row) => row.text)).toEqual([NOTE]);
   await (await sessionMenuItem(page, "Pause")).click();
   await expect.poll(async () => (await getSession(api, secondId)).pauses).toEqual([
-    { from: expect.stringMatching(/^[\d\-T:]+$/), fromMs: expect.any(Number) },
+    {
+      id: expect.any(String),
+      from: expect.stringMatching(/^[\d\-T:]+$/),
+      fromMs: expect.any(Number),
+      rev: expect.any(Number),
+    },
   ]);
   // The first session's pause list did not grow.
   expect((await getSession(api, sessionId)).pauses).toHaveLength(1);
@@ -583,7 +607,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const sessionId = (await activeSessionId(api)) ?? "";
+  const sessionId = (await runningSessionId(api)) ?? "";
 
   const aside = page.getByRole("complementary");
   // Nothing to remind of yet — the list is not rendered at all.
@@ -622,7 +646,7 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
   // The start action hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const sessionId = (await activeSessionId(api)) ?? "";
+  const sessionId = (await runningSessionId(api)) ?? "";
   expect(await sessionExists(api, sessionId)).toBe(true);
 
   // It asks first — the row is deleted, and that is what the dialog says.
@@ -653,7 +677,7 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
   // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  const restarted = (await activeSessionId(api)) ?? "";
+  const restarted = (await runningSessionId(api)) ?? "";
   expect(restarted).not.toBe("");
   expect(restarted).not.toBe(sessionId);
   expect(await sessionExists(api, restarted)).toBe(true);
@@ -666,7 +690,7 @@ test("session verwerfen — the mis-click's undo removes the empty row", async (
 test("an unreachable session lookup dims the chip instead of offering a start", async ({
   page,
 }) => {
-  await page.route("**/api/campaigns/beispiel/session**", (route) =>
+  await page.route("**/api/campaigns/beispiel/sessions?running=true", (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
   );
 
@@ -778,7 +802,11 @@ test.describe("played/dropped scenes in the live nav", () => {
     await expect(nav.getByRole("group", { name: "Gespielt" })).toHaveCount(0);
 
     // The SESSION checkmark is a different thing and still works on top
-    // of the grouping — a note played on the grouped scene marks it.
+    // of the grouping — leaving the grouped scene after a note in it marks it.
+    // The step out of it needs a planned scene behind it, so the DM puts the
+    // arrival there for this part, and back afterwards.
+    await setSceneOrder(api, ["harbor-office-talk", "lighthouse-arrival", "smuggler-captured"]);
+    await page.reload();
     await nav.getByRole("button", { name: /^Gespielt/ }).click();
     await nav
       .getByRole("group", { name: "Gespielt" })
@@ -787,13 +815,21 @@ test.describe("played/dropped scenes in the live nav", () => {
     const quickNote = page.getByLabel("Schnellnotiz");
     await quickNote.fill("Der Kontorschreiber rückt die Bücher heraus #thread");
     await quickNote.press("Enter");
-    const sessionId = (await activeSessionId(api)) ?? "";
+    const sessionId = (await runningSessionId(api)) ?? "";
     await expect
-      .poll(async () => (await getSession(api, sessionId)).scenesPlayed)
-      .toContain("harbor-office-talk");
+      .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.sceneId))
+      .toEqual(["harbor-office-talk"]);
+    await page.getByRole("button", { name: "Nächste Szene: Ankunft am Leuchtturm" }).click();
+    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect
+      .poll(async () =>
+        (await getSession(api, sessionId)).playedScenes.map((row) => row.sceneId),
+      )
+      .toEqual(["harbor-office-talk"]);
     await expect(
       nav.getByRole("group", { name: "Gespielt" }).getByText("Gespielt"),
     ).toBeAttached();
+    await setSceneOrder(api, ["lighthouse-arrival", "harbor-office-talk", "smuggler-captured"]);
 
     // Degrade: with EVERY scene played the view stays usable — the planned
     // list says so, the group holds both, and the center column still renders
@@ -951,6 +987,62 @@ test.describe("the session view follows the chapter's order", () => {
     await expect(page.getByRole("button", { name: `Nächste Szene: ${DINNER}` })).toBeVisible();
   });
 
+  test("Nächste Szene records the scene left — after a note in it, and only then", async ({
+    page,
+    api,
+  }) => {
+    await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
+    await patchScene(api, ARRIVAL, { status: "played" });
+    await startSession(page);
+    const nav = liveNav(page);
+    const heading = page.getByRole("article").getByRole("heading", { level: 1 });
+    const sessionId = (await runningSessionId(api)) ?? "";
+    const played = async () =>
+      (await getSession(api, sessionId)).playedScenes.map((row) => row.sceneId);
+    await expect(heading).toHaveText(DINNER);
+
+    // A note in the open scene is a log entry with its scene — and nothing
+    // else: the scene is not played yet.
+    const quickNote = page.getByLabel("Schnellnotiz");
+    await quickNote.fill("Jorna erzählt vom Keller #thread");
+    await quickNote.press("Enter");
+    await expect
+      .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.sceneId))
+      .toEqual(["abendessen"]);
+    expect(await played()).toEqual([]);
+
+    // Leaving it with the step records the scene LEFT, then opens the next.
+    await page.getByRole("button", { name: `Nächste Szene: ${CELLAR}` }).click();
+    await expect(heading).toHaveText(CELLAR);
+    await expect.poll(played).toEqual(["abendessen"]);
+    await expect(
+      nav.getByRole("button", { name: new RegExp(DINNER) }).getByText("Gespielt"),
+    ).toBeAttached();
+
+    // Without a note there is no sign the scene was played: leaving the
+    // contingency with the step records nothing, and the DM marks it later.
+    await nav.getByRole("button", { name: new RegExp(CONTINGENCY) }).click();
+    await expect(heading).toHaveText(CONTINGENCY);
+    await page.getByRole("button", { name: `Nächste Szene: ${DINNER}` }).click();
+    await expect(heading).toHaveText(DINNER);
+    // …and a scene already recorded in this session is not recorded twice.
+    await page.getByRole("button", { name: `Nächste Szene: ${CELLAR}` }).click();
+    await expect(heading).toHaveText(CELLAR);
+    expect(await played()).toEqual(["abendessen"]);
+
+    // Ending the session records nothing either, even with a note in the
+    // scene that is open: it may carry on next time.
+    await quickNote.fill("Die Tür im Keller klemmt");
+    await quickNote.press("Enter");
+    await expect
+      .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.sceneId))
+      .toEqual(["abendessen", "keller"]);
+    await (await sessionMenuItem(page, "Session beenden")).click();
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
+    await expect.poll(async () => (await getSession(api, sessionId)).ended).toBeDefined();
+    expect(await played()).toEqual(["abendessen"]);
+  });
+
   test("a rearranged order moves the entry point with it", async ({ page, api }) => {
     await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "abendessen", "keller"]);
     await patchScene(api, ARRIVAL, { status: "played" });
@@ -991,4 +1083,163 @@ test.describe("the session view follows the chapter's order", () => {
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
     await expect(page.getByRole("button", { name: /^Nächste Szene: / })).toHaveCount(0);
   });
+});
+
+// The session and its children are resources of their own (ADR #31): read
+// flat with the children embedded, written one row at a time, each row with
+// its own guard. The action endpoints of before answer nothing any more.
+test("the session resources: flat reads, the running filter, a guard per row, no old addresses", async ({
+  api,
+}) => {
+  const post = (path: string, body: unknown = {}) =>
+    api.fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const patch = (path: string, body: unknown) =>
+    api.fetch(path, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // Nothing runs: the filter answers a list of none.
+  expect(await api.get(`${sessionPath(api)}?running=true`)).toEqual([]);
+
+  // POST starts one; the filter now answers exactly that session.
+  const started = await post(sessionPath(api));
+  expect(started.status).toBe(201);
+  const session = await started.json();
+  expect(await api.get(`${sessionPath(api)}?running=true`)).toEqual([session]);
+  // The list stands newest first: the new session before the fixture's.
+  const list = await api.get<{ id: string }[]>(sessionPath(api));
+  expect(list.map((row) => row.id)).toEqual([session.id, "2026-01-15"]);
+
+  // Each child is written on its own resource and answers its own row.
+  const pause = await (await post(pausePath(api, session.id))).json();
+  const note = await (
+    await post(logEntryPath(api, session.id), { text: "Notiz", sceneId: "lighthouse-arrival" })
+  ).json();
+  const played = await (
+    await post(playedScenesPath(api, session.id), { sceneId: "lighthouse-arrival" })
+  ).json();
+  // The session reads them embedded — flat, no kind, no path, no properties
+  // map — and none of those writes moved the session's own guard.
+  const read = await api.get<Record<string, unknown>>(sessionPath(api, session.id));
+  expect(read).toMatchObject({
+    id: session.id,
+    rev: session.rev,
+    pauses: [pause],
+    log: [note],
+    playedScenes: [played],
+  });
+  for (const key of ["kind", "path", "properties", "scenesPlayed"]) {
+    expect(Object.keys(read)).not.toContain(key);
+  }
+
+  // A stale guard on a child is 409 with the current row, and writes nothing.
+  const ended = await patch(pausePath(api, session.id, pause.id), {
+    rev: pause.rev,
+    toMs: Date.now(),
+  });
+  expect(ended.status).toBe(200);
+  const stalePause = await patch(pausePath(api, session.id, pause.id), {
+    rev: pause.rev,
+    toMs: Date.now(),
+  });
+  expect(stalePause.status).toBe(409);
+  expect(await stalePause.json()).toMatchObject({ code: "rev_conflict", pause: await ended.json() });
+
+  // A session with content is ended, not deleted …
+  const refused = await api.fetch(sessionPath(api, session.id), {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: session.rev }),
+  });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: "session_not_empty" });
+  const end = await patch(sessionPath(api, session.id), { rev: session.rev, endedMs: Date.now() });
+  expect(end.status).toBe(200);
+  // … a stale session guard is 409 with the current session …
+  const staleEnd = await patch(sessionPath(api, session.id), {
+    rev: session.rev,
+    endedMs: Date.now(),
+  });
+  expect(staleEnd.status).toBe(409);
+  expect(await staleEnd.json()).toMatchObject({ code: "rev_conflict", session: await end.json() });
+  expect(await api.get(`${sessionPath(api)}?running=true`)).toEqual([]);
+
+  // … and an ended session takes no new child row: 409 `session_ended` for
+  // each of them, and nothing is written.
+  for (const [path, body] of [
+    [pausePath(api, session.id), {}],
+    [logEntryPath(api, session.id), { text: "zu spät" }],
+    [playedScenesPath(api, session.id), { sceneId: "lighthouse-arrival" }],
+  ] as const) {
+    const late = await post(path, body);
+    expect(late.status).toBe(409);
+    expect(await late.json()).toMatchObject({ code: "session_ended", id: session.id });
+  }
+  const after = await getSession(api, session.id);
+  expect(after.log).toHaveLength(1);
+  expect(after.pauses).toHaveLength(1);
+  expect(after.playedScenes).toHaveLength(1);
+
+  // The action endpoints of before are gone. Assembled from their segments:
+  // a literal address here would read like one the app still uses.
+  const old = (...segments: string[]) => `campaigns/beispiel/${segments.join("/")}`;
+  expect((await api.fetch(old("session"))).status).toBe(404);
+  expect((await post(old("session", "start"))).status).toBe(404);
+  expect((await post(old("log"), { text: "Notiz" })).status).toBe(404);
+});
+
+// A note typed into a session that was ended elsewhere is refused, and the
+// log says why in a whole sentence. The other writer and the Enter happen in
+// the SAME turn, so the version poll cannot bring the ended session into the
+// page in between.
+test("a note into a session ended elsewhere: the sentence says so, nothing is written", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/campaigns/beispiel");
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  const sessionId = (await runningSessionId(api)) ?? "";
+  const session = await getSession(api, sessionId);
+  await page.getByLabel("Schnellnotiz").fill("Noch schnell notiert");
+
+  const sentence = await page.evaluate(
+    async ({ url, body, expected }) => {
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return `end failed: ${res.status}`;
+      const input = document.querySelector<HTMLInputElement>('input[aria-label="Schnellnotiz"]');
+      input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      // The refusal renders within a moment — long before the next poll.
+      for (let i = 0; i < 60; i++) {
+        if (document.body.innerText.includes(expected)) return expected;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return document.body.innerText;
+    },
+    {
+      url: api.url(sessionPath(api, sessionId)),
+      body: { rev: session.rev, endedMs: Date.now() },
+      expected:
+        "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. " +
+        "Starte eine neue Session, um weiterzumachen.",
+    },
+  );
+  expect(sentence).toBe(
+    "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. " +
+      "Starte eine neue Session, um weiterzumachen.",
+  );
+  // Nothing landed in the closed log.
+  expect((await getSession(api, sessionId)).log).toEqual([]);
+  // The version poll then brings the ended session: nothing runs any more.
+  await expect(page.getByText("Es läuft keine Session.")).toBeVisible({ timeout: 15_000 });
 });
