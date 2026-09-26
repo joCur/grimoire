@@ -1,6 +1,6 @@
 {
   "id": "entity-refs",
-  "title": "Referenzen am Kai",
+  "title": "References at the Quay",
   "type": "planned",
   "chapter": "01-salzhafen",
   "location": "leuchtturm",
@@ -12,5 +12,5 @@
     "social"
   ],
   "status": "ready",
-  "body": "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot, und über der Bucht liegt [[leuchtturm]]\ndunkel. Nach [[niemand]] hat hier noch keiner gefragt.\n\nWer [[fenn]] zu nahe kommt, landet in [[smuggler-captured]].\n\n> [!readaloud] [[jorna]] wartet am Kai, im Rohtext `[[jorna]]`.\n\nDie Syntax selbst steht als Code da: `[[jorna]]` bleibt unangetastet.\n\n## If: [[jorna]] gewarnt wurde\n\nDann liegt das Boot leer am Kai.\n"
+  "body": "\n## Flow\n\n[[jorna]]'s boat waits at the quay, and [[leuchtturm]] lies dark\nabove the cove. No one here has asked about [[nobody]] yet.\n\nWhoever gets too close to [[fenn]] ends up in [[smuggler-captured]].\n\n> [!readaloud] [[jorna]] waits at the quay, in the raw text `[[jorna]]`.\n\nThe syntax itself stands as code: `[[jorna]]` stays untouched.\n\n## If: [[jorna]] was warned\n\nThen the boat lies empty at the quay.\n"
 }

@@ -17,11 +17,11 @@
 // report is read from the CLI's own stdout — there is no endpoint for it,
 // which is the point: the report belongs to the tool.
 
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { openSqlite } from "../../server/src/db/driver";
-import { pristineDir, runDir } from "../support/paths";
+import { CAMPAIGN, FIXTURES_ROOT, pristineDir, runDir } from "../support/paths";
 import { dbFor, expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
 import { apiFor, type Api } from "../support/api";
 import { getGlossaryTerms } from "../support/glossary-term";
@@ -42,6 +42,16 @@ interface TreeResponse {
 }
 
 const SCENE = "lighthouse-arrival";
+
+/**
+ * One object of the example campaign as its fixture file spells it — the
+ * content the seeded rows have to carry, read as data rather than copied
+ * into this spec.
+ */
+async function fixture<T = Record<string, unknown>>(kind: string, id: string): Promise<T> {
+  const file = path.join(FIXTURES_ROOT, CAMPAIGN, kind, `${id}.json`);
+  return JSON.parse(await readFile(file, "utf8")) as T;
+}
 
 const COUNTS =
   "SELECT (SELECT count(*) FROM campaigns) AS campaigns, " +
@@ -74,9 +84,11 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // name, the chapter and the Roll20 page its fixture
   // (`locations/bucht.json`) spells, which a synthesized stub would not have.
   const bucht = await getLocation(api, "bucht");
-  expect(bucht.name).toBe("Die Nordbucht");
+  const buchtFixture = await fixture("locations", "bucht");
+  expect(bucht.name).toBe(buchtFixture.name);
   expect(bucht.chapter).toBe("01-salzhafen");
-  expect(bucht.roll20Page).toBe("Nordbucht");
+  expect(bucht.roll20Page).toBe(buchtFixture.roll20Page);
+  expect(bucht.roll20Page).toEqual(expect.any(String));
   // …and the resource answers the location itself: every field flat, beside
   // its guard — no kind, no path, no properties (decisions/resources).
   expect(Object.keys(bucht).sort()).toEqual([
@@ -98,17 +110,19 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(scene.status).toBe("ready");
   expect(scene.location).toBe("leuchtturm");
   expect(scene.body).toContain("> [!readaloud]");
-  expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
+  expect(scene.body).toBe((await fixture<{ body: string }>("scenes", SCENE)).body);
 
   // --- an npc: its typed fields (voice, quickstats, motivation) and its prose,
   // as its fixture (`npcs/jorna.json`) spells them
   const npc = await getNpc(api, "jorna");
-  expect(npc.name).toBe("Hafenmeisterin Jorna");
-  expect(npc.voice).toBe("knapp, wetterrau, duzt jeden");
+  const npcFixture = await fixture("npcs", "jorna");
+  expect(npc.name).toBe(npcFixture.name);
+  expect(npc.voice).toBe(npcFixture.voice);
   expect(npc.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
-  expect(npc.motivation).toContain("Das Leuchtfeuer muss wieder brennen");
+  expect(npc.motivation).toBe(npcFixture.motivation);
   expect(npc.body).not.toContain("## Will");
-  expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
+  expect(npc.body).toContain("- [[fenn]]: ");
+  expect(npc.body).toBe(npcFixture.body);
   // …and the resource answers the npc itself: every field flat, beside its
   // guard — no kind, no path, no properties (decisions/resources).
   expect(Object.keys(npc).sort()).toEqual([
@@ -132,31 +146,23 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(session.ended).toBe("2026-01-15T22:45:00");
   // The log arrives as rows, with the columns the fixture spells — nothing is
   // parsed back out of a rendered line.
-  expect(session.log).toEqual([
-    {
-      id: "spuren-gefunden",
-      at: "19:52",
-      sceneId: "lighthouse-arrival",
-      text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
-      reviewed: false,
-      rev: expect.any(Number),
-    },
-    {
-      id: "old-metta",
-      at: "21:10",
-      sceneId: "lighthouse-arrival",
-      text: "Improvisiert: Fischerin „Old Metta“ am Steg #npc",
-      reviewed: false,
-      rev: expect.any(Number),
-    },
-    {
-      id: "lichter-in-der-bucht",
-      at: "22:40",
-      text: "Cliffhanger: Lichter in der Bucht gesichtet #thread",
-      reviewed: false,
-      rev: expect.any(Number),
-    },
+  const sessionFixture = await fixture<{ log: Record<string, unknown>[] }>(
+    "sessions",
+    "2026-01-15",
+  );
+  expect(session.log.map((row) => row.id)).toEqual([
+    "spuren-gefunden",
+    "old-metta",
+    "lichter-in-der-bucht",
   ]);
+  expect(session.log.map((row) => row.sceneId)).toEqual([
+    "lighthouse-arrival",
+    "lighthouse-arrival",
+    undefined,
+  ]);
+  expect(session.log).toEqual(
+    sessionFixture.log.map((row) => ({ ...row, rev: expect.any(Number) })),
+  );
   // A pause is an INTERVAL, with the server's epoch reading beside each
   // wall clock.
   expect(session.pauses).toEqual([
@@ -172,20 +178,15 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
 
   // --- the ideas: each its own resource --------------------------------------
   expect(await getIdeas(api)).toEqual([
-    {
-      id: "dorfschmied",
-      text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
-      done: false,
-      rev: 1,
-    },
+    { ...(await fixture("ideas", "dorfschmied")), id: "dorfschmied", done: false, rev: 1 },
   ]);
 
   // --- the glossary terms: each its own resource ----------------------------
   const terms = await getGlossaryTerms(api);
   expect(terms.find((term) => term.id === "lighthouse-keeper")).toEqual({
+    ...(await fixture("glossary-terms", "lighthouse-keeper")),
     id: "lighthouse-keeper",
     term: "lighthouse keeper",
-    explanation: "Leuchtturmwärter",
     rev: 1,
   });
   expect(terms.map((term) => term.term)).toContain("smugglers' cove");

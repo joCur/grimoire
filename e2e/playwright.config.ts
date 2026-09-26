@@ -1,4 +1,4 @@
-// Playwright config of the real-stack E2E suite (CLAUDE.md, "Kritische Pfade").
+// Playwright config of the real-stack E2E suite (CLAUDE.md, "Critical paths").
 //
 // No webServer entry and no baseURL here on purpose: every test brings its own
 // server process on its own port against its own campaign copy (support/test.ts
@@ -27,11 +27,12 @@ export default defineConfig({
     : [["list"], ["html", { open: "never" }]],
   outputDir: "./test-results",
   use: {
-    // Dark mode is the primary mode (CLAUDE.md, Qualitäts-Boden).
+    // Dark mode is the primary mode (CLAUDE.md, quality floor).
     colorScheme: "dark",
     // GERMAN IS FIXED for the suite. Without a stored setting the
     // app follows `navigator.language`, and Playwright's own default is
-    // en-US — which would flip every text locator in here to English at once.
+    // en-US — which would flip the UI to English while `ui()` (support/ui.ts)
+    // looks every label up in the German catalog.
     // German is also the primary UI language (CLAUDE.md), so this is the real
     // default, not a test convenience. The language SWITCH has its own spec
     // (tests/language.e2e.ts) and stores the setting on the server.

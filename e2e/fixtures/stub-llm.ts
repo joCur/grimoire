@@ -1,7 +1,7 @@
 // Stub LLM — a standalone, OpenAI-compatible /chat/completions endpoint that
 // answers with the canned replies of ./replies.ts.
 //
-// This is the ONE thing the E2E suite fakes (CLAUDE.md, "Kritische Pfade"):
+// This is the ONE thing the E2E suite fakes (CLAUDE.md, "Critical paths"):
 // the browser talks to the real server, the real server talks to a real HTTP
 // LLM endpoint over the real OpenAICompatProvider — only the model behind it
 // is canned. Nothing is mocked inside the browser.
@@ -20,16 +20,18 @@
 // the server follows (decisions/stack) — this script runs under Bun and Node.
 //
 // Which reply comes back is decided by the PROMPT, never by hidden state, so
-// the stub stays stateless and can serve several test workers at once:
+// the stub stays stateless and can serve several test workers at once. The
+// prompt's headings and context keys are matched exactly as the server's
+// prompt spells them (server/src/llm-provider.ts):
 //
-//   - a "## Bestehende Szene" section in the prompt           -> scene augment run
-//   - a "## Bestehender NPC" section in the prompt            -> npc augment run
-//   - a "## Bestehender Ort" section in the prompt            -> location augment run
+//   - an existing-scene section (EXISTING_SCENE_HEADING)       -> scene augment run
+//   - an existing-npc section (EXISTING_NPC_HEADING)           -> npc augment run
+//   - an existing-location section (EXISTING_LOCATION_HEADING) -> location augment run
 //     (the reply echoes that scene, npc or location and adds to it)
-//   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
+//   - a `chapter: <id>` line in the prompt's context block      -> scene run
 //     (the reply's scene names exactly that chapter)
 //   - no chapter line                                            -> npc run
-//     (a `vorgegebene id: <id>` line pins the id of the npc)
+//     (the pinned-id line pins the id of the npc)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
 //   - TRIGGER.unknownRef in the source text -> an npc or augment run's first
@@ -45,14 +47,14 @@
 //   - the system prompt is the OUTLINE prompt                 -> outline call
 //   - the prompt carries the outline and a `chapter:` line    -> a SCENE part
 //     (the assigned scene is the one the outline block marks)
-//   - the prompt carries the outline and a `vorgegebene id`   -> an NPC or a
+//   - the prompt carries the outline and a pinned id          -> an NPC or a
 //     LOCATION part (by which prompt the system message is)
 //   - TRIGGER.threeScenes  -> the outline has three scenes, no npc, no location
 //   - TRIGGER.partFail:<nonce> -> the middle scene fails its whole FIRST
 //     ROUND for that nonce — the initial call AND the correction turn the
 //     server spends on it — and succeeds from the second round on. That is
 //     what makes the part end up `failed` (a failure the correction turn
-//     repairs is not a failed part) and what „Erneut versuchen“ then fixes.
+//     repairs is not a failed part) and what the retry action then fixes.
 //     The round counter is the stub's only state and is keyed by the nonce,
 //     so parallel workers cannot consume each other's failure.
 //   - TRIGGER.slowPart -> only the LAST scene's reply is held, so a spec can
@@ -60,8 +62,8 @@
 //   - TRIGGER.latePart -> the scene PARTS (and an augment reply) answer late
 //     but normally, so a spec can watch a job that is genuinely running
 //     finish on a poll instead of being done before the first one answers.
-//   - TRIGGER.asciiQuotes -> the scene body carries German quotation marks
-//     closed with an ASCII `"`. Under the hand-written JSON
+//   - TRIGGER.asciiQuotes -> the scene body carries a typographic opening
+//     quotation mark closed with an ASCII `"`. Under the hand-written JSON
 //     wrapper that ended the string; as the `body` of a forced object the run
 //     must reach `done` without a single correction turn, and the characters
 //     have to arrive verbatim.
@@ -130,7 +132,7 @@ function matchLine(prompt: string, key: string): string | undefined {
   return match?.[1]?.trim();
 }
 
-/** Everything below the "## Quelltext" heading of the prompt. */
+/** Everything below the source-text heading of the prompt. */
 function sourceText(prompt: string): string {
   const index = prompt.indexOf("## Quelltext");
   return index === -1 ? prompt : prompt.slice(index);
@@ -155,7 +157,8 @@ function knowledgeBlock(prompt: string): string {
 }
 
 /**
- * The knowledge section's heading, as server/src/llm-provider.ts writes it.
+ * The knowledge section's heading, spelled exactly as
+ * server/src/llm-provider.ts writes it.
  * Duplicated on purpose: the stub is a fake MODEL and reads the prompt as a
  * model would — importing the server's constant would make the fixture agree
  * with the server by construction instead of by assertion.
@@ -165,7 +168,8 @@ const KNOWLEDGE_HEADING =
 
 /**
  * The heading the run's OUTLINE travels under (server/src/llm-provider.ts
- * OUTLINE_HEADING) and the one that says which scene THIS call writes
+ * OUTLINE_HEADING, spelled as the server spells it) and the one that says
+ * which scene THIS call writes
  * (ASSIGNMENT_HEADING — its own section in the prompt's VARIABLE half, so the
  * outline block stays byte-identical across a run and stays cacheable).
  * Duplicated on purpose, like KNOWLEDGE_HEADING: the stub reads the prompt
@@ -178,13 +182,13 @@ const ASSIGNED_SCENE = /## Diese Szene schreibst du jetzt\n+([a-z0-9-]+) /;
  * How many ROUNDS a scene part has been asked for, per failure nonce. The stub's
  * ONLY state — and the reason it can still serve several workers at once: the
  * nonce comes out of the source text a spec wrote, so two runs never share a
- * counter. A spec that uses no failure trigger touches this at all.
+ * counter. A spec that uses no failure trigger never touches this.
  */
 const partCalls = new Map<string, number>();
 
 /**
- * The scene a SCENE augment run works on, out of the fenced JSON below the
- * „Bestehende Szene" heading — every field of the scene in its reply form (an
+ * The scene a SCENE augment run works on, out of the fenced JSON below
+ * EXISTING_SCENE_HEADING — every field of the scene in its reply form (an
  * absent field `null`), the very object the reply is forced into (decisions/resources).
  * Null for every other prompt — which is every create run, and then nothing
  * about the stub changes.
@@ -207,8 +211,8 @@ function existingScene(prompt: string): SceneFields | null {
 }
 
 /**
- * The npc an NPC augment run works on, out of the fenced JSON below the
- * „Bestehender NPC" heading — every field of the npc in its reply form
+ * The npc an NPC augment run works on, out of the fenced JSON below
+ * EXISTING_NPC_HEADING — every field of the npc in its reply form
  * (`quickstats` as pairs, an absent field `null`), the very object the reply
  * is forced into (decisions/resources). Null for every other prompt.
  */
@@ -228,7 +232,7 @@ function existingNpc(prompt: string): NpcFields | null {
 
 /**
  * The location a LOCATION augment run works on, out of the fenced JSON below
- * the „Bestehender Ort" heading — every field of the location, the very
+ * EXISTING_LOCATION_HEADING — every field of the location, the very
  * object the reply is forced into (decisions/resources). Null for every other prompt.
  */
 function existingLocation(prompt: string): ExistingLocation | null {
@@ -356,7 +360,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       kind: "outline",
       truncated,
       delayMs,
-      // The „invalid" trigger belongs to the SCENE entry, so the outline
+      // The invalid trigger belongs to the SCENE entry, so the outline
       // it gets is a well-formed one with a single part.
       reply: invalid
         ? invalidRunOutline(source)
@@ -382,7 +386,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       const nonce = partFailNonce(source);
       // The first ROUND fails whole — initial call and correction turn — so
       // the part really ends up `failed`; from the second round on (that is:
-      // after „Erneut versuchen“) the same prompt gets a good draft.
+      // after the retry action) the same prompt gets a good draft.
       let fails = false;
       if (nonce !== "" && assigned === FAILING_SCENE_ID) {
         const key = `${nonce}:${assigned}`;
@@ -415,8 +419,8 @@ export function decide(messages: ChatMessage[]): StubDecision {
     return { kind: "proposal", truncated, delayMs, reply: proposalPartReply(kind) };
   }
 
-  // Everything left is the single-call NPC run: no chapter, and a
-  // `vorgegebene id` line when the DM pinned the id of the npc.
+  // Everything left is the single-call NPC run: no chapter, and the
+  // pinned-id line when the DM pinned the id of the npc.
   const pinned = matchLine(prompt, "vorgegebene id");
   return {
     kind: "npc",

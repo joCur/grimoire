@@ -20,7 +20,7 @@ export function getThread(api: Api, id: string): Promise<Thread> {
   return api.get<Thread>(threadPath(api, id));
 }
 
-/** A new thread of a chapter — the write „Handlungsstrang übernehmen" makes. */
+/** A new thread of a chapter — the write that adopting a plot thread in the review makes. */
 export function createThread(api: Api, input: ThreadCreate): Promise<Thread> {
   return api.send<Thread>("POST", threadPath(api), input);
 }
