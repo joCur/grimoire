@@ -11,7 +11,11 @@
 //     tooltip group; there is only ever ONE preview open (module state below);
 //   * leaving the reference AND the card closes it after CLOSE_DELAY_MS (the
 //     card is a hover bridge, though nothing on it is clickable); blur, Esc,
-//     any click and any scroll close it at once.
+//     any click and any scroll close it at once;
+//   * a card dismissed with Esc (or a press outside) stays closed until the
+//     pointer leaves its reference or focus moves on: the browser can report
+//     the pointer entering the reference again once the card is gone, and
+//     that must not bring the card straight back.
 //
 // Focus only counts when it is keyboard focus (`:focus-visible`): a mouse
 // click focuses the button too, and focus handed BACK to a reference — the
@@ -209,6 +213,7 @@ export function RefPreview({
   const anchorRef = useRef<HTMLSpanElement>(null);
   const openTimer = useRef<number | undefined>(undefined);
   const closeTimer = useRef<number | undefined>(undefined);
+  const dismissed = useRef(false);
   const [boundary, setBoundary] = useState<Element[]>([]);
 
   const clearTimers = (): void => {
@@ -220,6 +225,7 @@ export function RefPreview({
     setOpenKey(key);
   };
   const show = (): void => {
+    if (dismissed.current) return;
     clearTimers();
     // The SAME query the card reads; `staleTime: Infinity` leaves what is
     // already cached alone.
@@ -268,13 +274,18 @@ export function RefPreview({
       if (event.pointerType !== "touch") show();
     },
     onPointerLeave: (event) => {
-      if (event.pointerType !== "touch") hideSoon();
+      if (event.pointerType === "touch") return;
+      dismissed.current = false;
+      hideSoon();
     },
     onPointerDown: hideNow,
     onFocus: (event) => {
       if (event.currentTarget.matches(":focus-visible")) show();
     },
-    onBlur: hideNow,
+    onBlur: () => {
+      dismissed.current = false;
+      hideNow();
+    },
     "aria-describedby": open ? contentId : undefined,
   };
   const anchor = (
@@ -288,7 +299,9 @@ export function RefPreview({
       open={open}
       // Radix reports its own dismissals here: Esc and a press outside.
       onOpenChange={(next) => {
-        if (!next) hideNow();
+        if (next) return;
+        dismissed.current = true;
+        hideNow();
       }}
     >
       {children(trigger, anchor)}

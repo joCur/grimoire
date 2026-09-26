@@ -329,7 +329,9 @@ test("session view: previews in the scene column and in the drawer; the click op
   await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  await page.getByRole("button", { name: SCENE_TITLE }).click();
+  // Exact: until the live view has rendered, the chapter overview's reorder
+  // buttons carry the scene title in their names too.
+  await page.getByRole("button", { name: SCENE_TITLE, exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: SCENE_TITLE })).toBeVisible();
 
   const tooltip = page.getByRole("tooltip");
