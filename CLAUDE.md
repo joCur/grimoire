@@ -1,185 +1,180 @@
 # CLAUDE.md — Grimoire
 
-Grimoire ist ein selbst gehostetes Einzelnutzer-Tool für einen D&D-Spielleiter:
-Session-Vorbereitung und Live-Moderation über einer Kampagnen-Datenbank
-(SQLite, decisions/sqlite; Markdown ist das Inhaltsformat der Bodies).
-Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
+Grimoire is a self-hosted single-user tool for a D&D game master: session
+preparation and live running on top of a campaign database (SQLite,
+decisions/sqlite; Markdown is the content format of the bodies).
+It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 
-## Pflichtlektüre vor jeder Aufgabe
+## Required reading before every task
 
-1. `README.md` — Datenmodell und Konventionen: die Entitäten, ihre
-   Felder und Adressen, das Text-Vokabular (Callouts,
-   `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
-   normativ.
-2. `docs/decisions/` — Architektur-Entscheidungen inkl. Tech-Stack, eine
-   Datei je Thema (Übersicht in `docs/decisions/README.md`). Entscheidungen
-   dort sind bindend; Abweichungen nur, indem die Datei neu geschrieben oder
-   eine neue angelegt wird. Eine Entscheidung hält nur Zielentscheidungen
-   fest: keine befristeten Entscheidungen, keine Zwischenstände. Der
-   Zwischenstand eines in Scheiben geschnittenen Umbaus steht allein im
-   Ticket.
+1. `README.md` — data model and conventions: the entities, their fields and
+   addresses, the text vocabulary (callouts, `If:` sections, hashtags) and
+   the writing rules. All of it is normative.
+2. `docs/decisions/` — architecture decisions including the tech stack, one
+   file per topic (overview in `docs/decisions/README.md`). Decisions there
+   are binding; deviations only by rewriting the file or creating a new one.
+   A decision records only target decisions: no temporary decisions, no
+   intermediate states. The intermediate state of a rework cut into slices
+   lives only in the ticket.
    A decision records only real decisions with lasting validity (principle,
    why, consequences) — never inventories (tables, columns, endpoints, error
    codes, file or function names), implementation detail, or anything from
    older versions. It must stay true when the code grows.
-3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
+3. `docs/UI-BRIEF.md` — design direction for everything visible
 
-## Stack (Kurzfassung, Details in docs/decisions/stack.md)
+## Stack (short version, details in docs/decisions/stack.md)
 
 - Frontend: Vite + React 19 + Tailwind v4 + shadcn/ui, TanStack Query,
-  react-markdown + eigenes Remark-Plugin für Callouts und `## If:`
-- Backend: Bun + Hono, SQLite über Drizzle (`server/src/db/`), Suche als
-  FTS5-Index
-- Speicher: **eine SQLite-Datei ist die Quelle der Wahrheit** (decisions/sqlite),
+  react-markdown + a custom remark plugin for callouts and `## If:`
+- Backend: Bun + Hono, SQLite via Drizzle (`server/src/db/`), search as an
+  FTS5 index
+- Storage: **one SQLite file is the source of truth** (decisions/sqlite),
   `GRIMOIRE_DATA/grimoire.db`
-- Regel: Keine Bun-only-APIs ohne Eintrag in decisions/stack
-  (Node-Portabilität). Eingetragen ist genau eine: `bun:sqlite` als Fallback
-  hinter `server/src/db/driver.ts`
+- Rule: no Bun-only APIs without an entry in decisions/stack (Node
+  portability). Exactly one is registered: `bun:sqlite` as a fallback behind
+  `server/src/db/driver.ts`
 
-## Projektstruktur
+## Project structure
 
-- `fixtures/` — die Beispielkampagne als JSON (`fixtures/beispiel/*.json`),
-  ein Objekt je Datei in der Form der API: die Kampagne unter
-  `fixtures/beispiel/campaigns/<id>.json`, ein Kapitel unter
-  `fixtures/beispiel/chapters/<id>.json`, eine Szene unter
-  `fixtures/beispiel/scenes/<id>.json`, ein NPC unter
-  `fixtures/beispiel/npcs/<id>.json`, ein Ort unter
-  `fixtures/beispiel/locations/<id>.json`, ein Faden unter
-  `fixtures/beispiel/threads/<id>.json`, eine Idee unter
-  `fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
-  `fixtures/beispiel/glossary-terms/<id>.json`, Kampagnenwissen unter
-  `fixtures/beispiel/knowledge-items/<id>.json`, eine Session samt Pausen,
-  Log-Zeilen und gespielten Szenen unter
-  `fixtures/beispiel/sessions/<id>.json`, jede als das Objekt, das ihre
-  Ressource liefert, ohne `rev`. Sie ist
-  der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
-  umformatieren oder „aufräumen"; das Format ist Vertrag.
-- `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
-  `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
-  Kampagneninhalte von woanders.
-- `shared/` — Entitäts-Typen (`@grimoire/shared`), von Server und App
-  gemeinsam genutzt. Autorität über das Format ist
-  `server/src/db/schema.ts` (Speicherform), beschrieben in README.md — beide
-  synchron halten. Eine Entität mit eigener Ressource hat ihr zod-Schema in
-  `shared/src/<entität>.ts` (decisions/resources).
-- `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
-  ein Routen-Modul je Ressource, `server/src/routes/<ressource>.ts`, ein
-  Kommentar je Route — keine Liste zum Abhaken. `server/src/routes/api.ts`
-  setzt die Module zusammen und beschreibt, was für alle Routen gilt
-  (Fehlerkörper samt `code`); gemeinsame HTTP-Helfer liegen in
-  `server/src/routes/http.ts`. `server/src/server.ts` setzt nur die App
-  zusammen. Datenzugriff ausschließlich über `server/src/store/<domäne>.ts`
-  (Queries), nie direkt SQL aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
-  — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
-  `locations`, `threads`, `ideas`, `sessions` (mit `session-rows`, der
-  Session-Zeile, die ihre Kinder nachschlagen), `pauses`, `log-entries`,
+- `fixtures/` — the example campaign as JSON (`fixtures/beispiel/*.json`),
+  one object per file in the shape of the API: the campaign under
+  `fixtures/beispiel/campaigns/<id>.json`, a chapter under
+  `fixtures/beispiel/chapters/<id>.json`, a scene under
+  `fixtures/beispiel/scenes/<id>.json`, an NPC under
+  `fixtures/beispiel/npcs/<id>.json`, a location under
+  `fixtures/beispiel/locations/<id>.json`, a thread under
+  `fixtures/beispiel/threads/<id>.json`, an idea under
+  `fixtures/beispiel/ideas/<id>.json`, a glossary term under
+  `fixtures/beispiel/glossary-terms/<id>.json`, campaign knowledge under
+  `fixtures/beispiel/knowledge-items/<id>.json`, a session with its pauses,
+  log lines and played scenes under
+  `fixtures/beispiel/sessions/<id>.json`, each as the object its resource
+  returns, without `rev`. It is
+  the **seed** for dev/tests/E2E and the reference for callouts. NEVER
+  reformat or "tidy up" bodies; the format is a contract.
+- `GRIMOIRE_DATA` (default `./data`, gitignored) — this is where
+  `grimoire.db` with its `-wal`/`-shm` lives: the actual data. No code reads
+  campaign content from anywhere else.
+- `shared/` — entity types (`@grimoire/shared`), shared by server and app.
+  The authority over the format is `server/src/db/schema.ts` (storage
+  shape), described in README.md — keep both in sync. An entity with its own
+  resource has its zod schema in `shared/src/<entity>.ts`
+  (decisions/resources).
+- `server/` — Hono API. The endpoints are documented where they live: one
+  route module per resource, `server/src/routes/<resource>.ts`, one comment
+  per route — no checklist. `server/src/routes/api.ts` assembles the modules
+  and describes what applies to all routes (error body including `code`);
+  shared HTTP helpers live in `server/src/routes/http.ts`.
+  `server/src/server.ts` only assembles the app. Data access exclusively via
+  `server/src/store/<domain>.ts` (queries), never SQL directly from a route.
+  **The store is cut by domain:** one module per kind
+  — `campaigns`, `chapters` (with the scene order), `scenes`, `npcs`,
+  `locations`, `threads`, `ideas`, `sessions` (with `session-rows`, the
+  session row its children look up), `pauses`, `log-entries`,
   `played-scenes`, `glossary-terms`,
-  `knowledge-items` (mit ihrer Reihenfolge),
-  `generated` (das Übernehmen eines Generator-Laufs) — und
-  jedes trägt die
-  **Lese- UND Schreibzugriffe** seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
-  der Domäne, die er braucht.
-- `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
-  Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
+  `knowledge-items` (with their order),
+  `generated` (accepting a generator run) — and
+  each carries the **read AND write access** of its kind. No catch-all
+  module and no barrel: every caller imports from the domain it needs.
+- `app/` — the frontend. Every entity with its own resource has its slice
+  `app/src/<entity>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
-  `session/`, `generator-job/`) mit allem, was die App über sie weiß
-  (decisions/resources); **Slices importieren einander nicht.** Pause, Log-Zeile und
-  gespielte Szene gehören zum Slice `session/`: die App liest sie nur
-  eingebettet in ihrer Session, und jeder ihrer Schreibzugriffe landet im
-  Cache der Session; ihre Ressourcen haben dort je ein eigenes Modul
-  (`pause-api.ts`, `log-entry-api.ts`, `played-scene-api.ts`). Gemeinsam sind nur
-  UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`, etwa
-  `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
-  Kampagnenbaum) sind reine Verteiler. Eine Seite, die mehrere Entitäten
-  zeigt, setzt sich wie `App.tsx` aus den Slices zusammen und reicht fremde
-  Teile als Slot hinein (die Kapitelübersicht reicht dem Kapitel seine Fäden
-  und seine Szenenliste, die Szene bekommt ihre NPC-Karten, die Leseseite
-  einer Session den Link einer Szene; Szene, NPC und Ort bekommen ihre
-  Ergänzen-Aktion aus dem Generator-Job). Was zwei Slices verbindet, liegt bei
-  der Seite, die sie zusammensetzt (die Erinnerungen der Live-Ansicht aus
-  Log-Zeilen und Ideen in `routes/PcReminders.tsx`, die Ergänzen-Aktionen
-  in `routes/<Entität>AugmentAction.tsx`). Kein Barrel:
-  Aufrufer importieren die konkrete Datei.
-- `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
-- `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
-  siehe design/README.md). Bei Widerspruch zu docs/UI-BRIEF.md gewinnt design/.
-- `docs/` — die längeren Dokumente: `decisions/` (bindende Entscheidungen,
-  eine Datei je Thema), `UI-BRIEF.md` (Design-Intention), `DEPLOYMENT.md`
-  (Betrieb).
-  `README.md` und `CLAUDE.md` bleiben im Root (Tooling-Konvention).
+  `session/`, `generator-job/`) with everything the app knows about it
+  (decisions/resources); **slices do not import each other.** Pause, log
+  line and played scene belong to the `session/` slice: the app reads them
+  only embedded in their session, and every one of their writes lands in the
+  session's cache; their resources each have their own module there
+  (`pause-api.ts`, `log-entry-api.ts`, `played-scene-api.ts`). Shared are
+  only UI building blocks without knowledge of entities
+  (`app/src/components/`, e.g. `components/fields/`); mixed places (search,
+  `[[id]]` resolution, campaign tree) are pure dispatchers. A page that
+  shows several entities is composed from the slices like `App.tsx` and
+  passes foreign parts in as a slot (the chapter overview passes the chapter
+  its threads and its scene list, the scene gets its NPC cards, the reading
+  page of a session gets the link of a scene; scene, NPC and location get
+  their augment action from the generator job). Whatever connects two slices
+  lives with the page that composes them (the reminders of the live view
+  from log lines and ideas in `routes/PcReminders.tsx`, the augment actions
+  in `routes/<Entity>AugmentAction.tsx`). No barrel:
+  callers import the concrete file.
+- `generator/` — LLM pipeline (prompt, few-shot, process README).
+- `design/` — binding design reference (the PO's Claude Design export, see
+  design/README.md). If it contradicts docs/UI-BRIEF.md, design/ wins.
+- `docs/` — the longer documents: `decisions/` (binding decisions, one file
+  per topic), `UI-BRIEF.md` (design intent), `DEPLOYMENT.md` (operations).
+  `README.md` and `CLAUDE.md` stay in the root (tooling convention).
 
-## Arbeitsweise
+## Way of working
 
-- Vertikale Scheiben, eine pro Auftrag. Nicht mehrere Views gleichzeitig.
-- Gegen echte Daten entwickeln: keine erfundenen Mock-Objekte. Die Datenbank
-  ist die Wahrheit (decisions/sqlite), und der Server startet **leer**: einmal
-  `bun run --filter @grimoire/server seed` (liest `fixtures/`) füllt
-  `GRIMOIRE_DATA/grimoire.db`. Tests bekommen pro Fall eine frische
-  In-Memory-DB, geseedet aus denselben Fixtures
-  (`server/test/support/store.ts`). `campaigns/` existiert nur lokal beim
-  Nutzer und darf in Code, Tests und Doku nie vorausgesetzt werden.
-- Der Callout-Renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
-  `[!outcome]`, `[!loot]`, `[!note]`) ist die zentrale Komponente —
-  Änderungen daran immer gegen die Referenzszenen
-  `fixtures/beispiel/scenes/lighthouse-arrival.json` und
-  `scenes/smuggler-captured.json` prüfen, sichtbar im Dev-Harness
+- Vertical slices, one per assignment. Not several views at once.
+- Develop against real data: no invented mock objects. The database is the
+  truth (decisions/sqlite), and the server starts **empty**: running
+  `bun run --filter @grimoire/server seed` once (reads `fixtures/`) fills
+  `GRIMOIRE_DATA/grimoire.db`. Tests get a fresh in-memory DB per case,
+  seeded from the same fixtures (`server/test/support/store.ts`).
+  `campaigns/` exists only locally on the user's machine and must never be
+  assumed in code, tests or docs.
+- The callout renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
+  `[!outcome]`, `[!loot]`, `[!note]`) is the central component — always
+  check changes to it against the reference scenes
+  `fixtures/beispiel/scenes/lighthouse-arrival.json` and
+  `scenes/smuggler-captured.json`, visible in the dev harness
   `/dev/markdown`.
-- Format degradiert: unbekannte Callouts/Überschriften als normalen Text
-  rendern, niemals Fehler werfen.
-- Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
-  Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
-  Konflikt, nie stilles Überschreiben.
-- Kampagne, Kapitel, Szene, NPC, Ort, Faden, Idee, Glossar-Begriff,
-  Kampagnenwissen und Session samt Pause, Log-Zeile und gespielter Szene sind
-  jeweils ihre eigene Ressource (decisions/resources):
-  `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>` mit
-  `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
-  `…/locations/<id>` mit `Location`, `…/threads/<id>` mit `Thread`,
-  `…/ideas/<id>` mit `Idea`, `…/glossary-terms/<id>` mit `GlossaryTerm`,
-  `…/knowledge-items/<id>` mit `KnowledgeItem`, `…/sessions/<id>` mit
-  `Session` (Pausen, Log-Zeilen und gespielte Szenen eingebettet), alle
-  Felder nebeneinander,
-  `body` eingeschlossen, wo die Entität einen hat, ohne `kind` und `path`;
-  jede Zeile trägt ihr eigenes `rev`. Die App-Routen sind
-  `/campaigns/:id` (Kapitelübersicht), `/campaigns/:id/chapters/<id>`,
-  `/campaigns/:id/scenes/<id>`, `/campaigns/:id/npcs/<id>` und
-  `/campaigns/:id/locations/<id>`; Fäden pflegt die Kapitelübersicht, Ideen
-  die Nachbereitung und die Mobil-Startfläche, Glossar-Begriffe die Seite
-  `/campaigns/:id/glossary` und Kampagnenwissen `/campaigns/:id/knowledge`.
-  Eine Szene und ein Faden liegen flach unter ihrer Kampagne, ihr Kapitel ist
-  ein Feld. Welches
-  Kapitel aktiv ist, sagt sein `status`: höchstens eines je Kampagne, und wer
-  eines aktiviert, setzt das bisher aktive im selben Vorgang auf `planned`.
-- Die Kinder einer Session hängen unter ihr und werden nur dort geschrieben:
-  `POST …/sessions/<id>/pauses` beginnt eine Pause, `PATCH
-  …/pauses/<pause-id> { rev, toMs }` beendet sie; `POST …/sessions/<id>/log`
-  legt eine Log-Zeile an, `PATCH …/log/<log-id> { rev, reviewed }` sichtet
-  sie; `POST …/sessions/<id>/played-scenes { sceneId }` legt eine gespielte
-  Szene an.
-  Die laufende Session liefert `GET …/sessions?running=true` (eine oder
-  keine), die Liste steht neueste zuerst. `POST …/sessions` startet,
-  `PATCH …/sessions/<id> { rev, endedMs }` beendet, `DELETE` verwirft eine
-  leere. Einen Zeitpunkt schreibt der Client als Epochen-Wert (`…Ms`); die
-  zonenlose Lokalzeit daraus bildet der Server.
-- Der Generator-Job ist seine eigene Ressource, höchstens einer je Kampagne:
-  `POST …/generator-jobs { kind, … }` startet einen Szenen- oder NPC-Lauf
-  (ein Ergänzen-Lauf startet auf seiner Entität), `GET …/generator-jobs`
-  liefert ihn (einen oder keinen). `PATCH …/generator-jobs/<id> { rev, … }`
-  prüft und übernimmt: Übernehmen heißt, Vorschläge in
-  `review.writtenScenes`/`writtenNpcs`/`writtenLocations` zu nennen; ist
-  nichts mehr offen, ist der Job erledigt und die Antwort sein letzter Stand.
-  `PATCH …/parts/<key> { status: "running" }` wiederholt einen Teil,
-  `DELETE { rev }` verwirft den Job.
-- Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
+- The format degrades: render unknown callouts/headings as normal text,
+  never throw.
+- The app writes only through the documented API; patches carry the guard
+  token of the read (`rev`, the row version) — 409 on conflict, never a
+  silent overwrite.
+- Campaign, chapter, scene, NPC, location, thread, idea, glossary term,
+  campaign knowledge and session with pause, log line and played scene are
+  each their own resource (decisions/resources):
+  `/campaigns/<id>` responds with `Campaign`, `…/chapters/<id>` with
+  `Chapter`, `…/scenes/<id>` with `Scene`, `…/npcs/<id>` with `Npc`,
+  `…/locations/<id>` with `Location`, `…/threads/<id>` with `Thread`,
+  `…/ideas/<id>` with `Idea`, `…/glossary-terms/<id>` with `GlossaryTerm`,
+  `…/knowledge-items/<id>` with `KnowledgeItem`, `…/sessions/<id>` with
+  `Session` (pauses, log lines and played scenes embedded), all fields side
+  by side,
+  `body` included where the entity has one, without `kind` and `path`;
+  every row carries its own `rev`. The app routes are
+  `/campaigns/:id` (chapter overview), `/campaigns/:id/chapters/<id>`,
+  `/campaigns/:id/scenes/<id>`, `/campaigns/:id/npcs/<id>` and
+  `/campaigns/:id/locations/<id>`; threads are maintained by the chapter
+  overview, ideas by the debrief and the mobile start surface, glossary terms
+  by the page `/campaigns/:id/glossary` and campaign knowledge by
+  `/campaigns/:id/knowledge`.
+  A scene and a thread lie flat under their campaign; their chapter is a
+  field. Which
+  chapter is active is said by its `status`: at most one per campaign, and
+  whoever activates one sets the previously active one to `planned` in the
+  same operation.
+- The children of a session hang under it and are written only there:
+  `POST …/sessions/<id>/pauses` begins a pause, `PATCH
+  …/pauses/<pause-id> { rev, toMs }` ends it; `POST …/sessions/<id>/log`
+  creates a log line, `PATCH …/log/<log-id> { rev, reviewed }` reviews
+  it; `POST …/sessions/<id>/played-scenes { sceneId }` creates a played
+  scene.
+  The running session is returned by `GET …/sessions?running=true` (one or
+  none); the list is newest first. `POST …/sessions` starts,
+  `PATCH …/sessions/<id> { rev, endedMs }` ends, `DELETE` discards an empty
+  one. The client writes a point in time as an epoch value (`…Ms`); the
+  server derives the zoneless local time from it.
+- The generator job is its own resource, at most one per campaign:
+  `POST …/generator-jobs { kind, … }` starts a scene or NPC run
+  (an augment run starts on its entity), `GET …/generator-jobs`
+  returns it (one or none). `PATCH …/generator-jobs/<id> { rev, … }`
+  reviews and accepts: accepting means naming proposals in
+  `review.writtenScenes`/`writtenNpcs`/`writtenLocations`; once nothing is
+  open any more, the job is done and the response is its final state.
+  `PATCH …/parts/<key> { status: "running" }` retries a part,
+  `DELETE { rev }` discards the job.
+- UI language: German (primary language), English as the second language.
 - Repository language (decisions/language): everything in the repo is
   English — code, identifiers, comments, test names, commits, docs,
-  decisions, agent instructions, the example campaign content in
-  `fixtures/`, and tests. German exists only in the German UI catalog
-  (`app/src/i18n/de.ts`). German anywhere else is a violation to convert,
-  not an exception. In code and docs, describe a UI label in English instead
-  of quoting it.
-- Tests (decisions/testing): never assert against or locate by UI text; use
-  roles, test ids or catalog keys and assert on behavior and data.
+  decisions, agent instructions. German exists only in the German UI catalog
+  (`app/src/i18n/de.ts`), the example campaign content in `fixtures/`, and
+  literal UI strings that tests assert against. In code and docs, describe a
+  UI label in English instead of quoting it.
 - Comments explain the code and stand on their own: no references to issues,
   PRs or reviews. References to decisions (`decisions/sqlite`) are allowed —
   they point to a document in the repo, not to a ticket.
@@ -187,232 +182,229 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   file in line with the two rules above in the same change — German prose,
   comments and test names become English, issue references go — not only the
   changed lines. There is no separate cleanup PR.
-- Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
-  sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
-- Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
-  kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
-  Übergangscode gibt es nicht: Ein Umbau wird so geschnitten, dass weder
-  Adapter noch Doppelwege entstehen.
-- Eine Ressource je Entität (decisions/resources): Jede Entität der Datenbank hat ihren
-  eigenen Endpunkt, ihren eigenen Typ, ihr eigenes zod-Modul als einzige
-  Quelle und ihre eigene App-Route; einen allgemeinen Endpunkt über mehrere
-  Entitäten gibt es nicht. Jedes Feld ist ein Feld der Entität, `body`
-  eingeschlossen — keine Sammelbegriffe wie „Eigenschaften“ gegenüber „Text“,
-  kein „Eintrag“ oder „Entwurf“ als gemeinsame Form. Wo wirklich gemischt
-  wird (Suche), nennt der Treffer seine Entität ausdrücklich (`kind`).
-- Daten sind Zeilen ihrer Tabelle in der Datenbank, keine Dateien und keine
-  Dokumente — in Prompts, Schema-Namen und -Beschreibungen, Bezeichnern,
-  Kommentaren, Doku und Katalog. Prompts sagen nur, was das Modell tun soll:
-  keine Verbote, keine „nicht mehr“-Hinweise, keine Geschichte.
-- Fixes beschränken sich auf die Ursache: kein zusätzlicher Schutz, keine
-  Tests und keine Betriebsdoku über den Auftrag hinaus. Kommentare
-  beschreiben den Zustand, nie die Geschichte eines Fehlers oder das Setup
-  des PO.
-- Abhängigkeiten statt Eigenbau (decisions/dependencies): Für allgemeine Aufgaben
-  (Validierung, Schemata, Datum und Zeit, …) wird ein etabliertes Paket
-  eingebunden, nicht selbst gebaut. Eintragspflichtig in decisions/stack
-  bleiben allein Bun-only-APIs (Node-Portabilität).
-- Ein Schema hat genau eine Quelle; eine abgeleitete Form wird nie von Hand
-  nachgebaut. Das Schema einer Entität ist ihr zod-Schema, und Typ,
-  Patch-, Seed- und Generator-Form werden daraus abgeleitet (decisions/resources).
-  Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
-  das Objekt selbst, eine Entität als das Objekt, das ihre Ressource
-  liefert).
-- Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
-  `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
-  Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
-  `app/src/lib/` bekommen den Translator als Argument. Details: decisions/i18n.
-  `bun run lint` ist das Gate — scharf für migrierte Dateien, `warn` für den
-  Rest (Scheibe 2 von #69 arbeitet die Warnungen ab).
-- UI-Texte sind ganze Sätze, die der DM versteht: Ändert sich das Verhalten
-  hinter einem Text, wird der de/en-Satz neu formuliert, nie ein Satzteil
-  ausgetauscht. Keine rohen Leitungswerte (`status: unknown`) im Satz,
-  sondern das UI-Label. Der Lead prüft die Formulierung auf Logik, bevor der
-  PR zum PO geht.
+- Migration files are not tested — what is tested is the behavior they
+  enable (constraint errors on the write path), not their SQL.
+- Data changes are part of the migration itself (SQL, same transaction):
+  no preflight, no data step, no boot pass beside it.
+  There is no transitional code: a rework is cut so that neither adapters
+  nor double paths arise.
+- One resource per entity (decisions/resources): every entity of the
+  database has its own endpoint, its own type, its own zod module as the
+  single source and its own app route; there is no general endpoint across
+  several entities. Every field is a field of the entity, `body`
+  included — no umbrella terms like "properties" versus "text", no "entry"
+  or "draft" as a common shape. Where things are genuinely mixed (search),
+  the hit names its entity explicitly (`kind`).
+- Data are rows of their table in the database, not files and not
+  documents — in prompts, schema names and descriptions, identifiers,
+  comments, docs and catalog. Prompts say only what the model should do:
+  no prohibitions, no "no longer" notes, no history.
+- Fixes are limited to the cause: no additional safeguards, no tests and no
+  operations docs beyond the assignment. Comments describe the state, never
+  the history of a bug or the PO's setup.
+- Dependencies over home-grown code (decisions/dependencies): for general
+  tasks (validation, schemas, date and time, …) an established package is
+  added, not built in-house. Only Bun-only APIs still require an entry in
+  decisions/stack (Node portability).
+- A schema has exactly one source; a derived shape is never rebuilt by
+  hand. The schema of an entity is its zod schema, and type, patch, seed and
+  generator shape are derived from it (decisions/resources).
+  Fixtures remain the object itself (a response fixture as the object
+  itself, an entity as the object its resource returns).
+- User-visible texts NEVER directly in components, but in the catalog
+  `app/src/i18n/` (`de.ts` = key set, `en.ts` must be complete, otherwise a
+  type error). `t()` comes from `useT()`/`useI18n()`; pure helpers in
+  `app/src/lib/` get the translator as an argument. Details: decisions/i18n.
+  `bun run lint` is the gate; every rule is an error.
+- UI texts are whole sentences the DM understands: if the behavior behind a
+  text changes, the de/en sentence is reworded, never a fragment swapped
+  out. No raw wire values (`status: unknown`) in the sentence, but the UI
+  label. The lead checks the wording for logic before the PR goes to the
+  PO.
 
-## Backlog-Prozess
+## Backlog process
 
-- Der PO kippt Ideen als Issues mit Label `idee` ein (Template „Idee") —
-  formlos, Freitext genügt.
-- Refinement findet IM Issue statt: Rückfragen als Kommentare stellen;
-  danach den Issue-Body zum Ticket ausbauen — User Story („Als DM will
-  ich … damit …"), Akzeptanzkriterien (nachprüfbar), Scope/Nicht-Ziele,
-  Abhängigkeiten. Erst nach PO-Ok im Thread: Label `idee` → `ready`. Ein
-  Ok des PO im Gespräch mit dem Lead gilt genauso; der Lead hält es im
-  Thread fest, bevor er `ready` setzt.
-- Das Team nimmt nur `ready`-Tickets. Übernahme = Label „in Arbeit" +
-  Kommentar mit Zuschnitt; fertig = Schließen mit Commit-Verweis.
-- Zu Beginn jeder Arbeitssitzung: offene `idee`-Issues sichten, bevor
-  neue Arbeit startet.
-- Vor dem Merge einer Scheibe mit UI-Anteil läuft der Lead den echten
-  Klickpfad selbst (Server + gebaute App, Produktions-Topologie) —
-  Agent-Smoke-Berichte ersetzen das nicht.
+- The PO drops ideas in as issues with the label `idee` (template `Idee`) —
+  informal, free text is enough.
+- Refinement happens IN the issue: ask follow-up questions as comments;
+  then expand the issue body into a ticket — user story ("As a DM I
+  want … so that …"), acceptance criteria (verifiable), scope/non-goals,
+  dependencies. Only after the PO's ok in the thread: label `idee` →
+  `ready`. An ok from the PO in conversation with the lead counts the same;
+  the lead records it in the thread before setting `ready`.
+- The team only takes `ready` tickets. Taking one = label `in Arbeit` +
+  a comment with the cut; done = closing with a commit reference.
+- At the start of every work session: review open `idee` issues before
+  new work starts.
+- Before merging a slice with a UI part, the lead runs the real click path
+  personally (server + built app, production topology) — agent smoke
+  reports do not replace that.
 
-## Branch- & PR-Prozess (main ist produktiv)
+## Branch & PR process (main is production)
 
-- KEINE Direkt-Pushes auf main. (Serverseitige Branch-Protection ist im
-  Free-Plan für private Repos nicht verfügbar — die Regel ist prozessual
-  bindend; bei Wechsel auf Pro/public wird sie technisch erzwungen.)
-- Jedes Ticket: eigener Worktree + Feature-Branch (`<nr>-<slug>`),
-  Ergebnis als PR. Merge-Voraussetzungen: CI grün (Tests, Typecheck,
-  Build, E2E), Lead-Klickpfad, UND PO-Approval auf dem PR.
-- Der Lead implementiert nicht, auch keine Kleinigkeiten. Umgesetzt wird von
-  Engineer-Agents auf Opus (`model: "opus"`, eigener Worktree); Fable nur für
-  den Lead und, auf ausdrücklichen Wunsch des PO, für einen Designer.
-- Der Lead-Klickpfad läuft auf dem FINALEN PR-Stand nach dem letzten Commit,
-  auch nach Review-Fix-Runden. Ungetestet geht kein PR zum PO.
-- main ist per Definition deploybar, veröffentlicht aber nichts: Images
-  entstehen nur beim Release (decisions/release). Der PO pullt bewusst einen
-  Versions-Tag (nie direkt vor einer Session); Rollback = älterer
-  Versions-Tag.
+- NO direct pushes to main. (Server-side branch protection is not
+  available on the free plan for private repos — the rule is binding by
+  process; on switching to Pro/public it will be enforced technically.)
+- Every ticket: its own worktree + feature branch (`<nr>-<slug>`), result
+  as a PR. Merge prerequisites: CI green (tests, typecheck, build, E2E),
+  the lead's click path, AND PO approval on the PR.
+- The lead does not implement, not even small things. Implementation is
+  done by engineer agents on Opus (`model: "opus"`, own worktree); Fable
+  only for the lead and, at the PO's explicit request, for a designer.
+- The lead's click path runs on the FINAL PR state after the last commit,
+  also after review-fix rounds. No PR goes to the PO untested.
+- main is deployable by definition but publishes nothing: images are created
+  only on release (decisions/release). The PO pulls a version tag
+  deliberately; rollback = an older version tag.
 
-## Commit- & Release-Konventionen (decisions/release)
+## Commit & release conventions (decisions/release)
 
-- **Conventional Commits sind Pflicht**, sie erzeugen den Changelog:
-  `feat: …` (Minor), `fix: …` (Patch), `docs:`/`chore:`/`refactor:`/`test:`/
-  `ci:` (kein Release-Bump). Breaking Change = `feat!: …` oder ein
-  `BREAKING CHANGE:`-Footer im Body. Scope optional, aber üblich:
-  `feat(app): …`, `fix(server): …`. Die Ticketnummer gehört in den
-  Betreff-Suffix: `feat(app): Szenen-Editor (#43)`.
-- Das gilt auch für den **PR-Titel**: Squash-Merges übernehmen ihn als
-  Commit-Betreff auf `main`, ein unkonventioneller Titel fällt aus dem
-  Changelog.
-- **release-please** hält aus diesen Commits einen Release-PR
-  („chore(main): release X.Y.Z"). Erst dessen Merge — mit PO-Approval wie
-  jeder PR — erzeugt Tag `vX.Y.Z`, GitHub-Release, `CHANGELOG.md` und das
-  GHCR-Image mit Versions-Tag und `:latest`. Manuell wird nie getaggt und
-  `CHANGELOG.md`/`.release-please-manifest.json` nie von Hand editiert.
-- **`:latest` heißt „letzter Release", nicht „letzter Merge".** Der
-  Release-Workflow ist der einzige Schreiber der GHCR-Registry; `ci.yml`
-  baut das Image zur Prüfung (`push: false`), pusht es aber nie (#66).
+- **Conventional Commits are mandatory**, they generate the changelog:
+  `feat: …` (minor), `fix: …` (patch), `docs:`/`chore:`/`refactor:`/`test:`/
+  `ci:` (no release bump). Breaking change = `feat!: …` or a
+  `BREAKING CHANGE:` footer in the body. Scope optional but customary:
+  `feat(app): …`, `fix(server): …`. The ticket number goes in the subject
+  suffix: `feat(app): scene editor (#43)`.
+- This also applies to the **PR title**: squash merges take it as the commit
+  subject on `main`; an unconventional title drops out of the changelog.
+- **release-please** keeps a release PR from these commits
+  ("chore(main): release X.Y.Z"). Only its merge — with PO approval like
+  every PR — creates the tag `vX.Y.Z`, the GitHub release, `CHANGELOG.md` and
+  the GHCR image with the version tag and `:latest`. Nothing is ever tagged
+  by hand, and `CHANGELOG.md`/`.release-please-manifest.json` are never
+  edited by hand.
+- **`:latest` means "last release", not "last merge".** The release
+  workflow is the only writer to the GHCR registry; `ci.yml` builds the
+  image to check it (`push: false`) but never pushes it.
 
-## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
+## Critical paths (E2E required, real suite without mocks)
 
-Playwright gegen den echten Stack (realer Server auf einer eigenen, aus
-`fixtures/` geseedeten DB, gebaute App, echter Browser; einzige Ausnahme:
-das LLM ist ein lokaler Stub-HTTP-Server — der Provider-Pfad läuft real).
-Die Pfade:
+Playwright against the real stack (real server on its own DB seeded from
+`fixtures/`, built app, real browser; the only exception: the LLM is a local
+stub HTTP server — the provider path runs for real).
+The paths:
 
-1. Auto-Einstieg `/` → Kapitel lädt die Kampagne: eine durchgehende
-   Szenenliste in der Reihenfolge des DM (keine Ortsgruppen, der Ort steht
-   in der Metazeile), umsortiert über Hoch/Runter — der Schreibweg trägt den
-   eigenen Wächter der Reihenfolge (`scene_order_rev`), ein alter Stand ist
-   409, und weder Szenen- noch Kapitel-`rev` bewegen sich dabei. Unter dem
-   Kapiteltext stehen die Fäden des Kapitels (`GET …/threads?chapter=<id>`,
-   in der Reihenfolge des Anlegens) und werden dort gepflegt: anlegen,
-   abhaken, umformulieren, löschen — jeder Faden mit seinem eigenen `rev`
-   (`PATCH`/`DELETE …/threads/<id>`, ein alter Stand ist 409 mit dem
-   aktuellen Faden), Kapiteltext und Kapitel-`rev` bleiben unberührt
-2. Szene lesen: aus dieser Liste geöffnet (`/campaigns/:id/scenes/<id>`,
-   gelesen über `GET …/scenes/<id>`) — Callouts, If-Sections, NPC-Karten der
-   Referenzszenen
-3. ⌘K-Suche findet und öffnet: indexiert sind Kampagne, Kapitel, Szenen,
-   NPCs, Orte und die Glossar-Begriffe. Jeder Treffer nennt sich mit
-   `kind` + `id` ohne Adresse: ein Kampagnen-Treffer öffnet
-   `/campaigns/:id`, ein Kapitel-Treffer `/campaigns/:id/chapters/<id>`, ein
-   Szenen-Treffer `/campaigns/:id/scenes/<id>`, ein
-   NPC-Treffer `/campaigns/:id/npcs/<id>`, ein Orts-Treffer
-   `/campaigns/:id/locations/<id>` und ein Glossar-Treffer
-   (`kind: "glossary-term"`, die `id` des Begriffs) `/campaigns/:id/glossary`;
-   Sessions und Ideen sind nicht indexiert
-4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
-   weder `played` noch `dropped` ist, sonst die erste; die laufende Session
-   liefert `GET …/sessions?running=true`) → Schnellnotiz → Log-**Zeile** mit
-   `sceneId` (`POST …/sessions/<id>/log`), die Notiz legt **keine**
-   gespielte Szene an → „Nächste Szene" führt zur folgenden der Reihenfolge;
-   hat die Session eine Log-Zeile mit der `sceneId` der verlassenen Szene,
-   legt es für **die verlassene Szene** eine gespielte Szene an (`POST
-   …/sessions/<id>/played-scenes`, einmal je Session), ohne Notiz legt es
-   nichts an → Pause (`POST …/pauses`, ein Intervall, keine Log-Zeile;
-   beendet mit `PATCH …/pauses/<id> { rev, toMs }`) → beenden (`PATCH
-   …/sessions/<id> { rev, endedMs }`; die gerade offene Szene wird dabei
-   **nicht** als gespielt angelegt) → Nachbereitung. Jedes Kind trägt sein
-   eigenes `rev`, keines bewegt das der Session; an einer beendeten Session
-   ist jedes neue Kind 409 `session_ended`, und die Live-Ansicht sagt das in
-   einem ganzen Satz. Die alten Adressen `…/session`, `…/session/start` und
-   `…/log` antworten 404. Dazu die Leseseite einer vergangenen Session
+1. Auto entry `/` → the chapter loads the campaign: one continuous scene
+   list in the DM's order (no location groups, the location is in the meta
+   line), reordered via up/down — the write path carries the order's own
+   guard (`scene_order_rev`), a stale state is 409, and neither scene nor
+   chapter `rev` moves. Below the chapter text are the chapter's threads
+   (`GET …/threads?chapter=<id>`, in order of creation) and they are
+   maintained there: create, tick off, reword, delete — each thread with its
+   own `rev` (`PATCH`/`DELETE …/threads/<id>`, a stale state is 409 with the
+   current thread); chapter text and chapter `rev` stay untouched
+2. Read a scene: opened from that list (`/campaigns/:id/scenes/<id>`, read
+   via `GET …/scenes/<id>`) — callouts, if sections, NPC cards of the
+   reference scenes
+3. ⌘K search finds and opens: indexed are campaign, chapters, scenes,
+   NPCs, locations and the glossary terms. Every hit names itself with
+   `kind` + `id` without an address: a campaign hit opens
+   `/campaigns/:id`, a chapter hit `/campaigns/:id/chapters/<id>`, a
+   scene hit `/campaigns/:id/scenes/<id>`, an
+   NPC hit `/campaigns/:id/npcs/<id>`, a location hit
+   `/campaigns/:id/locations/<id>` and a glossary hit
+   (`kind: "glossary-term"`, the term's `id`) `/campaigns/:id/glossary`;
+   sessions and ideas are not indexed
+4. Session cycle: start (open is the first scene of the order that is
+   neither `played` nor `dropped`, otherwise the first; the running session
+   is returned by `GET …/sessions?running=true`) → quick note → log **line**
+   with `sceneId` (`POST …/sessions/<id>/log`); the note creates **no**
+   played scene → the next-scene action leads to the following one in the
+   order; if the session has a log line with the `sceneId` of the scene
+   being left, it creates a played scene for **the scene being left** (`POST
+   …/sessions/<id>/played-scenes`, once per session); without a note it
+   creates nothing → pause (`POST …/pauses`, an interval, no log line;
+   ended with `PATCH …/pauses/<id> { rev, toMs }`) → end (`PATCH
+   …/sessions/<id> { rev, endedMs }`; the scene currently open is **not**
+   created as played) → debrief. Every child carries its own `rev`; none
+   moves the session's; on an ended session every new child is 409
+   `session_ended`, and the live view says so in a whole sentence. The old
+   addresses `…/session`, `…/session/start` and `…/log` respond 404. Plus
+   the reading page of a past session
    (`/campaigns/:id/sessions/<session-id>`)
-5. Nachbereitung: Handlungsstrang übernehmen → ein Faden des aktiven
-   Kapitels (`POST …/threads { chapter, text }`, ohne `rev`; Kapiteltext und
-   Kapitel-`rev` bleiben unberührt); Idee abhaken → `PATCH …/ideas/<id>
-   { rev, done }`, ein alter `rev` ist 409 mit der aktuellen Idee. Die
-   Nachbereitung nimmt die erste Session der Liste (die zuletzt gestartete,
-   auch über Mitternacht) und sichtet eine Log-Zeile mit `PATCH
-   …/sessions/<id>/log/<log-id> { rev, reviewed }` — eine unbekannte id ist
-   404, ein alter `rev` 409 mit der aktuellen Zeile, und die Karte sagt, dass
-   die Notiz anderswo geändert wurde; `review/seen` antwortet 404
-6. Generator-Zyklus (Stub-LLM): Job → Vorschläge prüfen → Übernehmen →
-   Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
-   die Szene ohne `rev` (`result.scenes`, decisions/resources): „Bearbeiten" öffnet ihre
-   Felder und ihren Text, gespeichert werden die geänderten Felder je Szene
-   (`sceneEdits`), und „Übernehmen" schreibt sie über dem Vorschlag des
-   Modells; geprüft, verworfen und übernommen wird je `id`, alles über
-   `PATCH …/generator-jobs/<id>` (ein alter `rev` ist 409 mit dem aktuellen
-   Job), und die alten Adressen `…/generate/apply` und `…/generate/job`
-   antworten 404. Dazu
-   Kampagnenwissen und Glossar auf ihren eigenen Seiten
-   (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen — anlegen,
-   bearbeiten, löschen, jede Zeile mit ihrem eigenen `rev`
-   (`…/knowledge-items/<id>`, `…/glossary-terms/<id>`, ein alter Stand ist 409
-   mit der aktuellen Zeile), das Kampagnenwissen umsortieren über seinen
-   eigenen Wächter (`PUT …/knowledge-item-order`, ein alter Stand ist 409 mit
-   der aktuellen Reihenfolge, kein `rev` einer Zeile bewegt sich); die alten
-   Listen-Adressen `…/glossary` und `…/knowledge` antworten 404 — und der
-   Lauf danach:
-   Wissen im mitgeschickten Kontext (Stub echot den Prompt-Block zurück),
-   Namens-Hinweise beim Prüfen der Vorschläge, „Übernehmen" trotzdem möglich und
-   Server-Neustart (fertiger Job übersteht ihn und bleibt übernehmbar,
-   laufender wird als `failed` gemeldet). Die Szenen eines Laufs stehen im
-   Kapitel in Gliederungsreihenfolge, auch wenn sie einzeln und in
-   umgekehrter Reihenfolge übernommen werden — Startwert bei der ersten
-   Übernahme plus Nummer in der Gliederung (decisions/scene-order)
-7. Felder-Dialog (im UI „Eigenschaften“)/Status-Regler inkl. 409-Konflikt: der
-   Dialog über die Felder einer Szene, eines NPCs, eines Orts oder eines Kapitels zeigt
-   die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
-   Werte, „Trotzdem speichern" schreibt nur die Felder des Dialogs (eine
-   gleichzeitige Textänderung übersteht das). Der Status-Regler selbst hat
-   keine Konflikt-Aktionen: er meldet den veralteten Stand, der DM lädt neu.
-   Ein Kapitel aktiviert der Regler mit `PATCH …/chapters/<id> { rev,
-   status: "active" }`; das bisher aktive steht danach auf `planned`, und
-   genau ein Kapitel ist aktiv.
-8. Mobil-Startfläche + Ideen-Einwurf bei 390px: die Idee wird eine Idee
-   (`POST …/ideas`, antwortet mit `Idea`), am Ende, nichts abgehakt; läuft
-   eine Session (`GET …/sessions?running=true`), zeigt die Startfläche ihren
-   Chip als Weg zurück
-9. Text einer Szene bearbeiten: öffnen → `body` ändern → speichern →
-   gerendert sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe
-   Konfliktzeile statt still überschreiben. „Neu laden" verwirft den
-   ungespeicherten Text und übernimmt den gespeicherten Stand, „Trotzdem
-   speichern" schreibt nur `body`, sodass ein fremd geändertes Feld bleibt. Weil alle Felder einer Szene,
-   `body` eingeschlossen, EINE Zeile und EINEN Wächter teilen (decisions/writes), ist
-   auch ein reiner Status-Write eines Zweitschreibers ein Konflikt — der
-   Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit decisions/sqlite gibt
-   es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
-   Der Text eines Kapitels ist auf seiner Leseansicht
-   (`/campaigns/:id/chapters/<id>`) bearbeitbar wie der einer Szene. Die
-   Kampagne wird wie jede Entität über ihre Ressource geschrieben
-   (`PATCH /campaigns/:id`); ihre Route ist die Kapitelübersicht. Der Kopf der
-   Kapitelübersicht bleibt unberührt: sein eines `Bearbeiten` öffnet den
-   Dialog „Kampagne bearbeiten" über Name, Beschreibung und `body` — den Text
-   als Markdown wie im Textdialog eines Kapitels —, mit derselben
-   Konfliktzeile, deren „Trotzdem speichern" nur die geänderten Felder
-   schreibt.
-10. Kaltstart: leere Instanz ohne Seed — seit decisions/sqlite der Normalfall
-    einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
-    Szene befüllen → Session starten → Szene in der Session-Ansicht
-    nutzbar; jede neue Szene hängt sich ans Ende ihres Kapitels, ein
-    Kapitelwechsel ans Ende des Zielkapitels; dazu NPC/Ort anlegen aus ihren
-    Listen, die selbst gesetzte Kennung im Anlege-Dialog (Stift, ungültige
-    Kennung blockiert „Anlegen", leeres Feld leitet wieder aus dem Namen ab)
-    und die Slug-Kollision (409 mit Vorschlag, schreibt nichts)
+5. Debrief: accept a plot thread → a thread of the active chapter
+   (`POST …/threads { chapter, text }`, without `rev`; chapter text and
+   chapter `rev` stay untouched); tick off an idea → `PATCH …/ideas/<id>
+   { rev, done }`, a stale `rev` is 409 with the current idea. The debrief
+   takes the first session of the list (the most recently started, also
+   across midnight) and reviews a log line with `PATCH
+   …/sessions/<id>/log/<log-id> { rev, reviewed }` — an unknown id is
+   404, a stale `rev` 409 with the current line, and the card says that the
+   note was changed elsewhere; `review/seen` responds 404
+6. Generator cycle (stub LLM): job → review proposals → accept →
+   scene in the chapters; plus the 409/error path. A proposed scene is
+   the scene without `rev` (`result.scenes`, decisions/resources): the edit
+   action opens its fields and its text, the changed fields are saved per
+   scene (`sceneEdits`), and the accept action writes them over the model's
+   proposal; reviewing, discarding and accepting happen per `id`, all via
+   `PATCH …/generator-jobs/<id>` (a stale `rev` is 409 with the current
+   job), and the old addresses `…/generate/apply` and `…/generate/job`
+   respond 404. Plus
+   maintaining campaign knowledge and glossary on their own pages
+   (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) — create,
+   edit, delete, each row with its own `rev`
+   (`…/knowledge-items/<id>`, `…/glossary-terms/<id>`, a stale state is 409
+   with the current row), reordering the campaign knowledge via its own
+   guard (`PUT …/knowledge-item-order`, a stale state is 409 with the
+   current order, no row's `rev` moves); the old list addresses
+   `…/glossary` and `…/knowledge` respond 404 — and the run after that:
+   knowledge in the context sent along (the stub echoes the prompt block
+   back), name hints while reviewing the proposals, accepting still possible,
+   and a server restart (a finished job survives it and stays acceptable, a
+   running one is reported as `failed`). The scenes of a run stand in the
+   chapter in outline order, even when they are accepted one by one and in
+   reverse order — start value at the first acceptance plus the number in
+   the outline (decisions/scene-order)
+7. Fields dialog (labeled "properties" in the UI)/status control including
+   the 409 conflict: the dialog over the fields of a scene, an NPC, a
+   location or a chapter shows the conflict line with its two actions —
+   the reload action fetches the current values, the save-anyway action
+   writes only the dialog's fields (a concurrent text change survives
+   that). The status control itself has no conflict actions: it reports the
+   stale state, and the DM reloads.
+   The control activates a chapter with `PATCH …/chapters/<id> { rev,
+   status: "active" }`; the previously active one is then `planned`, and
+   exactly one chapter is active.
+8. Mobile start surface + idea drop at 390px: the idea becomes an idea
+   (`POST …/ideas`, responds with `Idea`), at the end, nothing ticked off;
+   if a session is running (`GET …/sessions?running=true`), the start
+   surface shows its chip as the way back
+9. Edit the text of a scene: open → change `body` → save →
+   visible rendered; 409 on a competing second write → the same
+   conflict line instead of silently overwriting. The reload action
+   discards the unsaved text and takes over the saved state, the save-anyway
+   action writes only `body`, so that a field changed by someone else stays.
+   Because all fields of a scene,
+   `body` included, share ONE row and ONE guard (decisions/writes), a pure
+   status write by a second writer is a conflict too — the status next to
+   the open editor is not silently taken over. Since decisions/sqlite there
+   is no external file change any more; the guard is the row version `rev`.
+   The text of a chapter is editable on its reading view
+   (`/campaigns/:id/chapters/<id>`) like that of a scene. The
+   campaign is written like every entity via its resource
+   (`PATCH /campaigns/:id`); its route is the chapter overview. The header of
+   the chapter overview stays untouched: its single edit action opens the
+   edit-campaign dialog over name, description and `body` — the text as
+   Markdown like in a chapter's text dialog —, with the same conflict line,
+   whose save-anyway action writes only the changed fields.
+10. Cold start: empty instance without seed — since decisions/sqlite the
+    normal case of a fresh installation → create a campaign → chapter →
+    scene → fill the scene → start a session → scene usable in the session
+    view; every new scene attaches to the end of its chapter, a chapter
+    change to the end of the target chapter; plus creating an NPC/location
+    from their lists, the self-chosen identifier in the create dialog
+    (pencil, an invalid identifier blocks the create action, an empty field
+    derives it from the name again) and the slug collision (409 with a
+    suggestion, writes nothing)
 
-Regel für neue Features: Jedes ready-Ticket benennt die berührten
-kritischen Pfade; wer einen berührt oder schafft, erweitert die
-E2E-Suite im selben PR — sonst kein Merge.
+Rule for new features: every ready ticket names the critical paths it
+touches; whoever touches or creates one extends the E2E suite in the same
+PR — otherwise no merge.
 
-## Qualitäts-Boden (nicht verhandelbar)
+## Quality floor (non-negotiable)
 
-- Responsive bis Mobil (Mobile = Suche, Leseansicht, Ideen — siehe UI-BRIEF)
-- Dark Mode ist der Primärmodus, Light Mode muss funktionieren
-- Tastatur-Fokus sichtbar; `prefers-reduced-motion` respektieren
-- Keine localStorage-Persistenz für Daten — der Server ist die Wahrheit
+- Responsive down to mobile (mobile = search, reading view, ideas — see
+  UI-BRIEF)
+- Dark mode is the primary mode; light mode must work
+- Visible keyboard focus; respect `prefers-reduced-motion`
+- No localStorage persistence for data — the server is the truth

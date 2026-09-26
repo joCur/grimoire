@@ -1,23 +1,23 @@
-# Grimoire — Deployment & Betrieb
+# Grimoire — Deployment & Operations
 
-Ein Container, ein Prozess: der Hono-Server liefert `/api` **und** den
-gebauten Frontend-Bundle aus `app/dist`. Die Kampagnendaten liegen außerhalb
-des Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht
-App-Sache — Standard ist Tailscale (siehe [decisions/scope](decisions/scope.md), [decisions/stack](decisions/stack.md)).
+One container, one process: the Hono server serves `/api` **and** the built
+frontend bundle from `app/dist`. The campaign data lives outside the image in
+a volume. Access control is a deployment concern, not an app concern — the
+default is Tailscale (see [decisions/scope](decisions/scope.md), [decisions/stack](decisions/stack.md)).
 
-> **Die Kampagnen-Wahrheit ist eine SQLite-Datei ([decisions/sqlite](decisions/sqlite.md)):**
-> `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container. Das ist die
-> **einzige** Datenquelle: der Server liest beim Start keine andere Quelle,
-> eine frische Instanz startet **leer** und wird in der UI gefüllt. Zu sichern
-> ist das `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
+> **The campaign truth is one SQLite file ([decisions/sqlite](decisions/sqlite.md)):**
+> `GRIMOIRE_DATA/grimoire.db`, default `/data` in the container. It is the
+> **only** data source: the server reads no other source at startup, a fresh
+> instance starts **empty** and is filled in the UI. What needs backing up
+> is the `GRIMOIRE_DATA` volume — section 2a.
 
-## 1. Bauen und starten
+## 1. Build and start
 
-> Am schnellsten: die `docker-compose.yml` im Repo-Root auf den Server
-> kopieren, `.env` mit `OPENROUTER_API_KEY=…` (und optional
-> `GRIMOIRE_VERSION=v0.1.0`) daneben legen, `docker compose up -d`.
-> Versionswahl, Update und Rollback: Abschnitt 1a. Alles Folgende ist der
-> manuelle Weg.
+> Quickest: copy the `docker-compose.yml` from the repo root to the server,
+> put a `.env` with `OPENROUTER_API_KEY=…` (and optionally
+> `GRIMOIRE_VERSION=v0.1.0`) next to it, `docker compose up -d`.
+> Version choice, update and rollback: section 1a. Everything below is the
+> manual way.
 
 
 ```bash
@@ -31,37 +31,37 @@ docker run -d --name grimoire \
   grimoire
 ```
 
-- `-p 127.0.0.1:3000:3000` bindet den Port bewusst nur auf Loopback; nach
-  außen geht es über Tailscale (Abschnitt 3).
-- `/data` ist der **Zustand**: dort liegt `grimoire.db` (plus `-wal`/`-shm`).
-  Das ist das Volume, das gesichert wird (Abschnitt 2a). Es ist der **einzige**
-  Datenmount — einen Kampagnen-Ordner liest der Server nicht mehr.
-- Schreibrechte: der Container läuft als `uid 1000` (`bun`). Bei einem
-  Bind-Mount einmalig `sudo chown -R 1000:1000 /srv/grimoire/data`, sonst
-  kann die Datenbank nicht angelegt werden.
+- `-p 127.0.0.1:3000:3000` deliberately binds the port to loopback only;
+  outside access goes through Tailscale (section 3).
+- `/data` is the **state**: that is where `grimoire.db` (plus `-wal`/`-shm`)
+  lives. It is the volume that gets backed up (section 2a). It is the
+  **only** data mount — the server does not read a campaign folder.
+- Write permissions: the container runs as `uid 1000` (`bun`). With a bind
+  mount, run `sudo chown -R 1000:1000 /srv/grimoire/data` once, otherwise
+  the database cannot be created.
 
-**Eine frische Instanz startet leer**: der Server seedet beim Start nichts.
-Das ist kein Sonderfall — „/" bietet auf einer leeren Instanz „Kampagne
-anlegen" an, und Kapitel, Szenen, NPCs und Orte entstehen danach ebenfalls in
-der UI. Das Image enthält keine Testdaten; die Beispielkampagne ist ein
-Dev-/E2E-Fixture im Repo (CLAUDE.md, `fixtures/`).
+**A fresh instance starts empty**: the server seeds nothing at startup.
+That is not a special case — on an empty instance `/` offers to create a
+campaign, and chapters, scenes, NPCs and locations are then created in the
+UI as well. The image contains no test data; the example campaign is a
+dev/E2E fixture in the repo (CLAUDE.md, `fixtures/`).
 
-**Update:** neu bauen, Container ersetzen (`docker rm -f grimoire` + `run`).
-Der Container selbst hat keinen Zustand — der steht im `/data`-Volume.
+**Update:** rebuild, replace the container (`docker rm -f grimoire` + `run`).
+The container itself has no state — that lives in the `/data` volume.
 
-### Alternative: fertiges Image aus GHCR ziehen
+### Alternative: pull a ready-made image from GHCR
 
-Das Produktivsystem muss nicht selbst bauen — Images liegen in der GitHub
-Container Registry. Der Release-Workflow ist der **einzige** Schreiber dieser
-Registry — ein main-Merge veröffentlicht nichts ([decisions/release](decisions/release.md)). Es gibt daher genau zwei Tag-Sorten:
+The production system does not have to build itself — images live in the
+GitHub Container Registry. The release workflow is the **only** writer to
+this registry — a merge to main publishes nothing ([decisions/release](decisions/release.md)). So there are exactly two kinds of tag:
 
-| Tag | Woher | Wofür |
-| --- | ----- | ----- |
-| `v0.1.0` (auch `0.1.0`) | Release-Workflow beim Merge des Release-PRs | **das, worauf ein Produktivsystem festnagelt** |
-| `latest` | derselbe Release-Workflow | jeweils letzter Release — mutiert **nicht** bei main-Merges |
+| Tag | From | For |
+| --- | ---- | --- |
+| `v0.1.0` (also `0.1.0`) | release workflow on merging the release PR | **what a production system pins to** |
+| `latest` | the same release workflow | the most recent release — does **not** change on merges to main |
 
-Einen noch nicht releasten Stand gibt es nicht als Image: dafür baut man
-lokal (Abschnitt 1).
+An unreleased state does not exist as an image: for that you build locally
+(section 1).
 
 ```bash
 docker pull ghcr.io/jocur/grimoire:v0.1.0
@@ -74,188 +74,188 @@ docker run -d --name grimoire \
   ghcr.io/jocur/grimoire:v0.1.0
 ```
 
-Das Package ist bei GHCR standardmäßig **privat**, ein `docker pull` ohne
-Anmeldung schlägt deshalb zunächst fehl. Zwei Wege:
+The package is **private** on GHCR by default, so a `docker pull` without
+logging in fails at first. Two ways:
 
-- **Öffentlich schalten** (einmalig, einfachster Weg): GitHub → Packages →
-  `grimoire` → Package settings → Change visibility → `public`. Danach zieht
-  jeder Host ohne Login. Das Image enthält nur Code und die Beispielkampagne,
-  keine Kampagnendaten und keine Secrets (`.dockerignore`).
-- **Privat lassen** und auf dem Host einmal anmelden, mit einem Personal
-  Access Token (classic) mit dem Scope `read:packages`:
+- **Make it public** (once, simplest way): GitHub → Packages →
+  `grimoire` → Package settings → Change visibility → `public`. After that
+  any host pulls without logging in. The image contains only code and the
+  example campaign, no campaign data and no secrets (`.dockerignore`).
+- **Keep it private** and log in once on the host, with a personal access
+  token (classic) with the scope `read:packages`:
 
   ```bash
   echo <PAT> | docker login ghcr.io -u jocur --password-stdin
   ```
 
-## 1a. Versionswahl, Update, Rollback
+## 1a. Version choice, update, rollback
 
-Releases entstehen nicht automatisch bei jedem Merge: release-please hält aus
-den Conventional Commits auf `main` einen Release-PR („chore(main): release
-X.Y.Z"). Erst dessen Merge (mit PO-Approval wie jeder PR) erzeugt Tag
-`vX.Y.Z`, GitHub-Release mit Changelog **und** die Image-Tags oben — und nur
-dann, wenn der `ci`-Lauf genau dieses Commits grün war (`require-green-ci` in
-`.github/workflows/release.yml`).
+Releases are not created automatically on every merge: release-please keeps
+a release PR from the Conventional Commits on `main` ("chore(main): release
+X.Y.Z"). Only its merge (with PO approval like every PR) creates the tag
+`vX.Y.Z`, the GitHub release with changelog **and** the image tags above —
+and only if the `ci` run of exactly that commit was green
+(`require-green-ci` in `.github/workflows/release.yml`).
 
-Das Compose-File referenziert deshalb
-`ghcr.io/jocur/grimoire:${GRIMOIRE_VERSION:-latest}`. Empfehlung für den
-Produktivbetrieb: in `.env` eine Version festnageln.
+The compose file therefore references
+`ghcr.io/jocur/grimoire:${GRIMOIRE_VERSION:-latest}`. Recommendation for
+production: pin a version in `.env`.
 
 ```bash
 # /srv/grimoire/.env
 GRIMOIRE_VERSION=v0.1.0
 ```
 
-**Update** (bewusst, nie direkt vor einer Session):
+**Update:**
 
 ```bash
-# 1. Changelog des neuen Releases lesen (GitHub → Releases)
-# 2. GRIMOIRE_VERSION in .env auf den neuen Tag setzen
+# 1. Read the changelog of the new release (GitHub → Releases)
+# 2. Set GRIMOIRE_VERSION in .env to the new tag
 docker compose pull
 docker compose up -d
 ```
 
-Ohne `GRIMOIRE_VERSION` zieht `docker compose pull` den jeweils letzten
-Release über `latest` — bequem, aber man weiß hinterher nicht, welcher Stand
-läuft. Welcher es war, sagt notfalls
+Without `GRIMOIRE_VERSION`, `docker compose pull` pulls the most recent
+release via `latest` — convenient, but afterwards you do not know which
+state is running. If needed,
 `docker inspect --format '{{index .Config.Env}}' grimoire | tr ' ' '\n' | grep GRIMOIRE_BUILD`
-(Build-Id = Release-Tag).
+tells you which one it was (build id = release tag).
 
-**Rollback** ist derselbe Handgriff rückwärts — kein Zustand im Container,
-alles steht im Volume:
+**Rollback** is the same step in reverse — no state in the container,
+everything lives in the volume:
 
 ```bash
-# GRIMOIRE_VERSION zurück auf den letzten guten Tag
+# GRIMOIRE_VERSION back to the last good tag
 docker compose up -d
 ```
 
-Manuell (ohne Compose): `docker rm -f grimoire`, dann derselbe `docker run`
-wie oben mit `ghcr.io/jocur/grimoire:<alter-versions-tag>`. Versions-Tags sind
-die einzige Rollback-Referenz — zu ihnen gehört ein Changelog, und alte
-Releases bleiben in GHCR liegen.
+Manually (without Compose): `docker rm -f grimoire`, then the same
+`docker run` as above with `ghcr.io/jocur/grimoire:<old-version-tag>`.
+Version tags are the only rollback reference — a changelog belongs to them,
+and old releases stay in GHCR.
 
-## 2. Konfiguration (Env-Variablen)
+## 2. Configuration (env variables)
 
-| Variable            | Default      | Bedeutung                                                     |
+| Variable            | Default      | Meaning                                                       |
 | ------------------- | ------------ | ------------------------------------------------------------- |
-| `GRIMOIRE_DATA`     | `/data` (im Image; sonst `./data` neben dem `server/`-Paket) | Verzeichnis der SQLite-Datenbank `grimoire.db` — **der Zustand des Deployments** (Abschnitt 2a) |
-| `PORT`              | `3000`       | HTTP-Port im Container                                        |
-| `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
-| `GRIMOIRE_BUILD`    | `dev`        | Build-Id; als Build-Arg in Bundle **und** Server eingebrannt — bei GHCR-Images der Release-Tag (`v0.1.0`), bei lokalen Builds das, was man als `--build-arg` mitgibt (sonst `dev`) |
-| `GRIMOIRE_VERSION`  | `latest`     | **nur im Compose-File**, kein App-Setting: der Image-Tag, den `docker compose` zieht (Abschnitt 1a) |
+| `GRIMOIRE_DATA`     | `/data` (in the image; otherwise `./data` next to the `server/` package) | Directory of the SQLite database `grimoire.db` — **the state of the deployment** (section 2a) |
+| `PORT`              | `3000`       | HTTP port in the container                                    |
+| `APP_DIST`          | `../app/dist` (relative to the `server/` package) | Path of the frontend build; already correct in the image |
+| `GRIMOIRE_BUILD`    | `dev`        | Build id; baked into the bundle **and** the server as a build arg — for GHCR images the release tag (`v0.1.0`), for local builds whatever you pass as `--build-arg` (otherwise `dev`) |
+| `GRIMOIRE_VERSION`  | `latest`     | **Compose file only**, not an app setting: the image tag `docker compose` pulls (section 1a) |
 
-## 2a. Datenbank, Volume und Sicherung
+## 2a. Database, volume and backup
 
-Die gesamte Kampagnen-Wahrheit ist **eine Datei**:
+The entire campaign truth is **one file**:
 
 ```
 $GRIMOIRE_DATA/
-  grimoire.db        ← Kampagnen, Szenen, NPCs, Orte, Fäden, Sessions, Log,
-  grimoire.db-wal      Ideen, Glossar, Generator-Jobs, Suchindex
+  grimoire.db        ← campaigns, scenes, NPCs, locations, threads, sessions,
+  grimoire.db-wal      log, ideas, glossary, generator jobs, search index
   grimoire.db-shm
 ```
 
-- `-wal` und `-shm` **gehören zum Datenbestand**. Wer nur `grimoire.db`
-  kopiert, während der Server läuft, kopiert einen unvollständigen Stand.
-- Schema-Migrationen laufen beim Start automatisch (in einer Transaktion,
-  Buchführung in `__drizzle_migrations`). Ein **Downgrade** wird nicht
-  unterstützt: der Rückweg bei Problemen ist die eigene Volume-Sicherung plus
-  Image-Rollback auf den alten Tag ([decisions/release](decisions/release.md)). Eine Migration, die
-  Inhalt umschreibt, bekommt einen eigenen Abschnitt.
-- Installationen vor v0.7 werden nicht unterstützt.
-- **WAL auf Bind-Mounts:** WAL braucht funktionierendes `mmap`/Locking im
-  gemounteten Dateisystem. Lokale Bind-Mounts und Docker-Volumes sind
-  unproblematisch; **Netzwerk-Dateisysteme (NFS, SMB/CIFS) sind es nicht** —
-  dort gehört die Datenbank auf lokalen Speicher, nicht auf die Freigabe.
+- `-wal` and `-shm` **are part of the data**. Copying only `grimoire.db`
+  while the server is running copies an incomplete state.
+- Schema migrations run automatically at startup (in a transaction,
+  bookkeeping in `__drizzle_migrations`). A **downgrade** is not
+  supported: the way back when there are problems is your own volume backup
+  plus an image rollback to the old tag ([decisions/release](decisions/release.md)). A migration
+  that rewrites content gets its own section.
+- Installations before v0.7 are not supported.
+- **WAL on bind mounts:** WAL needs working `mmap`/locking in the mounted
+  file system. Local bind mounts and Docker volumes are fine;
+  **network file systems (NFS, SMB/CIFS) are not** — there the database
+  belongs on local storage, not on the share.
 
-### Sicherung — Sache des Stack-Owners
+### Backup — the stack owner's job
 
-Grimoire hat **bewusst kein eigenes Backup-System**: kein
-`grimoire backup`, keine Auto-Backups vor Migrations-Boots. Es gibt eine
-Datei in einem Volume, und die sichert der Betreiber mit seinen Bordmitteln.
-Zwei Wege, die konsistent sind:
+Grimoire **deliberately has no backup system of its own**: no
+`grimoire backup`, no automatic backups before migration boots. There is one
+file in a volume, and the operator backs it up with their own tools.
+Two ways that are consistent:
 
 ```bash
-# a) im Betrieb, ohne Downtime — ein konsistenter Einzeldatei-Snapshot:
+# a) while running, without downtime — a consistent single-file snapshot:
 sqlite3 /srv/grimoire/data/grimoire.db "VACUUM INTO '/backup/grimoire-$(date +%F).db'"
 
-# b) oder Container stoppen und das Verzeichnis komplett sichern:
+# b) or stop the container and back up the whole directory:
 docker compose stop
 tar czf /backup/grimoire-$(date +%F).tar.gz -C /srv/grimoire data
 docker compose start
 ```
 
-Ein `cp grimoire.db` im laufenden Betrieb ist **kein** Backup — nimm `VACUUM
-INTO` oder stoppe den Container. Der Wiederherstellungsweg ist derselbe
-rückwärts: Container stoppen, Datei(en) zurücklegen, Container starten.
+A `cp grimoire.db` while running is **not** a backup — use `VACUUM INTO` or
+stop the container. Restoring is the same in reverse: stop the container,
+put the file(s) back, start the container.
 
-## 2b. Generator (LLM-Provider)
+## 2b. Generator (LLM provider)
 
-Alles hier ist **optional** — ohne Konfiguration läuft alles außer dem
-Generator. `LLM_PROVIDER` wählt den Provider, die übrigen Variablen gelten
-jeweils nur für den gewählten:
+Everything here is **optional** — without configuration everything except
+the generator runs. `LLM_PROVIDER` selects the provider; the other variables
+apply only to the selected one:
 
-| Variable             | Gilt für     | Default                        | Bedeutung                                             |
+| Variable             | Applies to   | Default                        | Meaning                                               |
 | -------------------- | ------------ | ------------------------------ | ----------------------------------------------------- |
 | `LLM_PROVIDER`       | –            | `claude`                       | `claude`, `openrouter`, `openai`, `lmstudio`           |
-| `ANTHROPIC_API_KEY`  | `claude`     | –                              | **erforderlich** für `claude`                          |
-| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-5`            | Modell-Override                                        |
-| `OPENROUTER_API_KEY` | `openrouter` | –                              | **erforderlich** für `openrouter`                      |
-| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **erforderlich**, z. B. `anthropic/claude-sonnet-5`  |
-| `LLM_BASE_URL`       | `openai` (Pflicht), `openrouter` (Override) | `https://openrouter.ai/api/v1` | API-Root eines OpenAI-kompatiblen Endpoints, **ohne** `/chat/completions` |
-| `LLM_API_KEY`        | `openai`     | –                              | optional, nur wenn der Endpoint Auth verlangt          |
-| `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API-Root der lokalen LM-Studio-Instanz                 |
-| `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Modellname in LM Studio                                |
-| `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
-| `LLM_CORRECTION_TURNS` | alle       | `1`                            | Korrektur-Turns nach dem ersten Aufruf (`0`–`2`; unbrauchbare Werte werden ignoriert) |
-| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet `response_format` mit (`json_schema`, strict, mit Rückfall auf `json_object` bei 400); `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung. Betrifft **jeden** Aufruf — Gliederung und Einträge —, weil jede Antwort ein Objekt mit eigenem Schema ist; der `claude`-Pfad erzwingt jede Antwort per Tool-Aufruf und ist davon unberührt |
-| `LLM_PROMPT_CACHE`   | `openrouter`, `openai`, `lmstudio` | an bei `openrouter`, sonst aus | Markiert den konstanten Prompt-Teil als cachebar; `0` = aus (für Endpoints, die Content-Parts ablehnen), `1` = an (z. B. eigener Anthropic-Proxy). Der `claude`-Pfad cacht immer und ist davon unberührt |
+| `ANTHROPIC_API_KEY`  | `claude`     | –                              | **required** for `claude`                              |
+| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-5`            | Model override                                         |
+| `OPENROUTER_API_KEY` | `openrouter` | –                              | **required** for `openrouter`                          |
+| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **required**, e.g. `anthropic/claude-sonnet-5`       |
+| `LLM_BASE_URL`       | `openai` (required), `openrouter` (override) | `https://openrouter.ai/api/v1` | API root of an OpenAI-compatible endpoint, **without** `/chat/completions` |
+| `LLM_API_KEY`        | `openai`     | –                              | optional, only if the endpoint requires auth           |
+| `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API root of the local LM Studio instance               |
+| `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Model name in LM Studio                                |
+| `LLM_MAX_TOKENS`     | all          | `8000` (`claude`), otherwise the endpoint default | Upper limit of the response length (positive integer; unusable values are ignored) |
+| `LLM_CORRECTION_TURNS` | all        | `1`                            | Correction turns after the first call (`0`–`2`; unusable values are ignored) |
+| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | on              | Sends `response_format` along (`json_schema`, strict, falling back to `json_object` on 400); `0` = off, for endpoints/models without `response_format` support. Affects **every** call — outline and entries — because every response is an object with its own schema; the `claude` path forces every response via a tool call and is unaffected |
+| `LLM_PROMPT_CACHE`   | `openrouter`, `openai`, `lmstudio` | on for `openrouter`, otherwise off | Marks the constant part of the prompt as cacheable; `0` = off (for endpoints that reject content parts), `1` = on (e.g. your own Anthropic proxy). The `claude` path always caches and is unaffected |
 
-`LLM_PROMPT_CACHE` ist der Kostenhebel eines Kapitel-Durchlaufs: seit der
-Pipeline (ein Aufruf je Szene) wiederholt sich derselbe Prompt-Anfang —
-System-Prompt, Few-Shot, Kampagnenwissen, Glossar, Gliederung — bei jedem
-Aufruf. Markiert man ihn, zahlt man ihn einmal statt ein Dutzend Mal; bei
-einem Kapitel sind das grob 30 % der Kosten. Ob der Cache greift, steht in der
-Server-Zeile pro Durchlauf: `generate: openrouter, 14 attempt(s), 119000 in /
-31000 out (98000 cached) — ok`. Bleibt `cached` aus, unterstützt das Modell
-(oder der geroutete Anbieter) keine Cache-Breakpoints — dann kostet die
-Markierung nichts, bringt aber auch nichts.
+`LLM_PROMPT_CACHE` is the cost lever of a chapter run: with the pipeline
+(one call per scene) the same prompt prefix — system prompt, few-shot,
+campaign knowledge, glossary, outline — repeats on every call. Marking it
+means paying for it once instead of a dozen times; for a chapter that is
+roughly 30 % of the cost. Whether the cache takes effect is shown in the
+server line per run: `generate: openrouter, 14 attempt(s), 119000 in /
+31000 out (98000 cached) — ok`. If `cached` is missing, the model (or the
+routed provider) does not support cache breakpoints — then the marking
+costs nothing, but gains nothing either.
 
-`LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
-Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`
-und bricht sofort mit `422` und der Meldung „Antwort wurde vom Modell
-abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: …) oder Quelltext
-verkleinern" ab, statt zwei teure Korrektur-Turns zu drehen; dann das Limit
-erhöhen oder den Quelltext verkleinern.
+`LLM_MAX_TOKENS` is worth it when comparing models: if a model cuts the
+response off, the generator detects that from `finish_reason`/`stop_reason`
+and aborts immediately with `422` and a message saying the model truncated
+the response and to raise `LLM_MAX_TOKENS` (showing the current value) or
+shorten the source text, instead of spinning two expensive correction turns;
+then raise the limit or shorten the source text.
 
-`LLM_CORRECTION_TURNS` regelt, wie oft eine fehlgeschlagene Formprüfung als
-Fehlerliste ans Modell zurückgeht (Default `1`): die nicht heilbaren Auslöser
-sind weg (abgeschnittene Antworten brechen sofort ab, ein Code-Zaun oder ein
-Satz um das Objekt wird toleriert, fast-JSON in der Gliederung wird
-repariert), und was übrig bleibt, repariert ein Modell mit Fehlerliste fast
-immer im ersten Turn — ein zweiter kostet nur. `0` schaltet Korrektur-Turns
-ganz ab (billigster, strengster Modus), `2` ist das Maximum.
+`LLM_CORRECTION_TURNS` controls how often a failed shape check goes back to
+the model as a list of errors (default `1`): the triggers that cannot be
+healed are gone (truncated responses abort immediately, a code fence or a
+sentence around the object is tolerated, near-JSON in the outline is
+repaired), and what remains, a model with an error list almost always
+repairs in the first turn — a second one only costs. `0` switches correction
+turns off entirely (cheapest, strictest mode), `2` is the maximum.
 
-**Generierungen laufen im Hintergrund** ([decisions/generator](decisions/generator.md)): `POST
-/api/campaigns/:campaign/generator-jobs` startet einen Job und antwortet mit
-`202` und dem Job; die App liest ihn über `GET
-/api/campaigns/:campaign/generator-jobs`. Ein Job pro Kampagne (zweiter Start →
-`409` mit dem laufenden Job), und er bleibt inklusive Review-Edits liegen, bis
-er übernommen oder verworfen wird — Navigation, Reload oder ein geschlossener
-Tab kosten damit keine Generierung. Der Job ist eine Zeile der Datenbank: ein
-fertiger übersteht einen Container-Neustart und bleibt übernehmbar, ein
-laufender wird dabei als gescheitert gemeldet.
+**Generations run in the background** ([decisions/generator](decisions/generator.md)): `POST
+/api/campaigns/:campaign/generator-jobs` starts a job and responds with
+`202` and the job; the app reads it via `GET
+/api/campaigns/:campaign/generator-jobs`. One job per campaign (a second
+start → `409` with the running job), and it stays, review edits included,
+until it is accepted or discarded — navigation, a reload or a closed tab do
+not cost a generation. The job is a row of the database: a finished one
+survives a container restart and stays acceptable, a running one is
+reported as failed.
 
-Fehlt eine erforderliche Variable, antwortet nur der Start eines Laufs (`POST
-/api/campaigns/:campaign/generator-jobs` oder `POST …/augment`) mit `503` und der Meldung im Klartext, z. B.
-`{"error":"ANTHROPIC_API_KEY fehlt"}`, `{"error":"OPENROUTER_API_KEY fehlt"}`
-oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)"}` (der
-Provider wird bewusst erst pro Request erzeugt). Ein Tippfehler in
-`LLM_PROVIDER` fällt genauso auf statt still auf Claude zurückzufallen:
-`{"error":"Unbekannter LLM_PROVIDER: …"}`. Lese- und Schreib-API sind von
-all dem nicht betroffen.
+If a required variable is missing, only the start of a run (`POST
+/api/campaigns/:campaign/generator-jobs` or `POST …/augment`) responds with
+`503` and a plain-text message in the `error` field naming the missing
+variable (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, or `LLM_MODEL` with an
+example value such as `anthropic/claude-sonnet-5`); the provider is
+deliberately created per request. A typo in `LLM_PROVIDER` is caught the
+same way instead of silently falling back to Claude: the message names the
+unknown provider. The read and write API is not affected by any of this.
 
-**Beispiel OpenRouter** (ein Key, viele Modelle — praktisch zum Vergleichen):
+**Example OpenRouter** (one key, many models — handy for comparing):
 
 ```bash
 LLM_PROVIDER=openrouter
@@ -263,12 +263,12 @@ OPENROUTER_API_KEY=sk-or-v1-…
 LLM_MODEL=anthropic/claude-sonnet-5
 ```
 
-Modellwechsel = `LLM_MODEL` ändern und Container neu starten. Grimoire
-schickt dabei OpenRouters optionale Attributions-Header (`HTTP-Referer`,
-`X-Title`) mit; das ist reine Kennzeichnung in deren Dashboard.
+Switching models = change `LLM_MODEL` and restart the container. Grimoire
+sends OpenRouter's optional attribution headers (`HTTP-Referer`,
+`X-Title`) along; that is purely a label in their dashboard.
 
-**Beispiel LM Studio** (lokal, ohne Key — der Container muss den Host
-erreichen, unter Docker Desktop z. B. `http://host.docker.internal:1234/v1`):
+**Example LM Studio** (local, without a key — the container must reach the
+host, under Docker Desktop e.g. `http://host.docker.internal:1234/v1`):
 
 ```bash
 LLM_PROVIDER=lmstudio
@@ -276,87 +276,88 @@ LMSTUDIO_URL=http://host.docker.internal:1234/v1
 LMSTUDIO_MODEL=qwen2.5-32b-instruct
 ```
 
-`LLM_PROVIDER=openai` ist derselbe Transport für jeden anderen
-OpenAI-kompatiblen Endpoint (vLLM, Ollama, LiteLLM, Azure-Proxy, …):
-`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` nur falls nötig.
+`LLM_PROVIDER=openai` is the same transport for any other OpenAI-compatible
+endpoint (vLLM, Ollama, LiteLLM, Azure proxy, …):
+`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` only if needed.
 
-Secrets nicht ins Image: `.env` ist gitignored **und** in `.dockerignore`.
-Zur Laufzeit übergeben:
+No secrets in the image: `.env` is gitignored **and** in `.dockerignore`.
+Pass them at runtime:
 
 ```bash
 docker run --env-file /srv/grimoire/.env … grimoire
 ```
 
-## 3. Erreichbarkeit: Tailscale zuerst
+## 3. Reachability: Tailscale first
 
-Grimoire hat kein Login ([decisions/scope](decisions/scope.md)). Es darf deshalb **nicht** offen im
-Internet stehen. Zwei erprobte Muster:
+Grimoire has no login ([decisions/scope](decisions/scope.md)). It must therefore **not** be openly
+reachable on the internet. Two proven patterns:
 
-**A) Tailscale auf dem Host (einfachster Weg)**
+**A) Tailscale on the host (simplest way)**
 
 ```bash
 tailscale serve --bg --https=443 http://127.0.0.1:3000
 tailscale serve status
 ```
 
-Erreichbar ist die App dann per MagicDNS unter
-`https://<hostname>.<tailnet>.ts.net` — TLS-Zertifikat besorgt Tailscale
-selbst. Container-Port dabei auf `127.0.0.1` binden (Abschnitt 1).
-Kein `tailscale funnel`, das würde den Dienst öffentlich machen.
+The app is then reachable via MagicDNS at
+`https://<hostname>.<tailnet>.ts.net` — Tailscale obtains the TLS certificate
+itself. Bind the container port to `127.0.0.1` (section 1).
+No `tailscale funnel`; that would make the service public.
 
-**B) Tailscale als Sidecar-Container**
+**B) Tailscale as a sidecar container**
 
-Für Hosts ohne Tailscale-Installation: ein `tailscale/tailscale`-Container
-mit `TS_AUTHKEY` (Auth-Key aus der Tailscale-Admin-Konsole) und
-`TS_SERVE_CONFIG` für HTTPS; Grimoire teilt dessen Netzwerk-Namespace
+For hosts without a Tailscale installation: a `tailscale/tailscale`
+container with `TS_AUTHKEY` (auth key from the Tailscale admin console) and
+`TS_SERVE_CONFIG` for HTTPS; Grimoire shares its network namespace
 (`--network=container:tailscale`, in Compose `network_mode:
-service:tailscale`). Dann veröffentlicht Grimoire selbst keinen Port nach
-außen. Zustand des Sidecars (`/var/lib/tailscale`) in ein Volume legen,
-sonst muss nach jedem Neustart neu authentifiziert werden.
+service:tailscale`). Then Grimoire itself publishes no port to the outside.
+Put the sidecar's state (`/var/lib/tailscale`) in a volume, otherwise it
+has to re-authenticate after every restart.
 
-**Alternativen** (falls Tailscale nicht in Frage kommt, [decisions/scope](decisions/scope.md), [decisions/stack](decisions/stack.md)):
-Reverse Proxy davor — Caddy/nginx/Traefik mit Basic Auth für den
-Minimalfall, oder Forward Auth gegen Authelia/authentik, wenn echte Sessions
-und 2FA gewünscht sind. In beiden Fällen bleibt der App-Code unverändert;
-kein In-App-Auth nachbauen.
+**Alternatives** (if Tailscale is not an option, [decisions/scope](decisions/scope.md), [decisions/stack](decisions/stack.md)):
+a reverse proxy in front — Caddy/nginx/Traefik with basic auth for the
+minimal case, or forward auth against Authelia/authentik if real sessions
+and 2FA are wanted. In both cases the app code stays unchanged;
+do not rebuild in-app auth.
 
 ## 4. Backup
 
-**Gesichert wird das `GRIMOIRE_DATA`-Volume — siehe Abschnitt 2a**, dort steht
-das Verfahren (`VACUUM INTO` im Betrieb, oder Container stoppen und das
-Verzeichnis kopieren) und die Wiederherstellung.
+**What gets backed up is the `GRIMOIRE_DATA` volume — see section 2a**, which
+describes the procedure (`VACUUM INTO` while running, or stop the container
+and copy the directory) and the restore.
 
-## 5. Betrieb & Fehlersuche
+## 5. Operations & troubleshooting
 
-- Logs: `docker logs -f grimoire`. Beim Start erscheinen der Pfad der
-  Datenbank, der Port, `Database ready (…)` und `Serving app build from
-  /app/app/dist`. Steht dort
-  stattdessen `No app build at …`, fehlt `app/dist` im Image (Build-Stage
-  fehlgeschlagen) und der Container liefert nur die API.
-- Healthcheck: eingebaut (`GET /api/campaigns`), sichtbar über
+- Logs: `docker logs -f grimoire`. At startup the path of the database, the
+  port, `Database ready (…)` and `Serving app build from /app/app/dist`
+  appear. If it says
+  `No app build at …` instead, `app/dist` is missing from the image (build
+  stage failed) and the container serves only the API.
+- Healthcheck: built in (`GET /api/campaigns`), visible via
   `docker inspect --format '{{.State.Health.Status}}' grimoire`.
-- Aktualisierung im Browser: jeder Write zählt `campaigns.version` in
-  derselben Transaktion hoch, die App pollt `GET /api/campaigns/:campaign/version`
-  ([decisions/polling](decisions/polling.md)). Es gibt keinen Datei-Watcher — Edits im Dateibaum
-  wirken NICHT, die Datenbank ist die Wahrheit ([decisions/sqlite](decisions/sqlite.md)).
-- Generator-Jobs überleben einen Neustart ([decisions/generator](decisions/generator.md)): ein fertiger
-  Job ist nach dem Boot noch da und übernehmbar. War ein Job im Lauf, steht im
-  Log `N generate job(s) were running at the last shutdown — marked as
-  failed`, und die App zeigt „Server wurde während des Laufs neu gestartet —
-  Job neu starten". Das ist die erwartete Meldung, kein Defekt.
-- Banner „Neue Version verfügbar — neu laden": ein offener Tab läuft noch mit
-  einem älteren Bundle als der Server (Build-Ids aus `GRIMOIRE_BUILD` weichen
-  ab, Vergleich beim laufenden Versions-Polling) — der Klick lädt hart neu,
-  automatisch passiert bewusst nichts. Lokal und in selbst gebauten Images
-  ohne `--build-arg GRIMOIRE_BUILD=…` steht auf beiden Seiten `dev`, dann
-  bleibt das Banner immer aus.
-- Caching: `/assets/*` (gehashte Dateinamen) wird `immutable` ausgeliefert,
-  `index.html` mit `no-cache`. Ein Deploy ist damit sofort sichtbar, ohne
-  dass der Browser Bundles doppelt lädt.
-- Entwicklung ist davon unberührt: dort läuft der Vite-Dev-Server und proxied
-  `/api` auf `localhost:3000` (`app/vite.config.ts`); ohne `app/dist` serviert
-  der Server nichts Statisches.
-- Runtime-Wechsel bleibt offen ([decisions/stack](decisions/stack.md)): server/ und shared/ liegen als
-  TypeScript-Quelle im Image, es werden keine Bun-only-Laufzeit-APIs benutzt.
-  Ein Node-Image mit `@hono/node-server` wäre ein Deployment-Umbau, kein
-  Code-Umbau.
+- Refresh in the browser: every write increments `campaigns.version` in the
+  same transaction, the app polls `GET /api/campaigns/:campaign/version`
+  ([decisions/polling](decisions/polling.md)). There is no file watcher — edits in the file tree
+  have NO effect; the database is the truth ([decisions/sqlite](decisions/sqlite.md)).
+- Generator jobs survive a restart ([decisions/generator](decisions/generator.md)): a finished
+  job is still there after the boot and acceptable. If a job was running,
+  the log says `N generate job(s) were running at the last shutdown — marked
+  as failed`, and the app says that the server was restarted during the run
+  and the job should be started again. That is the expected message, not a
+  defect.
+- The new-version banner with its reload action: an open tab is still
+  running an older bundle than the server (build ids from `GRIMOIRE_BUILD`
+  differ, compared during the ongoing version polling) — the click does a
+  hard reload; deliberately nothing happens automatically. Locally and in
+  self-built images without `--build-arg GRIMOIRE_BUILD=…` both sides say
+  `dev`, so the banner always stays off.
+- Caching: `/assets/*` (hashed file names) is served `immutable`,
+  `index.html` with `no-cache`. A deploy is therefore visible immediately,
+  without the browser loading bundles twice.
+- Development is unaffected by this: there the Vite dev server runs and
+  proxies `/api` to `localhost:3000` (`app/vite.config.ts`); without
+  `app/dist` the server serves nothing static.
+- A runtime switch stays open ([decisions/stack](decisions/stack.md)): server/ and shared/ are in
+  the image as TypeScript source, no Bun-only runtime APIs are used.
+  A Node image with `@hono/node-server` would be a deployment rework, not a
+  code rework.
