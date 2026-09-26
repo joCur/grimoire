@@ -41,6 +41,8 @@ deviation requires a changed or new file.
   building our own.
 - [language.md](language.md) — the repository is written in English; German
   only in the German UI catalog; the scout rule.
+- [testing.md](testing.md) — tests never depend on UI text; they use roles,
+  test ids or catalog keys and assert on behavior and data.
 - [sqlite.md](sqlite.md) — one SQLite database is the source of truth;
   Markdown bodies, empty start, migrations.
 - [constraints.md](constraints.md) — the database enforces references and

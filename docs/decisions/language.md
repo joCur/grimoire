@@ -9,8 +9,8 @@ example campaign in `fixtures/`, and tests.
 
 German exists in exactly one place: the German UI catalog in
 `app/src/i18n/`, which is the German language of the product. Tests do not
-assert against German UI strings; they run against the English UI or refer
-to catalog keys.
+depend on UI text at all (`decisions/testing`), so the language of the UI
+never matters to them.
 
 German anywhere else is a violation of this rule, not an exception. It is
 removed by the scout rule: whoever touches a file for another reason
@@ -26,16 +26,12 @@ The product stays bilingual through the catalog (`decisions/i18n`); the
 repository language does not decide the UI language, so the catalog is the
 only place where German belongs.
 
-A test that asserts a German sentence couples itself to one translation of
-the product; asserting the English UI or a catalog key tests the behavior
-without pinning the wording of a second language.
-
 Converting touched files whole, instead of in a dedicated sweep, spreads the
 cost over work that reviews the file anyway and avoids mixed-language files.
 
 ## Consequences
 
 - German outside the German catalog, whether a comment, a heading, a test
-  name, a test assertion or fixture content, is a review finding.
+  name or fixture content, is a review finding.
 - UI labels are described in English in code and docs; the German wording
   lives only in the catalog.
