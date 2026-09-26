@@ -1,6 +1,6 @@
 // The threads: list, read, create, write and delete.
 //
-// A THREAD IS ITS OWN RESOURCE (ADR #31): `…/threads` and `…/threads/:id`,
+// A THREAD IS ITS OWN RESOURCE (decisions/resources): `…/threads` and `…/threads/:id`,
 // answering the `Thread` type — `{ id, chapter, text, done, rev }`. It lies
 // flat under its campaign, and its chapter is a field: no thread write reads
 // or moves the chapter's text or its `rev`, so a thread adopted in the review

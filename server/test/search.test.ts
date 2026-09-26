@@ -34,7 +34,7 @@ async function search(q: string): Promise<SearchResult[]> {
   return body.results;
 }
 
-/** Write one npc on its own resource (ADR #31) — its fields flat. */
+/** Write one npc on its own resource (decisions/resources) — its fields flat. */
 async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Response> {
   const read = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
   const { rev } = (await read.json()) as { rev: number };
@@ -143,18 +143,18 @@ describe("reference queries", () => {
       id: "jorna",
       title: "Hafenmeisterin Jorna",
     });
-    // An npc is its own resource (ADR #31): the hit names it by kind and id.
+    // An npc is its own resource (decisions/resources): the hit names it by kind and id.
     expect(Object.hasOwn(results[0]!, "path")).toBe(false);
     // the scene that has her in `npcs:` and in its prose is found too, below her
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
 
   test("'leucht' finds the chapter, the location and the campaign (prefix)", async () => {
-    // Nobody types "Leuchtturm" in full into ⌘K — this is the property that
-    // replaced Fuse's fuzziness.
+    // Nobody types "Leuchtturm" in full into ⌘K — prefix matching is what
+    // makes a partial word enough.
     const results = await search("leucht");
     const byKind = new Map(results.map((r) => [r.kind, r]));
-    // Every entity is its own resource (ADR #31): a hit names its kind and id
+    // Every entity is its own resource (decisions/resources): a hit names its kind and id
     // and carries no address.
     expect(byKind.get("chapter")).toMatchObject({
       id: "01-salzhafen",
@@ -197,7 +197,7 @@ describe("reference queries", () => {
   });
 
   test("glossary terms are indexed too: 'lighthouse keeper'", async () => {
-    // A glossary term is its own entity (ADR #31), so a hit names it by its
+    // A glossary term is its own entity (decisions/resources), so a hit names it by its
     // kind and its id like every other hit; the app opens the glossary page.
     const results = await search("lighthouse keeper");
     const entry = results.find((r) => r.kind === "glossary-term");
@@ -213,9 +213,8 @@ describe("reference queries", () => {
 
 describe("the index follows every write", () => {
   test("a body written through the scene PATCH is searchable immediately", async () => {
-    // The guarantee that replaced invalidateCampaign(): the write and the
-    // index row are one transaction, so there is no window in which the DM
-    // cannot find what they just typed.
+    // The write and the index row are one transaction, so there is no window
+    // in which the DM cannot find what they just typed.
     expect(await search("nachtwache")).toEqual([]);
 
     const entry = await readScene("lighthouse-arrival");
@@ -279,9 +278,9 @@ describe("GET /api/campaigns/:campaign/version", () => {
   }
 
   test("polling alone never bumps; a write does (in the same transaction)", async () => {
-    // The counter replaced the watcher DECISIONS #9 describes: with the
-    // database as the only truth there is no external editor left to watch,
-    // so the version is bumped BY the write instead of by a watch event.
+    // The version counter of decisions/polling: with the database as the only
+    // truth there is no external editor to watch, so the version is bumped BY
+    // the write.
     const before = await version();
     expect(await version()).toBe(before);
 

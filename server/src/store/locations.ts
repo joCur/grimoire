@@ -1,9 +1,9 @@
 // Locations: the location resource read, listed, written, created and taken
 // over from a proposal — all of it typed by the location's one zod schema
-// (ADR #31, @grimoire/shared/location). A row renders into a `Location`, and
+// (decisions/resources, @grimoire/shared/location). A row renders into a `Location`, and
 // a `LocationPatch` or a `LocationProposal` writes into a row.
 //
-// A location is the group a scene hangs in (ADR #17), so its id is a
+// A location is the group a scene hangs in (decisions/scene-order), so its id is a
 // reference key long before the location holds anything. Creating one
 // therefore fills a location the DM created and left empty rather than
 // colliding with it — the same rule an npc follows (./npcs.ts), decided over
@@ -101,7 +101,7 @@ export function readLocationPatch(raw: unknown): LocationPatch {
 
 /**
  * PATCH /api/campaigns/:campaign/locations/:id — THE write of one location
- * (ADR #23): any subset of its fields in one row update against one `rev`.
+ * (decisions/writes): any subset of its fields in one row update against one `rev`.
  *
  * `jobId` discards the generator job the write came from — an accepted
  * augment proposal — in the SAME transaction. A stale id matches nothing and
@@ -132,7 +132,7 @@ export async function patchLocation(
  * one. `force` replaces the guard by the row's current rev — the DM's answer
  * to the conflict dialog, which writes only what this request carries. A
  * `chapter` has to name a chapter that exists (400 otherwise), and the id
- * never changes (ADR #21): a patch may echo it, never alter it. A patch that
+ * never changes (decisions/constraints): a patch may echo it, never alter it. A patch that
  * names no field is a 400 `nothing_to_write`.
  */
 export function patchLocationIn(

@@ -1,5 +1,5 @@
 // A GENERATOR JOB — one run of the generator and the DM's review of what it
-// proposed — its one zod schema and the forms derived from it (ADR #31).
+// proposed — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `generatorJobSchema` is the job as `GET /api/campaigns/:c/generator-jobs/:id`
 // answers it. The TypeScript type, the POST that starts a run, the PATCH that
@@ -319,7 +319,7 @@ export type GeneratorJobReview = z.infer<typeof generatorJobReviewSchema>;
 
 /**
  * What the DM may change about a proposed scene while reviewing it: any of
- * its fields but the id, which is what the change is keyed by (ADR #21).
+ * its fields but the id, which is what the change is keyed by (decisions/constraints).
  */
 export const sceneEditSchema = sceneChangeSchema.omit({ id: true });
 

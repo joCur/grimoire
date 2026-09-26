@@ -90,7 +90,7 @@ export function refTags(tx: GrimoireDb, campaign: string, sceneId: string): stri
 // line the DM turns into an npc with a click goes through the npc's own
 // (./npcs.ts `createNpc`) —, and accepting a generator proposal — including
 // `ensureChapterRow` inside that accept (./chapters.ts), which writes the
-// chapter the run itself decided on (ADR #18). Nowhere else.
+// chapter the run itself decided on (decisions/scene-order). Nowhere else.
 //
 // A `[[slug]]` in a body is not a reference in this sense. It is text, it
 // stays text, and an unknown one renders as exactly what the DM typed.

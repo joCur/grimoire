@@ -41,7 +41,7 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  *               A proposal that is already written has nothing left to do (a
  *               double click, a second tab) and is skipped.
  *               A SCENE CARRIES WHAT IT NAMES. A scene cannot be written
- *               while its `npcs`/`location` name nothing (ADR #19), so a
+ *               while its `npcs`/`location` name nothing (decisions/constraints), so a
  *               selected scene pulls in the run's own npcs and locations for
  *               those ids — every one that is not REJECTED, accepted or
  *               still undecided. Accepting the scene is the decision that
@@ -51,7 +51,7 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  *               (`writeGenerated`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
  *   placement   a scene of a pipelined run goes to the run's start plus its
- *               outline number (ADR #27), so the run keeps its outline order
+ *               outline number (decisions/scene-order), so the run keeps its outline order
  *               in the chapter however many calls accept it and in whatever
  *               order. The start is the chapter's end at the FIRST scene
  *               accept, taken in that transaction and stored on the job in
@@ -192,7 +192,7 @@ export async function acceptJobParts(
    * order — the dramaturgical sequence the outline step decided. A scene of
    * a pipelined run is placed by its outline number (`placeScene` below); a
    * scene without one goes to the end of its chapter, and then the write
-   * order IS the order the scenes end up in (ADR #27). Either way the chapter
+   * order IS the order the scenes end up in (decisions/scene-order). Either way the chapter
    * does not depend on the order the review happened to name its scenes in.
    *
    * The npcs and locations a selected scene carries along are written ahead

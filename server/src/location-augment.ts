@@ -1,5 +1,5 @@
 // Augmenting a LOCATION: the generator pointed at a location that already
-// exists, on the location's own resource (ADR #31) —
+// exists, on the location's own resource (decisions/resources) —
 // `POST …/locations/:id/augment` starts the run and
 // `POST …/locations/:id/augment/apply` writes what the DM took.
 //
@@ -74,7 +74,7 @@ export async function locationAugmentSystemPrompt(): Promise<string> {
  * Mechanical validation of one raw reply against the location it is about.
  * Returns the PROPOSAL, or the error list for the correction turn.
  *
- * The id stays (ADR #21), only known callouts, and every `[[id]]` the
+ * The id stays (decisions/constraints), only known callouts, and every `[[id]]` the
  * proposal ADDS names something of the campaign — one the stored body
  * already carries is the DM's, and the augmentation rule tells the model to
  * keep it. A location has no `status`: a reply that names one had it dropped

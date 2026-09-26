@@ -1,4 +1,4 @@
-// A CHAPTER — its one zod schema and the forms derived from it (ADR #31).
+// A CHAPTER — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `chapterSchema` is the chapter as `GET /api/campaigns/:c/chapters/:id`
 // answers it. The TypeScript type, the PATCH and the POST the resource
@@ -7,7 +7,7 @@
 // chapter is one line in the schema and one in its form fields.
 //
 // What a chapter says about its scenes — their order — is not a field of the
-// chapter: it has its own endpoint and its own guard (ADR #27). Its threads
+// chapter: it has its own endpoint and its own guard (decisions/scene-order). Its threads
 // are an entity of their own (./thread.ts), each naming its chapter.
 
 import { z } from "zod";
@@ -17,7 +17,7 @@ import { z } from "zod";
  * acts on — the session view opens the active chapter —, and there is at
  * most one per campaign: the write that makes a chapter active puts the one
  * that was active back to `planned` in the same transaction. A CHECK
- * constraint holds the column to these three (ADR #25).
+ * constraint holds the column to these three (decisions/constraints).
  */
 export const CHAPTER_STATUSES = ["planned", "active", "done"] as const;
 export type ChapterStatus = (typeof CHAPTER_STATUSES)[number];

@@ -1,4 +1,4 @@
-// Augmenting a location on its own resource (ADR #31):
+// Augmenting a location on its own resource (decisions/resources):
 // `POST …/locations/:id/augment` starts the run, the job carries the
 // location as read and as proposed, and `POST …/locations/:id/augment/apply`
 // writes what the DM took.

@@ -1,4 +1,4 @@
-// The reply of a location call (ADR #31): every field of the location beside
+// The reply of a location call (decisions/resources): every field of the location beside
 // the model's `warnings`, read by the very reply schema the provider
 // enforced.
 

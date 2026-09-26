@@ -1,6 +1,6 @@
 // The ideas: list, read, create and tick off.
 //
-// AN IDEA IS ITS OWN RESOURCE (ADR #31): `…/ideas` and `…/ideas/:id`,
+// AN IDEA IS ITS OWN RESOURCE (decisions/resources): `…/ideas` and `…/ideas/:id`,
 // answering the `Idea` type — `{ id, text, done, rev }`. An idea is written
 // once; the one change after that is ticking it off, a PATCH of its `done`.
 

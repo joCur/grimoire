@@ -2,7 +2,7 @@
 // location.
 //
 // A domain module and its neighbours read one definition of these rows here.
-// Each entity renders itself in its own domain module (ADR #31:
+// Each entity renders itself in its own domain module (decisions/resources:
 // ./campaigns.ts, ./chapters.ts, ./scenes.ts, ./npcs.ts, ./locations.ts).
 
 // --- row shapes (the columns the renderer needs) ----------------------------

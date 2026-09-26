@@ -6,7 +6,7 @@
 // /api (app/vite.config.ts), so server.ts mounts these routes only when it
 // is the process entrypoint AND the dist directory exists.
 //
-// Runtime-neutral by design (DECISIONS #5/#7): node:fs + node:stream only,
+// Runtime-neutral by design (decisions/stack): node:fs + node:stream only,
 // deliberately NOT hono/bun's serveStatic — the same code serves the app on
 // Bun and on Node via @hono/node-server.
 //

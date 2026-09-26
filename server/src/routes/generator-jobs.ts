@@ -1,7 +1,7 @@
 // The generator jobs: list, start, read, review and accept, retry a part,
 // discard.
 //
-// A GENERATOR JOB IS ITS OWN RESOURCE (ADR #31): `…/generator-jobs` and
+// A GENERATOR JOB IS ITS OWN RESOURCE (decisions/resources): `…/generator-jobs` and
 // `…/generator-jobs/:id`, answering the `GeneratorJob` type. A campaign has at
 // most one job, whatever its kind. The parts of a scene run are its children:
 // read embedded in the job, and retried on their own resource,

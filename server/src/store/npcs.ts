@@ -1,5 +1,5 @@
 // Npcs: the npc resource read, listed, written, created and taken over from a
-// proposal — all of it typed by the npc's one zod schema (ADR #31,
+// proposal — all of it typed by the npc's one zod schema (decisions/resources,
 // @grimoire/shared/npc). A row renders into an `Npc`, and an `NpcPatch` or an
 // `NpcProposal` writes into a row.
 //
@@ -47,7 +47,7 @@ export const NPC_DEFAULT_STATUS = "unknown";
  * display-name rule as everywhere —, a column that holds nothing is a field
  * the npc does not carry, and an empty `quickstats` set is absent. The body
  * travels exactly as it is stored: nothing about an npc is derived from its
- * text (ADR #29).
+ * text (decisions/data-shape).
  */
 export function renderNpc(row: NpcRow): Npc {
   const quickstats = unpackJson(row.quickstats) as NonNullable<Npc["quickstats"]>;
@@ -145,7 +145,7 @@ export async function listNpcs(campaign: string): Promise<Npc[]> {
  * `force` and any subset of the fields, `body` among them — a key that is
  * none of these, or a value of the wrong shape, is a 400 that names it. A
  * `status` outside the four is answered first, with the code the app has a
- * sentence for (`status_not_allowed`, ADR #25).
+ * sentence for (`status_not_allowed`, decisions/constraints).
  */
 export function readNpcPatch(raw: unknown): NpcPatch {
   if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
@@ -155,7 +155,7 @@ export function readNpcPatch(raw: unknown): NpcPatch {
 }
 
 /**
- * PATCH /api/campaigns/:campaign/npcs/:id — THE write of one npc (ADR #23):
+ * PATCH /api/campaigns/:campaign/npcs/:id — THE write of one npc (decisions/writes):
  * any subset of its fields in one row update against one `rev`.
  *
  * `jobId` discards the generator job the write came from — an accepted
@@ -187,7 +187,7 @@ export async function patchNpc(
  * one. `force` replaces the guard by the row's current rev — the DM's answer
  * to the conflict dialog, which writes only what this request carries. A
  * `chapter` has to name a chapter that exists (400 otherwise), and the id
- * never changes (ADR #21): a patch may echo it, never alter it. A patch that
+ * never changes (decisions/constraints): a patch may echo it, never alter it. A patch that
  * names no field is a 400 `nothing_to_write`.
  */
 export function patchNpcIn(tx: GrimoireDb, campaign: string, id: string, patch: NpcPatch): Npc {

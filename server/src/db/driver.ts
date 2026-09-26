@@ -1,10 +1,9 @@
 // The SQLite driver layer — the ONE module that knows which runtime we are on.
 //
-// WHY THIS MODULE EXISTS (a deviation from the planning, recorded in ADR #13):
+// WHY THIS MODULE EXISTS (decisions/sqlite):
 //
-// The planning assumed `node:sqlite` is available on Bun as well ("Bun
-// ≥1.1.14, Node ≥22.5") and that drizzle ships a `drizzle-orm/node-sqlite`
-// driver. Neither holds:
+// `node:sqlite` is not available on every runtime the server runs on, and
+// drizzle ships no `drizzle-orm/node-sqlite` driver:
 //
 //   * Bun (verified on 1.3.14, the version CI pins) does NOT implement
 //     `node:sqlite` — `require("node:sqlite")` throws "No such built-in
@@ -13,16 +12,15 @@
 //     its sqlite drivers are `bun-sqlite`, `better-sqlite3`, `sqlite-proxy`
 //     and the mobile ones.
 //
-// So the portability rule of CLAUDE.md / DECISIONS #7 ("no Bun-only runtime
-// API without an entry in DECISIONS") is honoured the only way it can be:
+// So the portability rule of CLAUDE.md / decisions/stack ("no Bun-only runtime
+// API without an entry in docs/decisions/") is honoured the only way it can be:
 //
 //   * `node:sqlite` is the PRIMARY backend and the one the production Node
 //     path uses. The server therefore runs on plain Node with zero native
 //     dependencies.
 //   * `bun:sqlite` is the BUN-ONLY FALLBACK, used exactly when `node:sqlite`
-//     is missing. This is the documented Bun coupling ADR #13 registers —
-//     the same shape as the `better-sqlite3` fallback the planning had
-//     foreseen for the opposite direction.
+//     is missing. This is the documented Bun coupling decisions/sqlite
+//     registers.
 //
 // Both backends are wrapped into ONE interface (`SqliteClient`) with
 // identical parameter and row handling, and `test/db-smoke.test.ts` proves
@@ -235,6 +233,6 @@ export async function openSqlite(filename: string): Promise<SqliteClient> {
   }
   throw new Error(
     "No SQLite backend available: this runtime provides neither node:sqlite " +
-      "(Node >= 22.5) nor bun:sqlite. See ADR #13 in docs/DECISIONS.md.",
+      "(Node >= 22.5) nor bun:sqlite. See docs/decisions/sqlite.md.",
   );
 }

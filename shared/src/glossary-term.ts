@@ -1,5 +1,5 @@
 // A GLOSSARY TERM — how the campaign renders one term of the source material
-// — its one zod schema and the forms derived from it (ADR #31).
+// — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `glossaryTermSchema` is the term as
 // `GET /api/campaigns/:c/glossary-terms/:id` answers it. The TypeScript type,

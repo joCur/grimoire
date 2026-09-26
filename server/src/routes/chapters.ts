@@ -1,7 +1,7 @@
 // The chapters: list, read, create, write, and the order of a chapter's
 // scenes.
 //
-// A CHAPTER IS ITS OWN RESOURCE (ADR #31): `…/chapters` and `…/chapters/:id`,
+// A CHAPTER IS ITS OWN RESOURCE (decisions/resources): `…/chapters` and `…/chapters/:id`,
 // answering the `Chapter` type — every field of the chapter flat, `body`
 // among them, beside its `rev`. Which chapter is the active one is its
 // `status`: a write that makes a chapter `active` puts the one that held it
@@ -65,7 +65,7 @@ chapterRoutes.post("/campaigns/:campaign/chapters", async (c) => {
 
 // PATCH /api/campaigns/:campaign/chapters/:id
 //   { rev, force?, id?, title?, status?, body? } -> Chapter
-// THE write of one chapter (ADR #23): any subset of its fields — `body` is
+// THE write of one chapter (decisions/writes): any subset of its fields — `body` is
 // one of them — in ONE row update against ONE `rev`, checked against the
 // chapter's schema. `null` clears the status; a key that is not a field of a
 // chapter, or a value of the wrong shape, is a 400 that names it, and a
@@ -97,7 +97,7 @@ chapterRoutes.patch("/campaigns/:campaign/chapters/:id", async (c) => {
 //
 // `rev` is the ORDER's own guard token (`ChapterNode.sceneOrderRev`), and the
 // answer carries the fresh one — not the chapter's `rev`, which guards its
-// fields and does not move here (ADR #27). A stale one is 409 { code:
+// fields and does not move here (decisions/scene-order). A stale one is 409 { code:
 // "rev_conflict", rev } and writes nothing. No chapter rides along — the
 // order is none of its fields, and the overview reloads the tree.
 //

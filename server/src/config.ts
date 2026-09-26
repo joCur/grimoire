@@ -1,7 +1,7 @@
 // Server configuration.
 //
-// The database is the only data source the server knows (ADR #13). There is no
-// campaign-root setting any more: the markdown importer survives ONLY as the
+// The database is the only data source the server knows (decisions/sqlite).
+// There is no campaign-root setting: the markdown importer exists ONLY as the
 // dev/E2E tool `grimoire seed` (src/cli.ts), which takes its source directory
 // as an argument. A fresh instance therefore starts EMPTY — the cold start is
 // the normal case, not a boot-time import.
@@ -15,7 +15,7 @@ const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "
 /**
  * Directory that holds the SQLite database (`grimoire.db` plus its `-wal` and
  * `-shm` companions) — the Docker volume mount point (docs/DEPLOYMENT.md,
- * ADR #13). Defaults to `./data` next to the server package so `bun run dev`
+ * decisions/sqlite). Defaults to `./data` next to the server package so `bun run dev`
  * and `bun test` work from the repo root as well as from server/.
  * GRIMOIRE_DATA overrides it with normal CLI semantics (relative to cwd).
  *

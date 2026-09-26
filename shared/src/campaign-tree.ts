@@ -11,7 +11,7 @@ import type { SessionSummary } from "./session";
 
 /**
  * A scene in the campaign tree. No address: a scene is its own resource,
- * `…/scenes/:id` (ADR #31).
+ * `…/scenes/:id` (decisions/resources).
  */
 export interface SceneSummary {
   id: string;
@@ -61,7 +61,7 @@ export interface ChapterNode {
 
 /**
  * An npc in the campaign tree. No address: an npc is its own resource,
- * `…/npcs/:id` (ADR #31).
+ * `…/npcs/:id` (decisions/resources).
  */
 export interface NpcSummary {
   id: string;
@@ -73,7 +73,7 @@ export interface NpcSummary {
 
 /**
  * A location in the campaign tree. No address: a location is its own
- * resource, `…/locations/:id` (ADR #31).
+ * resource, `…/locations/:id` (decisions/resources).
  */
 export interface LocationSummary {
   id: string;

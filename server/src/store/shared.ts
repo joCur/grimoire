@@ -22,7 +22,7 @@ import { ApiError } from "../api-error";
 // --- a request an entity's schema refuses -------------------------------------
 
 /**
- * Parse a request body with an entity's zod schema (ADR #31) — or answer 400.
+ * Parse a request body with an entity's zod schema (decisions/resources) — or answer 400.
  * The message names every issue with its field (`name: Invalid input: …`, an
  * unknown key by its name), in English like every technical fallback.
  */
@@ -62,7 +62,7 @@ export function nextPos(rows: Array<{ pos: number }>): number {
  *
  * These are the fields the format's degrade rule does not extend to on the
  * API. A value outside the list is still RENDERED verbatim wherever an older
- * database holds one, but the columns themselves are closed (ADR #25), so a
+ * database holds one, but the columns themselves are closed (decisions/constraints), so a
  * foreign value arriving on the wire can only be a typo — and the honest
  * answer to a typo is the 400 with a code the app has a sentence for, not
  * SQLite's "CHECK constraint failed" escaping as a 500.
@@ -206,7 +206,7 @@ export function assertSafeChapterId(chapter: string): void {
  * label: the sentence the DM reads is built by the app from its own catalog in
  * the UI language. The `error` text here is the English technical
  * fallback that curl, the log and an unknown-code client get. What is in the
- * way is named by `kind` and `id`: each entity is its own resource (ADR #31).
+ * way is named by `kind` and `id`: each entity is its own resource (decisions/resources).
  */
 export function slugTaken(kind: ErrorKind, id: string, suggestion: string): ApiError {
   return new ApiError(409, `${kind} "${id}" already exists — suggestion: "${suggestion}"`, {
@@ -230,7 +230,7 @@ export function slugTaken(kind: ErrorKind, id: string, suggestion: string): ApiE
  *     think of a different name".
  *   - the create dialog's id field, where the DM sets the id instead of
  *     accepting the one the name yields. This is the only moment an id is
- *     chosen (ADR #21 — no endpoint ever changes one).
+ *     chosen (decisions/constraints — no endpoint ever changes one).
  *
  * Either way it is taken verbatim — no derivation, no fallback — and has to be
  * a slug, because it lands in the format's one permanent field. A typed id

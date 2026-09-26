@@ -13,7 +13,7 @@
 //     click sends is honoured verbatim;
 //   * an EMPTY npc or location — one the DM created and did not fill in — is
 //     FILLED, not collided with;
-//   * a scene needs an EXISTING chapter (ADR #19);
+//   * a scene needs an EXISTING chapter (decisions/constraints);
 //   * a `suggestion` names only ids nobody holds, empty ones included:
 //     filling one of those is the DM's own decision about that id.
 
@@ -245,7 +245,7 @@ describe("the per-campaign creates", () => {
     expect(scene.type).toBe("planned");
     expect(scene.chapter).toBe("01-salzhafen");
     expect(scene.body).toBe("");
-    // A scene is its own resource (ADR #31): no address.
+    // A scene is its own resource (decisions/resources): no address.
     expect(Object.hasOwn(scene, "path")).toBe(false);
 
     // …and the chapter overview sees it (the tree is what every list reads).
@@ -287,7 +287,7 @@ describe("the per-campaign creates", () => {
     const body = await errorBody(res);
     expect(body.suggestion).toBe("holm-2");
     expect(body).toMatchObject({ kind: "npc", id: "holm" });
-    // An npc is its own resource (ADR #31): the 409 names it by kind and id.
+    // An npc is its own resource (decisions/resources): the 409 names it by kind and id.
     expect(Object.hasOwn(body, "path")).toBe(false);
   });
 

@@ -33,7 +33,7 @@ export async function jsonBody(
 
 /**
  * The `rev` of a guarded write. A MISSING rev has to be a 400 and never a
- * default, because a defaulted guard token is no guard at all (ADR #4).
+ * default, because a defaulted guard token is no guard at all (decisions/writes).
  */
 export function requireRev(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {

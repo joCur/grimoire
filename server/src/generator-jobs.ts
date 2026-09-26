@@ -1,4 +1,4 @@
-// The generator job (ADR #31, `GeneratorJob` in @grimoire/shared) — a
+// The generator job (decisions/resources, `GeneratorJob` in @grimoire/shared) — a
 // generation must not die with a browser-back gesture, which is what happens
 // when the run is one synchronous request and the result lives only in client
 // state.
@@ -19,7 +19,7 @@
 //     edited proposal survives the same way.
 //
 // THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
-// With the database as the single truth (ADR #13) the row is the obvious
+// With the database as the single truth (decisions/sqlite) the row is the obvious
 // home, and it prevents the loss the job model was built for: a deploy or a
 // container restart in the minute between a finished run and its accept
 // would otherwise throw the generation away.
@@ -1152,7 +1152,7 @@ export async function requireJob(campaign: string, jobId: string): Promise<Job> 
 
 /**
  * The 409 of a stale guard: `code: "rev_conflict"`, the current `rev` and the
- * job as it stands now under the name of its entity (ADR #31).
+ * job as it stands now under the name of its entity (decisions/resources).
  */
 export function jobConflict(job: Job): ApiError {
   return revConflict(job.rev, "the generator job changed", {

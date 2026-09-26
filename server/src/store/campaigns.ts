@@ -1,7 +1,7 @@
 // Campaigns: the campaign resource, and the row every other read and write
 // starts from.
 //
-// The campaign is its own resource with its own type (ADR #31,
+// The campaign is its own resource with its own type (decisions/resources,
 // @grimoire/shared/campaign): read, written, created and seeded here, typed
 // by its one zod schema. Beside it stand the lookup that turns a campaign id
 // into a row (404 for an unknown one), the list the app opens with, and
@@ -57,7 +57,7 @@ export function campaignRow(db: GrimoireDb, id: string): CampaignRow | undefined
     | undefined;
 }
 
-/** Current version counter of a campaign (`GET /version`, DECISIONS #9). */
+/** Current version counter of a campaign (`GET /version`, decisions/polling). */
 export async function campaignVersion(id: string): Promise<number> {
   return (await requireCampaign(id)).version;
 }
@@ -123,7 +123,7 @@ function storedName(name: string, id: string): string {
 }
 
 /**
- * PATCH /api/campaigns/:campaign — THE write of the campaign (ADR #23): any
+ * PATCH /api/campaigns/:campaign — THE write of the campaign (decisions/writes): any
  * subset of its fields, checked against the campaign's schema — a key that
  * is none of them, or a value of the wrong shape, is a 400 that names it —
  * in ONE row update against ONE `rev`.
@@ -131,7 +131,7 @@ function storedName(name: string, id: string): string {
  * Only the fields the patch names are touched; `null` clears the
  * description, and the glossary intro is stored like the body. `force` replaces the guard by the row's current rev — the DM's
  * answer to the conflict dialog, which writes only what this request
- * carries. The id may be echoed, never changed (ADR #21). A patch that names
+ * carries. The id may be echoed, never changed (decisions/constraints). A patch that names
  * no field is a 400 `nothing_to_write`.
  */
 export async function patchCampaign(campaign: string, raw: unknown): Promise<Campaign> {

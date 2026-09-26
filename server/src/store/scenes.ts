@@ -1,12 +1,12 @@
 // Scenes: the scene resource read, listed, written, created and taken over
-// from a proposal — all of it typed by the scene's one zod schema (ADR #31,
+// from a proposal — all of it typed by the scene's one zod schema (decisions/resources,
 // @grimoire/shared/scene). A row and its reference rows render into a
 // `Scene`, and a `ScenePatch` or a `SceneProposal` writes into them.
 //
 // A scene lies flat under its campaign: its id is unique per campaign, and
 // its chapter is a field that may change but never be cleared. Where a scene
 // stands in its chapter is the chapter's scene order (./chapters.ts), which
-// has its own write and its own guard (ADR #27): creating a scene appends it
+// has its own write and its own guard (decisions/scene-order): creating a scene appends it
 // to its chapter, moving it to another chapter appends it there, and nothing
 // else here touches `pos`.
 
@@ -64,13 +64,13 @@ import {
  * the id — the same display-name rule as everywhere — and a column that
  * holds nothing is a field the scene does not carry. The body travels
  * exactly as it is stored: nothing about a scene is derived from its text
- * (ADR #29).
+ * (decisions/data-shape).
  */
 export function renderScene(row: SceneRow, npcs: string[], tags: string[]): Scene {
   return {
     id: row.id,
     title: row.title === "" ? row.id : row.title,
-    // Both columns are CHECK constraints over the shared lists (ADR #25), so
+    // Both columns are CHECK constraints over the shared lists (decisions/constraints), so
     // the stored text is one of their values — the narrowing the row type
     // cannot express.
     type: row.type as SceneType,
@@ -194,7 +194,7 @@ function replaceSceneRefs(
  * none of these, or a value of the wrong shape, is a 400 that names it. Three
  * refusals come first, each with the code the app has a sentence for: a
  * `status` outside the four (`status_not_allowed`), a `type` outside the two
- * (`scene_type_not_allowed`, ADR #25), and a cleared `chapter`
+ * (`scene_type_not_allowed`, decisions/constraints), and a cleared `chapter`
  * (`chapter_required`).
  */
 export function readScenePatch(raw: unknown): ScenePatch {
@@ -212,7 +212,7 @@ export function readScenePatch(raw: unknown): ScenePatch {
 
 /**
  * PATCH /api/campaigns/:campaign/scenes/:id — THE write of one scene
- * (ADR #23): any subset of its fields in one row update against one `rev`.
+ * (decisions/writes): any subset of its fields in one row update against one `rev`.
  *
  * `jobId` discards the generator job the write came from — an accepted
  * augment proposal — in the SAME transaction. A stale id matches nothing and
@@ -243,7 +243,7 @@ export async function patchScene(
  * one. `force` replaces the guard by the row's current rev — the DM's answer
  * to the conflict dialog, which writes only what this request carries. Every
  * reference has to name something that exists (400 otherwise), checked
- * before anything is written, and the id never changes (ADR #21): a patch may
+ * before anything is written, and the id never changes (decisions/constraints): a patch may
  * echo it, never alter it. A patch that names no field is a 400
  * `nothing_to_write`.
  *
@@ -252,7 +252,7 @@ export async function patchScene(
  * target chapter's order is the DM's — a scene arriving in the middle of it
  * would move without anybody saying where. Staying in the chapter leaves
  * `pos` untouched, so an ordinary save reshuffles nothing, and neither moves
- * the chapter's order guard (ADR #27).
+ * the chapter's order guard (decisions/scene-order).
  */
 export function patchSceneIn(
   tx: GrimoireDb,
@@ -380,7 +380,7 @@ export function insertSceneProposal(
  * The three rules every create endpoint follows are in store/shared.ts.
  *
  * The chapter is REQUIRED and has to exist (400 otherwise): a scene belongs
- * to a chapter, and a mention creates nothing (ADR #19). The scene holds its
+ * to a chapter, and a mention creates nothing (decisions/constraints). The scene holds its
  * title and nothing else, and it is appended to the END of its chapter
  * (`nextScenePos`): a new scene has no place of its own yet, and the DM moves
  * it where it belongs.

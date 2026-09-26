@@ -1,5 +1,5 @@
 // A PLAYED SCENE — one step of a session through the scenes of its chapter —
-// its one zod schema and the forms derived from it (ADR #31).
+// its one zod schema and the forms derived from it (decisions/resources).
 //
 // `playedSceneSchema` is the played scene as the session embeds it and as
 // `POST /api/campaigns/:c/sessions/:s/played-scenes` answers it. The

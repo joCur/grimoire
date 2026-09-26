@@ -1,4 +1,4 @@
-// The sessions of a case, through their own resources (ADR #31): the
+// The sessions of a case, through their own resources (decisions/resources): the
 // session under `…/sessions/:id` and its children under it. The session
 // cases and those of its pauses, log entries and played scenes share these.
 

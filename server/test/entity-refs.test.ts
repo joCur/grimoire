@@ -53,7 +53,7 @@ async function writeBody(url: string, body: string): Promise<void> {
   expect(res.status).toBe(200);
 }
 
-/** Write fields of an npc — its own resource, fields flat, `body` among them (ADR #31). */
+/** Write fields of an npc — its own resource, fields flat, `body` among them (decisions/resources). */
 async function patchNpc(id: string, fields: Record<string, unknown>): Promise<void> {
   const url = `/api/campaigns/beispiel/npcs/${id}`;
   const npc = (await (await app.request(url)).json()) as { rev: number };
@@ -65,7 +65,7 @@ async function patchNpc(id: string, fields: Record<string, unknown>): Promise<vo
   expect(res.status).toBe(200);
 }
 
-/** Write fields of a location — its own resource, fields flat (ADR #31). */
+/** Write fields of a location — its own resource, fields flat (decisions/resources). */
 async function patchLocation(id: string, fields: Record<string, unknown>): Promise<void> {
   const url = `/api/campaigns/beispiel/locations/${id}`;
   const location = (await (await app.request(url)).json()) as { rev: number };

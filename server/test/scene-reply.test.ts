@@ -1,4 +1,4 @@
-// The reply of a scene call (ADR #31): every field of the scene beside the
+// The reply of a scene call (decisions/resources): every field of the scene beside the
 // model's `warnings`, read by the very reply schema the provider enforced —
 // a NEW scene's with the status narrowed to `draft`, an existing scene's
 // with all four.

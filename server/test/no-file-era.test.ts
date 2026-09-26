@@ -1,12 +1,12 @@
-// The END-STATE check: nothing in the repo still works the way the storage
-// did before the database was the truth.
+// The END-STATE check: nothing in the repo treats an entry as a file — the
+// database is the truth.
 //
-// This is a test and not a review note because the file era left NAMES behind,
-// and a name that is still in the tree is an invitation to write a second one
-// like it. `parseMarkdown`, a `frontmatter` in a comment, an `extra` column, a
-// `/file` in an API path, a `Datei` where an entry is meant — each of them says
-// that an entry is a text with properties parsed out of it, which it has not
-// been since ADR #13, #23 and #24.
+// This is a test and not a written convention because a NAME in the tree is an
+// invitation to write a second one like it. `parseMarkdown`, a `frontmatter` in
+// a comment, an `extra` column, a `/file` in an API path, a `Datei` where an
+// entry is meant — each of them says that an entry is a text with properties
+// parsed out of it, which it is not (decisions/sqlite, decisions/writes,
+// decisions/generator).
 //
 // HOW IT READS: one rule per name, over `server/src`, `server/test`,
 // `shared/src`, `shared/test`, `app/src`, `generator/`, `fixtures/` and
@@ -141,7 +141,7 @@ const EXCEPTIONS: readonly Exception[] = [
   {
     phrase: "database file",
     rule: "file-word-for-an-entry",
-    reason: "`GRIMOIRE_DATA/grimoire.db`, the one file the store opens (ADR #13)",
+    reason: "`GRIMOIRE_DATA/grimoire.db`, the one file the store opens (decisions/sqlite)",
   },
   {
     phrase: "prompt file",
@@ -186,14 +186,14 @@ const EXCEPTIONS: readonly Exception[] = [
 ];
 
 /**
- * Every name the file era left behind. The ids are referenced by the
+ * Every name that treats an entry as a file. The ids are referenced by the
  * exceptions above; the `meaning` is what a failure prints.
  */
 const RULES: readonly Rule[] = [
   {
     id: "parse-markdown",
     pattern: /\bparseMarkdown\b/,
-    meaning: "nothing parses properties out of a text any more (ADR #24)",
+    meaning: "nothing parses properties out of a text any more (decisions/generator)",
   },
   {
     id: "render-raw",
@@ -269,11 +269,8 @@ const RULES: readonly Rule[] = [
     meaning: "the API addresses ENTRIES — `/entries/<address>`, never a file",
   },
   {
-    // The one rule that is AHEAD of the tree: the app still carries
-    // `fmString`, `fmStringArray`, `fmQuickstats` and a `fm-` id prefix in its
-    // properties helpers, and the rename happens on the app's side. So this
-    // case fails until the two halves meet — encoded now, because a rule
-    // written after the rename is a rule nobody asked for.
+    // `fm` abbreviates frontmatter: a helper or id prefix named with it reads
+    // an entry's properties as the head of a file.
     id: "fm-prefix",
     pattern: /\bfm(?=[A-Z_]|\b)/,
     meaning: "`fm` was the frontmatter; the half is called `properties`",
@@ -300,7 +297,7 @@ const RULES: readonly Rule[] = [
   },
   {
     // The English word, over the WHOLE repo. Nothing reads or writes an entry
-    // on disk any more, so "file" is either a real file — a module, a spec, a
+    // on disk, so "file" is either a real file — a module, a spec, a
     // fixture, the database, a prompt asset, the app build, each named by one
     // of the phrase exceptions above — or an entry called by the wrong name.
     id: "file-word-for-an-entry",
@@ -308,11 +305,11 @@ const RULES: readonly Rule[] = [
     meaning: "an entry has properties, a body and an address — it is not a file",
   },
   {
-    // The status degrade the app used to carry: `status` is a CHECK constraint
-    // of its column, so the database cannot hold anything else (ADR #25) and
-    // a foreign value cannot reach a renderer at all. A fallback
-    // for one would be dead code that reads like a rule, and it would come
-    // back with these words — they are the ones the removed branches used.
+    // A status degrade in the app: `status` is a CHECK constraint of its
+    // column, so the database cannot hold anything else
+    // (decisions/constraints) and a foreign value cannot reach a renderer at
+    // all. A fallback for one would be dead code that reads like a rule, and
+    // these are the words it would come with.
     id: "status-degrade-fallback",
     pattern: /unknown status value|raw label/i,
     meaning: "status is an enum — a value from outside the list has no fallback to render",
@@ -320,17 +317,17 @@ const RULES: readonly Rule[] = [
   },
   {
     // A session, the ideas and the glossary terms have no entry address:
-    // each answers on its own endpoints (ADR #31), so these addresses name
-    // nothing and answer 404 like any other unknown one. A reader that still
-    // reaches for one is reaching for the parse that is gone.
+    // each answers on its own endpoints (decisions/resources), so these
+    // addresses name nothing and answer 404 like any other unknown one. A
+    // reader that reaches for one is reaching for a parse that does not exist.
     id: "list-entry-address",
     pattern: /entries\/(?:glossary|inbox|sessions)/,
-    meaning: "no entry address — every entity answers its own endpoint (ADR #31)",
+    meaning: "no entry address — every entity answers its own endpoint (decisions/resources)",
   },
   {
-    // The 400 that refused a `body` for one of those three addresses. With
-    // the address gone there is nothing to refuse a body FOR, so the code has
-    // no sender. It STAYS in the append-only code list and in the message
+    // The 400 that refuses a `body` for one of those three addresses. Without
+    // the address there is nothing to refuse a body FOR, so the code has no
+    // sender. It STAYS in the append-only code list and in the message
     // catalog (which is a Record over that whole list) — what is forbidden is
     // SENDING it, so the pattern looks for the shape a refusal has: the code
     // as the `code` field of an error body.
@@ -339,9 +336,8 @@ const RULES: readonly Rule[] = [
     meaning: "no address carries a list any more, so no write can be refused one",
   },
   {
-    // `raw` held the markdown line beside a log or inbox row — two truths
-    // about one note, and the line was the one the reader used. The column
-    // is gone; a reference to it anywhere — the store, a seed fixture's
+    // A `raw` markdown line beside a log or inbox row would be two truths
+    // about one note. There is no such column; a reference to it anywhere — the store, a seed fixture's
     // shape, an E2E helper — would be the parse coming back.
     //
     // `raw` is also an ordinary name for an unparsed model reply or an
@@ -366,13 +362,13 @@ const RULES: readonly Rule[] = [
     id: "campaigns-dir",
     pattern:
       /(?:path\.(?:join|resolve)|readdirSync|readFileSync|writeFileSync|existsSync|mkdirSync|GRIMOIRE_DATA|dataDir)[^\n]*campaigns/,
-    meaning: "`campaigns/` is not a data directory — the database is the only storage (ADR #13)",
+    meaning: "`campaigns/` is not a data directory — the database is the only storage (decisions/sqlite)",
   },
   {
-    // The app's own parser: it read a session's log back out of the rendered
-    // text, so a note had to satisfy a grammar to keep its time and its
-    // scene. The session endpoints answer rows (ADR #26), so there is nothing
-    // left to parse and nothing left to lose in the round trip.
+    // A parser that reads a session's log back out of a rendered text would
+    // make a note satisfy a grammar to keep its time and its scene. The
+    // session endpoints answer rows (decisions/resources), so there is
+    // nothing to parse and nothing to lose in a round trip.
     id: "log-line-parser",
     pattern: /\bparseLogEntries\b/,
     meaning: "a session's log arrives as rows — nothing reads it back out of a text",
