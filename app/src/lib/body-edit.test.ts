@@ -1,4 +1,4 @@
-// The rules of the reading view's edit mode: whether there is something to
+// The rules of the reading view's text editor: whether there is something to
 // save, and what one save carries. The write itself is the kind's editing
 // session, so nothing here talks to the server.
 
@@ -22,20 +22,10 @@ describe("hasBodyChanges", () => {
 });
 
 describe("bodyEditorChange", () => {
-  test("only the halves that changed travel — an untouched text stays out", () => {
-    expect(bodyEditorChange("Text.\n", "Text.\n", {})).toEqual({});
-    expect(bodyEditorChange("Text.\n", "New.\n", {})).toEqual({ body: "New.\n" });
-    expect(bodyEditorChange("Text.\n", "Text.\n", { motivation: "Peace." })).toEqual({
-      fields: { motivation: "Peace." },
-    });
+  test("only a changed text travels — an untouched text stays out", () => {
+    expect(bodyEditorChange("Text.\n", "Text.\n")).toEqual({});
+    expect(bodyEditorChange("Text.\n", "New.\n")).toEqual({ body: "New.\n" });
     expect(hasBodyEditChange({})).toBe(false);
     expect(hasBodyEditChange({ body: "" })).toBe(true);
-  });
-
-  test("text and prose property together are ONE write; `null` clears the field", () => {
-    expect(bodyEditorChange("Old.\n", "New.\n", { motivation: null })).toEqual({
-      body: "New.\n",
-      fields: { motivation: null },
-    });
   });
 });

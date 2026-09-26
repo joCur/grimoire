@@ -1,7 +1,7 @@
-// "Ort anlegen" at the head of the location list — the only surface that
-// shows all locations, and one a phone reaches. The dialog asks for a name
-// (and, behind the pencil, the id); a created location opens its reading
-// view, where the dialog carries the rest of its fields.
+// The create-location action at the head of the location list — the only
+// surface that shows all locations, and one a phone reaches. The dialog asks
+// for a name (and, behind the pencil, the id); a created location opens its
+// reading view, where its edit mode carries the rest of its fields.
 
 import { useState } from "react";
 import { useNavigate } from "react-router";

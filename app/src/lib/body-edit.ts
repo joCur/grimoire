@@ -1,19 +1,17 @@
-// What the edit mode of a reading view saves — the rules it needs before any
-// write is involved.
+// What the text editor of a reading view saves — the rules it needs before
+// any write is involved.
 //
-// The surface edits a text and, beside it, the PROSE fields its caller puts
-// there — an npc's `motivation`, a location's `atmosphere` (decisions/data-shape). One
-// save carries what changed, and the caller's editing session turns it into
-// its own write. Every other field is deliberately not part of this surface:
-// the status control and the dialog own those, and a request that does not
-// name them leaves them untouched — a forced save included (decisions/writes).
+// The surface edits the text alone. One save carries the text when it
+// changed, and the caller's editing session turns it into its own write.
+// Every other field is deliberately not part of this surface: the status
+// control and the dialog own those, and a request that does not name them
+// leaves them untouched — a forced save included (decisions/writes).
 //
 // Everything in this module is pure, so the rules are unit-testable.
 
-/** One save of the edit surface: the text, and the change of the prose fields that moved. */
-export interface BodyEditChange<F extends object = Record<string, unknown>> {
+/** One save of the text editor: the text, when it changed. */
+export interface BodyEditChange {
   body?: string;
-  fields?: F;
 }
 
 /**
@@ -29,28 +27,15 @@ export function hasBodyChanges(original: string, draft: string): boolean {
 }
 
 /**
- * The one save of the edit surface: each part only when it CHANGED. The text
- * travels when it differs from the baseline, the prose fields as the change
- * of the ones that moved. An empty change means there is nothing to save.
- *
- * Only-what-changed is what keeps a forced save honest: it resends this change
- * on top of the stored row, so a part the DM did not touch must not be in it
- * — a text write must not reset a `motivation` somebody else just wrote.
+ * The one save of the text editor: the text only when it CHANGED. An empty
+ * change means there is nothing to save, and a forced save resends only what
+ * changed, so a field somebody else just wrote stays.
  */
-export function bodyEditorChange<F extends object>(
-  baseline: string,
-  body: string,
-  fieldsChange?: F,
-): BodyEditChange<F> {
-  return {
-    ...(hasBodyChanges(baseline, body) ? { body } : {}),
-    ...(fieldsChange !== undefined && Object.keys(fieldsChange).length > 0
-      ? { fields: fieldsChange }
-      : {}),
-  };
+export function bodyEditorChange(baseline: string, body: string): BodyEditChange {
+  return hasBodyChanges(baseline, body) ? { body } : {};
 }
 
 /** Does a change carry anything? */
-export function hasBodyEditChange(change: BodyEditChange<object>): boolean {
-  return change.body !== undefined || change.fields !== undefined;
+export function hasBodyEditChange(change: BodyEditChange): boolean {
+  return change.body !== undefined;
 }

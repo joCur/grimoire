@@ -361,23 +361,27 @@ The paths:
    chapter in outline order, even when they are accepted one by one and in
    reverse order — start value at the first acceptance plus the number in
    the outline (decisions/scene-order)
-7. Fields dialog (labeled "properties" in the UI) / edit modes of scene and
-   NPC / status control including the 409 conflict: the dialog over the
-   fields of a location or a chapter shows the conflict line with its two
-   actions — the reload action fetches the current values, the save-anyway
-   action writes only the dialog's fields (a concurrent text change
-   survives that). A scene and an NPC have no fields dialog: the scene's
-   edit mode on `/campaigns/:id/scenes/<id>` edits title, trigger
-   (contingency scenes only), status, the field chips (type, location, NPCs,
-   tags, handouts, chapter) and `body` together; the NPC's edit mode on
+7. Fields dialog (labeled "properties" in the UI) / edit modes of scene,
+   NPC and location / status control including the 409 conflict: the dialog
+   over the fields of a chapter — the only entity that still has one — shows
+   the conflict line with its two actions — the reload action fetches the
+   current values, the save-anyway action writes only the dialog's fields
+   (a concurrent text change survives that). A scene, an NPC and a location
+   have no fields dialog: the scene's edit mode on
+   `/campaigns/:id/scenes/<id>` edits title, trigger (contingency scenes
+   only), status, the field chips (type, location, NPCs, tags, handouts,
+   chapter) and `body` together; the NPC's edit mode on
    `/campaigns/:id/npcs/<id>` edits name, status, the field chips (quick
    stats, statblock, chapter), the collapsible profile (role, voice,
-   appearance, motivation — one line while collapsed) and `body` together.
-   A chip opens only its field — a popover on desktop, a bottom sheet on a
-   phone; at 390px the chips wrap, the first three stand and a sheet lists
-   the rest, the save actions sit at the bottom, no horizontal scroll.
-   Saving is ONE `PATCH …/scenes/<id>` or `PATCH …/npcs/<id>` carrying
-   only the changed fields plus `rev`. A 409 shows the same conflict line
+   appearance, motivation — one line while collapsed) and `body` together;
+   the location's edit mode on `/campaigns/:id/locations/<id>` edits name,
+   the field chips (chapter, Roll20 page), the collapsible atmosphere and
+   `body` together. A chip opens only its field — a popover on desktop, a
+   bottom sheet on a phone; at 390px the chips wrap, the first three stand
+   and a sheet lists the rest, the save actions sit at the bottom, no
+   horizontal scroll. Saving is ONE `PATCH …/scenes/<id>`,
+   `PATCH …/npcs/<id>` or `PATCH …/locations/<id>` carrying only the
+   changed fields plus `rev`. A 409 shows the same conflict line
    above the title or name: the reload action takes the stored row, the
    save-anyway action writes only the changed fields. Leaving with unsaved
    changes asks first. The status control of a reading view has no conflict
