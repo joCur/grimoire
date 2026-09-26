@@ -48,9 +48,8 @@ most recent session.
 The `id` is derived from the typed name on creation, by exactly one rule
 (`@grimoire/shared/slug`), and is fixed from then on: it is the reference
 key in URLs, links and `[[id]]` references and never changes afterwards
-([decisions/constraints](docs/decisions/constraints.md)). The fields dialog of a chapter shows it
-without offering a change; the edit modes of a scene, an NPC and a location
-have no id field at all.
+([decisions/constraints](docs/decisions/constraints.md)). The edit modes of
+a scene, an NPC, a location and a chapter have no id field at all.
 
 The chapter overview is one continuous list of a chapter's scenes in the
 **order the DM sets** ([decisions/scene-order](docs/decisions/scene-order.md)); the location appears by its name in the
@@ -172,6 +171,11 @@ creates its chapter as `planned` with the description from its outline as
 The chapter overview shows the text below the title, whole and rendered like
 any text, limited to a few lines and expandable; whether and which headings
 it has changes nothing about that ([decisions/data-shape](docs/decisions/data-shape.md)).
+
+In the app a chapter is edited in the edit mode of its reading view: title,
+status and `body` on one page, saved together as one write; the chapter
+overview's edit action opens it. Picking `active` there is part of that
+write, so the previously active chapter goes back to `planned` with it.
 
 The **threads** — the plot threads the chapter carries — are neither text
 nor a field of the chapter, but each is its own resource that names its

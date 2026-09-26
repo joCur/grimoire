@@ -8,20 +8,8 @@ import type { ReactNode } from "react";
 import { ActionGroup, Title } from "@/components/ArticleHeader";
 import { Markdown } from "@/markdown/Markdown";
 
-/**
- * `actions` is the header's quiet action slot, `body` replaces the rendered
- * text — edit mode puts its editor there and keeps the header standing above
- * it.
- */
-export function ChapterArticle({
-  chapter,
-  actions,
-  body,
-}: {
-  chapter: Chapter;
-  actions?: ReactNode;
-  body?: ReactNode;
-}) {
+/** `actions` is the header's quiet action slot — the route owns the actions. */
+export function ChapterArticle({ chapter, actions }: { chapter: Chapter; actions?: ReactNode }) {
   return (
     <article className="w-full min-w-0">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -29,7 +17,7 @@ export function ChapterArticle({
         <Title>{chapter.title.trim() === "" ? chapter.id : chapter.title}</Title>
         <ActionGroup>{actions}</ActionGroup>
       </div>
-      {body ?? <Markdown>{chapter.body}</Markdown>}
+      <Markdown>{chapter.body}</Markdown>
     </article>
   );
 }

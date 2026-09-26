@@ -168,12 +168,16 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
   page,
   api,
 }) => {
+  const chapter = await getChapter(api, CHAPTER);
   await page.goto(`/campaigns/${CAMPAIGN}`);
+  // The overview's edit action opens the chapter's edit mode.
   await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
-  const dialog = page.getByRole("dialog");
-  const chapterText = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
+  await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
+  const chapterText = page.getByRole("textbox", {
+    name: ui("bodyEditor.markdown.aria", { path: chapter.title }),
+  });
   // The editor opens on the stored text.
-  await expect(chapterText).toHaveValue((await getChapter(api, CHAPTER)).body);
+  await expect(chapterText).toHaveValue(chapter.body);
   await chapterText.fill("Light the lighthouse again.");
 
   // A thread is appended underneath — the write that adopting a plot thread in the review makes.
@@ -183,10 +187,11 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
   expect((await getChapter(api, CHAPTER)).rev).toBe(chapterRev);
 
   // So the chapter save lands, and the thread stands beside it.
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: uiExact("common.save") }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(chapter.title);
   await expect.poll(async () => (await getChapter(api, CHAPTER)).body).toContain("Light the lighthouse again.");
   expect((await stored(api)).map(([text]) => text)).toEqual([SEEDED, NOTED]);
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await expect(threadList(page).getByRole("listitem")).toHaveText([SEEDED, NOTED]);
 });
 

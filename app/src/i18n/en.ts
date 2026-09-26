@@ -117,13 +117,13 @@ export const en: Messages = {
 
   "create.npc.title": "Create NPC",
   "create.npc.description":
-    "Just the name — role, status and everything else follow in the properties dialog.",
+    "Just the name — you add role, status and everything else afterwards when you edit the NPC.",
   "create.npc.nameLabel": "Name",
   "create.npc.namePlaceholder": "NPC name",
 
   "create.location.title": "Create location",
   "create.location.description":
-    "Just the name — everything else follows in the properties dialog.",
+    "Just the name — you add everything else afterwards when you edit the location.",
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Location name",
 
@@ -138,15 +138,9 @@ export const en: Messages = {
   "coldstart.lead":
     "No campaign yet. Create one — chapters and scenes come into being inside it afterwards.",
 
-  // --- properties dialog ----------------------------------------------------
-  "properties.action": "Properties",
-  "properties.title": "{kind}: properties",
-  "properties.description":
-    "Only what you changed is saved — everything else stays exactly as it is.",
+  // --- the fields of the edit modes ------------------------------------------
   "properties.id": "ID",
   "properties.discard.title": "Discard changes?",
-  "properties.discard.close":
-    "The changes are not saved. Discarding closes the dialog and keeps what is stored.",
   "properties.discard.keepEditing": "Keep editing",
   "unsaved.description":
     "This page has unsaved changes. They are lost if you leave now.",
@@ -214,13 +208,9 @@ export const en: Messages = {
   "properties.location.atmosphere.hint":
     "How the place feels — the location card and the preview show it. [[id]] reads as a name there.",
 
-  "properties.chapter.title.label": "Title",
-  "properties.chapter.status.label": "Status",
   "properties.chapter.status.planned": "Planned",
   "properties.chapter.status.active": "Active",
   "properties.chapter.status.done": "Done",
-  "properties.chapter.status.hint":
-    "Active marks the chapter the session view opens — there is exactly one; the previous one goes back to planned.",
 
   // --- settings page (/settings) --------------------------------------------
   "settings.title": "Settings",
@@ -347,7 +337,6 @@ export const en: Messages = {
   // --- the shared write layer (lib/write-with-rev.ts, lib/use-rev-write.ts) -
   "write.stale": "Changed in the meantime — reload",
   "write.failed": "Not saved — check the server",
-  "write.properties.failed": "Properties not saved — check the server",
   "write.status.failed": "Status not saved — check the server",
   "editConflict.line": "Changed in the meantime",
   "editConflict.reload": "Reload",
@@ -364,15 +353,8 @@ export const en: Messages = {
   "chapterOverview.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
   "chapterOverview.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "chapterOverview.chapter.empty": "No scenes in this chapter yet.",
-  // --- chapter actions in the chapter overview -----------------------------
-  "chapterOverview.chapter.properties": "Chapter properties",
+  // --- the chapter's action in the chapter overview --------------------------
   "chapterOverview.chapter.edit": "Edit chapter",
-  "chapterBody.title": "Edit chapter: {title}",
-  "chapterBody.description":
-    "The chapter's text as markdown. The chapter overview shows it under its title.",
-  "chapterBody.field.body": "Text",
-  "chapterBody.field.body.placeholder":
-    "What this chapter is about and what the party is meant to achieve",
   "chapterOverview.contingencies.hint": "only when the trigger fires",
   "chapterOverview.scene.trigger": "When: {trigger}",
   "chapterOverview.scene.moveUp.aria": "Move \u201c{title}\u201d up",
@@ -576,7 +558,6 @@ export const en: Messages = {
 
   // --- body editor (components/BodyEditor.tsx) ------------------------------
   "bodyEditor.markdown.aria": "Markdown text of {path}",
-  "bodyEditor.hint": "The body only — the properties stay unchanged.",
   "bodyEditor.blocked": "One block still needs a decision — see the note on the block.",
   "bodyEditor.discard.title": "Discard changes?",
   "bodyEditor.discard.description":
@@ -865,6 +846,13 @@ export const en: Messages = {
   "locationEdit.blocked.name": "A location needs a name.",
   "locationEdit.chapter.none": "No chapter",
   "locationEdit.atmosphere.empty": "The atmosphere is not described yet.",
+
+  // --- edit mode of a chapter (chapter/ChapterEditMode.tsx) ----------------
+  "chapterEdit.heading": "Edit chapter",
+  "chapterEdit.title.aria": "Chapter title",
+  "chapterEdit.blocked.title": "A chapter needs a title.",
+  "chapterEdit.activate.hint":
+    "Saving makes this chapter the active one — the chapter that was active until now goes back to planned.",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} is not an NPC ID, so there is no NPC for it.",

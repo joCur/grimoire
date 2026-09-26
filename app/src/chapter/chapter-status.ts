@@ -1,5 +1,5 @@
 // Chapter status: the labels/colors the overview's control and the chapter's
-// dialog share, and the write behind the control (the rev conflict is the
+// edit mode share, and the write behind the control (the rev conflict is the
 // shared protocol in lib/write-with-rev.ts).
 //
 // Same shape as scene/scene-status.ts, and deliberately so — the labels come

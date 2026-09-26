@@ -84,7 +84,7 @@ normal `OpenAICompatProvider`.
   path 9 writes through the API (`patchScene`, `patchChapter`,
   `patchCampaign`) while the editor stands open, then the UI saves — and has
   to show the conflict line with its two actions instead of silently
-  overwriting. The same in `status-control`, `properties-form` and
+  overwriting. The same in `status-control`, the `*-edit-mode` specs and
   `block-composer`.
 - **Because all fields of a scene share one row, a pure status write is a
   conflict for an open text editor too.** There is no "text-neutral" change
@@ -385,9 +385,9 @@ write paths lie on it:
 | 4 Session cycle    | `tests/session-cycle.e2e.ts`                                   |
 | 5 Debrief          | `tests/review.e2e.ts`, `tests/threads.e2e.ts`                  |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts`, `tests/campaign-knowledge.e2e.ts` |
-| 7 Properties/409   | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/chapter-overview.e2e.ts` (the active chapter) |
+| 7 Edit modes/409   | `tests/status-control.e2e.ts`, `tests/scene-edit-mode.e2e.ts`, `tests/npc-edit-mode.e2e.ts`, `tests/location-edit-mode.e2e.ts`, `tests/chapter-edit-mode.e2e.ts`, `tests/chapter-overview.e2e.ts` (the active chapter) |
 | 8 Mobile           | `tests/mobile.e2e.ts`                                          |
-| 9 Edit an entry    | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`, `tests/chapter-overview.e2e.ts` (the edit-campaign dialog) |
+| 9 Edit the text    | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`, `tests/chapter-edit-mode.e2e.ts`, `tests/chapter-overview.e2e.ts` (the edit-campaign dialog) |
 | 10 Cold start      | `tests/cold-start.e2e.ts`                                      |
 
 Paths 3, 4, 5 and 8 read rows instead of texts:
@@ -546,31 +546,29 @@ database already holds campaigns: same row counts, same content. It needs
 boots of its own and therefore uses `startGrimoireServer`/`seedCampaigns`
 directly instead of the `server` fixture.
 
-On path 7 two specs share the work: `status-control.e2e.ts` covers the
-status control (one key, conflict over the poll window; the control has no
-conflict actions and only reports the stale state), `properties-form.e2e.ts`
-the properties dialog (all fields of an entity kind,
-chips/references/select, emptying deletes the key, and the deterministic
-409: the dialog writes against the version its editing began with, and
-answers the conflict with its two actions — the reload action shows the
-current values, the save-anyway action writes only the dialog's fields, so a
-concurrent text change survives it and is read back through the API). The
-dialog additionally touches path 2 (the reading view shows the new values at
-once) and path 8 (form at 390px) — both stand in the same spec.
-`properties-form.e2e.ts` also checks the new location there: changing
-`location` is a field of the scene, the route stays `…/scenes/<id>`, the
-chapter overview keeps the order and names the new location's name, and the
-session's log rows stay valid (their `sceneId` names the scene by its id).
-Free text in `location` is a 400 there with `code: "location_not_an_id"` —
-the counter-check stands in `scene-rendering.e2e.ts`. And because status and
-type are `CHECK` constraints of their columns
-([decisions/constraints](../docs/decisions/constraints.md)), a test in the
-same spec pins the rule down directly at the write path: a `status` outside
-the closed list is a 400 with `code: "status_not_allowed"` together with
+On path 7 the status control and the edit modes share the work:
+`status-control.e2e.ts` covers the status control (one key, conflict over
+the poll window; the control has no conflict actions and only reports the
+stale state), and pins the closed status list down at the write path: a
+`status` outside it is a 400 with `code: "status_not_allowed"` together with
 `kind`, `value` and `allowed`, and the scene stays unchanged — the row
-version too. A stale `rev` on a scene's `PATCH` is 409 with the scene, a
-field it does not have a 400 that names it — `POST` as well as `PATCH`
-(`scene-rendering.e2e.ts`).
+version too ([decisions/constraints](../docs/decisions/constraints.md)).
+The edit modes of scene, NPC, location and chapter have one spec each
+(`scene-edit-mode.e2e.ts`, `npc-edit-mode.e2e.ts`,
+`location-edit-mode.e2e.ts`, `chapter-edit-mode.e2e.ts`): every field of the
+entity on one page, ONE `PATCH` of exactly the changed fields, emptying
+deletes the key, and the deterministic 409 — the edit mode writes against
+the version its editing began with and answers the conflict with its two
+actions above the title: the reload action takes the stored row, the
+save-anyway action writes only the changed fields, so a field changed
+elsewhere survives and is read back through the API. Each also covers
+leaving with unsaved work (the cancel action and a navigation ask first)
+and 390px (chips wrap, the save sits at the bottom, no horizontal scroll).
+The chapter's spec additionally checks that activating a chapter from its
+edit mode puts the previously active one back to planned, and that an
+untouched status is never sent, not even a stale active one. A stale `rev`
+on a scene's `PATCH` is 409 with the scene, a field it does not have a 400
+that names it — `POST` as well as `PATCH` (`scene-rendering.e2e.ts`).
 
 On path 9 two specs share the two surfaces of editing, which share ONE
 draft: `block-composer.e2e.ts` covers the block composer — default mode, one
@@ -612,7 +610,7 @@ Path 10 (`cold-start.e2e.ts`) is the only path that runs WITHOUT a seed:
 directory, the seed tool never runs — exactly what a fresh installation is.
 The spec therefore creates everything itself (campaign → chapter → scene →
 text → session; the new scene opens in the editor under
-`/campaigns/:id/scenes/<id>`, and a chapter change in the properties dialog
+`/campaigns/:id/scenes/<id>`, and a chapter change in the scene's edit mode
 appends it to the end of the target chapter) and builds its `api` helper
 with `apiFor(server.url, id)`, because the campaign id only exists at
 runtime. Plus the two list entries (create NPC/location, the lists on
@@ -664,11 +662,10 @@ Two paths carry the chapter as its own resource.
   Note: a bulk accept leaves **undecided** proposed entries open (rule of the
   review step), the review step stays and reports one of three accepted —
   the chapter is already written by the first accept.
-- **Path 1** (`chapter-overview.e2e.ts`): a chapter is editable where it is
-  read — the chapter properties action (title/status, the chapter's dialog),
-  the edit-chapter action (the chapter text the overview shows, including
-  the 409 against a second writer) and the **status control** in the chapter
-  row. Every value is **one** `PATCH …/chapters/<id> { rev, status }`;
+- **Path 1** (`chapter-overview.e2e.ts`): a chapter is editable from where
+  it is listed — the edit-chapter action opens the chapter's edit mode
+  (title, status and the text the overview shows; `chapter-edit-mode.e2e.ts`
+  covers it) — and the **status control** in the chapter row. Every value is **one** `PATCH …/chapters/<id> { rev, status }`;
   active makes the chapter the active one, the server sets the previously
   active one to planned in the same operation, and according to the tree
   exactly one chapter is active. A second writer between opening the menu
@@ -685,7 +682,7 @@ Two traps for new specs on these paths:
   label, and in the chapter overview both stand on one page. Whoever means
   the action of the CAMPAIGN HEADER writes
   `getByRole("button", { name: uiExact("common.edit") })`.
-- **Address the dialogs' fields by their role.** The properties dialog
+- **Address the form fields by their role.** The form of a proposal card
   writes the required marker into the label, so the accessible name is the
   field label plus the required marker — `getByRole("textbox", { name: … })`
   is more robust there than `getByLabel`.

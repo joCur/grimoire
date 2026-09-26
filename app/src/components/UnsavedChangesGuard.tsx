@@ -6,8 +6,8 @@
 // switcher, the browser's back button, a reload — would throw that work away
 // without a word. That is the same silent loss decisions/writes forbids on the write
 // path, just on the way out instead of on the way in, and the app already has
-// the answer for it: the dialogs' discard confirmation
-// (components/fields/FieldsDialog.tsx). This is that confirmation, for
+// the answer for it: the edit modes' discard confirmation
+// (components/DiscardChangesDialog.tsx). This is that confirmation, for
 // navigation.
 //
 // TWO EXITS, two mechanisms, because a page cannot guard both with one:

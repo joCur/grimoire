@@ -151,7 +151,7 @@ describe("rendered references", () => {
   test("…in the UI language, from the shared `kind.*` labels", () => {
     // Outside a provider `useT` degrades to German, which is what every other
     // assertion here reads; with an instance set to English the SAME labels
-    // the ⌘K rows and the properties dialog use have to come out.
+    // the ⌘K rows and the create dialogs use have to come out.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["settings"], { locale: "en" });
     const html = renderToStaticMarkup(

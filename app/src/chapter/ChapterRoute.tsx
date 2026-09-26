@@ -1,34 +1,48 @@
 // "/campaigns/:campaign/chapters/:id" — the reading view of ONE chapter, its
-// own resource with its own type (decisions/resources): the context line on top (the
-// chapter itself, linking to the chapter overview where its scenes stand),
-// the article, and the two quiet actions in its header — edit (the text) and
-// the dialog over its other fields. Each is its own editing session over the
-// one row, so a save from one while the other stands asks what to do instead
-// of overwriting it.
+// own resource with its own type (decisions/resources): the context line on
+// top (the chapter itself, linking to the chapter overview where its scenes
+// stand), the article, and the quiet edit action in its header.
+//
+// Edit switches the page into the chapter's edit mode
+// (./ChapterEditMode.tsx): the same article, every field of the chapter
+// editable in place and saved together.
 //
 // Edit mode is remembered BY CHAPTER: this route stays mounted across a
-// navigation, and an editor seeded from another chapter would be a lie.
+// navigation, and an editor seeded from another chapter would be a lie. A
+// navigation away from unsaved work asks first (UnsavedChangesGuard).
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
 import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
+import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
+import { cn } from "@/lib/utils";
 
 import { ChapterArticle } from "./ChapterArticle";
-import { ChapterBodyEditor, ChapterFieldsAction } from "./ChapterActions";
+import { ChapterEditMode } from "./ChapterEditMode";
 import { chapterPageCrumbs } from "./chapter-links";
 import { chapterQuery } from "./chapter-query";
 
 export function ChapterRoute() {
+  return (
+    <UnsavedChangesGuard>
+      <ChapterPage />
+    </UnsavedChangesGuard>
+  );
+}
+
+function ChapterPage() {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wantsEdit = searchParams.get("edit") === "1";
   const { data, isPending, error } = useQuery({
     ...chapterQuery(campaign, id),
     enabled: campaign !== "" && id !== "",
@@ -43,6 +57,19 @@ export function ChapterRoute() {
   useEffect(() => {
     setEditingId(undefined);
   }, [campaign, id]);
+  // `?edit=1` opens edit mode straight away — how the chapter overview's edit
+  // action arrives here. The flag is CONSUMED (replace, so it leaves no
+  // history entry): it is an instruction for this navigation, not a state of
+  // the page, and a reload or a back gesture must not re-open an editor over
+  // a text the DM has meanwhile left.
+  const loadedId = data?.id;
+  useEffect(() => {
+    if (!wantsEdit || loadedId === undefined) return;
+    setEditingId(loadedId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("edit");
+    setSearchParams(next, { replace: true });
+  }, [wantsEdit, loadedId, searchParams, setSearchParams]);
 
   if (isPending) {
     return (
@@ -63,28 +90,32 @@ export function ChapterRoute() {
   }
 
   const editing = editingId === data.id;
-  const actions = (
-    <>
-      {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
-      <ChapterFieldsAction campaign={campaign} chapter={data} />
-    </>
-  );
-  const body = editing ? (
-    <ChapterBodyEditor
-      key={data.id}
-      campaign={campaign}
-      chapter={data}
-      onClose={() => setEditingId(undefined)}
-    />
-  ) : undefined;
 
   return (
     <>
       <MobileBackRow campaign={campaign} />
-      <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
-        <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
+      <div
+        className={cn(
+          "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",
+          // Room for the save bar at the bottom of the phone's screen.
+          editing ? "pb-[140px] md:pb-[100px]" : "pb-[100px]",
+        )}
+      >
+        <div className={cn("w-full min-w-0 flex-1", editing ? "lg:max-w-[820px]" : "lg:max-w-[680px]")}>
           <PageContext crumbs={chapterPageCrumbs(campaign, data.id, tree.data)} />
-          <ChapterArticle chapter={data} actions={actions} body={body} />
+          {editing ? (
+            <ChapterEditMode
+              key={data.id}
+              campaign={campaign}
+              chapter={data}
+              onClose={() => setEditingId(undefined)}
+            />
+          ) : (
+            <ChapterArticle
+              chapter={data}
+              actions={<BodyEditAction onEdit={() => setEditingId(data.id)} />}
+            />
+          )}
         </div>
       </div>
     </>

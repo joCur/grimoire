@@ -1,5 +1,5 @@
 // Render tests for the npc's form fields (react-dom/server — no DOM): the
-// fields its dialog shows, in their order, the status as a closed list
+// fields a proposal card shows, in their order, the status as a closed list
 // without an empty choice, the quick stats as key/value rows, and the
 // `motivation` apart from them — it is written beside the text.
 

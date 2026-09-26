@@ -1,4 +1,4 @@
-// The form of a scene — what its dialog and the editor of a proposed scene
+// The form of a scene — what its edit mode and the editor of a proposed scene
 // start with, and the write a save sends. Pure, so every rule is
 // unit-testable.
 //

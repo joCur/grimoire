@@ -23,9 +23,10 @@
 // adopts the stored scene, forcing writes only the fields this request
 // carries, so the other writer's status survives a forced text save.
 //
-// The texts of an npc and a location are edited in their edit modes together
-// with all of their fields (tests/npc-edit-mode.e2e.ts and
-// tests/location-edit-mode.e2e.ts cover those); this spec covers the text half.
+// The texts of an npc, a location and a chapter are edited in their edit modes
+// together with all of their fields (tests/npc-edit-mode.e2e.ts,
+// tests/location-edit-mode.e2e.ts and tests/chapter-edit-mode.e2e.ts cover
+// those); this spec covers the text half.
 //
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
@@ -613,9 +614,9 @@ test("the npc reading view edits its body the same way", async ({ page, api }) =
   expect(fieldsAfter).toEqual(fieldsBefore);
 });
 
-test("a location and a chapter offer the editor on their own routes", async ({ page }) => {
-  // The entities whose prose the DM maintains offer the body editor — each on
-  // its own route (decisions/resources).
+test("a location and a chapter offer the text editor in their edit modes", async ({ page }) => {
+  // The entities whose prose the DM maintains offer the text editor in their
+  // edit modes — each on its own route (decisions/resources).
   for (const [url, name] of [
     ["/campaigns/example/locations/lighthouse", "The Lighthouse of Salt Harbour"],
     [CHAPTER_URL, CHAPTER_TITLE],
@@ -627,58 +628,6 @@ test("a location and a chapter offer the editor on their own routes", async ({ p
     await cancelButton(page).click();
     await expect(textareaOf(page, name)).toHaveCount(0);
   }
-});
-
-test("a chapter's text is edited on its reading view; its other fields stay", async ({
-  page,
-  api,
-}) => {
-  const before = await getChapter(api, CHAPTER);
-  const added = "Whoever puts out the fire does not want to be seen.";
-
-  await page.goto(CHAPTER_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
-  await openMarkdownEditor(page);
-  const textarea = textareaOf(page, CHAPTER_TITLE);
-  await expect(textarea).toHaveValue(before.body);
-  await textarea.fill(`${before.body}\n${added}\n`);
-  await saveButton(page).click();
-
-  // The editor closes and the reading view renders the new text.
-  await expect(textarea).toHaveCount(0);
-  await expect(page.getByRole("article")).toContainText(added);
-  const after = await getChapter(api, CHAPTER);
-  expect(after.body).toBe(`${before.body}\n${added}\n`);
-  // Only the text was sent: title and status are as they were.
-  expect({ title: after.title, status: after.status }).toEqual({
-    title: before.title,
-    status: before.status,
-  });
-});
-
-test("a chapter's text and a second writer: the conflict line, and reloading adopts it", async ({
-  page,
-  api,
-}) => {
-  await page.goto(CHAPTER_URL);
-  await openMarkdownEditor(page);
-  const textarea = textareaOf(page, CHAPTER_TITLE);
-  await textarea.fill("My draft.\n");
-
-  // The second writer: a status change of the same row, its own fresh rev.
-  await patchChapter(api, CHAPTER, { status: "done" });
-  await saveButton(page).click();
-
-  // Nothing written — the draft stays, the conflict line asks.
-  const conflicted = conflict(page);
-  await expect(conflicted.line).toBeVisible();
-  await expect(textarea).toHaveValue("My draft.\n");
-  expect((await getChapter(api, CHAPTER)).body).not.toContain("My draft.");
-
-  await conflicted.reload.click();
-  await expect(conflicted.line).toHaveCount(0);
-  await expect(textarea).toHaveValue((await getChapter(api, CHAPTER)).body);
-  expect((await getChapter(api, CHAPTER)).status).toBe("done");
 });
 
 test("the chapter and the campaign are their own resources; the entry addresses are gone", async ({

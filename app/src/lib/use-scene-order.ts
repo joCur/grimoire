@@ -9,7 +9,7 @@
 // THE CONFLICT HAS NO SECOND ACTION. Forcing an order that was arranged
 // against a list somebody else has already changed writes positions for
 // scenes the DM never saw in those places. So this follows the status
-// control, not the properties dialog: it reports the stale state and fetches
+// control, not an edit mode: it reports the stale state and fetches
 // the current one (critical path 7). The message is quiet and inline.
 
 import type { CampaignTree, ChapterNode } from "@grimoire/shared/campaign-tree";

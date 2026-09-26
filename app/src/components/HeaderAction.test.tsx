@@ -1,5 +1,5 @@
-// The header triggers of the reading views — the edit action for the text and
-// the dialog action for the other fields — are ONE component. That is what is
+// The header triggers of the reading views — the edit action among them — are
+// ONE component. That is what is
 // asserted here: each call site is compared against a live render of the
 // equivalent <HeaderAction …/> instead of against frozen markup (pinning
 // lucide-react/react-dom byte output would break on every dependency bump
@@ -7,13 +7,12 @@
 // their slices.
 
 import { describe, expect, test } from "bun:test";
-import { PenLine, SlidersHorizontal } from "lucide-react";
+import { PenLine } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { translator } from "@/i18n/format";
 
 import { BodyEditAction } from "./BodyEditor";
-import { FieldsDialogAction } from "./fields/FieldsDialog";
 import { HeaderAction } from "./HeaderAction";
 
 /** Without a provider the catalog answers in the primary language. */
@@ -46,19 +45,9 @@ describe("HeaderAction", () => {
 });
 
 describe("the call sites", () => {
-  test("the edit action of the body editor is the shared trigger", () => {
+  test("the edit action of a reading view is the shared trigger", () => {
     expect(renderToStaticMarkup(<BodyEditAction onEdit={() => {}} />)).toBe(
       headerAction(t("common.edit")),
-    );
-  });
-
-  test("the action of the fields dialog is the shared trigger with its own glyph", () => {
-    expect(
-      renderToStaticMarkup(<FieldsDialogAction openKey="example/x">{() => null}</FieldsDialogAction>),
-    ).toBe(
-      renderToStaticMarkup(
-        <HeaderAction icon={SlidersHorizontal} label={t("properties.action")} onClick={() => {}} />,
-      ),
     );
   });
 });

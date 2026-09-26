@@ -14,7 +14,7 @@
 // spaces, the single ellipsis character). Do not normalize them.
 //
 // The catalog covers the topbar incl. session chip, campaign switcher, the
-// five create dialogs, properties dialog + fields, cold start and the areas
+// five create dialogs, the fields of the edit modes, cold start and the areas
 // listed in the sections below. A component not covered here still carries
 // its literal strings.
 
@@ -133,13 +133,13 @@ export const de = {
 
   "create.npc.title": "NPC anlegen",
   "create.npc.description":
-    "Nur der Name — Rolle, Status und alles Weitere stehen danach im Eigenschaften-Dialog.",
+    "Nur der Name — Rolle, Status und alles Weitere trägst du danach beim Bearbeiten des NPCs ein.",
   "create.npc.nameLabel": "Name",
   "create.npc.namePlaceholder": "Name des NPCs",
 
   "create.location.title": "Ort anlegen",
   "create.location.description":
-    "Nur der Name — alles Weitere steht danach im Eigenschaften-Dialog.",
+    "Nur der Name — alles Weitere trägst du danach beim Bearbeiten des Orts ein.",
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Name des Orts",
 
@@ -154,15 +154,9 @@ export const de = {
   "coldstart.title": "Willkommen bei Grimoire",
   "coldstart.lead": "Noch keine Kampagne. Leg eine an — danach entstehen darin Kapitel und Szenen.",
 
-  // --- properties dialog ----------------------------------------------------
-  "properties.action": "Eigenschaften",
-  "properties.title": "{kind}: Eigenschaften",
-  "properties.description":
-    "Gespeichert wird nur, was du geändert hast — alles andere bleibt unverändert stehen.",
+  // --- the fields of the edit modes ------------------------------------------
   "properties.id": "Kennung",
   "properties.discard.title": "Änderungen verwerfen?",
-  "properties.discard.close":
-    "Die Änderungen sind nicht gespeichert. Verwerfen schließt das Fenster, und es bleibt beim gespeicherten Stand.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
   // The same question for LEAVING A PAGE whose save is explicit
   // (components/UnsavedChangesGuard.tsx); the title is shared.
@@ -191,9 +185,9 @@ export const de = {
   "properties.issue.chapterRequired":
     "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
 
-  // Field labels/hints/placeholders — a scene's (scene/SceneFields.tsx), a
-  // chapter's (chapter/ChapterFields.tsx), an npc's (npc/NpcFields.tsx) and a
-  // location's (location/LocationEditMode.tsx)
+  // Field labels/hints/placeholders — a scene's (scene/SceneFields.tsx), an
+  // npc's (npc/NpcFields.tsx), a location's (location/LocationEditMode.tsx)
+  // and the status labels of a chapter (chapter/chapter-status.ts)
   "properties.scene.title.label": "Titel",
   "properties.scene.type.label": "Typ",
   "properties.scene.type.planned": "Geplante Szene",
@@ -238,13 +232,9 @@ export const de = {
   "properties.location.atmosphere.hint":
     "Wie der Ort wirkt — die Ort-Karte und die Vorschau zeigen es. [[id]] erscheint dort als Name.",
 
-  "properties.chapter.title.label": "Titel",
-  "properties.chapter.status.label": "Status",
   "properties.chapter.status.planned": "Geplant",
   "properties.chapter.status.active": "Aktiv",
   "properties.chapter.status.done": "Abgeschlossen",
-  "properties.chapter.status.hint":
-    "Aktiv markiert das Kapitel, das die Session-Ansicht öffnet — es gibt genau eins; das vorherige wird wieder geplant.",
 
   // --- settings page (/settings) --------------------------------------------
   "settings.title": "Einstellungen",
@@ -378,7 +368,6 @@ export const de = {
   // --- the shared write layer (lib/write-with-rev.ts, lib/use-rev-write.ts) -
   "write.stale": "Inzwischen geändert — neu laden",
   "write.failed": "Nicht gespeichert — Server prüfen",
-  "write.properties.failed": "Eigenschaften nicht gespeichert — Server prüfen",
   "write.status.failed": "Status nicht gespeichert — Server prüfen",
   // The conflict line every editing surface shows (components/EditConflict.tsx)
   // and its two answers. The line only STATES it; the answers are controls,
@@ -400,18 +389,12 @@ export const de = {
   "chapterOverview.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
   "chapterOverview.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "chapterOverview.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
-  // --- chapter actions in the chapter overview -----------------------------
+  // --- the chapter's action in the chapter overview --------------------------
   // The chapter's status control (the active option sets `active`, and the
   // server takes it off the chapter that held it in the same write) carries its
-  // labels under `properties.chapter.status.*`.
-  "chapterOverview.chapter.properties": "Kapitel-Eigenschaften",
+  // labels under `properties.chapter.status.*`. The edit action opens the
+  // chapter's edit mode.
   "chapterOverview.chapter.edit": "Kapitel bearbeiten",
-  "chapterBody.title": "Kapitel bearbeiten: {title}",
-  "chapterBody.description":
-    "Der Text des Kapitels als Markdown. Die Kapitelübersicht zeigt ihn unter dem Titel.",
-  "chapterBody.field.body": "Text",
-  "chapterBody.field.body.placeholder":
-    "Worum es in diesem Kapitel geht und was die Gruppe erreichen soll",
   // The quiet second half of the contingency-scenes heading row — the `· `
   // separator stays markup in the JSX.
   "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
@@ -635,7 +618,6 @@ export const de = {
 
   // --- body editor (components/BodyEditor.tsx) ------------------------------
   "bodyEditor.markdown.aria": "Markdown-Text von {path}",
-  "bodyEditor.hint": "Nur der Textkörper — die Eigenschaften bleiben unverändert.",
   "bodyEditor.blocked": "Ein Block muss noch geklärt werden — siehe Hinweis am Block.",
   "bodyEditor.discard.title": "Änderungen verwerfen?",
   "bodyEditor.discard.description":
@@ -980,6 +962,14 @@ export const de = {
   "locationEdit.blocked.name": "Ein Ort braucht einen Namen.",
   "locationEdit.chapter.none": "Kein Kapitel",
   "locationEdit.atmosphere.empty": "Die Atmosphäre ist noch nicht beschrieben.",
+
+  // --- edit mode of a chapter (chapter/ChapterEditMode.tsx)
+  // The status labels are the shared `properties.chapter.status.*`.
+  "chapterEdit.heading": "Kapitel bearbeiten",
+  "chapterEdit.title.aria": "Titel des Kapitels",
+  "chapterEdit.blocked.title": "Ein Kapitel braucht einen Titel.",
+  "chapterEdit.activate.hint":
+    "Beim Speichern wird dieses Kapitel das aktive — das bisher aktive Kapitel steht danach wieder auf geplant.",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} ist keine NPC-Kennung, deshalb gibt es dazu keinen NPC.",
