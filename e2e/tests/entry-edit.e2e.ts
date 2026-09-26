@@ -48,6 +48,7 @@ import { getLocation } from "../support/location";
 import { getNpc, npcExists, patchNpc } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { createGlossaryTerm, getGlossaryTerms } from "../support/glossary-term";
+import { ui, uiExact } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
@@ -55,9 +56,32 @@ const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
 const NPC = "jorna";
 const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
-const CONFLICT_LINE = "Inzwischen geändert";
-/** aria-label of the raw-markdown textarea (BodyEditor). */
-const TEXTAREA = "Markdown-Text von";
+const CONFLICT_LINE = ui("editConflict.line");
+/**
+ * aria-label of the raw-markdown textarea (BodyEditor): the catalog sentence
+ * without the entity it names, matched as a prefix.
+ */
+const TEXTAREA = ui("bodyEditor.markdown.aria", { path: "" }).trim();
+/** The shared save action of the editor. */
+const SAVE = ui("common.save");
+/** The shared cancel action of the editor. */
+const CANCEL = ui("common.cancel");
+/** The edit action — the header trigger, and the raw surface's edit toggle. */
+const EDIT = ui("common.edit");
+/** The raw surface's preview toggle. */
+const PREVIEW = ui("editor.preview");
+/** The status control of a scene, named by its current status. */
+const statusControl = (page: Page, status: "ready" | "played") =>
+  page.getByRole("button", {
+    name: uiExact("status.change.aria", {
+      current: ui(`status.scene.${status}`),
+    }),
+  });
+
+/** The title of a scene, read through its resource. */
+async function sceneTitle(api: Api, id: string = SCENE): Promise<string> {
+  return (await getScene(api, id)).title;
+}
 
 /**
  * Read a scene: its text, and every other field beside it — what a text save
@@ -90,8 +114,8 @@ function conflict(page: Page) {
   const line = page.getByRole("alert").filter({ hasText: CONFLICT_LINE });
   return {
     line,
-    reload: line.getByRole("button", { name: "Neu laden" }),
-    force: line.getByRole("button", { name: "Trotzdem speichern" }),
+    reload: line.getByRole("button", { name: ui("editConflict.reload") }),
+    force: line.getByRole("button", { name: ui("editConflict.force") }),
   };
 }
 
@@ -106,10 +130,10 @@ function conflict(page: Page) {
  * disabled right after opening.
  */
 async function openMarkdownEditor(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await page.getByRole("button", { name: EDIT }).click();
   // exact: the composer's per-card controls carry a numbered block name of
   // their own that starts with the same word.
-  await page.getByRole("button", { name: "Markdown", exact: true }).click();
+  await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
 }
 
 test("editing the body: save writes the entry and the reading view shows it", async ({
@@ -117,10 +141,10 @@ test("editing the body: save writes the entry and the reading view shows it", as
   api,
 }) => {
   const before = await sceneSplit(api);
-  const added = "Am Fuß der Treppe liegt eine angelaufene Messingpfeife im Sand.";
+  const added = "At the foot of the stairs a tarnished brass whistle lies in the sand.";
 
   await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(await sceneTitle(api));
 
   // The trigger sits in the header action row, next to the properties action;
   // raw markdown is the fallback surface this spec is about.
@@ -131,15 +155,15 @@ test("editing the body: save writes the entry and the reading view shows it", as
   // Seeded with the body — WITHOUT the other fields, which this editor never
   // touches (and says so).
   await expect(textarea).toHaveValue(before.body);
-  await expect(page.getByText("Nur der Textkörper — die Eigenschaften bleiben unverändert.")).toBeVisible();
+  await expect(page.getByText(ui("bodyEditor.hint"))).toBeVisible();
   // The header keeps standing: title, chips and the status control stay put.
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
+  await expect(statusControl(page, "ready")).toBeVisible();
   // While the editor runs the header trigger is gone — the toolbar toggle owns
   // the mode from here on, and it currently offers the OTHER side.
-  await expect(page.getByRole("button", { name: "Vorschau" })).toBeVisible();
+  await expect(page.getByRole("button", { name: PREVIEW })).toBeVisible();
 
   // Nothing changed yet, so there is nothing to save.
-  const save = page.getByRole("button", { name: "Speichern" });
+  const save = page.getByRole("button", { name: SAVE });
   await expect(save).toBeDisabled();
 
   await textarea.fill(`${before.body}\n${added}\n`);
@@ -148,7 +172,7 @@ test("editing the body: save writes the entry and the reading view shows it", as
 
   // The editor closes and the reading view renders the new body.
   await expect(textarea).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Bearbeiten" })).toBeVisible();
+  await expect(page.getByRole("button", { name: EDIT })).toBeVisible();
   await expect(page.getByRole("article")).toContainText(added);
   // The old text is still there — this was an append, not a replace.
   await expect(page.locator("[data-callout='readaloud']")).toContainText(
@@ -164,27 +188,27 @@ test("editing the body: save writes the entry and the reading view shows it", as
 
 test("a mention in the text stays text — nothing created, no error", async ({ page, api }) => {
   // A reference names something that exists (decisions/constraints) — but a MENTION in
-  // the body is not a reference: `[[niemand]]` and a `## Beziehungen` line
-  // are prose. Saving them is a normal save: nothing is created, nothing is
+  // the body is not a reference: `[[nobody]]` and a relationship line under
+  // a heading are prose. Saving them is a normal save: nothing is created, nothing is
   // refused, and the text comes back as written.
   const before = await npcFields(api);
-  const mention = "Sie spricht von [[niemand]] und meint es ernst.";
-  const relation = "- holm: schuldet ihr noch Hafengeld";
+  const mention = "She speaks of [[nobody]] and means it.";
+  const relation = "- holm: still owes her harbour dues";
 
   await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
-  await textarea.fill(`${before.body}\n${mention}\n\n## Beziehungen\n\n${relation}\n`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await textarea.fill(`${before.body}\n${mention}\n\n## Relationships\n\n${relation}\n`);
+  await page.getByRole("button", { name: SAVE }).click();
 
   // Saved, rendered, and readable as typed — the unknown slug included.
   await expect(textarea).toHaveCount(0);
   const article = page.getByRole("article");
-  await expect(article).toContainText("[[niemand]]");
+  await expect(article).toContainText("[[nobody]]");
   // Rendered as the list item it is, so without the markdown dash.
-  await expect(article).toContainText("holm: schuldet ihr noch Hafengeld");
+  await expect(article).toContainText("holm: still owes her harbour dues");
   // …and neither mention brought an npc into existence.
-  expect(await npcExists(api, "niemand")).toBe(false);
+  expect(await npcExists(api, "nobody")).toBe(false);
   expect(await npcExists(api, "holm")).toBe(false);
   const after = await npcFields(api);
   expect(after.body).toContain(mention);
@@ -199,19 +223,21 @@ test("a scene whose location changed stays at its route and stays editable", asy
   // field, not the link — a bookmark written before still opens it, and the
   // text saves through it like any other edit.
   // The location has to exist before a scene can name it (decisions/constraints).
-  await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
-  await patchScene(api, SCENE, { location: "nordbucht" });
+  const cove = await api.send<{ id: string }>("POST", "campaigns/beispiel/locations", {
+    name: "North Cove",
+  });
+  await patchScene(api, SCENE, { location: cove.id });
 
   await page.goto(SCENE_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(await sceneTitle(api));
   await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
 
   const before = await sceneSplit(api);
-  const added = "Der Weg zur Nordbucht ist bei Ebbe trocken.";
+  const added = "At low tide the path to the North Cove is dry.";
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await textarea.fill(`${before.body}\n${added}\n`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
 
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(added);
@@ -226,7 +252,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   api,
 }) => {
   const before = await sceneSplit(api);
-  const loot = "> [!loot] Eine angelaufene Messingpfeife, Gravur: „Nordbucht“.";
+  const loot = '> [!loot] A tarnished brass whistle, engraved: "North Cove".';
 
   await page.goto(SCENE_URL);
   // The rendered body is on screen before edit mode …
@@ -240,9 +266,9 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
 
   await textarea.fill(`${before.body}\n${loot}\n`);
 
-  // „Vorschau“ renders the DRAFT: the callouts that were already there plus the
+  // The preview renders the DRAFT: the callouts that were already there plus the
   // one just typed, through the same renderer the reading view uses.
-  await page.getByRole("button", { name: "Vorschau" }).click();
+  await page.getByRole("button", { name: PREVIEW }).click();
   await expect(textarea).toHaveCount(0);
   await expect(page.locator("[data-callout='readaloud']")).toContainText(
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
@@ -250,24 +276,22 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await expect(page.locator("[data-callout='check']")).toContainText("Wisdom (Perception) DC 13");
   await expect(page.locator("[data-callout='secret']")).toBeVisible();
   const lootCallout = page.locator("[data-callout='loot']");
-  await expect(lootCallout).toContainText("Beute");
-  await expect(lootCallout).toContainText("Eine angelaufene Messingpfeife");
+  await expect(lootCallout).toContainText(ui("markdown.callout.loot"));
+  await expect(lootCallout).toContainText("A tarnished brass whistle");
   // Still edit mode: the save buttons stand, only the surface swapped.
-  await expect(page.getByRole("button", { name: "Abbrechen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: CANCEL })).toBeVisible();
 
   // Back to the text, unchanged by the round trip. This edit action is the raw
   // markdown surface's own preview/edit toggle, not the header trigger — that
   // one is gone while edit mode runs, and the blocks switch is a button of its
   // own, so the name stays unambiguous.
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await page.getByRole("button", { name: EDIT }).click();
   await expect(textarea).toHaveValue(`${before.body}\n${loot}\n`);
 
   // … and saved, the callout is part of the entry.
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
   await expect(textarea).toHaveCount(0);
-  await expect(page.locator("[data-callout='loot']")).toContainText(
-    "Eine angelaufene Messingpfeife",
-  );
+  await expect(page.locator("[data-callout='loot']")).toContainText("A tarnished brass whistle");
   const after = await sceneSplit(api);
   expect(after.fields).toEqual(before.fields);
   expect(after.body).toContain(loot);
@@ -278,10 +302,10 @@ test("a concurrent second write: the save reports the conflict, the second one w
   api,
 }) => {
   const before = await sceneSplit(api);
-  const mine = "Von der DM im Editor der App ergänzt.";
+  const mine = "Added by the DM in the app's editor.";
   // Same fields, different body — only the row's guard token moves, and
   // that is what the server compares against.
-  const otherBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
+  const otherBody = "\n## Flow\n\nChanged by a second writer.\n";
 
   await page.goto(SCENE_URL);
   await openMarkdownEditor(page);
@@ -295,7 +319,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // app's write succeed silently.
   await patchScene(api, SCENE, { body: otherBody });
   await textarea.fill(`${before.body}\n${mine}\n`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
 
   // Refused, and said so — quietly, under the editor that holds the draft,
   // with both honest answers as controls.
@@ -316,14 +340,14 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // is not a reason to move the DM onto the other surface.
   await conflicted.reload.click();
   await expect(conflicted.line).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: SAVE })).toBeDisabled();
   await expect(textarea).toHaveValue(otherBody);
   expect(await sceneSplit(api)).toEqual(stored);
 
   // And from that adopted version the DM's sentence saves in one click —
   // deliberately on top of the other writer's body: they saw it and decided.
   await textarea.fill(`${otherBody}${mine}\n`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
   await expect(textarea).toHaveCount(0);
   await expect(conflicted.line).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
@@ -343,13 +367,10 @@ test("a concurrent second write: the save reports the conflict, the second one w
 // The status control right next to the editor is the everyday way this happens,
 // and it is the DM's own click — so the conflict has to be answerable, not just
 // reported. These two tests are the same setup and the two answers.
-test("a status-only second write conflicts too — reloading adopts it", async ({
-  page,
-  api,
-}) => {
+test("a status-only second write conflicts too — reloading adopts it", async ({ page, api }) => {
   const opened = await getScene(api, SCENE);
   const before = { body: opened.body };
-  const mine = "Während des Statuswechsels geschrieben.";
+  const mine = "Written during the status change.";
 
   await page.goto(SCENE_URL);
   await openMarkdownEditor(page);
@@ -363,7 +384,7 @@ test("a status-only second write conflicts too — reloading adopts it", async (
   const bumped = (await patchScene(api, SCENE, { status: "played" })).rev;
   expect(bumped).toBe(opened.rev + 1);
 
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
 
   // Refused, with both answers offered.
   const conflicted = conflict(page);
@@ -380,10 +401,8 @@ test("a status-only second write conflicts too — reloading adopts it", async (
   // text is back in the textarea and the changed status is on the page.
   await conflicted.reload.click();
   await expect(conflicted.line).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /^Status ändern, aktuell/ })).toHaveText(
-    /Gespielt/,
-  );
+  await expect(page.getByRole("button", { name: SAVE })).toBeDisabled();
+  await expect(statusControl(page, "played")).toBeVisible();
   // Still the same textarea: reseeding keeps the surface.
   await expect(textarea).toHaveValue(before.body);
   // The sentence is gone, as the DM asked — nothing was written at all.
@@ -395,7 +414,7 @@ test("a forced save writes only the text — the other writer's status survives"
   api,
 }) => {
   const before = await sceneSplit(api);
-  const mine = "Trotz des Statuswechsels gespeichert.";
+  const mine = "Saved despite the status change.";
 
   await page.goto(SCENE_URL);
   await openMarkdownEditor(page);
@@ -404,7 +423,7 @@ test("a forced save writes only the text — the other writer's status survives"
   await textarea.fill(`${before.body}\n${mine}\n`);
 
   await patchScene(api, SCENE, { status: "played" });
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
 
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
@@ -421,9 +440,7 @@ test("a forced save writes only the text — the other writer's status survives"
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
   expect(after.fields).toEqual({ ...before.fields, status: "played" });
   // And the page agrees, without a reload.
-  await expect(page.getByRole("button", { name: /^Status ändern, aktuell/ })).toHaveText(
-    /Gespielt/,
-  );
+  await expect(statusControl(page, "played")).toBeVisible();
 });
 
 // Fields and text in ONE request are asserted here on the write path itself,
@@ -435,12 +452,12 @@ test("fields and body in ONE write are one version step", async ({ api }) => {
   const opened = await getScene(api, SCENE);
   const before = await sceneSplit(api);
   const rev = opened.rev;
-  const body = `${before.body}\nIn einem Zug mit den Feldern geschrieben.\n`;
+  const body = `${before.body}\nWritten in one go with the fields.\n`;
 
   const written = await patchScene(api, SCENE, {
     rev,
     status: "played",
-    tags: ["social", "travel", "zusammen"],
+    tags: ["social", "travel", "together"],
     body,
   });
 
@@ -453,7 +470,7 @@ test("fields and body in ONE write are one version step", async ({ api }) => {
   expect(after.fields).toEqual({
     ...before.fields,
     status: "played",
-    tags: ["social", "travel", "zusammen"],
+    tags: ["social", "travel", "together"],
   });
 
   // A request that names no field is refused rather than counted as a write.
@@ -473,27 +490,28 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   await page.goto(SCENE_URL);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
-  await textarea.fill(`${before.body}\nEin Satz, der die Navigation nicht überlebt.\n`);
+  await textarea.fill(`${before.body}\nA sentence that does not survive the navigation.\n`);
 
   // In-app navigation to the scene's NPC (the aside card): the SAME route with
   // another path, so the view is not remounted and could carry edit mode over.
-  await page.getByRole("link", { name: /Jorna/ }).first().click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  const npcName = (await getNpc(api, NPC)).name;
+  await page.getByRole("link", { name: npcName }).first().click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(npcName);
   await expect(textarea).toHaveCount(0);
 
   // Back on the scene: the reading view. An editor seeded from the server would
   // exactly like the one the DM left — with their paragraph silently missing.
   await page.goBack();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(await sceneTitle(api));
   await expect(textarea).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Bearbeiten" })).toBeVisible();
+  await expect(page.getByRole("button", { name: EDIT })).toBeVisible();
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
   expect(await sceneSplit(api)).toEqual(before);
 });
 
 test("a failing background refetch leaves the open editor standing", async ({ page, api }) => {
   const before = await sceneSplit(api);
-  const draft = `${before.body}\nGeschrieben, während der Server weg war.\n`;
+  const draft = `${before.body}\nWritten while the server was gone.\n`;
 
   await page.goto(SCENE_URL);
   await openMarkdownEditor(page);
@@ -516,17 +534,19 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   // so the scene query runs into the abort (retry: 1 -> two attempts, then
   // 'error'). The write goes through the API: only the app's own READ of this
   // scene is blocked, the server stays reachable.
-  await patchScene(api, SCENE, { body: "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n" });
+  await patchScene(api, SCENE, {
+    body: "\n## Flow\n\nChanged by a second writer.\n",
+  });
   await expect.poll(() => aborted, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
   // The cached scene is still there, so the PAGE must not swap itself for its
   // error line and take the unsaved text with it.
-  await expect(page.getByText("Eintrag nicht ladbar — Pfad prüfen")).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page.getByText(ui("reading.notLoadable"))).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(await sceneTitle(api));
   await expect(textarea).toHaveValue(draft);
 });
 
-test("Abbrechen asks before it throws work away", async ({ page, api }) => {
+test("cancelling asks before it throws work away", async ({ page, api }) => {
   const before = await sceneSplit(api);
 
   await page.goto(SCENE_URL);
@@ -536,50 +556,53 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
-  await page.getByRole("button", { name: "Abbrechen" }).click();
+  await page.getByRole("button", { name: CANCEL }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
 
   // With changes it asks — and continuing to edit keeps the text.
   await openMarkdownEditor(page);
-  await textarea.fill(`${before.body}\nEin Satz, der nie gespeichert wird.\n`);
-  await page.getByRole("button", { name: "Abbrechen" }).click();
+  await textarea.fill(`${before.body}\nA sentence that is never saved.\n`);
+  await page.getByRole("button", { name: CANCEL }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Änderungen verwerfen?");
-  await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await expect(dialog).toContainText(ui("bodyEditor.discard.title"));
+  await dialog.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(textarea).toHaveValue(/Ein Satz, der nie gespeichert wird\./);
+  await expect(textarea).toHaveValue(/A sentence that is never saved\./);
 
   // Discarding closes the editor and the reading view is as it was.
-  await page.getByRole("button", { name: "Abbrechen" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
+  await page.getByRole("button", { name: CANCEL }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: ui("common.discard") })
+    .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
   await expect(page.locator("[data-callout='readaloud']")).toContainText(
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
-  await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
+  await expect(page.getByRole("article")).not.toContainText("never saved");
   // Nothing was written.
   expect(await sceneSplit(api)).toEqual(before);
 });
 
 test("the NPC reading view edits its body the same way", async ({ page, api }) => {
   const before = await npcFields(api);
-  const added = "- metta: schuldet Jorna einen Gefallen aus dem letzten Herbst";
+  const added = "- metta: owes Jorna a favour from last autumn";
 
   await page.goto(NPC_URL);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(before.name);
 
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}${added}\n`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
 
   await expect(textarea).toHaveCount(0);
   // The NPC header (quickstats, voice) stands untouched around the new body.
   await expect(page.getByRole("article")).toContainText("knapp, wetterrau, duzt jeden");
-  await expect(page.getByRole("article")).toContainText("schuldet Jorna einen Gefallen");
+  await expect(page.getByRole("article")).toContainText("owes Jorna a favour");
 
   await expect.poll(async () => (await getNpc(api, NPC)).body).toContain(added);
   // Every other field of the npc is as it was.
@@ -599,7 +622,7 @@ test("a location and a chapter offer the editor on their own routes", async ({ p
     await openMarkdownEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
     // Clean exit — no dialog, nothing written.
-    await page.getByRole("button", { name: "Abbrechen" }).click();
+    await page.getByRole("button", { name: CANCEL }).click();
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
   }
 });
@@ -609,17 +632,15 @@ test("a chapter's text is edited on its reading view; its other fields stay", as
   api,
 }) => {
   const before = await getChapter(api, "01-salzhafen");
-  const added = "Wer das Feuer löscht, will nicht gesehen werden.";
+  const added = "Whoever puts out the light does not want to be seen.";
 
   await page.goto("/campaigns/beispiel/chapters/01-salzhafen");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Kapitel 1: Der Leuchtturm von Salzhafen",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(before.title);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${added}\n`);
-  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await page.getByRole("button", { name: SAVE, exact: true }).click();
 
   // The editor closes and the reading view renders the new text.
   await expect(textarea).toHaveCount(0);
@@ -633,25 +654,28 @@ test("a chapter's text is edited on its reading view; its other fields stay", as
   });
 });
 
-test("a chapter's text and a second writer: the conflict line, and „Neu laden“ adopts it", async ({
+test("a chapter's text and a second writer: the conflict line, and the reload action adopts it", async ({
   page,
   api,
 }) => {
   await page.goto("/campaigns/beispiel/chapters/01-salzhafen");
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
-  await textarea.fill("Mein Entwurf.\n");
+  await textarea.fill("My draft.\n");
 
   // The second writer: a status change of the same row, its own fresh rev.
   await patchChapter(api, "01-salzhafen", { status: "done" });
-  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await page.getByRole("button", { name: SAVE, exact: true }).click();
 
   // Nothing written — the draft stays, the conflict line asks.
   await expect(page.getByRole("alert")).toContainText(CONFLICT_LINE);
-  await expect(textarea).toHaveValue("Mein Entwurf.\n");
-  expect((await getChapter(api, "01-salzhafen")).body).not.toContain("Mein Entwurf.");
+  await expect(textarea).toHaveValue("My draft.\n");
+  expect((await getChapter(api, "01-salzhafen")).body).not.toContain("My draft.");
 
-  await page.getByRole("button", { name: "Neu laden" }).click();
+  await page
+    .getByRole("alert")
+    .getByRole("button", { name: ui("editConflict.reload") })
+    .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(textarea).toHaveValue((await getChapter(api, "01-salzhafen")).body);
   expect((await getChapter(api, "01-salzhafen")).status).toBe("done");
@@ -684,7 +708,7 @@ test("the chapter and the campaign are their own resources; the entry addresses 
   const staleChapter = await api.fetch(chapterPath(api, "01-salzhafen"), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: chapter.rev - 1, title: "Veraltet" }),
+    body: JSON.stringify({ rev: chapter.rev - 1, title: "Stale" }),
   });
   expect(staleChapter.status).toBe(409);
   expect(((await staleChapter.json()) as { chapter: { title: string } }).chapter.title).toBe(
@@ -693,7 +717,7 @@ test("the chapter and the campaign are their own resources; the entry addresses 
   const staleCampaign = await api.fetch(campaignPath(api), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: campaign.rev - 1, name: "Veraltet" }),
+    body: JSON.stringify({ rev: campaign.rev - 1, name: "Stale" }),
   });
   expect(staleCampaign.status).toBe(409);
   expect((await getCampaign(api)).name).toBe(campaign.name);
@@ -709,7 +733,10 @@ test("the chapter and the campaign are their own resources; the entry addresses 
   const unknownCampaign = await api.fetch(campaignPath(api), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: campaign.rev, title: "Kein Feld der Kampagne" }),
+    body: JSON.stringify({
+      rev: campaign.rev,
+      title: "Not a field of the campaign",
+    }),
   });
   expect(unknownCampaign.status).toBe(400);
   expect(await unknownCampaign.text()).toContain("title");
@@ -734,7 +761,7 @@ test("the chapter and the campaign are their own resources; the entry addresses 
       const res = await api.fetch(`campaigns/beispiel/entries/${address}`, {
         method,
         headers: { "content-type": "application/json" },
-        body: method === "GET" ? undefined : JSON.stringify({ rev: 1, body: "\nAlles neu.\n" }),
+        body: method === "GET" ? undefined : JSON.stringify({ rev: 1, body: "\nAll new.\n" }),
       });
       expect(res.status).toBe(404);
     }
@@ -745,20 +772,26 @@ test("a glossary term is a row of its own, kept on the glossary page", async ({ 
   // A glossary term is its own resource (decisions/resources) and has no text to edit as
   // markdown. The glossary page is where the DM keeps the terms — row by
   // row, never as markdown.
-  const created = await createGlossaryTerm(api, { term: "tide flat", explanation: "Gezeitenwatt" });
+  const created = await createGlossaryTerm(api, {
+    term: "tide flat",
+    explanation: "Mud flats bared at low tide",
+  });
   expect((await getGlossaryTerms(api)).map((term) => term.id)).toContain(created.id);
 
   // The glossary page shows the term, and carries no markdown editor.
   await page.goto("/campaigns/beispiel/glossary");
-  await expect(page.getByText("Gezeitenwatt")).toBeVisible();
+  await expect(page.getByText("Mud flats bared at low tide")).toBeVisible();
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 });
 
 // --- the prose field beside the text ------------------------------------------
 
-/** The motivation field of the npc edit surface („Will“). */
+/** The motivation field of the npc edit surface. */
 function motivationField(page: Page) {
-  return page.getByRole("textbox", { name: "Will", exact: true });
+  return page.getByRole("textbox", {
+    name: ui("properties.npc.motivation.label"),
+    exact: true,
+  });
 }
 
 test("the npc edit surface carries the motivation: set with the text, cleared with null", async ({
@@ -766,18 +799,22 @@ test("the npc edit surface carries the motivation: set with the text, cleared wi
   api,
 }) => {
   const before = await npcFields(api);
-  const mine = "Das Leuchtfeuer brennen sehen — und [[fenn]] endlich zur Rede stellen.";
+  const mine = "To see the beacon burn — and finally confront [[fenn]] about it.";
 
   await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   const field = motivationField(page);
   await expect(field).toHaveValue(String(before.motivation));
   await expect(
-    page.getByText("Textkörper und Will — die übrigen Eigenschaften bleiben unverändert."),
+    page.getByText(
+      ui("bodyEditor.hint.withFields", {
+        fields: ui("properties.npc.motivation.label"),
+      }),
+    ),
   ).toBeVisible();
 
   // A field change alone is something to save.
-  const save = page.getByRole("button", { name: "Speichern" });
+  const save = page.getByRole("button", { name: SAVE });
   await expect(save).toBeDisabled();
   await field.fill(mine);
   await expect(save).toBeEnabled();
@@ -786,7 +823,8 @@ test("the npc edit surface carries the motivation: set with the text, cleared wi
   // Rendered in the header, the reference as the current name.
   await expect(field).toHaveCount(0);
   const article = page.getByRole("article");
-  await expect(article).toContainText("und Fenn endlich zur Rede stellen");
+  const fenn = (await getNpc(api, "fenn")).name;
+  await expect(article).toContainText(`finally confront ${fenn} about it`);
   await expect(article).not.toContainText("[[fenn]]");
   const saved = await npcFields(api);
   // Only the motivation moved — the text was not touched, so it was not sent.
@@ -795,10 +833,10 @@ test("the npc edit surface carries the motivation: set with the text, cleared wi
   // Emptying the field clears it — no empty value stays behind.
   await openMarkdownEditor(page);
   await motivationField(page).fill("");
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
   await expect(motivationField(page)).toHaveCount(0);
   await expect.poll(async () => Object.hasOwn(await getNpc(api, NPC), "motivation")).toBe(false);
-  await expect(article).not.toContainText("zur Rede stellen");
+  await expect(article).not.toContainText("finally confront");
 });
 
 test("the location edit surface carries the atmosphere; the properties dialog shows neither", async ({
@@ -806,22 +844,29 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
   api,
 }) => {
   const before = await getLocation(api, "leuchtturm");
-  const mine = "Kaltes Lampenöl, und der Wind pfeift durch die Wendeltreppe.";
+  const mine = "Cold lamp oil, and the wind whistles through the spiral stairs.";
 
   await page.goto("/campaigns/beispiel/locations/leuchtturm");
   // Not in the dialog: it is edited where the prose is edited.
-  await page.getByRole("button", { name: "Eigenschaften" }).click();
+  await page.getByRole("button", { name: ui("properties.action") }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Ort: Eigenschaften");
-  await expect(dialog.getByRole("textbox", { name: "Atmosphäre" })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(dialog).toContainText(ui("properties.title", { kind: ui("kind.location") }));
+  await expect(
+    dialog.getByRole("textbox", {
+      name: ui("properties.location.atmosphere.label"),
+    }),
+  ).toHaveCount(0);
+  await dialog.getByRole("button", { name: CANCEL }).click();
   await expect(dialog).toHaveCount(0);
 
   await openMarkdownEditor(page);
-  const field = page.getByRole("textbox", { name: "Atmosphäre", exact: true });
+  const field = page.getByRole("textbox", {
+    name: ui("properties.location.atmosphere.label"),
+    exact: true,
+  });
   await expect(field).toHaveValue(String(before.atmosphere));
   await field.fill(mine);
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
   await expect(field).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
   const after = await getLocation(api, "leuchtturm");
@@ -831,29 +876,33 @@ test("the location edit surface carries the atmosphere; the properties dialog sh
 
   // …and the npc's dialog leaves the motivation out the same way.
   await page.goto(NPC_URL);
-  await page.getByRole("button", { name: "Eigenschaften" }).click();
-  await expect(page.getByRole("dialog")).toContainText("NPC: Eigenschaften");
-  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Will" })).toHaveCount(0);
+  await page.getByRole("button", { name: ui("properties.action") }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    ui("properties.title", { kind: ui("kind.npc") }),
+  );
+  await expect(
+    page.getByRole("dialog").getByRole("textbox", { name: ui("properties.npc.motivation.label") }),
+  ).toHaveCount(0);
 });
 
-test("text and motivation share the guard: a second write is the conflict line — „Neu laden“ takes the stored state", async ({
+test("text and motivation share the guard: a second write is the conflict line — the reload action takes the stored state", async ({
   page,
   api,
 }) => {
   const before = await npcFields(api);
-  const theirs = "Die Hafenkasse retten, koste es, was es wolle.";
+  const theirs = "Save the harbour coffers, whatever it costs.";
 
   await page.goto(NPC_URL);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
-  await motivationField(page).fill("Meine Fassung der Motivation.");
+  await motivationField(page).fill("My version of the motivation.");
   await textarea.fill(`${before.body}
-Meine Zeile.
+My line.
 `);
 
   // Somebody else writes the motivation while the surface stands.
   await patchNpc(api, NPC, { motivation: theirs });
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
 
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
@@ -866,16 +915,16 @@ Meine Zeile.
   await expect(conflicted.line).toHaveCount(0);
   await expect(motivationField(page)).toHaveValue(theirs);
   await expect(textarea).toHaveValue(before.body);
-  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: SAVE })).toBeDisabled();
 });
 
-test("„Trotzdem speichern“ writes text and motivation — a foreign status survives", async ({
+test("saving anyway writes text and motivation — a foreign status survives", async ({
   page,
   api,
 }) => {
   const before = await npcFields(api);
-  const mine = "Trotz allem das Leuchtfeuer.";
-  const line = "Trotz des Statuswechsels gespeichert.";
+  const mine = "The beacon, despite everything.";
+  const line = "Saved despite the status change.";
 
   await page.goto(NPC_URL);
   await openMarkdownEditor(page);
@@ -887,7 +936,7 @@ ${line}
 
   // A write of another field by a second writer is a conflict all the same.
   await patchNpc(api, NPC, { status: "missing" });
-  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: SAVE }).click();
   const conflicted = conflict(page);
   await expect(conflicted.line).toBeVisible();
 
