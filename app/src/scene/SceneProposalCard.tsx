@@ -16,7 +16,7 @@ import { Bookmark, Check, GitFork, MapPin } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { DraftBodySection, DraftFieldsSection } from "@/components/DraftEditor";
+import { ProposalBodySection, ProposalFieldsSection } from "@/components/ProposalEditor";
 import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
@@ -202,7 +202,7 @@ export function SceneProposalEditor({
   };
   return (
     <div className="mt-3 flex flex-col gap-4">
-      <DraftFieldsSection label={label}>
+      <ProposalFieldsSection label={label}>
         <SceneFields
           values={values}
           pending={pending}
@@ -211,8 +211,8 @@ export function SceneProposalEditor({
           onChange={(next) => edit(next, pending)}
           onPendingChange={(next) => edit(values, next)}
         />
-      </DraftFieldsSection>
-      <DraftBodySection
+      </ProposalFieldsSection>
+      <ProposalBodySection
         label={label}
         body={scene.body}
         onBodyChange={(body) => onChange({ body })}

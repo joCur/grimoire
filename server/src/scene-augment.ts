@@ -25,7 +25,7 @@ import {
   type SceneAugmentResult,
   type SceneProposal,
 } from "@grimoire/shared";
-import { bodyEntityRefSlugs } from "@grimoire/shared/refs";
+import { bodyRefSlugs } from "@grimoire/shared/refs";
 import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
@@ -102,7 +102,7 @@ export function validateSceneAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  const known = new Set([...refIds, ...bodyEntityRefSlugs(stored.body)]);
+  const known = new Set([...refIds, ...bodyRefSlugs(stored.body)]);
   for (const msg of unknownRefErrors(scene.body, known)) errors.push(`${label}: ${msg}`);
   if (errors.length > 0) return { ok: false, errors };
   return {

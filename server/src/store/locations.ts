@@ -22,10 +22,13 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { generateJobs, locations } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertChapterRef, indexLocation, locationRowOf } from "./entity-rows";
+import { assertChapterRef } from "./chapters";
+import { indexEntity } from "./fts";
 import { getDb } from "./handle";
+import { expandCampaignBodyRefs } from "./refs";
 import type { LocationRow } from "./render";
-import { normalizeBody, parseRequest, resolveNewId, revConflict, slugTaken } from "./shared";
+import { indexedProse, reindexReferrers } from "./search-index";
+import { normalizeBody, parseRequest, resolveNewId, revConflict, slugTaken, unknownRef } from "./shared";
 
 // --- rendering a row ----------------------------------------------------------
 
@@ -266,4 +269,35 @@ export async function createLocation(
     indexLocation(tx, campaign, row);
     return renderLocation(row);
   });
+}
+
+// --- loading and checking a location row ---------------------------------------
+
+/** One location row by id, read through `tx` (the database or a transaction). */
+export function locationRowOf(tx: GrimoireDb, campaign: string, id: string): LocationRow | undefined {
+  return tx
+    .select()
+    .from(locations)
+    .where(and(eq(locations.campaignId, campaign), eq(locations.id, id)))
+    .all()[0] as LocationRow | undefined;
+}
+
+/** A scene's `location` has to name a location. */
+export function assertLocationRef(tx: GrimoireDb, campaign: string, id: string | null): void {
+  if (id === null) return;
+  if (locationRowOf(tx, campaign, id) !== undefined) return;
+  throw unknownRef("location_unknown", "location", id);
+}
+
+/** Rebuild a location's search-index row, then the rows of what references it. */
+export function indexLocation(tx: GrimoireDb, campaign: string, row: LocationRow): void {
+  indexEntity(tx, campaign, {
+    kind: "location",
+    entityId: row.id,
+    title: row.name === "" ? row.id : row.name,
+    ref: row.id,
+    tags: "",
+    body: expandCampaignBodyRefs(tx, campaign, indexedProse(row.atmosphere, row.body)),
+  });
+  reindexReferrers(tx, campaign, row.id);
 }

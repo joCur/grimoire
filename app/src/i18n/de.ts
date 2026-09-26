@@ -105,7 +105,6 @@ export const de = {
   "create.campaign.title": "Kampagne anlegen",
   "create.campaign.nameLabel": "Name der Kampagne",
   "create.campaign.namePlaceholder": "Name der Kampagne",
-  "create.campaign.idPrefix": "Kennung: ",
   "create.campaign.descriptionLabel": "Beschreibung (optional)",
   "create.campaign.descriptionPlaceholder": "Ein Satz, der die Kampagne einordnet",
 

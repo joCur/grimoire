@@ -27,7 +27,7 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { threads } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertChapterRef } from "./entity-rows";
+import { assertChapterRef } from "./chapters";
 import { getDb } from "./handle";
 import { nextPos, parseRequest, revConflict } from "./shared";
 

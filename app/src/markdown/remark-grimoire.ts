@@ -16,7 +16,7 @@
 //    side (Markdown.tsx), the format keeps saying open.
 //
 // 3. `[[slug]]` entity references: every text node is split and the
-//    reference becomes a `<span data-entity-ref="slug">` carrying the
+//    reference becomes a `<span data-ref="slug">` carrying the
 //    literal `[[slug]]` as its text. RESOLUTION IS NOT THIS PLUGIN'S JOB —
 //    the name lives in the campaign tree, which only React has (RefLink in
 //    Markdown.tsx). The literal text inside the span is therefore also the
@@ -43,22 +43,22 @@ import {
 // `[[slug]]` is the format too — the server expands the same references for
 // the search index and the generator is told to emit them (@grimoire/shared).
 import {
-  entityRefSource,
-  splitEntityRefs,
-  type EntityRefPiece,
+  refSource,
+  splitRefs,
+  type RefPiece,
 } from "@grimoire/shared/refs";
 
 /** The attribute the React side reads to resolve a reference. */
-export const ENTITY_REF_ATTR = "data-entity-ref";
+export const REF_ATTR = "data-ref";
 
 /**
  * The attribute a SUMMARY's reference carries: a `## If:` summary is a
  * toggle, so a reference in it renders as the resolved NAME AS TEXT — never
- * as a link or a button (see `transformEntityRefs`).
+ * as a link or a button (see `transformRefs`).
  */
-export const ENTITY_REF_PLAIN_ATTR = "data-entity-ref-plain";
+export const REF_PLAIN_ATTR = "data-ref-plain";
 
-/** The read-aloud clipboard payload: `EntityRefPiece[]` as JSON. */
+/** The read-aloud clipboard payload: `RefPiece[]` as JSON. */
 export const COPY_PARTS_ATTR = "data-copy-parts";
 
 /**
@@ -72,8 +72,8 @@ export const COPY_PARTS_ATTR = "data-copy-parts";
  * contribute their value literally — a read-aloud that quotes `` `[[jorna]]` ``
  * shows brackets on screen, so the clipboard keeps them too.
  */
-function copyParts(node: Blockquote): EntityRefPiece[] {
-  const parts: EntityRefPiece[] = [];
+function copyParts(node: Blockquote): RefPiece[] {
+  const parts: RefPiece[] = [];
   const pushText = (value: string): void => {
     if (value === "") return;
     const last = parts[parts.length - 1];
@@ -85,7 +85,7 @@ function copyParts(node: Blockquote): EntityRefPiece[] {
   const walk = (current: unknown): void => {
     const item = current as { type?: string; value?: string; children?: unknown[] };
     if (item.type === "text") {
-      for (const piece of splitEntityRefs(item.value ?? "")) {
+      for (const piece of splitRefs(item.value ?? "")) {
         if (piece.type === "ref") parts.push(piece);
         else pushText(collapse(piece.value));
       }
@@ -233,13 +233,13 @@ function transformIfSections(tree: Root): void {
  */
 const LINK_TYPES = new Set(["link", "linkReference", "imageReference"]);
 
-function transformEntityRefs(node: Parent, insideLink: boolean, insideSummary = false): void {
+function transformRefs(node: Parent, insideLink: boolean, insideSummary = false): void {
   const next: RootContent[] = [];
   let changed = false;
 
   for (const child of node.children) {
     if (child.type === "text" && !insideLink) {
-      const pieces = splitEntityRefs(child.value);
+      const pieces = splitRefs(child.value);
       if (pieces.length > 1 || pieces[0]?.type === "ref") {
         changed = true;
         for (const piece of pieces) {
@@ -248,23 +248,23 @@ function transformEntityRefs(node: Parent, insideLink: boolean, insideSummary = 
             continue;
           }
           next.push({
-            type: "entityRef",
+            type: "ref",
             data: {
               hName: "span",
               hProperties: {
-                [ENTITY_REF_ATTR]: piece.slug,
-                ...(insideSummary ? { [ENTITY_REF_PLAIN_ATTR]: "" } : {}),
+                [REF_ATTR]: piece.slug,
+                ...(insideSummary ? { [REF_PLAIN_ATTR]: "" } : {}),
               },
             },
             // The literal source IS the fallback rendering (see the header).
-            children: [{ type: "text", value: entityRefSource(piece.slug) }],
+            children: [{ type: "text", value: refSource(piece.slug) }],
           } as unknown as PhrasingContent as RootContent);
         }
         continue;
       }
     }
     if ("children" in child && Array.isArray(child.children)) {
-      transformEntityRefs(
+      transformRefs(
         child as Parent,
         insideLink || LINK_TYPES.has(child.type),
         insideSummary || (child.type as string) === "ifSummary",
@@ -286,6 +286,6 @@ export function remarkGrimoire() {
     // References LAST: the callout pass reads the raw first text node of a
     // blockquote to find its `[!kind]` marker, and a marker line that also
     // carries a reference must still be a callout.
-    transformEntityRefs(tree, false);
+    transformRefs(tree, false);
   };
 }

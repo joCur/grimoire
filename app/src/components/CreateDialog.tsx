@@ -80,13 +80,6 @@ interface CreateDialogProps {
    * business in a fresh instance.
    */
   namePlaceholder: string;
-  /**
-   * What the id gets prefixed with in the address preview (`npcs/`,
-   * `locations/`, `<chapter>/`, and the empty string for a chapter, whose id
-   * IS the address). A campaign has no address to prefix, so it labels the
-   * bare id instead.
-   */
-  addressPrefix: string;
   /** The optional second field — same placeholder rule as above. */
   extra?: { label: string; placeholder: string; multiline?: boolean };
   /** Runs the POST. Rejecting with an ApiError is what the dialog reads. */
@@ -99,7 +92,6 @@ export function CreateDialog({
   description,
   nameLabel,
   namePlaceholder,
-  addressPrefix,
   extra,
   create,
   onClose,
@@ -187,7 +179,6 @@ export function CreateDialog({
             {/* The id that will be created — quiet, but never hidden, and
                 settable by hand (ADR #21). */}
             <IdField
-              prefix={addressPrefix}
               id={id}
               editing={idState.editing}
               invalid={idInvalid}

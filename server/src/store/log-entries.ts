@@ -22,7 +22,7 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { logEntries } from "../db/schema";
 import { mutate } from "./campaigns";
-import { assertSceneRef } from "./entity-rows";
+import { assertSceneRef } from "./scenes";
 import { requireRunningSessionRow, requireSessionRow } from "./session-rows";
 import { nextPos, parseRequest, revConflict } from "./shared";
 

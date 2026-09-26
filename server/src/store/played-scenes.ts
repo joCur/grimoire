@@ -18,7 +18,7 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { playedScenes } from "../db/schema";
 import { mutate } from "./campaigns";
-import { assertSceneRef } from "./entity-rows";
+import { assertSceneRef } from "./scenes";
 import { requireRunningSessionRow } from "./session-rows";
 import { nextPos, parseRequest } from "./shared";
 
