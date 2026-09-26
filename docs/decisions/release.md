@@ -24,10 +24,9 @@ definition but publishes nothing: images are created only on release.
 
 ## Why
 
-The PO wants to deploy a known good state deliberately before a session and
-roll back trivially. A tag that moves on every merge prevents both, and a
-push per merge would dilute what a release means; a version tag comes with a
-changelog, a commit hash does not.
+A deployment should run a known state and roll back trivially. A tag that
+moves on every merge prevents both, and a push per merge would dilute what a
+release means; a version tag comes with a changelog, a commit hash does not.
 
 release-please stays ungated because the release PR must be maintained even
 while `main` is red.
