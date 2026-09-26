@@ -641,11 +641,16 @@ ihrer Session: `{ id, sceneId, rev }`. Die gespielten Szenen sind eine
 Folge in Spielreihenfolge; eine Szene, zu der die Gruppe zurückkehrt, steht
 darin zweimal.
 
-- `POST …/sessions/<session>/played-scenes { sceneId }` ist „Nächste Szene“:
-  die Szene steht danach am Ende (201). Sie muss existieren (400
+- `POST …/sessions/<session>/played-scenes { sceneId }` legt eine gespielte
+  Szene an: die Szene steht danach am Ende (201). Sie muss existieren (400
   `played_scene_unknown` sonst).
-- Eine Log-Zeile spielt keine Szene: die gespielten Szenen wachsen nur über
-  ihre eigene Ressource.
+- Als gespielt gilt eine Szene, wenn der DM sie in der Live-Ansicht mit
+  „Nächste Szene“ **verlässt** und die Session mindestens eine Log-Zeile mit
+  ihrer `sceneId` hat; dann legt die App sie an, einmal je Session. Ohne
+  Notiz legt sie nichts an, und der DM markiert die Szene später selbst.
+- Eine Log-Zeile spielt keine Szene, und das Beenden der Session legt die
+  gerade offene Szene nicht an: die gespielten Szenen wachsen nur über ihre
+  eigene Ressource.
 
 ## Referenzen zeigen auf vorhandene Einträge
 

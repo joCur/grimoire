@@ -5,8 +5,8 @@
 //
 // In a pure helper, take `Translate` as a parameter instead of importing a
 // catalog — the lib layer must not decide which language the UI is in
-// (lib/create.ts, lib/session.ts and the entity slices' pure helpers do it
-// that way).
+// (lib/create.ts and the entity slices' pure helpers, session/session-time.ts
+// among them, do it that way).
 
 export { de } from "./de";
 export { en } from "./en";

@@ -1,4 +1,4 @@
-// The played scenes of a session: the next step of the evening.
+// The played scenes of a session: the scenes the group played that evening.
 //
 // A PLAYED SCENE IS ITS OWN RESOURCE (ADR #31), hanging under its session:
 // `…/sessions/:session/played-scenes`, answering the `PlayedScene` type —
@@ -14,8 +14,9 @@ export const playedSceneRoutes = new Hono();
 
 // POST /api/campaigns/:campaign/sessions/:session/played-scenes { sceneId }
 //   -> 201 PlayedScene
-// "Next scene": the session reaches `sceneId`, which stands at the end of its
-// played scenes, with an id the server hands out. The scene is a reference:
+// Records `sceneId` as played in the session: it stands at the end of its
+// played scenes, with an id the server hands out. The app writes it when the
+// DM leaves a scene with "Nächste Szene" after taking a note in it. The scene is a reference:
 // one the campaign does not have is 400 { code: "played_scene_unknown",
 // value }, and nothing is created for it. A key that is not `sceneId`, or a
 // value of the wrong shape, is a 400 that names it.

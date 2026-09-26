@@ -35,7 +35,7 @@ export type PlayedSceneSeed = z.infer<typeof playedSceneSeedSchema>;
 
 /**
  * The body of `POST /api/campaigns/:c/sessions/:s/played-scenes`: the scene
- * the session reaches next. It stands at the end of the sequence.
+ * that was played. It stands at the end of the sequence.
  */
 export const playedSceneCreateSchema = playedSceneSeedSchema.pick({ sceneId: true });
 
