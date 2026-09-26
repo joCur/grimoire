@@ -1,7 +1,8 @@
-// The augment action of an npc's reading view: the shared augment dialog and
-// review (components/AugmentAction.tsx) over the run that starts on the npc's
-// own resource (ADR #31), and the npc's own editing session as the accepting
-// write.
+// The augment action of an npc's reading view. It joins two slices: the
+// generator job's augment dialog and review (generator-job/AugmentAction.tsx)
+// over the run that starts on the npc's own resource (ADR #31), and the
+// npc's own editing session as the accepting write. App.tsx hands it to the
+// npc's route as its augment slot.
 
 import { npcChangeSchema } from "@grimoire/shared/npc";
 import type { Npc } from "@grimoire/shared/types";
@@ -14,12 +15,12 @@ import {
   staleAfterApply,
   useAugmentReviewState,
   type ProposalView,
-} from "@/components/AugmentAction";
+} from "@/generator-job/AugmentAction";
 
-import { applyNpcAugment, startNpcAugmentJob } from "./npc-api";
-import { npcFieldProposals } from "./npc-augment";
-import { npcsKey } from "./npc-query";
-import { useNpcEdit } from "./use-npc-edit";
+import { applyNpcAugment, startNpcAugmentJob } from "@/npc/npc-api";
+import { npcFieldProposals } from "@/npc/npc-augment";
+import { npcsKey } from "@/npc/npc-query";
+import { useNpcEdit } from "@/npc/use-npc-edit";
 
 export function NpcAugmentAction({ campaign, npc }: { campaign: string; npc: Npc }) {
   return (

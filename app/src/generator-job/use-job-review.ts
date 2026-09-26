@@ -36,18 +36,18 @@ import type {
   GeneratorJobReviewPatch,
 } from "@grimoire/shared/generator-job";
 
-import { ApiError, patchGeneratorJob } from "@/api";
-import { mergeEdits, mergeReviewPatch, type ReviewPatch } from "@/lib/generate";
-import { generateJobKey } from "@/lib/use-generate-job";
+import { ApiError } from "@/api";
+import type { ReviewSaveState } from "@/components/ReviewSaveStatus";
+
+import { patchGeneratorJob } from "./generator-job-api";
+import { generateJobKey } from "./generator-job-query";
+import { mergeEdits, mergeReviewPatch, type ReviewPatch } from "./generator-job-state";
 
 /** Debounce before a review edit is pushed into the job. */
 export const REVIEW_DEBOUNCE_MS = 600;
 
-/** What the quiet status line says. */
-export type ReviewSaveStatus = "idle" | "saving" | "saved" | "conflict" | "error";
-
 export interface JobReviewSync {
-  status: ReviewSaveStatus;
+  status: ReviewSaveState;
   /**
    * A change of one proposed scene, by its id — debounced; the caller keeps
    * its own buffer so the field does not lag behind the keystroke.
@@ -119,7 +119,7 @@ export interface ReviewQueueIo {
   send: (patch: ReviewPatch) => Promise<void>;
   /** Re-read the job after a conflict. */
   reread: () => void;
-  status: (status: ReviewSaveStatus) => void;
+  status: (status: ReviewSaveState) => void;
 }
 
 export interface ReviewQueue {
@@ -208,7 +208,7 @@ export function useJobReview(
   delayMs: number = REVIEW_DEBOUNCE_MS,
 ): JobReviewSync {
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<ReviewSaveStatus>("idle");
+  const [status, setStatus] = useState<ReviewSaveState>("idle");
   // Read at SEND time: a debounced edit must land on the job that is current
   // then, not on the one that was current when the key was pressed.
   const target = useRef({ campaign, jobId: job?.id });

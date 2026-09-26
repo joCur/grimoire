@@ -17,14 +17,12 @@ import { StickyNote } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 
-import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
+import { ReviewSaveStatus, type ReviewSaveState } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
-import type { JobReviewSync } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
 
 import { NpcProposalCard } from "./NpcProposalCard";
-import { startGenerateNpcJob } from "./npc-api";
 import { npcHref } from "./npc-links";
 import { npcIdError, npcOf } from "./npc-run";
 
@@ -34,7 +32,7 @@ const FIELD =
 
 // --- input ------------------------------------------------------------------------
 
-/** The run's form: its two fields, whether it can start, and the start itself. */
+/** The run's form: its two fields, whether it can start, and what it starts with. */
 export interface NpcRunForm {
   source: string;
   setSource: (text: string) => void;
@@ -44,7 +42,8 @@ export interface NpcRunForm {
   idError: string | undefined;
   /** Source text there and the id usable. */
   ready: boolean;
-  start: (campaign: string) => Promise<GeneratorJob>;
+  /** What the run starts with — the route starts it on the generator job. */
+  input: { sourceText: string; id: string };
 }
 
 export function useNpcRunForm(tree: CampaignTree | undefined): NpcRunForm {
@@ -60,7 +59,7 @@ export function useNpcRunForm(tree: CampaignTree | undefined): NpcRunForm {
     setId,
     idError,
     ready: source.trim() !== "" && idError === undefined,
-    start: (campaign) => startGenerateNpcJob(campaign, { sourceText: source, id: pinned }),
+    input: { sourceText: source, id: pinned },
   };
 }
 
@@ -147,7 +146,12 @@ export function NpcRunReview({
   job: GeneratorJob;
   result: GenerateNpcResult;
   tree: CampaignTree | undefined;
-  review: JobReviewSync;
+  /** The job's review: its save line, the debounced edit and the flush. */
+  review: {
+    status: ReviewSaveState;
+    editNpc: (id: string, change: NpcChange) => void;
+    flush: () => Promise<void>;
+  };
   /** The run's token spend, as one quiet line. */
   usage: string | undefined;
   /** The naming hints of the run, rendered by the route. */

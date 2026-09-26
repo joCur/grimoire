@@ -13,7 +13,7 @@
 import { useQuery, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
-import { deleteGeneratorJob, fetchGeneratorJob } from "@/api";
+import { deleteGeneratorJob, fetchGeneratorJob } from "./generator-job-api";
 
 /** Poll cadence while a job runs. */
 export const GENERATOR_JOB_POLL_MS = 3_000;
@@ -24,7 +24,7 @@ export function generateJobKey(campaign: string): [string, string] {
 }
 
 /**
- * How long until the next poll — `false` for „nothing to wait for".
+ * How long until the next poll — `false` for "nothing to wait for".
  *
  * Two reasons to keep the loop alive, and the SECOND one outranks everything
  * in the cache:
@@ -37,7 +37,7 @@ export function generateJobKey(campaign: string): [string, string] {
  *     interval off, because nothing would switch it back on while the run
  *     finishes on the server.
  *
- * The invariant behind it: the view may not claim „working" without a live
+ * The invariant behind it: the view may not claim "working" without a live
  * poll loop — the server is the truth, so something has to keep asking it.
  */
 export function generateJobPollMs(

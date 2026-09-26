@@ -7,8 +7,9 @@
 // Edit mode is remembered BY NPC: this route stays mounted across a
 // navigation, and an editor seeded from another npc would be a lie.
 
+import type { Npc } from "@grimoire/shared/npc";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 
 import { fetchTree } from "@/api";
@@ -19,11 +20,15 @@ import { useT } from "@/i18n";
 
 import { NpcArticle } from "./NpcArticle";
 import { NpcBodyEditor, NpcFieldsAction } from "./NpcActions";
-import { NpcAugmentAction } from "./NpcAugmentAction";
 import { npcPageCrumbs } from "./npc-links";
 import { npcQuery } from "./npc-query";
 
-export function NpcRoute() {
+export function NpcRoute({
+  augmentAction,
+}: {
+  /** The augment run on this npc — the generator job's dialog, handed in. */
+  augmentAction: (campaign: string, npc: Npc) => ReactNode;
+}) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
@@ -64,7 +69,7 @@ export function NpcRoute() {
     <>
       {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
       <NpcFieldsAction campaign={campaign} npc={data} tree={tree.data} />
-      {editing ? null : <NpcAugmentAction campaign={campaign} npc={data} />}
+      {editing ? null : augmentAction(campaign, data)}
     </>
   );
   const body = editing ? (

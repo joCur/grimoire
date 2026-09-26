@@ -8,8 +8,10 @@ import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
-import type { PartState } from "@/lib/generate";
 import { cn } from "@/lib/utils";
+
+/** What became of one part of a run — what a proposal row shows. */
+export type PartState = "open" | "written" | "dropped" | "rejected";
 
 export function ProposalRow({
   icon: Icon,

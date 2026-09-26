@@ -65,8 +65,8 @@ import {
 import { locationsHref } from "@/location/location-links";
 import { npcsHref } from "@/npc/npc-links";
 import { navSection } from "@/lib/topbar-nav";
-import { acceptProgress, pipelineProgress } from "@/lib/generate";
-import { useGenerateJob } from "@/lib/use-generate-job";
+import { acceptProgress, pipelineProgress } from "@/generator-job/generator-job-state";
+import { useGenerateJob } from "@/generator-job/generator-job-query";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
 import { MobileSessionRow, SessionChip, sessionChipState } from "@/session/SessionChip";

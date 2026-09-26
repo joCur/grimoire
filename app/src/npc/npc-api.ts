@@ -1,6 +1,5 @@
 // The API client of an npc (ADR #31): its resource — read, list, create,
-// write — its write conflict, the NPC run of the generator and the augment
-// run on it. Built from the shared HTTP helpers (../api.ts).
+// write — its write conflict and the augment run on it. Built from the shared HTTP helpers (../api.ts).
 
 import type { Npc, NpcPatch } from "@grimoire/shared/types";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
@@ -8,7 +7,6 @@ import type { GeneratorJob } from "@grimoire/shared/generator-job";
 import {
   ApiError,
   campaignPath,
-  generatorJobsPath,
   getJson,
   postJson,
   runTexts,
@@ -89,26 +87,6 @@ export function createNpc(
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
     ...(input.body === undefined ? {} : { body: input.body }),
-  });
-}
-
-/**
- * Start an NPC run: source material in, ONE proposed npc out. Same job model
- * as the scene run (`startJob`); the proposal is read on the job (its
- * `npcResult`).
- *
- * `id` is optional: empty means the model picks the id. A 409 WITHOUT a
- * running job is the other collision — the pinned id's npc already holds
- * something (never overwritten).
- */
-export function startGenerateNpcJob(
-  campaign: string,
-  input: { sourceText: string; id?: string },
-): Promise<GeneratorJob> {
-  return startJob(generatorJobsPath(campaign), {
-    kind: "npc",
-    sourceText: input.sourceText,
-    ...(input.id === undefined || input.id === "" ? {} : { id: input.id }),
   });
 }
 

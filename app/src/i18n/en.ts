@@ -592,7 +592,7 @@ export const en: Messages = {
   "markdown.ref.aria": "{kind}: {name}",
 
 
-  // --- generator: input form (routes/generate.tsx, lib/generate.ts) --------
+  // --- generator: input form (routes/generate.tsx, generator-job-state.ts) ---
   "generate.input.title.scene": "Generate scenes",
   "generate.input.title.npc": "Generate NPC",
   "generate.input.lead.scene":
@@ -631,7 +631,7 @@ export const en: Messages = {
   "generate.input.submit.scene": "Generate drafts",
   "generate.input.submit.npc": "Generate NPC",
 
-  // --- generator: the two id fields' own rules (lib/generate.ts) -----------
+  // --- generator: the two id fields' own rules (generator-job-state.ts) ------
   "generate.input.chapterId.missing": "Chapter ID missing.",
   "generate.input.chapterId.slash": "No slashes — the chapter ID is a single segment.",
   "generate.input.chapterId.dots": "No “..” in the chapter ID.",
@@ -666,7 +666,7 @@ export const en: Messages = {
   "generate.working.background":
     "Keeps running on the server — this tab may close. The result waits here until it is applied or discarded.",
 
-  // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
+  // --- generator: review (routes/generate.tsx, generator-job-state.ts) -------
   "generate.review.title": "Check drafts",
   // The NPC run reviews ONE suggested entry, not a set of drafts.
   "generate.review.titleNpc": "Check the proposal",
@@ -849,7 +849,7 @@ export const en: Messages = {
   "harness.properties": "Show properties",
 
 
-  // --- "Augment with AI" (components/AugmentAction.tsx) --------------------
+  // --- "Augment with AI" (generator-job/AugmentAction.tsx) -----------------
   "augment.action": "Augment with AI",
   "augment.title": "Augment with AI",
   "augment.description":

@@ -14,11 +14,14 @@ import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/knowledge-item/KnowledgeRoute";
 import { LiveRoute } from "@/routes/live";
 import { LocationRoute } from "@/location/LocationRoute";
+import { LocationAugmentAction } from "@/routes/LocationAugmentAction";
 import { NpcCard } from "@/npc/NpcCard";
 import { NpcRoute } from "@/npc/NpcRoute";
+import { NpcAugmentAction } from "@/routes/NpcAugmentAction";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SettingsRoute } from "@/routes/settings";
+import { SceneAugmentAction } from "@/routes/SceneAugmentAction";
 import { SceneRoute } from "@/scene/SceneRoute";
 import { sceneHref } from "@/scene/scene-links";
 import { SessionRoute } from "@/session/SessionRoute";
@@ -91,18 +94,40 @@ export function App() {
               reached from the topbar's quiet npc and location links and the
               mobile lookup rows. The scene's reading view is handed the npc
               cards of its aside — the npc draws them, the scene only says
-              where. */}
+              where — and each reading view its augment action, the generator
+              job's dialog joined with the entity's own write. */}
           <Route path="chapters/:id" element={<ChapterRoute />} />
           <Route
             path="scenes/:id"
             element={
-              <SceneRoute npcCard={(campaign, id) => <NpcCard campaign={campaign} id={id} />} />
+              <SceneRoute
+                npcCard={(campaign, id) => <NpcCard campaign={campaign} id={id} />}
+                augmentAction={(campaign, scene) => (
+                  <SceneAugmentAction campaign={campaign} scene={scene} />
+                )}
+              />
             }
           />
           <Route path="npcs" element={<BrowseRoute kind="npcs" />} />
-          <Route path="npcs/:id" element={<NpcRoute />} />
+          <Route
+            path="npcs/:id"
+            element={
+              <NpcRoute
+                augmentAction={(campaign, npc) => <NpcAugmentAction campaign={campaign} npc={npc} />}
+              />
+            }
+          />
           <Route path="locations" element={<BrowseRoute kind="locations" />} />
-          <Route path="locations/:id" element={<LocationRoute />} />
+          <Route
+            path="locations/:id"
+            element={
+              <LocationRoute
+                augmentAction={(campaign, location) => (
+                  <LocationAugmentAction campaign={campaign} location={location} />
+                )}
+              />
+            }
+          />
           {/* Campaign knowledge and glossary — campaign CONTENT, so they are
               list pages next to the npc/location ones and not sections of
               /settings. Reached from the chapter overview's lookup line, the

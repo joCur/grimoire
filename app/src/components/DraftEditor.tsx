@@ -6,7 +6,7 @@
 // A proposal is not written yet, so nothing here brings the write plumbing
 // along — no version guard, no save action, no conflict line. The sections
 // report every change upwards and the review keeps it on the job, debounced
-// (lib/use-job-review.ts). What they DO bring is the vocabulary:
+// (generator-job/use-job-review.ts). What they DO bring is the vocabulary:
 //
 //   fields  the heading and the proposal's label as the read-only id beside
 //           the controls its caller renders — the id is fixed there and here

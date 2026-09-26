@@ -8,8 +8,9 @@
 // Edit mode is remembered BY LOCATION: this route stays mounted across a
 // navigation, and an editor seeded from another location would be a lie.
 
+import type { Location } from "@grimoire/shared/location";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 
 import { fetchTree } from "@/api";
@@ -20,11 +21,15 @@ import { useT } from "@/i18n";
 
 import { LocationArticle } from "./LocationArticle";
 import { LocationBodyEditor, LocationFieldsAction } from "./LocationActions";
-import { LocationAugmentAction } from "./LocationAugmentAction";
 import { locationPageCrumbs } from "./location-links";
 import { locationQuery } from "./location-query";
 
-export function LocationRoute() {
+export function LocationRoute({
+  augmentAction,
+}: {
+  /** The augment run on this location — the generator job's dialog, handed in. */
+  augmentAction: (campaign: string, location: Location) => ReactNode;
+}) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
@@ -65,7 +70,7 @@ export function LocationRoute() {
     <>
       {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
       <LocationFieldsAction campaign={campaign} location={data} tree={tree.data} />
-      {editing ? null : <LocationAugmentAction campaign={campaign} location={data} />}
+      {editing ? null : augmentAction(campaign, data)}
     </>
   );
   const body = editing ? (
