@@ -1,4 +1,4 @@
-// The scene resource (ADR #31): `GET …/scenes`, `GET` and `PATCH
+// The scene resource (decisions/resources): `GET …/scenes`, `GET` and `PATCH
 // …/scenes/:id`, `POST …/scenes`, every field of a scene flat — `body` among
 // them — beside its `rev`, and every write checked against the scene's
 // schema. A scene lies flat under its campaign; the address it once had

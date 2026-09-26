@@ -1,7 +1,7 @@
 // In which order an accepted run lands in its chapter.
 //
 // The outline step decides the dramaturgical sequence of a run's scenes, and
-// that sequence is what the DM has to read in the chapter overview (ADR #27)
+// that sequence is what the DM has to read in the chapter overview (decisions/scene-order)
 // — whatever order the review names its scenes in, and however many accepts
 // it takes. A scene of the run goes to the run's START plus its outline
 // number: the start is the chapter's end at the first scene accept, stored

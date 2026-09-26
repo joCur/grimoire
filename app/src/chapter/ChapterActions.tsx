@@ -1,4 +1,4 @@
-// The editing surfaces of a chapter (ADR #31): the body editor of its reading
+// The editing surfaces of a chapter (decisions/resources): the body editor of its reading
 // view, the dialog over its other fields, and the two actions the chapter
 // overview offers per chapter. All of them are shared surfaces (BodyEditor,
 // FieldsDialog, the dialog shell) over the chapter's own form

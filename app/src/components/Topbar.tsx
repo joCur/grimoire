@@ -114,7 +114,7 @@ export function Topbar() {
   const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
   const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
   // A chapter's, a scene's, an npc's and a location's own routes — the
-  // reading view, and for the npc and the location their list (ADR #31).
+  // reading view, and for the npc and the location their list (decisions/resources).
   const chaptersMatch = matchPath("/campaigns/:campaign/chapters/*", pathname);
   const scenesMatch = matchPath("/campaigns/:campaign/scenes/*", pathname);
   const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
@@ -416,7 +416,7 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   const progressLabel = t("topbar.generator.progress", progress);
   // A PIPELINED run is both at once: parts are still going while
   // finished ones are already reviewable and acceptable. So the dot and the
-  // progress are no longer exclusive — the chip shows what is true.
+  // progress are not exclusive — the chip shows what is true.
   const runProgress = pipelineProgress(data, t);
   return (
     <Link

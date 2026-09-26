@@ -93,7 +93,7 @@ export function contingencyScenes(tree: CampaignTree | undefined): Set<string> {
 /**
  * Route for a picked result. The campaign, a chapter, a scene, an npc and a
  * location open their own routes by their id — the route their slice names
- * (ADR #31), the campaign's being the chapter overview; a session opens its
+ * (decisions/resources), the campaign's being the chapter overview; a session opens its
  * reading page, a glossary term the glossary page.
  *
  * A kind nobody knows falls back to the chapter overview rather than building

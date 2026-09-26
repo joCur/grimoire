@@ -79,7 +79,7 @@ function text(value: unknown): string | undefined {
 }
 
 /**
- * A list parameter as one readable enumeration. The closed columns (ADR #25)
+ * A list parameter as one readable enumeration. The closed columns (decisions/constraints)
  * send their allowed values in column order, and the sentence names them in
  * that order — the values are stored identifiers, not translated labels, so
  * they are shown as they will have to be typed.
@@ -166,7 +166,7 @@ function paramsFor(
     // The codes whose sentence names a RULE rather than a value, so there is
     // no parameter to check for. `nothing_to_write` says the request carried
     // no field to write. `body_not_editable` has no sender left — no address
-    // names a list any more, so there is no text to refuse — and stands here
+    // names a list, so there is no text to refuse — and stands here
     // only because the code list is append-only. `job_draft_format` has no
     // sender left either, but a job an older version failed with it still
     // shows its sentence.

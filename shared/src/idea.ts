@@ -1,5 +1,5 @@
 // An IDEA — a line the DM throws in on the go — its one zod schema and the
-// forms derived from it (ADR #31).
+// forms derived from it (decisions/resources).
 //
 // `ideaSchema` is the idea as `GET /api/campaigns/:c/ideas/:id` answers it.
 // The TypeScript type, the POST and the PATCH the resource accepts, and the

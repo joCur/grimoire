@@ -11,7 +11,7 @@
 // key (README — an id never changes). Deriving it silently would mean the DM
 // meets it for the first time in an address, so the quiet line under the name
 // field shows exactly what will be created — and carries the pencil that makes
-// it settable, which ADR #21 puts here and nowhere else (components/IdField.tsx).
+// it settable, which decisions/constraints puts here and nowhere else (components/IdField.tsx).
 //
 // The collision is the one branch worth reading. The server writes nothing and
 // answers `409 { code: "slug_taken", suggestion }` — no automatic `-2`,
@@ -177,7 +177,7 @@ export function CreateDialog({
               />
             </label>
             {/* The id that will be created — quiet, but never hidden, and
-                settable by hand (ADR #21). */}
+                settable by hand (decisions/constraints). */}
             <IdField
               id={id}
               editing={idState.editing}

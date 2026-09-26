@@ -1,4 +1,4 @@
-// The API client of an idea (ADR #31): its resource — list, create, tick off.
+// The API client of an idea (decisions/resources): its resource — list, create, tick off.
 // Built from the shared HTTP helpers (../api.ts).
 
 import type { Idea } from "@grimoire/shared/idea";

@@ -1,7 +1,7 @@
 // The campaigns: the list of them, the one create that lives outside a
 // campaign, the campaign itself, its tree and its version poll.
 //
-// THE CAMPAIGN IS ITS OWN RESOURCE (ADR #31): `/campaigns/:c`, answering the
+// THE CAMPAIGN IS ITS OWN RESOURCE (decisions/resources): `/campaigns/:c`, answering the
 // `Campaign` type — every field of the campaign flat, `body` among them,
 // beside its `rev`. The list answers `CampaignSummary`, the campaign's name
 // beside its newest session, and the tree is a shape of its own that shows
@@ -51,7 +51,7 @@ campaignRoutes.get("/campaigns/:campaign", async (c) =>
 
 // PATCH /api/campaigns/:campaign { rev, force?, id?, name?, description?, body? }
 //   -> Campaign
-// THE write of the campaign (ADR #23): any subset of its fields — `body` is
+// THE write of the campaign (decisions/writes): any subset of its fields — `body` is
 // one of them — in ONE row update against ONE `rev`, checked against the
 // campaign's schema. `null` clears the description; a key that is not a field
 // of a campaign, or a value of the wrong shape, is a 400 that names it. A
@@ -72,9 +72,9 @@ campaignRoutes.get("/campaigns/:campaign/tree", async (c) => c.json(await buildT
 
 // GET /api/campaigns/:campaign/version -> { version, build } — `version` is
 // `campaigns.version`, bumped by every write in the SAME transaction as the
-// change it belongs to — the database is the only truth (ADR #13), so a
+// change it belongs to — the database is the only truth (decisions/sqlite), so a
 // write is the only thing that can move it. The app polls this and refetches
-// when it changes (DECISIONS #9). `build` rides
+// when it changes (decisions/polling). `build` rides
 // along on that existing poll: the app compares it with its own
 // build id and offers a reload when a deploy left it with a stale bundle.
 // Every /api response carries the same value as `x-grimoire-build`.

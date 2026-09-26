@@ -1,4 +1,4 @@
-// The campaign resource (ADR #31): `GET` and `PATCH /campaigns/:c`, every
+// The campaign resource (decisions/resources): `GET` and `PATCH /campaigns/:c`, every
 // field of the campaign flat — `body` among them — beside its `rev`, and
 // every write checked against the campaign's schema. The address the
 // campaign once had under `…/entries/` names nothing. The create side of the

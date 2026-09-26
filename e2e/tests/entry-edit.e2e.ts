@@ -2,10 +2,10 @@
 // → save → rendered; 409 on a CONCURRENT SECOND WRITE offers the two answers
 // instead of silently overwriting; see CLAUDE.md.
 //
-// The database is the only truth (ADR #13), so "someone changed the scene
+// The database is the only truth (decisions/sqlite), so "someone changed the scene
 // outside" cannot happen — the conflict this path is about is a second write
 // through the API while the editor stands open. A scene is written through its
-// own resource, PATCH …/scenes/<id> with `rev` (ADR #31); its other fields
+// own resource, PATCH …/scenes/<id> with `rev` (decisions/resources); its other fields
 // must come out untouched, and every assertion reads the scene back through
 // the API.
 //
@@ -22,10 +22,10 @@
 // request carries, so the other writer's status survives a forced text save.
 //
 // An npc and a location keep one prose FIELD beside their text —
-// `motivation` and `atmosphere` (ADR #29) — and the edit surface carries it:
+// `motivation` and `atmosphere` (decisions/data-shape) — and the edit surface carries it:
 // set, cleared, saved in the same write as the text, and under the same
 // guard, so the conflict line and both of its answers hold for it too. The
-// properties dialog does not show it. Both are their own resources (ADR #31)
+// properties dialog does not show it. Both are their own resources (decisions/resources)
 // and are read back from there.
 //
 // Two more ways to lose text are covered here as well — a navigation must not
@@ -51,7 +51,7 @@ import { createGlossaryTerm, getGlossaryTerms } from "../support/glossary-term";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
-/** The npc the npc cases edit — its own resource and route (ADR #31). */
+/** The npc the npc cases edit — its own resource and route (decisions/resources). */
 const NPC = "jorna";
 const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
 /** The shared conflict line (EditConflict) — the only role="alert" of the app. */
@@ -163,7 +163,7 @@ test("editing the body: save writes the entry and the reading view shows it", as
 });
 
 test("a mention in the text stays text — nothing created, no error", async ({ page, api }) => {
-  // A reference names something that exists (ADR #19) — but a MENTION in
+  // A reference names something that exists (decisions/constraints) — but a MENTION in
   // the body is not a reference: `[[niemand]]` and a `## Beziehungen` line
   // are prose. Saving them is a normal save: nothing is created, nothing is
   // refused, and the text comes back as written.
@@ -195,10 +195,10 @@ test("a scene whose location changed stays at its route and stays editable", asy
   page,
   api,
 }) => {
-  // A scene is reached by its id (ADR #31): correcting its location changes a
+  // A scene is reached by its id (decisions/resources): correcting its location changes a
   // field, not the link — a bookmark written before still opens it, and the
   // text saves through it like any other edit.
-  // The location has to exist before a scene can name it (ADR #19).
+  // The location has to exist before a scene can name it (decisions/constraints).
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   await patchScene(api, SCENE, { location: "nordbucht" });
 
@@ -240,7 +240,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
 
   await textarea.fill(`${before.body}\n${loot}\n`);
 
-  // Vorschau renders the DRAFT: the callouts that were already there plus the
+  // „Vorschau“ renders the DRAFT: the callouts that were already there plus the
   // one just typed, through the same renderer the reading view uses.
   await page.getByRole("button", { name: "Vorschau" }).click();
   await expect(textarea).toHaveCount(0);
@@ -334,7 +334,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   expect(after.body).toBe(`${otherBody}${mine}\n`);
 });
 
-// Fields and text are ONE row and ONE version (ADR #23), so a write that
+// Fields and text are ONE row and ONE version (decisions/writes), so a write that
 // touched only the status makes an open editor's version stale exactly like
 // a text write does. That is deliberate: there is no "text-neutral" change the
 // editor may adopt on its own, because adopting one means writing the draft
@@ -590,7 +590,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
 
 test("a location and a chapter offer the editor on their own routes", async ({ page }) => {
   // The entities whose prose the DM maintains offer the body editor — each on
-  // its own route (ADR #31).
+  // its own route (decisions/resources).
   for (const url of [
     "/campaigns/beispiel/locations/leuchtturm",
     "/campaigns/beispiel/chapters/01-salzhafen",
@@ -742,7 +742,7 @@ test("the chapter and the campaign are their own resources; the entry addresses 
 });
 
 test("a glossary term is a row of its own, kept on the glossary page", async ({ page, api }) => {
-  // A glossary term is its own resource (ADR #31) and has no text to edit as
+  // A glossary term is its own resource (decisions/resources) and has no text to edit as
   // markdown. The glossary page is where the DM keeps the terms — row by
   // row, never as markdown.
   const created = await createGlossaryTerm(api, { term: "tide flat", explanation: "Gezeitenwatt" });

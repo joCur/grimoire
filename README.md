@@ -7,7 +7,7 @@ trägt), **Idee**, **Glossar-Begriff**, **Kampagnenwissen** (jede
 Namenskonvention, jeder Fakt, jede Stilregel für sich) und die **Session**
 mit ihren **Pausen**, **Log-Zeilen** und **gespielten Szenen** — ist eine
 Zeile ihrer eigenen Tabelle und ihre eigene Ressource mit ihren eigenen
-Feldern (ADR #31). Kampagne, Kapitel, Szene, NPC und Ort haben unter ihren
+Feldern ([decisions/resources](docs/decisions/resources.md)). Kampagne, Kapitel, Szene, NPC und Ort haben unter ihren
 Feldern einen `body`: ihren **Text** in Markdown.
 
 Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
@@ -22,7 +22,7 @@ gezeigt; nichts bricht.
 ## Ressourcen
 
 Jede Entität ist ihre eigene **Ressource** mit ihrem eigenen Typ aus genau
-einem zod-Schema in `shared/src/<entität>.ts` (ADR #31). Die URL nennt die
+einem zod-Schema in `shared/src/<entität>.ts` ([decisions/resources](docs/decisions/resources.md)). Die URL nennt die
 Entität und ihre `id`; eine Antwort trägt alle Felder der Entität
 nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
 
@@ -49,11 +49,11 @@ jüngsten Session.
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
 Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
 Referenz-Schlüssel in URLs, Links und `[[id]]`-Referenzen und ändert sich
-danach nie mehr (ADR #21). Der Felder-Dialog („Eigenschaften“) zeigt sie, bietet aber
+danach nie mehr ([decisions/constraints](docs/decisions/constraints.md)). Der Felder-Dialog („Eigenschaften“) zeigt sie, bietet aber
 keine Änderung.
 
 Die Kapitelübersicht ist eine durchgehende Liste der Szenen eines Kapitels
-in der **Reihenfolge, die der DM setzt** (ADR #27); der Ort steht mit
+in der **Reihenfolge, die der DM setzt** ([decisions/scene-order](docs/decisions/scene-order.md)); der Ort steht mit
 seinem Namen in der Metazeile der einzelnen Szene — hat eine Szene keinen,
 fehlt dort schlicht der Ortsteil —, Eventualszenen stehen als eigener Block
 am Ende. Diese Reihenfolge ist **kein Feld** — sie ist
@@ -62,20 +62,20 @@ selbst, und steht deshalb in keiner Feldtabelle dieses Dokuments. Gepflegt
 wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
 Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
 Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
-übernommen werden (ADR #27).
+übernommen werden ([decisions/scene-order](docs/decisions/scene-order.md)).
 
 Glossar-Begriffe und Kampagnenwissen bekommt der Generator als Kontext; beide
 werden auf ihren eigenen Seiten gepflegt.
 
 Alles Kampagnenabhängige hängt unter der Kampagne — in der API
-`/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` (ADR #22).
+`/api/campaigns/<kampagne>/…`, in der App `/campaigns/<kampagne>/…` ([decisions/resources](docs/decisions/resources.md)).
 Kampagnenlos bleiben `/api/campaigns`, `/api/settings` und `/settings`.
 
 ## Felder
 
 Was eine Ansicht als Daten braucht, ist ein Feld einer Entität oder eine
 Zeile einer Liste, nie ein Abschnitt, der über seine Überschrift gefunden
-wird (ADR #29).
+wird ([decisions/data-shape](docs/decisions/data-shape.md)).
 
 Geschrieben wird jede Entität mit `PATCH` auf ihrer Ressource und
 `{ rev, force?, …Teilmenge der Felder }`: nur die genannten Felder ändern
@@ -86,7 +86,7 @@ veralteter `rev` ist 409 mit dem aktuellen Stand der Ressource.
 ### Kampagne
 
 Die Kampagne ist ihre eigene Ressource mit ihrem eigenen Typ (`Campaign`, aus
-dem zod-Schema in `shared/src/campaign.ts`, ADR #31). `GET
+dem zod-Schema in `shared/src/campaign.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
 /api/campaigns/<kampagne>` antwortet mit ihr:
 
 ```json
@@ -127,7 +127,7 @@ steht dort nichts.
 ### Kapitel
 
 Ein Kapitel ist seine eigene Ressource mit seinem eigenen Typ (`Chapter`, aus
-dem zod-Schema in `shared/src/chapter.ts`, ADR #31). `GET
+dem zod-Schema in `shared/src/chapter.ts`, [decisions/resources](docs/decisions/resources.md)). `GET
 /api/campaigns/<kampagne>/chapters/<id>` antwortet mit ihm:
 
 ```json
@@ -154,8 +154,8 @@ Kampagne ist höchstens ein Kapitel aktiv. Aktiviert wird mit `PATCH
 `status: "active"`; der Server setzt das bisher aktive Kapitel im selben
 Vorgang auf `planned`, und dessen `rev` bewegt sich mit. Die API schreibt nur
 diese drei Werte (400 `status_not_allowed` sonst), und die Spalte selbst
-lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint (DECISIONS
-#25), kein degradierendes Freitextfeld. `null` löscht den Status.
+lässt keinen anderen zu — `status` ist ein `CHECK`-Constraint
+([decisions/constraints](docs/decisions/constraints.md)), kein degradierendes Freitextfeld. `null` löscht den Status.
 
 Geschrieben wird mit `PATCH …/chapters/<id>` und `{ rev, force?, …Teilmenge
 von title, status, body }`; ein veralteter `rev` ist 409 mit dem aktuellen
@@ -172,7 +172,7 @@ Beschreibung aus seiner Gliederung als `body` an (siehe Generator).
 
 Die Kapitelübersicht zeigt den Text unter dem Titel, ganz und gerendert wie
 jeder Text, auf wenige Zeilen begrenzt und aufklappbar; ob und welche
-Überschriften er hat, ändert daran nichts (ADR #29).
+Überschriften er hat, ändert daran nichts ([decisions/data-shape](docs/decisions/data-shape.md)).
 
 Die **Fäden** — die Handlungsstränge, die das Kapitel trägt — sind weder
 Text noch Feld des Kapitels, sondern jeder seine eigene Ressource, die ihr
@@ -182,7 +182,7 @@ Kapitels bleibt freier Text; nichts liest ihn als Faden.
 ### Szene
 
 Eine Szene ist ihre eigene Ressource mit ihrem eigenen Typ (`Scene`, aus dem
-zod-Schema in `shared/src/scene.ts`, ADR #31). Sie liegt flach unter ihrer
+zod-Schema in `shared/src/scene.ts`, [decisions/resources](docs/decisions/resources.md)). Sie liegt flach unter ihrer
 Kampagne: ihre `id` ist je Kampagne eindeutig, und ihr Kapitel ist ein Feld,
 das sich ändern kann.
 
@@ -247,7 +247,7 @@ der Szene: `POST …/scenes/<id>/augment` startet den Lauf, `POST
 ### NPC
 
 Ein NPC ist seine eigene Ressource mit seinem eigenen Typ (`Npc`, aus dem
-zod-Schema in `shared/src/npc.ts`, ADR #31):
+zod-Schema in `shared/src/npc.ts`, [decisions/resources](docs/decisions/resources.md)):
 
 | Lesen/Ändern | Anlegen/Liste | App-Route |
 | ------------ | ------------- | --------- |
@@ -318,7 +318,7 @@ im Szenentext oder `#npc`-Notiz im Log.
 ### Ort
 
 Ein Ort ist seine eigene Ressource mit seinem eigenen Typ (`Location`, aus
-dem zod-Schema in `shared/src/location.ts`, ADR #31):
+dem zod-Schema in `shared/src/location.ts`, [decisions/resources](docs/decisions/resources.md)):
 
 | Lesen/Ändern | Anlegen/Liste | App-Route |
 | ------------ | ------------- | --------- |
@@ -370,7 +370,7 @@ Text-Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit
 
 Ein Faden ist ein Handlungsstrang, den ein Kapitel trägt, und seine eigene
 Ressource mit seinem eigenen Typ (`Thread`, aus dem zod-Schema in
-`shared/src/thread.ts`, ADR #31). Er liegt flach unter der Kampagne, sein
+`shared/src/thread.ts`, [decisions/resources](docs/decisions/resources.md)). Er liegt flach unter der Kampagne, sein
 Kapitel ist ein Feld: `GET /api/campaigns/<kampagne>/threads/<id>` antwortet
 mit ihm.
 
@@ -414,7 +414,7 @@ mit ihm.
 
 Eine Idee ist ein Einfall, den der DM unterwegs einwirft, und ihre eigene
 Ressource mit ihrem eigenen Typ (`Idea`, aus dem zod-Schema in
-`shared/src/idea.ts`, ADR #31). `GET /api/campaigns/<kampagne>/ideas/<id>`
+`shared/src/idea.ts`, [decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<kampagne>/ideas/<id>`
 antwortet mit ihr:
 
 ```json
@@ -449,7 +449,7 @@ antwortet mit ihr:
 Ein Glossar-Begriff ist ein Begriff des Quellmaterials und die Schreibweise
 dieser Kampagne, seine eigene Ressource mit seinem eigenen Typ
 (`GlossaryTerm`, aus dem zod-Schema in `shared/src/glossary-term.ts`,
-ADR #31). `GET /api/campaigns/<kampagne>/glossary-terms/<id>` antwortet mit
+[decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<kampagne>/glossary-terms/<id>` antwortet mit
 ihm:
 
 ```json
@@ -491,7 +491,7 @@ Das Kampagnenwissen sind die Namenskonventionen, Fakten und Stilregeln, die
 der Generator verbindlich anwendet, auch wenn das Quellmaterial etwas anderes
 sagt. Jedes Stück davon ist seine eigene Ressource mit seinem eigenen Typ
 (`KnowledgeItem`, aus dem zod-Schema in `shared/src/knowledge-item.ts`,
-ADR #31). `GET /api/campaigns/<kampagne>/knowledge-items/<id>` antwortet mit
+[decisions/resources](docs/decisions/resources.md)). `GET /api/campaigns/<kampagne>/knowledge-items/<id>` antwortet mit
 ihm:
 
 ```json
@@ -534,7 +534,7 @@ ihm:
 ### Session
 
 Eine Session ist ein Spielabend und ihre eigene Ressource mit ihrem eigenen
-Typ (`Session`, aus dem zod-Schema in `shared/src/session.ts`, ADR #31).
+Typ (`Session`, aus dem zod-Schema in `shared/src/session.ts`, [decisions/resources](docs/decisions/resources.md)).
 `GET /api/campaigns/<kampagne>/sessions/<id>` antwortet mit ihr, ihre
 Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
 
@@ -797,7 +797,7 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
   `server/src/routes/<ressource>.ts`): Log, Nachbereitung,
   Generator-Vorschläge — und für jede Entität ihr eigener `PATCH` auf ihrer
   Ressource, der jede Teilmenge ihrer Felder, `body` eingeschlossen, in einem
-  Zug schreibt (ADR #23, ADR #31); Faden, Idee, Glossar-Begriff,
+  Zug schreibt ([decisions/writes](docs/decisions/writes.md), [decisions/resources](docs/decisions/resources.md)); Faden, Idee, Glossar-Begriff,
   Kampagnenwissen, Pause und Log-Zeile eingeschlossen, die keinen `body`
   haben. Keine Liste wird als Ganzes getauscht.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
@@ -813,10 +813,10 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
   Kapitels; passt es nicht, ist das 409. Geschrieben wird nur die
   Reihenfolge: weder `scenes.rev` noch `chapters.rev` bewegen sich, damit ein
   offener Szenen- oder Kapitel-Editor durch ein Umsortieren nicht in einen
-  Konflikt läuft (ADR #27). Dieselbe Bauart hat die Reihenfolge des
+  Konflikt läuft ([decisions/scene-order](docs/decisions/scene-order.md)). Dieselbe Bauart hat die Reihenfolge des
   Kampagnenwissens (`PUT …/knowledge-item-order { items, rev }`, siehe
   Kampagnenwissen).
-- Das Log ist append-only (ADR #4): eine Log-Zeile wird einmal geschrieben
+- Das Log ist append-only ([decisions/writes](docs/decisions/writes.md)): eine Log-Zeile wird einmal geschrieben
   und danach nur noch gesichtet. Eine Idee wird einmal geschrieben und
   danach nur noch abgehakt.
 
@@ -842,7 +842,7 @@ Kapitels ändert kein Lauf.
 alle Felder nebeneinander, dazu die Hinweise für den DM unter `warnings`;
 eine neue Szene ist dabei immer `draft`, und `quickstats` eines NPC reist als
 Liste von Paaren `{ key, value }`. Szene, NPC und Ort leiten ihr Schema
-selbst aus ihrem zod-Schema ab (`z.toJSONSchema`, ADR #31), und was das
+selbst aus ihrem zod-Schema ab (`z.toJSONSchema`, [decisions/resources](docs/decisions/resources.md)), und was das
 Modell über ihre Felder wissen muss, steht in ihrem Prompt
 (`generator/system-prompt.md`, `generator/npc-system-prompt.md`,
 `generator/location-system-prompt.md`). Ein Job listet die vorgeschlagenen
@@ -855,7 +855,7 @@ Szenen unter `result.scenes`, die NPCs unter `result.npcs` und die Orte unter
 `generator/README.md`.
 
 Die mechanische Prüfung liest die Felder und den Text, aber keine
-Überschrift (ADR #29): die Abschnitte eines Vorschlags sind die Empfehlung
+Überschrift ([decisions/data-shape](docs/decisions/data-shape.md)): die Abschnitte eines Vorschlags sind die Empfehlung
 der Prompts. Jedes `[[id]]` in einem erzeugten Text nennt einen NPC, einen
 Ort oder eine Szene der Kampagne oder einen Vorschlag desselben Laufs, sonst geht
 die Antwort als Korrektur-Turn zurück. Im Ergänzen-Lauf gilt das für die
@@ -867,7 +867,7 @@ bleibt dem DM. Ein `[[id]]` im Code zählt wie überall nicht als Verweis.
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/`, ein Objekt je
 Datei, genau in der Form, die die API spricht. Jede Entität mit eigener
 Ressource liegt in ihrem eigenen Verzeichnis, jede Datei genau das Objekt,
-das ihre Ressource liefert, ohne `rev` (ADR #31): die Kampagne unter
+das ihre Ressource liefert, ohne `rev` ([decisions/resources](docs/decisions/resources.md)): die Kampagne unter
 `fixtures/beispiel/campaigns/<id>.json`, ein Kapitel unter
 `fixtures/beispiel/chapters/<id>.json`, eine Szene unter
 `fixtures/beispiel/scenes/<id>.json`, ein NPC unter

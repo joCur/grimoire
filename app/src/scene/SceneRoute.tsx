@@ -1,5 +1,5 @@
 // "/campaigns/:campaign/scenes/:id" — the reading view of ONE scene, its own
-// resource with its own type (ADR #31): the scene article per the design
+// resource with its own type (decisions/resources): the scene article per the design
 // reference (type overline, Literata title, trigger row, chip row, markdown
 // body — shared with the session view through SceneArticle) plus a sticky
 // right aside with the cards of the scene's npcs. Below md: a back row to the

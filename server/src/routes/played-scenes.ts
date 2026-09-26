@@ -1,6 +1,6 @@
 // The played scenes of a session: the scenes the group played that evening.
 //
-// A PLAYED SCENE IS ITS OWN RESOURCE (ADR #31), hanging under its session:
+// A PLAYED SCENE IS ITS OWN RESOURCE (decisions/resources), hanging under its session:
 // `…/sessions/:session/played-scenes`, answering the `PlayedScene` type —
 // `{ id, sceneId, rev }`. The session embeds its played scenes, in the order
 // of play, when it is read; a scene the group returns to later stands there

@@ -4,7 +4,7 @@
 //
 // `unknown` is one of the four stored values — the npc nobody has placed
 // yet — and not a fallback: `npcs.status` is a CHECK constraint of its
-// column, so the database cannot hold anything else (ADR #25).
+// column, so the database cannot hold anything else (decisions/constraints).
 
 import type { NpcStatus } from "@grimoire/shared/npc";
 

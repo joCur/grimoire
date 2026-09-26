@@ -1,6 +1,6 @@
 // The sessions: list, read, start, end and delete.
 //
-// A SESSION IS ITS OWN RESOURCE (ADR #31): `…/sessions` and
+// A SESSION IS ITS OWN RESOURCE (decisions/resources): `…/sessions` and
 // `…/sessions/:id`, answering the `Session` type — `{ id, started,
 // startedMs?, ended?, endedMs?, body, pauses, log, playedScenes, rev }`. Its
 // children are embedded when it is read, and each is written on its own

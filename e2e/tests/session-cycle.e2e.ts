@@ -15,7 +15,7 @@
 // played one, stays openable there, and never becomes the default
 // selection.
 //
-// The nav reads the ORDER THE DM ARRANGED in the chapter overview (ADR #27);
+// The nav reads the ORDER THE DM ARRANGED in the chapter overview (decisions/scene-order);
 // this view moderates that order, it makes none of its own. So a spec that
 // depends on the order states the one it means through the documented
 // endpoint instead of leaning on whichever order the seed run produced.
@@ -23,7 +23,7 @@
 // Every claim is checked twice: once in the UI and once in the stored session
 // (the server is the truth, the app keeps no state of its own).
 //
-// A session is its own resource (ADR #31), and so is each of its children,
+// A session is its own resource (decisions/resources), and so is each of its children,
 // hanging under it: a log entry per note, a pause per interval, a played scene
 // per scene the DM LEFT with "Nächste Szene" after taking a note in it. The
 // session embeds them when it is read, so every claim about storage here reads
@@ -60,7 +60,7 @@ const CHAPTER = "01-salzhafen";
 
 /**
  * Arrange the chapter's scenes through the documented endpoint: the whole
- * list against the order's own guard token (ADR #27).
+ * list against the order's own guard token (decisions/scene-order).
  *
  * The order is the DM's, so a spec that reads it says which one it means.
  */
@@ -170,7 +170,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   expect(sessionId).not.toBe("");
 
   // The topbar carries ONE session control: the chip, brass, with the running
-  // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
+  // time as H:MM:SS. No "Live" label, no separate timer or buttons.
   const chip = sessionMenuChip(page);
   await expect(chip).toBeVisible();
 
@@ -272,7 +272,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   // The whole npc, not the card excerpt — and the way out into the npc's
-  // own route (ADR #31).
+  // own route (decisions/resources).
   await expect(drawer.getByRole("link", { name: "Vollständig öffnen" })).toHaveAttribute(
     "href",
     "/campaigns/beispiel/npcs/jorna",
@@ -295,7 +295,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
-  // The way out leads to the location's own route (ADR #31).
+  // The way out leads to the location's own route (decisions/resources).
   await expect(page.getByRole("dialog").getByRole("link")).toHaveAttribute(
     "href",
     "/campaigns/beispiel/locations/leuchtturm",
@@ -711,7 +711,7 @@ test("an unreachable session lookup dims the chip instead of offering a start", 
 test.describe("played/dropped scenes in the live nav", () => {
   const ARRIVAL = "lighthouse-arrival";
   // The seeded scene names a location that EXISTS — a reference creates
-  // nothing (ADR #19). Where it STANDS is the chapter's order: the test
+  // nothing (decisions/constraints). Where it STANDS is the chapter's order: the test
   // arranges it itself, the arrival scene first, so the default selection has
   // something to fall through to.
   const SEEDED = "harbor-office-talk";
@@ -885,14 +885,14 @@ test("the session page shows a past evening's rows; the old address is gone", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
   // The old ENTRY address of the same session answers 404 — no redirect, no
-  // alias (ADR #26). Assembled from its segments rather than spelled out: a
+  // alias (decisions/resources). Assembled from its segments rather than spelled out: a
   // literal address here would read like one the app still uses.
   const address = ["sessions", "2026-01-15"].join("/");
   const res = await api.fetch(`campaigns/beispiel/entries/${address}`);
   expect(res.status).toBe(404);
 });
 
-// The ORDER the DM arranged is what the session view moderates (ADR #27):
+// The ORDER the DM arranged is what the session view moderates (decisions/scene-order):
 // which scene it opens on, which rows the nav shows in which sequence, and
 // where the one step of the evening leads.
 //
@@ -1085,9 +1085,9 @@ test.describe("the session view follows the chapter's order", () => {
   });
 });
 
-// The session and its children are resources of their own (ADR #31): read
+// The session and its children are resources of their own (decisions/resources): read
 // flat with the children embedded, written one row at a time, each row with
-// its own guard. The action endpoints of before answer nothing any more.
+// its own guard. Action endpoints beside these resources answer nothing.
 test("the session resources: flat reads, the running filter, a guard per row, no old addresses", async ({
   api,
 }) => {

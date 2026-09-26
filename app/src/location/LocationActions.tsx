@@ -1,4 +1,4 @@
-// The editing surfaces of a location's reading view (ADR #31): the body
+// The editing surfaces of a location's reading view (decisions/resources): the body
 // editor with the `atmosphere` field beside the text, and the dialog over the
 // location's other fields. Both are shared surfaces (BodyEditor,
 // FieldsDialog) over the location's own form (./location-form.ts) and its

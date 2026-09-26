@@ -1,5 +1,5 @@
-// URLs of the API scheme (ADR #22): everything campaign-scoped lives under
-// `/api/campaigns/<id>`. Every entity is its own resource (ADR #31), and no
+// URLs of the API scheme (decisions/resources): everything campaign-scoped lives under
+// `/api/campaigns/<id>`. Every entity is its own resource (decisions/resources), and no
 // route answers under `entries/`: the cases use this URL to show that an
 // address there names nothing.
 

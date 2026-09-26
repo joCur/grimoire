@@ -35,7 +35,7 @@ export function ChapterFields({
         hint={t("properties.chapter.status.hint")}
         value={values.status}
         // Clearing is a real choice: it deletes the value. The closed list
-        // follows — the column admits nothing else (ADR #25) — with the same
+        // follows — the column admits nothing else (decisions/constraints) — with the same
         // labels the overview's status control shows.
         options={[{ value: "", label: t("properties.field.unset") }, ...chapterStatusOptions(t)]}
         onChange={set("status")}

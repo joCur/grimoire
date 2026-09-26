@@ -57,7 +57,7 @@ const TREE: CampaignTree = {
 describe("refIndex", () => {
   const index = refIndex(TREE);
 
-  test("a location resolves by its id — its own resource, no address (ADR #31)", () => {
+  test("a location resolves by its id — its own resource, no address (decisions/resources)", () => {
     expect(index.get("leuchtturm")).toEqual({
       kind: "location",
       slug: "leuchtturm",
@@ -65,7 +65,7 @@ describe("refIndex", () => {
     });
   });
 
-  test("an npc resolves by its id — its own resource, no address (ADR #31)", () => {
+  test("an npc resolves by its id — its own resource, no address (decisions/resources)", () => {
     expect(index.get("jorna")).toEqual({
       kind: "npc",
       slug: "jorna",

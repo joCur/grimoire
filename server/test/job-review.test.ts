@@ -32,10 +32,10 @@ import { PipelineFake } from "./support/pipeline-fake";
 // --- fixtures -----------------------------------------------------------------
 
 // The scenes the run proposes — named by their ids, like the npc below: a
-// scene is its own resource (ADR #31) and a proposal carries no address.
+// scene is its own resource (decisions/resources) and a proposal carries no address.
 const SCENE_A = "treffen-am-kai";
 const SCENE_B = "nacht-am-kai";
-/** The npc the run proposes — named by its id, on its own resource (ADR #31). */
+/** The npc the run proposes — named by its id, on its own resource (decisions/resources). */
 const NPC_ID = "grella";
 
 interface Draft {
@@ -367,9 +367,9 @@ test("a scene edit is stored by id, field by field, and is what the accept write
 });
 
 test("a scene edited into a chapter that does not exist is refused, and no chapter appears", async () => {
-  // Only the chapter the RUN decided on is written by an accept (ADR #18); a
+  // Only the chapter the RUN decided on is written by an accept (decisions/scene-order); a
   // chapter the DM typed into a proposed scene has to exist, like anywhere
-  // else (ADR #19).
+  // else (decisions/constraints).
   let job = await runJob();
   job = await patch(job, { sceneEdits: { [SCENE_A]: { chapter: "99-vertippt" } } });
   const res = await accept(job, { scenes: [SCENE_A] });

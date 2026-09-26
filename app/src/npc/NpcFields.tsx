@@ -1,6 +1,6 @@
 // The fields of an npc as form controls: the ones its dialog (and the card of
 // a proposed npc) edits, and the `motivation` its edit surface writes beside
-// the text (ADR #29). Plain rendering over the form's values
+// the text (decisions/data-shape). Plain rendering over the form's values
 // (./npc-form.ts).
 //
 // The status is a select over the closed list and nothing else: an npc

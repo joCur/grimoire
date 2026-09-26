@@ -1,4 +1,4 @@
-// A chapter in the suite: its resource `…/chapters/:id` (ADR #31), every field
+// A chapter in the suite: its resource `…/chapters/:id` (decisions/resources), every field
 // flat, `body` among them, beside its guard. Its type is the one
 // `@grimoire/shared/chapter` derives from the chapter's schema.
 

@@ -1,4 +1,4 @@
-// The editing surfaces of a scene's reading view (ADR #31): the body editor
+// The editing surfaces of a scene's reading view (decisions/resources): the body editor
 // over the scene's text, and the dialog over its other fields. Both are
 // shared surfaces (BodyEditor, FieldsDialog) over the scene's own form
 // (./scene-form.ts) and its own editing session (./use-scene-edit.ts): what a

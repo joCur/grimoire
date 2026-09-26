@@ -12,7 +12,7 @@ import { locationExcerpt } from "./location-excerpt";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
 
-/** A location fixture — the location as its resource answers it (ADR #31). */
+/** A location fixture — the location as its resource answers it (decisions/resources). */
 function locationFixture(id: string): Location {
   const stored = JSON.parse(
     readFileSync(path.join(FIXTURES, "locations", `${id}.json`), "utf8"),

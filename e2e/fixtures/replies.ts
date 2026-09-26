@@ -5,12 +5,12 @@
 //
 //   a scene call      every field of the scene — `body` among them, an
 //                     absent optional field as `null` — beside `warnings`,
-//                     the notes the review shows the DM (ADR #31)
+//                     the notes the review shows the DM (decisions/resources)
 //   an npc call       every field of the npc — `body` among them, an absent
 //                     optional field as `null`, `quickstats` as a list of
-//                     `{ key, value }` pairs — beside `warnings` (ADR #31)
+//                     `{ key, value }` pairs — beside `warnings` (decisions/resources)
 //   a location call   every field of the location — `body` among them —
-//                     beside `warnings` (ADR #31)
+//                     beside `warnings` (decisions/resources)
 //   the outline call  the run's scenes, and its new npcs and new locations
 //                     as two lists of their own
 //
@@ -45,7 +45,7 @@
 // referenceable kind).
 
 /**
- * A scene as its reply form carries it (ADR #31): every field of the scene,
+ * A scene as its reply form carries it (decisions/resources): every field of the scene,
  * `body` among them, an optional one the source does not give as `null` —
  * the very form a scene augment prompt shows the scene in.
  */
@@ -87,7 +87,7 @@ function sceneReply(
 
 /**
  * A location reply: every field of the location, `body` among them, beside
- * the notes (ADR #31). A field the source does not give is `null`, as the
+ * the notes (decisions/resources). A field the source does not give is `null`, as the
  * schema asks.
  */
 export interface LocationReply {
@@ -107,7 +107,7 @@ export interface QuickstatPair {
 }
 
 /**
- * An npc as its reply form carries it (ADR #31): every field of the npc,
+ * An npc as its reply form carries it (decisions/resources): every field of the npc,
  * `body` among them, an optional one the source does not give as `null`,
  * and `quickstats` as its list of pairs — the very form an npc augment
  * prompt shows the npc in.
@@ -567,7 +567,7 @@ export function invalidAugmentReply(scene: SceneFields): SceneReply {
 // --- augmenting an npc -------------------------------------------------------
 
 /**
- * The reply of an npc augment run (ADR #31). Which addition depends on what
+ * The reply of an npc augment run (decisions/resources). Which addition depends on what
  * the npc IS — that is the whole point of the two E2E cases:
  *
  *   an EMPTY npc (created, never filled in)  ->  its fields (the motivation
@@ -615,7 +615,7 @@ export function unknownRefNpcAugmentReply(npc: NpcFields): NpcReply {
 // --- augmenting a location ---------------------------------------------------
 
 /**
- * The reply of a location augment run (ADR #31): the location as it was
+ * The reply of a location augment run (decisions/resources): the location as it was
  * shown, every field echoed, plus one NEW `## If:` section at the end of its
  * text — every existing block comes back unchanged.
  */

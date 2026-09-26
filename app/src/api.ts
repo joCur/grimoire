@@ -129,7 +129,7 @@ export function fetchSearch(campaign: string, q: string): Promise<SearchResponse
 
 /**
  * Campaign version counter — bumped by every server-side write, in
- * the same transaction as the change (DECISIONS #9/#13); polled by
+ * the same transaction as the change (decisions/polling, decisions/sqlite); polled by
  * useCampaignVersion.
  *
  * `build` is the server's build id, riding along on this poll so
@@ -147,7 +147,7 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
 
 /**
  * Write the scene ORDER of one chapter — the whole list, because a move
- * changes where the neighbours sit too (ADR #27).
+ * changes where the neighbours sit too (decisions/scene-order).
  *
  * `scenes` must name exactly the chapter's scenes; anything else is
  * 400 `scene_order_mismatch` and writes nothing. `rev` is the order's own

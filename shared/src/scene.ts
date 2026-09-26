@@ -1,4 +1,4 @@
-// A SCENE — its one zod schema and the forms derived from it (ADR #31).
+// A SCENE — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `sceneSchema` is the scene as `GET /api/campaigns/:c/scenes/:id` answers
 // it. The TypeScript type, the PATCH the resource accepts, the scene a
@@ -9,11 +9,11 @@
 // A scene lies flat under its campaign: its id is unique per campaign, and
 // its chapter is a field that may change. Where it stands among the scenes of
 // its chapter is not a field of the scene — the chapter's scene order says
-// that (ADR #27).
+// that (decisions/scene-order).
 
 import { z } from "zod";
 
-/** A scene's lifecycle states. A CHECK constraint holds the column to them (ADR #25). */
+/** A scene's lifecycle states. A CHECK constraint holds the column to them (decisions/constraints). */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
 export type SceneStatus = (typeof SCENE_STATUSES)[number];
 

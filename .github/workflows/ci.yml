@@ -1,14 +1,14 @@
-# CI (issue #16). This workflow BUILDS to check and PUBLISHES nothing. GHCR is
-# written by .github/workflows/release.yml alone (issue #66, ADR #12): CI's
+# CI. This workflow BUILDS to check and PUBLISHES nothing. GHCR is
+# written by .github/workflows/release.yml alone (decisions/release): CI's
 # green result is the gate that release checks (`require-green-ci`), and the
 # published image is built at the version tag.
 #
 #   test          — every PR and every main push: install, typecheck all
-#                   workspaces, the i18n lint gate (issue #69), tests,
+#                   workspaces, the i18n lint gate, tests,
 #                   app build (runtime: Bun)
 #   db-smoke-node — the same DB smoke file on NODE, so the `node:sqlite`
 #                   primary backend is proven, not just Bun's fallback
-#                   (issue #54, ADR #13)
+#                   (decisions/sqlite)
 #   e2e           — after `test`: the real-stack Playwright suite over the
 #                   critical paths (CLAUDE.md) — built app, real server,
 #                   stub LLM
@@ -55,9 +55,9 @@ jobs:
       - name: Typecheck (shared, server, app)
         run: bun run typecheck
 
-      # The i18n gate (issue #69): user-visible copy belongs in the catalog,
-      # not in a component. `error` everywhere in app/src since the migration
-      # finished — there is no warning tier left to ignore, so ANY literal
+      # The i18n gate: user-visible copy belongs in the catalog, not in a
+      # component. `error` everywhere in app/src — there is no warning tier
+      # to ignore, so ANY literal
       # fails the job (see eslint.config.js for the `allowedStrings` list of
       # things that are not copy in any language).
       - name: Lint (i18n gate)
@@ -71,10 +71,9 @@ jobs:
       - name: Build frontend
         run: bun run --filter '@grimoire/app' build
 
-  # The database foundation on the OTHER runtime (issue #54 AK5, ADR #13).
-  # Grown with the cutover (issue #57): besides FTS5, transactions, UPSERT and
-  # the PRAGMAs, the smoke file now also pins the two mechanisms the store
-  # layer newly leans on — a COMPOSITE primary-key update cascading into its
+  # The database foundation on the OTHER runtime (decisions/sqlite).
+  # Besides FTS5, transactions, UPSERT and the PRAGMAs, the smoke file pins
+  # the two mechanisms the store layer leans on — a COMPOSITE primary-key update cascading into its
   # child rows (the rename) and quoted FTS5 prefix terms (the search).
   # `test` above already exercises it on Bun, where the driver falls back to
   # `bun:sqlite`; this job runs the same smoke file on Node, where the PRIMARY
@@ -151,7 +150,7 @@ jobs:
 
   # Proves the Dockerfile still builds — and stops there. `push: false`, no
   # registry login, no `packages` permission: this job CANNOT publish, which
-  # is the whole point of ADR #12's addendum (CI builds to check, publishes
+  # is the whole point of decisions/release (CI builds to check, publishes
   # never). It runs on PRs and on main pushes alike, so a Dockerfile breakage
   # is caught in review rather than after the release tag already exists.
   #
@@ -174,7 +173,7 @@ jobs:
         with:
           context: .
           push: false
-          # Same build arg as the release build (issue #24), but the value is
+          # Same build arg as the release build, but the value is
           # throwaway: nothing here is deployed, so the commit SHA is enough
           # to prove the arg is wired through bundle and server.
           build-args: |

@@ -1,7 +1,7 @@
 // The short form of an npc — what its aside cards, the hover preview of a
 // `[[slug]]` reference, its reading view and a proposed npc's card show of
-// it, read off its own fields (ADR #31), never off a section of its text
-// (ADR #29).
+// it, read off its own fields (decisions/resources), never off a section of its text
+// (decisions/data-shape).
 //
 // A reference INSIDE the motivation reads as the current display name, plain
 // text (a short form is no place for a second link); an unresolved slug keeps

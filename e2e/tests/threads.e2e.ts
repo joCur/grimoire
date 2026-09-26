@@ -1,4 +1,4 @@
-// Critical paths 1 and 5: a thread is its own resource (ADR #31) —
+// Critical paths 1 and 5: a thread is its own resource (decisions/resources) —
 // `…/threads/:id`, `{ id, chapter, text, done, rev }` — kept in the chapter
 // overview. See CLAUDE.md.
 //

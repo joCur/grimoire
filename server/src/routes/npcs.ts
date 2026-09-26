@@ -1,6 +1,6 @@
 // The npcs: list, read, create, write and the AI augment run.
 //
-// AN NPC IS ITS OWN RESOURCE (ADR #31): `…/npcs` and `…/npcs/:id`, answering
+// AN NPC IS ITS OWN RESOURCE (decisions/resources): `…/npcs` and `…/npcs/:id`, answering
 // the `Npc` type — every field of the npc flat, `body` among them, beside its
 // `rev`.
 
@@ -52,7 +52,7 @@ npcRoutes.post("/campaigns/:campaign/npcs", async (c) => {
 // PATCH /api/campaigns/:campaign/npcs/:id
 //   { rev, force?, id?, name?, role?, chapter?, status?, statblock?,
 //     quickstats?, voice?, appearance?, motivation?, body? } -> Npc
-// THE write of one npc (ADR #23): any subset of its fields — `body` is one
+// THE write of one npc (decisions/writes): any subset of its fields — `body` is one
 // of them — in ONE row update against ONE `rev`, checked against the npc's
 // schema. `null` clears an optional field; a key that is not a field of an
 // npc, or a value of the wrong shape, is a 400 that names it, and a `status`

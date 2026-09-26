@@ -1,4 +1,4 @@
-// AN NPC — its one zod schema and the forms derived from it (ADR #31).
+// AN NPC — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `npcSchema` is the npc as `GET /api/campaigns/:c/npcs/:id` answers it. The
 // TypeScript type, the PATCH the resource accepts, the npc a fixture holds and
@@ -12,7 +12,7 @@
 
 import { z } from "zod";
 
-/** An npc's states. A CHECK constraint holds the column to them (ADR #25). */
+/** An npc's states. A CHECK constraint holds the column to them (decisions/constraints). */
 export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
 export type NpcStatus = (typeof NPC_STATUSES)[number];
 

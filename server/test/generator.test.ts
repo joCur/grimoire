@@ -13,7 +13,7 @@
 // reported) or the full CompletionResult shape — that is how the truncation
 // fail-fast and the token accounting are exercised.
 //
-// The run is a background job, the generator job resource (ADR #31), so the
+// The run is a background job, the generator job resource (decisions/resources), so the
 // pipeline tests go through `generate()`: POST …/generator-jobs (202), poll
 // the job in-process, then read the answer off the finished job. What an
 // accept writes goes through the job's PATCH, and the job resource itself
@@ -70,7 +70,7 @@ import {
 } from "./support/pipeline-fake";
 
 /**
- * Whether a scene is there, on its own resource (ADR #31). A proposal that
+ * Whether a scene is there, on its own resource (decisions/resources). A proposal that
  * was accepted is a ROW, and the only thing that matters is that the app can
  * open it.
  */
@@ -79,19 +79,19 @@ async function exists(id: string): Promise<boolean> {
   return res.status === 200;
 }
 
-/** Whether a chapter is there — its own resource (ADR #31). */
+/** Whether a chapter is there — its own resource (decisions/resources). */
 async function chapterExists(id: string): Promise<boolean> {
   const res = await app.request(`/api/campaigns/beispiel/chapters/${id}`);
   return res.status === 200;
 }
 
-/** GET of a location — its own resource (ADR #31); undefined when there is none. */
+/** GET of a location — its own resource (decisions/resources); undefined when there is none. */
 async function readLocation(id: string): Promise<Location | undefined> {
   const res = await app.request(`/api/campaigns/beispiel/locations/${id}`);
   return res.status === 200 ? ((await res.json()) as Location) : undefined;
 }
 
-/** GET of an npc — its own resource (ADR #31); undefined when there is none. */
+/** GET of an npc — its own resource (decisions/resources); undefined when there is none. */
 async function readNpc(id: string): Promise<Npc | undefined> {
   const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
   return res.status === 200 ? ((await res.json()) as Npc) : undefined;
@@ -102,14 +102,14 @@ function npcItem(entry: ScriptedEntry = PROPOSED_NPC): Record<string, unknown> {
   return { ...entry.properties, body: entry.body };
 }
 
-/** GET of an accepted scene — its own resource (ADR #31). */
+/** GET of an accepted scene — its own resource (decisions/resources). */
 async function read(id: string): Promise<Scene> {
   const res = await app.request(`/api/campaigns/beispiel/scenes/${id}`);
   expect(res.status).toBe(200);
   return (await res.json()) as Scene;
 }
 
-/** GET of a chapter — its own resource (ADR #31). */
+/** GET of a chapter — its own resource (decisions/resources). */
 async function readChapter(id: string): Promise<Chapter> {
   const res = await app.request(`/api/campaigns/beispiel/chapters/${id}`);
   expect(res.status).toBe(200);
@@ -898,7 +898,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: scene }", () => {
     // truncation is not a form error — no validation error list
     expect(body.validationErrors).toBeUndefined();
 
-    // THE point of the fix: no correction turn, the second reply is unused
+    // THE point: no correction turn, the second reply is unused
     expect(fake.calls).toHaveLength(1);
     expect(fake.calls[0]!.corrections).toEqual([]);
     expect(await exists(SCENE_ID)).toBe(false);
@@ -981,7 +981,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: scene }", () => {
     expect(result.scenes[0]!.body).toBe(sceneDraft().body);
     // A proposed npc is an npc of its own list — the npc without its guard.
     expect(result.npcs as unknown).toEqual([npcItem()]);
-    // no correction turn on any part — that is the whole point of the fix
+    // no correction turn on any part — that is the whole point
     expect(fake.calls).toHaveLength(3);
     for (const call of fake.calls) expect(call.corrections).toEqual([]);
     expect(await exists(SCENE_ID)).toBe(false);
@@ -2195,7 +2195,7 @@ describe("campaign knowledge", () => {
 describe("a proposed scene whose chapter has no row", () => {
   test("gets the chapter in the same write, named by its id", async () => {
     // The accept is the ONE scene write without a dialog in front of it: the
-    // run decided the chapter, so accepting has to write it (ADR #18), or
+    // run decided the chapter, so accepting has to write it (decisions/scene-order), or
     // chapter and scenes would both be unreachable — the overview lists
     // chapters. A location a scene names is not created that way — the
     // proposal has to bring it, or the scene is refused.
@@ -2225,7 +2225,7 @@ describe("a proposed scene whose chapter has no row", () => {
     expect(node?.scenes.map((s) => s.id)).toContain("brut-im-dunkeln");
   });
 
-  test("a DIALOG still refuses an unknown chapter — ADR #19 stands", async () => {
+  test("a DIALOG still refuses an unknown chapter — decisions/constraints stands", async () => {
     // The rule is about reachability, not about inventing chapters: where a
     // DM typed the chapter, an unknown one is a typo and the honest answer is
     // the 400.

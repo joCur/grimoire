@@ -1,4 +1,4 @@
-// The API client of the generator job (ADR #31): its resource — start a
+// The API client of the generator job (decisions/resources): its resource — start a
 // run, read, review and accept, retry a part, discard. Built from the shared
 // HTTP helpers (../api.ts). There is one job per campaign, whatever its kind;
 // an augment run starts on the resource of its scene, npc or location and is
@@ -8,7 +8,7 @@ import type { GeneratorJob, GeneratorJobPatch } from "@grimoire/shared/generator
 
 import { ApiError, campaignPath, deleteJson, getJson, sendJson, startJob } from "@/api";
 
-/** `…/generator-jobs` of a campaign — the generator job's resource (ADR #31). */
+/** `…/generator-jobs` of a campaign — the generator job's resource (decisions/resources). */
 function generatorJobsPath(campaign: string): string {
   return `${campaignPath(campaign)}/generator-jobs`;
 }

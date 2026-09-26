@@ -7,7 +7,7 @@
 //      Everything README.md names for an entity gets its own column; a key
 //      the contract does not name has no field behind it and is refused
 //      (a PATCH answers 400, and so does a seed). The contract is the
-//      entity's zod schema (ADR #31).
+//      entity's zod schema (decisions/resources).
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
@@ -36,7 +36,7 @@
 //   4. `rev` IS THE ROW VERSION and replaces mtimeMs as the 409 guard. Every
 //      row a client can PATCH has one; the store bumps it on every write.
 //   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key and is
-//      set once, at creation (ADR #21); the cascade is what keeps a child row
+//      set once, at creation (decisions/constraints); the cascade is what keeps a child row
 //      honest, not a feature that changes ids.
 //   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as they were
 //      written, in the one shape store/time.ts spells out. Only the server
@@ -44,12 +44,12 @@
 //      storing an epoch here would bake today's timezone into the data.
 //   7. A CLOSED VALUE SET IS A CHECK CONSTRAINT. `scenes.status`,
 //      `scenes.type`, `npcs.status` and `chapters.status` each hold one of a
-//      fixed handful of positions, and the database is what says so (ADR
-//      #25). The allowed values are NOT written here: they are the lists in
+//      fixed handful of positions, and the database is what says so
+//      (decisions/constraints). The allowed values are NOT written here: they are the lists in
 //      @grimoire/shared, and `oneOf` below turns a list into the constraint.
 //      A degrading READER (README) and a closed COLUMN are not in conflict —
-//      the renderer still shows whatever it is handed, there simply is no
-//      longer a way to get a foreign value into the column.
+//      the renderer still shows whatever it is handed, and there simply is
+//      no way to get a foreign value into the column.
 //
 // The JSON columns (`quickstats`, `handouts`) are plain TEXT holding JSON;
 // pack/unpack helpers live at the bottom of this file. Deliberately not
@@ -99,7 +99,7 @@ function oneOf(column: string, values: readonly string[], nullable = false): SQL
  * One campaign. `id` is the key in every URL.
  *
  * `version` is the counter behind `GET /api/campaigns/:campaign/version`
- * (DECISIONS #9). With the database as the only truth there is nothing outside
+ * (decisions/polling). With the database as the only truth there is nothing outside
  * the server that could change campaign content, so the counter is simply
  * bumped by whoever writes — no watcher is involved.
  */
@@ -181,8 +181,8 @@ export const chapters = sqliteTable(
 // --- threads ------------------------------------------------------------------
 
 /**
- * One THREAD — a storyline the DM keeps track of — as its own row (ADR #29,
- * ADR #31): what the review writes and the chapter overview reads back is a
+ * One THREAD — a storyline the DM keeps track of — as its own row (decisions/data-shape,
+ * decisions/resources): what the review writes and the chapter overview reads back is a
  * row with columns, never a line found under a heading of a chapter's text.
  *
  * `id` is an OPAQUE random string (store/threads.ts), unique per campaign —
@@ -375,7 +375,7 @@ export const npcs = sqliteTable(
     chapterId: text("chapter_id"),
     /** `alive | dead | missing | unknown` (shared `NPC_STATUSES`), CHECKed. */
     status: text("status").notNull().default("unknown"),
-    /** `Roll20: <sheet>` — a reference, never a copy (DECISIONS #2). */
+    /** `Roll20: <sheet>` — a reference, never a copy (decisions/scope). */
     statblock: text("statblock"),
     /** Free-form social stats as a JSON object, e.g. `{"wis":"+2"}`. */
     quickstats: text("quickstats").notNull().default("{}"),
@@ -384,7 +384,7 @@ export const npcs = sqliteTable(
     /**
      * What the npc wants — the line the npc card and the reference preview
      * show. A property, not a body section found by its heading: what a view
-     * reads as data is a column (ADR #29).
+     * reads as data is a column (decisions/data-shape).
      */
     motivation: text("motivation"),
     body: text("body").notNull().default(""),
@@ -430,12 +430,12 @@ export const locations = sqliteTable(
      * belongs to no single chapter.
      */
     chapterId: text("chapter_id"),
-    /** Reference to the Roll20 page — never a map copy (DECISIONS #2). */
+    /** Reference to the Roll20 page — never a map copy (decisions/scope). */
     roll20Page: text("roll20_page"),
     /**
      * What the place feels like — the line the location card and the
      * reference preview show. A property for the same reason as
-     * `npcs.motivation` (ADR #29).
+     * `npcs.motivation` (decisions/data-shape).
      */
     atmosphere: text("atmosphere"),
     body: text("body").notNull().default(""),
@@ -463,7 +463,7 @@ export const locations = sqliteTable(
 // --- sessions ---------------------------------------------------------------
 
 /**
- * One game SESSION (ADR #31). `started`/`ended` keep the zone-less
+ * One game SESSION (decisions/resources). `started`/`ended` keep the zone-less
  * wall-clock strings of rule 6; the epoch reading stays the server's job. An
  * `ended` that is NULL or blank means the session runs
  * (@grimoire/shared/session `isSessionEnded`).
@@ -521,7 +521,7 @@ export const sessions = sqliteTable(
 );
 
 /**
- * One PAUSE of a session (ADR #31), second-precise and zone-less like
+ * One PAUSE of a session (decisions/resources), second-precise and zone-less like
  * `started`/`ended`. `toTs` NULL is the RUNNING pause: the session's clock
  * stands. `id` is an OPAQUE random string (store/pauses.ts), unique within
  * its session; `pos` is the order of creation. `rev` is the pause's own guard
@@ -552,7 +552,7 @@ export const pauses = sqliteTable(
 );
 
 /**
- * One LOG ENTRY of a session (ADR #31): a quick note the DM took. The log is
+ * One LOG ENTRY of a session (decisions/resources): a quick note the DM took. The log is
  * APPEND-ONLY — a note is written once, and the one thing that changes later
  * is `reviewed`, the review's flag on the row.
  *
@@ -602,7 +602,7 @@ export const logEntries = sqliteTable(
 );
 
 /**
- * One PLAYED SCENE of a session (ADR #31): a step of the evening through the
+ * One PLAYED SCENE of a session (decisions/resources): a step of the evening through the
  * scenes. The played scenes are a SEQUENCE — a scene the group returned to
  * later stands in it twice —, so the scene is no key: `id` is an OPAQUE
  * random string (store/played-scenes.ts), unique within its session, and
@@ -679,7 +679,7 @@ export const ideas = sqliteTable(
 // --- glossary terms ---------------------------------------------------------
 
 /**
- * One GLOSSARY TERM (ADR #31): a term of the source material and how the
+ * One GLOSSARY TERM (decisions/resources): a term of the source material and how the
  * campaign says it. The generator quotes the terms to the model as
  * `term → explanation` lines, and the search index holds them.
  *
@@ -717,7 +717,7 @@ export const glossaryTerms = sqliteTable(
 // --- knowledge items ----------------------------------------------------------
 
 /**
- * One KNOWLEDGE ITEM (ADR #31): a naming convention, fact or style rule the
+ * One KNOWLEDGE ITEM (decisions/resources): a naming convention, fact or style rule the
  * model has to apply even when the source material says something else.
  *
  * Its own table next to `glossary_terms`, per PO decision, because it answers
@@ -771,7 +771,7 @@ export const knowledgeItems = sqliteTable(
 // --- generator jobs ---------------------------------------------------------
 
 /**
- * The generate job of a campaign (ADR #10 addendum), at most one per
+ * The generate job of a campaign (decisions/generator), at most one per
  * campaign and persisted so it survives a restart. The
  * result/error/edit payloads stay JSON: they are the API's own shapes
  * (`GenerateResult`, `GeneratorJobError`, `sceneEdits`) and nothing queries

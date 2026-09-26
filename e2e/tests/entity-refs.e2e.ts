@@ -49,7 +49,7 @@ test("reading view: references render as the current name, unknown ones stay tex
   await page.goto(SCENE_URL);
 
   // Resolved: the NPC's CURRENT name, as a link to the npc's own route
-  // (ADR #31). The fixture mentions Jorna twice (prose and read-aloud) — the
+  // (decisions/resources). The fixture mentions Jorna twice (prose and read-aloud) — the
   // first one is the paragraph.
   const ref = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
   await expect(ref).toHaveText(JORNA);
@@ -59,12 +59,12 @@ test("reading view: references render as the current name, unknown ones stay tex
   await expect(page.locator(".md-body")).toContainText(`${JORNA}s Boot`);
 
   // The location resolves too (kind: location) — and links to the location's
-  // own route (ADR #31).
+  // own route (decisions/resources).
   const locationRef = page.getByRole("link", { name: "Ort: Der Leuchtturm von Salzhafen" }).first();
   await expect(locationRef).toBeVisible();
   await expect(locationRef).toHaveAttribute("href", "/campaigns/beispiel/locations/leuchtturm");
 
-  // …and so does a scene — by its id, on the scene's own route (ADR #31).
+  // …and so does a scene — by its id, on the scene's own route (decisions/resources).
   await expect(
     page.getByRole("link", { name: "Szene: Von den Schmugglern erwischt" }),
   ).toHaveAttribute("href", "/campaigns/beispiel/scenes/smuggler-captured");
@@ -126,7 +126,7 @@ test("live view: a reference opens the drawer instead of leaving the session", a
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
-  // The way out leads to the npc's own route (ADR #31).
+  // The way out leads to the npc's own route (decisions/resources).
   await expect(drawer.getByRole("link", { name: "Vollständig öffnen" })).toHaveAttribute(
     "href",
     "/campaigns/beispiel/npcs/jorna",

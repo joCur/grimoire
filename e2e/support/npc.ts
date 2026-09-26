@@ -1,4 +1,4 @@
-// An npc in the suite: its resource `…/npcs/:id` (ADR #31), every field
+// An npc in the suite: its resource `…/npcs/:id` (decisions/resources), every field
 // flat, `body` among them, beside its guard. Its type is the one
 // `@grimoire/shared/npc` derives from the npc's schema.
 

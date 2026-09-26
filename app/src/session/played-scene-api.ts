@@ -1,4 +1,4 @@
-// The API client of a played scene (ADR #31): its resource under its
+// The API client of a played scene (decisions/resources): its resource under its
 // session. The played scenes of a session are the sequence of scenes the
 // group played that evening.
 

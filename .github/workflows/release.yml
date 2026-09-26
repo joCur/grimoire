@@ -1,11 +1,11 @@
-# Release (issue #47). release-please maintains a release PR from the
+# Release. release-please maintains a release PR from the
 # Conventional Commits on main. Merging that PR — like any PR, only after
 # PO approval — creates the `vX.Y.Z` tag, the GitHub release and CHANGELOG.md.
 #
-# This workflow is the ONLY writer of the GHCR package (issue #66): it builds
+# This workflow is the ONLY writer of the GHCR package (decisions/release): it builds
 # the image with the version tags AND `:latest`, checked out at the tag rather
 # than the branch head. A regular main merge publishes nothing at all — ci.yml
-# builds the image to check it, but never pushes (DECISIONS #12).
+# builds the image to check it, but never pushes.
 #
 # Nothing is published from a tree whose CI was not green: `require-green-ci`
 # resolves the tag to its commit and waits for that commit's `ci` push run.
@@ -158,7 +158,7 @@ jobs:
         with:
           context: .
           push: true
-          # Build id in bundle AND server (issue #24) — the tag here instead
+          # Build id in bundle AND server — the tag here instead
           # of the SHA, so the reload-banner comparison between an old tab
           # and the new server state sees the same value on both sides and a
           # release is recognized as a new version.

@@ -112,7 +112,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
     expect(discarded.status).toBe(200);
     expect(await readGeneratorJob(api)).toBeNull();
 
-    // The job is its own resource (ADR #31): the generator's former
+    // The job is its own resource (decisions/resources): the generator's former
     // addresses answer 404.
     expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
     const oldApply = await api.fetch("campaigns/beispiel/generate/apply", {
@@ -177,7 +177,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(edit.body).toContain(edited.trim());
 
     // The accept names the scene AND the npc and location it references: a
-    // scene cannot name anything that does not exist (ADR #19). The server
+    // scene cannot name anything that does not exist (decisions/constraints). The server
     // lays the stored change on top of the run's scene — the accept carries
     // ids, not proposals.
     const accepted = await patchGeneratorJob(api, after.id, {

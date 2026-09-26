@@ -1,4 +1,4 @@
-// Where a location lives in the app and how it names itself (ADR #31): its
+// Where a location lives in the app and how it names itself (decisions/resources): its
 // reading view, its list, the context line of its reading view, and the label
 // it carries beside the addresses of a run's scenes.
 

@@ -1,6 +1,6 @@
 // Glossary terms: the glossary-term resource.
 //
-// A glossary term is its own resource with its own type (ADR #31,
+// A glossary term is its own resource with its own type (decisions/resources,
 // @grimoire/shared/glossary-term): listed, read, created, written and
 // deleted here, typed by its one zod schema. Every term carries its own guard
 // `rev`, and a term stands in the glossary once (409 `glossary_term_taken`).

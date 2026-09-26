@@ -1,5 +1,5 @@
 // Render tests for the location's reading view (react-dom/server — no DOM):
-// the location read straight from its own type (ADR #31) — name, atmosphere,
+// the location read straight from its own type (decisions/resources) — name, atmosphere,
 // the Roll20 reference line and the text, never the scene type overline.
 
 import type { Location } from "@grimoire/shared/location";

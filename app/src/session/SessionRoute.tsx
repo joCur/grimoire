@@ -3,7 +3,7 @@
 // The page is READ-ONLY and shows exactly what the server stored — when the
 // evening started and ended, the pauses, the log in the order it was written,
 // and the scenes that were played as links back into the campaign. The
-// session reads its children embedded (ADR #31). Where a scene lives is the
+// session reads its children embedded (decisions/resources). Where a scene lives is the
 // scene's to say: the page is handed that link.
 //
 // The log row renders the way the live panel's rows do: the wall-clock time in

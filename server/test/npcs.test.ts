@@ -1,4 +1,4 @@
-// The npc resource (ADR #31): `GET …/npcs`, `GET` and `PATCH …/npcs/:id`,
+// The npc resource (decisions/resources): `GET …/npcs`, `GET` and `PATCH …/npcs/:id`,
 // `POST …/npcs`, every field of an npc flat — `body` among them — beside its
 // `rev`, and every write checked against the npc's schema.
 // `…/entries/npcs/<id>` names nothing.
@@ -64,7 +64,7 @@ describe("reading an npc", () => {
       body: jorna.body,
       rev: jorna.rev,
     });
-    // The motivation is a field, not a section of the text (ADR #29).
+    // The motivation is a field, not a section of the text (decisions/data-shape).
     expect(jorna.body).toContain("## Beziehungen");
     expect(jorna.body).not.toContain("## Will");
   });

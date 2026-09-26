@@ -1,4 +1,4 @@
-// Where the DM meets the closed columns (ADR #25): a status or a type the
+// Where the DM meets the closed columns (decisions/constraints): a status or a type the
 // column does not accept is a 400 with a code, from every write path.
 //
 // The point of these cases is the ANSWER, not the constraint. The constraint
@@ -12,7 +12,7 @@ import type { Chapter, Npc, Scene } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 
-/** A chapter, a scene and an npc are their own resources (ADR #31): their fields travel flat. */
+/** A chapter, a scene and an npc are their own resources (decisions/resources): their fields travel flat. */
 const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
 const CHAPTER = "/api/campaigns/beispiel/chapters/01-salzhafen";
 const NPC_URL = "/api/campaigns/beispiel/npcs/jorna";

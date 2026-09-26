@@ -1,7 +1,7 @@
 // The campaign's generator job, read from its resource
 // (`GET …/generator-jobs`, a list of one or none). The run lives on the
 // SERVER, so the browser tab is free to go; everything here is about picking
-// that run back up — nothing about it is stored locally (DECISIONS #3: no
+// that run back up — nothing about it is stored locally (decisions/scope: no
 // persistent browser state; the server is the truth).
 //
 // One query key per campaign, shared by the generator route and the topbar's

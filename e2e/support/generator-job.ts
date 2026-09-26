@@ -1,4 +1,4 @@
-// A generator job in the suite: its resource `…/generator-jobs/:id` (ADR #31)
+// A generator job in the suite: its resource `…/generator-jobs/:id` (decisions/resources)
 // and the list `…/generator-jobs`, which holds the campaign's one job or none.
 // A scene run's parts are its children, retried on
 // `…/generator-jobs/:id/parts/:key`. Its type is the one

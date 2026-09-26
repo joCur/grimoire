@@ -38,13 +38,13 @@ test("mobile start surface: search, idea capture, lookup lists", async ({ page, 
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup.getByRole("link", { name: /Szenen/ })).toContainText("2 Szenen");
   await expect(lookup.getByRole("link", { name: /NPCs/ })).toContainText("2 NPCs");
-  // The npc row leads to the npc list on its own route (ADR #31).
+  // The npc row leads to the npc list on its own route (decisions/resources).
   await expect(lookup.getByRole("link", { name: /NPCs/ })).toHaveAttribute(
     "href",
     "/campaigns/beispiel/npcs",
   );
   // Two locations: each one a scene names exists on its own, because a
-  // reference creates nothing (ADR #19).
+  // reference creates nothing (decisions/constraints).
   await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("2 Orte");
 
   // --- idea capture --------------------------------------------------------
@@ -108,7 +108,7 @@ test.describe("with a session open since yesterday", () => {
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
   // Reached the way a phone reaches it: the lookup row of the start surface,
-  // then the scene list — onto the scene's own route (ADR #31).
+  // then the scene list — onto the scene's own route (decisions/resources).
   await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: /^Szenen/ }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes$/);

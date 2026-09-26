@@ -1,4 +1,4 @@
-// Provider factory and OpenAI-compatible transport (DECISIONS #6).
+// Provider factory and OpenAI-compatible transport (decisions/generator).
 //
 // Two kinds of test, no network and no new dependencies:
 //
@@ -7,7 +7,7 @@
 //      process.env stays untouched here.
 //   2. Request shape — a throwaway node:http server captures exactly ONE
 //      request per case and answers with a minimal OpenAI-style body. Plain
-//      node:http keeps this runtime-neutral (DECISIONS #7: no Bun-only APIs).
+//      node:http keeps this runtime-neutral (decisions/stack: no Bun-only APIs).
 //   3. Reply parsing — the same capture server answers with the truncation
 //      and usage fields the real APIs send, so `truncated`/`usage` of the
 //      CompletionResult are covered. ClaudeProvider talks to a
@@ -128,7 +128,7 @@ const REQ: GenerateRequest = {
 
 /**
  * REQ above carries NO schema — no caller sends such a
- * request any more (every call forces its object), and it stays in this suite
+ * request (every call forces its object), and it stays in this suite
  * for exactly that reason: the transports must still behave when nothing is
  * forced, which is what `LLM_FORCE_JSON=0` and a future unforced call rely on.
  *

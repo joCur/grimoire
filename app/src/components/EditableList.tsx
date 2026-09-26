@@ -14,7 +14,7 @@
 // is the unit of work in the head — and on the wire, where every row is
 // written on its own against its own `rev`.
 //
-// THE 409 is the shape ADR #4 prescribes: nothing was written, the list is
+// THE 409 is the shape decisions/writes prescribes: nothing was written, the list is
 // re-read and the DM is told — never a silent overwrite. The open row keeps
 // what they typed, and saving is off until they decide: reload, or — when it
 // was their open row that moved — write it anyway, only the fields they
@@ -200,7 +200,7 @@ function EditableListBody<T extends EditableRow, V>({
         const conflict = error.status === 409 && error.details.code === "rev_conflict";
         if (conflict || error.status === 404) {
           // Nothing was written. Re-read, and keep what the DM typed on
-          // screen until they have read why (ADR #4).
+          // screen until they have read why (decisions/writes).
           await queryClient.invalidateQueries({ queryKey: key });
           setStatus({ kind: "stale", force: force && conflict });
           return false;
@@ -214,7 +214,7 @@ function EditableListBody<T extends EditableRow, V>({
   /**
    * Open something else. With unsaved work on screen this ASKS first —
    * without the question, clicking the next row throws the draft away without
-   * a word, which is the silent loss ADR #4 forbids.
+   * a word, which is the silent loss decisions/writes forbids.
    */
   const requestOpen = (target: Editing<T, V>) => {
     if (dirty) {

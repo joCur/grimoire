@@ -1,4 +1,4 @@
-// The API client of a campaign (ADR #31): its resource — read, create,
+// The API client of a campaign (decisions/resources): its resource — read, create,
 // write — and its write conflict. Built from the shared HTTP helpers
 // (../api.ts). The campaign list (`GET /campaigns`, the switcher and "/")
 // answers `CampaignSummary` and is not the campaign itself.

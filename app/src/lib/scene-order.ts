@@ -1,4 +1,4 @@
-// The scene order of a chapter, as the two views read and write it (ADR #27).
+// The scene order of a chapter, as the two views read and write it (decisions/scene-order).
 //
 // `ChapterNode.scenes` arrives in the order the DM arranged — a flat list, not
 // groups. Everything both views derive from that order lives here: which of

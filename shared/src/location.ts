@@ -1,4 +1,4 @@
-// A LOCATION — its one zod schema and the forms derived from it (ADR #31).
+// A LOCATION — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `locationSchema` is the location as `GET /api/campaigns/:c/locations/:id`
 // answers it. The TypeScript type, the PATCH the resource accepts, the

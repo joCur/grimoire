@@ -1,4 +1,4 @@
-// A CAMPAIGN — its one zod schema and the forms derived from it (ADR #31).
+// A CAMPAIGN — its one zod schema and the forms derived from it (decisions/resources).
 //
 // `campaignSchema` is the campaign as `GET /api/campaigns/:c` answers it. The
 // TypeScript type, the PATCH and the POST the resource accepts, and the

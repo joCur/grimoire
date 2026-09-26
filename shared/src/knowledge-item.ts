@@ -1,6 +1,6 @@
 // A KNOWLEDGE ITEM — one rule of the campaign knowledge the generator has to
 // apply even where the source material says otherwise — its one zod schema
-// and the forms derived from it (ADR #31).
+// and the forms derived from it (decisions/resources).
 //
 // `knowledgeItemSchema` is the item as
 // `GET /api/campaigns/:c/knowledge-items/:id` answers it. The TypeScript type,

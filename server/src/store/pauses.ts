@@ -1,6 +1,6 @@
 // Pauses: the pause resource.
 //
-// A pause is its own resource with its own type (ADR #31,
+// A pause is its own resource with its own type (decisions/resources,
 // @grimoire/shared/pause), hanging under its session: begun, ended and
 // corrected here, typed by its one zod schema. Every pause carries its own
 // guard `rev`, and no pause write moves the session's. A session has at most

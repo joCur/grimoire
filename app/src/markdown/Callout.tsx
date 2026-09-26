@@ -19,10 +19,10 @@ import { cn } from "@/lib/utils";
 import { CALLOUT_LABEL_KEYS, isCalloutKind } from "@/markdown/grammar";
 
 // The labels are the format's vocabulary and live with it (grammar.ts holds
-// the catalog KEY per kind since issue #69) — the composer's cards name the
+// the catalog KEY per kind) — the composer's cards name the
 // same six blocks and must not invent second names.
 // Markers are the closest lucide glyphs (Dice3/Eye/CornerDownRight/Gem/PenLine
-// match the prototype's own stroke SVGs closely enough — DECISIONS #5: lucide
+// match the prototype's own stroke SVGs closely enough — decisions/stack: lucide
 // first).
 const ICONS: Record<Exclude<CalloutKind, "readaloud">, ReactNode> = {
   check: <Dice3 aria-hidden size={17} />,

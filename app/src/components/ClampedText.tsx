@@ -4,7 +4,7 @@
 //
 // The WHOLE text is rendered, through the one markdown renderer: callouts,
 // `## If:` branches, `[[id]]` references and tables look and degrade exactly
-// as everywhere else. Nothing is picked out of it by a heading (ADR #29); the
+// as everywhere else. Nothing is picked out of it by a heading (decisions/data-shape); the
 // only thing the view decides is how much of it stands on screen at first.
 //
 // How the clamp works: the box is cut at a height of `lines` lines of its own
