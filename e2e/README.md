@@ -17,7 +17,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   hält die Beispielkampagne als **ein JSON pro Objekt**, genau in der Form,
   die die API spricht. Die Kampagne, ein Kapitel, eine Szene, ein NPC, ein
   Ort, ein Faden, eine Idee, ein Glossar-Begriff, ein Stück
-  Kampagnenwissen und eine Session sind je eine eigene Ressource (ADR #31)
+  Kampagnenwissen und eine Session sind je eine eigene Ressource ([decisions/resources](../docs/decisions/resources.md))
   und liegen als `campaigns/<id>.json`, `chapters/<id>.json`,
   `scenes/<id>.json`, `npcs/<id>.json`, `locations/<id>.json`,
   `threads/<id>.json`, `ideas/<id>.json`, `glossary-terms/<id>.json`,
@@ -39,7 +39,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   die meisten Tests kopieren also gar nichts.
 - **Eine Referenz zeigt auf etwas, das existiert.** Eine Szene, die einen
   Ort oder NPC nennt, den es nicht gibt, lässt den Seed-Lauf
-  scheitern (ADR #19) — das ist ein Fehler im Fixture, keine Degradierung.
+  scheitern ([decisions/constraints](../docs/decisions/constraints.md)) — das ist ein Fehler im Fixture, keine Degradierung.
 - **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
   Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
   (Pfad 10).
@@ -55,7 +55,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   antwortet mit 409 `rev_conflict` und trägt den aktuellen Stand unter dem
   Namen der Entität mit — `campaign`, `chapter`, `scene`, `npc`, `location`.
 - **Eine vorgeschlagene Szene des Generators ist die Szene ohne `rev`**
-  (ADR #31) — auf der Leitung `result.scenes`, jede mit ihrer `id`, alle
+  ([decisions/resources](../docs/decisions/resources.md)) — auf der Leitung `result.scenes`, jede mit ihrer `id`, alle
   Felder flach. Änderungen des Prüfschritts reisen **je Szene und je Feld**:
   `sceneEdits: { "<id>": { title?, …, body? } }` im `PATCH` des Jobs und am
   Job; ein genanntes Feld ersetzt den Wert des Modells, `null` leert
@@ -63,7 +63,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   und geschrieben wird je `id` (`droppedScenes`, `writtenScenes`): das
   Übernehmen ist derselbe `PATCH` mit `review.writtenScenes`,
   `writtenNpcs` bzw. `writtenLocations` — die ids, die geschrieben werden.
-- **Der Generator-Job ist eine eigene Ressource** (ADR #31):
+- **Der Generator-Job ist eine eigene Ressource** ([decisions/resources](../docs/decisions/resources.md)):
   `…/generator-jobs` ist die Liste mit dem einen Job der Kampagne oder
   keinem (`readGeneratorJob(api)`), `POST` startet einen Lauf und antwortet
   202 mit dem Job selbst, `PATCH …/generator-jobs/<id> { rev, … }` prüft und
@@ -105,17 +105,17 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 
 ## Szene = eigene Ressource, Reihenfolge = eigene Liste
 
-Eine Szene ist ihre eigene Ressource (ADR #31): sie liegt flach unter ihrer
+Eine Szene ist ihre eigene Ressource ([decisions/resources](../docs/decisions/resources.md)): sie liegt flach unter ihrer
 Kampagne, ihr Kapitel und ihr Ort sind Felder, und die App liest sie unter
 `/campaigns/:c/scenes/<id>`. Die Kapitelübersicht ist eine durchgehende
-Liste in der Reihenfolge, die der DM setzt (ADR #27), und der Ort steht mit
+Liste in der Reihenfolge, die der DM setzt ([decisions/scene-order](../docs/decisions/scene-order.md)), und der Ort steht mit
 seinem Namen in der Metazeile der Zeile. Für die Suite heißt das vier Dinge:
 
 - **Eine Szene wird über ihre `id` angesprochen**, egal wo sie liegt:
   `getScene(api, "lighthouse-arrival")`, `sceneExists(api, id)`,
   `scenePath(api, id?)` für rohe Aufrufe. Beide Orte der Beispielkampagne
   gibt es als eigene Ressource (`…/locations/leuchtturm`, `…/locations/bucht`;
-  `getLocation(api, id)`) — eine Referenz legt nichts an (ADR #19) —, die
+  `getLocation(api, id)`) — eine Referenz legt nichts an ([decisions/constraints](../docs/decisions/constraints.md)) —, die
   Kampagne hat also **zwei** Orte. Frühere Adressen wie
   `…/entries/<kapitel>/…/<id>`, `…/entries/npcs/<id>` und
   `…/entries/locations/<id>` sind ein 404.
@@ -206,7 +206,7 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   Was die Suite über eine Entität weiß, steht im **Modul der Entität** unter
   `support/`, als Funktionen, die `api` als erstes Argument nehmen. Die
   **Kampagne**, ein **Kapitel**, eine **Szene**, ein **NPC** und ein **Ort**
-  sind je eine eigene Ressource (ADR #31) und antworten mit ihrem Typ aus
+  sind je eine eigene Ressource ([decisions/resources](../docs/decisions/resources.md)) und antworten mit ihrem Typ aus
   `@grimoire/shared/<entität>` (alle Felder flach, `body`, `rev`):
   `getCampaign(api)`, `getChapter(api, id)`, `getScene(api, id)`,
   `getNpc(api, id)` bzw. `getLocation(api, id)`, dazu
@@ -563,8 +563,8 @@ Kapitelübersicht behält die Reihenfolge und nennt den neuen Ortsnamen, und
 die Log-Zeilen der Session bleiben gültig (ihr `sceneId` nennt die Szene über
 ihre id). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
-`scene-rendering.e2e.ts`. Und weil Status und Typ seit ADR #25
-`CHECK`-Constraints ihrer Spalten sind, hält ein Test im selben Spec die Regel
+`scene-rendering.e2e.ts`. Und weil Status und Typ
+`CHECK`-Constraints ihrer Spalten sind ([decisions/constraints](../docs/decisions/constraints.md)), hält ein Test im selben Spec die Regel
 direkt am Schreibweg fest: ein `status` außerhalb der geschlossenen Liste ist
 ein 400 mit `code: "status_not_allowed"` samt `kind`, `value` und `allowed`,
 und die Szene bleibt unverändert — auch die Zeilenversion. Ein veralteter
@@ -588,7 +588,7 @@ niemanden von der Textarea in den Composer —, „Trotzdem speichern" schreibt
 den Text und lässt den fremden Status stehen. Ein Test belegt Felder und Text in EINER Anfrage direkt am
 Schreibweg der Szene — ein Schritt der Zeilenversion, und kein Feld dabei ist
 400 `nothing_to_write` —, weil keine Oberfläche der App heute beides in einem
-Speichern schickt. Kapitel und Kampagne sind eigene Ressourcen (ADR #31):
+Speichern schickt. Kapitel und Kampagne sind eigene Ressourcen ([decisions/resources](../docs/decisions/resources.md)):
 ein Test liest beide flach (alle Felder nebeneinander, ohne `kind`, `path`
 und `properties`), schickt einen alten `rev` (409 mit dem aktuellen Stand,
 nichts geschrieben) und ein Feld, das die Entität nicht hat (400, die es
@@ -618,7 +618,7 @@ Dazu die beiden Listen-Einstiege („NPC/Ort anlegen", die Listen auf
 `/campaigns/:id/npcs` und `/campaigns/:id/locations`) mit der
 Slug-Kollision — 409 mit Vorschlag, nichts geschrieben, der Vorschlag als ein
 Klick; für den NPC auch auf der Leitung samt dem 400 für ein unbekanntes
-Feld —, die selbst gesetzte Kennung am Stift der Vorschauzeile (ADR #21: der
+Feld —, die selbst gesetzte Kennung am Stift der Vorschauzeile ([decisions/constraints](../docs/decisions/constraints.md): der
 Anlege-Dialog ist der einzige Ort dafür — ungültige Kennung blockiert
 „Anlegen", leeres Feld leitet wieder aus dem Namen ab) und dieselben Listen
 bei 390px, womit der Spec auch auf Pfad 8 liegt.

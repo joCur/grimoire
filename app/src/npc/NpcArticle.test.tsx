@@ -1,5 +1,5 @@
 // Render tests for the npc's reading view (react-dom/server — no DOM): the
-// npc read straight from its own type (ADR #31) — name, status, the lines the
+// npc read straight from its own type (decisions/resources) — name, status, the lines the
 // table needs and the text, never the scene type overline. The npc is the
 // example campaign's own fixture, as its resource answers it.
 

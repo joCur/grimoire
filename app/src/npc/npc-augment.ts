@@ -1,4 +1,4 @@
-// An npc's augment proposal, field by field (ADR #31): what the model changes
+// An npc's augment proposal, field by field (decisions/resources): what the model changes
 // against the npc as the run read it. Pure, so the rule is unit-testable.
 
 import type { NpcProposal } from "@grimoire/shared/npc";

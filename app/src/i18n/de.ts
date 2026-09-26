@@ -5,7 +5,7 @@
 // — or one that exists only there — is a TYPE ERROR, not a runtime surprise.
 // That is the whole reason the catalogs are TS objects instead of JSON.
 //
-// Values are ICU MessageFormat (ADR #15): `{name}` interpolates, `{count,
+// Values are ICU MessageFormat (decisions/i18n): `{name}` interpolates, `{count,
 // plural, one {…} other {…}}` picks the form, `#` is the number itself.
 // A literal brace in copy has to be quoted as `'{'` — there is none here.
 //
@@ -411,7 +411,7 @@ export const de = {
   // separator stays markup in the JSX.
   "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
   "chapterOverview.scene.trigger": "Wenn: {trigger}",
-  // Up/down on a scene row (ADR #27). The title is IN the name: a list of
+  // Up/down on a scene row (decisions/scene-order). The title is IN the name: a list of
   // bare "move up" buttons says nothing about which row it moves — neither to
   // a screen reader nor in a test.
   "chapterOverview.scene.moveUp.aria": "„{title}“ nach oben",

@@ -1,4 +1,4 @@
-// The i18n entry point (ADR #15).
+// The i18n entry point (decisions/i18n).
 //
 //   const t = useT();            <span>{t("session.start")}</span>
 //   const { locale, date } = useI18n();

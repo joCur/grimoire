@@ -1,4 +1,4 @@
-// Where a campaign lives in the app (ADR #31): its route is the chapter
+// Where a campaign lives in the app (decisions/resources): its route is the chapter
 // overview, the page every campaign opens on.
 
 /** The campaign's own route — the chapter overview. */

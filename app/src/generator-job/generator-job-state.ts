@@ -351,7 +351,7 @@ export function sceneState(job: GeneratorJob | null | undefined, id: string): Pa
 
 /**
  * The state of one proposed npc, by its id — read off the npc's own
- * decisions and written list (ADR #31).
+ * decisions and written list (decisions/resources).
  */
 export function npcState(job: GeneratorJob | null | undefined, id: string): PartState {
   const review = reviewOf(job);

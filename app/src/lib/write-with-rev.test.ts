@@ -1,4 +1,4 @@
-// The rev protocol of ADR #4 has exactly one implementation, so it is tested
+// The rev protocol of decisions/writes has exactly one implementation, so it is tested
 // exactly once here — with plain stub functions, no fetch, no react. The
 // per-path suites (the scene's and the chapter's status) then only have to
 // show that they wire the right request into it.

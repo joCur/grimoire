@@ -623,7 +623,7 @@ describe("list operations are lossless when nothing actually moves", () => {
 });
 
 // The labels come from the catalog and the translator is passed in
-// (ADR #15) — the German names are the ones the reading view shows.
+// (decisions/i18n) — the German names are the ones the reading view shows.
 const t = translator("de");
 
 describe("labels", () => {
@@ -655,7 +655,7 @@ describe("labels", () => {
 
 // --- tables ------------------------------------------------------------------
 //
-// AK 3: a table is NOT a block type. It is markdown inside a text block (or
+// A table is NOT a block type. It is markdown inside a text block (or
 // inside a callout's text), which is exactly why nothing here had to change —
 // the line scan never splits on a `|` line. These tests nail that down, so a
 // later "let us model tables" change has to argue with the round-trip.

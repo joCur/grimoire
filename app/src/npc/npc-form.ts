@@ -6,7 +6,7 @@
 // stored value, whitespace around a value is no change, and a field left
 // blank clears the value (`null`) instead of writing an empty one. The name
 // and the status are the exceptions — an npc always has both: a blank name
-// is no save, and the status is chosen from its closed list (ADR #25).
+// is no save, and the status is chosen from its closed list (decisions/constraints).
 // `quickstats` follows the rules of a key/value field
 // (components/fields/pairs.ts).
 
@@ -21,7 +21,7 @@ type TextKey = Exclude<keyof NpcProposal, "id" | "body" | "status" | "quickstats
 
 /**
  * The form's values — typed against the npc, so a field the form does not
- * handle does not compile. `id` is fixed at creation (ADR #21) and `body` has
+ * handle does not compile. `id` is fixed at creation (decisions/constraints) and `body` has
  * its own editor.
  */
 export type NpcFormValues = { [K in TextKey]-?: string } & {

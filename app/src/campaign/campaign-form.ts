@@ -14,7 +14,7 @@ import { textValue } from "@/components/fields/text";
 /**
  * The form's values, one text per field — typed against the campaign, so a
  * field the form does not handle does not compile. `id` is fixed at creation
- * (ADR #21), and `glossaryIntro` — the prose above the glossary terms — is
+ * (decisions/constraints), and `glossaryIntro` — the prose above the glossary terms — is
  * not a field of this dialog.
  */
 export type CampaignFormValues = {

@@ -34,7 +34,7 @@ export interface NavView {
  *
  * The chapter overview, a chapter's reading view and a scene's list and
  * reading view are Chapters. An npc's and a location's list and reading view are
- * NPCs and Locations — each its own route (ADR #31).
+ * NPCs and Locations — each its own route (decisions/resources).
  */
 export function navSection(view: NavView): NavSection | undefined {
   if (view.isChapterOverview || view.isChapter === true || view.isScenes === true) {

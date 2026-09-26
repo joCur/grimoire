@@ -41,7 +41,7 @@ import { RefPreview, useCanHover, type RefPreviewTrigger } from "./ref-preview";
 
 /**
  * What a slug resolves to: which of the three it names, and its CURRENT
- * display name. Each is its own resource, reached by its id (ADR #31).
+ * display name. Each is its own resource, reached by its id (decisions/resources).
  */
 export interface ResolvedRef {
   kind: EntityRefKind;

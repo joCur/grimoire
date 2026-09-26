@@ -1,4 +1,4 @@
-// Thematic marker icons as own components (DECISIONS #5): ONLY where
+// Thematic marker icons as own components (decisions/stack): ONLY where
 // lucide has no fitting glyph. Everything else — chevrons, search, copy,
 // bookmark, pin, dice, gem, pen, fork — comes from lucide-react.
 // Icons render in currentColor; callers set size and color.

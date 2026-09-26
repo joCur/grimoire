@@ -1,4 +1,4 @@
-// NPC card fed from the npc's own resource (ADR #31) — voice, the motivation
+// NPC card fed from the npc's own resource (decisions/resources) — voice, the motivation
 // (the `motivation` field, labelled "Will") and quickstats, exactly those
 // three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id

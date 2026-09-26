@@ -1,4 +1,4 @@
-// One editing session over ONE npc (ADR #31), with the rules every editing
+// One editing session over ONE npc (decisions/resources), with the rules every editing
 // session in the app follows:
 //
 //   the write       ONE PATCH of the npc per interaction — any subset of its

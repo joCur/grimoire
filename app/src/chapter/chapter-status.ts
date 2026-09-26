@@ -13,7 +13,7 @@
 // holds on every write path, and the app only has to refetch both chapters.
 //
 // `chapters.status` is a CHECK constraint of its column, so the database
-// cannot hold anything else (ADR #25) and the stored value is one of the
+// cannot hold anything else (decisions/constraints) and the stored value is one of the
 // three. An ABSENT one is the only other case: every path that creates a
 // chapter writes `planned`, and no status on a chapter means "not started",
 // which is what `planned` says.

@@ -1,4 +1,4 @@
-// A scene in the suite: its resource `…/scenes/:id` (ADR #31), every field
+// A scene in the suite: its resource `…/scenes/:id` (decisions/resources), every field
 // flat, `body` among them, beside its guard. Its type is the one
 // `@grimoire/shared/scene` derives from the scene's schema.
 

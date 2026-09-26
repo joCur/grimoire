@@ -11,7 +11,7 @@
 // sentence, and the id, derived from the name (the shared slug rule) and shown
 // before it is created, because an id is permanent — with the same pencil as
 // the dialog surfaces, so the very first id of an instance is settable too
-// (components/IdField.tsx, ADR #21).
+// (components/IdField.tsx, decisions/constraints).
 //
 // A PAGE, not a dialog. There is nothing behind it to keep visible, the
 // surface has to work at 390px, and creating a campaign is the only thing this
@@ -163,7 +163,7 @@ function ColdStart() {
             />
           </label>
           {/* The id the name produces — it goes into every URL and stays, and
-              the pencil is where it gets settled by hand (ADR #21). The same
+              the pencil is where it gets settled by hand (decisions/constraints). The same
               component and the same label as the dialog surface. */}
           <IdField
             prefix={t("create.campaign.idPrefix")}

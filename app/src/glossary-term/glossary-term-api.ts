@@ -1,4 +1,4 @@
-// The API client of a glossary term (ADR #31): its resource — list, create,
+// The API client of a glossary term (decisions/resources): its resource — list, create,
 // write, delete. Built from the shared HTTP helpers (../api.ts).
 
 import type {

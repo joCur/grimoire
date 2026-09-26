@@ -50,7 +50,7 @@ describe("labels", () => {
 
   test("a value from outside the trio is not a status at all", () => {
     // The column is a CHECK constraint, so the database cannot hold anything
-    // else (ADR #25); the type is what says so, so the renderer has nothing
+    // else (decisions/constraints); the type is what says so, so the renderer has nothing
     // to fall back for.
     // @ts-expect-error not one of planned | active | done
     const foreign: ChapterStatus = "laeuft";

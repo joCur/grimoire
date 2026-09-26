@@ -13,7 +13,7 @@
 // with content, nothing is written, the dialog says so, and the row stays
 // open. Adopting a thread creates a thread of the active chapter
 // (`POST …/threads`); the chapter's text and its `rev` stay as they are
-// (ADR #29). The ONLY client state is cosmetic: which action a card got in
+// (decisions/data-shape). The ONLY client state is cosmetic: which action a card got in
 // this sitting (the server stores done/not-done, not which action) and which
 // threads were adopted here (the "neu" chip, by thread id).
 // Mobile: the desk task stays usable — one column, stacked cards.

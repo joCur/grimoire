@@ -1,5 +1,5 @@
 // "/campaigns/:campaign/locations/:id" — the reading view of ONE location,
-// its own resource with its own type (ADR #31). The page is the scene
+// its own resource with its own type (decisions/resources). The page is the scene
 // route's sibling: the context line on top (the location list), the
 // article, and the three quiet actions in its header — edit (the text with
 // the `atmosphere` beside it), the dialog over the other fields, and the

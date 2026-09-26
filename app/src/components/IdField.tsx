@@ -2,7 +2,7 @@
 // surfaces (the five CreateDialog kinds and the cold-start page).
 //
 // It was a quiet preview: the id a typed name yields, shown before anything is
-// written, because an id is the format's permanent reference key. ADR #21
+// written, because an id is the format's permanent reference key. decisions/constraints
 // names the create dialog as the ONE place where it may be personalised, so
 // the line now carries a pencil: pressing it turns the line into a field
 // prefilled with the id that is on screen anyway.

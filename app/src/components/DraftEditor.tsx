@@ -10,7 +10,7 @@
 //
 //   fields  the heading and the proposal's label as the read-only id beside
 //           the controls its caller renders — the id is fixed there and here
-//           (ADR #21).
+//           (decisions/constraints).
 //   text    the mode toggle of the block composer over the same two surfaces
 //           the body editor offers: the block cards, or the raw textarea with
 //           its preview.

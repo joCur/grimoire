@@ -1,4 +1,4 @@
-// The editing surfaces of an npc's reading view (ADR #31): the body editor
+// The editing surfaces of an npc's reading view (decisions/resources): the body editor
 // with the `motivation` field beside the text, and the dialog over the npc's
 // other fields. Both are shared surfaces (BodyEditor, FieldsDialog) over the
 // npc's own form (./npc-form.ts) and its own editing session

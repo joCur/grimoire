@@ -1,4 +1,4 @@
-// The message contract (issue #69, ADR #15).
+// The message contract (decisions/i18n).
 //
 // `de.ts` IS the key set: `MessageKey` is its `keyof`, and every other
 // language is a total `Record<MessageKey, string>`. A key forgotten in `en.ts`
@@ -32,8 +32,8 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 /**
- * The language a browser asks for when the instance has no setting yet
- * (issue #69 AK2): `de*` -> German, everything else English. The SETTING
+ * The language a browser asks for when the instance has no setting yet:
+ * `de*` -> German, everything else English. The SETTING
  * itself lives on the server — this is only the fallback for "not yet
  * decided", so it is read once and never written anywhere.
  */

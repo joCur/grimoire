@@ -9,7 +9,7 @@
 // [!loot], which the example campaign does not contain, through an extra
 // scene this test seeds into ITS OWN copy of the fixtures.
 //
-// A scene is its own resource (ADR #31): its reading view is
+// A scene is its own resource (decisions/resources): its reading view is
 // `/campaigns/:c/scenes/:id`, read through `GET …/scenes/:id`.
 
 import { readFileSync } from "node:fs";
@@ -59,7 +59,7 @@ test("a scene is its own resource: flat on the wire, 404 at its old address", as
   expect(arrival.body).toContain("## Flow");
   for (const key of ["kind", "path", "properties"]) expect(arrival).not.toHaveProperty(key);
 
-  // The address a scene used to have names nothing any more.
+  // A nested path under chapter and location names nothing: a scene is reached by its id.
   for (const address of [
     "01-salzhafen/leuchtturm/lighthouse-arrival",
     "01-salzhafen/lighthouse-arrival",
@@ -169,7 +169,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText("passive-perception");
 
   // The card links into the NPC reading view, on the npc's own route
-  // (ADR #31).
+  // (decisions/resources).
   await aside.getByRole("link").first().click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
@@ -250,7 +250,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
 
 test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ page, api }) => {
   // `location` is always an id or absent — and the id has to name a location
-  // that exists (ADR #19).
+  // that exists (decisions/constraints).
   const patchLocation = async (value: string, rev: number): Promise<Response> =>
     api.fetch(scenePath(api, "smuggler-captured"), {
       method: "PATCH",
@@ -360,7 +360,7 @@ test.describe("the table at 390px", () => {
     });
     expect(await box.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
 
-    // AK 2: the PAGE never scrolls sideways.
+    // The PAGE never scrolls sideways.
     const doc = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,

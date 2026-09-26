@@ -117,7 +117,7 @@ export function FieldsDialog({
   children,
 }: {
   title: string;
-  /** The id shown as read-only context — fixed at creation (ADR #21). */
+  /** The id shown as read-only context — fixed at creation (decisions/constraints). */
   idLabel: string;
   /** The save action is live: something changed and nothing blocks it. */
   canSubmit: boolean;

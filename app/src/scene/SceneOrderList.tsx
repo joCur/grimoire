@@ -1,5 +1,5 @@
 // The scenes of one chapter in the chapter overview: ONE list in the order the
-// DM arranged (ADR #27), shown as two blocks — the plan, and the contingencies
+// DM arranged (decisions/scene-order), shown as two blocks — the plan, and the contingencies
 // at the end — with up/down on every row and the create action underneath.
 // The chapter is the tree's node; the scene order is written through its own
 // endpoint with its own guard (lib/use-scene-order.ts).

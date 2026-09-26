@@ -5,8 +5,8 @@
 // and it asserts these things:
 //
 //   a) an EMPTY npc — one created and not filled in — is augmented on its own
-//      resource (ADR #31) and its holes are filled,
-//   b) a PREPARED scene is augmented on its own resource (ADR #31) and gains
+//      resource (decisions/resources) and its holes are filled,
+//   b) a PREPARED scene is augmented on its own resource (decisions/resources) and gains
 //      a new plot thread as ADDITIONAL blocks while every existing block
 //      comes back byte for byte,
 //   b2) a FILLED npc — whose stored shape differs from the reply shape
@@ -14,10 +14,10 @@
 //      augmented and keeps its stats as the mapping they are,
 //   c) rejecting the proposal writes nothing and takes the job with it,
 //   d) a scene that moves while the review is open answers 409 and nothing
-//      is written (ADR #4) — the review recovers on the re-read,
+//      is written (decisions/writes) — the review recovers on the re-read,
 //   e) a proposal that names an id nobody has (`[[…]]`) costs one correction
 //      turn, and the DM reviews the corrected one,
-//   f) a LOCATION is augmented on its own resource (ADR #31): its run starts
+//   f) a LOCATION is augmented on its own resource (decisions/resources): its run starts
 //      on `…/locations/:id/augment`, its proposal is the location as read
 //      beside the location as proposed, and the accept writes the location.
 //
@@ -74,7 +74,7 @@ const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein"
 /**
  * Create an npc with nothing but the id — how a DM ends up with an npc that
  * exists and says nothing. The scene then references it, which is only
- * possible BECAUSE it exists (ADR #19).
+ * possible BECAUSE it exists (decisions/constraints).
  */
 async function createEmptyNpc(api: Api): Promise<void> {
   await createNpc(api, { name: EMPTY_NPC });
@@ -139,7 +139,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
     "true",
   );
 
-  // The job is the npc's own run (ADR #31): kind, id and a typed proposal —
+  // The job is the npc's own run (decisions/resources): kind, id and a typed proposal —
   // the npc as read beside the npc as proposed, no address anywhere.
   const job: Record<string, unknown> = await getGeneratorJob(api);
   expect(job.kind).toBe("npc-augment");
@@ -208,7 +208,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
     timeout: 30_000,
   });
 
-  // The job is the scene's own run (ADR #31): kind, id and a typed proposal —
+  // The job is the scene's own run (decisions/resources): kind, id and a typed proposal —
   // the scene as read beside the scene as proposed, flat, no address anywhere.
   const job: Record<string, unknown> = await getGeneratorJob(api);
   expect(job.kind).toBe("scene-augment");

@@ -20,9 +20,9 @@
 // What the DM sees stays the same page: the header (title, chips, status
 // control) keeps standing, only the body below it becomes editable. Beside
 // the text the surface carries the PROSE FIELDS its caller puts there — an
-// npc's `motivation`, a location's `atmosphere` (ADR #29): prose the cards
+// npc's `motivation`, a location's `atmosphere` (decisions/data-shape): prose the cards
 // show, written where prose is written. They share the row's one guard
-// (ADR #23), so a save is ONE write of whatever changed, and a forced save
+// (decisions/writes), so a save is ONE write of whatever changed, and a forced save
 // resends exactly that. Every other field stays with the status control and
 // the dialog.
 //

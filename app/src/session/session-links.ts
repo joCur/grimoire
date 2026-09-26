@@ -1,4 +1,4 @@
-// Where a session lives in the app (ADR #31): the reading page of one
+// Where a session lives in the app (decisions/resources): the reading page of one
 // evening, the live mode of the running one, and its wrap-up.
 
 /** The reading page of one session. */

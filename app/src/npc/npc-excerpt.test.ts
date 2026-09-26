@@ -12,7 +12,7 @@ import { npcExcerpt } from "./npc-excerpt";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
 
-/** An npc fixture — the npc as its resource answers it (ADR #31). */
+/** An npc fixture — the npc as its resource answers it (decisions/resources). */
 function npcFixture(id: string): Npc {
   const stored = JSON.parse(
     readFileSync(path.join(FIXTURES, "npcs", `${id}.json`), "utf8"),

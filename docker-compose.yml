@@ -4,14 +4,14 @@
 #   mkdir -p ./data && sudo chown 1000:1000 ./data
 #   docker compose up -d
 #
-# Zugriffsschutz ist Deployment-Sache (DECISIONS #3): der Port bindet nur an
+# Zugriffsschutz ist Deployment-Sache (decisions/scope): der Port bindet nur an
 # localhost — davor gehört Tailscale, z. B.:  tailscale serve --bg --https=443 3000
 
 services:
   grimoire:
     # Version festnageln über .env: GRIMOIRE_VERSION=v0.1.0 (Tags der
-    # GitHub-Releases). Ohne Angabe `latest` — das ist seit Issue #47 der
-    # jeweils letzte Release, NICHT mehr der letzte main-Merge.
+    # GitHub-Releases). Ohne Angabe `latest` — das ist der jeweils
+    # letzte Release, NICHT der letzte main-Merge.
     image: ghcr.io/jocur/grimoire:${GRIMOIRE_VERSION:-latest}
     container_name: grimoire
     restart: unless-stopped

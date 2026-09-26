@@ -1,4 +1,4 @@
-// The conflict protocol of ADR #4, in one place.
+// The conflict protocol of decisions/writes, in one place.
 //
 // Every write the app does carries the guard token of the row the DM was
 // looking at, so a competing write answers 409 instead of being overwritten
@@ -26,7 +26,7 @@ export function isWriteConflict(error: unknown): boolean {
  * which sentence a path uses.
  *
  * The other writer is another tab, the generator or a second request: since
- * ADR #13 there is no writer outside the app.
+ * decisions/sqlite there is no writer outside the app.
  */
 export const STALE_MESSAGE: MessageKey = "write.stale";
 

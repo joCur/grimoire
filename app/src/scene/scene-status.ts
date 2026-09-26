@@ -3,11 +3,11 @@
 // itself (the rev conflict is the shared protocol in lib/write-with-rev.ts).
 //
 // The LABEL comes from the catalog, and the translator is PASSED IN — a pure
-// helper never decides which language the UI is in (ADR #15).
+// helper never decides which language the UI is in (decisions/i18n).
 // The colors stay here: they are design tokens, not copy.
 //
 // `scenes.status` is a CHECK constraint of its column, so the database cannot
-// hold anything else (ADR #25) and the value is one of the four everywhere
+// hold anything else (decisions/constraints) and the value is one of the four everywhere
 // below — there is no foreign value to render.
 
 import {

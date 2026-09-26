@@ -1,6 +1,6 @@
 // The augment action of an npc's reading view. It joins two slices: the
 // generator job's augment dialog and review (generator-job/AugmentAction.tsx)
-// over the run that starts on the npc's own resource (ADR #31), and the
+// over the run that starts on the npc's own resource (decisions/resources), and the
 // npc's own editing session as the accepting write. App.tsx hands it to the
 // npc's route as its augment slot.
 

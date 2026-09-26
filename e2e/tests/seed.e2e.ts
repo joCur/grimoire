@@ -37,7 +37,7 @@ interface TreeResponse {
   chapters: { id: string; title: string; scenes: { path?: string; id: string; title: string }[] }[];
   npcs: { id: string; path?: string }[];
   locations: { id: string }[];
-  /** A session SUMMARY — id and timestamps, no address (ADR #26). */
+  /** A session SUMMARY — id and timestamps, no address (decisions/resources). */
   sessions: { id: string; started: string }[];
 }
 
@@ -59,14 +59,14 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.campaign).toBe("beispiel");
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.scenes);
-  // A scene in the tree names itself by its id — it has no address (ADR #31).
+  // A scene in the tree names itself by its id — it has no address (decisions/resources).
   expect(scenes.map((s) => s.id).sort()).toEqual(["lighthouse-arrival", "smuggler-captured"]);
   for (const scene of scenes) expect(scene.path).toBeUndefined();
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-  // An npc in the tree names itself by its id — it has no address (ADR #31).
+  // An npc in the tree names itself by its id — it has no address (decisions/resources).
   for (const npc of tree.npcs) expect(npc.path).toBeUndefined();
   // BOTH locations exist on their own — and that is the only reason they are
-  // here. A mention creates nothing (ADR #19): a location that does not
+  // here. A mention creates nothing (decisions/constraints): a location that does not
   // exist would be a reference to nothing, and the run would fail on the
   // scene that names it.
   expect(tree.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
@@ -78,7 +78,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(bucht.chapter).toBe("01-salzhafen");
   expect(bucht.roll20Page).toBe("Nordbucht");
   // …and the resource answers the location itself: every field flat, beside
-  // its guard — no kind, no path, no properties (ADR #31).
+  // its guard — no kind, no path, no properties (decisions/resources).
   expect(Object.keys(bucht).sort()).toEqual([
     "atmosphere",
     "body",
@@ -110,7 +110,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(npc.body).not.toContain("## Will");
   expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
   // …and the resource answers the npc itself: every field flat, beside its
-  // guard — no kind, no path, no properties (ADR #31).
+  // guard — no kind, no path, no properties (decisions/resources).
   expect(Object.keys(npc).sort()).toEqual([
     "appearance",
     "body",

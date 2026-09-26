@@ -1,9 +1,9 @@
 // The id line of the create surfaces: derived from the name, or set by hand.
 //
-// An id is permanent (ADR #21 — there is no endpoint that changes one), and
-// that ADR names exactly one moment where it may be personalised: the create
-// dialog. So the quiet preview line under the name field is not read-only any
-// more. It carries a pencil; pressing it turns the line into a field prefilled
+// An id is permanent (decisions/constraints — there is no endpoint that changes one), and
+// that decision names exactly one moment where it may be personalised: the create
+// dialog. So the quiet preview line under the name field is not read-only:
+// it carries a pencil; pressing it turns the line into a field prefilled
 // with the id the name currently yields.
 //
 // The state worth naming is WHOSE id is on screen. Two answers, and the pure

@@ -1,4 +1,4 @@
-// The write half of the chapter's scene order (ADR #27): one up/down step,
+// The write half of the chapter's scene order (decisions/scene-order): one up/down step,
 // felt immediately and reconciled with the server afterwards.
 //
 // OPTIMISTIC, because the DM is looking at the row they just moved: the tree

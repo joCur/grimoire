@@ -1,4 +1,4 @@
-// One editing session over ONE chapter (ADR #31), with the rules every
+// One editing session over ONE chapter (decisions/resources), with the rules every
 // editing session in the app follows:
 //
 //   the write       ONE PATCH of the chapter per interaction — any subset of

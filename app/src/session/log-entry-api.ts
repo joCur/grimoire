@@ -1,4 +1,4 @@
-// The API client of a log entry (ADR #31): its resource under its session —
+// The API client of a log entry (decisions/resources): its resource under its session —
 // take a quick note, review it.
 
 import type { LogEntry } from "@grimoire/shared/log-entry";

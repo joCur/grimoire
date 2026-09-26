@@ -3,14 +3,14 @@
 // new chrome: the topbar does not grow, and the reading view gains one word.
 //
 // Every reading view builds its trigger from the parts exported here, over
-// the run that starts on its own resource (ADR #31). Everything below the
+// the run that starts on its own resource (decisions/resources). Everything below the
 // trigger is shared; what differs per reading view is how the run starts,
 // where its proposal sits on the job, and the write that accepts it.
 //
 // The flow is three states in ONE dialog, because it is one errand:
 //
 //   input     source text and/or a free instruction — at least one of them.
-//             Submitting starts a SERVER job (ADR #10) and answers right away.
+//             Submitting starts a SERVER job (decisions/generator) and answers right away.
 //   running   the job is polled through the shared generate-job query, so the
 //             tab may be closed, navigated away from, or reloaded; a finished
 //             proposal is still here afterwards, and so is a restart.
