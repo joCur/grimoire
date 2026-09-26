@@ -21,27 +21,27 @@ const fact = (text: string): KnowledgeItemDraft => ({ kind: "fact", from: "", to
 const stored = (id: string, draft: KnowledgeItemDraft): KnowledgeItem => ({ id, ...draft, rev: 1 });
 
 describe("visibleKnowledgeItems", () => {
-  const items = [stored("a", naming("Salt Harbour", "Salzhafen")), stored("b", fact("Der Turm ist leer."))];
+  const items = [stored("a", naming("Salt Harbour", "Brinehaven")), stored("b", fact("The tower is empty."))];
 
   test("the order is kept — it is the order of the prompt", () => {
     expect(visibleKnowledgeItems(items).map((item) => item.id)).toEqual(["a", "b"]);
   });
 
   test("the filter reads all three text fields", () => {
-    expect(visibleKnowledgeItems(items, "salzhafen").map((item) => item.id)).toEqual(["a"]);
+    expect(visibleKnowledgeItems(items, "brinehaven").map((item) => item.id)).toEqual(["a"]);
     expect(visibleKnowledgeItems(items, "harbour").map((item) => item.id)).toEqual(["a"]);
-    expect(visibleKnowledgeItems(items, "turm").map((item) => item.id)).toEqual(["b"]);
+    expect(visibleKnowledgeItems(items, "tower").map((item) => item.id)).toEqual(["b"]);
   });
 });
 
 describe("knowledgeSummary", () => {
-  test("a pair reads as „Alt → Neu“", () => {
-    expect(knowledgeSummary(naming("Salt Harbour", "Salzhafen"))).toBe("Salt Harbour → Salzhafen");
+  test("a pair reads as 'old → new'", () => {
+    expect(knowledgeSummary(naming("Salt Harbour", "Brinehaven"))).toBe("Salt Harbour → Brinehaven");
   });
 
   test("a half-typed pair shows the gap rather than hiding it", () => {
     expect(knowledgeSummary(naming("Salt Harbour", ""))).toBe("Salt Harbour → …");
-    expect(knowledgeSummary(naming("", "Salzhafen"))).toBe("… → Salzhafen");
+    expect(knowledgeSummary(naming("", "Brinehaven"))).toBe("… → Brinehaven");
   });
 
   test("an empty item has no summary — the row falls back to its placeholder", () => {
@@ -50,19 +50,19 @@ describe("knowledgeSummary", () => {
   });
 
   test("a fact or style is its own sentence", () => {
-    expect(knowledgeSummary(fact("Der Turm ist leer."))).toBe("Der Turm ist leer.");
+    expect(knowledgeSummary(fact("The tower is empty."))).toBe("The tower is empty.");
   });
 });
 
 describe("what is worth saving, and what a save writes", () => {
   test("a naming item with HALF a pair is still saved — the DM is mid-typing", () => {
     expect(isSendableKnowledgeItem(naming("Salt Harbour", ""))).toBe(true);
-    expect(isSendableKnowledgeItem(naming("", "Salzhafen"))).toBe(true);
+    expect(isSendableKnowledgeItem(naming("", "Brinehaven"))).toBe(true);
     expect(isSendableKnowledgeItem(naming("", " "))).toBe(false);
   });
 
   test("a fact or style item needs its sentence", () => {
-    expect(isSendableKnowledgeItem(fact("Der Turm ist leer."))).toBe(true);
+    expect(isSendableKnowledgeItem(fact("The tower is empty."))).toBe(true);
     expect(isSendableKnowledgeItem(fact("   "))).toBe(false);
   });
 
@@ -73,8 +73,8 @@ describe("what is worth saving, and what a save writes", () => {
 
   test("only the fields that moved are written", () => {
     const original = naming("Salt Harbour", "");
-    expect(knowledgeItemChange(original, naming("Salt Harbour", "Salzhafen"))).toEqual({
-      to: "Salzhafen",
+    expect(knowledgeItemChange(original, naming("Salt Harbour", "Brinehaven"))).toEqual({
+      to: "Brinehaven",
     });
     expect(knowledgeItemChange(original, switchKnowledgeKind(original, "fact"))).toEqual({
       kind: "fact",
@@ -88,12 +88,12 @@ describe("what is worth saving, and what a save writes", () => {
 describe("promptKnowledgeCount", () => {
   test("counts only what the PROMPT will actually carry", () => {
     // A half-filled convention is stored but skipped by the prompt, so
-    // promising it in „Mitgeschickter Kontext" would be a lie.
+    // counting it in the context the page says is sent along would be a lie.
     expect(
       promptKnowledgeCount([
-        naming("Salt Harbour", "Salzhafen"),
+        naming("Salt Harbour", "Brinehaven"),
         naming("Salt Harbour", ""),
-        fact("gilt"),
+        fact("applies"),
         fact("  "),
       ]),
     ).toBe(2);
@@ -102,24 +102,24 @@ describe("promptKnowledgeCount", () => {
 });
 
 describe("switchKnowledgeKind", () => {
-  test("a sentence becomes the „Alt“ half — the field the DM was typing in", () => {
+  test("a sentence becomes the 'old' half — the field the DM was typing in", () => {
     expect(switchKnowledgeKind(fact("Salt Harbour"), "naming")).toEqual(naming("Salt Harbour", ""));
   });
 
   test("a pair becomes ONE sentence, so neither half is lost", () => {
-    expect(switchKnowledgeKind(naming("Salt Harbour", "Salzhafen"), "fact")).toEqual(
-      fact("Salt Harbour → Salzhafen"),
+    expect(switchKnowledgeKind(naming("Salt Harbour", "Brinehaven"), "fact")).toEqual(
+      fact("Salt Harbour → Brinehaven"),
     );
     // Half a pair carries over without a dangling arrow.
     expect(switchKnowledgeKind(naming("Salt Harbour", ""), "style").text).toBe("Salt Harbour");
   });
 
   test("fact <-> style keeps the sentence untouched", () => {
-    expect(switchKnowledgeKind(fact("Kurz halten."), "style")).toEqual({
+    expect(switchKnowledgeKind(fact("Keep it short."), "style")).toEqual({
       kind: "style",
       from: "",
       to: "",
-      text: "Kurz halten.",
+      text: "Keep it short.",
     });
   });
 
@@ -133,7 +133,7 @@ describe("switchKnowledgeKind", () => {
   });
 
   test("switching to the same kind is the identical item", () => {
-    const item = fact("Bleibt.");
+    const item = fact("Stays.");
     expect(switchKnowledgeKind(item, "fact")).toBe(item);
   });
 
@@ -147,11 +147,11 @@ describe("switchKnowledgeKind", () => {
 describe("isIncompleteNaming", () => {
   test("exactly one half of the pair is incomplete", () => {
     expect(isIncompleteNaming(naming("Salt Harbour", ""))).toBe(true);
-    expect(isIncompleteNaming(naming("", "Salzhafen"))).toBe(true);
+    expect(isIncompleteNaming(naming("", "Brinehaven"))).toBe(true);
   });
 
   test("both halves, or neither, is not — and only a naming rule can be", () => {
-    expect(isIncompleteNaming(naming("Salt Harbour", "Salzhafen"))).toBe(false);
+    expect(isIncompleteNaming(naming("Salt Harbour", "Brinehaven"))).toBe(false);
     expect(isIncompleteNaming(naming("", ""))).toBe(false);
     expect(isIncompleteNaming(fact(""))).toBe(false);
   });

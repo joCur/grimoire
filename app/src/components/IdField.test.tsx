@@ -16,10 +16,12 @@ import { IdField } from "./IdField";
 type Props = Parameters<typeof IdField>[0];
 
 /** Without a provider the catalog answers in the primary language. */
+const t = translator("de");
+
 function render(props: Partial<Props> = {}): string {
   return renderToStaticMarkup(
     <IdField
-      id="alte-fischerin"
+      id="old-fisherwoman"
       editing={false}
       invalid={false}
       onToggle={() => {}}
@@ -32,10 +34,10 @@ function render(props: Partial<Props> = {}): string {
 describe("the quiet line", () => {
   test("shows the id alone, plus the pencil", () => {
     const html = render();
-    expect(html).toContain(">alte-fischerin<");
+    expect(html).toContain(">old-fisherwoman<");
     // No field yet: the id is text, not something to type over by accident.
     expect(html).not.toContain("<input");
-    expect(html).toContain('aria-label="Kennung selbst setzen"');
+    expect(html).toContain(`aria-label="${t("idField.edit")}"`);
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-pressed="false"');
   });
@@ -50,8 +52,8 @@ describe("the quiet line", () => {
 describe("the editable field", () => {
   test("carries the id and is named", () => {
     const html = render({ editing: true });
-    expect(html).toContain('value="alte-fischerin"');
-    expect(html).toContain('aria-label="Kennung"');
+    expect(html).toContain('value="old-fisherwoman"');
+    expect(html).toContain(`aria-label="${t("idField.label")}"`);
   });
 
   test("the pencil reports itself as the pressed toggle", () => {
@@ -66,17 +68,16 @@ describe("the editable field", () => {
 
 describe("an id the rule rejects", () => {
   test("names the rule and wires it to the field", () => {
-    const html = render({ editing: true, id: "Alte Fischerin!", invalid: true });
+    const html = render({ editing: true, id: "Old Fisherwoman!", invalid: true });
     expect(html).toContain('aria-invalid="true"');
-    expect(html).toContain("Kleinbuchstaben");
-    expect(html).toContain("Bindestriche");
+    expect(html).toContain(t("idField.invalid"));
     expect(html).toContain("aria-describedby");
   });
 
   test("a legal id says nothing at all", () => {
     const html = render({ editing: true });
     expect(html).toContain('aria-invalid="false"');
-    expect(html).not.toContain("Kleinbuchstaben");
+    expect(html).not.toContain(t("idField.invalid"));
     expect(html).not.toContain("aria-describedby");
   });
 });

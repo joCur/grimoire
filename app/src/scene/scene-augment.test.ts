@@ -7,11 +7,11 @@ import { describe, expect, test } from "bun:test";
 import { sceneFieldProposals } from "./scene-augment";
 
 const CURRENT: SceneProposal = {
-  id: "ankunft",
-  title: "Ankunft",
+  id: "arrival",
+  title: "Arrival",
   type: "planned",
-  chapter: "01-salzhafen",
-  location: "leuchtturm",
+  chapter: "01-salt-harbour",
+  location: "lighthouse",
   npcs: ["jorna"],
   handouts: [],
   tags: ["social"],
@@ -26,10 +26,10 @@ describe("sceneFieldProposals", () => {
 
   test("a value where the scene has none is new — and preselected", () => {
     expect(
-      sceneFieldProposals(CURRENT, { ...CURRENT, handouts: ["Karte"], trigger: "wenn es dunkel wird" }),
+      sceneFieldProposals(CURRENT, { ...CURRENT, handouts: ["Map"], trigger: "when night falls" }),
     ).toEqual([
-      { key: "handouts", current: [], proposed: ["Karte"], state: "new" },
-      { key: "trigger", proposed: "wenn es dunkel wird", state: "new" },
+      { key: "handouts", current: [], proposed: ["Map"], state: "new" },
+      { key: "trigger", proposed: "when night falls", state: "new" },
     ]);
   });
 
@@ -45,7 +45,7 @@ describe("sceneFieldProposals", () => {
   test("an emptied field is no deletion, and the id and text are no field here", () => {
     const { location: _location, ...withoutLocation } = CURRENT;
     expect(
-      sceneFieldProposals(CURRENT, { ...withoutLocation, tags: [], id: "neu", body: "## Anders\n" }),
+      sceneFieldProposals(CURRENT, { ...withoutLocation, tags: [], id: "new", body: "## Different\n" }),
     ).toEqual([]);
   });
 });

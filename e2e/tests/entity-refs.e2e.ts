@@ -22,6 +22,7 @@
 // The scene is SEEDED as an extra scene: it references two npcs, a location,
 // a scene and a slug nothing owns.
 
+import escapeStringRegexp from "escape-string-regexp";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -40,15 +41,11 @@ const SCENE: SceneProposal = JSON.parse(
 
 const SCENE_URL = "/campaigns/beispiel/scenes/entity-refs";
 /** The scene's title as its fixture holds it. */
-const SCENE_TITLE = "Referenzen am Kai";
+const SCENE_TITLE = "References at the Quay";
 /** Seeded names (fixtures/beispiel) of the npc, location and scene it references. */
 const JORNA = "Hafenmeisterin Jorna";
 const LIGHTHOUSE = "Der Leuchtturm von Salzhafen";
 const CAPTURED = "Von den Schmugglern erwischt";
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /** The accessible name of a resolved `[[slug]]`: its kind, then its current name. */
 function refName(kind: "npc" | "location" | "scene", name: string): string {
@@ -69,8 +66,8 @@ test("reading view: references render as the current name, unknown ones stay tex
   await expect(ref).toHaveText(JORNA);
   await expect(ref).toHaveAttribute("href", "/campaigns/beispiel/npcs/jorna");
 
-  // The suffix stays outside the reference — "Jornas Boot" reads as German.
-  await expect(page.locator(".md-body")).toContainText(`${JORNA}s Boot`);
+  // The suffix stays outside the reference — "[[jorna]]'s boat" reads as prose.
+  await expect(page.locator(".md-body")).toContainText(`${JORNA}'s boat`);
 
   // The location resolves too (kind: location) — and links to the location's
   // own route (decisions/resources).
@@ -83,10 +80,10 @@ test("reading view: references render as the current name, unknown ones stay tex
     page.getByRole("link", { name: refName("scene", CAPTURED) }),
   ).toHaveAttribute("href", "/campaigns/beispiel/scenes/smuggler-captured");
 
-  // Degradation: nothing owns `niemand`, so the source stays visible — no
+  // Degradation: nothing owns `nobody`, so the source stays visible — no
   // error, no warning colour, and it becomes a link the moment it exists.
-  await expect(page.locator(".md-body")).toContainText("[[niemand]]");
-  await expect(page.getByRole("link", { name: /niemand/ })).toHaveCount(0);
+  await expect(page.locator(".md-body")).toContainText("[[nobody]]");
+  await expect(page.getByRole("link", { name: /nobody/ })).toHaveCount(0);
 
   // The reference is a real link and opens the npc's reading view.
   await ref.click();
@@ -115,7 +112,7 @@ test("code stays code, and an `## If:` summary toggles instead of navigating", a
   // toggle, so a click folds the branch instead of leaving the page.
   const details = page.locator("details[data-if-section]").first();
   const summary = details.locator("summary");
-  await expect(summary).toContainText(`${JORNA} gewarnt wurde`);
+  await expect(summary).toContainText(`${JORNA} was warned`);
   await expect(summary.getByRole("link")).toHaveCount(0);
   await expect(summary.getByRole("button")).toHaveCount(0);
 
@@ -132,7 +129,9 @@ test("live view: a reference opens the drawer instead of leaving the session", a
   await page.getByRole("button", { name: ui("session.start") }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
-  await page.getByRole("button", { name: SCENE_TITLE }).click();
+  // Exact: until the live view has rendered, the chapter overview's reorder
+  // buttons carry the scene title in their names too.
+  await page.getByRole("button", { name: SCENE_TITLE, exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: SCENE_TITLE })).toBeVisible();
 
   // In the live view the reference is a BUTTON, not a link.
@@ -228,11 +227,11 @@ test("reading view: hovering a reference previews its target, per kind", async (
   await expect(tooltip).toContainText(CAPTURED);
   await expect(tooltip).toContainText(
     new RegExp(
-      `${escapeRegExp(ui("sceneArticle.trigger.label"))}\\s*Charaktere werden beim Auskundschaften der Bucht entdeckt`,
+      `${escapeStringRegexp(ui("sceneArticle.trigger.label"))}\\s*Charaktere werden beim Auskundschaften der Bucht entdeckt`,
     ),
   );
   await expect(tooltip).toContainText(
-    new RegExp(`${escapeRegExp(ui("refPreview.scene.location"))}\\s*Die Nordbucht`),
+    new RegExp(`${escapeStringRegexp(ui("refPreview.scene.location"))}\\s*Die Nordbucht`),
   );
 
   // Leaving reference and card closes it.
@@ -241,7 +240,7 @@ test("reading view: hovering a reference previews its target, per kind", async (
 
   // An unresolved reference is no element to hover at all, and the resolved
   // name in an `## If:` summary is text — neither previews anything.
-  await expect(page.getByRole("link", { name: /niemand/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /nobody/ })).toHaveCount(0);
   await page.locator("details[data-if-section] summary").first().hover();
   await page.waitForTimeout(500);
   await expect(tooltip).toHaveCount(0);

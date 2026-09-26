@@ -1,4 +1,4 @@
-// Build handshake predicate (issue #24 AK4). The rule matters more than it
+// Build handshake predicate. The rule matters more than it
 // looks: a wrong "true" nags the GM forever, a wrong "false" hides the very
 // crash the banner exists for.
 
@@ -20,7 +20,7 @@ describe("isStaleBuild", () => {
 
   test("equal ids are not stale", () => {
     expect(isStaleBuild("aaa", "aaa")).toBe(false);
-    expect(isStaleBuild("dev", "dev")).toBe(false); // AK3: dev == dev, no banner
+    expect(isStaleBuild("dev", "dev")).toBe(false); // dev == dev, no banner
   });
 
   test("either side on dev skips the check", () => {

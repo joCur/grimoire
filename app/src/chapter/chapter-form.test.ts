@@ -15,16 +15,16 @@ import {
 } from "./chapter-form";
 
 const CHAPTER: ChapterProposal = {
-  id: "01-salzhafen",
-  title: "Salzhafen",
+  id: "01-salt-harbour",
+  title: "Salt Harbour",
   status: "planned",
-  body: "Ankommen.\n",
+  body: "Arriving.\n",
 };
 const initial = chapterFormValues(CHAPTER);
 
 describe("chapterFormValues", () => {
   test("a chapter starts with its title and its status, never its id or text", () => {
-    expect(initial).toEqual({ title: "Salzhafen", status: "planned" });
+    expect(initial).toEqual({ title: "Salt Harbour", status: "planned" });
   });
 
   test("a chapter without a status starts with the empty choice", () => {
@@ -41,7 +41,7 @@ describe("chapterFormChange", () => {
 
   test("only the changed field is sent, whitespace around it is no change", () => {
     expect(chapterFormChange(initial, { ...initial, status: "done" })).toEqual({ status: "done" });
-    expect(chapterFormChange(initial, { ...initial, title: "  Salzhafen " })).toEqual({});
+    expect(chapterFormChange(initial, { ...initial, title: "  Salt Harbour " })).toEqual({});
   });
 
   test("making a chapter active is an ordinary field change", () => {
@@ -72,8 +72,8 @@ describe("canSubmitChapterForm", () => {
 
 describe("chapterBodyToWrite", () => {
   test("keeps the text and ends it with exactly one newline", () => {
-    expect(chapterBodyToWrite("Ankommen.\n\nUnd bleiben.")).toBe("Ankommen.\n\nUnd bleiben.\n");
-    expect(chapterBodyToWrite("## Ziel\n\nAnkommen.\n\n\n")).toBe("## Ziel\n\nAnkommen.\n");
+    expect(chapterBodyToWrite("Arriving.\n\nAnd staying.")).toBe("Arriving.\n\nAnd staying.\n");
+    expect(chapterBodyToWrite("## Goal\n\nArriving.\n\n\n")).toBe("## Goal\n\nArriving.\n");
   });
 
   test("blank text is the empty string, not whitespace", () => {
@@ -86,12 +86,12 @@ describe("chapterBodyToWrite", () => {
 
 describe("chapterBodyChanged", () => {
   test("whitespace-only differences are not a change — nothing to save", () => {
-    expect(chapterBodyChanged("## Ziel\n\nAnkommen.", "## Ziel\n\nAnkommen.\n")).toBe(false);
+    expect(chapterBodyChanged("## Goal\n\nArriving.", "## Goal\n\nArriving.\n")).toBe(false);
     expect(chapterBodyChanged("   ", "")).toBe(false);
   });
 
   test("real text is", () => {
-    expect(chapterBodyChanged("## Ziel\n\nAnkommen.", "## Ziel\n\nAbreisen.")).toBe(true);
-    expect(chapterBodyChanged("## Ziel\n\nAnkommen.", "")).toBe(true);
+    expect(chapterBodyChanged("## Goal\n\nArriving.", "## Goal\n\nLeaving.")).toBe(true);
+    expect(chapterBodyChanged("## Goal\n\nArriving.", "")).toBe(true);
   });
 });

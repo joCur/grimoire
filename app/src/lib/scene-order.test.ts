@@ -27,11 +27,11 @@ function scene(id: string, type: SceneType = "planned", status: SceneStatus = "r
 const ids = (scenes: readonly SceneSummary[]): string[] => scenes.map((s) => s.id);
 
 describe("the two blocks of a chapter", () => {
-  const scenes = [scene("a"), scene("notfall", "contingency"), scene("b")];
+  const scenes = [scene("a"), scene("fallback", "contingency"), scene("b")];
 
   test("the plan keeps its order, contingencies are their own block", () => {
     expect(ids(plannedScenes(scenes))).toEqual(["a", "b"]);
-    expect(ids(contingencyScenes(scenes))).toEqual(["notfall"]);
+    expect(ids(contingencyScenes(scenes))).toEqual(["fallback"]);
   });
 });
 
@@ -46,30 +46,30 @@ describe("moveSceneOrder", () => {
     // `pos` runs over both blocks; the DM sees two lists. Moving "b" up has to
     // reach "a" — swapping with the contingency between them would move
     // nothing on screen.
-    const scenes = [scene("a"), scene("notfall", "contingency"), scene("b")];
-    expect(moveSceneOrder(scenes, "b", -1)).toEqual(["b", "notfall", "a"]);
+    const scenes = [scene("a"), scene("fallback", "contingency"), scene("b")];
+    expect(moveSceneOrder(scenes, "b", -1)).toEqual(["b", "fallback", "a"]);
   });
 
   test("a contingency moves within its own block", () => {
     const scenes = [
-      scene("erst", "contingency"),
+      scene("first", "contingency"),
       scene("a"),
-      scene("dann", "contingency"),
+      scene("then", "contingency"),
     ];
-    expect(moveSceneOrder(scenes, "dann", -1)).toEqual(["dann", "a", "erst"]);
+    expect(moveSceneOrder(scenes, "then", -1)).toEqual(["then", "a", "first"]);
   });
 
   test("the ends of a block have nowhere to go — the order comes back unchanged", () => {
-    const scenes = [scene("a"), scene("b"), scene("notfall", "contingency")];
-    expect(moveSceneOrder(scenes, "a", -1)).toEqual(["a", "b", "notfall"]);
-    expect(moveSceneOrder(scenes, "b", 1)).toEqual(["a", "b", "notfall"]);
-    expect(moveSceneOrder(scenes, "notfall", 1)).toEqual(["a", "b", "notfall"]);
-    expect(moveSceneOrder(scenes, "notfall", -1)).toEqual(["a", "b", "notfall"]);
+    const scenes = [scene("a"), scene("b"), scene("fallback", "contingency")];
+    expect(moveSceneOrder(scenes, "a", -1)).toEqual(["a", "b", "fallback"]);
+    expect(moveSceneOrder(scenes, "b", 1)).toEqual(["a", "b", "fallback"]);
+    expect(moveSceneOrder(scenes, "fallback", 1)).toEqual(["a", "b", "fallback"]);
+    expect(moveSceneOrder(scenes, "fallback", -1)).toEqual(["a", "b", "fallback"]);
   });
 
   test("an id the chapter does not hold writes nothing new", () => {
     const scenes = [scene("a"), scene("b")];
-    expect(moveSceneOrder(scenes, "fremd", 1)).toEqual(["a", "b"]);
+    expect(moveSceneOrder(scenes, "stranger", 1)).toEqual(["a", "b"]);
   });
 });
 
@@ -89,7 +89,7 @@ describe("initialSessionScene", () => {
     // the next PLANNED one, not the contingency in between.
     const scenes = [
       scene("a", "planned", "played"),
-      scene("notfall", "contingency"),
+      scene("fallback", "contingency"),
       scene("b"),
       scene("c"),
     ];
@@ -99,7 +99,7 @@ describe("initialSessionScene", () => {
   test("with the plan played the view opens on its first scene, not on nothing", () => {
     const scenes = [
       scene("a", "planned", "played"),
-      scene("notfall", "contingency"),
+      scene("fallback", "contingency"),
       scene("b", "planned", "dropped"),
     ];
     expect(initialSessionScene(scenes)?.id).toBe("a");
@@ -107,13 +107,13 @@ describe("initialSessionScene", () => {
 
   test("a chapter without a planned scene has none", () => {
     expect(initialSessionScene([])).toBeUndefined();
-    expect(initialSessionScene([scene("notfall", "contingency")])).toBeUndefined();
+    expect(initialSessionScene([scene("fallback", "contingency")])).toBeUndefined();
   });
 });
 
 describe("nextSessionScene", () => {
   test("the next PLANNED scene of the order that is still open", () => {
-    const scenes = [scene("a"), scene("notfall", "contingency"), scene("b")];
+    const scenes = [scene("a"), scene("fallback", "contingency"), scene("b")];
     expect(nextSessionScene(scenes, "a")?.id).toBe("b");
   });
 
@@ -125,23 +125,23 @@ describe("nextSessionScene", () => {
   test("from a contingency the step picks the plan back up at its start", () => {
     const scenes = [
       scene("a", "planned", "played"),
-      scene("notfall", "contingency"),
+      scene("fallback", "contingency"),
       scene("b"),
     ];
-    expect(nextSessionScene(scenes, "notfall")?.id).toBe("b");
+    expect(nextSessionScene(scenes, "fallback")?.id).toBe("b");
   });
 
   test("from a contingency ahead of the plan the step is the plan's first open scene", () => {
     const scenes = [
-      scene("notfall", "contingency"),
+      scene("fallback", "contingency"),
       scene("a", "planned", "played"),
       scene("b"),
     ];
-    expect(nextSessionScene(scenes, "notfall")?.id).toBe("b");
+    expect(nextSessionScene(scenes, "fallback")?.id).toBe("b");
   });
 
   test("nothing left to play means no step at all", () => {
-    const scenes = [scene("a"), scene("notfall", "contingency")];
+    const scenes = [scene("a"), scene("fallback", "contingency")];
     expect(nextSessionScene(scenes, "a")).toBeUndefined();
     expect(nextSessionScene([], undefined)).toBeUndefined();
   });
@@ -149,10 +149,10 @@ describe("nextSessionScene", () => {
 
 describe("the optimistic half", () => {
   const tree: CampaignTree = {
-    campaign: "beispiel",
+    campaign: "example",
     chapters: [
-      { id: "01", title: "Kapitel 1", sceneOrderRev: 3, scenes: [scene("a"), scene("b")] },
-      { id: "02", title: "Kapitel 2", sceneOrderRev: 7, scenes: [scene("c")] },
+      { id: "01", title: "Chapter 1", sceneOrderRev: 3, scenes: [scene("a"), scene("b")] },
+      { id: "02", title: "Chapter 2", sceneOrderRev: 7, scenes: [scene("c")] },
     ],
     npcs: [],
     locations: [],
@@ -166,7 +166,7 @@ describe("the optimistic half", () => {
   });
 
   test("a scene the order does not name is kept rather than dropped", () => {
-    const next = withSceneOrder(tree, "01", ["b", "fremd"]);
+    const next = withSceneOrder(tree, "01", ["b", "stranger"]);
     expect(ids(next.chapters[0]?.scenes ?? [])).toEqual(["b", "a"]);
   });
 

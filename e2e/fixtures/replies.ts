@@ -32,8 +32,9 @@
 //                  as STRINGS ("+2" — a number would lose the plus on the
 //                  way into the store)
 //   every body     each `[[id]]` names something of the campaign or
-//                  something the same run proposes; the sections (`## Weiß`,
-//                  `## Beziehungen`, …) are free text and nothing checks them
+//                  something the same run proposes; the npc sections are
+//                  the section names the format recommends for an npc
+//                  (README.md), free text that nothing checks
 //
 // When a validation rule changes, THIS file is the place to follow along —
 // the specs assert on the titles and ids defined here.
@@ -175,7 +176,7 @@ export const TRIGGER = {
   describeAnyway: "E2E_DESCRIBE_ANYWAY",
   /**
    * The SECOND of those three scenes fails its first call and succeeds on
-   * every call after it — which is what „Erneut versuchen“ has to fix. The
+   * every call after it — which is what the retry action has to fix. The
    * token is written as `E2E_PART_FAIL:<nonce>` and the nonce keys the stub's
    * counter, so the one stub endpoint can serve several workers at once
    * without their retries interfering.
@@ -200,7 +201,8 @@ export const TRIGGER = {
    */
   latePart: "E2E_LATE_PARTS",
   /**
-   * The scene body carries German quotation marks closed with an ASCII `"`.
+   * The scene body carries a typographic opening quotation mark closed with
+   * an ASCII `"`.
    * A reply the model had to escape itself paid for that `"` with a
    * correction turn; as the `body` of a forced object it is just text, so
    * the run has to reach `done` with no correction at all.
@@ -226,8 +228,8 @@ export function partFailNonce(source: string): string {
 
 /**
  * The spelling `TRIGGER.oldName` puts into the draft. The spec writes a
- * naming convention „<OLD_NAME> → …" on the settings page and then expects
- * the review to flag exactly this word.
+ * naming convention `<OLD_NAME> → …` on the campaign-knowledge page and then
+ * expects the review to flag exactly this word.
  */
 export const OLD_NAME = "Saltmarsh";
 
@@ -235,7 +237,7 @@ export const OLD_NAME = "Saltmarsh";
  * The id TRIGGER.unknownRef puts into a first reply as `[[…]]` — neither the
  * example campaign nor any run of the suite has anything by that id.
  */
-export const UNKNOWN_REF_ID = "der-fremde";
+export const UNKNOWN_REF_ID = "the-stranger";
 
 /** How long a TRIGGER.slow request is held before it would answer. */
 export const SLOW_REPLY_MS = 60_000;
@@ -249,7 +251,7 @@ export const LATE_REPLY_MS = 5_000;
 // --- scene run ---------------------------------------------------------------
 
 /** Title of the generated scene draft — asserted in the specs. */
-export const SCENE_TITLE = "Nachtwache am Kai";
+export const SCENE_TITLE = "Night watch at the quay";
 /**
  * The draft's `id` — the ONE thing the model decides about addressing. The
  * review addresses the draft as `<chapter>/<id>`; the address it is WRITTEN
@@ -264,8 +266,8 @@ export const SCENE_ID = "night-watch-quay";
  */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
-export const LOCATION_STUB_ID = "raeucherkammer";
-export const LOCATION_STUB_NAME = "Die alte Räucherkammer";
+export const LOCATION_STUB_ID = "tide-flats";
+export const LOCATION_STUB_NAME = "The tide flats";
 
 /**
  * How the stub reports back WHAT CONTEXT it was sent. The echo rides along as
@@ -276,7 +278,7 @@ export const LOCATION_STUB_NAME = "Die alte Räucherkammer";
  * Only emitted when the campaign actually has knowledge, so every other spec
  * sees exactly the warnings it saw before.
  */
-export const CONTEXT_ECHO = "Kontext-Echo:";
+export const CONTEXT_ECHO = "Context echo:";
 
 export function contextEchoWarnings(knowledge: string): string[] {
   const trimmed = knowledge.trim();
@@ -284,12 +286,12 @@ export function contextEchoWarnings(knowledge: string): string[] {
 }
 
 /**
- * The read-aloud the ASCII-quote case adds — opening `„`, closing with the
- * ASCII `"`. A spec asserts it survives into the review character for
- * character.
+ * The read-aloud the ASCII-quote case adds — a typographic opening quotation
+ * mark, closed with the ASCII `"`. A spec asserts it survives into the review
+ * character for character.
  */
 export const ASCII_QUOTE_LINE =
-  '„Bleibt, wo ihr seid", ruft jemand aus dem Dunkeln — und die Stimme klingt';
+  '\u201cStay where you are", someone calls out of the dark — and the voice sounds';
 
 /** The scene draft of the default one-scene run, in its three variants. */
 function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): SceneReply {
@@ -305,25 +307,25 @@ function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): Scen
       tags: ["stealth"],
       body: `## Flow
 
-Die Wache am Kran murrt: „Wer nachts hier steht, hat was zu verbergen".
-[[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
+The guard at the crane grumbles: \u201cWhoever stands here at night has something to hide".
+[[fenn]]'s crew clears a cargo away before morning comes.
 
 > [!readaloud] ${ASCII_QUOTE_LINE}
-> jünger, als sie sein sollte.
+> younger than it ought to.
 `,
     });
   }
   if (oldName) {
     return sceneReply({
       id: SCENE_ID,
-      title: `Nachtwache in ${OLD_NAME}`,
+      title: `Night watch in ${OLD_NAME}`,
       chapter,
       tags: ["stealth"],
       body: `## Flow
 
-Die Gruppe beobachtet den Kai von ${OLD_NAME}, während die Flut fällt.
+The party watches the quay of ${OLD_NAME} while the tide goes out.
 
-> [!readaloud] Über den Dächern von ${OLD_NAME} hängt der Nebel.
+> [!readaloud] Fog hangs over the rooftops of ${OLD_NAME}.
 `,
     });
   }
@@ -336,39 +338,39 @@ Die Gruppe beobachtet den Kai von ${OLD_NAME}, während die Flut fällt.
     tags: ["stealth", "social"],
     body: `## Flow
 
-Die Gruppe beobachtet den Kai, während die Flut fällt. Zwei Laternen
-wandern über die Mole — [[fenn]]s Leute räumen eine Ladung fort, bevor
-der Morgen kommt.
+The party watches the quay while the tide goes out. Two lanterns
+move along the mole — [[fenn]]'s crew clears a cargo away before
+morning comes.
 
-> [!readaloud] Die Flut zieht sich zurück und lässt schwarzen Schlick
-> zurück. Zwei Laternen schwanken über die Mole, und irgendwo unter
-> euch knirscht ein Kiel gegen Stein.
+> [!readaloud] The tide pulls back and leaves black mud behind.
+> Two lanterns sway along the mole, and somewhere below you a
+> keel grinds against stone.
 
-> [!check] Dexterity (Stealth) DC 13, um bis unter die Mole zu kommen,
-> ohne die Wache am Kran zu alarmieren.
+> [!check] Dexterity (Stealth) DC 13 to get under the mole without
+> alerting the guard at the crane.
 
-> [!loot] In der abgestellten Kiste: drei Ballen Schmuggeltabak und ein
-> Frachtbrief mit dem Siegel des Auftraggebers.
+> [!loot] In the crate left behind: three bales of smuggled tobacco and
+> a bill of lading with the seal of the client.
 
-> [!note] Wenn die Gruppe die Wache alarmiert → Kontingenz
+> [!note] If the party alerts the guard → contingency
 > [[smuggler-captured]].
 
-## If: die Gruppe bleibt unentdeckt
+## If: the party stays unseen
 
-Sie können den Frachtbrief an sich nehmen und [[grella]] folgen, die
-die Ladung ins Dorf bringt.
+They can take the bill of lading and follow [[grella]], who
+carries the cargo into the village.
 
-## If: die Gruppe wird entdeckt
+## If: the party is spotted
 
-[[fenn]] ruft seine Leute zurück und stellt sich selbst auf die Mole —
-er will reden, nicht kämpfen.
+[[fenn]] calls his crew back and steps onto the mole himself —
+he wants to talk, not fight.
 `,
   });
 }
 
 /** The motivation of the npc a scene run proposes — a field, not a section. */
 export const NPC_STUB_MOTIVATION =
-  "Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen — und zwar von [[fenn]] persönlich.";
+  "Her share of the cargo without going to the dungeon for it — paid by [[fenn]] in person.";
 
 /** The npc a scene run's npc call answers with. */
 const npcStub: NpcReply = {
@@ -384,13 +386,13 @@ const npcStub: NpcReply = {
   motivation: NPC_STUB_MOTIVATION,
   body: `## Weiß
 
-> [!secret] Weiß, an welchem Poller [[fenn]] sein Boot festmacht.
+> [!secret] Knows which bollard [[fenn]] ties his boat to.
 `,
   warnings: [],
 };
 
 /** The atmosphere of the location a scene run proposes. */
-export const LOCATION_STUB_ATMOSPHERE = "Salz in der Luft, Möwen über dem Schlick, kein Mensch zu sehen.";
+export const LOCATION_STUB_ATMOSPHERE = "Salt in the air, gulls over the mud, not a soul in sight.";
 
 /** The location a scene run's location call answers with. */
 const locationStub: LocationReply = {
@@ -401,11 +403,11 @@ const locationStub: LocationReply = {
   atmosphere: LOCATION_STUB_ATMOSPHERE,
   // `[[grella]]` is the npc the SAME run proposes: a reference to it is
   // valid before either of them is written.
-  body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
+  body: `The shallow bay north of the harbour — reachable on foot at low tide.
 
-## Wer ist hier
+## Who is here
 
-- [[grella]], wenn eine Ladung kommt
+- [[grella]], when a cargo comes in
 `,
   warnings: [],
 };
@@ -414,11 +416,17 @@ const locationStub: LocationReply = {
 
 /** Id the stub uses when the DM pinned none. */
 export const NPC_DEFAULT_ID = "brakk";
-export const NPC_DEFAULT_NAME = "Brakk Sturmhand";
-export const NPC_ROLE = "Fischer, kennt jede Sandbank der Nordbucht";
-export const NPC_VOICE = "langsam, sucht Worte, lacht über eigene Witze";
+export const NPC_DEFAULT_NAME = "Brakk Stormhand";
+export const NPC_ROLE = "Fisherman, knows every sandbank of the north bay";
+export const NPC_VOICE = "slow, searches for words, laughs at his own jokes";
 export const NPC_MOTIVATION =
-  "Dass die Boote wieder sicher rausfahren können — er hat seit drei Nächten keinen Fang verkauft und traut [[fenn]] nicht.";
+  "That the boats can go out safely again — he has not sold a catch in three nights and does not trust [[fenn]].";
+
+/** The opening of the secret in the npc reply's body. */
+export const NPC_SECRET_OPENING = "Saw two strangers";
+
+/** What the npc reply's relation line says about `[[fenn]]`. */
+export const NPC_FENN_RELATION = "knows him from the quay";
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
 export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): NpcReply {
@@ -437,23 +445,23 @@ export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): NpcReply 
       { key: "passive-perception", value: "11" },
     ],
     voice: NPC_VOICE,
-    appearance: "geflickter Ölmantel, Hände voller Angelschnüre",
+    appearance: "patched oilskin coat, hands full of fishing line",
     motivation: NPC_MOTIVATION,
     body: `## Weiß
 
-> [!secret] Hat gesehen, wie zwei Fremde nachts Kisten von der Mole
-> trugen, und schweigt aus Angst.
+> [!secret] ${NPC_SECRET_OPENING} carry crates off the mole at night,
+> and keeps quiet out of fear.
 
 ## Beziehungen
 
-- [[fenn]]: kennt ihn vom Kai, geht ihm seit dem Sommer aus dem Weg
+- [[fenn]]: ${NPC_FENN_RELATION}, has avoided him since the summer
 `,
     warnings: contextEchoWarnings(knowledge),
   };
 }
 
 /** The relation line TRIGGER.unknownRef adds to the first npc reply. */
-export const UNKNOWN_REF_LINE = `- [[${UNKNOWN_REF_ID}]]: schuldet ihm Geld`;
+export const UNKNOWN_REF_LINE = `- [[${UNKNOWN_REF_ID}]]: owes him money`;
 
 /**
  * The first reply of a TRIGGER.unknownRef npc run: the good reply plus one
@@ -479,10 +487,10 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): Record<string, unk
     quickstats: [{ key: "insight", value: 1 }],
     voice: null,
     appearance: null,
-    motivation: "Irgendwas.",
+    motivation: "Something.",
     body: `## Weiß
 
-> [!secret] Irgendwas.
+> [!secret] Something.
 `,
     warnings: [],
   };
@@ -491,11 +499,11 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): Record<string, unk
 // --- augment run -------------------------------------------------------------
 
 /**
- * The heading the „Mit KI ergänzen" prompt of a scene puts the existing scene
- * under — server/src/llm-provider.ts EXISTING_SCENE_HEADING. Duplicated on
- * purpose, like KNOWLEDGE_HEADING in the stub: the fixture reads the prompt
- * the way a model does, so the server agrees with it by ASSERTION and not by
- * import.
+ * The heading the augment prompt of a scene puts the existing scene under —
+ * server/src/llm-provider.ts EXISTING_SCENE_HEADING, spelled exactly as the
+ * server's prompt spells it. Duplicated on purpose, like KNOWLEDGE_HEADING in
+ * the stub: the fixture reads the prompt the way a model does, so the server
+ * agrees with it by ASSERTION and not by import.
  */
 export const EXISTING_SCENE_HEADING = "## Bestehende Szene — ergänzen, nicht ersetzen";
 
@@ -506,11 +514,11 @@ export const EXISTING_NPC_HEADING = "## Bestehender NPC — ergänzen, nicht ers
 export const EXISTING_LOCATION_HEADING = "## Bestehender Ort — ergänzen, nicht ersetzen";
 
 /** The `## If:` section an augment run adds — asserted in the spec. */
-export const AUGMENT_THREAD_CONDITION = "die Gruppe fragt nach dem Spitzel";
+export const AUGMENT_THREAD_CONDITION = "the party asks about the informer";
 
 /** The paragraph inside that section. */
 export const AUGMENT_THREAD_TEXT =
-  "[[jorna]] wird einsilbig und schiebt die Frage auf den nächsten Morgen.";
+  "[[jorna]] turns curt and puts the question off until the next morning.";
 
 /**
  * What an augment run proposes for an EMPTY npc (one created with a name and
@@ -524,13 +532,15 @@ export const AUGMENT_THREAD_TEXT =
  * so an accept with the defaults fills the holes and leaves the two fields
  * the DM already authored exactly as they were.
  */
-export const AUGMENT_NPC_ROLE = "Spitzel der Schmuggler in der Hafenwache";
-export const AUGMENT_NPC_VOICE = "leise, weicht Blicken aus";
-export const AUGMENT_NPC_NAME = "Kell Stichbein";
+export const AUGMENT_NPC_ROLE = "The smugglers' informer in the harbour watch";
+export const AUGMENT_NPC_VOICE = "quiet, avoids eye contact";
+export const AUGMENT_NPC_NAME = "Kell Stitchbone";
 export const AUGMENT_NPC_STATUS = "alive";
 export const AUGMENT_NPC_MOTIVATION =
-  "Nicht auffliegen — und trotzdem bezahlt werden. Beides geht nicht mehr lange gut.";
-export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
+  "Not to be found out — and to get paid all the same. Both will not last much longer.";
+/** The first word of the secret an empty npc's augment run proposes. */
+export const AUGMENT_NPC_SECRET_OPENING = "Tells";
+export const AUGMENT_NPC_SECRET = `${AUGMENT_NPC_SECRET_OPENING} [[fenn]] when the harbour watch changes.`;
 
 /**
  * The reply of a scene augment run: the scene as it was shown — every field,
@@ -553,7 +563,7 @@ export function augmentReply(scene: SceneFields, knowledge = ""): SceneReply {
  */
 export function unknownRefAugmentReply(scene: SceneFields): SceneReply {
   const good = augmentReply(scene);
-  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
+  return { ...good, body: `${good.body}\nBehind it is [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 /**
@@ -571,7 +581,7 @@ export function invalidAugmentReply(scene: SceneFields): SceneReply {
  * the npc IS — that is the whole point of the two E2E cases:
  *
  *   an EMPTY npc (created, never filled in)  ->  its fields (the motivation
- *       among them) and the body's `## Weiß` are filled,
+ *       among them) and the body's secret section are filled,
  *   a filled npc  ->  every field echoed as it was shown, plus one NEW
  *       `## If:` section at the end of its text; every existing block comes
  *       back unchanged.
@@ -609,7 +619,7 @@ export function invalidNpcAugmentReply(npc: NpcFields): NpcReply {
 /** The first reply of a TRIGGER.unknownRef npc augment run — a correction turn. */
 export function unknownRefNpcAugmentReply(npc: NpcFields): NpcReply {
   const good = npcAugmentReply(npc);
-  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
+  return { ...good, body: `${good.body}\nBehind it is [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 // --- augmenting a location ---------------------------------------------------
@@ -640,7 +650,7 @@ export function invalidLocationAugmentReply(location: ExistingLocation): Locatio
 /** The first reply of a TRIGGER.unknownRef location augment run — a correction turn. */
 export function unknownRefLocationAugmentReply(location: ExistingLocation): LocationReply {
   const good = locationAugmentReply(location);
-  return { ...good, body: `${good.body}\nDahinter steckt [[${UNKNOWN_REF_ID}]].\n` };
+  return { ...good, body: `${good.body}\nBehind it is [[${UNKNOWN_REF_ID}]].\n` };
 }
 
 // --- the pipelined scene run -------------------------------------------------
@@ -658,16 +668,16 @@ export function unknownRefLocationAugmentReply(location: ExistingLocation): Loca
 //
 // The default run has ONE scene, one npc and one location the specs already
 // know. TRIGGER.threeScenes turns it into three scenes and no proposals, which
-// is what „ein Teil schlägt fehl, zwei sind prüfbar“ needs.
+// is what "one part fails, two are reviewable" needs.
 
 /** The three scenes of the pipelined run — ids asserted in the specs. */
 export const THREE_SCENES = [
   // Ids of their own — none of them is SCENE_ID, so the rich one-scene draft
   // (with its references) can never be served for a run whose outline
   // proposes no npc and no location.
-  { id: "night-watch", title: "Nachtwache an der Mole" },
-  { id: "smuggler-caught", title: "Von Schmugglern erwischt" },
-  { id: "dawn-escape", title: "Flucht im Morgengrauen" },
+  { id: "night-watch", title: "Night watch on the mole" },
+  { id: "smuggler-caught", title: "Caught by smugglers" },
+  { id: "dawn-escape", title: "Escape at dawn" },
 ] as const;
 
 /** The scene the failure trigger breaks — the middle one, so two survive. */
@@ -690,7 +700,8 @@ function wholeSourceExcerpt(source: string): { first: string; last: string } {
 
 /**
  * The context line of a new-chapter run's outline call —
- * server/src/llm-provider.ts NEW_CHAPTER_LINE, duplicated on purpose like
+ * server/src/llm-provider.ts NEW_CHAPTER_LINE, spelled exactly as the
+ * server's prompt spells it and duplicated on purpose like
  * EXISTING_SCENE_HEADING: the stub reads the prompt the way a model does.
  */
 export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
@@ -701,9 +712,12 @@ export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
  * so the overview has something to clamp.
  */
 export const CHAPTER_DESCRIPTION =
-  "Nachts verschwinden Ladungen aus dem Hafen, und an der Nordbucht brennen " +
-  "Laternen, wo niemand sein sollte.\n\nDie Gruppe soll herausfinden, wer die " +
-  "Schmuggler deckt, und die Ladung sicherstellen, bevor sie ins Dorf gelangt.";
+  "At night cargo vanishes from the harbour, and lanterns burn at the north " +
+  "bay where nobody should be.\n\nThe party is to find out who covers for the " +
+  "smugglers, and secure the cargo before it reaches the village.";
+
+/** The note the outline adds to every run: a detail the source text does not give. */
+export const OUTLINE_WARNING = "The bill of lading is invented — the source text mentions no seal.";
 
 /** The outline reply: one scene plus one npc and one location, or three scenes and none. */
 export function outlineReply(input: {
@@ -722,7 +736,7 @@ export function outlineReply(input: {
   /**
    * TRIGGER.oldName: the naming-check case. Its draft references no new npc
    * or location, so the outline must not propose one either — otherwise
-   * „Übernehmen“ leaves two undecided proposals behind and the run does not
+   * the accept leaves two undecided proposals behind and the run does not
    * finish (the badly-behaved model this trigger stands for is about
    * SPELLING, nothing else).
    */
@@ -737,9 +751,9 @@ export function outlineReply(input: {
 }): unknown {
   const sourceExcerpt = wholeSourceExcerpt(input.source);
   // The outline is the step that reads the WHOLE source text, so the run's
-  // „der Quelltext gibt das nicht her“ notes belong to it.
+  // "the source text does not say so" notes belong to it.
   const warnings = [
-    "Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel.",
+    OUTLINE_WARNING,
     ...contextEchoWarnings(input.knowledge ?? ""),
   ];
   const chapterDescription =
@@ -779,12 +793,12 @@ export function outlineReply(input: {
         refs: [],
       },
     ],
-    npcs: [{ id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Schmugglerin am Kai." }],
+    npcs: [{ id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Smuggler at the quay." }],
     locations: [
       {
         id: LOCATION_STUB_ID,
         name: LOCATION_STUB_NAME,
-        summary: "Die flache Bucht nördlich des Hafens.",
+        summary: "The shallow bay north of the harbour.",
       },
     ],
     chapterDescription,
@@ -794,8 +808,8 @@ export function outlineReply(input: {
 
 /**
  * An outline that FAILS validation (TRIGGER.invalid): one scene, nothing else —
- * so the broken scene draft below is the run's only part and „jeder Teil
- * ist fehlgeschlagen“ is what the DM sees. The outline itself is fine; the
+ * so the broken scene draft below is the run's only part and "every part
+ * failed" is what the DM sees. The outline itself is fine; the
  * error is in the draft, which is where the 422 block's messages come from.
  */
 export function invalidRunOutline(source: string): unknown {
@@ -838,7 +852,7 @@ export function invalidScenePartReply(chapter: string, sceneId: string): SceneRe
       chapter,
       body: `## Flow
 
-> [!combat] Zwei Wachen, Initiative wie üblich.
+> [!combat] Two guards, initiative as usual.
 `,
     }),
     status: "ready",
@@ -859,10 +873,10 @@ function plainSceneDraft(chapter: string, id: string, title: string): SceneReply
     tags: ["stealth"],
     body: `## Flow
 
-[[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
+[[fenn]]'s crew clears a cargo away before morning comes.
 
-> [!readaloud] Über der Mole hängt der Nebel, und irgendwo unter euch
-> knirscht ein Kiel gegen Stein.
+> [!readaloud] Fog hangs over the mole, and somewhere below you a keel
+> grinds against stone.
 `,
   });
 }

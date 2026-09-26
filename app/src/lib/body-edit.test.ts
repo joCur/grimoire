@@ -12,29 +12,29 @@ describe("hasBodyChanges", () => {
   });
 
   test("whitespace counts — two trailing spaces are a markdown line break", () => {
-    expect(hasBodyChanges("Zeile\n", "Zeile  \n")).toBe(true);
+    expect(hasBodyChanges("Line\n", "Line  \n")).toBe(true);
     expect(hasBodyChanges("Text.\n", "Text.\n\n")).toBe(true);
   });
 
   test("edited text is a change", () => {
-    expect(hasBodyChanges("Text.\n", "Anderer Text.\n")).toBe(true);
+    expect(hasBodyChanges("Text.\n", "Other text.\n")).toBe(true);
   });
 });
 
 describe("bodyEditorChange", () => {
   test("only the halves that changed travel — an untouched text stays out", () => {
     expect(bodyEditorChange("Text.\n", "Text.\n", {})).toEqual({});
-    expect(bodyEditorChange("Text.\n", "Neu.\n", {})).toEqual({ body: "Neu.\n" });
-    expect(bodyEditorChange("Text.\n", "Text.\n", { motivation: "Ruhe." })).toEqual({
-      fields: { motivation: "Ruhe." },
+    expect(bodyEditorChange("Text.\n", "New.\n", {})).toEqual({ body: "New.\n" });
+    expect(bodyEditorChange("Text.\n", "Text.\n", { motivation: "Peace." })).toEqual({
+      fields: { motivation: "Peace." },
     });
     expect(hasBodyEditChange({})).toBe(false);
     expect(hasBodyEditChange({ body: "" })).toBe(true);
   });
 
   test("text and prose property together are ONE write; `null` clears the field", () => {
-    expect(bodyEditorChange("Alt.\n", "Neu.\n", { motivation: null })).toEqual({
-      body: "Neu.\n",
+    expect(bodyEditorChange("Old.\n", "New.\n", { motivation: null })).toEqual({
+      body: "New.\n",
       fields: { motivation: null },
     });
   });

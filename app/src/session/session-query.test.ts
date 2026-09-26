@@ -25,7 +25,7 @@ const session = (id: string, extra: Partial<Session> = {}): Session => ({
   ...extra,
 });
 
-const entry = { id: "l1", at: "19:30", sceneId: "harbor", text: "Notiz", reviewed: false, rev: 1 };
+const entry = { id: "l1", at: "19:30", sceneId: "harbor", text: "Note", reviewed: false, rev: 1 };
 
 describe("the folds", () => {
   test("a new row is appended, a known one replaced in its place", () => {

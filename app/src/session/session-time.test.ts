@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { translator } from "@/i18n/format";
+import { formatDate, translator } from "@/i18n/format";
 
 import {
   formatDuration,
@@ -182,22 +182,25 @@ describe("openPause", () => {
 });
 
 describe("sessionDateLabel", () => {
-  test("the heading of a session is its `started` date, German format", () => {
-    expect(sessionDateLabel({ started: "2026-01-15T19:30:00" }, t)).toBe("Session vom 15.01.2026");
+  /** The heading of a session started on 15 January 2026, in the locale's date format. */
+  const JAN_15 = t("session.date", { date: formatDate(t.locale, new Date(2026, 0, 15)) });
+
+  test("the heading of a session is its `started` date, in the locale's format", () => {
+    expect(sessionDateLabel({ started: "2026-01-15T19:30:00" }, t)).toBe(JAN_15);
     // Minute-precise and date-only (the midnight degradation) read the same —
     // only the date part is used.
-    expect(sessionDateLabel({ started: "2026-01-15T19:30" }, t)).toBe("Session vom 15.01.2026");
-    expect(sessionDateLabel({ started: "2026-01-15" }, t)).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15T19:30" }, t)).toBe(JAN_15);
+    expect(sessionDateLabel({ started: "2026-01-15" }, t)).toBe(JAN_15);
   });
 
   test("a session close to midnight keeps ITS day (no timezone re-reading)", () => {
-    expect(sessionDateLabel({ started: "2026-01-15T23:59:59" }, t)).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15T23:59:59" }, t)).toBe(JAN_15);
   });
 
   test("the opaque id is never the label — no `started`, no date", () => {
-    expect(sessionDateLabel({}, t)).toBe("Session");
-    expect(sessionDateLabel({ started: "gestern abend" }, t)).toBe("Session");
-    expect(sessionDateLabel(undefined, t)).toBe("Session");
+    expect(sessionDateLabel({}, t)).toBe(t("session.date.unknown"));
+    expect(sessionDateLabel({ started: "last night" }, t)).toBe(t("session.date.unknown"));
+    expect(sessionDateLabel(undefined, t)).toBe(t("session.date.unknown"));
   });
 });
 

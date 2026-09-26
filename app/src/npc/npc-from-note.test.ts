@@ -7,14 +7,15 @@ import { deriveNpcSlug, isNpcSlug, npcNameFromText } from "./npc-from-note";
 
 describe("npc slug derivation", () => {
   test("prefers a quoted name (the log convention)", () => {
-    expect(npcNameFromText('Improvisiert: Fischerin "Old Metta" am Steg')).toBe("Old Metta");
-    expect(deriveNpcSlug('Improvisiert: Fischerin "Old Metta" am Steg')).toBe("old-metta");
-    expect(deriveNpcSlug("Improvisiert: Fischerin „Alte Metta“ am Steg")).toBe("alte-metta");
+    expect(npcNameFromText('Improvised: fisherwoman "Old Metta" at the jetty')).toBe("Old Metta");
+    expect(deriveNpcSlug('Improvised: fisherwoman "Old Metta" at the jetty')).toBe("old-metta");
+    // German low-high quotes count as quotes too.
+    expect(deriveNpcSlug("Improvised: fisherwoman „Grey Metta“ at the jetty")).toBe("grey-metta");
   });
 
   test("falls back to the first capitalized run, skipping labels", () => {
-    expect(deriveNpcSlug("Improvisiert: Alte Metta am Steg")).toBe("alte-metta");
-    expect(deriveNpcSlug("Neuer NPC: Kai Wellenläufer taucht auf")).toBe("kai-wellenlaeufer");
+    expect(deriveNpcSlug("Improvised: Grey Metta at the jetty")).toBe("grey-metta");
+    expect(deriveNpcSlug("New NPC: Kai Wavewalker shows up")).toBe("kai-wavewalker");
   });
 
   test("transliterates umlauts and folds diacritics", () => {
@@ -24,15 +25,15 @@ describe("npc slug derivation", () => {
   });
 
   test("no recognizable name yields an empty proposal", () => {
-    expect(deriveNpcSlug("jemand am steg")).toBe("");
-    expect(npcNameFromText("jemand am steg")).toBeUndefined();
+    expect(deriveNpcSlug("someone at the jetty")).toBe("");
+    expect(npcNameFromText("someone at the jetty")).toBeUndefined();
   });
 
   test("every derived slug passes the server's slug rule", () => {
     const texts = [
-      'Improvisiert: Fischerin "Old Metta" am Steg',
+      'Improvised: fisherwoman "Old Metta" at the jetty',
       '"Bärbel Öhler"',
-      "Neuer NPC: Kai Wellenläufer taucht auf",
+      "New NPC: Kai Wavewalker shows up",
     ];
     for (const text of texts) expect(isNpcSlug(deriveNpcSlug(text))).toBe(true);
   });

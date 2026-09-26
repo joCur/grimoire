@@ -1,14 +1,14 @@
 {
   "id": "wide-table",
-  "title": "Die Ladeliste der Seemöwe",
+  "title": "The Cargo List of the Seagull",
   "type": "planned",
   "chapter": "01-salzhafen",
   "location": "leuchtturm",
   "npcs": [],
   "handouts": [],
   "tags": [
-    "tabelle"
+    "table"
   ],
   "status": "draft",
-  "body": "\n## Flow\n\nNur als Überlauf-Prüfung da: die Referenzszene trägt eine schmale W6-Tabelle,\ndie auf 390px noch passt. Diese hier kann es nicht — sieben Spalten mit\nlangen, unumbrechbaren Wörtern. Genau dafür ist die Scroll-Box da.\n\n| Posten | Herkunftshafen | Zollvermerk | Empfaenger | Frachtbriefnummer | Versicherungssumme | Bemerkung |\n| --- | --- | --- | --- | --- | --- | --- |\n| Schmuggeltabak | Nordwestkuestenhafen | Unverzollt | Hafenmeisterkontor | FB-1938-XZ-004471 | 1200 Goldstuecke | Brandzeichen unleserlich |\n| Silberbarren | Suedmeerhandelsposten | Beschlagnahmt | Muenzpraegeanstalt | FB-1938-XZ-004472 | 8400 Goldstuecke | Siegel aufgebrochen |\n"
+  "body": "\n## Flow\n\nOnly here as an overflow check: the reference scene carries a narrow d6 table\nthat still fits at 390px. This one cannot — seven columns with\nlong, unbreakable words. That is exactly what the scroll box is for.\n\n| Consignment | Portoforigin | Customsnotation | Consignee | Billofladingnumber | Insurancevaluation | Remarks |\n| --- | --- | --- | --- | --- | --- | --- |\n| Smuggledtobacco | Northwestcoastharbour | Uncleared | Harbourmasteroffice | BL-1938-XZ-004471 | 1200 goldpieces | Brandmark illegible |\n| Silverbullion | Southseatradingpost | Confiscated | Royalmintworkshop | BL-1938-XZ-004472 | 8400 goldpieces | Seal broken |\n"
 }

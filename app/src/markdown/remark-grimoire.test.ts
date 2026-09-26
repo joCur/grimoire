@@ -22,7 +22,7 @@ function run(markdown: string): Root {
   return processor.runSync(processor.parse(markdown)) as Root;
 }
 
-/** The renderer's real pipeline: GFM tables (issue #96) plus the plugin. */
+/** The renderer's real pipeline: GFM tables plus the plugin. */
 function runWithTables(markdown: string): Root {
   const processor = unified().use(remarkParse).use(remarkTable).use(remarkGrimoire);
   return processor.runSync(processor.parse(markdown)) as Root;
@@ -48,63 +48,63 @@ function childrenOf(node: RootContent | undefined): RootContent[] {
 
 describe("callouts", () => {
   test.each([...CALLOUT_KINDS])("transforms [!%s] into a tagged section", (kind) => {
-    const tree = run(`> [!${kind}] Inhalt des Callouts.`);
+    const tree = run(`> [!${kind}] Content of the callout.`);
     const node = tree.children[0];
     const data = dataOf(node);
     expect(node?.type).toBe("blockquote");
     expect(data.hName).toBe("section");
     expect(data.hProperties?.["data-callout"]).toBe(kind);
     // marker is stripped from the rendered text
-    expect(mdastToString(node)).toBe("Inhalt des Callouts.");
+    expect(mdastToString(node)).toBe("Content of the callout.");
   });
 
   test("readaloud copy text collapses soft line breaks (Roll20 chat paste)", () => {
-    const tree = run("> [!readaloud] Der Turm ragt schwarz\n> gegen den Abendhimmel auf.");
+    const tree = run("> [!readaloud] The tower rises black\n> against the evening sky.");
     expect(copyPartsOf(tree.children[0])).toEqual([
-      { type: "text", value: "Der Turm ragt schwarz gegen den Abendhimmel auf." },
+      { type: "text", value: "The tower rises black against the evening sky." },
     ]);
   });
 
   test("readaloud copy parts keep a reference resolvable and code literal", () => {
     // The clipboard has to say what the DM READS: a prose reference becomes a
     // piece React resolves, a reference inside code is text and stays text.
-    const tree = run("> [!readaloud] [[jorna]] winkt, `[[jorna]]` nicht.");
+    const tree = run("> [!readaloud] [[jorna]] waves, `[[jorna]]` does not.");
     expect(copyPartsOf(tree.children[0])).toEqual([
       { type: "ref", slug: "jorna" },
-      { type: "text", value: " winkt, [[jorna]] nicht." },
+      { type: "text", value: " waves, [[jorna]] does not." },
     ]);
     // What the DM copies == what the DM reads (Markdown.tsx resolves these).
     expect(
       renderRefPieces(copyPartsOf(tree.children[0]) as RefPiece[], () => "Jorna"),
-    ).toBe("Jorna winkt, [[jorna]] nicht.");
+    ).toBe("Jorna waves, [[jorna]] does not.");
   });
 
   test("marker casing is accepted, kind is normalized to lowercase", () => {
-    const tree = run("> [!NOTE] Groß geschrieben.");
+    const tree = run("> [!NOTE] Written in capitals.");
     expect(dataOf(tree.children[0]).hProperties?.["data-callout"]).toBe("note");
   });
 
   test("marker-only first line keeps the following lines as content", () => {
-    const tree = run("> [!note]\n> Erst hier beginnt der Text.");
+    const tree = run("> [!note]\n> Only here does the text begin.");
     const node = tree.children[0];
     expect(dataOf(node).hName).toBe("section");
-    expect(mdastToString(node)).toBe("Erst hier beginnt der Text.");
+    expect(mdastToString(node)).toBe("Only here does the text begin.");
   });
 
   test("UNKNOWN kind stays an untouched blockquote with its text", () => {
-    const tree = run("> [!homebrew] Bleibt einfach Text.");
+    const tree = run("> [!homebrew] Simply stays text.");
     const node = tree.children[0] as Blockquote;
     expect(node.type).toBe("blockquote");
     expect(node.data).toBeUndefined();
     // the marker text is preserved, nothing is thrown or hidden
-    expect(mdastToString(node)).toBe("[!homebrew] Bleibt einfach Text.");
+    expect(mdastToString(node)).toBe("[!homebrew] Simply stays text.");
   });
 
   test("plain blockquote without marker is untouched", () => {
-    const tree = run("> Nur ein Zitat.");
+    const tree = run("> Just a quote.");
     const node = tree.children[0] as Blockquote;
     expect(node.data).toBeUndefined();
-    expect(mdastToString(node)).toBe("Nur ein Zitat.");
+    expect(mdastToString(node)).toBe("Just a quote.");
   });
 });
 
@@ -112,22 +112,22 @@ describe("if-sections", () => {
   test("wraps heading plus content until the next H2 into a details node", () => {
     const tree = run(
       [
-        "## If: sie lügen",
+        "## If: they lie",
         "",
-        "Absatz eins.",
+        "Paragraph one.",
         "",
-        "- Liste",
+        "- List",
         "",
-        "## Danach",
+        "## Afterwards",
         "",
-        "Außerhalb.",
+        "Outside.",
       ].join("\n"),
     );
 
     const section = tree.children[0];
     const data = dataOf(section);
     expect(data.hName).toBe("details");
-    expect(data.hProperties?.["data-if-section"]).toBe("sie lügen");
+    expect(data.hProperties?.["data-if-section"]).toBe("they lie");
     // branches are open by default (design reference)
     expect(data.hProperties?.["open"]).toBe(true);
 
@@ -135,18 +135,18 @@ describe("if-sections", () => {
     // summary + paragraph + list
     expect(kids).toHaveLength(3);
     expect(dataOf(kids[0]).hName).toBe("summary");
-    expect(mdastToString(kids[0])).toBe("sie lügen");
+    expect(mdastToString(kids[0])).toBe("they lie");
     expect(kids[1]?.type).toBe("paragraph");
     expect(kids[2]?.type).toBe("list");
 
     // the following H2 and its content stay top-level siblings
     expect(tree.children[1]?.type).toBe("heading");
-    expect(mdastToString(tree.children[1])).toBe("Danach");
+    expect(mdastToString(tree.children[1])).toBe("Afterwards");
     expect(tree.children[2]?.type).toBe("paragraph");
   });
 
   test("runs to the end of the document when no further H2 follows", () => {
-    const tree = run("## If: die Wache schläft\n\nEins.\n\n### Unterpunkt\n\nZwei.");
+    const tree = run("## If: the guard sleeps\n\nOne.\n\n### Subsection\n\nTwo.");
     expect(tree.children).toHaveLength(1);
     const kids = childrenOf(tree.children[0]);
     // summary + paragraph + h3 + paragraph — deeper headings do not end the section
@@ -160,13 +160,13 @@ describe("if-sections", () => {
   });
 
   test("H3 'If:' headings are not sectioned (contract is H2)", () => {
-    const tree = run("### If: zu tief verschachtelt\n\nText.");
+    const tree = run("### If: nested too deep\n\nText.");
     expect(tree.children[0]?.type).toBe("heading");
     expect(dataOf(tree.children[0]).hName).toBeUndefined();
   });
 
   test("callouts inside an if-section are still transformed", () => {
-    const tree = run("## If: sie lügen\n\n> [!check] Charisma (Deception) vs. Insight.");
+    const tree = run("## If: they lie\n\n> [!check] Charisma (Deception) vs. Insight.");
     const kids = childrenOf(tree.children[0]);
     const callout = kids[1];
     expect(dataOf(callout).hName).toBe("section");
@@ -174,14 +174,14 @@ describe("if-sections", () => {
   });
 
   test("empty if-section still renders as details with only the summary", () => {
-    const tree = run("## If: nichts passiert\n\n## Danach");
+    const tree = run("## If: nothing happens\n\n## Afterwards");
     const kids = childrenOf(tree.children[0]);
     expect(kids).toHaveLength(1);
     expect(dataOf(kids[0]).hName).toBe("summary");
   });
 
   test("every if-section carries the open attribute", () => {
-    const tree = run("## If: a\n\nEins.\n\n## If: b\n\nZwei.");
+    const tree = run("## If: a\n\nOne.\n\n## If: b\n\nTwo.");
     expect(tree.children).toHaveLength(2);
     for (const child of tree.children) {
       expect(dataOf(child).hProperties?.["open"]).toBe(true);
@@ -195,7 +195,7 @@ describe("reference fixtures", () => {
     expect(() => run("> ")).not.toThrow();
     expect(() => run("> [!]")).not.toThrow();
     expect(() => run("## If:")).not.toThrow();
-    expect(() => run("**kaputt\n\n> [!secret]")).not.toThrow();
+    expect(() => run("**broken\n\n> [!secret]")).not.toThrow();
   });
 
   test("marker-only callout with no content at all renders empty section", () => {
@@ -206,7 +206,7 @@ describe("reference fixtures", () => {
   });
 });
 
-describe("entity references (issue #68)", () => {
+describe("entity references", () => {
   /** The `[[…]]` nodes of a tree, flattened, with their slug and text. */
   function refs(node: unknown): Array<{ slug: unknown; text: string }> {
     const found: Array<{ slug: unknown; text: string }> = [];
@@ -241,24 +241,24 @@ describe("entity references (issue #68)", () => {
   }
 
   test("a reference becomes a marked node carrying the slug", () => {
-    const tree = run("Am Kai wartet [[jorna]]s Boot.");
+    const tree = run("On the quay waits [[jorna]]s boat.");
     expect(refs(tree)).toEqual([{ slug: "jorna", text: "[[jorna]]" }]);
     // The literal source is the node's own text — that IS the unresolved
     // rendering, so a body never loses what the DM typed.
-    expect(mdastToString(tree)).toBe("Am Kai wartet [[jorna]]s Boot.");
+    expect(mdastToString(tree)).toBe("On the quay waits [[jorna]]s boat.");
   });
 
   test("references inside a callout and inside an if-section are found", () => {
-    expect(refs(run("> [!note] [[jorna]] wartet."))).toEqual([
+    expect(refs(run("> [!note] [[jorna]] waits."))).toEqual([
       { slug: "jorna", text: "[[jorna]]" },
     ]);
-    expect(refs(run("## If: sie lügen\n\nDann holt [[fenn]] sie.")).map((r) => r.slug)).toEqual([
+    expect(refs(run("## If: they lie\n\nThen [[fenn]] fetches them.")).map((r) => r.slug)).toEqual([
       "fenn",
     ]);
   });
 
   test("the callout marker still wins when its line also carries a reference", () => {
-    const tree = run("> [!check] Insight gegen [[fenn]].");
+    const tree = run("> [!check] Insight against [[fenn]].");
     expect(dataOf(tree.children[0]).hProperties?.["data-callout"]).toBe("check");
     expect(refs(tree).map((r) => r.slug)).toEqual(["fenn"]);
   });
@@ -272,12 +272,12 @@ describe("entity references (issue #68)", () => {
   test("reference-style links are links too — no anchor inside an anchor", () => {
     // `[text][label]` is a `linkReference`, `![alt][label]` an
     // `imageReference`; both become an anchor, so a ref in them stays text.
-    expect(refs(run("[Kai mit [[jorna]]][kai]\n\n[kai]: https://example.org"))).toEqual([]);
-    expect(refs(run("![[[jorna]] am Kai][bild]\n\n[bild]: https://example.org/x.png"))).toEqual([]);
+    expect(refs(run("[Quay with [[jorna]]][quay]\n\n[quay]: https://example.org"))).toEqual([]);
+    expect(refs(run("![[[jorna]] on the quay][picture]\n\n[picture]: https://example.org/x.png"))).toEqual([]);
   });
 
   test("a reference in an `## If:` summary is marked PLAIN (the row toggles)", () => {
-    const tree = run("## If: [[jorna]] gewarnt wurde\n\nDann holt [[fenn]] sie.");
+    const tree = run("## If: [[jorna]] was warned\n\nThen [[fenn]] fetches them.");
     const summary = childrenOf(tree.children[0])[0];
     const inSummary = refs(summary);
     expect(inSummary.map((r) => r.slug)).toEqual(["jorna"]);
@@ -291,10 +291,10 @@ describe("entity references (issue #68)", () => {
   });
 
   test("several references in one paragraph, in order", () => {
-    expect(refs(run("[[jorna]], [[fenn]] und [[alte-mole]]")).map((r) => r.slug)).toEqual([
+    expect(refs(run("[[jorna]], [[fenn]] and [[old-pier]]")).map((r) => r.slug)).toEqual([
       "jorna",
       "fenn",
-      "alte-mole",
+      "old-pier",
     ]);
   });
 });
@@ -302,19 +302,19 @@ describe("entity references (issue #68)", () => {
 // --- tables -----------------------------------------------------------------
 
 describe("tables", () => {
-  const W6 = "| W6 | Fund |\n| --- | --- |\n| 1 | [[jorna]]s Kompass |";
+  const D6 = "| d6 | Find |\n| --- | --- |\n| 1 | [[jorna]]s compass |";
 
   test("a cell is walked by the reference pass like any other text", () => {
-    const table = runWithTables(W6).children[0];
+    const table = runWithTables(D6).children[0];
     const cell = childrenOf(childrenOf(childrenOf(table)[1])[1])[0];
     expect(dataOf(cell).hProperties?.[REF_ATTR]).toBe("jorna");
   });
 
   test("a table inside a callout stays inside it — the callout keeps its tag", () => {
-    const quoted = W6.split("\n")
+    const quoted = D6.split("\n")
       .map((line) => `> ${line}`)
       .join("\n");
-    const node = runWithTables(`> [!note] Zufallstabelle\n>\n${quoted}`).children[0];
+    const node = runWithTables(`> [!note] Random table\n>\n${quoted}`).children[0];
     expect(dataOf(node).hProperties?.["data-callout"]).toBe("note");
     expect(childrenOf(node).some((child) => child.type === "table")).toBe(true);
   });
@@ -323,11 +323,11 @@ describe("tables", () => {
     // The copy button must not hand the Roll20 chat an empty string just
     // because the block is a table: cells are text like any other leaf.
     const node = runWithTables(
-      "> [!readaloud] Der Wurf:\n>\n> | W6 | Fund |\n> | --- | --- |\n> | 1 | Fass |",
+      "> [!readaloud] The roll:\n>\n> | d6 | Find |\n> | --- | --- |\n> | 1 | Barrel |",
     ).children[0];
     const text = JSON.stringify(copyPartsOf(node));
-    // Cells separated, rows on their own line — not `W6Fund1Fass`.
-    expect(text).toContain("W6 | Fund");
-    expect(text).toContain("1 | Fass");
+    // Cells separated, rows on their own line — not `d6Find1Barrel`.
+    expect(text).toContain("d6 | Find");
+    expect(text).toContain("1 | Barrel");
   });
 });

@@ -17,49 +17,49 @@ import {
 
 describe("extractHashtags", () => {
   test("collects hashtags in order, lowercased", () => {
-    expect(extractHashtags("Lichter in der Bucht #thread #Loot")).toEqual(["thread", "loot"]);
+    expect(extractHashtags("Lights in the bay #thread #Loot")).toEqual(["thread", "loot"]);
   });
 
   test("handles umlauts and digits, ignores lone hashes", () => {
-    expect(extractHashtags("Nebelöl #öl-fass #date2 # nichts")).toEqual(["öl-fass", "date2"]);
+    expect(extractHashtags("Fog oil #björn-cask #date2 # nothing")).toEqual(["björn-cask", "date2"]);
   });
 
   test("no hashtags yields an empty list", () => {
-    expect(extractHashtags("— Pause")).toEqual([]);
+    expect(extractHashtags("— Break")).toEqual([]);
   });
 });
 
 describe("firstReviewTag", () => {
   test("picks the first REVIEW tag, skipping others", () => {
-    expect(firstReviewTag("#date Tag 4 und #thread offen")).toBe("thread");
-    expect(firstReviewTag("Spuren gefunden #decision")).toBe("decision");
-    expect(firstReviewTag("Improvisiert: Metta #npc")).toBe("npc");
-    expect(firstReviewTag("Kiste #loot")).toBe("loot");
+    expect(firstReviewTag("#date Day 4 and #thread open")).toBe("thread");
+    expect(firstReviewTag("Tracks found #decision")).toBe("decision");
+    expect(firstReviewTag("Improvised: Metta #npc")).toBe("npc");
+    expect(firstReviewTag("Chest #loot")).toBe("loot");
   });
 
   test("undefined without a review tag — those lines stay in the log", () => {
-    expect(firstReviewTag("#date Tag 4")).toBeUndefined();
-    expect(firstReviewTag("— Pause")).toBeUndefined();
+    expect(firstReviewTag("#date Day 4")).toBeUndefined();
+    expect(firstReviewTag("— Break")).toBeUndefined();
   });
 
   test("isReviewTag knows the four harvest tags", () => {
     for (const tag of ["thread", "npc", "loot", "decision"]) expect(isReviewTag(tag)).toBe(true);
-    for (const tag of ["date", "idee", ""]) expect(isReviewTag(tag)).toBe(false);
+    for (const tag of ["date", "idea", ""]) expect(isReviewTag(tag)).toBe(false);
   });
 
   test("idea rule: the row's tag list keeps every tag in order", () => {
     // use-review names an idea by its first tag, unless a harvest tag
     // appears later in the text.
-    expect(extractHashtags("Idee zum Hafen #idee #npc")).toEqual(["idee", "npc"]);
+    expect(extractHashtags("Idea for the harbour #idea #npc")).toEqual(["idea", "npc"]);
   });
 });
 
 describe("stripHashtags", () => {
   test("removes hashtags and collapses whitespace", () => {
-    expect(stripHashtags("Cliffhanger: Lichter in der Bucht #thread")).toBe(
-      "Cliffhanger: Lichter in der Bucht",
+    expect(stripHashtags("Cliffhanger: Lights in the bay #thread")).toBe(
+      "Cliffhanger: Lights in the bay",
     );
-    expect(stripHashtags("#thread Lichter #loot in der Bucht")).toBe("Lichter in der Bucht");
+    expect(stripHashtags("#thread Lights #loot in the bay")).toBe("Lights in the bay");
   });
 
   test("a row of nothing but hashtags keeps its text", () => {
@@ -71,9 +71,9 @@ describe("player-character notes", () => {
   test("hasPcTag matches the exact tag only", () => {
     expect(hasPcTag(extractHashtags("Item #pc #kaela"))).toBe(true);
     // `#pc` inside a longer tag is a DIFFERENT tag — no match.
-    expect(hasPcTag(extractHashtags("Notiz #pcs"))).toBe(false);
-    expect(hasPcTag(extractHashtags("Notiz #npc"))).toBe(false);
-    expect(hasPcTag(extractHashtags("Notiz ohne Tag"))).toBe(false);
+    expect(hasPcTag(extractHashtags("Note #pcs"))).toBe(false);
+    expect(hasPcTag(extractHashtags("Note #npc"))).toBe(false);
+    expect(hasPcTag(extractHashtags("Note without a tag"))).toBe(false);
   });
 
   test("hasPcTag ignores the writing case (#PC)", () => {
@@ -86,39 +86,39 @@ describe("player-character notes", () => {
   });
 
   test("pcGroupTag is undefined without a second tag", () => {
-    expect(pcGroupTag(extractHashtags("Karte für alle #pc"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Card for everyone #pc"))).toBeUndefined();
   });
 
   test("pcGroupTag skips the convention tags — those are no character names", () => {
     // The harvest tags (README) and `#date` describe the ROW, not a person.
-    expect(pcGroupTag(extractHashtags("Notiz #pc #thread"))).toBeUndefined();
-    expect(pcGroupTag(extractHashtags("Notiz #npc #pc"))).toBeUndefined();
-    expect(pcGroupTag(extractHashtags("Notiz #pc #date"))).toBeUndefined();
-    expect(pcGroupTag(extractHashtags("Notiz #pc #loot #decision"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Note #pc #thread"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Note #npc #pc"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Note #pc #date"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Note #pc #loot #decision"))).toBeUndefined();
     // …but a character tag next to one of them still wins.
-    expect(pcGroupTag(extractHashtags("Notiz #pc #thread #kaela"))).toBe("kaela");
-    expect(pcGroupTag(extractHashtags("Notiz #pc #kaela #thread"))).toBe("kaela");
+    expect(pcGroupTag(extractHashtags("Note #pc #thread #kaela"))).toBe("kaela");
+    expect(pcGroupTag(extractHashtags("Note #pc #kaela #thread"))).toBe("kaela");
   });
 
   test("a #pc row wins over the harvest tag it also carries", () => {
     // The two predicates the review model branches on, in that order.
-    const tags = extractHashtags("Rückblende für Kaela #pc #thread");
+    const tags = extractHashtags("Flashback for Kaela #pc #thread");
     expect(hasPcTag(tags)).toBe(true);
-    expect(firstReviewTag("Rückblende für Kaela #pc #thread")).toBe("thread");
+    expect(firstReviewTag("Flashback for Kaela #pc #thread")).toBe("thread");
   });
 
   test("groupByPcTag groups in first-appearance order, the general group last", () => {
     const rows = [
-      { text: "Geburtstags-Item für Kaela", tags: ["pc", "kaela"] },
-      { text: "Rückblende vorbereiten", tags: ["pc", "brann"] },
-      { text: "Allen eine Karte geben", tags: ["pc"] },
-      { text: "Karte für Kaela", tags: ["pc", "kaela"] },
+      { text: "Birthday item for Kaela", tags: ["pc", "kaela"] },
+      { text: "Prepare the flashback", tags: ["pc", "brann"] },
+      { text: "Give everyone a card", tags: ["pc"] },
+      { text: "Card for Kaela", tags: ["pc", "kaela"] },
     ];
     const grouped = groupByPcTag(rows, (row) => pcGroupTag(row.tags));
     expect(grouped.map((g) => g.tag)).toEqual(["kaela", "brann", undefined]);
     expect(grouped[0]?.items.map((e) => e.text)).toEqual([
-      "Geburtstags-Item für Kaela",
-      "Karte für Kaela",
+      "Birthday item for Kaela",
+      "Card for Kaela",
     ]);
   });
 

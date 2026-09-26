@@ -6,7 +6,7 @@ const note = (id: string, sceneId?: string) => ({
   id,
   at: "19:30",
   ...(sceneId === undefined ? {} : { sceneId }),
-  text: "Notiz",
+  text: "Note",
   reviewed: false,
   rev: 1,
 });

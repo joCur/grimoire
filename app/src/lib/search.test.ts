@@ -20,14 +20,14 @@ const t = translator("de");
 const tEn = translator("en");
 
 describe("kindLabel", () => {
-  test("maps the indexed kinds to German labels", () => {
-    expect(kindLabel("scene", t)).toBe("Szene");
-    expect(kindLabel("npc", t)).toBe("NPC");
-    expect(kindLabel("location", t)).toBe("Ort");
-    expect(kindLabel("chapter", t)).toBe("Kapitel");
-    expect(kindLabel("campaign", t)).toBe("Kampagne");
-    expect(kindLabel("session", t)).toBe("Session");
-    expect(kindLabel("glossary-term", t)).toBe("Glossar");
+  test("maps the indexed kinds to their catalog labels", () => {
+    expect(kindLabel("scene", t)).toBe(t("kind.scene"));
+    expect(kindLabel("npc", t)).toBe(t("kind.npc"));
+    expect(kindLabel("location", t)).toBe(t("kind.location"));
+    expect(kindLabel("chapter", t)).toBe(t("kind.chapter"));
+    expect(kindLabel("campaign", t)).toBe(t("kind.campaign"));
+    expect(kindLabel("session", t)).toBe(t("kind.session"));
+    expect(kindLabel("glossary-term", t)).toBe(t("kind.glossary"));
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
@@ -62,11 +62,11 @@ describe("kindIcon", () => {
 
 describe("contingencyScenes", () => {
   const tree = {
-    campaign: "beispiel",
+    campaign: "example",
     chapters: [
       {
         id: "01",
-        title: "Kapitel 1",
+        title: "Chapter 1",
         scenes: [
           { id: "a", title: "A", type: "planned", status: "ready", npcs: [], tags: [] },
           { id: "b", title: "B", type: "contingency", status: "draft", npcs: [], tags: [] },
@@ -89,52 +89,52 @@ describe("contingencyScenes", () => {
 
 describe("resultHref", () => {
   test("a chapter hit opens the chapter's own route by its id", () => {
-    expect(resultHref("beispiel", { kind: "chapter", id: "01-salzhafen" })).toBe(
-      "/campaigns/beispiel/chapters/01-salzhafen",
+    expect(resultHref("example", { kind: "chapter", id: "01-salt-harbour" })).toBe(
+      "/campaigns/example/chapters/01-salt-harbour",
     );
-    expect(resultHref("beispiel", { kind: "chapter", id: "höhle" })).toBe(
-      "/campaigns/beispiel/chapters/h%C3%B6hle",
+    expect(resultHref("example", { kind: "chapter", id: "café" })).toBe(
+      "/campaigns/example/chapters/caf%C3%A9",
     );
   });
 
   test("the campaign hit opens the campaign's route, the chapter overview", () => {
-    expect(resultHref("beispiel", { kind: "campaign", id: "beispiel" })).toBe(
-      "/campaigns/beispiel",
+    expect(resultHref("example", { kind: "campaign", id: "example" })).toBe(
+      "/campaigns/example",
     );
-    expect(resultHref("höhlen kampagne", { kind: "campaign", id: "höhlen kampagne" })).toBe(
-      "/campaigns/h%C3%B6hlen%20kampagne",
+    expect(resultHref("café campaign", { kind: "campaign", id: "café campaign" })).toBe(
+      "/campaigns/caf%C3%A9%20campaign",
     );
   });
 
   // The kinds without a reading view of their own open the page that holds
   // them, named by their id where there is one.
   test("a session opens its reading page", () => {
-    expect(resultHref("beispiel", { kind: "session", id: "s-42" })).toBe(
-      "/campaigns/beispiel/sessions/s-42",
+    expect(resultHref("example", { kind: "session", id: "s-42" })).toBe(
+      "/campaigns/example/sessions/s-42",
     );
   });
 
   test("a term opens the glossary page", () => {
-    expect(resultHref("beispiel", { kind: "glossary-term", id: "salzhafen" })).toBe(
-      "/campaigns/beispiel/glossary",
+    expect(resultHref("example", { kind: "glossary-term", id: "salt-harbour" })).toBe(
+      "/campaigns/example/glossary",
     );
   });
 
   test("a scene hit opens the scene's own route by its id", () => {
-    expect(resultHref("beispiel", { kind: "scene", id: "späh trupp" })).toBe(
-      "/campaigns/beispiel/scenes/sp%C3%A4h%20trupp",
+    expect(resultHref("example", { kind: "scene", id: "naïve scout" })).toBe(
+      "/campaigns/example/scenes/na%C3%AFve%20scout",
     );
   });
 
   test("an npc hit opens the npc's own route by its id", () => {
-    expect(resultHref("beispiel", { kind: "npc", id: "fenn" })).toBe(
-      "/campaigns/beispiel/npcs/fenn",
+    expect(resultHref("example", { kind: "npc", id: "fenn" })).toBe(
+      "/campaigns/example/npcs/fenn",
     );
   });
 
   test("a location hit opens the location's own route by its id", () => {
-    expect(resultHref("beispiel", { kind: "location", id: "leuchtturm" })).toBe(
-      "/campaigns/beispiel/locations/leuchtturm",
+    expect(resultHref("example", { kind: "location", id: "lighthouse" })).toBe(
+      "/campaigns/example/locations/lighthouse",
     );
   });
 });

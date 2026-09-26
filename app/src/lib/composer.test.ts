@@ -40,8 +40,8 @@ import {
   withDraftText,
 } from "./composer";
 
-// The German lines come from the catalog and the translator is passed in —
-// a test says which language it asserts.
+// The lines come from the catalog and the translator is passed in, so the
+// tests compare against catalog keys, never against spelled-out text.
 const t = translator("de");
 
 const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
@@ -96,7 +96,7 @@ describe("the draft and its two surfaces", () => {
     expect(draft.blocks.length).toBeGreaterThan(0);
   });
 
-  test("Blöcke → Roh → Blöcke keeps every fixture body byte-identical", () => {
+  test("blocks → markdown → blocks keeps every fixture body byte-identical", () => {
     for (const rel of fixtureFiles()) {
       const body = fixtureBody(rel);
       const blocks = composerDraft(body);
@@ -119,21 +119,21 @@ describe("the draft and its two surfaces", () => {
     expect(withDraftMode(raw, "markdown")).toBe(raw);
   });
 
-  test("text typed in Roh survives the way back into the blocks", () => {
-    const raw = withDraftText("## Flow\n\n> [!loot] Ein Silberring.\n");
+  test("text typed in the markdown surface survives the way back into the blocks", () => {
+    const raw = withDraftText("## Flow\n\n> [!loot] A silver ring.\n");
     const blocks = withDraftMode(raw, "blocks");
     if (blocks.mode !== "blocks") throw new Error("unreachable");
     expect(blocks.blocks.map((block) => block.type)).toEqual(["heading", "callout"]);
-    expect(draftBody(blocks)).toBe("## Flow\n\n> [!loot] Ein Silberring.\n");
+    expect(draftBody(blocks)).toBe("## Flow\n\n> [!loot] A silver ring.\n");
   });
 
-  test("an edit made in Blöcke is what Roh then shows", () => {
-    const draft = composerDraft("> [!note] alt\n");
+  test("an edit made in the blocks surface is what the markdown surface then shows", () => {
+    const draft = composerDraft("> [!note] old\n");
     if (draft.mode !== "blocks") throw new Error("unreachable");
-    const edited = withDraftBlocks(setBlockText(draft.blocks, at(draft.blocks, 0).id, "neu"));
+    const edited = withDraftBlocks(setBlockText(draft.blocks, at(draft.blocks, 0).id, "new"));
     const raw = withDraftMode(edited, "markdown");
     if (raw.mode !== "markdown") throw new Error("unreachable");
-    expect(raw.text).toBe("> [!note] neu\n");
+    expect(raw.text).toBe("> [!note] new\n");
   });
 
   test("reseeding keeps the surface — adopting the stored text is not a switch", () => {
@@ -156,8 +156,8 @@ describe("the draft and its two surfaces", () => {
     if (draft.mode !== "blocks") throw new Error("unreachable");
     expect(draft.blocks).toEqual([]);
     expect(draftBody(draft)).toBe("");
-    const filled = insertAt(draft.blocks, { index: 0 }, makeCallout("note", "erster Block"));
-    expect(serializeBlocks(filled)).toBe("> [!note] erster Block\n");
+    const filled = insertAt(draft.blocks, { index: 0 }, makeCallout("note", "first block"));
+    expect(serializeBlocks(filled)).toBe("> [!note] first block\n");
   });
 });
 
@@ -166,12 +166,12 @@ describe("editing a block", () => {
     const body = fixtureBody(ARRIVAL);
     const blocks = parseBlocks(body);
     const readaloud = at(blocks, 2);
-    const next = setBlockText(blocks, readaloud.id, "Der Turm steht still.");
+    const next = setBlockText(blocks, readaloud.id, "The tower stands still.");
 
     expect(at(next, 2).source).toBeUndefined();
     expect(next.filter((block) => block.source === undefined)).toHaveLength(1);
     expect(serializeBlocks(next)).toBe(
-      body.replace(at(blocks, 2).source ?? "", "> [!readaloud] Der Turm steht still."),
+      body.replace(at(blocks, 2).source ?? "", "> [!readaloud] The tower stands still."),
     );
   });
 
@@ -179,14 +179,14 @@ describe("editing a block", () => {
     const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const first = section(blocks, 2);
-    const next = setBlockText(blocks, first.id, "sie schweigen");
+    const next = setBlockText(blocks, first.id, "they stay silent");
 
     const edited = section(next, 2);
-    expect(edited.condition).toBe("sie schweigen");
+    expect(edited.condition).toBe("they stay silent");
     expect(edited.source).toBeUndefined();
     expect(edited.children).toEqual(first.children);
     expect(serializeBlocks(next)).toBe(
-      body.replace("## If: sie geben zu, für Jorna zu arbeiten", "## If: sie schweigen"),
+      body.replace("## If: sie geben zu, für Jorna zu arbeiten", "## If: they stay silent"),
     );
   });
 
@@ -194,13 +194,13 @@ describe("editing a block", () => {
     const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const child = at(section(blocks, 2).children, 2);
-    const next = setBlockText(blocks, child.id, "Jorna erfährt davon.");
+    const next = setBlockText(blocks, child.id, "Jorna hears of it.");
 
     const edited = section(next, 2);
     expect(edited.source).toBe("## If: sie geben zu, für Jorna zu arbeiten");
     expect(at(edited.children, 2).source).toBeUndefined();
     expect(at(edited.children, 0).source).toBe(at(section(blocks, 2).children, 0).source);
-    expect(serializeBlocks(next)).toContain("> [!note] Jorna erfährt davon.");
+    expect(serializeBlocks(next)).toContain("> [!note] Jorna hears of it.");
   });
 
   test("a heading's level changes without keeping the old heading line", () => {
@@ -223,7 +223,7 @@ describe("insert, move, remove", () => {
   test("a new callout lands between two blocks and nothing else moves", () => {
     const body = fixtureBody(ARRIVAL);
     const blocks = parseBlocks(body);
-    const loot = makeCallout("loot", "Ein Silberring am Daumen.");
+    const loot = makeCallout("loot", "A silver ring on the thumb.");
     const next = insertAt(blocks, { index: 3 }, loot);
 
     expect(next.map((block) => block.type)).toEqual([
@@ -236,7 +236,7 @@ describe("insert, move, remove", () => {
       "callout",
     ]);
     const markdown = serializeBlocks(next);
-    expect(markdown).toContain("> [!loot] Ein Silberring am Daumen.");
+    expect(markdown).toContain("> [!loot] A silver ring on the thumb.");
     // Insert then remove is the identity — the scaffolding went back in place.
     expect(serializeBlocks(removeAt(next, loot.id))).toBe(body);
   });
@@ -245,7 +245,7 @@ describe("insert, move, remove", () => {
     const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const target = section(blocks, 3);
-    const heading = makeHeading(3, "Danach");
+    const heading = makeHeading(3, "After");
     const next = insertAt(blocks, { sectionId: target.id, index: 0 }, heading);
 
     const grown = section(next, 3);
@@ -253,42 +253,42 @@ describe("insert, move, remove", () => {
     expect(at(grown.children, 0).id).toBe(heading.id);
     // The section itself was not rewritten — its heading line is still verbatim.
     expect(grown.source).toBe(target.source);
-    expect(serializeBlocks(next)).toContain("### Danach");
+    expect(serializeBlocks(next)).toContain("### After");
     expect(serializeBlocks(removeAt(next, heading.id))).toBe(body);
   });
 
   test("the first child of a childless section gets a blank line of room", () => {
     // `## If: a` as the last line of a body has a gap of one newline; the child
     // would otherwise land directly under the heading.
-    const blocks = parseBlocks("## Flow\n\n## If: sie fliehen\n");
+    const blocks = parseBlocks("## Flow\n\n## If: they flee\n");
     const target = section(blocks, 1);
     const next = insertAt(blocks, { sectionId: target.id, index: 0 }, makeCallout("check", "DC 13"));
     expect(serializeBlocks(next)).toBe(
-      "## Flow\n\n## If: sie fliehen\n\n> [!check] DC 13\n",
+      "## Flow\n\n## If: they flee\n\n> [!check] DC 13\n",
     );
     // …and the heading itself was not re-rendered from its fields.
-    expect(section(next, 1).source).toBe("## If: sie fliehen");
+    expect(section(next, 1).source).toBe("## If: they flee");
   });
 
   test("the first child of a section with children gets its blank line too", () => {
     // A hand-written body may glue the first child to the heading; inserting
     // ABOVE that child must not glue the new block to the `## If:` line.
-    const blocks = parseBlocks("## Flow\n\n## If: sie fliehen\ndrin\n");
+    const blocks = parseBlocks("## Flow\n\n## If: they flee\ninside\n");
     const target = section(blocks, 1);
     expect(target.children).toHaveLength(1);
     const next = insertAt(blocks, { sectionId: target.id, index: 0 }, makeCallout("check", "DC 13"));
     expect(serializeBlocks(next)).toBe(
-      "## Flow\n\n## If: sie fliehen\n\n> [!check] DC 13\n\ndrin\n",
+      "## Flow\n\n## If: they flee\n\n> [!check] DC 13\n\ninside\n",
     );
-    expect(section(next, 1).source).toBe("## If: sie fliehen");
+    expect(section(next, 1).source).toBe("## If: they flee");
   });
 
   test("inserting further down leaves the heading's own gap alone", () => {
-    const blocks = parseBlocks("## If: sie fliehen\ndrin\n");
+    const blocks = parseBlocks("## If: they flee\ninside\n");
     const target = section(blocks, 0);
-    const next = insertAt(blocks, { sectionId: target.id, index: 1 }, makeText("danach"));
+    const next = insertAt(blocks, { sectionId: target.id, index: 1 }, makeText("afterwards"));
     // The glued first line is the DM's text — only the new block gets room.
-    expect(serializeBlocks(next)).toBe("## If: sie fliehen\ndrin\n\ndanach\n");
+    expect(serializeBlocks(next)).toBe("## If: they flee\ninside\n\nafterwards\n");
   });
 
   test("moving swaps two neighbours and leaves the body's whitespace alone", () => {
@@ -357,7 +357,7 @@ describe("insert, move, remove", () => {
   });
 
   test("removing the last block of a raw-only body leaves an empty draft", () => {
-    const blocks = parseBlocks("> [!warning] unbekannt\n");
+    const blocks = parseBlocks("> [!warning] unknown\n");
     expect(at(blocks, 0).type).toBe("markdown");
     expect(removeAt(blocks, at(blocks, 0).id)).toEqual([]);
   });
@@ -366,7 +366,7 @@ describe("insert, move, remove", () => {
 describe("what blocks a save", () => {
   /** A section with one text child, ready to be typed into. */
   function withChild(text: string): { blocks: SceneBlock[]; childId: string } {
-    const blocks = parseBlocks("## Flow\n\n## If: sie lügen\n\ndrin\n");
+    const blocks = parseBlocks("## Flow\n\n## If: they lie\n\ninside\n");
     const child = at(section(blocks, 1).children, 0);
     return { blocks: setBlockText(blocks, child.id, text), childId: child.id };
   }
@@ -381,7 +381,7 @@ describe("what blocks a save", () => {
     const { blocks, childId } = withChild("## Flow");
     const issues = composerIssues(blocks, t);
     expect(Object.keys(issues)).toEqual([childId]);
-    expect(issues[childId]).toContain("beendet den Falls-Abschnitt");
+    expect(issues[childId]).toBe(t("composer.issue.sectionEscape"));
     // …and it is a HINT: the text the DM typed is still there, unchanged.
     const child = at(section(blocks, 1).children, 0);
     if (child.type !== "text") throw new Error("expected a text block");
@@ -389,7 +389,7 @@ describe("what blocks a save", () => {
   });
 
   test("…because the next parse really does pull it out of the section", () => {
-    const { blocks } = withChild("## Flow\n\nnoch mehr");
+    const { blocks } = withChild("## Flow\n\nmore still");
     // This is the damage the check prevents: the composer shows one section
     // with one child, the body comes back with a heading and a paragraph
     // OUTSIDE the branch.
@@ -406,7 +406,7 @@ describe("what blocks a save", () => {
   });
 
   test("a `#` counts as well, a `###` does not", () => {
-    expect(Object.keys(composerIssues(withChild("# Kapitel").blocks, t))).toHaveLength(1);
+    expect(Object.keys(composerIssues(withChild("# Chapter").blocks, t))).toHaveLength(1);
     expect(composerIssues(withChild("### Detail").blocks, t)).toEqual({});
   });
 
@@ -414,12 +414,12 @@ describe("what blocks a save", () => {
     // The parser's own reading decides — a fence, a blockquote and an indented
     // code block all hold their `##` harmlessly (README: the format degrades).
     expect(composerIssues(withChild("```md\n## Flow\n```").blocks, t)).toEqual({});
-    expect(composerIssues(withChild("> [!note] x\n> ## keine Überschrift").blocks, t)).toEqual({});
-    expect(composerIssues(withChild("Ein Absatz über ## Rauten.").blocks, t)).toEqual({});
+    expect(composerIssues(withChild("> [!note] x\n> ## no heading").blocks, t)).toEqual({});
+    expect(composerIssues(withChild("A paragraph about ## hashes.").blocks, t)).toEqual({});
   });
 
   test("a heading child that would end the section is named too", () => {
-    const blocks = parseBlocks("## If: sie lügen\n\n### Detail\n");
+    const blocks = parseBlocks("## If: they lie\n\n### Detail\n");
     const child = at(section(blocks, 0).children, 0);
     // The picker never offers level 2 inside a section, but the depth control shows a
     // level the BODY brought — the guard sits behind the UI, not in it.
@@ -429,12 +429,12 @@ describe("what blocks a save", () => {
 
   test("a `##` at document level is a perfectly normal heading", () => {
     const blocks = parseBlocks("## Flow\n\nText\n");
-    expect(composerIssues(setBlockText(blocks, at(blocks, 1).id, "## Noch eine"), t)).toEqual({});
-    expect(composerIssues(insertAt(blocks, { index: 2 }, makeHeading(2, "Danach")), t)).toEqual({});
+    expect(composerIssues(setBlockText(blocks, at(blocks, 1).id, "## Another one"), t)).toEqual({});
+    expect(composerIssues(insertAt(blocks, { index: 2 }, makeHeading(2, "After")), t)).toEqual({});
   });
 
   test("a fresh block inserted into a section is clean", () => {
-    const blocks = parseBlocks("## If: sie lügen\n\ndrin\n");
+    const blocks = parseBlocks("## If: they lie\n\ninside\n");
     const target = section(blocks, 0);
     for (const option of newBlockOptions("section", t)) {
       const next = insertAt(blocks, { sectionId: target.id, index: 0 }, option.create());
@@ -445,16 +445,28 @@ describe("what blocks a save", () => {
 
 describe("the type picker", () => {
   test("the document offers the six callouts, both plain blocks and a section", () => {
-    expect(newBlockOptions("body", t).map((option) => option.label)).toEqual([
-      "Vorlesetext",
-      "Probe",
-      "Geheim",
-      "Ergebnis",
-      "Beute",
-      "Notiz",
-      "Überschrift",
-      "Text",
-      "Falls-Abschnitt",
+    const options = newBlockOptions("body", t);
+    expect(options.map((option) => option.key)).toEqual([
+      "callout:readaloud",
+      "callout:check",
+      "callout:secret",
+      "callout:outcome",
+      "callout:loot",
+      "callout:note",
+      "heading",
+      "text",
+      "ifSection",
+    ]);
+    expect(options.map((option) => option.label)).toEqual([
+      t("markdown.callout.readaloud"),
+      t("markdown.callout.check"),
+      t("markdown.callout.secret"),
+      t("markdown.callout.outcome"),
+      t("markdown.callout.loot"),
+      t("markdown.callout.note"),
+      t("composer.blockType.heading"),
+      t("composer.blockType.text"),
+      t("composer.blockType.ifSection"),
     ]);
   });
 

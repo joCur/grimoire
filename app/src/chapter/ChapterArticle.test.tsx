@@ -5,10 +5,14 @@ import type { Chapter } from "@grimoire/shared/chapter";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { translator } from "@/i18n/format";
+
 import { ChapterArticle } from "./ChapterArticle";
 
+const t = translator("de");
+
 function chapter(over: Partial<Chapter> = {}): Chapter {
-  return { id: "01-salzhafen", title: "Salzhafen", body: "", rev: 1, ...over };
+  return { id: "01-salt-harbour", title: "Salt Harbour", body: "", rev: 1, ...over };
 }
 
 function render(value: Chapter): string {
@@ -17,10 +21,10 @@ function render(value: Chapter): string {
 
 describe("the article of a chapter", () => {
   test("renders title plus text", () => {
-    const html = render(chapter({ body: "## Ziel\n\nLicht an.\n" }));
-    expect(html).toContain("Salzhafen");
-    expect(html).toContain("Licht an.");
-    expect(html).not.toContain("Geplante Szene");
+    const html = render(chapter({ body: "## Goal\n\nLight on.\n" }));
+    expect(html).toContain("Salt Harbour");
+    expect(html).toContain("Light on.");
+    expect(html).not.toContain(t("sceneArticle.type.planned"));
   });
 
   test("the action slot stays ONE spaced group", () => {
@@ -31,12 +35,12 @@ describe("the article of a chapter", () => {
       <>
         {/* Stand-in caller markup, not app copy — the literals stay, in an
             expression container so the i18n lint rule is satisfied. */}
-        <button type="button">{"Bearbeiten"}</button>
-        <button type="button">{"Eigenschaften"}</button>
+        <button type="button">{"first"}</button>
+        <button type="button">{"second"}</button>
       </>
     );
     const grouped =
-      /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
+      /<span class="[^"]*gap-2[^"]*"><button[^>]*>first<\/button><button[^>]*>second<\/button><\/span>/;
     expect(renderToStaticMarkup(<ChapterArticle chapter={chapter()} actions={actions} />)).toMatch(
       grouped,
     );
@@ -45,6 +49,6 @@ describe("the article of a chapter", () => {
   });
 
   test("a chapter without a title is shown under its id", () => {
-    expect(render(chapter({ title: "" }))).toContain("01-salzhafen");
+    expect(render(chapter({ title: "" }))).toContain("01-salt-harbour");
   });
 });

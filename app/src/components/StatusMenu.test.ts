@@ -23,8 +23,8 @@ describe("statusSelectionWrites", () => {
   });
 
   test("while a write runs, its TARGET is the value shown", () => {
-    // The trigger already reads „Aktiv" (dimmed) — selecting it again is the
-    // same no-op, not a second swap.
+    // The trigger already shows the active status (dimmed) — selecting it
+    // again is the same no-op, not a second swap.
     expect(statusSelectionWrites("active", "planned", "active")).toBe(false);
     // …and the stored value is selectable again, which is how a DM takes it
     // back while the write is still in flight.
