@@ -22,6 +22,7 @@ import { reportServerBuild } from "@/lib/build-id";
 import { LOCATION_QUERY_ROOTS } from "@/location/location-query";
 import { NPC_QUERY_ROOTS } from "@/npc/npc-query";
 import { SCENE_QUERY_ROOTS } from "@/scene/scene-query";
+import { SESSION_QUERY_ROOTS } from "@/session/session-query";
 import { THREAD_QUERY_ROOTS } from "@/thread/thread-query";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -58,13 +59,11 @@ export function useCampaignVersion(campaign: string): void {
     if (previous.version === data.version) return;
     // Something changed on the server — refetch everything read from this
     // campaign. The campaign's, a chapter's, a scene's, an npc's and a
-    // location's reads name their own key roots in their slices (ADR #31). "active-session" rides along: a session
-    // ended in another tab, a hand-edited `ended`, or simply midnight passing
-    // must reach the global live indicator without a reload.
-    // "last-session" is the review's session (ended or not) — same reasoning,
-    // and "session"/"sessions" are the reads of one evening and the list of
-    // evenings. The ideas and each chapter's threads name their key roots in
-    // their slices too; the threads are keyed per chapter below the campaign,
+    // location's reads name their own key roots in their slices (ADR #31). So
+    // do the sessions: the running one, the list and each evening share one
+    // root — a session ended in another tab must reach the global live
+    // indicator without a reload. The ideas and each chapter's threads name
+    // their key roots in their slices too; the threads are keyed per chapter below the campaign,
     // and the prefix reaches all of them. The glossary terms, the knowledge
     // items and their order name theirs in their slices as well. An OPEN row
     // on their pages keeps the `rev` it was opened with
@@ -78,10 +77,7 @@ export function useCampaignVersion(campaign: string): void {
       ...NPC_QUERY_ROOTS,
       ...LOCATION_QUERY_ROOTS,
       "search",
-      "active-session",
-      "last-session",
-      "session",
-      "sessions",
+      ...SESSION_QUERY_ROOTS,
       ...THREAD_QUERY_ROOTS,
       ...IDEA_QUERY_ROOTS,
       ...GLOSSARY_TERM_QUERY_ROOTS,

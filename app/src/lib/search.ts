@@ -23,6 +23,7 @@ import type { MessageKey, Translate } from "@/i18n";
 import { locationHref } from "@/location/location-links";
 import { npcHref } from "@/npc/npc-links";
 import { sceneHref } from "@/scene/scene-links";
+import { sessionHref } from "@/session/session-links";
 
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
@@ -109,7 +110,7 @@ export function resultHref(campaign: string, result: Pick<SearchResult, "kind" |
     case "location":
       return locationHref(encodeURIComponent(campaign), result.id);
     case "session":
-      return `${scope}/sessions/${encodeURIComponent(result.id)}`;
+      return sessionHref(encodeURIComponent(campaign), result.id);
     case "glossary-term":
       return glossaryHref(encodeURIComponent(campaign));
     default:

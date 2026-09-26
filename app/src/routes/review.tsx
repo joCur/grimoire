@@ -6,8 +6,9 @@
 //
 // The server is the truth: every action writes through its endpoint, and what
 // comes back — the thread that was created, the npc that was created, plus
-// the session the log row was marked in or the idea that was ticked off — is
-// seeded into the caches. An npc is created on its own resource
+// the log entry that was reviewed or the idea that was ticked off — is
+// seeded into the caches. The page harvests the first session of the list:
+// the last started one, ended or not. An npc is created on its own resource
 // (`POST …/npcs`) with the note as its text; when the id already names an npc
 // with content, nothing is written, the dialog says so, and the row stays
 // open. Adopting a thread creates a thread of the active chapter
@@ -18,14 +19,15 @@
 // Mobile: the desk task stays usable — one column, stacked cards.
 
 import type { Idea } from "@grimoire/shared/idea";
+import type { LogEntry } from "@grimoire/shared/log-entry";
+import type { Npc } from "@grimoire/shared/npc";
 import type { Thread } from "@grimoire/shared/thread";
-import type { Npc, SessionResponse } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { fetchTree, markLogLineSeen } from "@/api";
+import { fetchTree } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
@@ -40,11 +42,13 @@ import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
 import { pcGroups, useReviewEntries } from "@/lib/use-review";
-import { seedSession } from "@/lib/use-session";
 import { isWriteConflict } from "@/lib/write-with-rev";
 import { NpcFromNoteDialog } from "@/npc/NpcFromNoteDialog";
 import { createNpc } from "@/npc/npc-api";
 import { npcKey, npcsKey } from "@/npc/npc-query";
+import { reviewLogEntry } from "@/session/log-entry-api";
+import { reviewFailureKey } from "@/session/log-entry-review";
+import { putLogEntry, sessionScopeKey } from "@/session/session-query";
 import { createThread } from "@/thread/thread-api";
 import { threadsKey, withThread } from "@/thread/thread-query";
 import { ThreadSummary } from "@/thread/ThreadSummary";
@@ -63,7 +67,7 @@ interface ActResult {
   npc?: Npc;
   /** The thread an adoption created. */
   thread?: Thread;
-  session?: SessionResponse;
+  logEntry?: LogEntry;
   idea?: Idea;
 }
 
@@ -110,10 +114,9 @@ export function ReviewRoute() {
   const [npcEntry, setNpcEntry] = useState<ReviewEntry>();
   // The keep action writes nothing: the entry stays open (and counted) for the
   // next wrap-up, the marker is cosmetic and lives for this sitting only.
-  // Campaign-scoped like the rest of the review memory: the entry key is only
-  // the line index in its session, so an unscoped set would carry a keep mark
-  // over to the same index in the NEXT campaign (the route param changes
-  // without remounting this component).
+  // Campaign-scoped like the rest of the review memory: the route param
+  // changes without remounting this component, so an unscoped set would carry
+  // a keep mark over into the NEXT campaign.
   const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set<string>());
   const keptKey = (entry: ReviewEntry) => `${campaign}:${entry.key}`;
 
@@ -156,19 +159,26 @@ export function ReviewRoute() {
         return { ...made, idea: await tickIdea(campaign, entry.idea) };
       }
       // The session comes from the server (the last started one — which may
-      // be yesterday's). Without it there is nothing to mark.
-      if (model.sessionId === "") throw new Error("no session to mark in");
-      return { ...made, session: await markLogLineSeen(campaign, model.sessionId, entry.id) };
+      // have started yesterday). Without it there is nothing to review.
+      if (entry.logEntry === undefined || model.sessionId === "") {
+        throw new Error("no log entry to review");
+      }
+      return {
+        ...made,
+        logEntry: await reviewLogEntry(campaign, model.sessionId, entry.logEntry),
+      };
     },
     onSuccess: (result, vars) => {
       // Every endpoint returns what it wrote: seed the npc's own query.
       if (result.npc !== undefined) {
         queryClient.setQueryData(npcKey(campaign, result.npc.id), result.npc);
       }
-      // A log row's done-state lives in the session, an idea's on the idea —
-      // the live aside and the topbar read both, so they see the fresh answer
-      // (same rule as components/PcReminders).
-      if (result.session !== undefined) seedSession(queryClient, campaign, result.session);
+      // A log entry's done-state lives in its session, an idea's on the idea
+      // — the live aside and the topbar read both, so they see the fresh
+      // answer (same rule as routes/PcReminders).
+      if (result.logEntry !== undefined) {
+        putLogEntry(queryClient, campaign, model.sessionId, result.logEntry);
+      }
       const { idea, thread } = result;
       if (idea !== undefined) {
         queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withIdea(list, idea));
@@ -189,10 +199,13 @@ export function ReviewRoute() {
       remember(campaign, vars.entry.key, vars.action, thread?.id);
       if (vars.action === "npc") setNpcEntry(undefined);
     },
-    onError: (error) => {
-      // The idea moved since it was read: read the ideas again, so the next
-      // attempt carries its current guard.
-      if (isWriteConflict(error)) void queryClient.invalidateQueries({ queryKey: ideasKey(campaign) });
+    onError: (error, { entry }) => {
+      // The row moved since it was read: read it again, so the next attempt
+      // carries its current guard.
+      if (!isWriteConflict(error)) return;
+      void queryClient.invalidateQueries({
+        queryKey: entry.idea !== undefined ? ideasKey(campaign) : sessionScopeKey(campaign),
+      });
     },
   });
 
@@ -204,7 +217,11 @@ export function ReviewRoute() {
     act.isError && act.variables?.action === "npc" ? npcFailure(act.error, t) : undefined;
   const cardError = (entry: ReviewEntry) =>
     act.isError && act.variables?.action !== "npc" && act.variables?.entry.key === entry.key
-      ? t(tickFailureKey(act.error, "review.action.failed"))
+      ? t(
+          entry.logEntry !== undefined
+            ? reviewFailureKey(act.error, "review.action.failed")
+            : tickFailureKey(act.error, "review.action.failed"),
+        )
       : undefined;
 
   const harvest = model.entries.filter((entry) => entry.section === "harvest");

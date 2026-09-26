@@ -1,10 +1,12 @@
 // The live aside's reminder list.
 //
-// The open `#pc` entries of the log and the ideas, grouped by character, as a
-// compact checkable list. It reads the SAME model the wrap-up page and the
-// topbar counter read (lib/use-review) and does the same two writes: a log row
-// is marked reviewed, an idea ticked off. Nothing is adopted here — a PC note
-// is a reminder for the table, not campaign content.
+// The open `#pc` entries of the session's log and of the ideas, grouped by
+// character, as a compact checkable list. It joins two entities — the session
+// and the idea — so it sits with the page that composes them, not in either
+// slice. It reads the SAME model the wrap-up page and the topbar counter read
+// (lib/use-review) and does the same two writes: a log entry is marked
+// reviewed, an idea ticked off, each against its own guard. Nothing is
+// adopted here — a PC note is a reminder for the table, not campaign content.
 //
 // The list renders only when there is something to remind of: an empty
 // heading in the aside would cost the space the log needs. Once the LAST
@@ -13,11 +15,10 @@
 // the focus over.
 
 import type { Idea } from "@grimoire/shared/idea";
-import type { SessionResponse } from "@grimoire/shared/types";
+import type { LogEntry } from "@grimoire/shared/log-entry";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { markLogLineSeen } from "@/api";
 import { useT } from "@/i18n";
 import { tickIdea } from "@/idea/idea-api";
 import { ideasKey, withIdea } from "@/idea/idea-query";
@@ -25,7 +26,9 @@ import { tickFailureKey } from "@/idea/idea-tick";
 import { isWriteConflict } from "@/lib/write-with-rev";
 import type { ReviewEntry } from "@/lib/use-review";
 import { pcGroups, useReviewEntries } from "@/lib/use-review";
-import { seedSession } from "@/lib/use-session";
+import { reviewLogEntry } from "@/session/log-entry-api";
+import { reviewFailureKey } from "@/session/log-entry-review";
+import { putLogEntry, sessionScopeKey } from "@/session/session-query";
 
 export function PcReminders({ campaign }: { campaign: string }) {
   const t = useT();
@@ -37,22 +40,29 @@ export function PcReminders({ campaign }: { campaign: string }) {
   const [cleared, setCleared] = useState(false);
 
   const done = useMutation({
-    mutationFn: (entry: ReviewEntry): Promise<SessionResponse | Idea> => {
-      if (entry.idea !== undefined) return tickIdea(campaign, entry.idea);
-      if (model.sessionId === "") throw new Error("no session to mark in");
-      return markLogLineSeen(campaign, model.sessionId, entry.id);
+    mutationFn: async (entry: ReviewEntry): Promise<{ idea?: Idea; logEntry?: LogEntry }> => {
+      if (entry.idea !== undefined) return { idea: await tickIdea(campaign, entry.idea) };
+      if (entry.logEntry === undefined || model.sessionId === "") {
+        throw new Error("no log entry to review");
+      }
+      return { logEntry: await reviewLogEntry(campaign, model.sessionId, entry.logEntry) };
     },
-    onSuccess: (answer) => {
+    onSuccess: ({ idea, logEntry }) => {
       setCleared(true);
-      // The done-state of a log row lives in the session, an idea's on the
-      // idea — the answer is the fresh one either way.
-      if ("log" in answer) seedSession(queryClient, campaign, answer);
-      else queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withIdea(list, answer));
+      // The done-state of a log entry lives in its session, an idea's on the
+      // idea — the answer is the fresh row either way.
+      if (logEntry !== undefined) putLogEntry(queryClient, campaign, model.sessionId, logEntry);
+      if (idea !== undefined) {
+        queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withIdea(list, idea));
+      }
     },
-    onError: (error) => {
-      // The idea moved since it was read: read the ideas again, so the next
-      // tick carries its current guard.
-      if (isWriteConflict(error)) void queryClient.invalidateQueries({ queryKey: ideasKey(campaign) });
+    onError: (error, entry) => {
+      // The row moved since it was read: read it again, so the next tick
+      // carries its current guard.
+      if (!isWriteConflict(error)) return;
+      void queryClient.invalidateQueries({
+        queryKey: entry.idea !== undefined ? ideasKey(campaign) : sessionScopeKey(campaign),
+      });
     },
   });
 
@@ -101,7 +111,11 @@ export function PcReminders({ campaign }: { campaign: string }) {
       </div>
       {done.isError && (
         <p className="pt-1.5 text-[11.5px] text-destructive" aria-live="polite">
-          {t(tickFailureKey(done.error, "live.pc.failed"))}
+          {t(
+            done.variables?.logEntry !== undefined
+              ? reviewFailureKey(done.error, "live.pc.failed")
+              : tickFailureKey(done.error, "live.pc.failed"),
+          )}
         </p>
       )}
     </section>

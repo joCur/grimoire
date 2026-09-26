@@ -104,6 +104,16 @@ export function updateSession(
   );
 }
 
+/** Fold a log entry a write answered into its session — the review's write. */
+export function putLogEntry(
+  queryClient: QueryClient,
+  campaign: string,
+  sessionId: string,
+  entry: LogEntry,
+): void {
+  updateSession(queryClient, campaign, sessionId, (session) => withLogEntry(session, entry));
+}
+
 /**
  * Put the session a session write answered into the caches: under its id, as
  * the running session while it is not ended (an ended one stops being the

@@ -9,11 +9,16 @@
 // scene it opens on, and where the "next scene" step under the open one
 // leads, are both read out of that order (lib/scene-order.ts).
 //
-// The session on the server is the truth: every write
-// returns the fresh session, the "played" checkmark comes from its played
-// scenes (server-maintained — never faked client-side). WHICH session is running is
-// the server's answer too (GET /campaigns/:campaign/session) — a session
-// past midnight lives in yesterday's session.
+// The session on the server is the truth: every write answers the row it
+// wrote, and the "played" checkmark comes from the session's played scenes —
+// never faked client-side. A scene is recorded as played when the DM leaves
+// it with "Nächste Szene" after taking a note in it (session/NextSceneStep).
+// WHICH session is running is the server's answer too (`?running=true`) — a
+// session that runs past midnight keeps running.
+//
+// The page composes slices: the scenes, the npc and location cards, the
+// session's log, start prompt and "next scene" step, and the reminders that
+// join the session's log with the ideas (./PcReminders.tsx).
 //
 // Client state is exactly two things: the selected scene and which entity the
 // detail drawer shows. Aside cards therefore do NOT navigate here
@@ -22,30 +27,34 @@
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
-import type { SceneSummary, SessionLogEntry } from "@grimoire/shared/types";
+import type { SceneSummary } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
+import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { appendLog, endSession, fetchTree } from "@/api";
+import { fetchTree } from "@/api";
 import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
 import { LocationCard } from "@/location/LocationCard";
 import type { OpenTarget } from "@/lib/open-target";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/npc/NpcCard";
-import { PcReminders } from "@/components/PcReminders";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
 import { initialSessionScene, nextSessionScene } from "@/lib/scene-order";
 import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
 import { cn } from "@/lib/utils";
-import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
 import { SceneArticle } from "@/scene/SceneArticle";
 import { sceneHref } from "@/scene/scene-links";
 import { sceneQuery } from "@/scene/scene-query";
 import { isSceneDone } from "@/scene/scene-status";
+import { NextSceneStep } from "@/session/NextSceneStep";
+import { playedSceneIds } from "@/session/played-scene-rule";
+import { SessionLog } from "@/session/SessionLog";
+import { SessionStart } from "@/session/SessionStart";
+import { useRunningSession } from "@/session/use-session";
+
+import { PcReminders } from "./PcReminders";
 
 export function LiveRoute() {
   const { campaign = "" } = useParams();
@@ -95,7 +104,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
 
 function LiveDesktop({ campaign }: { campaign: string }) {
   const t = useT();
-  const session = useActiveSession(campaign);
+  const session = useRunningSession(campaign);
   const tree = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
@@ -130,7 +139,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // untouched while the drawer opens and closes.
   const [drawerTarget, setDrawerTarget] = useState<OpenTarget>();
 
-  const playedIds = session.data?.scenesPlayed ?? [];
+  const playedIds = session.data === undefined || session.data === null ? [] : playedSceneIds(session.data);
 
   // Only the tree decides whether a scene's `location` is an entity: the
   // format allows a free string there, and that must stay plain text instead
@@ -142,7 +151,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
     return <p className="px-7 pt-10 text-muted-foreground">{t("live.session.loading")}</p>;
   }
   if (session.data === null) {
-    return <NoSessionYet campaign={campaign} />;
+    return <SessionStart campaign={campaign} />;
   }
   if (session.isError || session.data === undefined) {
     return <p className="px-7 pt-10 text-muted-foreground">{t("live.session.unloadable")}</p>;
@@ -226,7 +235,13 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                 <LiveScene key={selected.id} campaign={campaign} id={selected.id} />
               </EntityRefDrawerTarget>
               {next !== undefined && (
-                <NextSceneStep title={next.title} onPick={() => setSelectedId(next.id)} />
+                <NextSceneStep
+                  campaign={campaign}
+                  session={session.data}
+                  left={selected.id}
+                  next={next}
+                  onNext={setSelectedId}
+                />
               )}
             </>
           )}
@@ -265,7 +280,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             <p className="text-[12.5px] text-muted-foreground">{t("live.scene.noNpcs")}</p>
           )}
         </div>
-        <LogPanel campaign={campaign} log={session.data.log} activeSceneId={selected?.id} />
+        <SessionLog campaign={campaign} session={session.data} activeSceneId={selected?.id} />
       </aside>
 
       {/* A reference INSIDE the drawer switches the drawer, it does not
@@ -338,7 +353,7 @@ function PlayedGroup({
 }
 
 /** Left-nav row per the prototype: icon, brass left edge + darker bg when
- * active, played checkmark from scenes_played. `dimmed` is the "Gespielt"
+ * active, played checkmark from the session's played scenes. `dimmed` is the "Gespielt"
  * group's quieter treatment — an active row stays readable. */
 function SceneNavRow({
   scene,
@@ -401,162 +416,3 @@ function LiveScene({ campaign, id }: { campaign: string; id: string }) {
   return <SceneArticle scene={data} tree={tree.data} variant="live" />;
 }
 
-/**
- * The one step of the evening, under the open scene: it names where the DM
- * reaches next so the left list does not have to be searched mid-sentence
- * (UI-BRIEF §3).
- *
- * It lives at the END of the CENTER column, which is the whole placement
- * decision: the Schnellnotiz is the second most important element of this view
- * and sits in the aside, so a step here can neither cover it nor push itself
- * between a scene and the field the DM types into. Quiet, one line, the title
- * in the label — a step nobody can read at a glance is not a step.
- */
-function NextSceneStep({ title, onPick }: { title: string; onPick: () => void }) {
-  const t = useT();
-  return (
-    <div className="mt-8 border-t border-border pt-4">
-      <button
-        type="button"
-        onClick={onPick}
-        className="group flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13.5px] text-body-secondary transition-colors hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-reduce:transition-none"
-      >
-        <span className="min-w-0 flex-1 truncate">{t("live.next", { title })}</span>
-        <ArrowRight
-          aria-hidden
-          size={15}
-          className="flex-none text-muted-foreground group-hover:text-primary"
-        />
-      </button>
-    </div>
-  );
-}
-
-/** Log panel (newest first) pinned above the Schnellnotiz — recessed panel,
- * max ~46% of the aside. Nothing may ever overlay the note input. */
-function LogPanel({
-  campaign,
-  log,
-  activeSceneId,
-}: {
-  campaign: string;
-  log: readonly SessionLogEntry[];
-  activeSceneId: string | undefined;
-}) {
-  const t = useT();
-  const [note, setNote] = useState("");
-  const rows = [...log].reverse();
-  const append = useSessionWrite(campaign, (vars: { text: string; sceneId?: string }) =>
-    appendLog(campaign, vars.text, vars.sceneId),
-  );
-
-  const send = () => {
-    const text = note.trim();
-    if (text === "") return;
-    // Clear immediately (the input keeps focus); a failed send restores the
-    // text unless the DM already typed something new.
-    setNote("");
-    append.mutate(
-      activeSceneId === undefined ? { text } : { text, sceneId: activeSceneId },
-      { onError: () => setNote((current) => (current === "" ? text : current)) },
-    );
-  };
-
-  return (
-    <div className="flex flex-none flex-col border-t border-border bg-panel-deep lg:max-h-[46%]">
-      <p className="px-4 pt-3.5 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-        {t("live.log.heading")}
-      </p>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-2.5">
-        {rows.length === 0 && (
-          <p className="text-[12.5px] leading-[1.5] text-muted-foreground">
-            {t("live.log.empty")}
-          </p>
-        )}
-        {rows.map((row) => (
-          <div key={row.id} className="flex gap-2 text-[12.5px] leading-[1.5]">
-            {row.at !== "" && (
-              <span className="flex-none font-mono text-muted-foreground">{row.at}</span>
-            )}
-            <span className="min-w-0 text-body">{row.text}</span>
-          </div>
-        ))}
-      </div>
-      <div className="flex-none px-4 pt-1 pb-3.5">
-        {append.isError && (
-          <p className="mb-1.5 text-[11.5px] text-destructive">{t("live.note.failed")}</p>
-        )}
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
-          }}
-          placeholder={t("live.note.placeholder")}
-          aria-label={t("live.note.aria")}
-          className="w-full rounded-lg border border-input bg-card px-[13px] py-[11px] text-[13.5px] text-foreground placeholder:text-muted-foreground"
-        />
-        <p className="mt-[7px] text-[11.5px] text-faint">{t("live.note.hint")}</p>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Quiet empty state when the live route is opened while nothing is running —
- * and the ONE place a start conflict becomes a question the DM can answer.
- *
- * Exactly ONE conflict is a question here: `session_running`, an OLDER
- * session that was never ended — ending someone else's evening is not implied
- * by "starten". An already ended session of today is no question at all: the
- * start opens the NEXT session of the day, so there is no
- * "fortsetzen" here either.
- */
-function NoSessionYet({ campaign }: { campaign: string }) {
-  const t = useT();
-  const { enter, entering, conflict, conflictSessionId, failed } = useSessionStartFlow(campaign);
-  const end = useSessionWrite(campaign, () => endSession(campaign));
-  const busy = entering || end.isPending;
-  return (
-    <div className="flex h-full items-center justify-center px-7">
-      <div className="max-w-[380px] text-center">
-        {conflict === "session_running" ? (
-          <>
-            <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
-              {/* One sentence either way — the session is a parameter, not a
-                  fragment pasted between two halves. */}
-              {conflictSessionId === undefined
-                ? t("live.session.olderRunning")
-                : t("live.session.olderRunning.withSession", { session: conflictSessionId })}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => end.mutate()}
-              className="h-auto px-4 py-2 text-[13px]"
-            >
-              {t("live.session.endOld")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="mb-4 text-[14px] text-muted-foreground">{t("live.session.none")}</p>
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() => enter()}
-              className="h-auto px-4 py-2 text-[13px] font-semibold"
-            >
-              {t("session.start")}
-            </Button>
-          </>
-        )}
-        {(failed || end.isError) && (
-          <p className="mt-3 text-[12.5px] text-destructive">{t("session.write.failed")}</p>
-        )}
-      </div>
-    </div>
-  );
-}
