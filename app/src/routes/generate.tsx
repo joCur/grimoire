@@ -55,17 +55,11 @@ import {
   type NamingHint,
 } from "@grimoire/shared/generator-job";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, RotateCcw, Sparkles, SpellCheck, StickyNote } from "lucide-react";
+import { Check, Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import {
-  ApiError,
-  acceptJobParts,
-  fetchTree,
-  retryJobPart,
-  startGenerateJob,
-} from "@/api";
+import { ApiError, fetchTree } from "@/api";
 import { chapterLabel } from "@/chapter/chapter-links";
 import { chapterIdError, chapterIdValue, newChapterId } from "@/chapter/chapter-run";
 import { glossaryTermsQuery } from "@/glossary-term/glossary-term-query";
@@ -104,13 +98,21 @@ import {
   writtenBy,
   type AcceptSelection,
   type GenerateMode,
-} from "@/lib/generate";
+} from "@/generator-job/generator-job-state";
+import {
+  acceptJobParts,
+  retryJobPart,
+  startGenerateJob,
+  startGenerateNpcJob,
+} from "@/generator-job/generator-job-api";
 import {
   discardGeneratorJob,
   generateJobKey,
   useGenerateJob,
-} from "@/lib/use-generate-job";
-import { useJobReview } from "@/lib/use-job-review";
+} from "@/generator-job/generator-job-query";
+import { GeneratorJobPartCard } from "@/generator-job/GeneratorJobPartCard";
+import { GeneratorJobWorking } from "@/generator-job/GeneratorJobWorking";
+import { useJobReview } from "@/generator-job/use-job-review";
 import { cn } from "@/lib/utils";
 import { LocationProposalRow } from "@/location/LocationProposalRow";
 import { locationLabel } from "@/location/location-links";
@@ -225,7 +227,7 @@ export function GenerateRoute() {
   //
   // `awaitingJob` is on from the click on the generate action until the job
   // of THAT run is readable — it carries the id that was in the cache at the
-  // click, because that is what the new job is not (lib/generate.ts
+  // click, because that is what the new job is not (generator-job/generator-job-state.ts
   // runJobArrived). It is the view's whole working state and the poll
   // loop's reason to live at the same time, and those two must be ONE flag:
   // a GET that overtakes the new row answers 404 and the previous run's job
@@ -312,7 +314,7 @@ export function GenerateRoute() {
   const start = useMutation({
     mutationFn: () =>
       mode === "npc"
-        ? npcRun.start(campaign)
+        ? startGenerateNpcJob(campaign, npcRun.input)
         : startGenerateJob(campaign, {
             chapter: chapterId as string,
             sourceText,
@@ -950,7 +952,7 @@ export function GenerateRoute() {
             flash the empty form. */}
         {phase === "checking" && <div className="py-24 md:py-[120px]" />}
 
-        {phase === "working" && <Working />}
+        {phase === "working" && <GeneratorJobWorking />}
 
         {/* The review of a SCENE run — gated on the phase and the job's kind,
             never on a result being there: in a pipelined
@@ -1032,7 +1034,7 @@ export function GenerateRoute() {
               const scene = part.status === "done" ? sceneOfPart(part) : undefined;
               if (scene === undefined) {
                 return (
-                  <PartCard
+                  <GeneratorJobPartCard
                     key={part.key}
                     part={part}
                     // A part that says `done` and has no draft in the result
@@ -1063,7 +1065,7 @@ export function GenerateRoute() {
                   if (npc !== undefined) return npcRow(npc, cardRef);
                   if (location !== undefined) return locationRow(location, cardRef);
                   return (
-                    <PartCard
+                    <GeneratorJobPartCard
                       key={part.key}
                       part={part}
                       mismatch={part.status === "done"}
@@ -1314,181 +1316,6 @@ function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Transla
           );
         })}
       </ul>
-    </section>
-  );
-}
-
-/**
- * The working state: spinner + the correction-turn explainer + the one fact
- * that matters — the run is on the server, so the tab may
- * go. No number of attempts here: LLM_CORRECTION_TURNS is a server setting
- * (default 1) and a hardcoded "max. 2" would be a lie in half the setups.
- */
-function Working() {
-  const t = useT();
-  return (
-    <div
-      role="status"
-      className="flex flex-col items-center gap-[18px] py-24 text-center md:py-[120px]"
-    >
-      {/* Motion is optional: the ring animates only when motion is welcome,
-          otherwise a static brass ring stands in for it. */}
-      <span
-        aria-hidden
-        className="size-[30px] animate-spin rounded-full border-[3px] border-input border-t-primary motion-reduce:hidden"
-      />
-      <span
-        aria-hidden
-        className="hidden size-[30px] rounded-full border-[3px] border-primary motion-reduce:block"
-      />
-      <p className="text-[14.5px] text-foreground">{t("generate.working.title")}</p>
-      <p className="max-w-[380px] text-[13px] leading-[1.6] text-muted-foreground">
-        {t("generate.working.correction")}
-      </p>
-      <p className="max-w-[380px] text-[12.5px] leading-[1.6] text-faint">
-        {t("generate.working.background")}
-      </p>
-    </div>
-  );
-}
-
-/**
- * One part of a pipelined run that has no draft to show yet:
- * waiting, being written, or failed.
- *
- * It is deliberately the SAME footprint as a draft card, in the same place in
- * the list — the review is laid out in outline order, and a part that moves
- * from being written to a finished scene must not make everything below
- * it jump. Quieter than a draft: a hairline card, the title the outline gave
- * the part, and one line saying what is going on.
- *
- * A failed part is the only one with a button. WHY it failed is said in this
- * language (the raw server sentence about failed mechanical validation is
- * English and is the DM's only headline otherwise), with
- * the mechanical error list unchanged below it and the raw reply behind the
- * same disclosure the whole-run failure uses — the DM decides from it whether
- * to retry or to drop the run.
- *
- * `mismatch` is the third failure there is: a part the server calls `done`
- * whose draft is not in the result.
- */
-function PartCard({
-  part,
-  busy,
-  error,
-  mismatch = false,
-  cardRef,
-  onRetry,
-}: {
-  part: GeneratorJobPart;
-  busy: boolean;
-  /** This part's own retry error, already translated (never a global one). */
-  error?: string;
-  mismatch?: boolean;
-  cardRef?: (el: HTMLElement | null) => void;
-  onRetry: () => void;
-}) {
-  const t = useT();
-  const failed = part.status === "failed" || mismatch;
-  const validationErrors = part.validationErrors ?? [];
-  return (
-    <section
-      ref={cardRef}
-      // Focusable only programmatically: the retry action unmounts its own
-      // button, so the retry hands the focus to the card instead of letting
-      // it fall to `body`. Not a live region — the review
-      // has exactly one, on its progress line.
-      tabIndex={-1}
-      className={cn(
-        "mb-3 rounded-lg border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-        failed ? "border-destructive/40" : "border-border",
-      )}
-    >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-serif text-[16px] leading-[1.3] font-semibold text-foreground">
-          {part.title}
-        </h2>
-        <span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-          {part.status === "running" && (
-            <>
-              {/* Motion is optional — a static ring stands in for it. */}
-              <span
-                aria-hidden
-                className="size-[13px] flex-none animate-spin rounded-full border-2 border-input border-t-primary motion-reduce:hidden"
-              />
-              <span
-                aria-hidden
-                className="hidden size-[13px] flex-none rounded-full border-2 border-primary motion-reduce:block"
-              />
-            </>
-          )}
-          {t(
-            failed
-              ? "generate.pipeline.partFailed"
-              : part.status === "running"
-                ? "generate.pipeline.partRunning"
-                : "generate.pipeline.partPending",
-          )}
-        </span>
-      </div>
-      {failed && (
-        <>
-          {/* The headline: this language's sentence when the failure IS the
-              form check (its server message is English), the server's own
-              text otherwise — a restart, a provider outage and a 500 all say
-              something the DM needs verbatim. */}
-          {mismatch ? (
-            <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">
-              {t("generate.pipeline.partMissing")}
-            </p>
-          ) : validationErrors.length > 0 ? (
-            <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">
-              {t("generate.pipeline.partInvalid")}
-            </p>
-          ) : (
-            part.error !== undefined && (
-              <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">{part.error}</p>
-            )
-          )}
-          {validationErrors.length > 0 && (
-            <ul className="mt-1.5 flex flex-col gap-1">
-              {validationErrors.map((message) => (
-                <li
-                  key={message}
-                  className="font-mono text-[11.5px] leading-[1.5] text-body-secondary"
-                >
-                  {message}
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* WHAT came back — the same disclosure the whole-run failure uses. The part carries its own last raw reply. */}
-          {part.rawReply !== undefined && part.rawReply !== "" && (
-            <details className="mt-2.5">
-              <summary className="cursor-pointer text-[12.5px] text-body-secondary hover:text-foreground">
-                {t("generate.error.rawReply")}
-              </summary>
-              <pre className="mt-2 max-h-[260px] overflow-auto rounded-md border border-input bg-background px-3 py-2.5 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap text-body-secondary">
-                {part.rawReply}
-              </pre>
-            </details>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={onRetry}
-            className="mt-3 h-auto gap-2 border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[14px]"
-          >
-            <RotateCcw aria-hidden />
-            {t("generate.pipeline.retry")}
-          </Button>
-          {/* The retry's own failure, next to the button that caused it. */}
-          {error !== undefined && (
-            <p className="mt-2 text-[13px] text-destructive">{error}</p>
-          )}
-        </>
-      )}
     </section>
   );
 }

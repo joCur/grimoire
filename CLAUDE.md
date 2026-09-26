@@ -75,7 +75,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
   Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
-  `session/`) mit allem, was die App über sie weiß
+  `session/`, `generator-job/`) mit allem, was die App über sie weiß
   (ADR #31); **Slices importieren einander nicht.** Pause, Log-Zeile und
   gespielte Szene gehören zum Slice `session/`: die App liest sie nur
   eingebettet in ihrer Session, und jeder ihrer Schreibzugriffe landet im
@@ -87,9 +87,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   zeigt, setzt sich wie `App.tsx` aus den Slices zusammen und reicht fremde
   Teile als Slot hinein (die Kapitelübersicht reicht dem Kapitel seine Fäden
   und seine Szenenliste, die Szene bekommt ihre NPC-Karten, die Leseseite
-  einer Session den Link einer Szene). Was zwei Slices verbindet, liegt bei
+  einer Session den Link einer Szene; Szene, NPC und Ort bekommen ihre
+  Ergänzen-Aktion aus dem Generator-Job). Was zwei Slices verbindet, liegt bei
   der Seite, die sie zusammensetzt (die Erinnerungen der Live-Ansicht aus
-  Log-Zeilen und Ideen in `routes/PcReminders.tsx`). Kein Barrel:
+  Log-Zeilen und Ideen in `routes/PcReminders.tsx`, die Ergänzen-Aktionen
+  in `routes/<Entität>AugmentAction.tsx`). Kein Barrel:
   Aufrufer importieren die konkrete Datei.
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,

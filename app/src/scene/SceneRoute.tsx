@@ -17,12 +17,14 @@
 // own editing session over the one row, so a save from one while the other
 // stands asks what to do instead of overwriting it.
 //
-// The npc cards are not this slice's to draw: the route is handed them
-// (`npcCard`), so the scene never reaches into the npc's slice.
+// The npc cards and the augment action are not this slice's to draw: the
+// route is handed them (`npcCard`, `augmentAction`), so the scene never
+// reaches into the npc's slice or the generator job's.
 //
 // Edit mode is remembered BY SCENE: this route stays mounted across a
 // navigation, and an editor seeded from another scene would be a lie.
 
+import type { Scene } from "@grimoire/shared/scene";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
@@ -35,16 +37,18 @@ import { useT } from "@/i18n";
 
 import { SceneArticle } from "./SceneArticle";
 import { SceneBodyEditor, SceneFieldsAction } from "./SceneActions";
-import { SceneAugmentAction } from "./SceneAugmentAction";
 import { SceneStatusControl } from "./SceneStatusMenu";
 import { scenePageCrumbs } from "./scene-links";
 import { sceneQuery } from "./scene-query";
 
 export function SceneRoute({
   npcCard,
+  augmentAction,
 }: {
   /** The card of one npc the scene names — drawn by the npc, not by the scene. */
   npcCard: (campaign: string, id: string) => ReactNode;
+  /** The augment run on this scene — the generator job's dialog. */
+  augmentAction: (campaign: string, scene: Scene) => ReactNode;
 }) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
@@ -112,7 +116,7 @@ export function SceneRoute({
     <>
       {editing ? null : <BodyEditAction onEdit={() => setEditingId(data.id)} />}
       <SceneFieldsAction campaign={campaign} scene={data} tree={tree.data} />
-      {editing ? null : <SceneAugmentAction campaign={campaign} scene={data} />}
+      {editing ? null : augmentAction(campaign, data)}
     </>
   );
   const body = editing ? (

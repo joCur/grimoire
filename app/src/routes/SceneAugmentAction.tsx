@@ -1,7 +1,8 @@
-// The augment action of a scene's reading view: the shared augment dialog and
-// review (components/AugmentAction.tsx) over the run that starts on the
-// scene's own resource (ADR #31), and the scene's own editing session as the
-// accepting write.
+// The augment action of a scene's reading view. It joins two slices: the
+// generator job's augment dialog and review (generator-job/AugmentAction.tsx)
+// over the run that starts on the scene's own resource (ADR #31), and the
+// scene's own editing session as the accepting write. App.tsx hands it to the
+// scene's route as its augment slot.
 
 import { sceneChangeSchema } from "@grimoire/shared/scene";
 import type { Scene } from "@grimoire/shared/types";
@@ -14,11 +15,11 @@ import {
   staleAfterApply,
   useAugmentReviewState,
   type ProposalView,
-} from "@/components/AugmentAction";
+} from "@/generator-job/AugmentAction";
 
-import { applySceneAugment, startSceneAugmentJob } from "./scene-api";
-import { sceneFieldProposals } from "./scene-augment";
-import { useSceneEdit } from "./use-scene-edit";
+import { applySceneAugment, startSceneAugmentJob } from "@/scene/scene-api";
+import { sceneFieldProposals } from "@/scene/scene-augment";
+import { useSceneEdit } from "@/scene/use-scene-edit";
 
 export function SceneAugmentAction({
   campaign,

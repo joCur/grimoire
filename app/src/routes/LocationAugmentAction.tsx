@@ -1,7 +1,8 @@
-// The augment action of a location's reading view: the shared augment dialog
-// and review (components/AugmentAction.tsx) over the run that starts on the
-// location's own resource (ADR #31), and the location's own editing session
-// as the accepting write.
+// The augment action of a location's reading view. It joins two slices: the
+// generator job's augment dialog and review (generator-job/AugmentAction.tsx)
+// over the run that starts on the location's own resource (ADR #31), and the
+// location's own editing session as the accepting write. App.tsx hands it to
+// the location's route as its augment slot.
 
 import { locationChangeSchema } from "@grimoire/shared/location";
 import type { Location } from "@grimoire/shared/types";
@@ -14,12 +15,12 @@ import {
   staleAfterApply,
   useAugmentReviewState,
   type ProposalView,
-} from "@/components/AugmentAction";
+} from "@/generator-job/AugmentAction";
 
-import { applyLocationAugment, startLocationAugmentJob } from "./location-api";
-import { locationFieldProposals } from "./location-augment";
-import { locationsKey } from "./location-query";
-import { useLocationEdit } from "./use-location-edit";
+import { applyLocationAugment, startLocationAugmentJob } from "@/location/location-api";
+import { locationFieldProposals } from "@/location/location-augment";
+import { locationsKey } from "@/location/location-query";
+import { useLocationEdit } from "@/location/use-location-edit";
 
 export function LocationAugmentAction({
   campaign,

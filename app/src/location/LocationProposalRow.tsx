@@ -7,7 +7,7 @@ import type { GenerateReviewDecision } from "@grimoire/shared/generator-job";
 import { MapPin } from "lucide-react";
 
 import { ProposalRow } from "@/components/ProposalRow";
-import type { PartState } from "@/lib/generate";
+import type { PartState } from "@/components/ProposalRow";
 
 import { locationHref, locationLabel } from "./location-links";
 

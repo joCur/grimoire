@@ -55,10 +55,11 @@ import {
   type FieldProposal,
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
-import { reviewOf, runJobArrived } from "@/lib/generate";
-import { discardGeneratorJob, generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
-import { useJobReview, type JobReviewSync } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
+
+import { discardGeneratorJob, generateJobKey, useGenerateJob } from "./generator-job-query";
+import { reviewOf, runJobArrived } from "./generator-job-state";
+import { useJobReview, type JobReviewSync } from "./use-job-review";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
 
@@ -172,7 +173,7 @@ export function AugmentDialog({
   const queryClient = useQueryClient();
   // `awaitingJob` is on from the click on the submit button until the job of
   // THAT run is readable, and it carries the id that was in the cache at the click
-  // — because that is the one the new job does NOT have (lib/generate.ts
+  // — because that is the one the new job does NOT have (generator-job/generator-job-state.ts
   // runJobArrived). It is the running view's first half and the poll loop's
   // reason to live at the same time, and those two have to be ONE flag: a GET
   // that overtakes the new row answers 404 and a previous run's job is

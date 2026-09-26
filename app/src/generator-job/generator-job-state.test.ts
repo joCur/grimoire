@@ -12,7 +12,7 @@ import {
   GENERATOR_JOB_POLL_MS,
   generateJobPollMs,
   generateJobQueryOptions,
-} from "@/lib/use-generate-job";
+} from "./generator-job-query";
 import {
   applySummary,
   emptyReview,
@@ -45,7 +45,7 @@ import {
   pipelineCostLabel,
   pipelineProgress,
   usageLabel,
-} from "./generate";
+} from "./generator-job-state";
 
 // The copy comes from the catalog and the translator is passed in — so a
 // test says which language it asserts.

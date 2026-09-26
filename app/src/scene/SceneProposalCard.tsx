@@ -20,7 +20,7 @@ import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
-import type { PartState } from "@/lib/generate";
+import type { PartState } from "@/components/ProposalRow";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 

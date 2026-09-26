@@ -4,9 +4,9 @@
 //   - the edits the review keeps on the job: one change per proposed scene
 //     and per proposed npc, by id, field by field — merged here exactly the
 //     way the server merges them.
-//   - the count labels for the context hint and the apply button — from the
-//     out of the catalog, with the translator PASSED IN (the lib layer
-//     must not decide which language the UI is in, see i18n/index.ts).
+//   - the count labels for the context hint and the apply button — out of
+//     the catalog, with the translator PASSED IN (a pure helper must not
+//     decide which language the UI is in, see i18n/index.ts).
 //   - the run's token spend as one quiet line, formatted from
 //     whatever the server sent — a successful run and a 422 both carry it.
 //   - which of the view's states the server's job puts us in,
@@ -20,10 +20,11 @@ import type {
   GenerateReviewDecision,
 } from "@grimoire/shared/generator-job";
 
+import type { PartState } from "@/components/ProposalRow";
 import type { Translate } from "@/i18n";
 
 /**
- * Summary inside the apply button: "2 Szenen · 1 vorgeschlagener Eintrag".
+ * Summary inside the apply button: "2 scenes · 1 proposed npc or location".
  * One catalog entry per sentence, so the plural of both halves is the
  * message's business (ICU) and nothing is glued together here. `proposed`
  * counts the proposed npcs and locations together.
@@ -224,7 +225,7 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 // scenes, the per field/block decisions of an augment run — lives on the JOB,
 // not in this browser. These are the pure
 // halves of that: what the state IS, what a patch does to it, and what is
-// still open. No fetching; the hook (lib/use-job-review.ts) does that.
+// still open. No fetching; the hook (./use-job-review.ts) does that.
 
 /** A review state with nothing decided — also the fallback for an older payload. */
 export function emptyReview(): GeneratorJobReview {
@@ -335,9 +336,6 @@ export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): Generat
     },
   };
 }
-
-/** What became of one part of a run. */
-export type PartState = "open" | "written" | "dropped" | "rejected";
 
 /**
  * The state of one proposed scene of a run, by its id. A WRITTEN scene is

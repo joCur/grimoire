@@ -9,18 +9,18 @@ import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
 import type { SceneChange } from "@grimoire/shared/types";
+import type { ReviewSaveState } from "@/components/ReviewSaveStatus";
 
-import type { ReviewPatch } from "@/lib/generate";
+import type { ReviewPatch } from "./generator-job-state";
 import {
   createReviewQueue,
   type ReviewQueueIo,
-  type ReviewSaveStatus,
-} from "@/lib/use-job-review";
+} from "./use-job-review";
 
 interface Harness {
   io: ReviewQueueIo;
   sent: ReviewPatch[];
-  statuses: ReviewSaveStatus[];
+  statuses: ReviewSaveState[];
   /** What the optimistic copy currently shows, per edited scene. */
   shown: Record<string, SceneChange>;
   rereads: number;
@@ -53,7 +53,7 @@ function harness(): Harness {
   return h;
 }
 
-const last = (statuses: ReviewSaveStatus[]): ReviewSaveStatus | undefined => statuses.at(-1);
+const last = (statuses: ReviewSaveState[]): ReviewSaveState | undefined => statuses.at(-1);
 
 describe("flush", () => {
   test("resolves only after the debounced edit has really landed", async () => {

@@ -651,7 +651,7 @@ export const de = {
   // what it points at, then its current name.
   "markdown.ref.aria": "{kind}: {name}",
 
-  // --- generator: input form (routes/generate.tsx, lib/generate.ts) --------
+  // --- generator: input form (routes/generate.tsx, generator-job-state.ts) ---
   "generate.input.title.scene": "Szenen generieren",
   "generate.input.title.npc": "NPC generieren",
   "generate.input.lead.scene":
@@ -683,7 +683,7 @@ export const de = {
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
   // The two counts that come from the tree. The knowledge and the glossary
   // are LINKS to their own pages now, so
-  // the view composes the line from three pieces (lib/generate.ts).
+  // the view composes the line from three pieces (generator-job-state.ts).
   "generate.input.contextEntities":
     "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# Ort} other {# Orte}}",
   // The knowledge COUNT — the number is what tells the DM
@@ -695,7 +695,7 @@ export const de = {
   "generate.input.submit.scene": "Entwürfe generieren",
   "generate.input.submit.npc": "NPC generieren",
 
-  // --- generator: the two id fields' own rules (lib/generate.ts) -----------
+  // --- generator: the two id fields' own rules (generator-job-state.ts) ------
   "generate.input.chapterId.missing": "Kapitel-Kennung fehlt.",
   "generate.input.chapterId.slash":
     "Keine Schrägstriche — die Kapitel-Kennung ist ein einzelnes Segment.",
@@ -737,7 +737,7 @@ export const de = {
   "generate.working.background":
     "Läuft auf dem Server weiter — dieser Tab darf zu. Das Ergebnis wartet hier, bis es übernommen oder verworfen wird.",
 
-  // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
+  // --- generator: review (routes/generate.tsx, generator-job-state.ts) -------
   "generate.review.title": "Entwürfe prüfen",
   // The NPC run reviews ONE suggested entry, not a set of drafts.
   "generate.review.titleNpc": "Vorschlag prüfen",
@@ -800,7 +800,7 @@ export const de = {
   // chapter's text. Shown read-only above the drafts.
   "generate.review.chapterDescription": "Beschreibung des Kapitels",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
-  // (lib/generate.ts groups by hand — Intl would need full ICU data).
+  // (generator-job-state.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
   "generate.usage.group": ".",
   // --- generator: the pipeline ---------------------------------------------
@@ -959,7 +959,7 @@ export const de = {
   "harness.lead": "Rendert die Referenz-Fixtures aus fixtures/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
 
-  // --- the augment-with-AI action (components/AugmentAction.tsx) -----------
+  // --- the augment-with-AI action (generator-job/AugmentAction.tsx) --------
   "augment.action": "Mit KI ergänzen",
   "augment.title": "Mit KI ergänzen",
   "augment.description":
