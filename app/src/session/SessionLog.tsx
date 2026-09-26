@@ -3,8 +3,8 @@
 // ever overlay the note input.
 //
 // A note is a log entry of the running session, taken in the scene that is
-// open (`sceneId`). It records nothing else: whether that scene counts as
-// played is decided when the DM leaves it (./played-scene-rule.ts).
+// open (`sceneId`). It records nothing else: whether that scene was played is
+// the scene's status, which the DM sets when leaving it (./NextSceneStep.tsx).
 
 import type { Session } from "@grimoire/shared/session";
 import { useState } from "react";

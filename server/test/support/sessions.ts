@@ -1,6 +1,6 @@
 // The sessions of a case, through their own resources (ADR #31): the
 // session under `…/sessions/:id` and its children under it. The session
-// cases and those of its pauses, log entries and played scenes share these.
+// cases and those of its pauses and log entries share these.
 
 import { expect } from "bun:test";
 import type { Session, SessionSeed } from "@grimoire/shared/session";
@@ -9,7 +9,7 @@ import { app } from "../../src/server";
 /** The session list of the example campaign; a session's URL is below it. */
 export const SESSIONS = "/api/campaigns/beispiel/sessions";
 
-/** The committed fixture's session — ended, with a pause, a log and a played scene. */
+/** The committed fixture's session — ended, with a pause and a log. */
 export const FIXTURE_SESSION = "2026-01-15";
 
 /** One request with a JSON body (an empty object when none is given). */
@@ -54,5 +54,5 @@ export async function runningSession(): Promise<Session | undefined> {
 
 /** A session fixture with no children — what a case seeds beside the example's own. */
 export function sessionSeed(fields: Partial<SessionSeed> & { id: string }): SessionSeed {
-  return { started: "", body: "", pauses: [], log: [], playedScenes: [], ...fields };
+  return { started: "", body: "", pauses: [], log: [], ...fields };
 }

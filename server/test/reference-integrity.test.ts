@@ -7,7 +7,7 @@
 //
 //   * a `location`, an `npcs` entry and a `chapter` are refused with 400 and
 //     their own code when they name nothing, and the write leaves no trace
-//     (the scene of a log entry and of a played scene: their own tests);
+//     (the scene of a log entry: its own tests);
 //   * an entry is only ever created by a create endpoint or by accepting a
 //     generator proposal;
 //   * a mention in TEXT — a `## Beziehungen` line, `[[slug]]` in prose —

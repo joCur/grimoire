@@ -3,12 +3,11 @@
 //
 // `sessionSchema` is the session as `GET /api/campaigns/:c/sessions/:id`
 // answers it: its own fields with its children embedded — the pauses
-// (./pause.ts), the log (./log-entry.ts) and the played scenes
-// (./played-scene.ts). The children do not exist without their session, and
-// each is written on its own resource under it; a session write never
-// touches them. The TypeScript type, the POST, the PATCH and the DELETE the
-// resource accepts, and the session a fixture holds are each derived from it
-// below with zod's own API.
+// (./pause.ts) and the log (./log-entry.ts). The children do not exist
+// without their session, and each is written on its own resource under it; a
+// session write never touches them. The TypeScript type, the POST, the PATCH
+// and the DELETE the resource accepts, and the session a fixture holds are
+// each derived from it below with zod's own API.
 //
 // TIME. `started` and `ended` are zone-less wall-clock strings read in the
 // SERVER's timezone, and `startedMs`/`endedMs` are the server's epoch reading
@@ -20,7 +19,6 @@
 import { z } from "zod";
 import { logEntrySchema, logEntrySeedSchema } from "./log-entry";
 import { pauseSchema, pauseSeedSchema } from "./pause";
-import { playedSceneSchema, playedSceneSeedSchema } from "./played-scene";
 
 /**
  * A session, exactly as the resource answers it:
@@ -31,8 +29,7 @@ import { playedSceneSchema, playedSceneSeedSchema } from "./played-scene";
  *   - `ended` when it was ended beside `endedMs` — both absent while the
  *     session runs;
  *   - `body` the session's free Markdown text;
- *   - `pauses`, `log` and `playedScenes` its children, each in the order it
- *     was written;
+ *   - `pauses` and `log` its children, each in the order it was written;
  *   - `rev` the row version a PATCH or a DELETE sends back as its guard. It
  *     guards the session's own fields: a child carries its own.
  *
@@ -47,7 +44,6 @@ export const sessionSchema = z.strictObject({
   body: z.string(),
   pauses: z.array(pauseSchema),
   log: z.array(logEntrySchema),
-  playedScenes: z.array(playedSceneSchema),
   rev: z.number(),
 });
 
@@ -65,7 +61,6 @@ export const sessionSeedSchema = sessionSchema
   .extend({
     pauses: z.array(pauseSeedSchema),
     log: z.array(logEntrySeedSchema),
-    playedScenes: z.array(playedSceneSeedSchema),
   });
 
 export type SessionSeed = z.infer<typeof sessionSeedSchema>;
@@ -128,12 +123,12 @@ export function isSessionEnded(session: { ended?: string | null }): boolean {
 }
 
 /**
- * True when a session holds nothing the DM would miss: no log entry, no
- * played scene, and a text of nothing but headings and blank lines. Only such
- * a session may be deleted; one with content is ended, not deleted.
+ * True when a session holds nothing the DM would miss: no log entry and a
+ * text of nothing but headings and blank lines. Only such a session may be
+ * deleted; one with content is ended, not deleted.
  */
-export function isSessionEmpty(session: Pick<Session, "log" | "playedScenes" | "body">): boolean {
-  if (session.log.length > 0 || session.playedScenes.length > 0) return false;
+export function isSessionEmpty(session: Pick<Session, "log" | "body">): boolean {
+  if (session.log.length > 0) return false;
   return session.body
     .split(/\r?\n/)
     .every((line) => line.trim() === "" || /^#{1,6}(\s|$)/.test(line.trim()));

@@ -445,18 +445,10 @@ export function refTags(tx: GrimoireDb, campaign: string, sceneId: string): stri
     .map((r) => r.tag);
 }
 
-/**
- * The scene a session's log entry or played scene names — `code` says which
- * of the two it is (`log_scene_unknown`, `played_scene_unknown`).
- */
-export function assertSceneRef(
-  tx: GrimoireDb,
-  campaign: string,
-  id: string,
-  code: "log_scene_unknown" | "played_scene_unknown",
-): void {
+/** The scene a session's log entry names — 400 `log_scene_unknown` when there is none. */
+export function assertSceneRef(tx: GrimoireDb, campaign: string, id: string): void {
   if (sceneRowOf(tx, campaign, id) !== undefined) return;
-  throw unknownRef(code, "scene", id);
+  throw unknownRef("log_scene_unknown", "scene", id);
 }
 
 /** Rebuild a scene's search-index row, then the rows of what references it. */

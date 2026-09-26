@@ -3,9 +3,8 @@
 // A session is its own resource with its own type (ADR #31,
 // @grimoire/shared/session): listed, read, started, ended and deleted here,
 // typed by its one zod schema. It answers with its children embedded — its
-// pauses (./pauses.ts), its log (./log-entries.ts) and its played scenes
-// (./played-scenes.ts) —, but each child is written on its own resource, and
-// a session write touches none of them, with one exception: ending a session
+// pauses (./pauses.ts) and its log (./log-entries.ts) —, but each child is
+// written on its own resource, and a session write touches none of them, with one exception: ending a session
 // ends its open pause at the same moment.
 //
 // `started` and `ended` are zone-less wall-clock strings (./time.ts): a start
@@ -35,7 +34,6 @@ import { mutate, requireCampaign } from "./campaigns";
 import { getDb } from "./handle";
 import { insertLogEntrySeed, sessionLog } from "./log-entries";
 import { closeOpenPause, insertPauseSeed, sessionPauses } from "./pauses";
-import { insertPlayedSceneSeed, sessionPlayedScenes } from "./played-scenes";
 import {
   requireSessionRow,
   runningSessionRow,
@@ -74,7 +72,6 @@ function renderSession(db: GrimoireDb, campaign: string, row: SessionRow): Sessi
     body: row.body,
     pauses: sessionPauses(db, campaign, row.id),
     log: sessionLog(db, campaign, row.id),
-    playedScenes: sessionPlayedScenes(db, campaign, row.id),
     rev: row.rev,
   };
 }
@@ -276,9 +273,8 @@ export function readSessionSeed(raw: unknown, what: string): SessionSeed {
 
 /**
  * Write one session of a fixture with its children, INSIDE the caller's
- * transaction. Its played scenes and the scenes of its log are foreign keys,
- * so a fixture naming a scene the campaign does not have is refused by the
- * database. Nothing about a session is indexed for search.
+ * transaction. The scenes of its log are foreign keys, so a fixture naming a
+ * scene the campaign does not have is refused by the database. Nothing about a session is indexed for search.
  */
 export function insertSessionSeed(tx: GrimoireDb, campaign: string, seed: SessionSeed): void {
   tx.insert(sessions)
@@ -292,5 +288,4 @@ export function insertSessionSeed(tx: GrimoireDb, campaign: string, seed: Sessio
     .run();
   for (const pause of seed.pauses) insertPauseSeed(tx, campaign, seed.id, pause);
   for (const entry of seed.log) insertLogEntrySeed(tx, campaign, seed.id, entry);
-  for (const played of seed.playedScenes) insertPlayedSceneSeed(tx, campaign, seed.id, played);
 }

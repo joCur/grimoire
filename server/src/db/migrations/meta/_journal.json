@@ -71,6 +71,13 @@
       "when": 1790372992448,
       "tag": "0009_session_rows",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790440424472,
+      "tag": "0010_drop_played_scenes",
+      "breakpoints": true
     }
   ]
 }
