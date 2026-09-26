@@ -38,7 +38,6 @@ export function ChapterCreateAction({
           description={t("create.chapter.description")}
           nameLabel={t("create.chapter.nameLabel")}
           namePlaceholder={t("create.chapter.namePlaceholder")}
-          addressPrefix=""
           extra={{
             label: t("create.chapter.descriptionLabel"),
             placeholder: t("create.chapter.descriptionPlaceholder"),

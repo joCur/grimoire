@@ -10,7 +10,7 @@
 // Pure on purpose: the name lookup is passed in, so this runs without a tree,
 // a query or a DOM.
 
-import { expandBodyEntityRefs } from "@grimoire/shared/refs";
+import { expandBodyRefs } from "@grimoire/shared/refs";
 import type { NpcProposal, NpcStatus } from "@grimoire/shared/npc";
 
 export interface NpcExcerpt {
@@ -40,7 +40,7 @@ export function npcExcerpt(
   return {
     role: text(npc.role),
     voice: text(npc.voice),
-    will: will === undefined ? undefined : expandBodyEntityRefs(will, nameOf),
+    will: will === undefined ? undefined : expandBodyRefs(will, nameOf),
     quickstats: Object.entries(npc.quickstats ?? {}).map(([key, value]) => [key, String(value)]),
     status: npc.status,
   };

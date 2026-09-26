@@ -1,16 +1,14 @@
 // The id line under the name field — one component for all six create
 // surfaces (the five CreateDialog kinds and the cold-start page).
 //
-// It was a quiet preview: the id a typed name yields, shown before anything is
-// written, because an id is the format's permanent reference key. ADR #21
-// names the create dialog as the ONE place where it may be personalised, so
-// the line now carries a pencil: pressing it turns the line into a field
-// prefilled with the id that is on screen anyway.
+// It previews the id a typed name yields, shown before anything is written,
+// because an id is the permanent reference key. ADR #21 names the create
+// dialog as the ONE place where it may be personalised, so the line carries a
+// pencil: pressing it turns the line into a field prefilled with the id that
+// is on screen anyway.
 //
-// The static part stays static. Only the id itself is editable — the address
-// prefix (`npcs/`, `<chapter>/`) and the campaign's id label are context, not
-// something to type over, so they sit outside the input and the DM cannot
-// produce an address that is half typed.
+// The label in front of the id ("ID: ") is context, not something to type
+// over, so it sits outside the input.
 //
 // The state machine behind this (who owns the id, and how it goes back to
 // following the name) is lib/id-field.ts; this file only renders it and owns
@@ -23,12 +21,6 @@ import { useEffect, useId, useRef } from "react";
 import { useT } from "@/i18n";
 
 interface IdFieldProps {
-  /**
-   * The unchangeable text in front of the id: a resource or address prefix
-   * (`npcs/`, `locations/`, `<chapter>/`), the empty string for a chapter (whose id IS
-   * the address), or the campaign's id label, which has no address to show.
-   */
-  prefix: string;
   /** The id as it stands — derived from the name, or the one that was typed. */
   id: string;
   /** Editable field instead of the quiet line. */
@@ -41,8 +33,9 @@ interface IdFieldProps {
   onChange: (value: string) => void;
 }
 
-export function IdField({ prefix, id, editing, invalid, onToggle, onChange }: IdFieldProps) {
+export function IdField({ id, editing, invalid, onToggle, onChange }: IdFieldProps) {
   const t = useT();
+  const prefix = t("idField.prefix");
   const ruleId = useId();
   const input = useRef<HTMLInputElement>(null);
 
@@ -64,9 +57,7 @@ export function IdField({ prefix, id, editing, invalid, onToggle, onChange }: Id
       <span className="flex min-h-[16px] flex-wrap items-center gap-1">
         {editing ? (
           <>
-            {prefix === "" ? null : (
-              <span className="font-mono text-[11.5px] text-muted-foreground">{prefix}</span>
-            )}
+            <span className="font-mono text-[11.5px] text-muted-foreground">{prefix}</span>
             <input
               ref={input}
               value={id}

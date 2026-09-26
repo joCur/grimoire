@@ -1,6 +1,6 @@
 // The live aside's reminder list.
 //
-// The open `#pc` entries of the session's log and of the ideas, grouped by
+// The open `#pc` cards of the session's log and of the ideas, grouped by
 // character, as a compact checkable list. It joins two entities — the session
 // and the idea — so it sits with the page that composes them, not in either
 // slice. It reads the SAME model the wrap-up page and the topbar counter read
@@ -24,8 +24,8 @@ import { tickIdea } from "@/idea/idea-api";
 import { ideasKey, withIdea } from "@/idea/idea-query";
 import { tickFailureKey } from "@/idea/idea-tick";
 import { isWriteConflict } from "@/lib/write-with-rev";
-import type { ReviewEntry } from "@/lib/use-review";
-import { pcGroups, useReviewEntries } from "@/lib/use-review";
+import type { ReviewCard } from "@/lib/use-review";
+import { pcGroups, useReviewCards } from "@/lib/use-review";
 import { reviewLogEntry } from "@/session/log-entry-api";
 import { reviewFailureKey } from "@/session/log-entry-review";
 import { putLogEntry, sessionScopeKey } from "@/session/session-query";
@@ -33,19 +33,19 @@ import { putLogEntry, sessionScopeKey } from "@/session/session-query";
 export function PcReminders({ campaign }: { campaign: string }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const model = useReviewEntries(campaign);
-  const groups = pcGroups(model.entries.filter((entry) => !entry.done));
+  const model = useReviewCards(campaign);
+  const groups = pcGroups(model.cards.filter((card) => !card.done));
   // Was something ticked off HERE? Then the emptied region stays as the
   // done-line instead of unmounting under the keyboard focus.
   const [cleared, setCleared] = useState(false);
 
   const done = useMutation({
-    mutationFn: async (entry: ReviewEntry): Promise<{ idea?: Idea; logEntry?: LogEntry }> => {
-      if (entry.idea !== undefined) return { idea: await tickIdea(campaign, entry.idea) };
-      if (entry.logEntry === undefined || model.sessionId === "") {
+    mutationFn: async (card: ReviewCard): Promise<{ idea?: Idea; logEntry?: LogEntry }> => {
+      if (card.idea !== undefined) return { idea: await tickIdea(campaign, card.idea) };
+      if (card.logEntry === undefined || model.sessionId === "") {
         throw new Error("no log entry to review");
       }
-      return { logEntry: await reviewLogEntry(campaign, model.sessionId, entry.logEntry) };
+      return { logEntry: await reviewLogEntry(campaign, model.sessionId, card.logEntry) };
     },
     onSuccess: ({ idea, logEntry }) => {
       setCleared(true);
@@ -56,12 +56,12 @@ export function PcReminders({ campaign }: { campaign: string }) {
         queryClient.setQueryData<Idea[]>(ideasKey(campaign), (list) => withIdea(list, idea));
       }
     },
-    onError: (error, entry) => {
+    onError: (error, card) => {
       // The row moved since it was read: read it again, so the next tick
       // carries its current guard.
       if (!isWriteConflict(error)) return;
       void queryClient.invalidateQueries({
-        queryKey: entry.idea !== undefined ? ideasKey(campaign) : sessionScopeKey(campaign),
+        queryKey: card.idea !== undefined ? ideasKey(campaign) : sessionScopeKey(campaign),
       });
     },
   });
@@ -85,15 +85,15 @@ export function PcReminders({ campaign }: { campaign: string }) {
                 : t("review.pc.groupTag", { tag: group.tag })}
             </h3>
             <ul className="flex flex-col gap-1">
-              {group.entries.map((entry) => (
-                <li key={entry.key}>
+              {group.items.map((card) => (
+                <li key={card.key}>
                   <button
                     type="button"
                     disabled={done.isPending}
-                    aria-label={t("live.pc.done", { text: entry.text })}
+                    aria-label={t("live.pc.done", { text: card.text })}
                     onClick={() => {
                       done.reset();
-                      done.mutate(entry);
+                      done.mutate(card);
                     }}
                     className="flex w-full items-start gap-2 rounded-md px-1 py-1 text-left text-[12.5px] leading-[1.5] text-body hover:bg-divider hover:text-foreground"
                   >
@@ -101,7 +101,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
                       aria-hidden
                       className="mt-[3px] size-3.5 flex-none rounded-[4px] border-[1.5px] border-muted-foreground"
                     />
-                    <span className="min-w-0">{entry.text}</span>
+                    <span className="min-w-0">{card.text}</span>
                   </button>
                 </li>
               ))}

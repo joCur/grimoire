@@ -54,7 +54,7 @@ import {
   type NpcProposal,
   type SceneProposal,
 } from "@grimoire/shared";
-import { bodyEntityRefSlugs, entityRefSource } from "@grimoire/shared/refs";
+import { bodyRefSlugs, refSource } from "@grimoire/shared/refs";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import type { LocationReply } from "./location-reply";
@@ -394,7 +394,7 @@ export function unknownCallouts(body: string): string[] {
 /**
  * Every id a `[[id]]` in a generated body may name without the run proposing
  * it: the campaign's npcs, locations and scenes — the three kinds a reference
- * resolves to (@grimoire/shared/refs `ENTITY_REF_KINDS`).
+ * resolves to (@grimoire/shared/refs `REF_KINDS`).
  */
 export function campaignRefIds(ctx: CampaignContext): Set<string> {
   return new Set([...ctx.npcIds, ...ctx.locationIds, ...ctx.sceneIds]);
@@ -412,11 +412,11 @@ export function campaignRefIds(ctx: CampaignContext): Set<string> {
  * not checked. WHERE in the body a reference stands does not matter.
  */
 export function unknownRefErrors(body: string, known: ReadonlySet<string>): string[] {
-  return bodyEntityRefSlugs(body)
+  return bodyRefSlugs(body)
     .filter((slug) => !known.has(slug))
     .map(
       (slug) =>
-        `${entityRefSource(slug)} nennt nichts — weder die Kampagne noch dieser ` +
+        `${refSource(slug)} nennt nichts — weder die Kampagne noch dieser ` +
         "Durchlauf hat diese id; nenne eine id aus dem Kontext oder schreibe den Namen als Text",
     );
 }

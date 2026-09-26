@@ -89,7 +89,6 @@ export const en: Messages = {
   "create.campaign.title": "Create campaign",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
-  "create.campaign.idPrefix": "ID: ",
   "create.campaign.descriptionLabel": "Description (optional)",
   "create.campaign.descriptionPlaceholder": "One sentence that places the campaign",
 
@@ -122,6 +121,7 @@ export const en: Messages = {
 
   // --- the id line of every create surface (components/IdField.tsx) ---------
   "idField.label": "ID",
+  "idField.prefix": "ID: ",
   "idField.edit": "Set the ID yourself",
   "idField.invalid": "An ID needs lowercase letters, digits and single hyphens.",
 

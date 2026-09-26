@@ -1,6 +1,6 @@
 // Resolution of `[[slug]]` body references at RENDER TIME.
 //
-// The remark plugin only marks a reference (`<span data-entity-ref="slug">`
+// The remark plugin only marks a reference (`<span data-ref="slug">`
 // with the literal `[[slug]]` inside); WHAT it means is a question only the
 // campaign tree can answer, and the tree lives in the react-query cache. So
 // the resolver is a context: mounted once per campaign (App.tsx), read by
@@ -31,7 +31,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
-import { ENTITY_REF_KINDS, type EntityRefKind } from "@grimoire/shared/refs";
+import { REF_KINDS, type RefKind } from "@grimoire/shared/refs";
 
 import { fetchTree } from "@/api";
 import { useT, type MessageKey } from "@/i18n";
@@ -44,7 +44,7 @@ import { RefPreview, useCanHover, type RefPreviewTrigger } from "./ref-preview";
  * display name. Each is its own resource, reached by its id (ADR #31).
  */
 export interface ResolvedRef {
-  kind: EntityRefKind;
+  kind: RefKind;
   slug: string;
   name: string;
 }
@@ -68,7 +68,7 @@ const RefContext = createContext<RefContextValue>(NO_REFS);
 /**
  * Build the slug→entity lookup from a tree.
  *
- * KIND PRIORITY (npc > location > scene, ENTITY_REF_KINDS): slugs are unique
+ * KIND PRIORITY (npc > location > scene, REF_KINDS): slugs are unique
  * per kind but not across kinds, so the first kind that knows a slug wins —
  * see @grimoire/shared/refs for why the order is this one.
  */
@@ -83,7 +83,7 @@ export function refIndex(
     index.set(ref.slug, { ...ref, name: ref.name === "" ? ref.slug : ref.name });
   };
 
-  for (const kind of ENTITY_REF_KINDS) {
+  for (const kind of REF_KINDS) {
     if (kind === "npc") {
       for (const npc of tree.npcs) put({ kind: "npc", slug: npc.id, name: npc.name });
     } else if (kind === "location") {
@@ -173,7 +173,7 @@ export function useRefs(): RefContextValue {
  * the ⌘K rows and the properties dialog use (`kind.*`, i18n/de.ts), so a
  * screen reader hears one vocabulary and it follows the UI language.
  */
-const KIND_KEY: Record<EntityRefKind, MessageKey> = {
+const KIND_KEY: Record<RefKind, MessageKey> = {
   npc: "kind.npc",
   location: "kind.location",
   scene: "kind.scene",

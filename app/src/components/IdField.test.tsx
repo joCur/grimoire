@@ -19,7 +19,6 @@ type Props = Parameters<typeof IdField>[0];
 function render(props: Partial<Props> = {}): string {
   return renderToStaticMarkup(
     <IdField
-      prefix="npcs/"
       id="alte-fischerin"
       editing={false}
       invalid={false}
@@ -31,18 +30,14 @@ function render(props: Partial<Props> = {}): string {
 }
 
 describe("the quiet line", () => {
-  test("shows prefix and id as ONE run of text, plus the pencil", () => {
+  test("shows the label and the id as ONE run of text, plus the pencil", () => {
     const html = render();
-    expect(html).toContain("npcs/alte-fischerin");
+    expect(html).toContain("Kennung: alte-fischerin");
     // No field yet: the id is text, not something to type over by accident.
     expect(html).not.toContain("<input");
     expect(html).toContain('aria-label="Kennung selbst setzen"');
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-pressed="false"');
-  });
-
-  test("a chapter has no prefix, so the id IS the address", () => {
-    expect(render({ prefix: "", id: "01-salzhafen" })).toContain("01-salzhafen");
   });
 
   test("stays empty while the name yields no id — and offers no pencil", () => {
@@ -53,13 +48,13 @@ describe("the quiet line", () => {
 });
 
 describe("the editable field", () => {
-  test("carries the id, is named, and the prefix stays outside it", () => {
+  test("carries the id, is named, and the label stays outside it", () => {
     const html = render({ editing: true });
     expect(html).toContain('value="alte-fischerin"');
     expect(html).toContain('aria-label="Kennung"');
-    // The prefix is context, not part of what can be typed.
-    expect(html).toContain(">npcs/<");
-    expect(html).not.toContain('value="npcs/alte-fischerin"');
+    // The label is context, not part of what can be typed.
+    expect(html).toContain(">Kennung: <");
+    expect(html).not.toContain('value="Kennung: alte-fischerin"');
   });
 
   test("the pencil reports itself as the pressed toggle", () => {

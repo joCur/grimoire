@@ -43,7 +43,6 @@ export function SceneCreateAction({
           description={t("create.scene.description")}
           nameLabel={t("create.scene.nameLabel")}
           namePlaceholder={t("create.scene.namePlaceholder")}
-          addressPrefix="scenes/"
           create={async (values: CreateValues) => {
             const created = await createScene(campaign, {
               title: values.name,

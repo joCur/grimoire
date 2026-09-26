@@ -7,7 +7,7 @@
 //
 // THE CHOSEN SOLUTION — expand at INDEX time (the smallest one that holds):
 // `indexEntity` gets the body with every resolved reference replaced by the
-// current display name (@grimoire/shared/refs `expandEntityRefs`). One extra
+// current display name (@grimoire/shared/refs `expandRefs`). One extra
 // query per index write, no new table, no new column, and the search snippet
 // then reads exactly like the rendered page. Rejected alternatives: a second
 // FTS column for reference names (same lookup, plus a schema migration and a
@@ -22,13 +22,11 @@
 // columns of one campaign — cheap in a single-user tool, and precise, which
 // is why it beats the pragmatic "reindex the whole campaign".
 //
-// SCOPE: every entry whose body a DM writes prose in — scene, npc,
-// location, chapter AND the campaign entry (`campaign`, the free note
-// space). The campaign entry used to be scanned HALF: its index row expanded
-// references (write.ts `indexCampaign`) but no scan ever found it again, so a
-// changed display name left a stale name in the search index. It is now a
-// FULL body kind: `reindexReferrers` covers it like any other entry. Glossary
-// terms stay out — a term and its explanation are no prose body.
+// SCOPE: every row whose body a DM writes prose in — scene, npc,
+// location, chapter AND the campaign (`campaign`, the free note space), whose
+// index row expands references (./campaigns.ts `indexCampaign`) and which
+// `reindexReferrers` covers like any other. Glossary terms stay out — a term
+// and its explanation are no prose body.
 //
 // CODE IS NOT PROSE: `` `[[jorna]]` `` and fenced blocks render literally, so
 // the expansion may not touch them. That rule lives once,
@@ -36,11 +34,11 @@
 
 import { and, eq, like, sql } from "drizzle-orm";
 import {
-  ENTITY_REF_KINDS,
-  bodyReferencesEntity,
-  entityRefSource,
-  expandBodyEntityRefs,
-  type EntityRefKind,
+  REF_KINDS,
+  bodyReferencesSlug,
+  refSource,
+  expandBodyRefs,
+  type RefKind,
 } from "@grimoire/shared/refs";
 import type { GrimoireDb } from "../db/client";
 import { campaigns, chapters, locations, npcs, scenes } from "../db/schema";
@@ -53,7 +51,7 @@ export type RefBodyKind = (typeof REF_BODY_KINDS)[number];
 function displayNameOfKind(
   tx: GrimoireDb,
   campaign: string,
-  kind: EntityRefKind,
+  kind: RefKind,
   slug: string,
 ): string | undefined {
   if (kind === "npc") {
@@ -82,7 +80,7 @@ function displayNameOfKind(
 
 /**
  * The kind that OWNS a slug, by the documented KIND PRIORITY (npc > location
- * > scene — ENTITY_REF_KINDS, and the app's resolver walks the same order).
+ * > scene — REF_KINDS, and the app's resolver walks the same order).
  * Undefined when nothing owns it.
  *
  * This is what makes a slug COLLISION safe. A scene and an npc may both be
@@ -96,8 +94,8 @@ export function refOwnerKind(
   tx: GrimoireDb,
   campaign: string,
   slug: string,
-): EntityRefKind | undefined {
-  for (const kind of ENTITY_REF_KINDS) {
+): RefKind | undefined {
+  for (const kind of REF_KINDS) {
     if (displayNameOfKind(tx, campaign, kind, slug) !== undefined) return kind;
   }
   return undefined;
@@ -113,7 +111,7 @@ export function refDisplayName(
   campaign: string,
   slug: string,
 ): string | undefined {
-  for (const kind of ENTITY_REF_KINDS) {
+  for (const kind of REF_KINDS) {
     const name = displayNameOfKind(tx, campaign, kind, slug);
     if (name !== undefined) return name;
   }
@@ -126,10 +124,10 @@ export function refDisplayName(
  * because a reference inside them is literal text on the page too. Bodies
  * without a reference come back untouched without a single query.
  */
-export function expandBodyRefs(tx: GrimoireDb, campaign: string, body: string): string {
+export function expandCampaignBodyRefs(tx: GrimoireDb, campaign: string, body: string): string {
   if (!body.includes("[[")) return body;
   const cache = new Map<string, string | undefined>();
-  return expandBodyEntityRefs(body, (slug) => {
+  return expandBodyRefs(body, (slug) => {
     if (!cache.has(slug)) cache.set(slug, refDisplayName(tx, campaign, slug));
     return cache.get(slug);
   });
@@ -139,8 +137,8 @@ export function expandBodyRefs(tx: GrimoireDb, campaign: string, body: string): 
  * Expand the references in the ALREADY INDEXED text of a whole campaign —
  * the seed's second pass (db/seed.ts).
  *
- * The seed writes one index row per entry as it goes, and a body can
- * reference an entry that has no row yet at that moment (a chapter text
+ * The seed writes each index row as it goes, and a body can
+ * reference a row that has no index row yet at that moment (a chapter text
  * naming an npc loaded later in the same pass). So the expansion cannot
  * happen while loading; it happens once at the end, over `search_fts`
  * itself rather than over the bodies — which keeps it kind-agnostic
@@ -154,7 +152,7 @@ export function expandIndexedRefs(tx: GrimoireDb, campaign: string): number {
   `);
   let changed = 0;
   for (const row of rows) {
-    const body = expandBodyRefs(tx, campaign, row.body ?? "");
+    const body = expandCampaignBodyRefs(tx, campaign, row.body ?? "");
     if (body === row.body) continue;
     changed += 1;
     tx.run(sql`
@@ -169,7 +167,7 @@ export function expandIndexedRefs(tx: GrimoireDb, campaign: string): number {
  * The table of each body kind and the PROSE a reference can stand in: the
  * body, and for an npc and a location also the prose property the card shows
  * (`motivation`, `atmosphere`). A `[[slug]]` there reads as a name on the card
- * and is expanded in the index (./entity-rows.ts `indexedProse`), so a
+ * and is expanded in the index (./search-index.ts `indexedProse`), so a
  * renamed target has to find these rows too.
  */
 const REF_TABLES = {
@@ -185,7 +183,7 @@ const REF_TABLES = {
   chapter: { table: chapters, prose: sql<string>`${chapters.body}` },
 } as const;
 
-/** One referring entry with the body the check works on. */
+/** One referring row with the body the check works on. */
 interface ReferrerRow {
   kind: RefBodyKind;
   id: string;
@@ -193,7 +191,7 @@ interface ReferrerRow {
 }
 
 /**
- * Candidate bodies for `[[slug]]` and the entries they belong to.
+ * Candidate bodies for `[[slug]]` and the rows they belong to.
  *
  * The `like` is only a PRE-FILTER — SQL cannot tell prose from code, so every
  * candidate is confirmed in JS with the shared grammar. The campaign row is
@@ -201,7 +199,7 @@ interface ReferrerRow {
  * generic table loop.
  */
 function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerRow[] {
-  const needle = `%${entityRefSource(slug)}%`;
+  const needle = `%${refSource(slug)}%`;
   const rows: ReferrerRow[] = [];
   for (const kind of REF_BODY_KINDS) {
     if (kind === "campaign") {
@@ -223,7 +221,7 @@ function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerR
       rows.push({ kind, id: row.id, body: row.body });
     }
   }
-  return rows.filter((row) => bodyReferencesEntity(row.body, slug));
+  return rows.filter((row) => bodyReferencesSlug(row.body, slug));
 }
 
 /** Ids of the entities whose PROSE (see `REF_TABLES`) contains `[[slug]]`, per kind. */

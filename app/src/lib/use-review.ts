@@ -39,12 +39,12 @@ import {
 } from "@/lib/review";
 import { useLastStartedSession } from "@/session/use-session";
 
-export interface ReviewEntry {
+export interface ReviewCard {
   /** Stable identity: the source plus the row's own id. */
   key: string;
   source: "log" | "idea";
   /**
-   * Which section the entry belongs to: the tagged harvest, or the notes
+   * Which section the card belongs to: the tagged harvest, or the notes
    * section of untagged ideas thrown in on the go, or the player-character
    * section of `#pc` rows. The counting is the same for all of them — one
    * source for page and topbar.
@@ -64,11 +64,11 @@ export interface ReviewEntry {
   text: string;
   /** The row's id. */
   id: string;
-  /** The log entry itself, for an entry from the log — reviewing it sends its `rev`. */
+  /** The log entry itself, for a card from the log — reviewing it sends its `rev`. */
   logEntry?: LogEntry;
-  /** The idea itself, for an entry from the ideas — ticking it off sends its `rev`. */
+  /** The idea itself, for a card from the ideas — ticking it off sends its `rev`. */
   idea?: Idea;
-  /** The character tag of a `#pc` entry — undefined means the general group. */
+  /** The character tag of a `#pc` card — undefined means the general group. */
   pcGroup?: string;
   done: boolean;
   canThread: boolean;
@@ -76,7 +76,7 @@ export interface ReviewEntry {
 }
 
 export interface ReviewModel {
-  entries: ReviewEntry[];
+  cards: ReviewCard[];
   total: number;
   seenCount: number;
   pendingCount: number;
@@ -96,11 +96,11 @@ interface UseReviewOptions {
   enabled?: boolean;
 }
 
-/** The player-character entries of a model, grouped by character tag. */
-export function pcGroups(entries: readonly ReviewEntry[]) {
+/** The player-character cards of a model, grouped by character tag. */
+export function pcGroups(cards: readonly ReviewCard[]) {
   return groupByPcTag(
-    entries.filter((entry) => entry.section === "pc"),
-    (entry) => entry.pcGroup,
+    cards.filter((card) => card.section === "pc"),
+    (card) => card.pcGroup,
   );
 }
 
@@ -113,7 +113,7 @@ interface HarvestedLogRow {
   pcGroup?: string;
 }
 
-export function useReviewEntries(
+export function useReviewCards(
   campaign: string,
   { enabled = true }: UseReviewOptions = {},
 ): ReviewModel {
@@ -145,7 +145,7 @@ export function useReviewEntries(
     enabled: enabled && campaign !== "",
   });
   // No ideas is an empty list. An error here must never look like "no
-  // ideas", it just yields no entries.
+  // ideas", it just yields no cards.
   const ideas = useQuery({
     ...ideasQuery(campaign),
     enabled: enabled && campaign !== "",
@@ -163,10 +163,10 @@ export function useReviewEntries(
         // `#pc` wins over the harvest tags (README): the row is a reminder
         // for the table, not campaign content.
         if (hasPcTag(tags)) {
-          const entry: HarvestedLogRow = { row, tag: PC_TAG, pc: true };
+          const card: HarvestedLogRow = { row, tag: PC_TAG, pc: true };
           const group = pcGroupTag(tags);
-          if (group !== undefined) entry.pcGroup = group;
-          return [entry];
+          if (group !== undefined) card.pcGroup = group;
+          return [card];
         }
         const tag = firstReviewTag(row.text);
         return tag === undefined ? [] : [{ row, tag, pc: false }];
@@ -183,10 +183,10 @@ export function useReviewEntries(
 
   const treeData = tree.data;
 
-  const entries = useMemo<ReviewEntry[]>(() => {
-    const logEntries: ReviewEntry[] = harvestedLog.map(({ row, tag, pc, pcGroup }) => {
+  const cards = useMemo<ReviewCard[]>(() => {
+    const logEntries: ReviewCard[] = harvestedLog.map(({ row, tag, pc, pcGroup }) => {
       const scene = sceneTitle(treeData, row.sceneId);
-      const item: ReviewEntry = {
+      const item: ReviewCard = {
         key: `log:${row.id}`,
         source: "log",
         section: pc ? "pc" : "harvest",
@@ -208,7 +208,7 @@ export function useReviewEntries(
       return item;
     });
 
-    const ideaEntries: ReviewEntry[] = openIdeas.map((row) => {
+    const ideaCards: ReviewCard[] = openIdeas.map((row) => {
       const tags = extractHashtags(row.text);
       const pc = hasPcTag(tags);
       // A `#pc` row is a reminder for the table, an untagged one is a note
@@ -216,8 +216,8 @@ export function useReviewEntries(
       // is the tagged harvest, where a harvest tag anywhere in the row wins
       // over the first tag, so `#idee #npc` still offers the npc action.
       const tag = pc ? PC_TAG : (tags.find(isReviewTag) ?? tags[0] ?? "");
-      const section: ReviewEntry["section"] = pc ? "pc" : tags.length === 0 ? "notes" : "harvest";
-      const item: ReviewEntry = {
+      const section: ReviewCard["section"] = pc ? "pc" : tags.length === 0 ? "notes" : "harvest";
+      const item: ReviewCard = {
         key: `idea:${row.id}`,
         source: "idea",
         section,
@@ -239,15 +239,15 @@ export function useReviewEntries(
       return item;
     });
 
-    return [...logEntries, ...ideaEntries];
+    return [...logEntries, ...ideaCards];
   }, [harvestedLog, openIdeas, treeData, t]);
 
-  const seenCount = entries.filter((e) => e.done).length;
-  const total = entries.length;
+  const seenCount = cards.filter((e) => e.done).length;
+  const total = cards.length;
   const noSession = session.data === null;
 
   return {
-    entries,
+    cards,
     total,
     seenCount,
     pendingCount: total - seenCount,

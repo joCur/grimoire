@@ -101,7 +101,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const chapterTitle = page.getByLabel("Titel");
   await expect(chapterTitle).toHaveAttribute("placeholder", "Titel des Kapitels");
   await chapterTitle.fill("01 Salzhafen");
-  await expect(page.getByText("01-salzhafen", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kennung: 01-salzhafen", { exact: true })).toBeVisible();
   const description = page.getByLabel("Beschreibung (optional)");
   await expect(description).toHaveAttribute(
     "placeholder",
@@ -135,7 +135,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const sceneTitle = page.getByLabel("Titel");
   await expect(sceneTitle).toHaveAttribute("placeholder", "Titel der Szene");
   await sceneTitle.fill("Ankunft am Leuchtturm");
-  await expect(page.getByText("scenes/ankunft-am-leuchtturm", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kennung: ankunft-am-leuchtturm", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // A new scene OPENS IN THE EDITOR, on its own route — an empty scene is
@@ -271,7 +271,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   const npcName = page.getByLabel("Name");
   await expect(npcName).toHaveAttribute("placeholder", "Name des NPCs");
   await npcName.fill("Hafenmeisterin Jorna");
-  await expect(page.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kennung: hafenmeisterin-jorna", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // The dialog only ever asks for a name — the npc's reading view on its
@@ -463,14 +463,14 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   await page.getByRole("button", { name: "Kapitel anlegen" }).last().click();
   const chapterDialog = page.getByRole("dialog");
   await chapterDialog.getByLabel("Titel").fill("Erstes Kapitel");
-  await expect(chapterDialog.getByText("erstes-kapitel", { exact: true })).toBeVisible();
+  await expect(chapterDialog.getByText("Kennung: erstes-kapitel", { exact: true })).toBeVisible();
   await chapterDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
   const chapterId = chapterDialog.getByLabel("Kennung", { exact: true });
   await chapterId.fill("nummer-eins");
 
   // Pressing the pencil again is the other way back to automatic.
   await chapterDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
-  await expect(chapterDialog.getByText("erstes-kapitel", { exact: true })).toBeVisible();
+  await expect(chapterDialog.getByText("Kennung: erstes-kapitel", { exact: true })).toBeVisible();
 
   await chapterDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
   await chapterId.fill("01-salzhafen");
@@ -480,17 +480,17 @@ test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, se
   // The derived id was never written — only the one that was typed.
   expect(await chapterExists(api, "erstes-kapitel")).toBe(false);
 
-  // --- an NPC: the prefix stays in front, only the id is typed -------------
+  // --- an NPC: the label stays in front, only the id is typed --------------
   await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/npcs`);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   const npcDialog = page.getByRole("dialog");
   await npcDialog.getByLabel("Name").fill("Hafenmeisterin Jorna");
-  await expect(npcDialog.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
+  await expect(npcDialog.getByText("Kennung: hafenmeisterin-jorna", { exact: true })).toBeVisible();
   await npcDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
   const npcId = npcDialog.getByLabel("Kennung", { exact: true });
   await npcId.fill("jorna");
-  // The address prefix is context, outside the field — no half-typed address.
-  await expect(npcDialog.getByText("npcs/", { exact: true })).toBeVisible();
+  // The label is context, outside the field.
+  await expect(npcDialog.getByText("Kennung:", { exact: true })).toBeVisible();
   await expect(npcId).toHaveValue("jorna");
   await npcDialog.getByRole("button", { name: "Anlegen" }).click();
 

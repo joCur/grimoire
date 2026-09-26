@@ -15,7 +15,7 @@ import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 
-import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
+import { renderRefPieces, type RefPiece } from "@grimoire/shared/refs";
 
 import { useT } from "@/i18n";
 
@@ -23,8 +23,8 @@ import { Callout } from "./Callout";
 import { RefLink, RefName, useRefs } from "./refs";
 import {
   COPY_PARTS_ATTR,
-  ENTITY_REF_ATTR,
-  ENTITY_REF_PLAIN_ATTR,
+  REF_ATTR,
+  REF_PLAIN_ATTR,
   remarkGrimoire,
 } from "./remark-grimoire";
 import { remarkTable } from "./remark-table";
@@ -48,11 +48,11 @@ const components: Components = {
   span(props) {
     const { node: _node, children, ...rest } = props;
     const attrs = rest as Record<string, unknown>;
-    const slug = attrs[ENTITY_REF_ATTR];
+    const slug = attrs[REF_ATTR];
     if (typeof slug !== "string") return <span {...rest}>{children}</span>;
     // Inside a `## If:` summary a reference is the resolved NAME AS TEXT —
     // the row's own click must toggle the branch, not navigate away.
-    if (attrs[ENTITY_REF_PLAIN_ATTR] !== undefined) {
+    if (attrs[REF_PLAIN_ATTR] !== undefined) {
       return <RefName slug={slug} fallback={children} />;
     }
     return <RefLink slug={slug} fallback={children} />;
@@ -204,7 +204,7 @@ function CalloutSection({
   const text =
     copyParts === undefined
       ? undefined
-      : renderEntityRefPieces(parseCopyParts(copyParts), (slug) => resolve(slug)?.name);
+      : renderRefPieces(parseCopyParts(copyParts), (slug) => resolve(slug)?.name);
   return (
     <Callout kind={kind} copyText={text}>
       {children}
@@ -213,10 +213,10 @@ function CalloutSection({
 }
 
 /** The pieces come from our own plugin; a broken payload copies nothing. */
-function parseCopyParts(value: string): EntityRefPiece[] {
+function parseCopyParts(value: string): RefPiece[] {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as EntityRefPiece[]) : [];
+    return Array.isArray(parsed) ? (parsed as RefPiece[]) : [];
   } catch {
     return [];
   }

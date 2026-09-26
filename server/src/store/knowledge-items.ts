@@ -37,7 +37,7 @@ import type { GrimoireDb } from "../db/client";
 import { campaigns, knowledgeItems } from "../db/schema";
 import { mutate, requireCampaign, requireCampaignRow } from "./campaigns";
 import { getDb } from "./handle";
-import { expandBodyRefs } from "./refs";
+import { expandCampaignBodyRefs } from "./refs";
 import { nextPos, parseRequest, revConflict } from "./shared";
 
 /** One stored knowledge-item row. */
@@ -372,7 +372,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
   const lines: string[] = [];
   for (const item of knowledgeItemRows(db, campaign).map(renderKnowledgeItem)) {
     const resolve = (value: string): string =>
-      promptInline(expandBodyRefs(db, campaign, value));
+      promptInline(expandCampaignBodyRefs(db, campaign, value));
     if (item.kind === "naming") {
       if (item.from.trim() === "" || item.to.trim() === "") continue;
       lines.push(
@@ -401,7 +401,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
 export async function namingRules(campaign: string): Promise<Array<{ from: string; to: string }>> {
   const db = await getDb();
   const expand = (value: string): string =>
-    promptInline(expandBodyRefs(db, campaign, value)).trim();
+    promptInline(expandCampaignBodyRefs(db, campaign, value)).trim();
   return knowledgeItemRows(db, campaign)
     .map(renderKnowledgeItem)
     .filter((item) => item.kind === "naming" && item.from.trim() !== "" && item.to.trim() !== "")

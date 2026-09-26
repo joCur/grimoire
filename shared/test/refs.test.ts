@@ -2,29 +2,29 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  bodyEntityRefSlugs,
-  bodyReferencesEntity,
-  entityRefSlugs,
-  entityRefSource,
-  expandBodyEntityRefs,
-  expandEntityRefs,
-  isEntityRefSlug,
+  bodyRefSlugs,
+  bodyReferencesSlug,
+  refSlugs,
+  refSource,
+  expandBodyRefs,
+  expandRefs,
+  isRefSlug,
   splitCodeSegments,
-  splitEntityRefs,
+  splitRefs,
 } from "../src/refs";
 
 const NAMES: Record<string, string> = { jorna: "Hafenmeisterin Jorna", bucht: "Die Bucht" };
 const nameOf = (slug: string): string | undefined => NAMES[slug];
 
-describe("splitEntityRefs", () => {
+describe("splitRefs", () => {
   test("text without a reference stays one piece", () => {
-    expect(splitEntityRefs("Nur Prosa [ein Link](x)")).toEqual([
+    expect(splitRefs("Nur Prosa [ein Link](x)")).toEqual([
       { type: "text", value: "Nur Prosa [ein Link](x)" },
     ]);
   });
 
   test("splits around a reference and keeps the suffix", () => {
-    expect(splitEntityRefs("Am Kai wartet [[jorna]]s Boot.")).toEqual([
+    expect(splitRefs("Am Kai wartet [[jorna]]s Boot.")).toEqual([
       { type: "text", value: "Am Kai wartet " },
       { type: "ref", slug: "jorna" },
       { type: "text", value: "s Boot." },
@@ -32,7 +32,7 @@ describe("splitEntityRefs", () => {
   });
 
   test("several references in one text", () => {
-    expect(entityRefSlugs("[[jorna]] und [[fenn]] und wieder [[jorna]]")).toEqual([
+    expect(refSlugs("[[jorna]] und [[fenn]] und wieder [[jorna]]")).toEqual([
       "jorna",
       "fenn",
     ]);
@@ -40,25 +40,25 @@ describe("splitEntityRefs", () => {
 
   test("only kebab-case slugs count — everything else is plain text", () => {
     for (const text of ["[[Jorna]]", "[[jorna ]]", "[[a b]]", "[[]]", "[[jorna|Jorna]]", "[jorna]"]) {
-      expect(splitEntityRefs(text)).toEqual([{ type: "text", value: text }]);
+      expect(splitRefs(text)).toEqual([{ type: "text", value: text }]);
     }
-    expect(entityRefSlugs("[[alte-mole]]")).toEqual(["alte-mole"]);
+    expect(refSlugs("[[alte-mole]]")).toEqual(["alte-mole"]);
   });
 });
 
-describe("expandEntityRefs", () => {
+describe("expandRefs", () => {
   test("resolved references become the current display name", () => {
-    expect(expandEntityRefs("[[jorna]] steht an [[bucht]].", nameOf)).toBe(
+    expect(expandRefs("[[jorna]] steht an [[bucht]].", nameOf)).toBe(
       "Hafenmeisterin Jorna steht an Die Bucht.",
     );
   });
 
   test("unresolved reference keeps its brackets (degrades, never throws)", () => {
-    expect(expandEntityRefs("Wer ist [[niemand]]?", nameOf)).toBe("Wer ist [[niemand]]?");
+    expect(expandRefs("Wer ist [[niemand]]?", nameOf)).toBe("Wer ist [[niemand]]?");
   });
 
   test("an empty display name counts as unresolved", () => {
-    expect(expandEntityRefs("[[leer]]", () => "")).toBe("[[leer]]");
+    expect(expandRefs("[[leer]]", () => "")).toBe("[[leer]]");
   });
 });
 
@@ -87,36 +87,36 @@ describe("code regions are not prose", () => {
   test("a code span does not reach across a blank line", () => {
     const text = "ein ` Backtick\n\nund [[jorna]] ` noch einer";
     expect(splitCodeSegments(text).every((segment) => !segment.code)).toBe(true);
-    expect(expandBodyEntityRefs(text, nameOf)).toContain("Hafenmeisterin Jorna");
+    expect(expandBodyRefs(text, nameOf)).toContain("Hafenmeisterin Jorna");
   });
 
   test("expansion skips fenced blocks and code spans", () => {
-    const expanded = expandBodyEntityRefs(FENCED, nameOf);
+    const expanded = expandBodyRefs(FENCED, nameOf);
     expect(expanded).toContain("Vorher Hafenmeisterin Jorna.");
     expect(expanded).toContain("[[jorna]] im Block");
     expect(expanded).toContain("`[[jorna]]` inline");
   });
 
   test("a mention only inside code is not a reference", () => {
-    expect(bodyReferencesEntity("nur `[[jorna]]` hier", "jorna")).toBe(false);
-    expect(bodyReferencesEntity("```\n[[jorna]]\n```\n", "jorna")).toBe(false);
-    expect(bodyReferencesEntity("Am Kai wartet [[jorna]]s Boot.", "jorna")).toBe(true);
-    expect(bodyReferencesEntity("Nur Prosa.", "jorna")).toBe(false);
+    expect(bodyReferencesSlug("nur `[[jorna]]` hier", "jorna")).toBe(false);
+    expect(bodyReferencesSlug("```\n[[jorna]]\n```\n", "jorna")).toBe(false);
+    expect(bodyReferencesSlug("Am Kai wartet [[jorna]]s Boot.", "jorna")).toBe(true);
+    expect(bodyReferencesSlug("Nur Prosa.", "jorna")).toBe(false);
   });
 
   test("the slugs of a body are its prose references, once each", () => {
-    expect(bodyEntityRefSlugs(FENCED)).toEqual(["jorna"]);
-    expect(bodyEntityRefSlugs("nur `[[fenn]]` und\n```\n[[bucht]]\n```\n")).toEqual([]);
-    expect(bodyEntityRefSlugs("[[fenn]] trifft [[jorna]], dann [[fenn]]s Boot.")).toEqual([
+    expect(bodyRefSlugs(FENCED)).toEqual(["jorna"]);
+    expect(bodyRefSlugs("nur `[[fenn]]` und\n```\n[[bucht]]\n```\n")).toEqual([]);
+    expect(bodyRefSlugs("[[fenn]] trifft [[jorna]], dann [[fenn]]s Boot.")).toEqual([
       "fenn",
       "jorna",
     ]);
-    expect(bodyEntityRefSlugs("Nur Prosa, [[Jorna]] ist Text.")).toEqual([]);
+    expect(bodyRefSlugs("Nur Prosa, [[Jorna]] ist Text.")).toEqual([]);
   });
 });
 
 test("slug predicate and source spelling", () => {
-  expect(isEntityRefSlug("alte-mole")).toBe(true);
-  expect(isEntityRefSlug("Alte Mole")).toBe(false);
-  expect(entityRefSource("jorna")).toBe("[[jorna]]");
+  expect(isRefSlug("alte-mole")).toBe(true);
+  expect(isRefSlug("Alte Mole")).toBe(false);
+  expect(refSource("jorna")).toBe("[[jorna]]");
 });
