@@ -23,12 +23,11 @@
 // adopts the stored scene, forcing writes only the fields this request
 // carries, so the other writer's status survives a forced text save.
 //
-// An npc and a location keep one prose FIELD beside their text —
-// `motivation` and `atmosphere` (decisions/data-shape) — and the edit surface carries it:
-// set, cleared, saved in the same write as the text, and under the same
-// guard, so the conflict line and both of its answers hold for it too. The
-// fields dialog does not show it. Both are their own resources (decisions/resources)
-// and are read back from there.
+// A location keeps one prose FIELD beside its text — `atmosphere`
+// (decisions/data-shape) — and the edit surface carries it, saved in the same
+// write as the text; the fields dialog does not show it. An npc's text is
+// edited in its edit mode together with all of its fields
+// (tests/npc-edit-mode.e2e.ts covers those); this spec covers the text half.
 //
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
@@ -49,7 +48,7 @@ import { campaignPath, getCampaign } from "../support/campaign";
 import { chapterPath, getChapter, patchChapter } from "../support/chapter";
 import { createGlossaryTerm, getGlossaryTerms } from "../support/glossary-term";
 import { getLocation } from "../support/location";
-import { getNpc, npcExists, patchNpc } from "../support/npc";
+import { getNpc, npcExists } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { expect, test } from "../support/test";
 import { ui, uiPattern } from "../support/ui";
@@ -446,8 +445,8 @@ test("a forced save writes only the text — the other writer's status survives"
 });
 
 // Fields and text in ONE request are asserted here on the write path itself;
-// the edit modes send them together (tests/scene-edit-mode.e2e.ts, and the
-// npc's edit surface with text and motivation below). One PATCH, one
+// the edit modes send them together (tests/scene-edit-mode.e2e.ts,
+// tests/npc-edit-mode.e2e.ts). One PATCH, one
 // transaction, ONE step of the version — how much a request carried is not
 // readable from `rev`.
 test("fields and body in ONE write are one version step", async ({ api }) => {
@@ -784,54 +783,7 @@ test("a glossary term is a row of its own, kept on the glossary page", async ({ 
 
 // --- the prose field beside the text ------------------------------------------
 
-/** The motivation field of the npc edit surface. */
-function motivationField(page: Page) {
-  return page.getByRole("textbox", { name: ui("properties.npc.motivation.label"), exact: true });
-}
-
-test("the npc edit surface carries the motivation: set with the text, cleared with null", async ({
-  page,
-  api,
-}) => {
-  const before = await npcFields(api);
-  const mine = "See the beacon burn — and finally confront [[fenn]].";
-
-  await page.goto(NPC_URL);
-  await openMarkdownEditor(page);
-  const field = motivationField(page);
-  await expect(field).toHaveValue(String(before.motivation));
-  await expect(
-    page.getByText(
-      ui("bodyEditor.hint.withFields", { fields: ui("properties.npc.motivation.label") }),
-    ),
-  ).toBeVisible();
-
-  // A field change alone is something to save.
-  const save = saveButton(page);
-  await expect(save).toBeDisabled();
-  await field.fill(mine);
-  await expect(save).toBeEnabled();
-  await save.click();
-
-  // Rendered in the header, the reference as the current name.
-  await expect(field).toHaveCount(0);
-  const article = page.getByRole("article");
-  await expect(article).toContainText("and finally confront Fenn");
-  await expect(article).not.toContainText("[[fenn]]");
-  const saved = await npcFields(api);
-  // Only the motivation moved — the text was not touched, so it was not sent.
-  expect(saved).toEqual({ ...before, motivation: mine });
-
-  // Emptying the field clears it — no empty value stays behind.
-  await openMarkdownEditor(page);
-  await motivationField(page).fill("");
-  await saveButton(page).click();
-  await expect(motivationField(page)).toHaveCount(0);
-  await expect.poll(async () => Object.hasOwn(await getNpc(api, NPC), "motivation")).toBe(false);
-  await expect(article).not.toContainText("finally confront");
-});
-
-test("the location edit surface carries the atmosphere; the fields dialog shows neither", async ({
+test("the location edit surface carries the atmosphere; the fields dialog does not", async ({
   page,
   api,
 }) => {
@@ -861,82 +813,4 @@ test("the location edit surface carries the atmosphere; the fields dialog shows 
   expect(after.atmosphere).toBe(mine);
   // The text was not touched, so it was not sent.
   expect(after.body).toBe(before.body);
-
-  // …and the npc's dialog leaves the motivation out the same way.
-  await page.goto(NPC_URL);
-  await page.getByRole("button", { name: ui("properties.action") }).click();
-  const npcDialog = page.getByRole("dialog", {
-    name: ui("properties.title", { kind: ui("kind.npc") }),
-  });
-  await expect(npcDialog).toBeVisible();
-  await expect(
-    npcDialog.getByRole("textbox", { name: ui("properties.npc.motivation.label") }),
-  ).toHaveCount(0);
-});
-
-test("text and motivation share the guard: a second write is the conflict line — reloading takes the stored state", async ({
-  page,
-  api,
-}) => {
-  const before = await npcFields(api);
-  const theirs = "Save the harbour funds, whatever it costs.";
-
-  await page.goto(NPC_URL);
-  await openMarkdownEditor(page);
-  const textarea = textareaOf(page, NPC_NAME);
-  await motivationField(page).fill("My version of the motivation.");
-  await textarea.fill(`${before.body}\nMy line.\n`);
-
-  // Somebody else writes the motivation while the surface stands.
-  await patchNpc(api, NPC, { motivation: theirs });
-  await saveButton(page).click();
-
-  const conflicted = conflict(page);
-  await expect(conflicted.line).toBeVisible();
-  // Nothing of the draft was written.
-  expect((await getNpc(api, NPC)).motivation).toBe(theirs);
-  expect((await getNpc(api, NPC)).body).toBe(before.body);
-
-  // Reloading drops BOTH halves of the draft for the stored state.
-  await conflicted.reload.click();
-  await expect(conflicted.line).toHaveCount(0);
-  await expect(motivationField(page)).toHaveValue(theirs);
-  await expect(textarea).toHaveValue(before.body);
-  await expect(saveButton(page)).toBeDisabled();
-});
-
-test("saving anyway writes text and motivation — a foreign status survives", async ({
-  page,
-  api,
-}) => {
-  const before = await npcFields(api);
-  const mine = "The beacon, despite everything.";
-  const line = "Saved despite the status change.";
-
-  await page.goto(NPC_URL);
-  await openMarkdownEditor(page);
-  await motivationField(page).fill(mine);
-  const textarea = textareaOf(page, NPC_NAME);
-  await textarea.fill(`${before.body}\n${line}\n`);
-
-  // A write of another field by a second writer is a conflict all the same.
-  await patchNpc(api, NPC, { status: "missing" });
-  await saveButton(page).click();
-  const conflicted = conflict(page);
-  await expect(conflicted.line).toBeVisible();
-
-  await conflicted.force.click();
-  await expect(textarea).toHaveCount(0);
-  await expect(conflicted.line).toHaveCount(0);
-
-  await expect.poll(async () => (await getNpc(api, NPC)).motivation).toBe(mine);
-  const after = await npcFields(api);
-  // Only what the surface shows was written: the status set in between stays.
-  expect(after).toEqual({
-    ...before,
-    motivation: mine,
-    status: "missing",
-    body: `${before.body}\n${line}\n`,
-  });
-  await expect(page.getByRole("article")).toContainText(mine);
 });
