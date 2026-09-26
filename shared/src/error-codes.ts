@@ -184,6 +184,15 @@ export const ERROR_CODES = [
    * `trash_blocked`.
    */
   "restore_blocked",
+  /**
+   * 409, accepting a proposed scene of a generator run: the scene names an
+   * npc or a location the same run proposes that is not written yet — it is
+   * undecided or rejected. A scene is written only once everything it names
+   * exists (decisions/generator). Nothing is written and the job stays as it
+   * was. `{ scenes, npcs, locations }` — the refused scenes and the proposals
+   * they name, each an id list.
+   */
+  "proposal_not_written",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

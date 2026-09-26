@@ -37,6 +37,7 @@ import {
   readGeneratorJob,
   startGeneratorJob,
 } from "../support/generator-job";
+import { applyScenes, sceneProposal } from "../support/generator-review";
 import { getScene, sceneExists } from "../support/scene";
 import { ui, uiPattern } from "../support/ui";
 
@@ -62,10 +63,7 @@ async function startSceneRun(page: Page, source: string): Promise<void> {
 
 /** The part-level accept action of the proposed scene `id`. */
 async function acceptPart(page: Page, id: string): Promise<void> {
-  await page
-    .locator("div")
-    .filter({ hasText: sceneLabel(id) })
-    .last()
+  await sceneProposal(page, id)
     .getByRole("button", { name: ui("generate.review.acceptOne") })
     .click();
 }
@@ -148,16 +146,15 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   });
   // …and it is still on the card once the retried part is its draft.
   await expect(retriedCard).toBeFocused();
-  // All three are there now; the one already accepted stayed accepted.
+  // All three are there now, each as its proposed scene; the one already
+  // accepted stayed accepted.
   for (const scene of THREE_SCENES) {
-    await expect(page.getByRole("heading", { level: 2, name: scene.title })).toBeVisible();
+    await expect(sceneProposal(page, scene.id)).toBeVisible();
   }
   await expect(page.getByText(ui("generate.pipeline.partFailed"))).toHaveCount(0);
 
   // --- (4) accepting the rest writes what is left and the job is gone -----
-  await page
-    .getByRole("button", { name: uiPattern("generate.review.applyRest", { count: /.+/ }) })
-    .click();
+  await applyScenes(page).click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   for (const scene of THREE_SCENES) {
     const stored = await getScene(api, scene.id);

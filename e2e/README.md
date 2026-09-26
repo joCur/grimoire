@@ -62,7 +62,10 @@ normal `OpenAICompatProvider`.
   `trigger`/`location`, every other field stays the model's. Discarding and
   writing happen per `id` (`droppedScenes`, `writtenScenes`): accepting is
   the same `PATCH` with `review.writtenScenes`, `writtenNpcs` or
-  `writtenLocations` — the ids that get written.
+  `writtenLocations` — the ids that get written, and nothing else. The
+  review of a scene run walks its stages (locations, NPCs, scenes); the
+  helpers that walk them in the browser live in
+  `support/generator-review.ts`.
 - **The generator job is its own resource**
   ([decisions/resources](../docs/decisions/resources.md)):
   `…/generator-jobs` is the list with the campaign's one job or none

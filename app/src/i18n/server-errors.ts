@@ -55,6 +55,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   trash_blocked: "server.trash_blocked",
   chapter_in_trash: "server.chapter_in_trash",
   restore_blocked: "server.restore_blocked",
+  proposal_not_written: "server.proposal_not_written",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -223,6 +224,7 @@ function paramsFor(
     case "llm_invalid":
     case "nothing_to_write":
     case "body_not_editable":
+    case "proposal_not_written":
       return {};
   }
 }

@@ -15,19 +15,23 @@
 //     the augment action and the generator page say it.
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
-import type {
-  GeneratorJob,
-  GeneratorJobPart,
-  GeneratorJobPatch,
-  GeneratorJobReview,
-  GenerateReviewDecision,
+import {
+  GENERATOR_REVIEW_STAGES,
+  unwrittenReferences,
+  type GeneratorJob,
+  type GeneratorJobPart,
+  type GeneratorJobPatch,
+  type GeneratorJobReview,
+  type GeneratorReviewStage,
+  type GenerateReviewDecision,
 } from "@grimoire/shared/generator-job";
+import { withSceneChange, type SceneProposal } from "@grimoire/shared/scene";
 
 import type { PartState } from "@/components/ProposalRow";
 import type { Translate } from "@/i18n";
 
 /**
- * Summary inside the apply button: "2 scenes · 1 proposed npc or location".
+ * Summary of what a run proposes: "2 scenes · 1 proposed npc or location".
  * One catalog entry per sentence, so the plural of both halves is the
  * message's business (ICU) and nothing is glued together here. `proposed`
  * counts the proposed npcs and locations together.
@@ -233,6 +237,7 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 /** A review state with nothing decided — also the fallback for an older payload. */
 export function emptyReview(): GeneratorJobReview {
   return {
+    stage: GENERATOR_REVIEW_STAGES[0],
     droppedScenes: [],
     fields: {},
     blocks: {},
@@ -249,6 +254,7 @@ export function reviewOf(job: GeneratorJob | null | undefined): GeneratorJobRevi
   const review = job?.review;
   if (review === undefined) return emptyReview();
   return {
+    stage: review.stage ?? GENERATOR_REVIEW_STAGES[0],
     droppedScenes: review.droppedScenes ?? [],
     fields: review.fields ?? {},
     blocks: review.blocks ?? {},
@@ -312,9 +318,9 @@ function mergeDecisions(
 /**
  * The job as it will look once a patch lands — the OPTIMISTIC copy the UI
  * shows while the request is in flight. It must merge exactly the way the
- * server does (generator-jobs.ts `applyReviewPatch`), including the one
- * asymmetry: `droppedScenes` is a set sent whole, everything else merges per key,
- * and a `null` decision — in `npcs`, `locations`, `fields` and `blocks`
+ * server does (generator-jobs.ts `applyReviewPatch`): `stage` replaces the
+ * stored one, `droppedScenes` is a set sent whole, everything else merges per
+ * key, and a `null` decision — in `npcs`, `locations`, `fields` and `blocks`
  * alike — means that the decision is open again, which deletes the key.
  */
 export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): GeneratorJob {
@@ -325,6 +331,7 @@ export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): Generat
     sceneEdits: mergeEdits(job.sceneEdits ?? {}, patch.sceneEdits),
     npcEdits: mergeEdits(job.npcEdits ?? {}, patch.npcEdits),
     review: {
+      stage: decided.stage ?? review.stage,
       droppedScenes:
         decided.droppedScenes === undefined
           ? review.droppedScenes
@@ -463,18 +470,165 @@ export interface AcceptSelection {
 }
 
 /**
- * What accepting the whole run names: every open scene, every open npc and
- * location the DM accepted — an undecided one stays out — and the NPC run's
- * one npc unless it was rejected, because it is the whole run.
+ * A proposed scene of the job with the DM's stored change laid over the
+ * model's scene — what an accept of it writes.
+ */
+export function editedScene(job: GeneratorJob, scene: SceneProposal): SceneProposal {
+  const change = job.sceneEdits?.[scene.id];
+  return change === undefined ? scene : (withSceneChange(scene, change) as SceneProposal);
+}
+
+/**
+ * The npcs and locations of this run that a proposed scene names and that
+ * are not written — the scene cannot be written until they are
+ * (decisions/generator). `scene` is the scene as the review shows it.
+ */
+export function missingReferences(
+  job: GeneratorJob | null | undefined,
+  scene: Pick<SceneProposal, "npcs" | "location">,
+): { npcs: string[]; locations: string[] } {
+  if (job === null || job === undefined) return { npcs: [], locations: [] };
+  return unwrittenReferences({ ...job, review: reviewOf(job) }, scene);
+}
+
+/**
+ * The run's npcs and locations a proposed scene names that the DM REJECTED:
+ * the scene is incomplete until each of them is accepted after all or taken
+ * out of the scene, or the scene is dropped.
+ */
+export function rejectedReferences(
+  job: GeneratorJob | null | undefined,
+  scene: Pick<SceneProposal, "npcs" | "location">,
+): { npcs: string[]; locations: string[] } {
+  const missing = missingReferences(job, scene);
+  return {
+    npcs: missing.npcs.filter((id) => npcState(job, id) === "rejected"),
+    locations: missing.locations.filter((id) => locationState(job, id) === "rejected"),
+  };
+}
+
+/** Does the scene name nothing of its run that is not written? */
+export function sceneWritable(
+  job: GeneratorJob | null | undefined,
+  scene: Pick<SceneProposal, "npcs" | "location">,
+): boolean {
+  const missing = missingReferences(job, scene);
+  return missing.npcs.length === 0 && missing.locations.length === 0;
+}
+
+/**
+ * The open scenes the scene stage's accept action names: every open scene
+ * whose references are all written — one that still names a proposal that is
+ * not written would refuse the whole accept.
+ */
+export function acceptableScenes(job: GeneratorJob | null | undefined): string[] {
+  if (job === null || job === undefined) return [];
+  const open = new Set(openScenes(job));
+  return (job.result?.scenes ?? [])
+    .filter((scene) => open.has(scene.id) && sceneWritable(job, editedScene(job, scene)))
+    .map((scene) => scene.id);
+}
+
+/**
+ * What accepting the whole run names: every open scene whose references are
+ * written, and the NPC run's one npc unless it was rejected, because it is
+ * the whole run. A scene run's npcs and locations are accepted one by one,
+ * in their own stage.
  */
 export function openSelection(job: GeneratorJob | null | undefined): AcceptSelection {
-  const review = reviewOf(job);
   const npcRun = job?.npcResult?.npc.id;
   return {
-    scenes: openScenes(job),
-    npcs: openNpcs(job).filter((id) => id === npcRun || review.npcs[id] === "accepted"),
-    locations: openLocations(job).filter((id) => review.locations[id] === "accepted"),
+    scenes: acceptableScenes(job),
+    npcs: openNpcs(job).filter((id) => id === npcRun),
   };
+}
+
+// --- the stages of a scene run's review --------------------------------------
+//
+// The review walks through the run in reference order (decisions/generator):
+// the new locations, then the new npcs, then the scenes that name them. The
+// stage the DM is in is stored on the job (`review.stage`); what of it can be
+// shown is decided here — a stage without proposals is skipped, and the
+// scene stage opens only once every location and npc is decided.
+
+/** One stage of the review, as its step shows it. */
+export interface ReviewStageState {
+  stage: GeneratorReviewStage;
+  /** Proposals and open parts of this stage — 0 means it is skipped. */
+  total: number;
+  /** Proposals that are written or rejected (scenes: written or dropped). */
+  decided: number;
+  /** Nothing left to decide in it, and no part of it still to come. */
+  complete: boolean;
+  /** Can the DM go there now? */
+  reachable: boolean;
+}
+
+/** The part kind of a stage. */
+const STAGE_PART: Record<GeneratorReviewStage, GeneratorJobPart["kind"]> = {
+  locations: "location",
+  npcs: "npc",
+  scenes: "scene",
+};
+
+/** The ids a stage decides, each with whether it is decided. */
+function stageProposals(
+  job: GeneratorJob | null | undefined,
+  stage: GeneratorReviewStage,
+): Array<{ id: string; decided: boolean }> {
+  switch (stage) {
+    case "locations":
+      return jobLocations(job).map((id) => ({ id, decided: locationState(job, id) !== "open" }));
+    case "npcs":
+      return (job?.result?.npcs ?? []).map((npc) => ({
+        id: npc.id,
+        decided: npcState(job, npc.id) !== "open",
+      }));
+    case "scenes":
+      return jobScenes(job).map((id) => ({ id, decided: sceneState(job, id) !== "open" }));
+  }
+}
+
+/**
+ * Every stage of a scene run's review with how far it is. A part still
+ * pending, running or failed counts as a proposal that is not decided: what
+ * it will propose is not there yet.
+ */
+export function reviewStages(job: GeneratorJob | null | undefined): ReviewStageState[] {
+  const parts = jobPipelineParts(job);
+  const states = GENERATOR_REVIEW_STAGES.map((stage) => {
+    const proposals = stageProposals(job, stage);
+    const ids = new Set(proposals.map((proposal) => proposal.id));
+    const waiting = parts.filter(
+      (part) => part.kind === STAGE_PART[stage] && part.status !== "done" && !ids.has(part.id),
+    ).length;
+    const decided = proposals.filter((proposal) => proposal.decided).length;
+    const total = proposals.length + waiting;
+    return { stage, total, decided, complete: decided === total, reachable: true };
+  });
+  const earlierComplete = states
+    .filter((state) => state.stage !== "scenes")
+    .every((state) => state.complete);
+  return states.map((state) =>
+    state.stage === "scenes" ? { ...state, reachable: earlierComplete } : state,
+  );
+}
+
+/**
+ * The stage the review shows: the stored one, moved to the next stage that
+ * has proposals when it has none (or to the last one before it), and to the
+ * first undecided stage when the stored one is the scene stage and that is
+ * not open yet.
+ */
+export function currentStage(job: GeneratorJob | null | undefined): GeneratorReviewStage {
+  const stages = reviewStages(job).filter((state) => state.total > 0);
+  const stored = reviewOf(job).stage;
+  const order = (stage: GeneratorReviewStage) => GENERATOR_REVIEW_STAGES.indexOf(stage);
+  const shown =
+    stages.find((state) => order(state.stage) >= order(stored)) ?? stages.at(-1);
+  if (shown === undefined) return "scenes";
+  if (shown.reachable) return shown.stage;
+  return stages.find((state) => !state.complete)?.stage ?? shown.stage;
 }
 
 /**

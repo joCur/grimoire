@@ -2,7 +2,6 @@
 // case starts from, and the PATCH body of an accept.
 
 import {
-  openLocationIds,
   openNpcIds,
   openSceneIds,
   type GeneratorJob,
@@ -52,18 +51,15 @@ export function acceptBody(job: GeneratorJob, selection: Selection): Record<stri
 }
 
 /**
- * What "accept all" names: every open scene, every open npc and location the
- * DM accepted, and the NPC run's one npc unless it was rejected — it is the
- * whole run.
+ * What "accept all" names: every open scene, and the NPC run's one npc unless
+ * it was rejected — it is the whole run. A scene run's npcs and locations are
+ * accepted one by one, each on its own.
  */
 export function openSelection(job: GeneratorJob): Selection {
   const npcRun = job.npcResult?.npc.id;
   return {
     scenes: [...openSceneIds(job)],
-    npcs: [...openNpcIds(job)].filter(
-      (id) => id === npcRun || job.review.npcs[id] === "accepted",
-    ),
-    locations: [...openLocationIds(job)].filter((id) => job.review.locations[id] === "accepted"),
+    npcs: [...openNpcIds(job)].filter((id) => id === npcRun),
   };
 }
 

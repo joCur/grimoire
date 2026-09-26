@@ -31,10 +31,10 @@
 //                the DM's edits), so the review comes back and can be applied.
 //   running      cannot survive: the provider call lived in the process that
 //                is gone. The BOOT therefore turns every leftover `running`
-//                row into a `failed` one whose error body carries a plain
-//                German sentence — the app already renders exactly that field
-//                for a failed run, so the DM reads "restart the job" instead
-//                of watching a spinner that will never stop. That rewrite
+//                row into a `failed` one whose error body carries its code
+//                — the app renders its sentence for a failed run, so the DM
+//                reads "restart the job" instead of watching a spinner that
+//                will never stop. That rewrite
 //                lives in db/job-boot.ts (an import-cycle split, nothing
 //                more) and runs from store/handle.ts.
 //
@@ -46,6 +46,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   GENERATOR_JOB_KINDS,
+  GENERATOR_REVIEW_STAGES,
   isGeneratorJobSettled,
   npcEditSchema,
   openLocationIds,
@@ -316,6 +317,7 @@ function unpackNpcEdits(value: string): Record<string, NpcChange> {
 /** The review state of a job that has not been touched yet. */
 export function emptyReview(): GeneratorJobReview {
   return {
+    stage: GENERATOR_REVIEW_STAGES[0],
     droppedScenes: [],
     fields: {},
     blocks: {},
@@ -346,16 +348,16 @@ function stringRecord<T>(value: unknown, pick: (v: unknown) => T | undefined): R
 function unpackReview(value: string): GeneratorJobReview {
   const parsed = unpackPayload<Record<string, unknown>>(value);
   if (parsed === undefined) return emptyReview();
+  const stage = GENERATOR_REVIEW_STAGES.find((candidate) => candidate === parsed.stage);
   return {
+    stage: stage ?? GENERATOR_REVIEW_STAGES[0],
     droppedScenes: stringList(parsed.droppedScenes),
     fields: stringRecord(parsed.fields, (v) => (typeof v === "boolean" ? v : undefined)),
     blocks: stringRecord(parsed.blocks, (v) => (typeof v === "boolean" ? v : undefined)),
     writtenScenes: stringList(parsed.writtenScenes),
-    npcs: stringRecord(parsed.npcs, (v) => (v === "accepted" || v === "rejected" ? v : undefined)),
+    npcs: stringRecord(parsed.npcs, (v) => (v === "rejected" ? v : undefined)),
     writtenNpcs: stringList(parsed.writtenNpcs),
-    locations: stringRecord(parsed.locations, (v) =>
-      v === "accepted" || v === "rejected" ? v : undefined,
-    ),
+    locations: stringRecord(parsed.locations, (v) => (v === "rejected" ? v : undefined)),
     writtenLocations: stringList(parsed.writtenLocations),
   };
 }
@@ -367,11 +369,11 @@ function stringList(value: unknown): string[] {
 
 /**
  * What the DM reads when a finished job's payload column is unreadable (a
- * truncated write, a hand-edited database). The wording is the one the
- * failure block already renders, and it names the only way forward.
+ * truncated write, a hand-edited database) — the failure block renders it,
+ * and it names the only way forward.
  */
 export const UNREADABLE_PAYLOAD_MESSAGE =
-  "Das Ergebnis dieses Durchlaufs ist nicht mehr lesbar. Verwirf den Job und starte ihn neu.";
+  "the result of this run can no longer be read — discard the job and start it again";
 
 /** The kind of a stored job; anything unknown reads as a scene run. */
 function jobKind(value: string): GeneratorJobKind {
@@ -1267,6 +1269,7 @@ export function applyReviewPatch(job: Job, patch: GeneratorJobPatch): void {
     job.npcEdits[id] = { ...job.npcEdits[id], ...change };
   }
   const review = patch.review ?? {};
+  if (review.stage !== undefined) job.review.stage = review.stage;
   for (const [id, decision] of Object.entries(review.npcs ?? {})) {
     // `null` is undecided — the review's third state, which is why an
     // undo has to be expressible and is not just a missing key.

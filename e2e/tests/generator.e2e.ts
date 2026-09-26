@@ -1,6 +1,7 @@
 // Critical path 6: the generator cycle against the stub LLM; see CLAUDE.md.
 //
-// Job → review → apply → draft in the chapter overview, plus the NPC mode and the failure
+// Job → review in stages (the new locations, the new npcs, the scenes) →
+// accept → draft in the chapter overview, plus the NPC mode and the failure
 // path.
 //
 // A proposed scene is the scene without its guard (decisions/resources): the review names
@@ -36,13 +37,26 @@ import {
   OUTLINE_WARNING,
   SCENE_ID,
   SCENE_TITLE,
+  SECOND_SCENE,
   TRIGGER,
   UNKNOWN_REF_ID,
 } from "../fixtures/replies";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getChapter } from "../support/chapter";
-import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
+import { generatorJobPath, getGeneratorJob, readGeneratorJob } from "../support/generator-job";
+import {
+  acceptProposal,
+  acceptProposalsOfRun,
+  applyScenes,
+  expectStage,
+  locationProposal,
+  nextStage,
+  npcProposal,
+  rejectProposal,
+  reviewStep,
+  sceneProposal,
+} from "../support/generator-review";
 import { getLocation, locationExists } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
@@ -94,16 +108,6 @@ function pendingSummary(scenes: number, stubs: number): string {
     summary: ui("generate.review.summary", { scenes, stubs }),
   });
 }
-
-/** The bulk accept button, naming exactly what it writes. */
-function applyAllName(scenes: number, stubs: number): RegExp {
-  return uiExact("generate.review.apply", {
-    count: ui("generate.review.summary", { scenes, stubs }),
-  });
-}
-
-/** The bulk accept button, whatever it counts. */
-const APPLY_ANY = uiPattern("generate.review.apply", { count: /.*/ }, { exact: true });
 
 /** The accessible name of a `[[ref]]` to an npc. */
 function npcRefName(name: string): string {
@@ -170,6 +174,10 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // The review of the finished job (the working state may flash by).
   await startSceneRun(page, SOURCE);
   await expect(page.getByText(pendingSummary(1, 2))).toBeVisible();
+  // It opens at the first stage: the new location. The scenes wait until
+  // every new location and npc is decided.
+  await expectStage(page, "locations");
+  await expect(reviewStep(page, "scenes")).toBeDisabled();
   // What the run cost: it is summed over every CALL of the
   // pipeline — the outline plus the one scene plus the npc and the location.
   // Not one correction among them: the scene and the location name
@@ -179,36 +187,9 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // The model's warning is shown, not swallowed (the stub's warning text).
   await expect(page.getByText(OUTLINE_WARNING)).toBeVisible();
 
-  // The scene's card: title, label, status pill, rendered body.
-  const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
-  await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
-  // The status chip shows the LABEL, not the raw property value.
-  await expect(card.getByText(ui("status.scene.draft"), { exact: true })).toBeVisible();
-  await expect(card.locator("[data-callout='readaloud']")).toContainText(READALOUD_OPENING);
-  await expect(card.locator("[data-callout='loot']")).toContainText(ui("markdown.callout.loot"));
-  await expect(card.locator("details[data-if-section]")).toHaveCount(2);
-  // The draft's prose uses `[[slug]]` and the review resolves it —
-  // `[[fenn]]` becomes the NPC's current name as a link, while `[[grella]]`
-  // (only proposed by this run, nothing stored yet) stays visible as source
-  // text.
-  await expect(card.getByRole("link", { name: npcRefName(FENN) }).first()).toHaveText(FENN);
-  await expect(card).toContainText("[[grella]]");
-
   // Nothing is stored before the accept.
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
 
-  // Proposed npcs and locations are decided one by one. An undecided row is
-  // the innermost div that carries its label AND its own reject button.
-  const acceptProposal = async (targetPath: string, name: string) => {
-    const row = page
-      .locator("div")
-      .filter({ hasText: targetPath })
-      .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
-      .last();
-    await expect(row).toContainText(name);
-    await row.getByRole("button", { name: ui("generate.stub.accept") }).click();
-  };
-  await expect(page.getByText(ui("generate.review.stubsHeading"))).toBeVisible();
   // The run's proposed scenes, npcs and locations are each their own typed
   // list (decisions/resources): the scene, the npc and the location themselves, no kind,
   // no path, no properties map.
@@ -250,21 +231,45 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
     "id",
     "name",
   ]);
-  await acceptProposal(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
-  await acceptProposal(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
-  await expect(page.getByRole("button", { name: ui("generate.stub.accepted") })).toHaveCount(2);
 
-  await page.getByRole("button", { name: applyAllName(1, 2) }).click();
+  // Every proposal is decided on its own, and accepting one writes exactly
+  // that one: the location first…
+  await expect(locationProposal(page, LOCATION_STUB_ID)).toContainText(LOCATION_STUB_NAME);
+  await acceptProposal(locationProposal(page, LOCATION_STUB_ID));
+  expect(await locationExists(api, LOCATION_STUB_ID)).toBe(true);
+  expect(await npcExists(api, NPC_STUB_ID)).toBe(false);
+  // …then the npc…
+  await nextStage(page);
+  await expectStage(page, "npcs");
+  await expect(npcProposal(page, NPC_STUB_ID)).toContainText(NPC_STUB_NAME);
+  await acceptProposal(npcProposal(page, NPC_STUB_ID));
+  expect(await npcExists(api, NPC_STUB_ID)).toBe(true);
+  expect(await sceneExists(api, SCENE_ID)).toBe(false);
+  // …then the scenes.
+  await nextStage(page);
+  await expectStage(page, "scenes");
 
-  // Done state lists exactly what was written, each by its resource segment
+  // The scene's card: title, label, status pill, rendered body.
+  const card = sceneProposal(page, SCENE_ID);
+  await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
+  // The status chip shows the LABEL, not the raw property value.
+  await expect(card.getByText(ui("status.scene.draft"), { exact: true })).toBeVisible();
+  await expect(card.locator("[data-callout='readaloud']")).toContainText(READALOUD_OPENING);
+  await expect(card.locator("[data-callout='loot']")).toContainText(ui("markdown.callout.loot"));
+  await expect(card.locator("details[data-if-section]")).toHaveCount(2);
+  // The draft's prose uses `[[slug]]` and the review resolves it —
+  // `[[fenn]]` and, now that it is written, `[[grella]]` become the npcs'
+  // current names as links.
+  await expect(card.getByRole("link", { name: npcRefName(FENN) }).first()).toHaveText(FENN);
+  await expect(card.getByRole("link", { name: npcRefName(NPC_STUB_NAME) }).first()).toBeVisible();
+
+  await applyScenes(page).click();
+
+  // The done state lists what the last accept wrote, by its resource segment
   // and id.
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   const writtenList = page.getByRole("listitem");
   await expect(writtenList.getByText(SCENE_LABEL, { exact: true })).toBeVisible();
-  await expect(writtenList.getByText(`npcs/${NPC_STUB_ID}`, { exact: true })).toBeVisible();
-  await expect(
-    writtenList.getByText(`locations/${LOCATION_STUB_ID}`, { exact: true }),
-  ).toBeVisible();
 
   // Stored: the draft plus the npc and the location, the location without a
   // status.
@@ -338,7 +343,7 @@ test("the review appears as soon as the job is done — even with the start requ
     timeout: 6_000,
   });
   expect(released).toBe(false);
-  await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
+  await expect(locationProposal(page, LOCATION_STUB_ID)).toBeVisible();
 
   // Let the held response go, so nothing is left hanging when the test ends —
   // and the arrival of the 202 must not throw the review away again.
@@ -370,11 +375,13 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   // Nothing failed, so no error block and no retry action.
   await expect(page.getByRole("button", { name: ui("generate.pipeline.retry") })).toHaveCount(0);
 
+  // Nothing new to decide first: the review opens at the scenes.
+  await expectStage(page, "scenes");
   // The read-aloud carries the mixed quotation marks, rendered as written.
-  const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
+  const card = sceneProposal(page, SCENE_ID);
   await expect(card.locator("[data-callout='readaloud']")).toContainText(ASCII_QUOTE_LINE);
 
-  await page.getByRole("button", { name: applyAllName(1, 0) }).click();
+  await applyScenes(page).click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   // …and they are stored byte for byte: the server corrects no typography.
   const stored = (await getScene(api, SCENE_ID)).body;
@@ -552,11 +559,35 @@ test("review state survives navigation and reload; parts are accepted one by one
   await page.goto("/campaigns/example/generate");
   await startSceneRun(page, SOURCE);
 
-  // (1) Edit a field and the text of the proposed scene, leave the page, come
+  // (1) A decision survives a RELOAD (a second tab sees the same, for the
+  // same reason: it is a row) — and a rejected location can be accepted
+  // after all, which writes it.
+  await expectStage(page, "locations");
+  await rejectProposal(locationProposal(page, LOCATION_STUB_ID));
+  await page.reload();
+  await expect(locationProposal(page, LOCATION_STUB_ID)).toHaveAttribute("data-state", "rejected");
+  expect((await getGeneratorJob(api)).review.locations).toEqual({ [LOCATION_STUB_ID]: "rejected" });
+  await locationProposal(page, LOCATION_STUB_ID)
+    .getByRole("button", { name: ui("generate.stub.acceptAnyway") })
+    .click();
+  await expect(locationProposal(page, LOCATION_STUB_ID)).toHaveAttribute("data-state", "written");
+  expect(await locationExists(api, LOCATION_STUB_ID)).toBe(true);
+
+  // (2) The stage is part of the review on the job: a reload comes back to it.
+  await nextStage(page);
+  await expectStage(page, "npcs");
+  await page.reload();
+  await expectStage(page, "npcs");
+  expect((await getGeneratorJob(api)).review.stage).toBe("npcs");
+  await acceptProposal(npcProposal(page, NPC_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "scenes");
+
+  // (3) Edit a field and the text of the proposed scene, leave the page, come
   // back: they are there. This is the loss being guarded against: component
   // state alone would not survive. The test touches one field and one line and
   // then reads the job back.
-  const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
+  const card = sceneProposal(page, SCENE_ID);
   await card.getByRole("button", { name: ui("common.edit") }).click();
 
   const title = titleField(card);
@@ -579,46 +610,16 @@ test("review state survives navigation and reload; parts are accepted one by one
   await page.goto("/campaigns/example");
   await page.goto("/campaigns/example/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"));
+  await expectStage(page, "scenes");
   await expect(page.getByText(EDITED_READALOUD)).toBeVisible();
   // The edited title is what the card is headed with now — the review reads
   // the edit, not the model's fields.
   await expect(page.getByRole("heading", { level: 2, name: EDITED_TITLE })).toBeVisible();
 
-  // (2) A decision about a proposed npc survives a RELOAD (a second tab sees
-  // the same, for the same reason: it is a row).
-  const proposalRow = (targetPath: string) =>
-    page
-      .locator("div")
-      .filter({ hasText: targetPath })
-      .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
-      .last();
-  const accepted = page.getByRole("button", { name: ui("generate.stub.accepted") });
-  await proposalRow(`npcs/${NPC_STUB_ID}`)
-    .getByRole("button", { name: ui("generate.stub.accept") })
-    .click();
-  await expect(accepted).toHaveCount(1);
-  await page.reload();
-  await expect(accepted).toHaveCount(1);
-
-  // (3) The proposed location, decided as well: the scene NAMES both of
-  // them, and a scene cannot be written while a reference names nothing
-  // (decisions/constraints) — accepting is that decision, the write comes below.
-  await proposalRow(`locations/${LOCATION_STUB_ID}`)
-    .getByRole("button", { name: ui("generate.stub.accept") })
-    .click();
-  await expect(accepted).toHaveCount(2);
-  // Accepted is a decision, not a write.
-  expect(await npcExists(api, NPC_STUB_ID)).toBe(false);
-  const decided = await getGeneratorJob(api);
-  expect(decided.review.npcs).toEqual({ [NPC_STUB_ID]: "accepted" });
-
-  // (4) Accepting the scene writes the scene AND the accepted npc and
-  // location it references — one batch, so nothing is half-written.
+  // (4) Accepting the scene writes the scene and nothing else — its npc and
+  // location are written already.
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
-  await page
-    .locator("div")
-    .filter({ hasText: SCENE_LABEL })
-    .last()
+  await sceneProposal(page, SCENE_ID)
     .getByRole("button", { name: ui("generate.review.acceptOne") })
     .click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
@@ -685,11 +686,15 @@ test("a body-only edit keeps the fields the run produced", async ({ page, api })
   expect(fields).toEqual(fieldsOfRun);
 });
 
-/** Start the standard run and open the editor of its scene draft. */
+/**
+ * Start the standard run, accept its location and npc, and open the editor of
+ * its scene draft.
+ */
 async function runAndOpenDraftEditor(page: Page): Promise<Locator> {
   await page.goto("/campaigns/example/generate");
   await startSceneRun(page, SOURCE);
-  const card = page.locator("div").filter({ hasText: SCENE_LABEL }).last();
+  await acceptProposalsOfRun(page, LOCATION_STUB_ID, NPC_STUB_ID);
+  const card = sceneProposal(page, SCENE_ID);
   await card.getByRole("button", { name: ui("common.edit") }).click();
   return card;
 }
@@ -740,22 +745,9 @@ async function storedSceneEdit(api: Api): Promise<SceneEdit> {
   return job.sceneEdits[SCENE_ID]!;
 }
 
-/**
- * Accept the whole run: the proposed npc and location, then the bulk accept.
- * The scene NAMES them, and a scene cannot be written while a reference names
- * nothing (decisions/constraints), so they have to be decided first.
- */
+/** Accept the rest of the run: its scenes, once its npc and location are written. */
 async function acceptWholeRun(page: Page): Promise<void> {
-  for (const targetPath of [`npcs/${NPC_STUB_ID}`, `locations/${LOCATION_STUB_ID}`]) {
-    await page
-      .locator("div")
-      .filter({ hasText: targetPath })
-      .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
-      .last()
-      .getByRole("button", { name: ui("generate.stub.accept") })
-      .click();
-  }
-  await page.getByRole("button", { name: APPLY_ANY }).click();
+  await applyScenes(page).click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
 }
 
@@ -763,38 +755,26 @@ test("discarding drops only the open rest — what was accepted stays", async ({
   await page.goto("/campaigns/example/generate");
   await startSceneRun(page, SOURCE);
 
-  // The proposed npc is accepted and written — it references nothing new, so
-  // it stands on its own — and the rest of the run is thrown away.
-  const npcRow = page
-    .locator("div")
-    .filter({ hasText: `npcs/${NPC_STUB_ID}` })
-    .filter({ has: page.getByRole("button", { name: ui("generate.stub.reject") }) })
-    .last();
-  await npcRow.getByRole("button", { name: ui("generate.stub.accept") }).click();
-  const acceptOne = ui("generate.review.acceptOne");
-  await page
-    .locator("div")
-    .filter({ hasText: `npcs/${NPC_STUB_ID}` })
-    .filter({ has: page.getByRole("button", { name: acceptOne }) })
-    .last()
-    .getByRole("button", { name: acceptOne })
-    .click();
-  // Once written, the row links to the npc's own route (decisions/resources).
-  await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toHaveAttribute(
+  // The proposed location is accepted and written — it stands on its own —
+  // and the rest of the run is thrown away.
+  await expectStage(page, "locations");
+  await acceptProposal(locationProposal(page, LOCATION_STUB_ID));
+  // Once written, the row links to the location's own route (decisions/resources).
+  await expect(page.getByRole("link", { name: `locations/${LOCATION_STUB_ID}` })).toHaveAttribute(
     "href",
-    `/campaigns/example/npcs/${NPC_STUB_ID}`,
+    `/campaigns/example/locations/${LOCATION_STUB_ID}`,
   );
   const partial = await getGeneratorJob(api);
-  expect(partial.review.writtenNpcs).toEqual([NPC_STUB_ID]);
+  expect(partial.review.writtenLocations).toEqual([LOCATION_STUB_ID]);
 
   await page.getByRole("button", { name: ui("generate.review.discardRest") }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     ui("generate.input.title.scene"),
   );
-  // The accepted npc is stored now; the scene and the location never landed.
-  expect((await getNpc(api, NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
+  // The accepted location is stored now; the scene and the npc never landed.
+  expect((await getLocation(api, LOCATION_STUB_ID)).name).toBe(LOCATION_STUB_NAME);
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
-  expect(await locationExists(api, LOCATION_STUB_ID)).toBe(false);
+  expect(await npcExists(api, NPC_STUB_ID)).toBe(false);
   expect(await readGeneratorJob(api)).toBeNull();
 });
 
@@ -849,11 +829,11 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
     timeout: 30_000,
   });
 
-  await page.getByRole("button", { name: APPLY_ANY }).click();
-  // The accept writes the scene, the chapter it hangs in and the npc and the
-  // location the scene NAMES — a scene cannot be written while a
-  // reference names nothing (decisions/constraints), so they come along. Nothing is left
-  // open afterwards, so the review is done.
+  // The location and the npc the scene names first, then the scene: its
+  // accept writes it and the chapter it hangs in. Nothing is left open
+  // afterwards, so the review is done.
+  await acceptProposalsOfRun(page, LOCATION_STUB_ID, NPC_STUB_ID);
+  await applyScenes(page).click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
 
   // The point: the chapter exists, with the title the RUN was started with —
@@ -889,16 +869,130 @@ test("a run into an existing chapter leaves the chapter's text alone", async ({ 
   ).toHaveCount(0);
   await expect(page.getByText(DESCRIPTION_OPENING, { exact: false })).toHaveCount(0);
 
-  // Accept the whole run: the proposed npc and location, then everything open.
-  const acceptEntry = page.getByRole("button", { name: ui("generate.stub.accept") });
-  await expect(acceptEntry).toHaveCount(2);
-  await acceptEntry.first().click();
-  await expect(acceptEntry).toHaveCount(1);
-  await acceptEntry.first().click();
-  await expect(acceptEntry).toHaveCount(0);
-  await page.getByRole("button", { name: APPLY_ANY }).click();
+  // Accept the whole run: the proposed location and npc, then the scene.
+  await acceptProposalsOfRun(page, LOCATION_STUB_ID, NPC_STUB_ID);
+  await applyScenes(page).click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
 
   expect((await getScene(api, SCENE_ID)).chapter).toBe("01-salt-harbour");
   expect((await getChapter(api, "01-salt-harbour")).body).toBe(before.body);
+});
+
+// A scene is written only once everything it names exists (decisions/generator):
+// the review walks the run in reference order, accepting a scene writes that
+// scene and nothing else, and a scene that names a rejected proposal says so
+// on its card and offers its ways out.
+test("the stages walk the run; a scene naming a rejected npc is incomplete until its reference is removed", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/campaigns/example/generate");
+  await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.twoScenes}`);
+
+  // --- the locations, then the npcs, then the scenes ------------------------
+  await expectStage(page, "locations");
+  await expect(reviewStep(page, "locations")).toHaveAttribute("aria-current", "step");
+  await expect(reviewStep(page, "scenes")).toBeDisabled();
+  // The way on opens only once the stage is decided.
+  await expect(page.getByTestId("review-next")).toBeDisabled();
+  await acceptProposal(locationProposal(page, LOCATION_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "npcs");
+
+  // The 409 path: the server refuses a scene that names a run npc that is
+  // not written, names the npc, and writes nothing.
+  const job = await getGeneratorJob(api);
+  const refused = await api.fetch(generatorJobPath(api, job.id), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: job.rev, review: { writtenScenes: [SCENE_ID] } }),
+  });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({
+    code: "proposal_not_written",
+    scenes: [SCENE_ID],
+    npcs: [NPC_STUB_ID],
+  });
+  expect(await sceneExists(api, SCENE_ID)).toBe(false);
+  expect((await getGeneratorJob(api)).rev).toBe(job.rev);
+
+  await rejectProposal(npcProposal(page, NPC_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "scenes");
+
+  // --- the scene that names the rejected npc is incomplete ------------------
+  const naming = sceneProposal(page, SCENE_ID);
+  const incomplete = naming.getByTestId(`scene-incomplete:npc:${NPC_STUB_ID}`);
+  await expect(incomplete).toContainText(NPC_STUB_NAME);
+  await expect(naming.getByRole("button", { name: ui("generate.review.acceptOne") })).toBeDisabled();
+  // The other scene names nothing of the run and is complete.
+  await expect(sceneProposal(page, SECOND_SCENE.id).getByTestId("scene-incomplete")).toHaveCount(0);
+
+  // --- way out: remove the reference ---------------------------------------
+  await incomplete.getByTestId("scene-incomplete-remove").click();
+  await expect(naming.getByTestId("scene-incomplete")).toHaveCount(0);
+  await expect(naming.getByRole("button", { name: ui("generate.review.acceptOne") })).toBeEnabled();
+  await naming.getByRole("button", { name: ui("generate.review.acceptOne") }).click();
+  await expect(naming).toHaveAttribute("data-state", "written");
+
+  // Accepting the scene wrote the scene alone, without the npc it named.
+  const written = await getScene(api, SCENE_ID);
+  expect(written.npcs).toEqual(["fenn"]);
+  expect(written.location).toBe(LOCATION_STUB_ID);
+  expect(await npcExists(api, NPC_STUB_ID)).toBe(false);
+
+  await applyScenes(page).click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
+  expect(await readGeneratorJob(api)).toBeNull();
+
+  // Both scenes are in the chapter, the npc is not in the campaign.
+  type Tree = { chapters: Array<{ id: string; scenes: Array<{ id: string }> }>; npcs: Array<{ id: string }> };
+  const tree = await api.get<Tree>("campaigns/example/tree");
+  const chapterScenes = tree.chapters.find((chapter) => chapter.id === "01-salt-harbour")!.scenes;
+  expect(chapterScenes.map((scene) => scene.id)).toEqual(
+    expect.arrayContaining([SCENE_ID, SECOND_SCENE.id]),
+  );
+  expect(tree.npcs.map((npc) => npc.id)).not.toContain(NPC_STUB_ID);
+});
+
+test("a scene naming a rejected npc offers to accept it after all, and to drop the scene", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/campaigns/example/generate");
+  await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.twoScenes}`);
+  await expectStage(page, "locations");
+  await rejectProposal(locationProposal(page, LOCATION_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "npcs");
+  await rejectProposal(npcProposal(page, NPC_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "scenes");
+
+  const naming = sceneProposal(page, SCENE_ID);
+  await expect(naming.getByTestId(`scene-incomplete:location:${LOCATION_STUB_ID}`)).toContainText(
+    LOCATION_STUB_NAME,
+  );
+
+  // Accept the npc after all: it is written, and the notice names only the
+  // location now.
+  await naming
+    .getByTestId(`scene-incomplete:npc:${NPC_STUB_ID}`)
+    .getByTestId("scene-incomplete-accept")
+    .click();
+  await expect(naming.getByTestId(`scene-incomplete:npc:${NPC_STUB_ID}`)).toHaveCount(0);
+  expect(await npcExists(api, NPC_STUB_ID)).toBe(true);
+  await expect(naming.getByTestId(`scene-incomplete:location:${LOCATION_STUB_ID}`)).toBeVisible();
+
+  // Drop the scene instead of taking the location: it is out of the run.
+  await naming.getByTestId("scene-incomplete-drop").click();
+  await expect(naming).toHaveAttribute("data-state", "dropped");
+  await expect(naming.getByTestId("scene-incomplete")).toHaveCount(0);
+  expect((await getGeneratorJob(api)).review.droppedScenes).toEqual([SCENE_ID]);
+
+  await applyScenes(page).click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
+  expect(await sceneExists(api, SCENE_ID)).toBe(false);
+  expect(await sceneExists(api, SECOND_SCENE.id)).toBe(true);
+  expect(await locationExists(api, LOCATION_STUB_ID)).toBe(false);
 });

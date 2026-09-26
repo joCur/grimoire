@@ -8,6 +8,7 @@
 // exists for.
 
 import {
+  unwrittenReferences,
   withNpcChange,
   withSceneChange,
   type GeneratorJobPatch,
@@ -35,18 +36,19 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  * patch names in `review.writtenScenes`, `writtenNpcs` and `writtenLocations`
  * — together with the rest of the patch, the DM's changes and decisions:
  *
- *   selection   exactly the named proposals. Naming one is the decision to
- *               take it: an undecided npc or location is written, a dropped
- *               scene or a rejected npc or location is not open and is a 409.
- *               A proposal that is already written has nothing left to do (a
- *               double click, a second tab) and is skipped.
- *               A SCENE CARRIES WHAT IT NAMES. A scene cannot be written
- *               while its `npcs`/`location` name nothing (decisions/constraints), so a
- *               selected scene pulls in the run's own npcs and locations for
- *               those ids — every one that is not REJECTED, accepted or
- *               still undecided. Accepting the scene is the decision that
- *               they exist; what the DM threw away stays thrown away, and
- *               the write is then refused and names it.
+ *   selection   exactly the named proposals, and nothing else. Naming one
+ *               is the decision to take it: an undecided npc or location is
+ *               written, a dropped scene or a rejected npc or location is not
+ *               open and is a 409 — unless the same patch takes the decision
+ *               back. A proposal that is already written has nothing left to
+ *               do (a double click, a second tab) and is skipped.
+ *   references  a scene is written only once everything it names exists
+ *               (decisions/generator): a selected scene whose `npcs` or
+ *               `location` name a proposal of this run that is neither
+ *               written nor written by this same patch is refused with
+ *               `proposal_not_written`, naming the scenes and the proposals,
+ *               and nothing is written. A `[[id]]` in its text is not a
+ *               reference.
  *   transaction one, with the conflict checks of the ordinary generator write
  *               (`writeGenerated`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
@@ -138,22 +140,6 @@ export async function acceptJobParts(
   });
 
   /**
-   * The run's own npcs and locations a scene REFERENCES and the DM has not
-   * rejected — see the selection rule above. Read off the scene with the
-   * DM's change applied, so an edit of the scene in the review counts.
-   */
-  const referencedOf = (id: string): { npcs: string[]; locations: string[] } => {
-    const part = sceneParts.get(id);
-    if (part === undefined) return { npcs: [], locations: [] };
-    const { npcs: npcIds, location } = part.scene;
-    return {
-      npcs: npcIds.filter((npcId) => npcParts.get(npcId)?.open === true),
-      locations:
-        location !== undefined && locationParts.get(location)?.open === true ? [location] : [],
-    };
-  };
-
-  /**
    * WHICH parts this call writes. Only membership — the order comes from
    * `sceneParts` below.
    */
@@ -178,10 +164,25 @@ export async function acceptJobParts(
     if (part.open) chosenLocations.add(id);
     else if (!review.writtenLocations.includes(id)) throw notOpen("location", id);
   }
-  for (const id of [...chosenScenes]) {
-    const referenced = referencedOf(id);
-    for (const id of referenced.npcs) chosenNpcs.add(id);
-    for (const id of referenced.locations) chosenLocations.add(id);
+  // The references are read off the scene with the DM's change applied, so
+  // a reference the review removed does not count.
+  const refused = { scenes: [] as string[], npcs: new Set<string>(), locations: new Set<string>() };
+  for (const id of chosenScenes) {
+    const missing = unwrittenReferences(job, sceneParts.get(id)!.scene);
+    const npcs = missing.npcs.filter((npc) => !chosenNpcs.has(npc));
+    const locations = missing.locations.filter((location) => !chosenLocations.has(location));
+    if (npcs.length === 0 && locations.length === 0) continue;
+    refused.scenes.push(id);
+    for (const npc of npcs) refused.npcs.add(npc);
+    for (const location of locations) refused.locations.add(location);
+  }
+  if (refused.scenes.length > 0) {
+    throw new ApiError(409, "a scene names a proposal of the run that is not written", {
+      code: "proposal_not_written",
+      scenes: refused.scenes,
+      npcs: [...refused.npcs],
+      locations: [...refused.locations],
+    });
   }
   const npcs = [...npcParts].filter(([id]) => chosenNpcs.has(id)).map(([, part]) => part.npc);
   const locations = [...locationParts]
@@ -195,9 +196,8 @@ export async function acceptJobParts(
    * order IS the order the scenes end up in (decisions/scene-order). Either way the chapter
    * does not depend on the order the review happened to name its scenes in.
    *
-   * The npcs and locations a selected scene carries along are written ahead
-   * of every scene by `writeGenerated`, so they cannot shift a scene's
-   * position.
+   * Npcs and locations named in the same patch are written ahead of every
+   * scene by `writeGenerated`, so they cannot shift a scene's position.
    */
   const scenes = [...sceneParts]
     .filter(([id]) => chosenScenes.has(id))

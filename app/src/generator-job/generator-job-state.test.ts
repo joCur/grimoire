@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { SceneProposal } from "@grimoire/shared/scene";
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
-import type { GeneratorJob } from "@grimoire/shared/generator-job";
+import type { GeneratorJob, GeneratorJobPart } from "@grimoire/shared/generator-job";
 
 import { translator } from "@/i18n/format";
 import {
@@ -51,6 +51,11 @@ import {
   isAugmentOf,
   jobSentence,
   jobState,
+  currentStage,
+  missingReferences,
+  rejectedReferences,
+  reviewStages,
+  sceneWritable,
 } from "./generator-job-state";
 import { AUGMENT_OPEN_PARAM, generatorHref, jobHref } from "./job-links";
 
@@ -398,6 +403,7 @@ describe("review state mapping", () => {
 
   test("a payload without a review degrades to 'nothing decided yet'", () => {
     expect(reviewOf(job())).toEqual({
+      stage: "locations",
       droppedScenes: [],
       fields: {},
       blocks: {},
@@ -411,9 +417,9 @@ describe("review state mapping", () => {
   });
 
   test("a patch merges per key — and `null` puts a decision back to open", () => {
-    let next = mergeReviewPatch(job(), { review: { npcs: { grella: "accepted" } } });
+    let next = mergeReviewPatch(job(), { review: { npcs: { grella: "rejected" } } });
     next = mergeReviewPatch(next, { sceneEdits: { a: { body: "typed" } } });
-    expect(next.review?.npcs).toEqual({ grella: "accepted" });
+    expect(next.review?.npcs).toEqual({ grella: "rejected" });
     expect(next.sceneEdits.a).toEqual({ body: "typed" });
 
     next = mergeReviewPatch(next, { review: { npcs: { grella: null } } });
@@ -453,11 +459,45 @@ describe("review state mapping", () => {
     expect(next.review?.droppedScenes).toEqual(["b"]);
   });
 
-  test("accepting the whole run names what is open and, of npcs and locations, only the accepted", () => {
+  test("the stage replaces the stored one", () => {
+    expect(reviewOf(job()).stage).toBe("locations");
+    const next = mergeReviewPatch(job(), { review: { stage: "npcs" } });
+    expect(next.review.stage).toBe("npcs");
+    expect(mergeReviewPatch(next, { review: { droppedScenes: [] } }).review.stage).toBe("npcs");
+  });
+
+  test("accepting the whole run names the open scenes and never a scene run's npc", () => {
     const decided = mergeReviewPatch(job(), { review: { droppedScenes: ["b"] } });
-    expect(openSelection(decided)).toEqual({ scenes: ["a"], npcs: [], locations: [] });
-    const accepted = mergeReviewPatch(decided, { review: { npcs: { grella: "accepted" } } });
-    expect(openSelection(accepted).npcs).toEqual(["grella"]);
+    expect(openSelection(decided)).toEqual({ scenes: ["a"], npcs: [] });
+  });
+
+  test("a scene that names an npc of its run that is not written is left out of the accept", () => {
+    const naming = job({
+      result: {
+        scenes: [{ ...proposed("a"), npcs: ["grella"] }, proposed("b")],
+        npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
+        locations: [],
+        warnings: [],
+      },
+    });
+    expect(openSelection(naming).scenes).toEqual(["b"]);
+    expect(missingReferences(naming, { npcs: ["grella", "fenn"] })).toEqual({
+      npcs: ["grella"],
+      locations: [],
+    });
+    // Undecided, it is missing but not rejected.
+    expect(rejectedReferences(naming, { npcs: ["grella"] })).toEqual({ npcs: [], locations: [] });
+    const rejected = mergeReviewPatch(naming, { review: { npcs: { grella: "rejected" } } });
+    expect(rejectedReferences(rejected, { npcs: ["grella"] })).toEqual({
+      npcs: ["grella"],
+      locations: [],
+    });
+    // The DM's change takes the reference out, and the scene is acceptable.
+    const removed = mergeReviewPatch(rejected, { sceneEdits: { a: { npcs: [] } } });
+    expect(openSelection(removed).scenes).toEqual(["a", "b"]);
+    // Written, the npc is no longer missing.
+    const written = job({ ...naming, review: { ...reviewOf(naming), writtenNpcs: ["grella"] } });
+    expect(sceneWritable(written, { npcs: ["grella"] })).toBe(true);
   });
 
   test("what an accept wrote is what the answer lists as written and the job before did not", () => {
@@ -471,6 +511,7 @@ describe("review state mapping", () => {
   test("a scene is open, written or dropped; a proposed npc open, written or rejected", () => {
     const decided = job({
       review: {
+        stage: "locations",
         droppedScenes: ["b"],
         fields: {},
         blocks: {},
@@ -505,6 +546,7 @@ describe("review state mapping", () => {
     expect(jobProgress(job())).toEqual({ written: 0, total: 3 });
     const partly = job({
       review: {
+        stage: "locations",
         droppedScenes: [],
         fields: {},
         blocks: {},
@@ -548,6 +590,7 @@ describe("review state mapping", () => {
   test("a dropped or rejected part is not part of the rest", () => {
     const decided = job({
       review: {
+        stage: "locations",
         droppedScenes: ["b"],
         fields: {},
         blocks: {},
@@ -677,6 +720,7 @@ describe("the run's parts", () => {
         warnings: [],
       },
       review: {
+        stage: "locations",
         droppedScenes: [],
         fields: {},
         blocks: {},
@@ -707,11 +751,12 @@ describe("the run's parts", () => {
         warnings: [],
       },
       review: {
+        stage: "locations",
         droppedScenes: [],
         fields: {},
         blocks: {},
         writtenScenes: ["s0"],
-        npcs: { grella: "accepted" },
+        npcs: {},
         writtenNpcs: ["grella"],
         locations: {},
         writtenLocations: [],
@@ -829,5 +874,113 @@ describe("the campaign's job, wherever it is shown", () => {
     );
     expect(jobHref("example", run({ kind: "scene" }))).toBe(generatorHref("example"));
     expect(jobHref("example", run({ kind: "npc" }))).toBe(generatorHref("example"));
+  });
+});
+
+describe("the stages of a scene run's review", () => {
+  const part = (
+    kind: GeneratorJobPart["kind"],
+    id: string,
+    status: GeneratorJobPart["status"] = "done",
+  ): GeneratorJobPart => ({
+    key: `${kind}:${id}`,
+    kind,
+    id,
+    title: id,
+    status,
+  });
+  const run = (over: Partial<GeneratorJob> = {}): GeneratorJob =>
+    ({
+      id: "j1",
+      kind: "scene",
+      status: "done",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      sceneEdits: {},
+      npcEdits: {},
+      rev: 0,
+      review: emptyReview(),
+      result: {
+        scenes: [proposed("a"), proposed("b")],
+        npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
+        locations: [{ id: "old-mole", name: "Old Mole", body: "m" }],
+        warnings: [],
+      },
+      pipeline: {
+        parts: [
+          part("scene", "a"),
+          part("scene", "b"),
+          part("npc", "grella"),
+          part("location", "old-mole"),
+        ],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+      ...over,
+    }) as GeneratorJob;
+  const decide = (job: GeneratorJob, review: Partial<GeneratorJob["review"]>): GeneratorJob => ({
+    ...job,
+    review: { ...job.review, ...review },
+  });
+
+  test("a run opens at the location stage, and the scene stage waits for every decision", () => {
+    const job = run();
+    expect(currentStage(job)).toBe("locations");
+    expect(reviewStages(job).map((stage) => [stage.stage, stage.total, stage.reachable])).toEqual([
+      ["locations", 1, true],
+      ["npcs", 1, true],
+      ["scenes", 2, false],
+    ]);
+    // Asked for the scenes while an npc is undecided: the npc stage is shown.
+    const early = decide(job, { stage: "scenes", writtenLocations: ["old-mole"] });
+    expect(currentStage(early)).toBe("npcs");
+    // Every location and npc decided — written or rejected — opens the scenes.
+    const done = decide(early, { npcs: { grella: "rejected" } });
+    expect(reviewStages(done).find((stage) => stage.stage === "scenes")?.reachable).toBe(true);
+    expect(currentStage(done)).toBe("scenes");
+    // Going back stays possible.
+    expect(currentStage(decide(done, { stage: "locations" }))).toBe("locations");
+  });
+
+  test("a stage without proposals is skipped", () => {
+    const noLocations = run({
+      result: {
+        scenes: [proposed("a")],
+        npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
+        locations: [],
+        warnings: [],
+      },
+      pipeline: {
+        parts: [part("scene", "a"), part("npc", "grella")],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    expect(currentStage(noLocations)).toBe("npcs");
+    const scenesOnly = run({
+      result: { scenes: [proposed("a")], npcs: [], locations: [], warnings: [] },
+      pipeline: {
+        parts: [part("scene", "a")],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    expect(currentStage(scenesOnly)).toBe("scenes");
+  });
+
+  test("a part still running counts as undecided in its stage", () => {
+    const running = run({
+      status: "running",
+      result: {
+        scenes: [proposed("a")],
+        npcs: [],
+        locations: [{ id: "old-mole", name: "Old Mole", body: "m" }],
+        warnings: [],
+      },
+      pipeline: {
+        parts: [part("scene", "a"), part("npc", "grella", "running"), part("location", "old-mole")],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    const decided = decide(running, { writtenLocations: ["old-mole"], stage: "scenes" });
+    const npcs = reviewStages(decided).find((stage) => stage.stage === "npcs");
+    expect(npcs).toMatchObject({ total: 1, decided: 0, complete: false });
+    expect(currentStage(decided)).toBe("npcs");
   });
 });

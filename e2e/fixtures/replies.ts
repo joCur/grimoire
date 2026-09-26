@@ -169,6 +169,12 @@ export const TRIGGER = {
    */
   threeScenes: "E2E_THREE_SCENES",
   /**
+   * The default run with a SECOND scene: the rich scene that names the new
+   * npc and the new location, and a plain one that names neither — so a spec
+   * can reject a proposal and still see a scene the rejection leaves alone.
+   */
+  twoScenes: "E2E_TWO_SCENES",
+  /**
    * The outline describes the chapter even though the run goes into an
    * EXISTING one — a model that ignores the prompt's rule. The server has to
    * drop it, so that chapter's text stays the DM's.
@@ -680,6 +686,9 @@ export const THREE_SCENES = [
   { id: "dawn-escape", title: "Escape at dawn" },
 ] as const;
 
+/** The second scene of a TRIGGER.twoScenes run — it names no new npc or location. */
+export const SECOND_SCENE = { id: "talk-on-the-mole", title: "Talk on the mole" } as const;
+
 /** The scene the failure trigger breaks — the middle one, so two survive. */
 export const FAILING_SCENE_ID = THREE_SCENES[1].id;
 
@@ -733,6 +742,8 @@ export function outlineReply(input: {
   /** TRIGGER.describeAnyway: a description for an EXISTING chapter as well. */
   describeAnyway?: boolean;
   three?: boolean;
+  /** TRIGGER.twoScenes: the default run plus SECOND_SCENE. */
+  two?: boolean;
   /**
    * TRIGGER.oldName: the naming-check case. Its draft references no new npc
    * or location, so the outline must not propose one either — otherwise
@@ -792,6 +803,9 @@ export function outlineReply(input: {
         sourceExcerpt,
         refs: [],
       },
+      ...(input.two === true
+        ? [{ id: SECOND_SCENE.id, title: SECOND_SCENE.title, type: "planned", sourceExcerpt, refs: [] }]
+        : []),
     ],
     npcs: [{ id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Smuggler at the quay." }],
     locations: [
@@ -838,7 +852,7 @@ export function scenePartReply(
   asciiQuotes = false,
 ): SceneReply {
   if (sceneId === SCENE_ID) return sceneDraft(chapter, oldName, asciiQuotes);
-  const scene = THREE_SCENES.find((s) => s.id === sceneId);
+  const scene = [...THREE_SCENES, SECOND_SCENE].find((s) => s.id === sceneId);
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
@@ -860,9 +874,10 @@ export function invalidScenePartReply(chapter: string, sceneId: string): SceneRe
 }
 
 /**
- * A plain, well-formed scene of the three-scene run. No references and no
- * location: the pipelined specs are about the PARTS, and every reference a
- * fixture adds is one more thing that can fail for another reason.
+ * A plain, well-formed scene of the three-scene run and the second scene of
+ * the two-scene run. No new references and no location: the pipelined specs
+ * are about the PARTS, and every reference a fixture adds is one more thing
+ * that can fail for another reason.
  */
 function plainSceneDraft(chapter: string, id: string, title: string): SceneReply {
   return sceneReply({

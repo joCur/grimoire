@@ -597,10 +597,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
 
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   // The stub's one scene, and no proposed npc or location.
-  const summary = ui("generate.review.summary", { scenes: 1, stubs: 0 });
-  await page
-    .getByRole("button", { name: ui("generate.review.apply", { count: summary }), exact: true })
-    .click();
+  await page.getByTestId("review-apply-scenes").click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   const scene = await getScene(api, SCENE_ID);
   expect(`${scene.title}\n${scene.body}`).toContain(OLD_NAME);

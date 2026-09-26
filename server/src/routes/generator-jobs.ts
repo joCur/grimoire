@@ -132,17 +132,24 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 //   - `sceneEdits` and `npcEdits` change a proposed scene or npc, by its id:
 //     any subset of the entity's fields, `null` clearing an optional one,
 //     merged onto the stored change of that proposal;
-//   - `review.npcs` and `review.locations` decide a proposed npc or location
-//     (`accepted`, `rejected`, `null` for undecided again), `review.fields`
-//     and `review.blocks` decide a field or body block of an augment run, and
+//   - `review.stage` is the stage of a scene run's review the DM is in;
+//   - `review.npcs` and `review.locations` reject a proposed npc or location
+//     (`rejected`, `null` for undecided again), `review.fields` and
+//     `review.blocks` decide a field or body block of an augment run, and
 //     `review.droppedScenes` is the whole set of dropped scenes;
 //   - `review.writtenScenes`, `review.writtenNpcs` and
 //     `review.writtenLocations` ACCEPT: every proposal they name is written
-//     into the campaign, with the DM's changes on top of the model's, and a
-//     scene carries the run's own npcs and location it names. A proposal
-//     that is already written is skipped; a dropped or rejected one is 409.
-//     A running scene run is acceptable part by part — a `done` part is in
-//     the result before its siblings are.
+//     into the campaign, with the DM's changes on top of the model's, and
+//     nothing else is. A proposal that is already written is skipped; a
+//     dropped or rejected one is 409, unless the same patch takes the
+//     decision back. A running scene run is acceptable part by part — a
+//     `done` part is in the result before its siblings are.
+//
+// A scene is written only once every npc and location of the run it names in
+// its `npcs` and `location` is written, before or in the same patch
+// (decisions/generator). Otherwise the accept is
+// 409 { code: "proposal_not_written", scenes, npcs, locations }, naming the
+// refused scenes and the proposals they name, and nothing is written.
 //
 // One transaction for an accept: the conflict check lives inside it
 // (409 { chapters, scenes, npcs, locations } — rows that already exist), FTS

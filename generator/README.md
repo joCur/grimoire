@@ -1,31 +1,29 @@
 # Generator
 
-Pipeline: Quelltext (EN) → LLM → vorgeschlagene Szenen (DE) → Review-Vorschau
-→ Datenbank.
+Pipeline: source text (EN) → LLM → proposed scenes (DE) → review → database.
 
-## Antwortformate
+## Reply formats
 
-**Jede Antwort ist ein JSON-Objekt, und jedes Objekt ist per Schema
-erzwungen.** Das ist der ganze Vertrag: der Provider schickt das Schema mit
-und die Schnittstelle garantiert die Form, bevor der Server sie liest.
+**Every reply is a JSON object, and every object is enforced by a schema.**
+That is the whole contract: the provider sends the schema along and the
+interface guarantees the shape before the server reads it.
 
-* **Claude**: das Schema reist als Tool mit, `tool_choice` erzwingt den
-  Aufruf; die Antwort ist der Tool-Input.
-* **OpenAI-kompatibel**: `response_format: { type: "json_schema", …, strict:
-  true }`, mit **einem** Rückfall auf `json_object`, wenn der Endpoint mit 400
-  antwortet. Gemerkt (einmal je Prozess, damit die Erkennung einmal bezahlt
-  wird) wird der Rückfall nur, wenn der Fehlertext das Format nennt
-  (`response_format`, `json_schema`, `schema`) oder der einfache Versuch
-  gelingt — ein 400 aus anderem Grund (zu langer Prompt, falsche Modell-id)
-  fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
-  abzuschalten.
+* **Claude**: the schema travels as a tool, `tool_choice` forces the call;
+  the reply is the tool input.
+* **OpenAI-compatible**: `response_format: { type: "json_schema", …, strict:
+  true }`, with **one** fallback to `json_object` when the endpoint answers
+  400. The fallback is remembered (once per process, so the detection is paid
+  for once) only when the error text names the format (`response_format`,
+  `json_schema`, `schema`) or the plain attempt succeeds — a 400 for another
+  reason (prompt too long, wrong model id) propagates unchanged instead of
+  switching the enforced shape off for good.
 
-**Szenen-, NPC- und Orts-Antworten.** Szene, NPC und Ort sind jeweils ihre
-eigene Ressource mit eigenem Typ (decisions/resources). Szenen-Teil und Szenen-Ergänzung
-antworten mit der Szene selbst ohne `rev`, NPC-Teil, NPC-Lauf und
-NPC-Ergänzung mit dem NPC, Orts-Teil und Orts-Ergänzung mit dem Ort — alle
-Felder nebeneinander, `body` eines davon — und daneben `warnings`. Eine
-Szene:
+**Scene, NPC and location replies.** Scene, NPC and location are each their
+own resource with their own type (decisions/resources). The scene part and
+the scene augment reply with the scene itself without `rev`, the NPC part,
+the NPC run and the NPC augment with the NPC, the location part and the
+location augment with the location — all fields side by side, `body` one of
+them — plus `warnings`. A scene:
 
 ```json
 {
@@ -44,8 +42,8 @@ Szene:
 }
 ```
 
-Beim NPC reist `quickstats` als **Liste** von `{ "key": …, "value": … }`,
-der Wert immer ein String:
+For an NPC, `quickstats` travels as a **list** of `{ "key": …, "value": … }`,
+the value always a string:
 
 ```json
 {
@@ -64,7 +62,7 @@ der Wert immer ein String:
 }
 ```
 
-Ein Ort:
+A location:
 
 ```json
 {
@@ -78,231 +76,246 @@ Ein Ort:
 }
 ```
 
-Die Felder sind **je Entität** getypt — ein Modell kann genau die Felder
-schreiben, die der DM auch bearbeiten kann, und keins mehr. Nichts setzt aus
-einer Antwort einen Markdown-Text zusammen und nichts liest einen zurück,
-also kann auf diesem Weg auch nichts an einem Wert verloren gehen. Eine
-vorgeschlagene Szene ist die Szene ohne `rev` (`SceneProposal`), ein
-vorgeschlagener NPC der NPC ohne `rev` (`NpcProposal`), ein vorgeschlagener
-Ort der Ort ohne `rev` (`LocationProposal`); ein Job listet sie unter
-`result.scenes`, `result.npcs` und `result.locations`, und Prüfen,
-Entscheiden und Übernehmen laufen für jede über ihre `id`. Ändert der DM
-eine vorgeschlagene Szene oder einen vorgeschlagenen NPC im Review, liegt
-die Änderung als `sceneEdits[<id>]` bzw. `npcEdits[<id>]` neben dem
-Vorschlag und wird beim Übernehmen darübergelegt.
+The fields are typed **per entity** — a model can write exactly the fields
+the DM can edit, and no more. Nothing assembles a Markdown text from a reply
+and nothing reads one back, so nothing can lose a value on the way. A
+proposed scene is the scene without `rev` (`SceneProposal`), a proposed NPC
+the NPC without `rev` (`NpcProposal`), a proposed location the location
+without `rev` (`LocationProposal`); a job lists them under `result.scenes`,
+`result.npcs` and `result.locations`, and reviewing, deciding and accepting
+run for each through its `id`. When the DM changes a proposed scene or a
+proposed NPC in the review, the change lies next to the proposal as
+`sceneEdits[<id>]` or `npcEdits[<id>]` and is laid over it on accepting.
 
-Die Antwort-Schemata von Szene, NPC und Ort haben **genau eine Quelle**: ihr
-zod-Schema (`shared/src/scene.ts`, `shared/src/npc.ts`,
-`shared/src/location.ts`). Daraus leitet jede Entität ihre Generator-Form
-selbst ab, mit der API von zod (`sceneReplySchema`, `npcReplySchema`,
-`locationReplySchema`: die Entität ohne `rev`, die optionalen Felder
-`null`-fähig statt optional, beim NPC `quickstats` als Liste von Paaren,
-dazu `warnings`, nichts Zusätzliches erlaubt), und `sceneReplyRequest` in
+The reply schemas of scene, NPC and location have **exactly one source**:
+their zod schema (`shared/src/scene.ts`, `shared/src/npc.ts`,
+`shared/src/location.ts`). From it each entity derives its generator shape
+itself, with zod's API (`sceneReplySchema`, `npcReplySchema`,
+`locationReplySchema`: the entity without `rev`, the optional fields
+nullable instead of optional, for the NPC `quickstats` as a list of pairs,
+plus `warnings`, nothing additional allowed), and `sceneReplyRequest` in
 `server/src/scene-reply.ts`, `npcReplyRequest` in `server/src/npc-reply.ts`
-bzw. `locationReplyRequest` in `server/src/location-reply.ts` gibt sie per
-`z.toJSONSchema` an den Provider — je Lauf unter eigenem Namen (`scene`,
+and `locationReplyRequest` in `server/src/location-reply.ts` hand it to the
+provider via `z.toJSONSchema` — per run under its own name (`scene`,
 `augmented_scene`, `npc`, `augmented_npc`, `location`,
-`augmented_location`). Bei der Szene unterscheiden sich die Läufe auch in
-der Form: eine **neue** Szene kann nur `draft` sein (`newSceneReplySchema`),
-eine bestehende behält den Status, den der DM ihr gegeben hat. Das Schema
-trägt keine `description`: was das Modell über die Felder wissen muss (die
-id-Regel, welche Kapitel-id `chapter` nennen darf, was `motivation` oder
-`atmosphere` ist, die Form von `quickstats`, `body` und `warnings`), steht
-im Prompt der Entität unter „## Die Felder der Szene“, „## Die Felder des
-NPC“ bzw. „## Die Felder des Orts“, und der Ergänzen-Lauf bekommt genau
-diesen Abschnitt mit. Die Gliederung lädt ihr Schema als lesbares JSON aus
-`shared/schema/outline.schema.json`; `shared/test/reply-schema.test.ts`
-prüft für **jedes** Schema, abgeleitet oder geladen, die Regeln des strict
-mode.
+`augmented_location`). For the scene the runs also differ in shape: a
+**new** scene can only be `draft` (`newSceneReplySchema`), an existing one
+keeps the status the DM gave it. The schema carries no `description`: what
+the model must know about the fields (the id rule, which chapter id `chapter`
+may name, what `motivation` or `atmosphere` is, the shape of `quickstats`,
+`body` and `warnings`) is in the entity's prompt under
+`## Die Felder der Szene`, `## Die Felder des NPC` or `## Die Felder des
+Orts`, and the augment run gets exactly that section. The outline loads its
+schema as readable JSON from `shared/schema/outline.schema.json`;
+`shared/test/reply-schema.test.ts` checks the rules of strict mode for
+**every** schema, derived or loaded.
 
-**Die Prompts zeigen genau dieses Objekt.** Der Formatabschnitt jedes
-Create-Prompts — „## Die Felder der Szene“, „## Die Felder des NPC“, „## Die
-Felder des Orts“ — führt ein ```json-Beispiel des Antwort-Objekts: die
-Felder nebeneinander in derselben Reihenfolge wie das Schema der Entität
-(ein optionales Feld ohne Quelle als `null`), `body` als **ein** String —
-dessen Aufbau, `## Flow`, `## If:`, die sechs Callouts und
-`[[id]]`-Verweise, steht als Beschreibung dieses Strings darunter — und
-`warnings` als Liste von Strings. Prompt, Schema und Few-Shot zeigen damit
-Feld für Feld dieselbe Form.
+**The prompts show exactly this object.** The format section of every create
+prompt — `## Die Felder der Szene`, `## Die Felder des NPC`, `## Die Felder
+des Orts` — carries a ```json example of the reply object: the fields side by
+side in the same order as the entity's schema (an optional field without a
+source as `null`), `body` as **one** string — its structure, `## Flow`,
+`## If:`, the six callouts and `[[id]]` references, is described below it as
+a description of that string — and `warnings` as a list of strings. Prompt,
+schema and few-shot thereby show the same shape, field by field.
 
-Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
-und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
-Prozess):
+Three quirks of **strict mode** (the OpenAI path sends `strict: true`, and a
+rejected schema is a lasting fallback for the whole process):
 
-* kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
-  nicht sagen kann, steht im Prompt der Entität (bei der Gliederung in einer
-  `description`) und wird dort geprüft, wo es immer geprüft wurde
-  (kebab-`id`, bekannte Callouts, auflösbare Referenzen),
-* **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
-  stattdessen `null`-fähig, und der Server liest `null` als „nicht
-  angegeben“ und lässt den Schlüssel weg,
-* eine freie Schlüssel/Wert-Abbildung (`quickstats`) lässt sich gar nicht
-  ausdrücken, also reist sie als **Liste** von `{ key, value }`, und
-  `npcFromReply` faltet sie zurück in die Kurzwerte des NPC.
+* no `pattern`, no `format`, no `min*`/`max*` bounds — what the schema cannot
+  say is in the entity's prompt (for the outline in a `description`) and is
+  checked where it is checked anyway (kebab `id`, known callouts, resolvable
+  references),
+* **all** fields are in `required`; a truly optional field is nullable
+  instead, and the server reads `null` as "not given" and leaves the key out,
+* a free key/value map (`quickstats`) cannot be expressed at all, so it
+  travels as a **list** of `{ key, value }`, and `npcFromReply` folds it back
+  into the NPC's quick stats.
 
-Warum nicht eine Szene als **einen** Markdown-Text als Antwort? Weil damit
-die JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum,
-ein Satz davor, ein Abschiedssatz danach, zwei waagerechte Linien, die wie
-Felder davor aussehen. Diese Hälfte kann keine API garantieren, sie
-müsste also von Hand toleriert werden — und jeder Fehlgriff ist eine
-Korrekturrunde oder stiller Datenverlust. Ein erzwungenes Objekt kann das
-alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht ein
-`„…“`, dessen schließendes Zeichen das ASCII-`"` ist, die Übertragung Zeichen
-für Zeichen.
+Why not a scene as **one** Markdown text as the reply? Because that would
+trade JSON escaping for **text parsing**: a code fence around it, a sentence
+before it, a closing sentence after it, two horizontal rules that look like
+fields. No API can guarantee that half, so it would have to be tolerated by
+hand — and every miss is a correction round or silent data loss. An enforced
+object can do none of that: the **transport** escapes the `body`, which is
+why a `„…“` whose closing character is the ASCII `"` survives the transfer
+character by character.
 
-**Der tolerante Leser** bleibt als Netz für Endpoints, die das Feld annehmen
-und ignorieren (`parseJsonReply` in `server/src/json-reply.ts`, von allen
-Antworten benutzt): der ganze Text, dann ein ```json-Zaun, dann die Spanne von
-der ersten `{` bis zur letzten `}` — und **eine** deterministische Reparatur
-(`jsonrepair`, exakt gepinnt) für Komma am Ende oder einfache
-Anführungszeichen. Danach wird **normal validiert**: die Reparatur lockert das
-Parsen, nie die Regeln. Ein reparierter Lauf trägt die Warnung „Antwort musste
-repariert werden“, damit ein Provider, der jedes Mal geflickt werden muss,
-sichtbar ist. Fließtext ohne Objekt wird *nicht* repariert: `jsonrepair` würde
-einen Satz in einen JSON-String verwandeln, und der Lauf scheiterte dann mit
-einer Meldung über die falsche Sache.
+**The tolerant reader** stays as a net for endpoints that accept the field
+and ignore it (`parseJsonReply` in `server/src/json-reply.ts`, used by every
+reply): the whole text, then a ```json fence, then the span from the first
+`{` to the last `}` — and **one** deterministic repair (`jsonrepair`, pinned
+exactly) for a trailing comma or single quotes. After that it is **validated
+as usual**: the repair loosens parsing, never the rules. A repaired run
+carries a warning that the reply had to be repaired, so that a provider that
+needs patching every time is visible. Prose without an object is *not*
+repaired: `jsonrepair` would turn a sentence into a JSON string, and the run
+would then fail with a message about the wrong thing.
 
-Die **Korrekturrunde** nennt das Schema, in dem korrigiert werden soll
-(`buildCorrectionMessage`), damit das Modell in der Form bleibt, die es
-bekommen hat. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik,
-kein stilles Ersetzen.
+The **correction round** names the schema in which to correct
+(`buildCorrectionMessage`), so that the model stays in the shape it was
+given. Nothing else is corrected afterwards: no typography heuristic, no
+silent replacement.
 
-**Die Gliederung** hat ihr eigenes Schema (`shared/schema/outline.schema.json`) und
-das einzige, das keine Entität beschreibt: ein kleines, flaches Objekt aus
-der Szenenliste, der Liste neuer NPCs (`npcs`), der Liste neuer Orte
-(`locations`) und, für ein neues Kapitel, dessen Beschreibung.
-Die **semantischen** Prüfungen bleiben auch
-dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
-Durchlauf nur einmal vor“, „dieser Verweis in `refs` ist eine Szene DIESER
-Gliederung“ oder „das Kapitel kommt aus dem Kontext“.
+**The outline** has its own schema (`shared/schema/outline.schema.json`), the
+only one that describes no entity: a small flat object of the scene list,
+the list of new NPCs (`npcs`), the list of new locations (`locations`) and,
+for a new chapter, its description. The **semantic** checks stay where they
+are: a schema cannot say "this id occurs only once in the whole run", "this
+reference in `refs` is a scene of THIS outline" or "the chapter comes from
+the context".
 
-**Die Few-Shots sind Antworten**: `example-output.json`,
-`npc-example-output.json`, `location-example-output.json` und
-`outline-example-output.json` zeigen genau das Objekt, in das der jeweilige
-Aufruf gezwungen wird — derselbe Beispielinhalt wie vorher, nur in der Form,
-die das Modell auch liefern soll.
+**The few-shots are replies**: `example-output.json`,
+`npc-example-output.json`, `location-example-output.json` and
+`outline-example-output.json` show exactly the object the respective call is
+forced into.
 
-## Ablauf eines Szenen-Laufs (Pipeline)
+## Flow of a scene run (pipeline)
 
-Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
+A scene run is not **one** call but `1 + N (+ proposals)`:
 
-1. **Gliederung** (ein Aufruf, `outline-system-prompt.md` +
-   `outline-example-output.json`): kleines JSON, per Schema erzwungen (siehe
-   „Antwortformate“) — mit der Szenenliste: `id`,
-   `title`, `type`, `location`, Querverweise (`refs`) — und je einer Liste
-   neuer NPCs (`npcs`) und neuer Orte (`locations`), jeder darin
-   `{ id, name, summary }`. Jede Szene nennt zusätzlich den **ersten und
-   letzten Satz ihres Quelltext-Abschnitts wörtlich** (`sourceExcerpt`); der
-   Server schneidet den Abschnitt damit aus dem Quelltext. Findet er die
-   Zitate nicht wörtlich wieder (Whitespace wird normalisiert, sonst nichts),
-   bekommt die Szene den **ganzen** Quelltext und der Lauf eine Warnung —
-   teurer, aber nie falsch. Validierung und Korrektur-Turns gelten für diesen
-   Schritt allein.
+1. **Outline** (one call, `outline-system-prompt.md` +
+   `outline-example-output.json`): small JSON, enforced by schema (see
+   "Reply formats") — with the scene list: `id`, `title`, `type`,
+   `location`, cross references (`refs`) — and one list each of new NPCs
+   (`npcs`) and new locations (`locations`), each entry
+   `{ id, name, summary }`. Each scene also names the **first and last
+   sentence of its source section verbatim** (`sourceExcerpt`); the server
+   cuts the section out of the source text with them. If it does not find the
+   quotes verbatim (whitespace is normalised, nothing else), the scene gets
+   the **whole** source text and the run a warning — more expensive, but
+   never wrong. Validation and correction turns apply to this step alone.
 
-   **Neues Kapitel:** Legt der Lauf sein Kapitel neu an („Neues Kapitel“),
-   trägt der Kontext des Gliederungs-Aufrufs die Zeile `neues Kapitel: ja`,
-   und die Gliederung beschreibt das Kapitel unter `chapterDescription` —
-   ein bis drei Sätze aus dem Quelltext, worum es geht und was die Gruppe
-   erreichen soll. „Entwürfe prüfen“ zeigt sie als „Beschreibung des
-   Kapitels“, und das Übernehmen legt das Kapitel getypt an — als `Chapter`
-   ohne `rev`, `planned`, mit der Beschreibung als `body`. Für ein
-   bestehendes Kapitel ist das Feld `null`, und was dort trotzdem steht,
-   verwirft die Validierung: den Text eines bestehenden Kapitels erreicht
-   kein Lauf. Eine fehlende Beschreibung kostet keinen Korrektur-Turn — das
-   Kapitel beginnt dann mit leerem Text.
+   **New chapter:** when the run creates its chapter, the context of the
+   outline call carries the line `neues Kapitel: ja`, and the outline
+   describes the chapter under `chapterDescription` — one to three sentences
+   from the source text about what the chapter is about and what the group
+   should achieve. The review shows it as the chapter's description, and
+   accepting creates the chapter typed — as a `Chapter` without `rev`,
+   `planned`, with the description as `body`. For an existing chapter the
+   field is `null`, and whatever is there anyway is discarded by validation:
+   no run reaches the text of an existing chapter. A missing description
+   costs no correction turn — the chapter then starts with an empty text.
 
-   **Obergrenze:** höchstens 12 Szenen und zusammen 12 neue NPCs und Orte je
-   Lauf (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Jeder Teil ist ein
-   Provider-Aufruf, also entscheidet die Gliederung, was ein Lauf kostet;
-   darüber ist die Antwort ein Validierungsfehler und damit ein
-   Korrektur-Turn, der um Zusammenfassen bittet — kein fehlgeschlagener Lauf.
+   **Limit:** at most 12 scenes and 12 new NPCs and locations together per
+   run (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Every part is a
+   provider call, so the outline decides what a run costs; above that the
+   reply is a validation error and thus a correction turn that asks for
+   merging — not a failed run.
 
-   Die Gliederung ist ein **rein systeminterner** Schritt zur Fehlerreduktion.
-   Sie wird dem Nutzer nie angezeigt und nie zum Bearbeiten angeboten (PO,
-   15.09.) — interessant ist nur das Ergebnis je Szene/NPC/Ort und die
-   Beschreibung eines neuen Kapitels. Der Server
-   speichert sie auf der Job-Zeile, weil „Erneut versuchen“ und ein Neustart
-   sie brauchen.
+   The outline is a **purely internal** step to reduce errors. It is never
+   shown to the DM and never offered for editing — what matters is the
+   result per scene, NPC and location and the description of a new chapter.
+   The server stores it on the job row, because a retry and a restart need
+   it.
 
-2. **Szenen** (je Szene ein Aufruf, Parallelität 3): `system-prompt.md` im
-   Modus „genau eine Szene aus der Gliederung“ (`scene-single-output.md`
-   tauscht nur das Ausgabeformat — alle Regeln bleiben wörtlich dieselben) +
-   Gliederung + der geschnittene Quelltext-Abschnitt. Ausgabe: genau ein
-   Szenen-Objekt. Validierung, Korrektur-Turns und Namensprüfung **je
-   Szene**; ein fehlgeschlagener Teil blockiert die anderen nicht.
+2. **Scenes** (one call per scene, concurrency 3): `system-prompt.md` in the
+   mode "exactly one scene from the outline" (`scene-single-output.md` swaps
+   only the output format — all rules stay word for word the same) + outline
+   + the cut source section. Output: exactly one scene object. Validation,
+   correction turns and the naming check **per scene**; a failed part does
+   not block the others.
 
-3. **Vorschläge** (je neuem NPC und je neuem Ort ein Aufruf):
-   `npc-system-prompt.md` bzw. `location-system-prompt.md`, mit der
-   Gliederung und den Abschnitten der Szenen, die den NPC nennen bzw. am Ort
-   spielen. Dedupliziert über die id.
+3. **Proposals** (one call per new NPC and per new location):
+   `npc-system-prompt.md` or `location-system-prompt.md`, with the outline
+   and the sections of the scenes that name the NPC or play at the location.
+   Deduplicated by id.
 
-Was das dem DM bringt: ein Formfehler kostet nur den betroffenen Teil, fertige
-Szenen sind sofort prüfbar und übernehmbar, und ein defekter Teil lässt sich
-einzeln wiederholen (`PATCH …/generator-jobs/:id/parts/:key { status: "running" }`). Das
-Job-Modell dazu steht in `docs/decisions/generator.md`.
+What this gives the DM: a shape error costs only the affected part, finished
+parts can be reviewed and accepted right away, and a broken part can be
+retried on its own (`PATCH …/generator-jobs/:id/parts/:key { status:
+"running" }`). The job model behind it is in `docs/decisions/generator.md`.
 
-**Prompt-Caching:** Der konstante Teil des Prompts — System-Prompt,
-Kampagnenwissen, Glossar, Kontextlisten, Few-Shot, Gliederung — steht bei
-jedem Aufruf **zuerst** und wird beim Claude-Provider mit
-`cache_control: ephemeral` markiert (System-Prompt und konstanter Block je
-eine Marke); OpenAI-kompatible Endpoints cachen denselben Prefix implizit. Nur
-der variable Rest wechselt je Teil: **welche Szene dieser Aufruf schreibt**
-(„## Diese Szene schreibst du jetzt“), der Ausschnitt, die bestehende Szene,
-der bestehende NPC oder Ort, die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
-**byteweise identisch** — deshalb steht die Zuweisung nicht darin.
+**Prompt caching:** the constant part of the prompt — system prompt,
+campaign knowledge, glossary, context lists, few-shot, outline — comes
+**first** in every call and is marked with `cache_control: ephemeral` for the
+Claude provider (one mark each for the system prompt and the constant
+block); OpenAI-compatible endpoints cache the same prefix implicitly. Only
+the variable rest changes per part: **which scene this call writes**
+(`## Diese Szene schreibst du jetzt`), the excerpt, the existing scene, the
+existing NPC or location, the instruction. The outline block itself is
+**byte for byte identical** for every part of a run — which is why the
+assignment is not in it.
 
-Die Anzeige „~N Tokens · M Aufrufe“ summiert über alle Teile, die Gliederung
-eingeschlossen.
+The "~N tokens · M calls" display sums over all parts, the outline included.
 
-**Ein Aufruf bleiben** (PO-Entscheid): die Ergänzen-Läufe und die
-NPC-Generierung — je eine Szene, ein NPC oder ein Ort, nichts zu zerlegen.
+**Single calls:** the augment runs and the NPC run — one scene, one NPC or
+one location each, nothing to split.
 
-## Ablauf pro Aufruf
+## Review of a scene run
 
-Gilt für jeden EINZELNEN Provider-Aufruf — den Gliederungs-Aufruf, jeden
-Szenen-Aufruf, jeden NPC- und Orts-Aufruf und die Ein-Aufruf-Läufe:
+The review walks the run in the order its proposals reference each other
+(decisions/generator):
 
-1. Server sammelt Kontext: alle npc-/location-ids + Namen, Kapitel-id,
-   **Kampagnenwissen** und Glossar (beides aus der Datenbank —
-   `knowledge_items` bzw. `glossary_terms`).
-2. Prompt = `system-prompt.md` + `example-output.json` (Few-Shot-Ziel)
-   + Kampagnenwissen + Glossar + Kontext + Quelltext.
-3. LLM antwortet — mit dem **Objekt der Entität** (Szene, NPC, Ort, Ergänzung)
-   bzw. mit dem **Gliederungs-Objekt**, je per Schema erzwungen; siehe
-   „Antwortformate“ oben.
-4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
-   Inhalt):
-   - nur bekannte Felder, kebab-`id`? `type`/`status` gültig? Neue Szene:
-     `status == draft`, das Schema erzwingt es; `chapter` das des Laufs?
-     NPC: `status` einer der vier Werte (Normalfall `alive`), das Schema
-     erzwingt ihn; ein Ort hat kein `status`-Feld, sein Schema kennt keins.
-   - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Vorschlag
-     desselben Laufs bei?
-   - jedes `[[id]]` im Text nennt einen NPC, Ort oder eine Szene der
-     Kampagne oder einen Vorschlag desselben Laufs (Gliederung, im NPC-Lauf
-     der NPC selbst)? Im Ergänzen-Lauf zählen nur Verweise, die der
-     Vorschlag neu bringt; `[[id]]` in Code ist kein Verweis.
-   - nur bekannte Callout-Typen?
-   Keine Prüfung sucht eine Überschrift (decisions/data-shape): `## Weiß`,
-   `## Beziehungen` & Co. sind Empfehlungen der Prompts, freier Text.
-   Fehler gehen als Korrektur-Turn zurück ans LLM (konfigurierbar
-   über LLM_CORRECTION_TURNS, 0–2, Default 1),
-   nicht an den Nutzer. Ausnahme: eine vom Modell abgeschnittene Antwort
-   (finish_reason/stop_reason) bricht sofort ab — Korrektur-Turns können
-   ein Token-Limit nicht heilen, sie kosten nur.
-5. Server prüft den fertigen Vorschlag gegen die **Namenskonventionen** des
-   Kampagnenwissens (Wortgrenzen, Groß/Klein-unabhängig, keine Heuristik)
-   und legt Treffer als `namingHints` ins Job-Ergebnis.
-6. App zeigt Review-Vorschau: Szenen editierbar, vorgeschlagene NPCs und
-   Orte einzeln annehmen/ablehnen, Namens-Hinweise dezent daneben (kein
-   Blocker).
-   Erst „Übernehmen“ schreibt in die Datenbank.
+1. **Locations** — every new location of the run,
+2. **NPCs** — every new NPC of the run,
+3. **Scenes** — the scenes that name them.
 
-## Kampagnenwissen
+A stage without proposals is skipped; within a stage the proposals stand in
+outline order, and a part that is still running or failed shows in its
+stage. The stage the DM stands on is stored on the job (`review.stage`) and
+written back as it changes.
 
-Gepflegt auf `/settings` je Kampagne, drei Arten: Namenskonvention
-(`Alt → Neu`), Fakt, Stilregel. Der Prompt stellt sie **vor** das Glossar,
-unter einer bindenden Überschrift:
+Each location and NPC is decided on its own: accepting writes it right away,
+rejecting marks it rejected (a rejected one can still be accepted after
+all). The scene stage opens only when every location and NPC is decided;
+going back stays possible. Scenes are editable, naming hints stand quietly
+next to them (never a blocker), and accepting a scene writes exactly that
+scene.
+
+A scene whose `npcs` or `location` names a proposal of the run that is not
+written cannot be written: the server refuses it with a 409
+`proposal_not_written` naming the scene and the unwritten NPCs and locations,
+and writes nothing. A `[[id]]` mention in the text never blocks. The card of
+such a scene says which rejected proposal it names and offers three ways
+out: accept the proposal after all, remove the reference (a change in
+`sceneEdits`; `null` clears the location), or drop the scene.
+
+## Flow per call
+
+Applies to every SINGLE provider call — the outline call, every scene call,
+every NPC and location call and the single-call runs:
+
+1. The server gathers context: all npc/location ids + names, chapter id,
+   **campaign knowledge** and glossary (both from the database —
+   `knowledge_items` and `glossary_terms`).
+2. Prompt = `system-prompt.md` + `example-output.json` (few-shot target)
+   + campaign knowledge + glossary + context + source text.
+3. The LLM replies — with the **entity's object** (scene, NPC, location,
+   augment) or with the **outline object**, each enforced by schema; see
+   "Reply formats" above.
+4. The server validates mechanically (the schema covers the shape, this is
+   the content):
+   - only known fields, kebab `id`? `type`/`status` valid? New scene:
+     `status == draft`, enforced by the schema; `chapter` the run's? NPC:
+     `status` one of the four values (normally `alive`), enforced by the
+     schema; a location has no `status` field, its schema knows none.
+   - do all `npcs`/`location` references exist OR come as a proposal of the
+     same run?
+   - does every `[[id]]` in the text name an NPC, location or scene of the
+     campaign or a proposal of the same run (outline, in the NPC run the NPC
+     itself)? In the augment run only references the proposal newly brings
+     count; `[[id]]` in code is not a reference.
+   - only known callout types?
+   No check looks for a heading (decisions/data-shape): `## Weiß`,
+   `## Beziehungen` and the like are recommendations of the prompts, free
+   text.
+   Errors go back to the LLM as a correction turn (configurable via
+   LLM_CORRECTION_TURNS, 0–2, default 1), not to the DM. Exception: a reply
+   the model cut off (finish_reason/stop_reason) aborts right away —
+   correction turns cannot heal a token limit, they only cost.
+5. The server checks the finished proposal against the **naming
+   conventions** of the campaign knowledge (word boundaries, case
+   insensitive, no heuristic) and puts matches as `namingHints` into the job
+   result.
+6. The app shows the review (see "Review of a scene run"). Only accepting
+   writes into the database.
+
+## Campaign knowledge
+
+Maintained per campaign on `/campaigns/:id/knowledge`, three kinds: naming
+convention (`Old → New`), fact, style rule. The prompt puts them **before**
+the glossary, under a binding heading:
 
 ```
 ## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet
@@ -312,134 +325,132 @@ unter einer bindenden Überschrift:
 - Stilregel: Keine Würfelwerte im Read-Aloud-Text.
 ```
 
-`[[slug]]`-Referenzen im Kampagnenwissen werden vorher aufgelöst (der
-Modell-Text soll Namen enthalten, keine Slugs). Ohne Zeilen fehlt der Abschnitt ganz —
-der Prompt sieht dann genauso aus wie vorher.
+`[[slug]]` references in the campaign knowledge are resolved beforehand (the
+model's text should contain names, not slugs). Without rows the section is
+missing entirely.
 
-## Deutsche Orthografie
+## German orthography
 
-Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
+All system prompts (`system-prompt.md`, `npc-system-prompt.md`,
 `location-system-prompt.md`, `scene-augment-system-prompt.md`,
-`npc-augment-system-prompt.md`, `location-augment-system-prompt.md` und
-`outline-system-prompt.md`) tragen **dieselbe** Regel „Deutsche
-Orthografie“: jeder echte Text — Fließtext, Read-Alouds, Callouts,
-`## If:`-Bedingungen, Überschriften, `warnings` und jedes Feld, das Text ist
-(`title`, `name`, `role`, `voice`, `appearance`, `trigger`, `statblock` …) —
-nutzt ä/ö/ü/ß als genau diese Zeichen. **Einzige Ausnahme**: `id`-Werte (und
-`location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
-dem Quelltext bleiben unverändert.
+`npc-augment-system-prompt.md`, `location-augment-system-prompt.md` and
+`outline-system-prompt.md`) carry **the same** German-orthography rule:
+every real text — prose, read-alouds, callouts, `## If:` conditions,
+headings, `warnings` and every field that is text (`title`, `name`, `role`,
+`voice`, `appearance`, `trigger`, `statblock` …) — uses ä/ö/ü/ß as exactly
+these characters. **The only exception**: `id` values (and `location`, which
+is an id) stay kebab-case ASCII; proper names from the source text stay
+unchanged.
 
-**Die Anführungszeichen gehören dazu**, als **ein** identischer Satz
-in derselben Regel: deutsche typografische Anführungszeichen `„…“`
-(U+201E/U+201C), einfache `‚…‘`, als Apostroph `’`. Die Mischform — U+201E
-geöffnet, mit dem ASCII-Zeichen geschlossen — stand vorher durchgehend in
-unseren Prompts, Few-Shots, Beispielen **und im UI-Katalog**, und das Modell
-hat sie imitiert; alle vier sind umgestellt (nur die Anführungszeichen).
-Zwei Tests halten es so: `app/src/i18n/i18n.test.ts` über die Katalog-WERTE
-(im Quelltext ist das schließende ASCII-Zeichen vom String-Begrenzer
-ununterscheidbar) und `server/test/typography.test.ts` über Prompts,
-Few-Shots und `examples/`.
+**The quotation marks belong to it**, as **one** identical sentence in the
+same rule: German typographic quotation marks `„…“` (U+201E/U+201C), single
+`‚…‘`, and `’` as the apostrophe. Prompts, few-shots, examples and the UI
+catalog use them throughout, never U+201E closed by the ASCII character. Two
+tests keep it that way: `app/src/i18n/i18n.test.ts` over the catalog VALUES
+(in the source the closing ASCII character cannot be told apart from the
+string delimiter) and `server/test/typography.test.ts` over prompts,
+few-shots and `examples/`.
 
-Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
-Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
-zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
-nur den Formatabschnitt einschneidet (`formatContract` in
-`server/src/generator-augment.ts`; bei der Szene „## Die Felder der Szene“
-aus `system-prompt.md` unter den Szenen-Ergänzen-Prompt
-`scene-augment-system-prompt.md`, `server/src/scene-augment.ts`, beim NPC
-„## Die Felder des NPC“ aus
-`npc-system-prompt.md` unter den NPC-Ergänzen-Prompt
-`npc-augment-system-prompt.md`, `server/src/npc-augment.ts`, beim Ort
-„## Die Felder des Orts“ aus `location-system-prompt.md` unter den
-Ort-Ergänzen-Prompt `location-augment-system-prompt.md`,
-`server/src/location-augment.ts`). Der Server korrigiert nichts nach: es
-gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
-Prompt.
+The rule stands in the three create prompts under `## Regeln` and in the
+augment prompt in the augment rule — so exactly **once** in every assembled
+prompt, also in augment mode, which takes only the format section from the
+create prompts (`formatContract` in `server/src/generator-augment.ts`; for
+the scene `## Die Felder der Szene` from `system-prompt.md` under the scene
+augment prompt `scene-augment-system-prompt.md`, `server/src/scene-augment.ts`,
+for the NPC `## Die Felder des NPC` from `npc-system-prompt.md` under the NPC
+augment prompt `npc-augment-system-prompt.md`, `server/src/npc-augment.ts`,
+for the location `## Die Felder des Orts` from `location-system-prompt.md`
+under the location augment prompt `location-augment-system-prompt.md`,
+`server/src/location-augment.ts`). The server corrects nothing afterwards:
+there is no heuristic and no silent replacement, the rule works in the
+prompt alone.
 
-## Tabellen
+## Tables
 
-Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
-„Tabellen“** in allen System-Prompts, die Szenen, NPCs oder Orte schreiben — der
-Gliederungs-Prompt trägt sie nicht, weil er allein die Gliederung ausgibt
-(die Orthografie-Regel steht dort trotzdem, weil Titel, Einzeiler und
-`warnings` Text sind) — in den drei Create-Prompts unter
-„## Regeln“, im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
-in jedem zusammengesetzten Prompt (`formatContract` in
-`server/src/generator-augment.ts` schneidet aus den Create-Prompts nur den
-Formatabschnitt heraus).
+The same mechanism as the orthography rule: **one identical table rule** in
+all system prompts that write scenes, NPCs or locations — the outline prompt
+does not carry it, because it only outputs the outline (it carries the
+orthography rule anyway, because titles, one-liners and `warnings` are
+text) — in the three create prompts under `## Regeln`, in the augment prompt
+in the augment rule, so exactly **once** in every assembled prompt
+(`formatContract` in `server/src/generator-augment.ts` takes only the format
+section from the create prompts).
 
-Inhalt der Regel: Tabellen aus dem Quellmaterial — Zufallstabellen,
-Begegnungs- und Würfellisten — werden als gültige GFM-Pipe-Tabelle
-ausgegeben (Kopfzeile, `|---|`-Trennzeile, Rand-Pipes) und stehen im
-passenden Callout, in jeder Zeile mit dessen `>`. **Aus GFM nutzt der
-Generator ausschließlich diese Pipe-Tabelle**: Durchgestrichenes,
-Aufgabenlisten, Fußnoten und Auto-Links bleiben normaler Text — genau so
-rendert sie `app/src/markdown/remark-table.ts`.
+What the rule says: tables from the source material — random tables,
+encounter and dice lists — are output as a valid GFM pipe table (header row,
+`|---|` separator row, edge pipes) and stand in the matching callout, with
+its `>` in every row. **Of GFM the generator uses only this pipe table**:
+strikethrough, task lists, footnotes and autolinks stay normal text —
+exactly as `app/src/markdown/remark-table.ts` renders them.
 
-Der Szenen-Few-Shot (`example-output.json`) zeigt eine kleine W6-Tabelle in
-einem `[!note]`-Callout, damit das Modell die Form im Callout sieht statt sie
-nur beschrieben zu bekommen. Tabellen bleiben unvalidiert: eine kaputte
-Trennzeile ist Text — Degradation statt Fehler.
+The scene few-shot (`example-output.json`) shows a small d6 table in a
+`[!note]` callout, so the model sees the shape in the callout instead of only
+having it described. Tables stay unvalidated: a broken separator row is
+text — degradation instead of an error.
 
-## NPC-Generator
+## NPC generator
 
-Gleiche Pipeline, eigene Art von Lauf (`POST
-/api/campaigns/:campaign/generator-jobs { kind: "npc", sourceText, id? }`) und eigene Prompt-Assets (`npc-system-prompt.md` und `npc-example-output.json`
-als Few-Shot-Ziel). Zielformat: der NPC aus README.md, ohne `rev`; `[[id]]`
-nur auf NPCs, Orte und Szenen der Kampagne oder den NPC selbst, Quickstats
-als Strings (das Plus überlebt), `status: alive` als Normalfall, `chapter`
-leer. Ein Generator-Job pro Kampagne, egal ob Szenen oder NPC. Das Ergebnis
-steht unter `npcResult.npc` und wird wie jeder vorgeschlagene NPC über seine
-`id` übernommen (`PATCH …/generator-jobs/:id` mit `review.writtenNpcs`).
+The same pipeline, its own kind of run (`POST
+/api/campaigns/:campaign/generator-jobs { kind: "npc", sourceText, id? }`)
+and its own prompt assets (`npc-system-prompt.md` and
+`npc-example-output.json` as the few-shot target). Target format: the NPC
+from README.md, without `rev`; `[[id]]` only to NPCs, locations and scenes of
+the campaign or the NPC itself, quick stats as strings (the plus survives),
+`status: alive` as the normal case, `chapter` empty. One generator job per
+campaign, whether scenes or NPC. The result is under `npcResult.npc` and is
+accepted like every proposed NPC through its `id` (`PATCH
+…/generator-jobs/:id` with `review.writtenNpcs`).
 
-Ein bestehender NPC wird an seiner Ressource ergänzt (`POST
-…/npcs/<id>/augment`, übernommen mit `POST …/npcs/<id>/augment/apply`):
-`npc-augment-system-prompt.md` trägt die Ergänzungsregel, der Abschnitt
-„## Die Felder des NPC“ aus `npc-system-prompt.md` die Felder, und der
-bestehende NPC steht im Prompt in der Antwort-Form (`quickstats` als Paare).
+An existing NPC is augmented on its resource (`POST …/npcs/<id>/augment`,
+accepted with `POST …/npcs/<id>/augment/apply`):
+`npc-augment-system-prompt.md` carries the augment rule, the section
+`## Die Felder des NPC` from `npc-system-prompt.md` the fields, and the
+existing NPC stands in the prompt in the reply shape (`quickstats` as
+pairs).
 
 ## Provider
 
-Abstraktion in `server/src/llm-provider.ts`, Auswahl per Env-Var
-`LLM_PROVIDER` — keine Code-Änderung nötig:
+Abstraction in `server/src/llm-provider.ts`, chosen by the env var
+`LLM_PROVIDER` — no code change needed:
 
-- `claude` (Default): Claude API direkt (`ANTHROPIC_API_KEY`, optional
+- `claude` (default): the Claude API directly (`ANTHROPIC_API_KEY`, optional
   `CLAUDE_MODEL`).
-- `openrouter`: OpenRouter als Modell-Router (`OPENROUTER_API_KEY` +
-  `LLM_MODEL`, z. B. `anthropic/claude-sonnet-5`) — ein Key, viele
-  Modelle, damit lässt sich vergleichen, ohne die Konfiguration umzubauen.
-- `openai`: derselbe Transport für **jeden** OpenAI-kompatiblen Endpoint
-  (`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` nur falls verlangt).
-- `lmstudio`: lokal ohne Key (`LMSTUDIO_URL`, `LMSTUDIO_MODEL`).
+- `openrouter`: OpenRouter as a model router (`OPENROUTER_API_KEY` +
+  `LLM_MODEL`, e.g. `anthropic/claude-sonnet-5`) — one key, many models, so
+  they can be compared without rebuilding the configuration.
+- `openai`: the same transport for **any** OpenAI-compatible endpoint
+  (`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` only if required).
+- `lmstudio`: local without a key (`LMSTUDIO_URL`, `LMSTUDIO_MODEL`).
 
-Die drei OpenAI-kompatiblen Fälle teilen eine Klasse
-(`OpenAICompatProvider`); sie unterscheiden sich nur in Base-URL, Modell und
-Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
-`LLM_PROVIDER`-Wert werden nicht verschluckt: der Start eines Laufs
-(`POST /api/campaigns/:campaign/generator-jobs`) antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
-docs/DEPLOYMENT.md Abschnitt 2.
+The three OpenAI-compatible cases share one class (`OpenAICompatProvider`);
+they differ only in base URL, model and auth header. Missing required
+variables and an unknown `LLM_PROVIDER` value are not swallowed: starting a
+run (`POST /api/campaigns/:campaign/generator-jobs`) answers `503` with the
+message in plain text. Full variable table: docs/DEPLOYMENT.md section 2.
 
-## Szenen ergänzen
+## Augmenting scenes
 
-Eine bestehende Szene wird an ihrer Ressource ergänzt (`POST
-…/scenes/<id>/augment`, übernommen mit `POST …/scenes/<id>/augment/apply`):
-`scene-augment-system-prompt.md` trägt die Ergänzungsregel, der Abschnitt
-„## Die Felder der Szene“ aus `system-prompt.md` die Felder, und die
-bestehende Szene steht im Prompt in der Antwort-Form.
+An existing scene is augmented on its resource (`POST
+…/scenes/<id>/augment`, accepted with `POST …/scenes/<id>/augment/apply`):
+`scene-augment-system-prompt.md` carries the augment rule, the section
+`## Die Felder der Szene` from `system-prompt.md` the fields, and the
+existing scene stands in the prompt in the reply shape.
 
-## Vorschläge tragen keine Adresse
+## Proposals carry no address
 
-Das Modell liefert **Szenen, NPCs und Orte**, jede als ihre Entität ohne
-`rev`, und keine davon hat eine Adresse:
+The model delivers **scenes, NPCs and locations**, each as its entity
+without `rev`, and none of them has an address:
 
-* Vorgeschlagene Szenen stehen unter `result.scenes`, jede mit dem Kapitel
-  des Laufs in `chapter`, vorgeschlagene NPCs und Orte unter `result.npcs`
-  und `result.locations`. Geprüft, entschieden und übernommen wird jede über
-  ihre `id` (`accept { scenes: [<id>], npcs: [<id>], locations: [<id>] }`;
-  die Antwort nennt die geschriebenen unter `scenes`, `npcs` und
-  `locations`). Ein Konflikt ist eine 409 `{ chapters, scenes, npcs,
-  locations }` mit den ids, die schon belegt sind.
-* NPC-Lauf und Ergänzen-Lauf: beim Ergänzen steht das Ziel ohnehin
-  serverseitig fest — es ist die Ressource, an der der Lauf hängt (`POST
+* Proposed scenes are under `result.scenes`, each with the run's chapter in
+  `chapter`, proposed NPCs and locations under `result.npcs` and
+  `result.locations`. Each is reviewed, decided and accepted through its
+  `id` (`PATCH …/generator-jobs/:id` naming it in `review.writtenScenes`,
+  `review.writtenNpcs` or `review.writtenLocations`; the response is the
+  job, whose review names what is written). An id that is already taken is
+  a 409 `{ chapters, scenes, npcs, locations }` with those ids; a scene that
+  names an unwritten proposal is the 409 `proposal_not_written` (see
+  "Review of a scene run").
+* NPC run and augment run: when augmenting, the target is fixed on the
+  server anyway — it is the resource the run hangs on (`POST
   …/scenes/<id>/augment`, `POST …/npcs/<id>/augment`, `POST
-  …/locations/<id>/augment`, übernommen mit `…/augment/apply`).
+  …/locations/<id>/augment`, accepted with `…/augment/apply`).

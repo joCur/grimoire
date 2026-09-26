@@ -31,10 +31,20 @@
 - **The review state lives on the job,** not in the browser: the DM's edits
   and decisions are stored per entity and id and written back as they happen.
   The job has its own guard (`decisions/writes`).
-- **Applying** writes the named proposals in one transaction under the same
-  rules as creating their entities. What is applied becomes an ordinary row;
-  discarding the job takes only the open remainder. A chapter the run creates
-  is recorded on the job and created on the first apply.
+- **The review walks in reference order.** A scene run is reviewed in
+  stages: first the new locations, then the new NPCs, then the scenes that
+  name them. Each proposal is decided on its own; the stage the DM stands on
+  is part of the review state on the job. The scene stage opens only when
+  every location and NPC of the run is decided, and going back stays
+  possible.
+- **Applying writes exactly what is named.** Accepting a proposal writes that
+  proposal, in one transaction under the same rules as creating its entity,
+  and nothing else. A scene is applied only once every location and NPC of
+  the run that its fields name exists; otherwise the server refuses it and
+  writes nothing. A mention in the text never blocks. What is applied becomes
+  an ordinary row; discarding the job takes only the open remainder. A
+  chapter the run creates is recorded on the job and created on the first
+  apply.
 
 ## Why
 
@@ -50,6 +60,10 @@
 - Fields assembled into a text and taken apart again can only lose values.
 - Parts let a long run deliver early and let one failure cost one call
   instead of the whole run.
+- A scene is only playable when what it names exists. Deciding the things a
+  scene references before the scene itself makes every write the DM's own
+  choice: nothing enters the campaign because something else was accepted,
+  and no scene points at a row that was never written.
 
 ## Consequences
 
@@ -59,3 +73,8 @@
 - Two tabs are a conflict to report, not one to merge. There is no undo
   history.
 - Where applied scenes stand in their chapter follows `decisions/scene-order`.
+- A failed part of a location or NPC keeps its stage open until it is retried
+  or the job is discarded.
+- A scene that names a rejected proposal cannot be applied as it stands:
+  the DM accepts the proposal after all, removes the reference, or drops the
+  scene.
