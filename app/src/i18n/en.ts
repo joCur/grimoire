@@ -853,6 +853,14 @@ export const en: Messages = {
   "sceneEdit.npcs.title": "NPCs in this order",
   "sceneEdit.handouts.title": "Handouts in Roll20",
 
+  // --- edit mode of an npc (npc/NpcEditMode.tsx, components/FieldSection.tsx)
+  "npcEdit.heading": "Edit NPC",
+  "npcEdit.name.aria": "NPC name",
+  "npcEdit.blocked.name": "An NPC needs a name.",
+  "npcEdit.chapter.none": "No chapter",
+  "npcEdit.profile.title": "Profile",
+  "npcEdit.profile.empty": "The profile is still empty.",
+
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} is not an NPC ID, so there is no NPC for it.",
   "npcCard.unloadable": "{id} — NPC not loadable, check the server.",

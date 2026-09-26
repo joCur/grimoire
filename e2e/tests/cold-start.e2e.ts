@@ -309,10 +309,10 @@ test("npc and location are created from their lists; a collision writes nothing"
   await page.getByRole("button", { name: ui("common.create") }).click();
 
   // The dialog only ever asks for a name — the npc's reading view on its
-  // own route opens, and the rest of the fields live in the properties form.
+  // own route opens, and the rest of the fields live in its edit mode.
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs/harbormaster-jorna$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Harbormaster Jorna");
-  await expect(page.getByRole("button", { name: ui("properties.action") })).toBeVisible();
+  await expect(page.getByRole("button", { name: ui("common.edit"), exact: true })).toBeVisible();
   // The create answers the npc itself: every field flat, no kind, no path,
   // no properties map (decisions/resources).
   const created = await getNpc(api, "harbormaster-jorna");

@@ -10,6 +10,8 @@ import type { Npc } from "@grimoire/shared/npc";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { translator } from "@/i18n/format";
+
 import { NpcArticle } from "./NpcArticle";
 
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel/npcs");
@@ -25,6 +27,10 @@ function npcFixture(id: string): Npc {
 
 const jorna = npcFixture("jorna");
 
+// UI text comes from the catalog (decisions/testing); the fixture's own
+// content is data and is asserted as it is stored.
+const t = translator("de");
+
 function render(npc: Npc): string {
   return renderToStaticMarkup(<NpcArticle npc={npc} />);
 }
@@ -34,7 +40,7 @@ describe("NpcArticle", () => {
     const html = render(jorna);
     expect(html).toContain("Hafenmeisterin Jorna");
     expect(html).toContain("Auftraggeberin, Hafenmeisterin von Salzhafen");
-    expect(html).toContain("Lebendig");
+    expect(html).toContain(t("status.npc.alive"));
     expect(html).toContain("knapp, wetterrau, duzt jeden");
     expect(html).toContain("Ölmantel, graue Flechte");
     expect(html).toContain("insight 2");
@@ -43,21 +49,21 @@ describe("NpcArticle", () => {
 
   test("the motivation stands in the header, labelled like the card", () => {
     const html = render(jorna);
-    expect(html).toContain("Will:");
+    expect(html).toContain(t("npcCard.will.inline"));
     expect(html).toContain("Das Leuchtfeuer muss wieder brennen");
   });
 
   test("the statblock is a plain reference line, never a link", () => {
     const html = render(jorna);
-    expect(html).toContain("Statblock: Roll20: Jorna");
+    expect(html).toContain(t("entity.npc.statblock", { value: "Roll20: Jorna" }));
     expect(html).not.toContain("<a ");
   });
 
   test("the text goes through the markdown pipeline, without a scene overline", () => {
     const html = render(jorna);
     expect(html).toContain("Ahnt, dass jemand im Dorf die Schmuggler deckt");
-    expect(html).not.toContain("Geplante Szene");
-    expect(html).not.toContain("Eventualszene");
+    expect(html).not.toContain(t("sceneArticle.type.planned"));
+    expect(html).not.toContain(t("sceneArticle.type.contingency"));
   });
 
   test("an npc with nothing but its id is a normal, thin page", () => {
@@ -65,28 +71,28 @@ describe("NpcArticle", () => {
     // the name, the neutral status, no field rows.
     const html = render({ id: "holm", name: "holm", status: "unknown", body: "", rev: 1 });
     expect(html).toContain("holm");
-    expect(html).toContain("Unbekannt");
-    expect(html).not.toContain("Statblock");
-    expect(html).not.toContain("Will:");
+    expect(html).toContain(t("status.npc.unknown"));
+    expect(html).not.toContain(t("properties.npc.statblock.label"));
+    expect(html).not.toContain(t("npcCard.will.inline"));
   });
 
-  test("the actions stay ONE spaced group; an editor replaces the text", () => {
+  test("the actions stay ONE spaced group", () => {
     const html = renderToStaticMarkup(
       <NpcArticle
         npc={jorna}
         actions={
           <>
             {/* Stand-in caller markup, not app copy. */}
-            <button type="button">{"Bearbeiten"}</button>
-            <button type="button">{"Eigenschaften"}</button>
+            <button type="button">{"first"}</button>
+            <button type="button">{"second"}</button>
           </>
         }
-        body={<textarea defaultValue={"Entwurf"} />}
       />,
     );
     expect(html).toMatch(
-      /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/,
+      /<span class="[^"]*gap-2[^"]*"><button[^>]*>first<\/button><button[^>]*>second<\/button><\/span>/,
     );
-    expect(html).not.toContain("Ahnt, dass jemand im Dorf");
+    // The text stands below the header.
+    expect(html).toContain("Ahnt, dass jemand im Dorf");
   });
 });
