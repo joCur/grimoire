@@ -19,10 +19,11 @@ import type { Api } from "../support/api";
 import { chapterPath, getChapter } from "../support/chapter";
 import { createThread, getThread, getThreads, patchThread, threadPath } from "../support/thread";
 import { ui, uiExact } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
-const CHAPTER = "01-salzhafen";
+const CHAPTER = "01-salt-harbour";
 // The seeded thread of the example campaign.
-const SEEDED = "Wer bezahlt die Schmuggler?";
+const SEEDED = "Who pays the smugglers?";
 
 function threadList(page: Page) {
   return page.getByRole("list", { name: ui("chapterOverview.threads.label") });
@@ -57,7 +58,7 @@ test("the chapter overview keeps the threads: add, tick, reword, delete — the 
   api,
 }) => {
   const chapterBefore = await getChapter(api, CHAPTER);
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
 
   // The seeded thread is a row under the chapter's text, open.
   const list = threadList(page);
@@ -132,7 +133,7 @@ test("a second writer changed the thread: the save is refused, the reload action
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await expect(threadList(page).getByRole("listitem")).toHaveText([SEEDED]);
 
   // The row is opened for rewording — on the thread as it stood then.
@@ -167,7 +168,7 @@ test("a thread write is no conflict for an open chapter editor — two guards", 
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
   const dialog = page.getByRole("dialog");
   const chapterText = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });

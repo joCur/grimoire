@@ -33,15 +33,18 @@ import { getNpc, npcPath, patchNpc } from "../support/npc";
 import { getScene, scenePath } from "../support/scene";
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
 const SCENE = "lighthouse-arrival";
 /** The npc of the example campaign the npc cases edit — its own resource (decisions/resources). */
 const NPC = "jorna";
-const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
-const NPC_NAME = "Hafenmeisterin Jorna";
-const LOCATION = "leuchtturm";
-const LOCATION_URL = `/campaigns/beispiel/locations/${LOCATION}`;
-const LOCATION_NAME = "Der Leuchtturm von Salzhafen";
+const NPC_URL = `/campaigns/${CAMPAIGN}/npcs/${NPC}`;
+const NPC_NAME = "Harbourmaster Jorna";
+const LOCATION = "lighthouse";
+const LOCATION_URL = `/campaigns/${CAMPAIGN}/locations/${LOCATION}`;
+const LOCATION_NAME = "The Lighthouse of Salt Harbour";
+/** The example campaign shares its name with the lighthouse. */
+const CAMPAIGN_NAME = LOCATION_NAME;
 
 /** The name of an entity's fields dialog. */
 function dialogName(kind: "kind.npc" | "kind.location" | "kind.chapter"): string {
@@ -409,9 +412,9 @@ test("navigating away closes the dialog — no change of location A lands in npc
   await page.keyboard.press("ControlOrMeta+KeyK");
   const search = page.getByRole("combobox");
   await expect(search).toBeFocused();
-  await search.fill("Hafenmeisterin");
+  await search.fill("Harbourmaster");
   await page.getByRole("option").filter({ hasText: NPC_NAME }).first().click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/jorna$`));
 
   // The dialog is gone with its location — it may not stand over another
   // reading view, holding the frozen values (and the rev) of the one it left.
@@ -442,11 +445,11 @@ test("npc, location and chapter have the dialog — a scene edits in place, the 
   // (decisions/resources) …
   const withDialog: [string, string, "kind.npc" | "kind.location" | "kind.chapter"][] = [
     ["npcs/fenn", "Fenn", "kind.npc"],
-    ["locations/leuchtturm", LOCATION_NAME, "kind.location"],
-    ["chapters/01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "kind.chapter"],
+    [`locations/${LOCATION}`, LOCATION_NAME, "kind.location"],
+    ["chapters/01-salt-harbour", "Chapter 1: The Lighthouse of Salt Harbour", "kind.chapter"],
   ];
   for (const [route, heading, kind] of withDialog) {
-    await page.goto(`/campaigns/beispiel/${route}`);
+    await page.goto(`/campaigns/${CAMPAIGN}/${route}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
     const dialog = await openProperties(page, kind);
     // Clean exit — nothing changed, nothing written.
@@ -455,14 +458,14 @@ test("npc, location and chapter have the dialog — a scene edits in place, the 
   }
 
   // … a scene does not: its fields are part of its edit mode.
-  await page.goto("/campaigns/beispiel/scenes/smuggler-captured");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Von den Schmugglern erwischt");
+  await page.goto(`/campaigns/${CAMPAIGN}/scenes/smuggler-captured`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Caught by the Smugglers");
   await expect(page.getByRole("button", { name: ui("properties.action") })).toHaveCount(0);
 
   // The campaign's route is the chapter overview, and its one edit action in
   // the header opens its own dialog over name, description and text.
-  await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
+  await page.goto(`/campaigns/${CAMPAIGN}`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   await page.getByRole("button", { name: ui("common.edit"), exact: true }).click();
   await expect(page.getByRole("dialog", { name: ui("campaignEdit.title") })).toBeVisible();
 });

@@ -16,7 +16,7 @@ import { NpcArticle } from "./NpcArticle";
 
 const t = translator("de");
 
-const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel/npcs");
+const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/npcs");
 
 /** An npc fixture — the npc as its resource answers it. */
 function npcFixture(id: string): Npc {
@@ -36,11 +36,11 @@ function render(npc: Npc): string {
 describe("NpcArticle", () => {
   test("name, role, status label, voice, appearance and quick stats", () => {
     const html = render(jorna);
-    expect(html).toContain("Hafenmeisterin Jorna");
-    expect(html).toContain("Auftraggeberin, Hafenmeisterin von Salzhafen");
+    expect(html).toContain("Harbourmaster Jorna");
+    expect(html).toContain("Employer, harbourmaster of Salt Harbour");
     expect(html).toContain(t("status.npc.alive"));
-    expect(html).toContain("knapp, wetterrau, duzt jeden");
-    expect(html).toContain("Ölmantel, graue Flechte");
+    expect(html).toContain("curt, weather-beaten, on first-name terms with everyone");
+    expect(html).toContain("oilskin coat, grey braid");
     expect(html).toContain("insight 2");
     expect(html).toContain("passive-perception 12");
   });
@@ -48,7 +48,7 @@ describe("NpcArticle", () => {
   test("the motivation stands in the header, labelled like the card", () => {
     const html = render(jorna);
     expect(html).toContain(t("npcCard.will.inline"));
-    expect(html).toContain("Das Leuchtfeuer muss wieder brennen");
+    expect(html).toContain("The beacon has to burn again");
   });
 
   test("the statblock is a plain reference line, never a link", () => {
@@ -59,7 +59,7 @@ describe("NpcArticle", () => {
 
   test("the text goes through the markdown pipeline, without a scene overline", () => {
     const html = render(jorna);
-    expect(html).toContain("Ahnt, dass jemand im Dorf die Schmuggler deckt");
+    expect(html).toContain("Suspects that someone in the village covers for the smugglers");
     expect(html).not.toContain(t("sceneArticle.type.planned"));
     expect(html).not.toContain(t("sceneArticle.type.contingency"));
   });
@@ -91,6 +91,6 @@ describe("NpcArticle", () => {
     expect(html).toMatch(
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>First<\/button><button[^>]*>Second<\/button><\/span>/,
     );
-    expect(html).not.toContain("Ahnt, dass jemand im Dorf");
+    expect(html).not.toContain("Suspects that someone in the village");
   });
 });

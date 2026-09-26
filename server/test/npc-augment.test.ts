@@ -34,7 +34,7 @@ import {
 import { dropStore, seedStore } from "./support/store";
 import { readJob } from "./support/generator-jobs";
 
-const CAMPAIGN = "beispiel";
+const CAMPAIGN = "example";
 const JORNA = `/api/campaigns/${CAMPAIGN}/npcs/jorna`;
 
 class FakeProvider implements LLMProvider {
@@ -158,7 +158,7 @@ describe("the prompt", () => {
       existingNpc: npcToReply(withoutGuard(stored)),
     });
     expect(prompt).toContain(`${EXISTING_NPC_HEADING} (jorna)`);
-    expect(prompt).toContain('"name": "Hafenmeisterin Jorna"');
+    expect(prompt).toContain('"name": "Harbourmaster Jorna"');
     // `quickstats` is a key/value set on the npc and a list of pairs in a
     // reply — the model is shown the form it has to write back.
     expect(prompt).toContain('"key": "insight"');
@@ -173,9 +173,9 @@ describe("the prompt", () => {
 describe("the run", () => {
   test("202, and the job carries the npc as read and as proposed", async () => {
     const stored = await read();
-    const body = `${stored.body}\n> [!secret] Sie kennt den Spitzel in der Hafenwache.\n`;
-    const fake = useFake([reply(stored, { voice: "knapp, heiser", body }, ["Spitzel ergänzt"])]);
-    const job = await runJob({ instruction: "Einen Spitzel einführen" });
+    const body = `${stored.body}\n> [!secret] She knows the informer in the harbour watch.\n`;
+    const fake = useFake([reply(stored, { voice: "curt, hoarse", body }, ["informer added"])]);
+    const job = await runJob({ instruction: "Introduce an informer" });
     expect(job.status).toBe("done");
     expect(job.kind).toBe("npc-augment");
     expect(job.npc).toBe("jorna");
@@ -185,12 +185,12 @@ describe("the run", () => {
     expect(result.id).toBe("jorna");
     expect(result.rev).toBe(stored.rev);
     expect(result.current).toEqual(withoutGuard(stored));
-    expect(result.proposed.voice).toBe("knapp, heiser");
-    expect(result.proposed.body).toContain("Spitzel in der Hafenwache");
+    expect(result.proposed.voice).toBe("curt, hoarse");
+    expect(result.proposed.body).toContain("informer in the harbour watch");
     // The stored quickstats hold numbers, the reply form holds strings: an
     // echo of them is no change, and the proposal keeps the stored values.
     expect(result.proposed.quickstats).toEqual(stored.quickstats);
-    expect(result.warnings).toEqual(["Spitzel ergänzt"]);
+    expect(result.warnings).toEqual(["informer added"]);
     // Nothing is written by a run.
     expect(await read()).toEqual(stored);
 
@@ -205,19 +205,19 @@ describe("the run", () => {
 
   test("the proposal round-trips through the job row", async () => {
     const stored = await read();
-    useFake([reply(stored, { role: "Hafenmeisterin mit Geheimnissen" })]);
+    useFake([reply(stored, { role: "Harbourmaster with secrets" })]);
     const started = await runJob({ instruction: "x" });
     const job = (await readJob(CAMPAIGN))!;
     expect(job.id).toBe(started.id);
     expect(job.npcAugmentResult).toEqual(started.npcAugmentResult!);
-    expect(job.npcAugmentResult?.proposed.role).toBe("Hafenmeisterin mit Geheimnissen");
+    expect(job.npcAugmentResult?.proposed.role).toBe("Harbourmaster with secrets");
   });
 
   test("400 without source text and instruction, 404 for an unknown npc", async () => {
     expect((await post(`${JORNA}/augment`, {})).status).toBe(400);
     expect((await post(`${JORNA}/augment`, { instruction: "  " })).status).toBe(400);
     expect((await post(`${JORNA}/augment`, { path: "x", instruction: "x" })).status).toBe(400);
-    const unknown = await post(`/api/campaigns/${CAMPAIGN}/npcs/gibt-es-nicht/augment`, {
+    const unknown = await post(`/api/campaigns/${CAMPAIGN}/npcs/does-not-exist/augment`, {
       instruction: "x",
     });
     expect(unknown.status).toBe(404);
@@ -237,20 +237,20 @@ describe("the run", () => {
     );
     expect(callout.ok).toBe(false);
     const unknownRef = validateNpcAugmentReply(
-      reply(stored, { body: `${stored.body}\n[[gibt-es-nicht]]\n` }),
+      reply(stored, { body: `${stored.body}\n[[does-not-exist]]\n` }),
       stored,
       refIds,
     );
     expect(unknownRef.ok).toBe(false);
     // A reference the stored body already carries is the DM's, not the run's.
-    const dangling = { ...stored, body: `${stored.body}\nVielleicht [[der-fremde]].\n` };
+    const dangling = { ...stored, body: `${stored.body}\nPerhaps [[the-stranger]].\n` };
     expect(validateNpcAugmentReply(reply(dangling), dangling, refIds).ok).toBe(true);
   });
 
   test("a key an npc does not have is an echo, not a failed run", async () => {
     const stored = await read();
     const outcome = validateNpcAugmentReply(
-      reply(stored, { atmosphere: "Nebel" }),
+      reply(stored, { atmosphere: "Fog" }),
       stored,
       campaignRefIds(await collectContext(CAMPAIGN)),
     );
@@ -260,26 +260,26 @@ describe("the run", () => {
 
   test("an unknown [[id]] in the proposal costs one correction turn", async () => {
     const stored = await read();
-    const bad = reply(stored, { body: `${stored.body}\nDer Spitzel ist [[der-spitzel]].\n` });
-    const good = reply(stored, { body: `${stored.body}\nDer Spitzel sitzt in der Hafenwache.\n` });
+    const bad = reply(stored, { body: `${stored.body}\nThe informer is [[the-informer]].\n` });
+    const good = reply(stored, { body: `${stored.body}\nThe informer serves in the harbour watch.\n` });
     const fake = useFake([bad, good]);
-    const job = await runJob({ instruction: "Spitzel einführen" });
+    const job = await runJob({ instruction: "Introduce an informer" });
     expect(job.status).toBe("done");
     expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain("[[der-spitzel]]");
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain("[[the-informer]]");
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("den vollständigen ergänzten NPC");
-    expect(job.npcAugmentResult?.proposed.body).not.toContain("[[der-spitzel]]");
+    expect(job.npcAugmentResult?.proposed.body).not.toContain("[[the-informer]]");
   });
 
   test("a spelling a naming convention replaces is a hint on the npc, never a failure", async () => {
-    await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
+    await setKnowledge([{ kind: "naming", from: "Salt Harbor", to: "Salt Harbour", text: "" }]);
     try {
       const stored = await read();
-      useFake([reply(stored, { role: "Hafenmeisterin von Salt Harbour" })]);
-      const job = await runJob({ instruction: "Rolle schärfen" });
+      useFake([reply(stored, { role: "Harbourmaster of Salt Harbor" })]);
+      const job = await runJob({ instruction: "Sharpen the role" });
       expect(job.status).toBe("done");
       expect(job.npcAugmentResult?.namingHints).toEqual([
-        expect.objectContaining({ from: "Salt Harbour", npc: "jorna", field: "role" }),
+        expect.objectContaining({ from: "Salt Harbor", npc: "jorna", field: "role" }),
       ]);
     } finally {
       await setKnowledge([]);
@@ -292,17 +292,17 @@ describe("accepting", () => {
     const before = await read();
     useFake([reply(before)]);
     const job = await runJob({ instruction: "x" });
-    const body = `${before.body}\n- ein Spitzel in der Hafenwache\n`;
+    const body = `${before.body}\n- an informer in the harbour watch\n`;
     const res = await post(`${JORNA}/augment/apply`, {
       rev: before.rev,
-      voice: "knapp, heiser",
+      voice: "curt, hoarse",
       body,
       jobId: job.id,
     });
     expect(res.status).toBe(200);
     const written = (await res.json()) as Npc;
-    expect(written.voice).toBe("knapp, heiser");
-    expect(written.body).toContain("ein Spitzel in der Hafenwache");
+    expect(written.voice).toBe("curt, hoarse");
+    expect(written.body).toContain("an informer in the harbour watch");
     expect(written.quickstats).toEqual(before.quickstats);
     expect(written.rev).toBe(before.rev + 1);
     expect(await read()).toEqual(written);
@@ -311,7 +311,7 @@ describe("accepting", () => {
 
   test("a stale rev is 409 with the current npc, and nothing is written", async () => {
     const before = await read();
-    const res = await post(`${JORNA}/augment/apply`, { rev: before.rev - 1, name: "Anders" });
+    const res = await post(`${JORNA}/augment/apply`, { rev: before.rev - 1, name: "Other" });
     expect(res.status).toBe(409);
     const conflict = (await res.json()) as { code: string; npc: Npc };
     expect(conflict.code).toBe("rev_conflict");

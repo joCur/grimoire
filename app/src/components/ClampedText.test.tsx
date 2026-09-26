@@ -5,8 +5,8 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import campaign from "../../../fixtures/beispiel/campaigns/beispiel.json";
-import chapter from "../../../fixtures/beispiel/chapters/01-salzhafen.json";
+import campaign from "../../../fixtures/campaigns/example.json";
+import chapter from "../../../fixtures/chapters/01-salt-harbour.json";
 
 import { CLAMP_LINES, ClampedText, textOverflows } from "./ClampedText";
 

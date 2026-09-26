@@ -1,0 +1,19 @@
+{
+  "id": "lighthouse-arrival",
+  "title": "Arrival at the Lighthouse",
+  "type": "planned",
+  "chapter": "01-salt-harbour",
+  "location": "lighthouse",
+  "npcs": [
+    "jorna"
+  ],
+  "handouts": [
+    "Map of Salt Harbour"
+  ],
+  "tags": [
+    "social",
+    "travel"
+  ],
+  "status": "ready",
+  "body": "\n## Flow\n\nThe party reaches the lighthouse at nightfall.\nHarbourmaster Jorna waits at the foot of the stairs — she hired the party\nand wants to see results.\n\n> [!readaloud] The tower rises black against the evening sky. No\n> light burns in the lantern, and the spray beats hard against the\n> rocks. Somewhere above you a door bangs in the wind — again and\n> again, as if nobody had the strength left to close it.\n\n> [!check] Wisdom (Perception) DC 13: fresh boot prints in the sand\n> that do NOT come from the village but from the cove to the north.\n\n> [!secret] The lighthouse keeper has not vanished — he is held in\n> the cove so the beacon stays dark.\n\n> [!note] If the party scouts the cove at night and gets caught\n> → contingency `smuggler-captured`.\n>\n> | d6 | What the surf washes up |\n> | --- | --- |\n> | 1–2 | An empty barrel with a foreign brand |\n> | 3–4 | An oar, freshly notched |\n> | 5–6 | A lantern, its glass blackened with soot |\n"
+}

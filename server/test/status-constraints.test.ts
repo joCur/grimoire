@@ -13,9 +13,9 @@ import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 
 /** A chapter, a scene and an npc are their own resources (decisions/resources): their fields travel flat. */
-const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
-const CHAPTER = "/api/campaigns/beispiel/chapters/01-salzhafen";
-const NPC_URL = "/api/campaigns/beispiel/npcs/jorna";
+const SCENE = "/api/campaigns/example/scenes/lighthouse-arrival";
+const CHAPTER = "/api/campaigns/example/chapters/01-salt-harbour";
+const NPC_URL = "/api/campaigns/example/npcs/jorna";
 
 async function read(url: string): Promise<{ rev: number }> {
   const res = await app.request(url);
@@ -58,13 +58,13 @@ describe("a foreign status or type is a 400", () => {
   });
 
   test("a scene status outside the four positions", async () => {
-    const body = await refusal(SCENE, { status: "halbfertig" });
+    const body = await refusal(SCENE, { status: "half-done" });
     expect(body.code).toBe("status_not_allowed");
     expect(body.kind).toBe("scene");
-    expect(body.value).toBe("halbfertig");
+    expect(body.value).toBe("half-done");
     expect(body.allowed).toEqual(["draft", "ready", "played", "dropped"]);
     // The English `error` stays as the technical fallback next to the code.
-    expect(body.error).toContain("halbfertig");
+    expect(body.error).toContain("half-done");
   });
 
   test("a scene type outside the two kinds — its own code", async () => {
@@ -79,7 +79,7 @@ describe("a foreign status or type is a 400", () => {
     const res = await app.request(NPC_URL, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: before.rev, status: "tot" }),
+      body: JSON.stringify({ rev: before.rev, status: "deceased" }),
     });
     expect(res.status).toBe(400);
     expect(((await (await app.request(NPC_URL)).json()) as Npc).rev).toBe(before.rev);
@@ -90,7 +90,7 @@ describe("a foreign status or type is a 400", () => {
   });
 
   test("a chapter status outside the three positions", async () => {
-    const body = await refusal(CHAPTER, { status: "begonnen" });
+    const body = await refusal(CHAPTER, { status: "begun" });
     expect(body.code).toBe("status_not_allowed");
     expect(body.kind).toBe("chapter");
     expect(body.allowed).toEqual(["planned", "active", "done"]);

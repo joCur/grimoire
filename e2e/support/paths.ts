@@ -12,13 +12,13 @@ export const E2E_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url))
 export const REPO_ROOT = path.resolve(E2E_DIR, "..");
 
 /**
- * The committed fixtures root: one directory per campaign, each holding the
- * campaign's entries as JSON. The suite only ever COPIES it.
+ * The committed example campaign: one folder per entity kind, one JSON object
+ * per fixture. The suite only ever COPIES it.
  */
 export const FIXTURES_ROOT = path.join(REPO_ROOT, "fixtures");
 
-/** Campaign id inside fixtures/ — the fixture campaign of the whole suite. */
-export const CAMPAIGN = "beispiel";
+/** Id of the example campaign in fixtures/ — the fixture campaign of the whole suite. */
+export const CAMPAIGN = "example";
 
 /** Vite build output the server serves statically (APP_DIST). */
 export const APP_DIST = path.join(REPO_ROOT, "app", "dist");
@@ -36,7 +36,7 @@ export const CLI_ENTRY = path.join(REPO_ROOT, "server", "src", "cli.ts");
 /** The standalone stub LLM script (started once per run). */
 export const STUB_LLM_ENTRY = path.join(E2E_DIR, "fixtures", "stub-llm.ts");
 
-/** The suite's own fixtures: the stub LLM and the entries single specs seed. */
+/** The suite's own fixtures: the stub LLM and the objects single specs seed. */
 export const E2E_FIXTURES_DIR = path.join(E2E_DIR, "fixtures");
 
 /**
@@ -70,8 +70,8 @@ export function stubLlmBaseUrl(): string {
 }
 
 /**
- * The pristine fixtures directory (<pristine>/beispiel/*.json) `grimoire seed`
- * reads. Nothing ever writes into it — a test that overrides entries gets its
+ * The pristine fixtures directory (<pristine>/<kind>/<id>.json) `grimoire seed`
+ * reads. Nothing ever writes into it — a test that overrides fixtures gets its
  * own copy (support/test.ts, the `seed` fixture).
  */
 export function pristineDir(): string {

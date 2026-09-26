@@ -1,0 +1,5 @@
+{
+  "id": "glossary",
+  "term": "Glossary",
+  "explanation": "Sent along with every generator call. Format: `source → campaign`.\nProper names without a term stay as they are."
+}

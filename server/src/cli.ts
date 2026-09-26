@@ -5,9 +5,9 @@
 //
 // The server boots EMPTY — a fresh installation has no content, and creating
 // a campaign in the app is the normal way to start. `seed` is for the
-// development and test data: it loads the committed `fixtures/` tree, where a
-// directory is a campaign and each fixture in it is one object in the shape
-// the API speaks (db/seed.ts).
+// development and test data: it loads one campaign directory, by default the
+// committed example campaign in `fixtures/`, where each fixture is one object
+// in the shape the API speaks (db/seed.ts).
 //
 // Deliberately thin: argument parsing, a readable report, an exit code. A
 // database that already holds campaigns is refused rather than mixed with a
@@ -21,13 +21,13 @@ import { getDbFile } from "./config";
 
 const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-/** The committed fixture campaigns (CLAUDE.md, "Arbeitsweise"). */
+/** The committed example campaign (CLAUDE.md, "Way of working"). */
 const DEFAULT_SOURCE = path.resolve(PACKAGE_DIR, "../fixtures");
 
 const USAGE = `grimoire — Grimoire maintenance CLI
 
-  grimoire seed [dir]   Load JSON campaign fixtures into the database.
-                        One subdirectory per campaign, one JSON object per fixture.
+  grimoire seed [dir]   Load one campaign's JSON fixtures into the database.
+                        One folder per entity kind, one JSON object per fixture.
                         dir defaults to ${DEFAULT_SOURCE}
                         Target database: GRIMOIRE_DATA/grimoire.db
                         (currently ${getDbFile()})
@@ -53,12 +53,11 @@ async function seed(args: string[]): Promise<number> {
       console.log("  · add to this one anyway (rows are added, nothing deleted): --force");
       return 0;
     }
-    for (const outcome of await seedFixtures(db, source)) {
-      console.log(
-        `seeded: ${outcome.campaignId} (${outcome.fixtures} ` +
-          `${outcome.fixtures === 1 ? "fixture" : "fixtures"})`,
-      );
-    }
+    const outcome = await seedFixtures(db, source);
+    console.log(
+      `seeded: ${outcome.campaignId} (${outcome.fixtures} ` +
+        `${outcome.fixtures === 1 ? "fixture" : "fixtures"})`,
+    );
     return 0;
   } catch (error) {
     console.error(`seed failed: ${error instanceof Error ? error.message : error}`);

@@ -10,7 +10,7 @@ import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-const SCENES = "/api/campaigns/beispiel/scenes";
+const SCENES = "/api/campaigns/example/scenes";
 const ARRIVAL = `${SCENES}/lighthouse-arrival`;
 const CAPTURED = `${SCENES}/smuggler-captured`;
 
@@ -34,7 +34,7 @@ const createScene = (body: Record<string, unknown>): Promise<Response> =>
   send("POST", SCENES, body);
 
 async function chapterScenes(chapter: string): Promise<string[]> {
-  const tree = (await (await app.request("/api/campaigns/beispiel/tree")).json()) as CampaignTree;
+  const tree = (await (await app.request("/api/campaigns/example/tree")).json()) as CampaignTree;
   return tree.chapters.find((node) => node.id === chapter)?.scenes.map((s) => s.id) ?? [];
 }
 
@@ -51,28 +51,28 @@ describe("reading a scene", () => {
     const arrival = await getScene();
     expect(arrival).toEqual({
       id: "lighthouse-arrival",
-      title: "Ankunft am Leuchtturm",
+      title: "Arrival at the Lighthouse",
       type: "planned",
-      chapter: "01-salzhafen",
-      location: "leuchtturm",
+      chapter: "01-salt-harbour",
+      location: "lighthouse",
       npcs: ["jorna"],
-      handouts: ["Karte von Salzhafen"],
+      handouts: ["Map of Salt Harbour"],
       tags: ["social", "travel"],
       status: "ready",
       body: arrival.body,
       rev: arrival.rev,
     });
     // The reference scene arrives with its callouts, character for character.
-    expect(arrival.body).toContain("> [!readaloud] Der Turm ragt schwarz");
-    expect(arrival.body).toContain("> | W6 | Was die Brandung anschwemmt |");
+    expect(arrival.body).toContain("> [!readaloud] The tower rises black");
+    expect(arrival.body).toContain("> | d6 | What the surf washes up |");
   });
 
   test("an optional field that holds something is there; the lists are always there", async () => {
     const captured = await getScene(CAPTURED);
     expect(captured.type).toBe("contingency");
-    expect(captured.trigger).toBe("Charaktere werden beim Auskundschaften der Bucht entdeckt");
+    expect(captured.trigger).toBe("The characters are spotted while scouting the cove");
     expect(captured.handouts).toEqual([]);
-    expect(captured.body).toContain("## If: sie lügen");
+    expect(captured.body).toContain("## If: they lie");
   });
 
   test("the list answers every scene in its own shape, in the chapter's order", async () => {
@@ -84,8 +84,8 @@ describe("reading a scene", () => {
   });
 
   test("404 for an unknown scene or campaign", async () => {
-    expect((await app.request(`${SCENES}/gibt-es-nicht`)).status).toBe(404);
-    expect((await app.request("/api/campaigns/nirgends/scenes/lighthouse-arrival")).status).toBe(
+    expect((await app.request(`${SCENES}/does-not-exist`)).status).toBe(404);
+    expect((await app.request("/api/campaigns/nowhere/scenes/lighthouse-arrival")).status).toBe(
       404,
     );
   });
@@ -93,12 +93,12 @@ describe("reading a scene", () => {
   test("the entry address of a scene names nothing — GET and PATCH are 404", async () => {
     const before = await getScene();
     for (const address of [
-      "01-salzhafen/leuchtturm/lighthouse-arrival",
-      "01-salzhafen/lighthouse-arrival",
+      "01-salt-harbour/lighthouse/lighthouse-arrival",
+      "01-salt-harbour/lighthouse-arrival",
     ]) {
-      const url = entriesUrl("beispiel", address);
+      const url = entriesUrl("example", address);
       expect((await app.request(url)).status).toBe(404);
-      const res = await send("PATCH", url, { rev: before.rev, body: "Überschrieben.\n" });
+      const res = await send("PATCH", url, { rev: before.rev, body: "Overwritten.\n" });
       expect(res.status).toBe(404);
     }
     expect(await getScene()).toEqual(before);
@@ -131,7 +131,7 @@ describe("writing a scene", () => {
       npcs: ["fenn", "jorna"],
       handouts: [],
       tags: ["combat"],
-      body: "\n## Flow\n\nKomplett neu geschrieben.",
+      body: "\n## Flow\n\nCompletely rewritten.",
     });
     expect(res.status).toBe(200);
     const after = (await res.json()) as Scene;
@@ -139,14 +139,14 @@ describe("writing a scene", () => {
     expect(after.handouts).toEqual([]);
     expect(after.tags).toEqual(["combat"]);
     // A body gets its closing newline, and nothing else about it changes.
-    expect(after.body).toBe("\n## Flow\n\nKomplett neu geschrieben.\n");
+    expect(after.body).toBe("\n## Flow\n\nCompletely rewritten.\n");
     expect(after.rev).toBe(before.rev + 1);
     expect(await getScene()).toEqual(after);
   });
 
   test("unknown callouts and headings survive a write verbatim", async () => {
     const before = await getScene(CAPTURED);
-    const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
+    const body = "\n## Entirely Our Own\n\n> [!weather] Fog over the cove\n\n### Sub-Title\n";
     const after = (await (await patchScene({ rev: before.rev, body }, CAPTURED)).json()) as Scene;
     expect(after.body).toBe(body);
     const back = (await (
@@ -161,7 +161,7 @@ describe("writing a scene", () => {
       { name: "X" },
       { properties: { title: "X" } },
       { kind: "scene" },
-      { path: "01-salzhafen/lighthouse-arrival" },
+      { path: "01-salt-harbour/lighthouse-arrival" },
       { pos: 0 },
     ]) {
       const res = await patchScene({ rev: before.rev, ...extra });
@@ -186,13 +186,13 @@ describe("writing a scene", () => {
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain(key);
     }
-    expect((await patchScene({ title: "ohne rev" })).status).toBe(400);
+    expect((await patchScene({ title: "without rev" })).status).toBe(400);
     expect((await getScene()).rev).toBe(before.rev);
   });
 
   test("a status or a type outside its list is a 400 with the code the app has a sentence for", async () => {
     const before = await getScene();
-    const status = await patchScene({ rev: before.rev, status: "gespielt" });
+    const status = await patchScene({ rev: before.rev, status: "finished" });
     expect(status.status).toBe(400);
     expect(await status.json()).toMatchObject({ code: "status_not_allowed", kind: "scene" });
     const type = await patchScene({ rev: before.rev, type: "optional" });
@@ -212,10 +212,10 @@ describe("writing a scene", () => {
   test("every reference has to name something — 400 with the create-this-first code", async () => {
     const before = await getScene();
     for (const [fields, code] of [
-      [{ chapter: "99-nirgends" }, "chapter_unknown"],
-      [{ location: "nirgendwo" }, "location_unknown"],
-      [{ npcs: ["jorna", "niemand"] }, "npc_unknown"],
-      [{ location: "Der Leuchtturm" }, "location_not_an_id"],
+      [{ chapter: "99-nowhere" }, "chapter_unknown"],
+      [{ location: "nowhere" }, "location_unknown"],
+      [{ npcs: ["jorna", "nobody"] }, "npc_unknown"],
+      [{ location: "The Lighthouse" }, "location_not_an_id"],
     ] as const) {
       const res = await patchScene({ rev: before.rev, ...fields });
       expect(res.status).toBe(400);
@@ -225,19 +225,19 @@ describe("writing a scene", () => {
   });
 
   test("a scene that changes chapter lands at the end of the new one", async () => {
-    const chapter = await send("POST", "/api/campaigns/beispiel/chapters", {
-      title: "Zweites Kapitel",
+    const chapter = await send("POST", "/api/campaigns/example/chapters", {
+      title: "Second Chapter",
     });
     expect(chapter.status).toBe(201);
-    expect((await createScene({ title: "Die Erste Dort", chapter: "zweites-kapitel" })).status).toBe(
+    expect((await createScene({ title: "The First There", chapter: "second-chapter" })).status).toBe(
       201,
     );
     const before = await getScene();
-    const res = await patchScene({ rev: before.rev, chapter: "zweites-kapitel" });
+    const res = await patchScene({ rev: before.rev, chapter: "second-chapter" });
     expect(res.status).toBe(200);
-    expect(((await res.json()) as Scene).chapter).toBe("zweites-kapitel");
-    expect(await chapterScenes("zweites-kapitel")).toEqual(["die-erste-dort", "lighthouse-arrival"]);
-    expect(await chapterScenes("01-salzhafen")).toEqual(["smuggler-captured"]);
+    expect(((await res.json()) as Scene).chapter).toBe("second-chapter");
+    expect(await chapterScenes("second-chapter")).toEqual(["the-first-there", "lighthouse-arrival"]);
+    expect(await chapterScenes("01-salt-harbour")).toEqual(["smuggler-captured"]);
   });
 
   test("the id may be echoed, never changed; an empty patch writes nothing", async () => {
@@ -256,50 +256,50 @@ describe("writing a scene", () => {
     // Somebody else changes the status while the editor is open.
     expect((await patchScene({ rev: read.rev, status: "played" })).status).toBe(200);
 
-    const refused = await patchScene({ rev: read.rev, body: "\n## Flow\n\nZu spät.\n" });
+    const refused = await patchScene({ rev: read.rev, body: "\n## Flow\n\nToo late.\n" });
     expect(refused.status).toBe(409);
     const conflict = (await refused.json()) as { code: string; rev: number; scene: Scene };
     expect(conflict.code).toBe("rev_conflict");
     expect(conflict.scene.status).toBe("played");
     expect(conflict.rev).toBe(conflict.scene.rev);
 
-    // „Trotzdem speichern": the text, and nothing else.
+    // The save-anyway action writes the text, and nothing else.
     const forced = await patchScene({
       rev: read.rev,
-      body: "\n## Flow\n\nTrotzdem gespeichert.\n",
+      body: "\n## Flow\n\nSaved anyway.\n",
       force: true,
     });
     expect(forced.status).toBe(200);
     const written = (await forced.json()) as Scene;
-    expect(written.body).toBe("\n## Flow\n\nTrotzdem gespeichert.\n");
+    expect(written.body).toBe("\n## Flow\n\nSaved anyway.\n");
     expect(written.status).toBe("played");
   });
 
   test("404 for an unknown scene", async () => {
-    expect((await patchScene({ rev: 1, title: "X" }, `${SCENES}/gibt-es-nicht`)).status).toBe(404);
+    expect((await patchScene({ rev: 1, title: "X" }, `${SCENES}/does-not-exist`)).status).toBe(404);
   });
 
   test("the search index follows a new title, and the hit carries no address", async () => {
     const before = await getScene();
-    expect((await patchScene({ rev: before.rev, title: "Nacht am Turm" })).status).toBe(200);
-    const res = await app.request("/api/campaigns/beispiel/search?q=Nacht");
+    expect((await patchScene({ rev: before.rev, title: "Night at the Tower" })).status).toBe(200);
+    const res = await app.request("/api/campaigns/example/search?q=Night");
     const { results } = (await res.json()) as { results: Array<Record<string, unknown>> };
     const hit = results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival");
-    expect(hit?.title).toBe("Nacht am Turm");
+    expect(hit?.title).toBe("Night at the Tower");
     expect(Object.hasOwn(hit!, "path")).toBe(false);
   });
 });
 
 describe("creating a scene", () => {
   test("from the title: the id is derived, the scene is a draft at the end of its chapter", async () => {
-    const res = await createScene({ title: "Der Nachzügler", chapter: "01-salzhafen" });
+    const res = await createScene({ title: "The Latecomer", chapter: "01-salt-harbour" });
     expect(res.status).toBe(201);
     const scene = (await res.json()) as Scene;
     expect(scene).toEqual({
-      id: "der-nachzuegler",
-      title: "Der Nachzügler",
+      id: "the-latecomer",
+      title: "The Latecomer",
       type: "planned",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       npcs: [],
       handouts: [],
       tags: [],
@@ -307,17 +307,17 @@ describe("creating a scene", () => {
       body: "",
       rev: scene.rev,
     });
-    expect(await getScene(`${SCENES}/der-nachzuegler`)).toEqual(scene);
-    expect(await chapterScenes("01-salzhafen")).toEqual([
+    expect(await getScene(`${SCENES}/the-latecomer`)).toEqual(scene);
+    expect(await chapterScenes("01-salt-harbour")).toEqual([
       "lighthouse-arrival",
       "smuggler-captured",
-      "der-nachzuegler",
+      "the-latecomer",
     ]);
   });
 
   test("the chapter is required and has to exist", async () => {
-    expect((await createScene({ title: "Irgendwo" })).status).toBe(400);
-    const unknown = await createScene({ title: "Irgendwo", chapter: "99-nirgends" });
+    expect((await createScene({ title: "Somewhere" })).status).toBe(400);
+    const unknown = await createScene({ title: "Somewhere", chapter: "99-nowhere" });
     expect(unknown.status).toBe(400);
     expect(await unknown.json()).toMatchObject({ code: "chapter_unknown" });
   });
@@ -325,8 +325,8 @@ describe("creating a scene", () => {
   test("a taken id is a 409 with a free proposal and no address — nothing is written", async () => {
     const before = await getScene();
     const res = await createScene({
-      title: "Ankunft",
-      chapter: "01-salzhafen",
+      title: "Arrival",
+      chapter: "01-salt-harbour",
       id: "lighthouse-arrival",
     });
     expect(res.status).toBe(409);
@@ -343,12 +343,12 @@ describe("creating a scene", () => {
 
   test("400 for a key the create does not take, and for a missing title", async () => {
     expect(
-      (await createScene({ title: "Holm", chapter: "01-salzhafen", status: "ready" })).status,
+      (await createScene({ title: "Holm", chapter: "01-salt-harbour", status: "ready" })).status,
     ).toBe(400);
-    expect((await createScene({ chapter: "01-salzhafen" })).status).toBe(400);
-    expect((await createScene({ title: "   ", chapter: "01-salzhafen" })).status).toBe(400);
+    expect((await createScene({ chapter: "01-salt-harbour" })).status).toBe(400);
+    expect((await createScene({ title: "   ", chapter: "01-salt-harbour" })).status).toBe(400);
     expect(
-      (await createScene({ title: "Holm", chapter: "01-salzhafen", id: "Kein Slug" })).status,
+      (await createScene({ title: "Holm", chapter: "01-salt-harbour", id: "Not A Slug" })).status,
     ).toBe(400);
   });
 });

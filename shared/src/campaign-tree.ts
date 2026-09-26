@@ -37,7 +37,7 @@ export interface SceneSummary {
 }
 
 export interface ChapterNode {
-  /** The chapter's id, e.g. "01-salzhafen". */
+  /** The chapter's id, e.g. "01-salt-harbour". */
   id: string;
   /** The chapter's title; falls back to its id. */
   title: string;

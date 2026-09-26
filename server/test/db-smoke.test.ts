@@ -96,25 +96,26 @@ test("FTS5 works, folds diacritics and ranks by bm25", async () => {
     db.run(sql`
       insert into search_fts (title, ref, tags, body, campaign_id, kind, entity_id)
       values
-        ('Der Leuchtturm von Salzhafen', 'leuchtturm', 'ort', 'Verlassen in Eile, nicht im Kampf.', 'beispiel', 'location', 'leuchtturm'),
-        ('Hafenmeisterin Jorna', 'jorna', 'npc', 'Das Leuchtfeuer muss wieder brennen.', 'beispiel', 'npc', 'jorna'),
-        ('Müller am Steg', 'mueller', 'npc', 'Nebenfigur.', 'beispiel', 'npc', 'mueller')
+        ('The Lighthouse of Salt Harbour', 'lighthouse', 'location', 'Left in a hurry, not in a fight.', 'example', 'location', 'lighthouse'),
+        ('Harbourmaster Jorna', 'jorna', 'npc', 'The beacon light has to burn again.', 'example', 'npc', 'jorna'),
+        ('Müller at the jetty', 'mueller', 'npc', 'Minor character.', 'example', 'npc', 'mueller')
     `);
 
     // Prefix search — what ⌘K sends while the DM is still typing.
     const prefix = db.all<{ entity_id: string }>(
-      sql`select entity_id from search_fts where search_fts match 'leucht*' order by bm25(search_fts, 10, 6, 4, 1)`,
+      sql`select entity_id from search_fts where search_fts match 'light*' order by bm25(search_fts, 10, 6, 4, 1)`,
     );
     assert.deepEqual(
       prefix.map((r) => r.entity_id).sort(),
-      ["jorna", "leuchtturm"],
+      ["jorna", "lighthouse"],
       "prefix match should find the title hit and the body hit",
     );
 
     // bm25 with the schema's weights must rank the TITLE hit first.
-    assert.equal(prefix[0]?.entity_id, "leuchtturm");
+    assert.equal(prefix[0]?.entity_id, "lighthouse");
 
-    // remove_diacritics 2: an ASCII query finds the umlaut and vice versa.
+    // remove_diacritics 2: an ASCII query finds the umlaut and vice versa —
+    // the one name with a diacritic is there on purpose.
     const folded = db.all<{ entity_id: string }>(
       sql`select entity_id from search_fts where search_fts match 'muller'`,
     );
@@ -122,9 +123,9 @@ test("FTS5 works, folds diacritics and ranks by bm25", async () => {
 
     // snippet() — the search response's context excerpt.
     const snippet = db.all<{ s: string }>(
-      sql`select snippet(search_fts, 3, '[', ']', '…', 8) as s from search_fts where search_fts match 'Leuchtfeuer'`,
+      sql`select snippet(search_fts, 3, '[', ']', '…', 8) as s from search_fts where search_fts match 'beacon'`,
     );
-    assert.match(String(snippet[0]?.s), /\[Leuchtfeuer\]/);
+    assert.match(String(snippet[0]?.s), /\[beacon\]/);
   } finally {
     close();
   }
@@ -134,13 +135,13 @@ test("transactions commit and roll back", async () => {
   const { db, close } = await openDb(":memory:");
   try {
     db.transaction((tx) => {
-      tx.insert(campaigns).values({ id: "committed", name: "Bleibt" }).run();
+      tx.insert(campaigns).values({ id: "committed", name: "Stays" }).run();
     });
     assert.equal(db.select().from(campaigns).all().length, 1);
 
     assert.throws(() => {
       db.transaction((tx) => {
-        tx.insert(campaigns).values({ id: "rolled-back", name: "Weg" }).run();
+        tx.insert(campaigns).values({ id: "rolled-back", name: "Gone" }).run();
         throw new Error("boom");
       });
     }, /boom/);
@@ -160,22 +161,22 @@ test("UPSERT on a composite primary key updates instead of failing", async () =>
   const { db, close } = await openDb(":memory:");
   try {
     // `meta` is the simplest single-key case.
-    db.insert(meta).values({ key: "marke", value: "first" }).run();
+    db.insert(meta).values({ key: "marker", value: "first" }).run();
     db.insert(meta)
-      .values({ key: "marke", value: "second" })
+      .values({ key: "marker", value: "second" })
       .onConflictDoUpdate({ target: meta.key, set: { value: "second" } })
       .run();
     const rows = db.select().from(meta).all();
-    assert.deepEqual(rows, [{ key: "marke", value: "second" }]);
+    assert.deepEqual(rows, [{ key: "marker", value: "second" }]);
 
     // And the composite-key case the entity tables use.
-    db.insert(campaigns).values({ id: "beispiel", name: "Alt" }).run();
+    db.insert(campaigns).values({ id: "example", name: "Old" }).run();
     db.insert(campaigns)
-      .values({ id: "beispiel", name: "Neu" })
-      .onConflictDoUpdate({ target: campaigns.id, set: { name: "Neu", rev: 2 } })
+      .values({ id: "example", name: "New" })
+      .onConflictDoUpdate({ target: campaigns.id, set: { name: "New", rev: 2 } })
       .run();
     const campaign = db.select().from(campaigns).all()[0];
-    assert.equal(campaign?.name, "Neu");
+    assert.equal(campaign?.name, "New");
     assert.equal(campaign?.rev, 2);
   } finally {
     close();
@@ -185,16 +186,16 @@ test("UPSERT on a composite primary key updates instead of failing", async () =>
 test("foreign keys cascade on update and delete", async () => {
   const { db, close } = await openDb(":memory:");
   try {
-    db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
-    db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
+    db.insert(campaigns).values({ id: "example", name: "Example" }).run();
+    db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('example', '01', 'Chapter', 0)`);
 
     // ON UPDATE CASCADE — what keeps a child row honest.
-    db.run(sql`update campaigns set id = 'umbenannt' where id = 'beispiel'`);
+    db.run(sql`update campaigns set id = 'renamed' where id = 'example'`);
     const moved = db.all<{ campaign_id: string }>(sql`select campaign_id from chapters`);
-    assert.deepEqual(moved, [{ campaign_id: "umbenannt" }]);
+    assert.deepEqual(moved, [{ campaign_id: "renamed" }]);
 
     // ON DELETE CASCADE.
-    db.run(sql`delete from campaigns where id = 'umbenannt'`);
+    db.run(sql`delete from campaigns where id = 'renamed'`);
     assert.equal(db.all(sql`select 1 from chapters`).length, 0);
   } finally {
     close();
@@ -209,21 +210,21 @@ test("foreign keys cascade on update and delete", async () => {
 test("a composite primary key cascades on update", async () => {
   const { db, close } = await openDb(":memory:");
   try {
-    db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
+    db.insert(campaigns).values({ id: "example", name: "Example" }).run();
     // The chapter and the location first: a scene's references are foreign
     // keys, so the entries it names have to be there.
-    db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
-    db.run(sql`insert into locations (campaign_id, id, name) values ('beispiel', 'hafen', 'Hafen')`);
+    db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('example', '01', 'Chapter', 0)`);
+    db.run(sql`insert into locations (campaign_id, id, name) values ('example', 'harbour', 'Harbour')`);
     db.run(
-      sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
+      sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('example', 'old', '01', 'harbour', 'Scene', 0)`,
     );
     db.run(
-      sql`insert into scene_tags (campaign_id, scene_id, tag, pos) values ('beispiel', 'alt', 'social', 0)`,
+      sql`insert into scene_tags (campaign_id, scene_id, tag, pos) values ('example', 'old', 'social', 0)`,
     );
 
-    db.run(sql`update scenes set id = 'neu' where campaign_id = 'beispiel' and id = 'alt'`);
+    db.run(sql`update scenes set id = 'new' where campaign_id = 'example' and id = 'old'`);
     const tags = db.all<{ scene_id: string }>(sql`select scene_id from scene_tags`);
-    assert.deepEqual(tags, [{ scene_id: "neu" }], "the tag row must follow the scene's new id");
+    assert.deepEqual(tags, [{ scene_id: "new" }], "the tag row must follow the scene's new id");
   } finally {
     close();
   }
@@ -232,18 +233,18 @@ test("a composite primary key cascades on update", async () => {
 // The search endpoint builds QUOTED prefix terms (`"tok"*`), because quoting
 // is what keeps a query full of FTS5 operators from turning into syntax
 // (store/search.ts ftsQuery). That is a different parser path than the bare
-// `leucht*` above, so both runtimes get to prove it.
+// `light*` above, so both runtimes get to prove it.
 test("a quoted prefix term matches and operator-looking input stays text", async () => {
   const { db, close } = await openDb(":memory:");
   try {
     db.run(sql`
       insert into search_fts (title, ref, tags, body, campaign_id, kind, entity_id)
-      values ('Der Leuchtturm', 'leuchtturm', '', 'Verlassen in Eile.', 'beispiel', 'location', 'leuchtturm')
+      values ('The Lighthouse', 'lighthouse', '', 'Left in a hurry.', 'example', 'location', 'lighthouse')
     `);
     const hits = db.all<{ entity_id: string }>(
-      sql`select entity_id from search_fts where search_fts match '"leucht"*'`,
+      sql`select entity_id from search_fts where search_fts match '"light"*'`,
     );
-    assert.deepEqual(hits.map((r) => r.entity_id), ["leuchtturm"]);
+    assert.deepEqual(hits.map((r) => r.entity_id), ["lighthouse"]);
 
     // A term that would be an operator unquoted must simply not match —
     // never raise a syntax error.
@@ -264,7 +265,7 @@ test("an on-disk database gets WAL and survives a reopen", async () => {
     const first = await openDb(dbPath);
     const journal = first.db.all<{ journal_mode: string }>(sql`PRAGMA journal_mode`);
     assert.equal(String(journal[0]?.journal_mode).toLowerCase(), "wal");
-    first.db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
+    first.db.insert(campaigns).values({ id: "example", name: "Example" }).run();
     first.close();
 
     // Reopening runs the migrator again — it must be a no-op, not a failure.

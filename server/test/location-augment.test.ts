@@ -26,8 +26,8 @@ import {
 import { dropStore, seedStore } from "./support/store";
 import { readJob } from "./support/generator-jobs";
 
-const CAMPAIGN = "beispiel";
-const TOWER = `/api/campaigns/${CAMPAIGN}/locations/leuchtturm`;
+const CAMPAIGN = "example";
+const TOWER = `/api/campaigns/${CAMPAIGN}/locations/lighthouse`;
 
 class FakeProvider implements LLMProvider {
   readonly name = "fake";
@@ -74,7 +74,7 @@ async function runJob(body: Record<string, unknown>): Promise<GeneratorJob> {
   // The answer is the job itself, naming the location from the moment it starts.
   const started = (await res.json()) as GeneratorJob;
   expect(started.kind).toBe("location-augment");
-  expect(started.location).toBe("leuchtturm");
+  expect(started.location).toBe("lighthouse");
   for (let i = 0; i < 200; i += 1) {
     const job = (await readJob(CAMPAIGN))!;
     expect(job.id).toBe(started.id);
@@ -130,7 +130,7 @@ describe("the prompt", () => {
   });
 
   test("the existing location travels as its own block — no entry block", () => {
-    const location: LocationProposal = { id: "leuchtturm", name: "Leuchtturm", body: "## Text\n" };
+    const location: LocationProposal = { id: "lighthouse", name: "Lighthouse", body: "## Text\n" };
     const prompt = buildPrompt({
       systemPrompt: "SYS",
       fewShotTarget: "FEWSHOT",
@@ -140,8 +140,8 @@ describe("the prompt", () => {
       sourceText: "source",
       existingLocation: location,
     });
-    expect(prompt).toContain(`${EXISTING_LOCATION_HEADING} (leuchtturm)`);
-    expect(prompt).toContain('"name": "Leuchtturm"');
+    expect(prompt).toContain(`${EXISTING_LOCATION_HEADING} (lighthouse)`);
+    expect(prompt).toContain('"name": "Lighthouse"');
     expect(prompt).not.toContain(EXISTING_SCENE_HEADING);
     expect(prompt.indexOf("FEWSHOT")).toBeLessThan(prompt.indexOf(EXISTING_LOCATION_HEADING));
     expect(prompt.indexOf(EXISTING_LOCATION_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
@@ -151,28 +151,29 @@ describe("the prompt", () => {
 describe("the run", () => {
   test("202, and the job carries the location as read and as proposed", async () => {
     const stored = await read();
-    const body = `${stored.body}\n> [!secret] Unter der Treppe liegt ein Logbuch.\n`;
-    const fake = useFake([reply(stored, { roll20Page: "Leuchtturm (Karte)", body }, ["Logbuch ergänzt"])]);
-    const job = await runJob({ instruction: "Ein Geheimnis ergänzen" });
+    const body = `${stored.body}\n> [!secret] A logbook lies under the stairs.\n`;
+    const fake = useFake([reply(stored, { roll20Page: "Lighthouse (map)", body }, ["Logbook added"])]);
+    const job = await runJob({ instruction: "Add a secret" });
     expect(job.status).toBe("done");
     expect(job.kind).toBe("location-augment");
-    expect(job.location).toBe("leuchtturm");
+    expect(job.location).toBe("lighthouse");
     expect(job.scene).toBeUndefined();
     expect(job.sceneAugmentResult).toBeUndefined();
     const result = job.locationAugmentResult!;
-    expect(result.id).toBe("leuchtturm");
+    expect(result.id).toBe("lighthouse");
     expect(result.rev).toBe(stored.rev);
     const { rev: _rev, ...current } = stored;
     expect(result.current).toEqual(current);
-    expect(result.proposed.roll20Page).toBe("Leuchtturm (Karte)");
-    expect(result.proposed.body).toContain("Logbuch");
-    expect(result.warnings).toEqual(["Logbuch ergänzt"]);
+    expect(result.proposed.roll20Page).toBe("Lighthouse (map)");
+    expect(result.proposed.body).toContain("logbook");
+    expect(result.warnings).toEqual(["Logbook added"]);
 
     const req = fake.calls[0]!.req;
     expect(req.existingLocation).toEqual(current);
     expect(req.existingScene).toBeUndefined();
     expect(req.jsonSchema?.name).toBe("augmented_location");
     expect(req.systemPrompt).toContain("System-Prompt: Ort ergänzen");
+    // The few-shot is the generator's own German example location.
     expect(req.fewShotTarget).toContain('"id": "leuchtturm"');
     expect(req.context.chapter).toBeUndefined();
   });
@@ -181,7 +182,7 @@ describe("the run", () => {
     expect((await post(`${TOWER}/augment`, {})).status).toBe(400);
     expect((await post(`${TOWER}/augment`, { instruction: "  " })).status).toBe(400);
     expect((await post(`${TOWER}/augment`, { path: "x", instruction: "x" })).status).toBe(400);
-    const unknown = await post(`/api/campaigns/${CAMPAIGN}/locations/gibt-es-nicht/augment`, {
+    const unknown = await post(`/api/campaigns/${CAMPAIGN}/locations/does-not-exist/augment`, {
       instruction: "x",
     });
     expect(unknown.status).toBe(404);
@@ -193,11 +194,11 @@ describe("the run", () => {
     const withStatus = validateLocationAugmentReply(reply(stored, { status: "alive" }), stored, refIds);
     expect(withStatus.ok).toBe(false);
     if (!withStatus.ok) expect(withStatus.errors.join(" ")).toContain('"status"');
-    const renamed = validateLocationAugmentReply(reply(stored, { id: "turm" }), stored, refIds);
+    const renamed = validateLocationAugmentReply(reply(stored, { id: "tower" }), stored, refIds);
     expect(renamed.ok).toBe(false);
-    if (!renamed.ok) expect(renamed.errors.join(" ")).toContain('die id bleibt "leuchtturm"');
+    if (!renamed.ok) expect(renamed.errors.join(" ")).toContain('die id bleibt "lighthouse"');
     const unknownRef = validateLocationAugmentReply(
-      reply(stored, { body: `${stored.body}\n[[gibt-es-nicht]]\n` }),
+      reply(stored, { body: `${stored.body}\n[[does-not-exist]]\n` }),
       stored,
       refIds,
     );
@@ -210,17 +211,17 @@ describe("accepting", () => {
     const before = await read();
     useFake([reply(before)]);
     const job = await runJob({ instruction: "x" });
-    const body = `${before.body}\n- ein Logbuch unter der Treppe\n`;
+    const body = `${before.body}\n- a logbook under the stairs\n`;
     const res = await post(`${TOWER}/augment/apply`, {
       rev: before.rev,
-      roll20Page: "Leuchtturm (neu)",
+      roll20Page: "Lighthouse (new)",
       body,
       jobId: job.id,
     });
     expect(res.status).toBe(200);
     const written = (await res.json()) as Location;
-    expect(written.roll20Page).toBe("Leuchtturm (neu)");
-    expect(written.body).toContain("ein Logbuch unter der Treppe");
+    expect(written.roll20Page).toBe("Lighthouse (new)");
+    expect(written.body).toContain("a logbook under the stairs");
     expect(written.rev).toBe(before.rev + 1);
     expect(await read()).toEqual(written);
     expect(await readJob(CAMPAIGN)).toBeNull();
@@ -228,7 +229,7 @@ describe("accepting", () => {
 
   test("a stale rev is 409 with the current location, and nothing is written", async () => {
     const before = await read();
-    const res = await post(`${TOWER}/augment/apply`, { rev: before.rev - 1, name: "Anders" });
+    const res = await post(`${TOWER}/augment/apply`, { rev: before.rev - 1, name: "Other" });
     expect(res.status).toBe(409);
     const conflict = (await res.json()) as { code: string; location: Location };
     expect(conflict.code).toBe("rev_conflict");
@@ -240,7 +241,7 @@ describe("accepting", () => {
     const before = await read();
     for (const body of [
       { rev: before.rev, name: "X", force: true },
-      { rev: before.rev, id: "leuchtturm", name: "X" },
+      { rev: before.rev, id: "lighthouse", name: "X" },
       { rev: before.rev, properties: { name: "X" } },
       { rev: before.rev, path: "x", name: "X" },
       { rev: before.rev },

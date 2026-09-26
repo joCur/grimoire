@@ -36,20 +36,17 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 
 ## Project structure
 
-- `fixtures/` — the example campaign as JSON (`fixtures/beispiel/*.json`),
+- `fixtures/` — the example campaign as JSON, one campaign directory with
   one object per file in the shape of the API: the campaign under
-  `fixtures/beispiel/campaigns/<id>.json`, a chapter under
-  `fixtures/beispiel/chapters/<id>.json`, a scene under
-  `fixtures/beispiel/scenes/<id>.json`, an NPC under
-  `fixtures/beispiel/npcs/<id>.json`, a location under
-  `fixtures/beispiel/locations/<id>.json`, a thread under
-  `fixtures/beispiel/threads/<id>.json`, an idea under
-  `fixtures/beispiel/ideas/<id>.json`, a glossary term under
-  `fixtures/beispiel/glossary-terms/<id>.json`, campaign knowledge under
-  `fixtures/beispiel/knowledge-items/<id>.json`, a session with its pauses
-  and log lines under
-  `fixtures/beispiel/sessions/<id>.json`, each as the object its resource
-  returns, without `rev`. It is
+  `fixtures/campaigns/<id>.json`, a chapter under
+  `fixtures/chapters/<id>.json`, a scene under `fixtures/scenes/<id>.json`,
+  an NPC under `fixtures/npcs/<id>.json`, a location under
+  `fixtures/locations/<id>.json`, a thread under
+  `fixtures/threads/<id>.json`, an idea under `fixtures/ideas/<id>.json`, a
+  glossary term under `fixtures/glossary-terms/<id>.json`, campaign
+  knowledge under `fixtures/knowledge-items/<id>.json`, a session with its
+  pauses and log lines under `fixtures/sessions/<id>.json`, each as the
+  object its resource returns, without `rev`. It is
   the **seed** for dev/tests/E2E and the reference for callouts. NEVER
   reformat or "tidy up" bodies; the format is a contract.
 - `GRIMOIRE_DATA` (default `./data`, gitignored) — this is where
@@ -118,8 +115,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 - The callout renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
   `[!outcome]`, `[!loot]`, `[!note]`) is the central component — always
   check changes to it against the reference scenes
-  `fixtures/beispiel/scenes/lighthouse-arrival.json` and
-  `scenes/smuggler-captured.json`, visible in the dev harness
+  `fixtures/scenes/lighthouse-arrival.json` and
+  `fixtures/scenes/smuggler-captured.json`, visible in the dev harness
   `/dev/markdown`.
 - The format degrades: render unknown callouts/headings as normal text,
   never throw.
@@ -172,10 +169,9 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 - UI language: German (primary language), English as the second language.
 - Repository language (decisions/language): everything in the repo is
   English — code, identifiers, comments, test names, commits, docs,
-  decisions, agent instructions. German exists only in the German UI catalog
-  (`app/src/i18n/de.ts`), the example campaign content in `fixtures/`, and
-  literal UI strings that tests assert against. In code and docs, describe a
-  UI label in English instead of quoting it.
+  decisions, agent instructions, the example campaign in `fixtures/`.
+  German exists only in the German UI catalog (`app/src/i18n/de.ts`). In
+  code and docs, describe a UI label in English instead of quoting it.
 - Comments explain the code and stand on their own: no references to issues,
   PRs or reviews. References to decisions (`decisions/sqlite`) are allowed —
   they point to a document in the repo, not to a ticket.

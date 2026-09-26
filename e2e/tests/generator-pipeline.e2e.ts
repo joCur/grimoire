@@ -40,7 +40,7 @@ import {
 import { getScene, sceneExists } from "../support/scene";
 import { ui, uiPattern } from "../support/ui";
 
-const CHAPTER = "01-salzhafen";
+const CHAPTER = "01-salt-harbour";
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn. At dawn the characters slip
@@ -85,7 +85,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   page,
   api,
 }, testInfo) => {
-  await page.goto(`/campaigns/beispiel/generate`);
+  await page.goto(`/campaigns/example/generate`);
   await startSceneRun(page, threeSceneSource(`w${testInfo.workerIndex}a`));
 
   // --- (1) the review fills up: two drafts, one failed part ----------------
@@ -126,7 +126,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   // Written, the card links to the scene it became, on the scene's own route.
   await expect(page.getByRole("link", { name: sceneLabel(firstId) })).toHaveAttribute(
     "href",
-    `/campaigns/beispiel/scenes/${firstId}`,
+    `/campaigns/example/scenes/${firstId}`,
   );
   expect(await sceneExists(api, firstId)).toBe(true);
   // The job is still there — the failed part is not settled.
@@ -182,11 +182,11 @@ async function shownOrder(page: Page): Promise<string[]> {
 test("scenes accepted one by one in reverse stand in outline order", async ({ page, api }) => {
   type Tree = { chapters: Array<{ id: string; scenes: Array<{ id: string; title: string }> }> };
   const chapterScenes = async () =>
-    (await api.get<Tree>("campaigns/beispiel/tree")).chapters.find((c) => c.id === CHAPTER)!
+    (await api.get<Tree>("campaigns/example/tree")).chapters.find((c) => c.id === CHAPTER)!
       .scenes;
   const before = await chapterScenes();
 
-  await page.goto("/campaigns/beispiel/generate");
+  await page.goto("/campaigns/example/generate");
   await startSceneRun(page, [SOURCE, TRIGGER.threeScenes].join("\n\n"));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
@@ -219,7 +219,7 @@ test("scenes accepted one by one in reverse stand in outline order", async ({ pa
   // Shown: the planned rows of the overview put the run behind the planned
   // scene the chapter already had, in outline order (the contingency keeps
   // its own block at the end).
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   const runTitles: string[] = THREE_SCENES.map((scene) => scene.title);
   await expect
     .poll(async () => (await shownOrder(page)).filter((title) => runTitles.includes(title)))
@@ -233,7 +233,7 @@ test("a finished part is acceptable while the run is still running", async ({
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel/generate");
+  await page.goto("/campaigns/example/generate");
   // The LAST scene's reply is held, so the run is genuinely `running` while
   // the DM accepts one of the two that answered — which is the claim: what is
   // here can already be accepted, without waiting for everything to arrive.
@@ -271,7 +271,7 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   // watch the spinner turn into it. With late parts the browser really sees
   // the working state first and the switch has to happen on a polled job —
   // never on a reload.
-  await page.goto("/campaigns/beispiel/generate");
+  await page.goto("/campaigns/example/generate");
   await startSceneRun(
     page,
     [SOURCE, TRIGGER.threeScenes, TRIGGER.latePart, TRIGGER.slowPart].join("\n\n"),
@@ -308,7 +308,7 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   // failed one is the only thing there is — and it is something the DM can act
   // on. Gating the review on a RESULT would render this state as an empty page
   // that only appears on a reload.
-  await page.goto("/campaigns/beispiel/generate");
+  await page.goto("/campaigns/example/generate");
   await startSceneRun(page, threeSceneSource(`w${testInfo.workerIndex}d`, TRIGGER.latePart));
 
   const failedTitle = THREE_SCENES.find((s) => s.id === FAILING_SCENE_ID)!.title;
@@ -344,7 +344,7 @@ test("a FAILED part alone is already the review (no empty page)", async ({
 });
 
 test("discarding during a run stops the open parts", async ({ page, api }, testInfo) => {
-  await page.goto("/campaigns/beispiel/generate");
+  await page.goto("/campaigns/example/generate");
   // The last scene's reply is HELD, so the run is genuinely still going while
   // the DM is already looking at the two that answered.
   await startSceneRun(page, threeSceneSource(`w${testInfo.workerIndex}b`, TRIGGER.slowPart));

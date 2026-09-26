@@ -7,7 +7,7 @@ import type { Session, SessionSeed } from "@grimoire/shared/session";
 import { app } from "../../src/server";
 
 /** The session list of the example campaign; a session's URL is below it. */
-export const SESSIONS = "/api/campaigns/beispiel/sessions";
+export const SESSIONS = "/api/campaigns/example/sessions";
 
 /** The committed fixture's session — ended, with a pause and a log. */
 export const FIXTURE_SESSION = "2026-01-15";

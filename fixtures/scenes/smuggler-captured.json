@@ -1,0 +1,18 @@
+{
+  "id": "smuggler-captured",
+  "title": "Caught by the Smugglers",
+  "type": "contingency",
+  "trigger": "The characters are spotted while scouting the cove",
+  "chapter": "01-salt-harbour",
+  "location": "cove",
+  "npcs": [
+    "fenn"
+  ],
+  "handouts": [],
+  "tags": [
+    "social",
+    "escape"
+  ],
+  "status": "ready",
+  "body": "\n## Flow\n\nDisarmed and bound, the characters are brought before Fenn, the\nleader of the smugglers. He questions each of them alone: Who sent you?\nHow much do you know?\n\n## If: they admit to working for Jorna\n\nFenn has them locked in the old smokehouse — he wants to talk to\nwhoever hired him before he decides. The party has until\ndawn to escape.\n\n- break open the rotten boards of the back wall\n- charm or bribe the bored guard\n- clever use of a cantrip\n\n> [!note] Safety valve: the captured lighthouse keeper in the\n> next chamber knows of a loose floorboard.\n\n## If: they lie (shipwrecked, lost travellers ...)\n\n> [!check] Charisma (Deception) of each character vs. Fenn's\n> Wisdom (Insight) +2. Advantage/Disadvantage by plausibility,\n> for each character separately.\n\n- **Believed** → they are escorted to the village and watched\n- **Not believed** → smokehouse as above\n\n> [!outcome] After this scene Fenn knows the party's faces —\n> however it ends.\n"
+}

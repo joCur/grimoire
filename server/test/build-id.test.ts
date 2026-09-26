@@ -45,7 +45,7 @@ describe("getBuildId", () => {
 
 describe("GET /api/campaigns/:campaign/version", () => {
   async function version(): Promise<{ version: number; build: string }> {
-    const res = await app.request("/api/campaigns/beispiel/version");
+    const res = await app.request("/api/campaigns/example/version");
     expect(res.status).toBe(200);
     return (await res.json()) as { version: number; build: string };
   }
@@ -68,7 +68,7 @@ describe("x-grimoire-build header", () => {
     process.env.GRIMOIRE_BUILD = "deadbee";
     const campaigns = await app.request("/api/campaigns");
     expect(campaigns.headers.get("x-grimoire-build")).toBe("deadbee");
-    const tree = await app.request("/api/campaigns/beispiel/tree");
+    const tree = await app.request("/api/campaigns/example/tree");
     expect(tree.headers.get("x-grimoire-build")).toBe("deadbee");
   });
 

@@ -97,7 +97,7 @@ describe("beginning a pause — POST …/sessions/:id/pauses", () => {
       id: session.id,
     });
     expect((await readSession(session.id)).pauses).toEqual([]);
-    expect((await send("POST", pausesUrl("gibt-es-nicht"))).status).toBe(404);
+    expect((await send("POST", pausesUrl("does-not-exist"))).status).toBe(404);
   });
 
   test("400 for a key in the body — a pause begins on the server's clock", async () => {
@@ -172,11 +172,11 @@ describe("ending and correcting a pause — PATCH …/pauses/:id", () => {
   });
 
   test("404 for an unknown pause or session", async () => {
-    expect((await send("PATCH", `${pausesUrl()}/gibt-es-nicht`, { rev: 1, toMs: 0 })).status).toBe(
+    expect((await send("PATCH", `${pausesUrl()}/does-not-exist`, { rev: 1, toMs: 0 })).status).toBe(
       404,
     );
     expect(
-      (await send("PATCH", `${pausesUrl("gibt-es-nicht")}/abendessen`, { rev: 1, toMs: 0 })).status,
+      (await send("PATCH", `${pausesUrl("does-not-exist")}/dinner`, { rev: 1, toMs: 0 })).status,
     ).toBe(404);
   });
 });

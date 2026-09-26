@@ -12,7 +12,7 @@ function npc(over: Record<string, unknown> = {}): string {
   return JSON.stringify({
     id: "grella",
     name: " Grella ",
-    role: "Schmugglerin",
+    role: "Smuggler",
     chapter: null,
     status: "alive",
     statblock: "",
@@ -22,16 +22,16 @@ function npc(over: Record<string, unknown> = {}): string {
     ],
     voice: null,
     appearance: null,
-    motivation: "Ihren Anteil.",
-    body: "\n## Weiß\n\nKennt den Steg.",
-    warnings: [" Kein Statblock im Quelltext. ", ""],
+    motivation: "Her share.",
+    body: "\n## Knows\n\nKnows the jetty.",
+    warnings: [" No statblock in the source. ", ""],
     ...over,
   });
 }
 
 /** The example campaign's Jorna, as her fixture holds her — the npc without its guard. */
 const JORNA = JSON.parse(
-  readFileSync(join(import.meta.dir, "..", "..", "fixtures", "beispiel", "npcs", "jorna.json"), "utf8"),
+  readFileSync(join(import.meta.dir, "..", "..", "fixtures", "npcs", "jorna.json"), "utf8"),
 ) as NpcProposal;
 
 describe("parseNpcReply", () => {
@@ -43,13 +43,13 @@ describe("parseNpcReply", () => {
     expect(outcome.reply.npc).toEqual({
       id: "grella",
       name: "Grella",
-      role: "Schmugglerin",
+      role: "Smuggler",
       status: "alive",
       quickstats: { wis: "+2" },
-      motivation: "Ihren Anteil.",
-      body: "## Weiß\n\nKennt den Steg.\n",
+      motivation: "Her share.",
+      body: "## Knows\n\nKnows the jetty.\n",
     });
-    expect(outcome.reply.warnings).toEqual(["Kein Statblock im Quelltext."]);
+    expect(outcome.reply.warnings).toEqual(["No statblock in the source."]);
     expect(outcome.reply.ignored).toEqual([]);
   });
 
@@ -67,7 +67,7 @@ describe("parseNpcReply", () => {
   });
 
   test("a status outside the four, and a missing one, are named", () => {
-    for (const status of ["tot", null]) {
+    for (const status of ["deceased", null]) {
       const outcome = parseNpcReply(npc({ status }));
       expect(outcome.ok).toBe(false);
       if (!outcome.ok) expect(outcome.errors.join(" ")).toContain('"status"');
@@ -77,6 +77,7 @@ describe("parseNpcReply", () => {
   test("a blank name is missing, and a wrong shape is named", () => {
     const blank = parseNpcReply(npc({ name: "  " }));
     expect(blank.ok).toBe(false);
+    // The correction message is German production text sent back to the model.
     if (!blank.ok) expect(blank.errors.join(" ")).toContain('"name" fehlt');
     const wrong = parseNpcReply(npc({ motivation: 7 }));
     expect(wrong.ok).toBe(false);
@@ -84,10 +85,10 @@ describe("parseNpcReply", () => {
   });
 
   test("an unknown key fails a create run and is dropped by an augment run", () => {
-    const created = parseNpcReply(npc({ atmosphere: "Nebel" }));
+    const created = parseNpcReply(npc({ atmosphere: "Fog" }));
     expect(created.ok).toBe(false);
     if (!created.ok) expect(created.errors.join(" ")).toContain("atmosphere");
-    const augmented = parseNpcReply(npc({ atmosphere: "Nebel" }), "augment");
+    const augmented = parseNpcReply(npc({ atmosphere: "Fog" }), "augment");
     if (!augmented.ok) throw new Error(augmented.errors.join(" | "));
     expect(augmented.reply.ignored).toEqual(["atmosphere"]);
   });
@@ -101,7 +102,7 @@ describe("parseNpcReply", () => {
     const outcome = parseNpcReply(nested);
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("properties");
-    expect(parseNpcReply("kein Objekt")).toEqual({ ok: false, errors: [NOT_AN_NPC_ERROR] });
+    expect(parseNpcReply("not an object")).toEqual({ ok: false, errors: [NOT_AN_NPC_ERROR] });
   });
 
   test("the not-an-object error names every field of the npc", () => {

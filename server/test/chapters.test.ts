@@ -16,10 +16,10 @@ import { getDb } from "../src/store/handle";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-const CHAPTERS = "/api/campaigns/beispiel/chapters";
-const SALZHAFEN = `${CHAPTERS}/01-salzhafen`;
+const CHAPTERS = "/api/campaigns/example/chapters";
+const SALT_HARBOUR = `${CHAPTERS}/01-salt-harbour`;
 
-async function getChapter(url = SALZHAFEN): Promise<Chapter> {
+async function getChapter(url = SALT_HARBOUR): Promise<Chapter> {
   const res = await app.request(url);
   expect(res.status).toBe(200);
   return (await res.json()) as Chapter;
@@ -33,10 +33,10 @@ async function send(method: string, url: string, body: unknown): Promise<Respons
   });
 }
 
-const patchChapter = (body: unknown, url = SALZHAFEN): Promise<Response> =>
+const patchChapter = (body: unknown, url = SALT_HARBOUR): Promise<Response> =>
   send("PATCH", url, body);
 
-async function patchOk(body: unknown, url = SALZHAFEN): Promise<Chapter> {
+async function patchOk(body: unknown, url = SALT_HARBOUR): Promise<Chapter> {
   const res = await patchChapter(body, url);
   expect(res.status).toBe(200);
   return (await res.json()) as Chapter;
@@ -57,7 +57,7 @@ async function chaptersById(): Promise<Record<string, Chapter>> {
 }
 
 async function campaignVersion(): Promise<number> {
-  const res = await app.request("/api/campaigns/beispiel/version");
+  const res = await app.request("/api/campaigns/example/version");
   return ((await res.json()) as { version: number }).version;
 }
 
@@ -73,34 +73,34 @@ describe("reading a chapter", () => {
   test("GET answers every field flat — no kind, no path, no properties", async () => {
     const chapter = await getChapter();
     expect(chapter).toEqual({
-      id: "01-salzhafen",
-      title: "Kapitel 1: Der Leuchtturm von Salzhafen",
+      id: "01-salt-harbour",
+      title: "Chapter 1: The Lighthouse of Salt Harbour",
       status: "active",
-      body: "Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.\n",
+      body: "Find out why the beacon has been dark for three nights.\n",
       rev: chapter.rev,
     });
   });
 
   test("the list answers every chapter in its own shape, in the campaign's order", async () => {
-    await createChapter({ title: "02 Tiefe" });
+    await createChapter({ title: "02 Depths" });
     const res = await app.request(CHAPTERS);
     expect(res.status).toBe(200);
     const list = (await res.json()) as Chapter[];
-    expect(list.map((chapter) => chapter.id)).toEqual(["01-salzhafen", "02-tiefe"]);
+    expect(list.map((chapter) => chapter.id)).toEqual(["01-salt-harbour", "02-depths"]);
     expect(list[0]).toEqual(await getChapter());
   });
 
   test("404 for an unknown chapter or campaign", async () => {
-    expect((await app.request(`${CHAPTERS}/gibt-es-nicht`)).status).toBe(404);
-    expect((await app.request("/api/campaigns/nirgends/chapters/01-salzhafen")).status).toBe(404);
-    expect((await app.request("/api/campaigns/nirgends/chapters")).status).toBe(404);
+    expect((await app.request(`${CHAPTERS}/does-not-exist`)).status).toBe(404);
+    expect((await app.request("/api/campaigns/nowhere/chapters/01-salt-harbour")).status).toBe(404);
+    expect((await app.request("/api/campaigns/nowhere/chapters")).status).toBe(404);
   });
 
   test("the entry address of a chapter names nothing — GET and PATCH are 404", async () => {
     const before = await getChapter();
-    const url = entriesUrl("beispiel", "01-salzhafen");
+    const url = entriesUrl("example", "01-salt-harbour");
     expect((await app.request(url)).status).toBe(404);
-    expect((await send("PATCH", url, { rev: before.rev, body: "Überschrieben.\n" })).status).toBe(
+    expect((await send("PATCH", url, { rev: before.rev, body: "Overwritten.\n" })).status).toBe(
       404,
     );
     expect(await getChapter()).toEqual(before);
@@ -113,14 +113,14 @@ describe("writing a chapter", () => {
     const versionBefore = await campaignVersion();
     const after = await patchOk({
       rev: before.rev,
-      title: "Kapitel 1: Salzhafen",
-      body: "\n## Flow\n\nEin Satz.",
+      title: "Chapter 1: Salt Harbour",
+      body: "\n## Flow\n\nOne sentence.",
     });
     expect(after).toEqual({
       ...before,
-      title: "Kapitel 1: Salzhafen",
+      title: "Chapter 1: Salt Harbour",
       // A body without a trailing newline gets exactly one.
-      body: "\n## Flow\n\nEin Satz.\n",
+      body: "\n## Flow\n\nOne sentence.\n",
       rev: before.rev + 1,
     });
     // ONE write: the rev and the campaign version step once each.
@@ -130,7 +130,7 @@ describe("writing a chapter", () => {
 
   test("unknown callouts and headings survive a write verbatim", async () => {
     const before = await getChapter();
-    const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
+    const body = "\n## Entirely Our Own\n\n> [!weather] Fog over the cove\n\n### Sub-heading\n";
     const after = await patchOk({ rev: before.rev, body });
     expect(after.body).toBe(body);
     const back = await patchOk({ rev: after.rev, body: before.body });
@@ -147,7 +147,7 @@ describe("writing a chapter", () => {
   test("a field a chapter does not have, or a value of the wrong shape, is a 400 naming it", async () => {
     const before = await getChapter();
     for (const [key, value] of [
-      ["goal", "Ankommen"],
+      ["goal", "Arrive"],
       ["properties", { title: "x" }],
       ["title", 7],
       ["body", ["x"]],
@@ -161,7 +161,7 @@ describe("writing a chapter", () => {
 
   test("a status outside the three is status_not_allowed, and nothing is written", async () => {
     const before = await getChapter();
-    for (const status of ["laeuft", 3]) {
+    for (const status of ["running", 3]) {
       const res = await patchChapter({ rev: before.rev, status });
       expect(res.status).toBe(400);
       const body = (await res.json()) as { code: string; kind: string; allowed: string[] };
@@ -176,7 +176,7 @@ describe("writing a chapter", () => {
     const db = await getDb();
     expect(() =>
       db.run(
-        sql`update chapters set status = 'laeuft' where campaign_id = 'beispiel' and id = '01-salzhafen'`,
+        sql`update chapters set status = 'running' where campaign_id = 'example' and id = '01-salt-harbour'`,
       ),
     ).toThrow();
   });
@@ -191,11 +191,11 @@ describe("writing a chapter", () => {
 
   test("the id may be echoed, never changed", async () => {
     const before = await getChapter();
-    const res = await patchChapter({ rev: before.rev, id: "neu" });
+    const res = await patchChapter({ rev: before.rev, id: "new" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("id is the primary key");
     expect(await getChapter()).toEqual(before);
-    const same = await patchOk({ rev: before.rev, id: "01-salzhafen", status: "done" });
+    const same = await patchOk({ rev: before.rev, id: "01-salt-harbour", status: "done" });
     expect(same.status).toBe("done");
   });
 
@@ -215,20 +215,20 @@ describe("writing a chapter", () => {
     await patchOk({ rev: read.rev, status: "done" });
     const forced = await patchOk({
       rev: read.rev,
-      body: "\n## Flow\n\nTrotzdem gespeichert.\n",
+      body: "\n## Flow\n\nSaved anyway.\n",
       force: true,
     });
-    expect(forced.body).toBe("\n## Flow\n\nTrotzdem gespeichert.\n");
+    expect(forced.body).toBe("\n## Flow\n\nSaved anyway.\n");
     expect(forced.status).toBe("done");
     expect(await getChapter()).toEqual(forced);
   });
 
   test("404 for an unknown chapter or campaign", async () => {
-    expect((await patchChapter({ rev: 1, title: "x" }, `${CHAPTERS}/gibt-es-nicht`)).status).toBe(
+    expect((await patchChapter({ rev: 1, title: "x" }, `${CHAPTERS}/does-not-exist`)).status).toBe(
       404,
     );
     expect(
-      (await patchChapter({ rev: 1, title: "x" }, "/api/campaigns/nirgends/chapters/x")).status,
+      (await patchChapter({ rev: 1, title: "x" }, "/api/campaigns/nowhere/chapters/x")).status,
     ).toBe(404);
   });
 });
@@ -237,58 +237,58 @@ describe("writing a chapter", () => {
 // it spans rows: at most one chapter per campaign is active.
 describe("the one active chapter", () => {
   test("activating B while A is active puts A back to planned, with a new rev", async () => {
-    const b = await createChapter({ title: "02 Tiefe" });
+    const b = await createChapter({ title: "02 Depths" });
     const a = await getChapter();
     expect(a.status).toBe("active");
 
-    const activated = await patchOk({ rev: b.rev, status: "active" }, `${CHAPTERS}/02-tiefe`);
+    const activated = await patchOk({ rev: b.rev, status: "active" }, `${CHAPTERS}/02-depths`);
     expect(activated.status).toBe("active");
 
     const after = await chaptersById();
-    expect(after["01-salzhafen"]?.status).toBe("planned");
+    expect(after["01-salt-harbour"]?.status).toBe("planned");
     // The chapter that lost `active` was written, so its guard moved: an
     // editor open on it sees that it changed.
-    expect(after["01-salzhafen"]?.rev).toBe(a.rev + 1);
+    expect(after["01-salt-harbour"]?.rev).toBe(a.rev + 1);
     expect(Object.values(after).filter((chapter) => chapter.status === "active")).toHaveLength(1);
   });
 
   test("creating a chapter as active does the same", async () => {
     const a = await getChapter();
-    const created = await createChapter({ title: "02 Tiefe", status: "active" });
+    const created = await createChapter({ title: "02 Depths", status: "active" });
     expect(created.status).toBe("active");
 
     const after = await chaptersById();
-    expect(after["01-salzhafen"]?.status).toBe("planned");
-    expect(after["01-salzhafen"]?.rev).toBe(a.rev + 1);
+    expect(after["01-salt-harbour"]?.status).toBe("planned");
+    expect(after["01-salt-harbour"]?.rev).toBe(a.rev + 1);
     expect(Object.values(after).filter((chapter) => chapter.status === "active")).toHaveLength(1);
   });
 
   test("a stale activation writes nothing — the active chapter stays", async () => {
-    const b = await createChapter({ title: "02 Tiefe" });
+    const b = await createChapter({ title: "02 Depths" });
     const a = await getChapter();
-    const res = await patchChapter({ rev: b.rev - 1, status: "active" }, `${CHAPTERS}/02-tiefe`);
+    const res = await patchChapter({ rev: b.rev - 1, status: "active" }, `${CHAPTERS}/02-depths`);
     expect(res.status).toBe(409);
     expect(await getChapter()).toEqual(a);
   });
 
   test("setting a chapter to done or planned leaves the active one alone", async () => {
-    const b = await createChapter({ title: "02 Tiefe" });
+    const b = await createChapter({ title: "02 Depths" });
     const a = await getChapter();
-    const done = await patchOk({ rev: b.rev, status: "done" }, `${CHAPTERS}/02-tiefe`);
-    await patchOk({ rev: done.rev, status: "planned" }, `${CHAPTERS}/02-tiefe`);
+    const done = await patchOk({ rev: b.rev, status: "done" }, `${CHAPTERS}/02-depths`);
+    await patchOk({ rev: done.rev, status: "planned" }, `${CHAPTERS}/02-depths`);
     expect(await getChapter()).toEqual(a);
   });
 
   test("activating the active chapter again moves nobody else", async () => {
-    const b = await createChapter({ title: "02 Tiefe" });
+    const b = await createChapter({ title: "02 Depths" });
     const a = await getChapter();
     const again = await patchOk({ rev: a.rev, status: "active" });
     expect(again.status).toBe("active");
-    expect((await chaptersById())["02-tiefe"]).toEqual(b);
+    expect((await chaptersById())["02-depths"]).toEqual(b);
   });
 
   test("the action endpoint is gone", async () => {
-    const res = await send("POST", `${SALZHAFEN}/active`, {});
+    const res = await send("POST", `${SALT_HARBOUR}/active`, {});
     expect(res.status).toBe(404);
   });
 });
