@@ -74,15 +74,22 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   der Domäne, die er braucht.
 - `app/` — das Frontend. Jede Entität mit eigener Ressource hat ihren
   Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
-  `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`) mit
-  allem, was die App über sie weiß
-  (ADR #31); **Slices importieren einander nicht.** Gemeinsam sind nur
+  `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
+  `session/`) mit allem, was die App über sie weiß
+  (ADR #31); **Slices importieren einander nicht.** Pause, Log-Zeile und
+  gespielte Szene gehören zum Slice `session/`: die App liest sie nur
+  eingebettet in ihrer Session, und jeder ihrer Schreibzugriffe landet im
+  Cache der Session; ihre Ressourcen haben dort je ein eigenes Modul
+  (`pause-api.ts`, `log-entry-api.ts`, `played-scene-api.ts`). Gemeinsam sind nur
   UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`, etwa
   `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
   Kampagnenbaum) sind reine Verteiler. Eine Seite, die mehrere Entitäten
   zeigt, setzt sich wie `App.tsx` aus den Slices zusammen und reicht fremde
   Teile als Slot hinein (die Kapitelübersicht reicht dem Kapitel seine Fäden
-  und seine Szenenliste, die Szene bekommt ihre NPC-Karten). Kein Barrel:
+  und seine Szenenliste, die Szene bekommt ihre NPC-Karten, die Leseseite
+  einer Session den Link einer Szene). Was zwei Slices verbindet, liegt bei
+  der Seite, die sie zusammensetzt (die Erinnerungen der Live-Ansicht aus
+  Log-Zeilen und Ideen in `routes/PcReminders.tsx`). Kein Barrel:
   Aufrufer importieren die konkrete Datei.
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
@@ -137,7 +144,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `POST …/sessions/<id>/pauses` beginnt eine Pause, `PATCH
   …/pauses/<pause-id> { rev, toMs }` beendet sie; `POST …/sessions/<id>/log`
   legt eine Log-Zeile an, `PATCH …/log/<log-id> { rev, reviewed }` sichtet
-  sie; `POST …/sessions/<id>/played-scenes { sceneId }` ist „Nächste Szene".
+  sie; `POST …/sessions/<id>/played-scenes { sceneId }` legt eine gespielte
+  Szene an.
   Die laufende Session liefert `GET …/sessions?running=true` (eine oder
   keine), die Liste steht neueste zuerst. `POST …/sessions` startet,
   `PATCH …/sessions/<id> { rev, endedMs }` beendet, `DELETE` verwirft eine
@@ -284,13 +292,20 @@ Die Pfade:
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste; die laufende Session
    liefert `GET …/sessions?running=true`) → Schnellnotiz → Log-**Zeile** mit
-   `sceneId` (`POST …/sessions/<id>/log`) → „Nächste Szene" führt zur
-   folgenden der Reihenfolge und legt eine gespielte Szene an (`POST
-   …/sessions/<id>/played-scenes`) → Pause (`POST …/pauses`, ein Intervall,
-   keine Log-Zeile; beendet mit `PATCH …/pauses/<id> { rev, toMs }`) →
-   beenden (`PATCH …/sessions/<id> { rev, endedMs }`) → Nachbereitung. Jedes
-   Kind trägt sein eigenes `rev`, keines bewegt das der Session. Dazu die
-   Leseseite einer vergangenen Session (`/campaigns/:id/sessions/<session-id>`)
+   `sceneId` (`POST …/sessions/<id>/log`), die Notiz legt **keine**
+   gespielte Szene an → „Nächste Szene" führt zur folgenden der Reihenfolge;
+   hat die Session eine Log-Zeile mit der `sceneId` der verlassenen Szene,
+   legt es für **die verlassene Szene** eine gespielte Szene an (`POST
+   …/sessions/<id>/played-scenes`, einmal je Session), ohne Notiz legt es
+   nichts an → Pause (`POST …/pauses`, ein Intervall, keine Log-Zeile;
+   beendet mit `PATCH …/pauses/<id> { rev, toMs }`) → beenden (`PATCH
+   …/sessions/<id> { rev, endedMs }`; die gerade offene Szene wird dabei
+   **nicht** als gespielt angelegt) → Nachbereitung. Jedes Kind trägt sein
+   eigenes `rev`, keines bewegt das der Session; an einer beendeten Session
+   ist jedes neue Kind 409 `session_ended`, und die Live-Ansicht sagt das in
+   einem ganzen Satz. Die alten Adressen `…/session`, `…/session/start` und
+   `…/log` antworten 404. Dazu die Leseseite einer vergangenen Session
+   (`/campaigns/:id/sessions/<session-id>`)
 5. Nachbereitung: Handlungsstrang übernehmen → ein Faden des aktiven
    Kapitels (`POST …/threads { chapter, text }`, ohne `rev`; Kapiteltext und
    Kapitel-`rev` bleiben unberührt); Idee abhaken → `PATCH …/ideas/<id>
@@ -298,7 +313,8 @@ Die Pfade:
    Nachbereitung nimmt die erste Session der Liste (die zuletzt gestartete,
    auch über Mitternacht) und sichtet eine Log-Zeile mit `PATCH
    …/sessions/<id>/log/<log-id> { rev, reviewed }` — eine unbekannte id ist
-   404, ein alter `rev` 409 mit der aktuellen Zeile
+   404, ein alter `rev` 409 mit der aktuellen Zeile, und die Karte sagt, dass
+   die Notiz anderswo geändert wurde; `review/seen` antwortet 404
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen →
    Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
    die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
@@ -330,7 +346,9 @@ Die Pfade:
    status: "active" }`; das bisher aktive steht danach auf `planned`, und
    genau ein Kapitel ist aktiv.
 8. Mobil-Startfläche + Ideen-Einwurf bei 390px: die Idee wird eine Idee
-   (`POST …/ideas`, antwortet mit `Idea`), am Ende, nichts abgehakt
+   (`POST …/ideas`, antwortet mit `Idea`), am Ende, nichts abgehakt; läuft
+   eine Session (`GET …/sessions?running=true`), zeigt die Startfläche ihren
+   Chip als Weg zurück
 9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → dieselbe Konfliktzeile
    statt still überschreiben. „Neu laden" verwirft den Entwurf und übernimmt

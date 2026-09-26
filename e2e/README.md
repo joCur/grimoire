@@ -16,23 +16,23 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 - **Die Fixtures sind EINGABE**, einmal pro Test gelesen. `fixtures/beispiel`
   hält die Beispielkampagne als **ein JSON pro Objekt**, genau in der Form,
   die die API spricht. Die Kampagne, ein Kapitel, eine Szene, ein NPC, ein
-  Ort, ein Faden, eine Idee, ein Glossar-Begriff und ein Stück
-  Kampagnenwissen sind je eine eigene Ressource (ADR #31) und liegen als
-  `campaigns/<id>.json`, `chapters/<id>.json`, `scenes/<id>.json`,
-  `npcs/<id>.json`, `locations/<id>.json`, `threads/<id>.json`,
-  `ideas/<id>.json`, `glossary-terms/<id>.json` bzw.
-  `knowledge-items/<id>.json`: die Entität selbst, alle Felder flach, ohne
-  `kind` und ohne `rev`. Eine Session liegt daneben als `{ kind: "session",
-  … }` mit ihren **Zeilen** (`log` als `{ at, sceneId?, text, reviewed? }` —
-  Zeilen, kein Markdown).
+  Ort, ein Faden, eine Idee, ein Glossar-Begriff, ein Stück
+  Kampagnenwissen und eine Session sind je eine eigene Ressource (ADR #31)
+  und liegen als `campaigns/<id>.json`, `chapters/<id>.json`,
+  `scenes/<id>.json`, `npcs/<id>.json`, `locations/<id>.json`,
+  `threads/<id>.json`, `ideas/<id>.json`, `glossary-terms/<id>.json`,
+  `knowledge-items/<id>.json` bzw. `sessions/<id>.json`: die Entität selbst,
+  alle Felder flach, ohne `kind` und ohne `rev`. Eine Session bettet ihre
+  Kinder ein — `pauses`, `log` und `playedScenes`, jede Zeile mit ihrer
+  eigenen `id`.
 - **Ein Test überschreibt die Beispielkampagne je Entität**, in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { scenes: [{ id: "loot-check", … }], without: { sessions: ["2026-01-15"] } } })`.
   `campaign`, `chapters`, `scenes`, `npcs` und `locations` tragen den Typ
   der Entität aus `@grimoire/shared/<entität>` (`CampaignSeed`,
   `ChapterProposal`, `SceneProposal`, `NpcProposal`, `LocationProposal` —
-  die Entität ohne `rev`), `sessions` die Form, die der Seed-Loader liest
-  (`SeedSession` aus `server/src/db/seed.ts`). Ein Objekt, dessen `id` die
+  die Entität ohne `rev`), `sessions` die Session ohne ihre Wächter
+  (`SessionSeed` aus `@grimoire/shared/session`). Ein Objekt, dessen `id` die
   Beispielkampagne schon hat, ERSETZT es, jedes andere kommt dazu;
   `without` lässt Objekte je Entität über ihre `id` weg. Ohne Überschreibung
   wird die geteilte pristine Kopie direkt benutzt (niemand schreibt hinein),
@@ -215,13 +215,16 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   `patchThread(api, id, { rev?, …Felder })` und `threadPath(api, id?)`
   (`support/thread.ts`), `getIdeas(api)` und `ideaPath(api, id?)`
   (`support/idea.ts`). Die **Sessions** haben ihr eigenes Modul:
-  `getActiveSession(api, includeEnded?)` und
-  `activeSessionId(api, …)` (die laufende bzw. zuletzt gestartete —
-  `undefined`, wenn nichts läuft; der Endpoint antwortet dafür 200 mit
-  `null`), `getSession(api, id)`, `sessionExists(api, id)` und
-  `listSessions(api)` (`support/session.ts`). Jede Behauptung über eine
-  Session, eine Idee oder einen Faden liest ein **Feld** — `log`, `pauses`,
-  `scenesPlayed`, `done` —, nie einen gerenderten Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
+  `getRunningSession(api)` und `runningSessionId(api)` (die laufende aus
+  `GET …/sessions?running=true` — `undefined`, wenn nichts läuft; der Filter
+  antwortet dafür eine leere Liste), `getLastStartedSession(api)` (die erste
+  der Liste), `getSession(api, id)`, `sessionExists(api, id)`,
+  `listSessions(api)` und die Pfade `sessionPath(api, id?)`,
+  `pausePath(api, session, id?)`, `logEntryPath(api, session, id?)` und
+  `playedScenesPath(api, session)` für rohe Aufrufe (`support/session.ts`).
+  Jede Behauptung über eine Session, eine Idee oder einen Faden liest ein
+  **Feld** — `log`, `pauses`, `playedScenes`, `done` —, nie einen
+  gerenderten Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
   kein Spec schreibt eine hin, sie kommt immer vom Server.
   `todaySessionId()` ist die datumsförmige id einer Session, die ein Spec
   **selbst seedet**.
@@ -393,18 +396,30 @@ Die Pfade 3, 4, 5 und 8 lesen Zeilen statt Texte:
   Sessions und Ideen sind nicht indexiert; ein eigener Test fragt nach Wörtern, die nur dort vorkommen, und
   erwartet keinen Treffer.
 - **Pfad 4** (`session-cycle.e2e.ts`): die Schnellnotiz wird eine Log-**Zeile**
-  mit `at`, `sceneId` und dem Text, wie der DM ihn getippt hat; `scenesPlayed`
-  wächst in derselben Anfrage. Eine **Pause ist ein Intervall** in `pauses`
+  mit `id`, `at`, `sceneId`, dem Text, wie der DM ihn getippt hat, und ihrem
+  `rev` — und legt keine gespielte Szene an. „Nächste Szene" legt die
+  **verlassene** Szene als gespielt an, wenn die Session eine Notiz in ihr
+  hat, einmal je Session; ohne Notiz legt es nichts an, und das Beenden legt
+  die offene Szene nicht an. Eine **Pause ist ein Intervall** in `pauses`
   und schreibt keine Log-Zeile — der Beweis ist die unveränderte Länge des
-  Logs plus der Chip-Zustand `paused`. Dazu die Leseseite einer vergangenen
+  Logs plus der Chip-Zustand `paused`. Ein eigener Test prüft die
+  Ressourcen selbst: `?running=true` als Liste von einer oder keiner, die
+  Liste neueste zuerst, die Session flach mit eingebetteten Kindern, deren
+  Schreibzugriffe ihr `rev` nicht bewegen, 409 bei altem `rev` einer Pause
+  und der Session, 409 `session_ended` für jedes neue Kind einer beendeten
+  Session, `session_not_empty` beim Verwerfen, und 404 auf `…/session`,
+  `…/session/start` und `…/log`. Eine Notiz in eine anderswo beendete
+  Session zeigt den Satz dazu und lässt den Text im Feld; der fremde
+  Schreibzugriff und das Enter laufen im selben `page.evaluate`, damit der
+  Poll nicht dazwischenkommt. Dazu die Leseseite einer vergangenen
   Session (`/campaigns/beispiel/sessions/2026-01-15`): Log-Zeilen mit
   Szenen-Links auf `/campaigns/beispiel/scenes/<id>`, die geschlossene Pause
   mit ihrer Dauer, die gespielten Szenen — und die alte Eintrags-Adresse
   derselben Session als 404. Die Leseansicht einer Szene bietet wie jede
   Leseansicht „Session starten".
-- **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): die Review benennt eine
-  Log-Zeile per `id` und hakt eine Idee mit `PATCH …/ideas/<id> { rev, done }`
-  ab, also liest der Spec das `reviewed` der getroffenen Log-Zeile und die
+- **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): die Review sichtet eine
+  Log-Zeile mit `PATCH …/sessions/<id>/log/<log-id> { rev, reviewed }` und
+  hakt eine Idee mit `PATCH …/ideas/<id> { rev, done }` ab, also liest der Spec das `reviewed` der getroffenen Log-Zeile und die
   abgehakte Idee samt ihrem neuen `rev` — und prüft, dass keine andere das
   Flag trägt. Eine Idee mit altem `rev` ist 409 mit der aktuellen Idee, ein
   `text` im `PATCH` eine 400, und `…/inbox` sowie `review/inbox-done`
@@ -422,7 +437,12 @@ Die Pfade 3, 4, 5 und 8 lesen Zeilen statt Texte:
   ein neuer NPC bekommt die Notiz als Text, ein leerer unter der Kennung wird
   gefüllt, und bei einem NPC mit Inhalt bleibt der Dialog mit dem
   Konflikt-Satz offen — nichts geschrieben, die Log-Zeile bleibt
-  `reviewed: false`.
+  `reviewed: false`. Die Log-Zeile als Ressource: unbekannte id 404, alter
+  `rev` 409 mit der aktuellen Zeile unter `logEntry`, `text` im `PATCH` 400,
+  `review/seen` 404, und das `rev` der Session bleibt stehen. Eine anderswo
+  geänderte Log-Zeile zeigt auf ihrer Karte den Satz dazu, schreibt nichts,
+  und der nächste Klick gelingt — fremder Schreibzugriff und Klick im selben
+  `page.evaluate`.
 - **Pfad 8** (`mobile.e2e.ts`): der Ideen-Einwurf wird eine Idee am Ende;
   der Spec vergleicht alle Ideen samt `rev`, womit „die vorhandene Idee
   bleibt unberührt" und „nichts abgehakt" in einer Zusicherung stehen.
