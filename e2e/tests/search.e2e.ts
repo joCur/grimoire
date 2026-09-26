@@ -22,15 +22,11 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 import { getGlossaryTerm } from "../support/glossary-term";
-import { ui, uiExact } from "../support/ui";
+import { ui, uiExact, uiPattern } from "../support/ui";
 
 const CAMPAIGN_NAME = "Der Leuchtturm von Salzhafen";
 const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
 const SCENE_TITLE = "Ankunft am Leuchtturm";
-
-function escaped(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /**
  * Opens the palette with the global shortcut and returns its input.
@@ -44,7 +40,7 @@ async function openPalette(page: Page) {
   await expect(
     page
       .getByRole("banner")
-      .getByRole("button", { name: new RegExp(`^${escaped(ui("topbar.search"))}`) }),
+      .getByRole("button", { name: new RegExp(`^${uiPattern("topbar.search").source}`) }),
   ).toBeVisible();
   const input = page.getByRole("combobox");
   await expect(async () => {

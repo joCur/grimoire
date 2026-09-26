@@ -36,8 +36,10 @@ import type { SceneProposal } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getScene, patchScene } from "../support/scene";
+import escapeStringRegexp from "escape-string-regexp";
+
 import type { MessageKey } from "../../app/src/i18n/messages";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
 const SCENE = "lighthouse-arrival";
@@ -80,17 +82,6 @@ const SCENE_BLOCKS = [
   block(LABEL.note, 6),
 ];
 
-function escaped(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** A catalog text around one parameter, split at it. */
-function around(key: MessageKey, param: string): [string, string] {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui(key, { [param]: marker }).split(marker);
-  return [before, after];
-}
-
 /**
  * Read the scene: its text, and every other field beside it — a save of the
  * text has to leave those alone, which is what the assertions look at.
@@ -122,8 +113,9 @@ function blockOf(text: string, head: string): string {
 
 /** The composer's region — present exactly while the blocks mode is the surface. */
 function composer(page: Page): Locator {
-  const [before] = around("composer.list.aria", "label");
-  return page.getByRole("region", { name: new RegExp(`^${escaped(before)}`) });
+  return page.getByRole("region", {
+    name: uiPattern("composer.list.aria", { label: /.*/ }, { exact: true }),
+  });
 }
 
 /** The text editor's frame: mode switch, and the composer or the raw textarea. */
@@ -133,8 +125,9 @@ function textEditor(page: Page): Locator {
 
 /** The raw textarea of the markdown mode (labelled with the scene's title). */
 function rawTextarea(page: Page): Locator {
-  const [before] = around("bodyEditor.markdown.aria", "path");
-  return page.getByRole("textbox", { name: new RegExp(`^${escaped(before)}`) });
+  return page.getByRole("textbox", {
+    name: uiPattern("bodyEditor.markdown.aria", { path: /.*/ }, { exact: true }),
+  });
 }
 
 /** The form field of an open card, named by the card's label. */
@@ -163,15 +156,12 @@ function card(page: Page, name: string) {
  * shows the nesting as well.
  */
 async function blockNames(page: Page): Promise<string[]> {
-  const suffixes = [
-    around("composer.card.edit.aria", "name")[1],
-    around("composer.card.collapse.aria", "name")[1],
-  ];
-  const pattern = new RegExp(`(${suffixes.map(escaped).join("|")})$`);
+  const edit = uiPattern("composer.card.edit.aria", { name: /(.*)/ }, { exact: true });
+  const collapse = uiPattern("composer.card.collapse.aria", { name: /(.*)/ }, { exact: true });
   const labels = await composer(page)
-    .getByRole("button", { name: pattern })
+    .getByRole("button", { name: new RegExp(`${edit.source}|${collapse.source}`) })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels.map((label) => label.replace(pattern, ""));
+  return labels.map((label) => (edit.exec(label) ?? collapse.exec(label))?.[1] ?? label);
 }
 
 /** The rendered callouts of the reading view, in document order. */
@@ -222,9 +212,10 @@ test("the edit action opens the block composer — one card per block, no textar
   // vocabulary the reading view uses.
   expect(await blockNames(page)).toEqual(SCENE_BLOCKS);
   // A "+" before, between and after them: six blocks, seven slots.
-  const [, insertSuffix] = around("composer.insert.aria", "position");
   await expect(
-    composer(page).getByRole("button", { name: new RegExp(`${escaped(insertSuffix)}$`) }),
+    composer(page).getByRole("button", {
+      name: uiPattern("composer.insert.aria", { position: /\d+/ }, { exact: true }),
+    }),
   ).toHaveCount(7);
 
   // Collapsed cards show their own text, unrendered — the structure view, not
@@ -294,7 +285,7 @@ test("editing a read-aloud card writes THAT block and nothing else", async ({ pa
   // The form holds the callout's TEXT: no `>` markers, no `[!readaloud]` — the
   // markers are the serializer's business (that is the point of the composer).
   const field = contentField(page, LABEL.readaloud);
-  await expect(field).toHaveValue(new RegExp(`^${escaped(TOWER_LINE)}`));
+  await expect(field).toHaveValue(new RegExp(`^${escapeStringRegexp(TOWER_LINE)}`));
   await expect(field).not.toHaveValue(/\[!readaloud\]/);
   await expect(field).not.toHaveValue(/>/);
   const text = await field.inputValue();
@@ -634,7 +625,7 @@ test("cancelling after a block edit asks first — discarding leaves the scene a
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(field).toHaveValue(new RegExp(escaped(unsaved)));
+  await expect(field).toHaveValue(new RegExp(escapeStringRegexp(unsaved)));
 
   // Discarding closes the editor; the reading view is as it was.
   await page.getByRole("button", { name: ui("common.cancel"), exact: true }).click();

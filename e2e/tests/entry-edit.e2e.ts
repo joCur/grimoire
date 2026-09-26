@@ -52,7 +52,7 @@ import { getLocation } from "../support/location";
 import { getNpc, npcExists, patchNpc } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { expect, test } from "../support/test";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
@@ -776,7 +776,9 @@ test("a glossary term is a row of its own, kept on the glossary page", async ({ 
   await page.goto("/campaigns/beispiel/glossary");
   await expect(page.getByText("Tidal flat")).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: new RegExp(`^${ui("bodyEditor.markdown.aria", { path: "" })}`) }),
+    page.getByRole("textbox", {
+      name: uiPattern("bodyEditor.markdown.aria", { path: /.*/ }, { exact: true }),
+    }),
   ).toHaveCount(0);
 });
 
