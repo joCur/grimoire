@@ -2,8 +2,7 @@
 // campaign list (which campaign "/" opens).
 
 import type { CampaignSummary, CampaignTree } from "@grimoire/shared/types";
-
-import { parseLocalDateTime } from "@/lib/session";
+import { isValid, parseISO } from "date-fns";
 
 /**
  * Resolve a location id to its display name via the tree; an unknown id
@@ -88,7 +87,8 @@ export function findCampaign(
  * every campaign that has one; ties fall back to the id.
  */
 function startedMs(campaign: CampaignSummary): number | undefined {
-  return parseLocalDateTime(campaign.lastSessionStarted);
+  const started = parseISO(campaign.lastSessionStarted ?? "");
+  return isValid(started) ? started.getTime() : undefined;
 }
 
 function byLastActive(a: CampaignSummary, b: CampaignSummary): number {

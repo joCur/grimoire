@@ -1,5 +1,5 @@
-// The pure half of the session hooks: how a `POST /session/start` 409 is
-// read. Everything else in use-session.ts is react-query wiring and is
+// The pure half of the session hooks: how a start's 409 (`POST …/sessions`)
+// is read. Everything else in use-session.ts is react-query wiring and is
 // covered by the E2E session cycle.
 
 import { describe, expect, test } from "bun:test";
@@ -16,9 +16,8 @@ describe("sessionStartConflict", () => {
   });
 
   test("anything else is a plain error, not a question", () => {
-    // `session_ended` is gone with the resume semantics: a start after an
-    // ended session creates a new one, so this code never arrives — and if an
-    // older server sent it, it must not become a resume offer.
+    // `session_ended` refuses a write INTO an ended session; a start never
+    // answers it, and it must not become a question about the start.
     expect(sessionStartConflict(conflict({ code: "session_ended" }))).toBeUndefined();
     expect(sessionStartConflict(conflict({}))).toBeUndefined();
     expect(sessionStartConflict(conflict({ code: "whatever" }))).toBeUndefined();
