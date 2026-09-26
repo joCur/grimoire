@@ -25,6 +25,13 @@
 // explains why neither is silently resolved). Every one of them also accepts an explicit `id` — that
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of
 // making the DM invent another name.
+//
+// THE TRASH (decisions/trash): chapters, scenes, npcs, locations and ideas go
+// to the trash with their DELETE `{ rev }`, which answers the row with its
+// `deletedMs`, and come back with a PATCH `{ rev, deletedMs: null }`; their
+// lists answer the rows in the trash with `?deleted=true`. For every other
+// read and write a row in the trash is not there (404), yet its id stays
+// taken until the purge removes it for good (store/trash.ts).
 
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";

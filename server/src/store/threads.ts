@@ -9,9 +9,13 @@
 //
 // Every thread carries its own guard `rev`. There is no order to write:
 // threads stand in the order they were created (`pos`, db/schema.ts).
+//
+// A thread does not go to the trash on its own — its DELETE removes it —, but
+// it goes there with its chapter and comes back with it (decisions/trash).
+// Every read here asks for live threads; one in the trash is not there.
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   threadCreateSchema,
   threadDeleteSchema,
@@ -51,7 +55,7 @@ function threadRowOf(tx: GrimoireDb, campaign: string, id: string): ThreadRow | 
   return tx
     .select()
     .from(threads)
-    .where(and(eq(threads.campaignId, campaign), eq(threads.id, id)))
+    .where(and(eq(threads.campaignId, campaign), eq(threads.id, id), isNull(threads.deletedAt)))
     .all()[0];
 }
 
@@ -73,8 +77,12 @@ export async function listThreads(campaign: string, chapter?: string): Promise<T
   const db = await getDb();
   const where =
     chapter === undefined
-      ? eq(threads.campaignId, campaign)
-      : and(eq(threads.campaignId, campaign), eq(threads.chapterId, chapter));
+      ? and(eq(threads.campaignId, campaign), isNull(threads.deletedAt))
+      : and(
+          eq(threads.campaignId, campaign),
+          eq(threads.chapterId, chapter),
+          isNull(threads.deletedAt),
+        );
   return db
     .select()
     .from(threads)
@@ -199,6 +207,66 @@ export async function deleteThread(campaign: string, id: string, request: Thread
       .where(and(eq(threads.campaignId, campaign), eq(threads.id, row.id)))
       .run();
   });
+}
+
+// --- the trash of a chapter -----------------------------------------------------
+
+/**
+ * Put a chapter's live threads in the trash with it, INSIDE the caller's
+ * transaction, at the chapter's moment `at`; each `rev` moves.
+ */
+export function trashThreadsOfChapter(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  at: string,
+): void {
+  const rows = tx
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.campaignId, campaign),
+        eq(threads.chapterId, chapter),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .all();
+  for (const row of rows) {
+    tx.update(threads)
+      .set({ deletedAt: at, rev: row.rev + 1 })
+      .where(and(eq(threads.campaignId, campaign), eq(threads.id, row.id)))
+      .run();
+  }
+}
+
+/**
+ * Restore exactly the threads that went to the trash with a chapter at its
+ * moment `at`, INSIDE the caller's transaction; each `rev` moves.
+ */
+export function restoreThreadsOfChapter(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  at: string,
+): void {
+  const rows = tx
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.campaignId, campaign),
+        eq(threads.chapterId, chapter),
+        eq(threads.deletedAt, at),
+      ),
+    )
+    .all();
+  for (const row of rows) {
+    tx.update(threads)
+      .set({ deletedAt: null, rev: row.rev + 1 })
+      .where(and(eq(threads.campaignId, campaign), eq(threads.id, row.id)))
+      .run();
+  }
 }
 
 // --- the seed -----------------------------------------------------------------

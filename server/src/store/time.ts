@@ -1,8 +1,9 @@
-// The one shape a session timestamp has, and the way back from it.
+// The one shape a stored point in time has, and the way back from it.
 //
-// `sessions.started`, `sessions.ended` and the two ends of a pause are
-// zone-less local wall-clock strings — read in the timezone of the server —,
-// and they are second-precise: the values are read back as durations, and a
+// `sessions.started`, `sessions.ended`, the two ends of a pause and the
+// moment a row went to the trash (decisions/trash) are zone-less local
+// wall-clock strings — read in the timezone of the server —, and they are
+// second-precise: the values are read back as durations, and a
 // minute-precise value rounds DOWN to the start of its minute, which would
 // jump a session's runtime by up to a minute per pause.
 //
@@ -18,8 +19,9 @@
 import { format, isValid, parse } from "date-fns";
 
 /**
- * `yyyy-mm-ddTHH:MM:SS` in local time — `started`, `ended` and both ends of a
- * pause. Zone-less and second-precise.
+ * `yyyy-mm-ddTHH:MM:SS` in local time — `started`, `ended`, both ends of a
+ * pause and a trash moment. Zone-less and second-precise; the shape sorts as
+ * text in the order of time.
  */
 export const LOCAL_DATE_TIME_SECONDS = "yyyy-MM-dd'T'HH:mm:ss";
 
@@ -54,4 +56,14 @@ export function localDateTimeToMs(value: unknown): number | undefined {
   const parsed = parse(value, LOCAL_DATE_TIME_SECONDS, new Date());
   if (!isValid(parsed)) return undefined;
   return format(parsed, LOCAL_DATE_TIME_SECONDS) === value ? parsed.getTime() : undefined;
+}
+
+/**
+ * The trash moment of a row as its wire field: `{ deletedMs }` for a row in
+ * the trash, nothing for a live one (decisions/trash).
+ */
+export function deletedField(deletedAt: string | null): { deletedMs?: number } {
+  if (deletedAt === null) return {};
+  const ms = localDateTimeToMs(deletedAt);
+  return ms === undefined ? {} : { deletedMs: ms };
 }

@@ -51,6 +51,6 @@ no such state, and an empty one would only be an incomplete row.
 - No write changes an id; there is no id cascade in the application.
 - A new value in a closed list is a migration, a decision about the data
   model, not only a constant change.
-- Deleting entities that others reference needs a decision of its own; the
+- Deleting entities that others reference follows `decisions/trash`; the
   foreign keys do not cascade deletes. References across campaigns are
   impossible.

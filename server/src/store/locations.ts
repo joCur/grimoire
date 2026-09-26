@@ -8,13 +8,19 @@
 // therefore fills a location the DM created and left empty rather than
 // colliding with it — the same rule an npc follows (./npcs.ts), decided over
 // the columns a location actually has.
+//
+// A location in the trash (decisions/trash) is there for nothing but its
+// restore: every read here asks for live locations (`locationRowOf`), and
+// only the trash's own paths and the id checks of a create see the rest
+// (`storedLocationRowOf`). Its id stays taken, and it is never filled.
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import {
   freeSlug,
   locationPatchSchema,
   locationProposalSchema,
   type Location,
+  type LocationDelete,
   type LocationPatch,
   type LocationProposal,
 } from "@grimoire/shared";
@@ -22,13 +28,27 @@ import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import { generateJobs, locations } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertChapterRef } from "./chapters";
-import { indexEntity } from "./fts";
+import { assertChapterRef, chapterBlocker, storedChapterRowOf } from "./chapters";
+import { dropEntity, indexEntity } from "./fts";
 import { getDb } from "./handle";
 import { expandCampaignBodyRefs } from "./refs";
 import type { LocationRow } from "./render";
+import { liveScenesAtLocation } from "./scenes";
 import { indexedProse, reindexReferrers } from "./search-index";
-import { normalizeBody, parseRequest, resolveNewId, revConflict, slugTaken, unknownRef } from "./shared";
+import {
+  isRestore,
+  normalizeBody,
+  parseRequest,
+  resolveNewId,
+  restoreBlocked,
+  revConflict,
+  slugTaken,
+  trashBlocked,
+  trashMoment,
+  unknownRef,
+  type TrashBlocker,
+} from "./shared";
+import { deletedField } from "./time";
 
 // --- rendering a row ----------------------------------------------------------
 
@@ -45,6 +65,7 @@ export function renderLocation(row: LocationRow): Location {
     ...(row.roll20Page === null ? {} : { roll20Page: row.roll20Page }),
     ...(row.atmosphere === null ? {} : { atmosphere: row.atmosphere }),
     body: row.body,
+    ...deletedField(row.deletedAt),
     rev: row.rev,
   };
 }
@@ -76,14 +97,28 @@ export async function readLocation(campaign: string, id: string): Promise<Locati
   return locationIn(await getDb(), campaign, id);
 }
 
-/** GET /api/campaigns/:campaign/locations — every location, by name. */
-export async function listLocations(campaign: string): Promise<Location[]> {
+/**
+ * GET /api/campaigns/:campaign/locations[?deleted=true] — every live
+ * location, by name. `deleted` lists the locations in the trash instead, the
+ * latest to go there first.
+ */
+export async function listLocations(campaign: string, deleted = false): Promise<Location[]> {
   await requireCampaign(campaign);
   const db = await getDb();
+  if (deleted) {
+    return (
+      db
+        .select()
+        .from(locations)
+        .where(and(eq(locations.campaignId, campaign), isNotNull(locations.deletedAt)))
+        .orderBy(desc(locations.deletedAt), asc(locations.id))
+        .all() as LocationRow[]
+    ).map(renderLocation);
+  }
   const rows = db
     .select()
     .from(locations)
-    .where(eq(locations.campaignId, campaign))
+    .where(and(eq(locations.campaignId, campaign), isNull(locations.deletedAt)))
     .orderBy(asc(locations.id))
     .all() as LocationRow[];
   return rows
@@ -137,6 +172,10 @@ export async function patchLocation(
  * `chapter` has to name a chapter that exists (400 otherwise), and the id
  * never changes (decisions/constraints): a patch may echo it, never alter it. A patch that
  * names no field is a 400 `nothing_to_write`.
+ *
+ * A location in the trash takes exactly one patch, `deletedMs: null`, which
+ * restores it (`restoreLocationIn`); any other is a 404, as if it were not
+ * there. On a live location `deletedMs: null` changes nothing.
  */
 export function patchLocationIn(
   tx: GrimoireDb,
@@ -144,14 +183,20 @@ export function patchLocationIn(
   id: string,
   patch: LocationPatch,
 ): Location {
-  const { rev, force, id: patchedId, ...fields } = patch;
+  const { rev, force, id: patchedId, deletedMs, ...fields } = patch;
+  const row = storedLocationRowOf(tx, campaign, id);
+  if (row?.deletedAt != null) {
+    if (!isRestore(deletedMs, fields) || (patchedId !== undefined && patchedId !== id)) {
+      throw new ApiError(404, "location not found");
+    }
+    return restoreLocationIn(tx, campaign, row, force === true ? row.rev : rev);
+  }
   const named = Object.values(fields).some((value) => value !== undefined);
   if (!named && patchedId === undefined) {
     throw new ApiError(400, "nothing to write — send at least one field", {
       code: "nothing_to_write",
     });
   }
-  const row = locationRowOf(tx, campaign, id);
   if (row === undefined) throw new ApiError(404, "location not found");
   const guard = force === true ? row.rev : rev;
   if (row.rev !== guard) {
@@ -183,6 +228,135 @@ export function patchLocationIn(
     .run();
   indexLocation(tx, campaign, next);
   return renderLocation(next);
+}
+
+// --- the trash ----------------------------------------------------------------
+
+/** A location as the trash's refusals name it. */
+function locationBlocker(row: { id: string; name: string }): TrashBlocker {
+  return { kind: "location", id: row.id, name: row.name === "" ? row.id : row.name };
+}
+
+/**
+ * DELETE /api/campaigns/:campaign/locations/:id `{ rev }` — the location goes
+ * to the trash (decisions/trash): it keeps its id and its fields, and its
+ * `rev` moves. It leaves the search index, and its name leaves the indexed
+ * text of every row that mentions it. A location a live scene plays at stays
+ * where it is: 409 `trash_blocked` with those scenes, and nothing is written.
+ * A stale `rev` is 409 with the current location; a location that is not
+ * there, or already in the trash, is 404.
+ */
+export async function trashLocation(
+  campaign: string,
+  id: string,
+  request: LocationDelete,
+): Promise<Location> {
+  return mutate(campaign, (tx) => {
+    const row = locationRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(404, "location not found");
+    if (row.rev !== request.rev) {
+      throw revConflict(row.rev, "location changed", { location: renderLocation(row) });
+    }
+    const blockers = liveScenesAtLocation(tx, campaign, row.id);
+    if (blockers.length > 0) throw trashBlocked("location", row.id, blockers);
+    const next: LocationRow = { ...row, deletedAt: trashMoment(), rev: row.rev + 1 };
+    tx.update(locations)
+      .set({ deletedAt: next.deletedAt, rev: next.rev })
+      .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
+      .run();
+    dropEntity(tx, campaign, "location", row.id);
+    reindexReferrers(tx, campaign, row.id);
+    return renderLocation(next);
+  });
+}
+
+/**
+ * The restore of one location, INSIDE the caller's transaction, against
+ * `guard`. A location whose chapter is in the trash would name a chapter that
+ * is not there: 409 `restore_blocked` with that chapter, and nothing is
+ * written.
+ */
+function restoreLocationIn(
+  tx: GrimoireDb,
+  campaign: string,
+  row: LocationRow,
+  guard: number,
+): Location {
+  if (row.rev !== guard) {
+    throw revConflict(row.rev, "location changed", { location: renderLocation(row) });
+  }
+  const chapter =
+    row.chapterId === null ? undefined : storedChapterRowOf(tx, campaign, row.chapterId);
+  if (chapter !== undefined && chapter.deletedAt !== null) {
+    throw restoreBlocked("location", row.id, [chapterBlocker(chapter)]);
+  }
+  const next: LocationRow = { ...row, deletedAt: null, rev: row.rev + 1 };
+  tx.update(locations)
+    .set({ deletedAt: null, rev: next.rev })
+    .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
+    .run();
+  indexLocation(tx, campaign, next);
+  return renderLocation(next);
+}
+
+/** The live locations of this chapter — what keeps it out of the trash. */
+export function liveLocationsOfChapter(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+): TrashBlocker[] {
+  return tx
+    .select({ id: locations.id, name: locations.name })
+    .from(locations)
+    .where(
+      and(
+        eq(locations.campaignId, campaign),
+        eq(locations.chapterId, chapter),
+        isNull(locations.deletedAt),
+      ),
+    )
+    .orderBy(asc(locations.id))
+    .all()
+    .map(locationBlocker);
+}
+
+/** Those of these locations that are in the trash — what keeps a scene there. */
+export function trashedLocationBlockers(
+  tx: GrimoireDb,
+  campaign: string,
+  ids: readonly string[],
+): TrashBlocker[] {
+  if (ids.length === 0) return [];
+  return tx
+    .select({ id: locations.id, name: locations.name })
+    .from(locations)
+    .where(
+      and(
+        eq(locations.campaignId, campaign),
+        inArray(locations.id, [...ids]),
+        isNotNull(locations.deletedAt),
+      ),
+    )
+    .orderBy(asc(locations.id))
+    .all()
+    .map(locationBlocker);
+}
+
+/**
+ * Remove for good every location that went to the trash before `cutoff`,
+ * across all campaigns — after the scenes that play there, before its
+ * chapter (./trash.ts). Returns the campaign of each removed location.
+ */
+export function purgeLocations(tx: GrimoireDb, cutoff: string): string[] {
+  const expired = and(isNotNull(locations.deletedAt), lt(locations.deletedAt, cutoff));
+  const campaigns = tx
+    .select({ campaignId: locations.campaignId })
+    .from(locations)
+    .where(expired)
+    .all()
+    .map((row) => row.campaignId);
+  tx.delete(locations).where(expired).run();
+  return campaigns;
 }
 
 // --- taking over a proposal ---------------------------------------------------
@@ -230,10 +404,14 @@ export function insertLocationProposal(
   if (row !== undefined) indexLocation(tx, campaign, row);
 }
 
-/** True when a proposal would land on a location that already holds something. */
+/**
+ * True when a location under this id may not be filled: one that holds
+ * something, and one in the trash, empty or not — its id stays taken until
+ * the purge, and nothing writes into a row there (decisions/trash).
+ */
 export function locationTaken(tx: GrimoireDb, campaign: string, id: string): boolean {
-  const row = locationRowOf(tx, campaign, id);
-  return row !== undefined && !isEmptyLocationRow(row);
+  const row = storedLocationRowOf(tx, campaign, id);
+  return row !== undefined && (row.deletedAt !== null || !isEmptyLocationRow(row));
 }
 
 // --- creating a location ------------------------------------------------------
@@ -246,12 +424,13 @@ export async function createLocation(
 ): Promise<Location> {
   const id = resolveNewId(explicitId, name, "location", "name");
   return mutate(campaign, (tx) => {
-    const existing = locationRowOf(tx, campaign, id);
-    if (existing !== undefined && !isEmptyLocationRow(existing)) {
-      // Same as for an npc: an empty location is claimed, so it is never proposed.
+    const existing = storedLocationRowOf(tx, campaign, id);
+    if (locationTaken(tx, campaign, id)) {
+      // Same as for an npc: an empty location and one in the trash are
+      // claimed, so neither is ever proposed.
       const suggestion = freeSlug(
         id,
-        (candidate) => locationRowOf(tx, campaign, candidate) !== undefined,
+        (candidate) => storedLocationRowOf(tx, campaign, candidate) !== undefined,
       );
       throw slugTaken("location", id, suggestion);
     }
@@ -273,8 +452,27 @@ export async function createLocation(
 
 // --- loading and checking a location row ---------------------------------------
 
-/** One location row by id, read through `tx` (the database or a transaction). */
+/**
+ * One LIVE location row by id, read through `tx` (the database or a
+ * transaction) — a location in the trash is not there for any read of
+ * content.
+ */
 export function locationRowOf(tx: GrimoireDb, campaign: string, id: string): LocationRow | undefined {
+  return tx
+    .select()
+    .from(locations)
+    .where(
+      and(eq(locations.campaignId, campaign), eq(locations.id, id), isNull(locations.deletedAt)),
+    )
+    .all()[0] as LocationRow | undefined;
+}
+
+/** One location row by id, live or in the trash — for the trash and for id checks. */
+export function storedLocationRowOf(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+): LocationRow | undefined {
   return tx
     .select()
     .from(locations)

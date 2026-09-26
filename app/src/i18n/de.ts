@@ -325,6 +325,12 @@ export const de = {
   "server.session_not_empty": "Diese Session hat Inhalt — beenden statt verwerfen.",
   "server.session_ended":
     "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. Starte eine neue Session, um weiterzumachen.",
+  "server.trash_blocked":
+    "Das kann nicht in den Papierkorb, weil noch etwas darauf verweist. Entferne erst diese Verweise.",
+  "server.chapter_in_trash":
+    "Diese Szene kann nicht zurückgeholt werden, weil ihr Kapitel im Papierkorb liegt. Hol zuerst das Kapitel zurück.",
+  "server.restore_blocked":
+    "Das kann nicht zurückgeholt werden, weil etwas, worauf es verweist, im Papierkorb liegt. Hol das zuerst zurück.",
   "server.rev_conflict": "Inzwischen geändert — neu laden vor dem Speichern.",
   "server.nothing_to_write": "Nichts zu speichern.",
   "server.body_not_editable":

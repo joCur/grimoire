@@ -8,8 +8,13 @@
 // back to `planned`, in the same transaction. The order of a chapter's scenes
 // is no field of it: it has its own endpoint and its own guard (below). Its
 // threads are a resource of their own, each naming its chapter (./threads.ts).
+//
+// A chapter in the trash (decisions/trash) is not there for any of these but
+// the list with `?deleted=true` and its restore, a PATCH of
+// `deletedMs: null`.
 
 import { Hono } from "hono";
+import { chapterDeleteSchema } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import {
   createChapter,
@@ -17,22 +22,28 @@ import {
   patchChapter,
   readChapter,
   readChapterCreate,
+  trashChapter,
   writeSceneOrder,
 } from "../store/chapters";
-import { jsonBody, optionalText, requiredText, requireRev } from "./http";
+import { parseRequest } from "../store/shared";
+import { deletedFilter, jsonBody, optionalText, requiredText, requireRev } from "./http";
 
 export const chapterRoutes = new Hono();
 
-// GET /api/campaigns/:campaign/chapters -> Chapter[] — every chapter of the
-// campaign in the campaign's order, each exactly as its own GET answers it.
+// GET /api/campaigns/:campaign/chapters[?deleted=true] -> Chapter[] — every
+// live chapter of the campaign in the campaign's order, each exactly as its
+// own GET answers it. `?deleted=true` answers the chapters in the trash
+// instead, each with its `deletedMs`, the latest to go there first. Any other
+// value of `deleted` is a 400.
 chapterRoutes.get("/campaigns/:campaign/chapters", async (c) =>
-  c.json(await listChapters(c.req.param("campaign"))),
+  c.json(await listChapters(c.req.param("campaign"), deletedFilter(c.req.query("deleted")))),
 );
 
 // GET /api/campaigns/:campaign/chapters/:id -> Chapter
 // `{ id, title, status?, body, rev }` — every field of the chapter flat, the
 // status absent when the chapter carries none, and `rev` the guard its PATCH
-// sends back. 404 for an unknown campaign or chapter.
+// sends back. 404 for an unknown campaign or chapter, and for a chapter in
+// the trash.
 chapterRoutes.get("/campaigns/:campaign/chapters/:id", async (c) =>
   c.json(await readChapter(c.req.param("campaign"), c.req.param("id"))),
 );
@@ -44,8 +55,9 @@ chapterRoutes.get("/campaigns/:campaign/chapters/:id", async (c) =>
 // the chapter that was active goes back to `planned` in the same
 // transaction, and its `rev` moves. `body` becomes the chapter's text as
 // typed (trimmed, one closing newline, no heading around it); the chapter
-// overview shows that text under the title. A taken id is 409 { code:
-// "slug_taken", kind, id, suggestion } and writes nothing. A `status` outside
+// overview shows that text under the title. A taken id — by a chapter in the
+// trash, too — is 409 { code: "slug_taken", kind, id, suggestion } and writes
+// nothing. A `status` outside
 // the three is 400 { code: "status_not_allowed" }; a key that is none of the
 // four, or a value of the wrong shape, is a 400 that names it.
 chapterRoutes.post("/campaigns/:campaign/chapters", async (c) => {
@@ -64,7 +76,7 @@ chapterRoutes.post("/campaigns/:campaign/chapters", async (c) => {
 });
 
 // PATCH /api/campaigns/:campaign/chapters/:id
-//   { rev, force?, id?, title?, status?, body? } -> Chapter
+//   { rev, force?, id?, title?, status?, body?, deletedMs? } -> Chapter
 // THE write of one chapter (decisions/writes): any subset of its fields — `body` is
 // one of them — in ONE row update against ONE `rev`, checked against the
 // chapter's schema. `null` clears the status; a key that is not a field of a
@@ -84,9 +96,38 @@ chapterRoutes.post("/campaigns/:campaign/chapters", async (c) => {
 // the text. The scene order's guard does not move, and neither does any
 // thread of the chapter.
 // 404 for an unknown campaign or chapter.
+//
+// RESTORE. `{ rev, force?, deletedMs: null }` and nothing else takes a chapter
+// out of the trash, and with it EXACTLY the scenes and threads that went there
+// with it (those sharing its `deletedMs`), the scenes at the places they had
+// in its order; each `rev` moves, and all of them are back in the search. A
+// scene that went on its own stays in the trash. A scene of it naming a
+// location or an npc in the trash keeps the whole chapter there: 409 { code:
+// "restore_blocked", kind, id, blockers }, and nothing is written. A chapter
+// that went to the trash `active` comes back `planned` when another chapter
+// has become active meanwhile — at most one is. Any other patch of a chapter
+// in the trash is 404. `deletedMs` takes no other value (400): the trash is
+// entered by DELETE. On a live chapter `deletedMs: null` changes nothing.
 chapterRoutes.patch("/campaigns/:campaign/chapters/:id", async (c) => {
   const body = await jsonBody(c, null);
   return c.json(await patchChapter(c.req.param("campaign"), c.req.param("id"), body));
+});
+
+// DELETE /api/campaigns/:campaign/chapters/:id { rev } -> Chapter
+// Puts the chapter in the TRASH (decisions/trash) together with its live
+// scenes and threads — one moment, its `deletedMs`, for all of them — and
+// answers the chapter with that `deletedMs` and its moved `rev`; the `rev` of
+// each scene and thread moves too. They keep their ids, fields and places,
+// leave the tree, the lists and the search, and are removed for good after
+// the trash's retention. A chapter a live npc or location names, or one a
+// log entry names a scene of, stays: 409 { code: "trash_blocked", kind, id,
+// blockers } with those rows (`kind` `npc`, `location` or `log-entry`), and
+// nothing is written. A stale `rev` is 409 { code: "rev_conflict", rev,
+// chapter }. 404 for an unknown campaign or chapter, and for one already in
+// the trash.
+chapterRoutes.delete("/campaigns/:campaign/chapters/:id", async (c) => {
+  const request = parseRequest(chapterDeleteSchema, await jsonBody(c, null), "chapter delete");
+  return c.json(await trashChapter(c.req.param("campaign"), c.req.param("id"), request));
 });
 
 // PUT /api/campaigns/:campaign/chapters/:chapter/scene-order { scenes, rev }
@@ -101,7 +142,7 @@ chapterRoutes.patch("/campaigns/:campaign/chapters/:id", async (c) => {
 // "rev_conflict", rev } and writes nothing. No chapter rides along — the
 // order is none of its fields, and the overview reloads the tree.
 //
-// `scenes` must name EXACTLY the scenes of the chapter. A missing, a foreign
+// `scenes` must name EXACTLY the live scenes of the chapter. A missing, a foreign
 // or a repeated id is
 // 400 { code: "scene_order_mismatch", missing, unknown, duplicate } and
 // nothing is written — a partial order would have to invent positions for

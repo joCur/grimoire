@@ -29,17 +29,20 @@ included, without `kind`, without `path`:
 | Entity | Read/change | Create/list | App route |
 | ------ | ----------- | ----------- | --------- |
 | Campaign | `GET/PATCH /api/campaigns/<campaign>` | `POST /api/campaigns` | `/campaigns/<campaign>` |
-| Chapter | `GET/PATCH /api/campaigns/<campaign>/chapters/<id>` | `GET/POST /api/campaigns/<campaign>/chapters` | `/campaigns/<campaign>/chapters/<id>` |
-| Scene | `GET/PATCH /api/campaigns/<campaign>/scenes/<id>` | `GET/POST /api/campaigns/<campaign>/scenes` | `/campaigns/<campaign>/scenes/<id>` |
-| NPC | `GET/PATCH /api/campaigns/<campaign>/npcs/<id>` | `GET/POST /api/campaigns/<campaign>/npcs` | `/campaigns/<campaign>/npcs/<id>` |
-| Location | `GET/PATCH /api/campaigns/<campaign>/locations/<id>` | `GET/POST /api/campaigns/<campaign>/locations` | `/campaigns/<campaign>/locations/<id>` |
+| Chapter | `GET/PATCH/DELETE /api/campaigns/<campaign>/chapters/<id>` | `GET/POST /api/campaigns/<campaign>/chapters` | `/campaigns/<campaign>/chapters/<id>` |
+| Scene | `GET/PATCH/DELETE /api/campaigns/<campaign>/scenes/<id>` | `GET/POST /api/campaigns/<campaign>/scenes` | `/campaigns/<campaign>/scenes/<id>` |
+| NPC | `GET/PATCH/DELETE /api/campaigns/<campaign>/npcs/<id>` | `GET/POST /api/campaigns/<campaign>/npcs` | `/campaigns/<campaign>/npcs/<id>` |
+| Location | `GET/PATCH/DELETE /api/campaigns/<campaign>/locations/<id>` | `GET/POST /api/campaigns/<campaign>/locations` | `/campaigns/<campaign>/locations/<id>` |
 | Thread | `GET/PATCH/DELETE /api/campaigns/<campaign>/threads/<id>` | `GET/POST /api/campaigns/<campaign>/threads` | in the chapter overview `/campaigns/<campaign>` |
-| Idea | `GET/PATCH /api/campaigns/<campaign>/ideas/<id>` | `GET/POST /api/campaigns/<campaign>/ideas` | in the debrief and on the mobile start surface |
+| Idea | `GET/PATCH/DELETE /api/campaigns/<campaign>/ideas/<id>` | `GET/POST /api/campaigns/<campaign>/ideas` | in the debrief and on the mobile start surface |
 | Glossary term | `GET/PATCH/DELETE /api/campaigns/<campaign>/glossary-terms/<id>` | `GET/POST /api/campaigns/<campaign>/glossary-terms` | on the glossary page `/campaigns/<campaign>/glossary` |
 | Campaign knowledge | `GET/PATCH/DELETE /api/campaigns/<campaign>/knowledge-items/<id>` | `GET/POST /api/campaigns/<campaign>/knowledge-items` | on the knowledge page `/campaigns/<campaign>/knowledge` |
 | Session | `GET/PATCH/DELETE /api/campaigns/<campaign>/sessions/<id>` | `GET/POST /api/campaigns/<campaign>/sessions` | `/campaigns/<campaign>/sessions/<id>`, live `/campaigns/<campaign>/live` |
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
+
+`DELETE` on a chapter, a scene, an NPC, a location or an idea puts it in the
+**trash** (see trash below); the other `DELETE`s remove their row.
 
 The chapter overview stays `/campaigns/<campaign>`; the list of campaigns
 (`GET /api/campaigns`) responds with its own shape, the name next to the
@@ -144,6 +147,7 @@ schema in `shared/src/chapter.ts`, [decisions/resources](docs/decisions/resource
 | `title` | display name; without a title of its own the chapter shows its id |
 | `status` | `planned`, `active` or `done`; optional |
 | `body` | Markdown of the chapter: what it is about and what the group should achieve |
+| `deletedMs` | when it went to the trash, as an epoch value; missing while it is live (see trash) |
 | `rev` | row version, the guard of every write |
 
 `active` marks the **one** chapter the session view opens: at most one
@@ -190,7 +194,7 @@ is unique per campaign, and its chapter is a field that can change.
 
 | Read/change | Create/list | App route |
 | ----------- | ----------- | --------- |
-| `GET/PATCH /api/campaigns/<campaign>/scenes/<id>` | `GET/POST /api/campaigns/<campaign>/scenes` | `/campaigns/<campaign>/scenes/<id>` |
+| `GET/PATCH/DELETE /api/campaigns/<campaign>/scenes/<id>` | `GET/POST /api/campaigns/<campaign>/scenes` | `/campaigns/<campaign>/scenes/<id>` |
 
 `GET` responds with the scene itself — without `kind`, without `path`, all
 fields side by side:
@@ -224,6 +228,7 @@ fields side by side:
 | `tags` | free; recommended: `combat`, `social`, `stealth`, `travel` |
 | `status` | `draft`, `ready`, `played` or `dropped`; always set. Whether a scene has been played is said by `played` alone (see session) |
 | `body` | Markdown of the scene |
+| `deletedMs` | when it went to the trash, as an epoch value; missing while it is live (see trash) |
 | `rev` | row version, the guard of every write |
 
 An optional field without a value is missing from the response; the three
@@ -260,7 +265,7 @@ An NPC is its own resource with its own type (`Npc`, from the zod schema in
 
 | Read/change | Create/list | App route |
 | ----------- | ----------- | --------- |
-| `GET/PATCH /api/campaigns/<campaign>/npcs/<id>` | `GET/POST /api/campaigns/<campaign>/npcs` | `/campaigns/<campaign>/npcs/<id>` |
+| `GET/PATCH/DELETE /api/campaigns/<campaign>/npcs/<id>` | `GET/POST /api/campaigns/<campaign>/npcs` | `/campaigns/<campaign>/npcs/<id>` |
 
 `GET` responds with the NPC itself — without `kind`, without `path`, all
 fields side by side:
@@ -295,6 +300,7 @@ fields side by side:
 | `appearance` | one or two features; optional |
 | `motivation` | what the character wants, one to three sentences — shown by the NPC card and the preview (under the "wants" label); optional |
 | `body` | Markdown of the NPC |
+| `deletedMs` | when it went to the trash, as an epoch value; missing while it is live (see trash) |
 | `rev` | row version, the guard of every write |
 
 An optional field without a value is missing from the response. It is
@@ -333,7 +339,7 @@ schema in `shared/src/location.ts`, [decisions/resources](docs/decisions/resourc
 
 | Read/change | Create/list | App route |
 | ----------- | ----------- | --------- |
-| `GET/PATCH /api/campaigns/<campaign>/locations/<id>` | `GET/POST /api/campaigns/<campaign>/locations` | `/campaigns/<campaign>/locations/<id>`, list `/campaigns/<campaign>/locations` |
+| `GET/PATCH/DELETE /api/campaigns/<campaign>/locations/<id>` | `GET/POST /api/campaigns/<campaign>/locations` | `/campaigns/<campaign>/locations/<id>`, list `/campaigns/<campaign>/locations` |
 
 `GET` responds with the location itself — without `kind`, without `path`,
 all fields side by side:
@@ -358,6 +364,7 @@ all fields side by side:
 | `roll20Page` | reference to the Roll20 page, not a copy of the map; optional |
 | `atmosphere` | what the place reveals about itself, one to three sentences — shown by the location card and the preview; optional |
 | `body` | Markdown of the location |
+| `deletedMs` | when it went to the trash, as an epoch value; missing while it is live (see trash) |
 | `rev` | row version, the guard of every write |
 
 An optional field without a value is missing from the response. It is
@@ -419,7 +426,8 @@ own type (`Thread`, from the zod schema in `shared/src/thread.ts`,
   with the current thread under `thread`, an unknown id 404, a field a
   thread does not have a 400 that names it.
 - No write to a thread touches the text or `rev` of its chapter, and a
-  chapter write moves no thread. The threads are maintained in the chapter
+  chapter write moves no thread. A thread goes to the trash only with its
+  chapter and comes back with it (see trash). The threads are maintained in the chapter
   overview below the chapter's text: create, tick off, reword, delete. The
   debrief creates them (its accept-as-plot-thread action).
 
@@ -443,6 +451,7 @@ its own type (`Idea`, from the zod schema in `shared/src/idea.ts`,
 | `id` | stable and opaque, assigned by the server on creation |
 | `text` | the idea as it was typed, hashtags included; one line |
 | `done` | ticked off or open |
+| `deletedMs` | when it went to the trash, as an epoch value; missing while it is live (see trash) |
 | `rev` | row version, the guard of every write |
 
 - `GET …/ideas` responds with all ideas in the order in which they were
@@ -453,6 +462,7 @@ its own type (`Idea`, from the zod schema in `shared/src/idea.ts`,
   idea is written once: `done` is the only field a `PATCH` carries, every
   other — `text` included — is a 400 that names it. A stale `rev` is 409
   with the current idea under `idea`, an unknown id 404.
+- `DELETE …/ideas/<id> { rev }` puts it in the trash (see trash).
 
 ### Glossary term
 
@@ -647,12 +657,51 @@ A log line is a quick note of the DM and its own resource (`LogEntry`, from
   Every other field, `text` included, is a 400; a stale `rev` is 409 with
   the current line under `logEntry`.
 
+## Trash
+
+Deleting a chapter, a scene, an NPC, a location or an idea puts it in the
+**trash** ([decisions/trash](docs/decisions/trash.md)); after 30 days the
+server removes it for good. A row in the trash keeps its id, its fields and
+its references and carries `deletedMs`, the moment it went there.
+
+- `DELETE …/<entity>/<id> { rev }` puts the row in the trash and responds
+  with it — `deletedMs` set, `rev` moved. A stale `rev` is 409 with the
+  current row; an unknown id, or one already in the trash, 404.
+- `PATCH …/<entity>/<id> { rev, force?, deletedMs: null }` restores it and
+  responds with it. It is the only write a row in the trash takes: any other
+  `PATCH` is 404, and `deletedMs` takes no other value (400).
+- `GET …/<entities>?deleted=true` lists the rows in the trash, the latest to
+  go there first; without the filter a list holds only live rows.
+- For everything else a row in the trash is **not there**: its `GET` is 404,
+  it is missing from the lists, the tree, the scene order, the search and the
+  generator's context, an `[[id]]` naming it shows as text, and a write that
+  names it (a scene's `npcs`, `location` or `chapter`, a log line's
+  `sceneId`, a thread's `chapter`) is the 400 of a reference that names
+  nothing. Its id stays taken: creating it again is the 409 `slug_taken`, and
+  an empty NPC or location in the trash is not filled.
+- **What still hangs on a row keeps it out of the trash** — 409
+  `trash_blocked` with `blockers`, each `{ kind, id, name }`, and nothing is
+  written: a scene that a log line names (the line with its `session`, its
+  text as `name`), an NPC a live scene names, a location a live scene plays
+  at, a chapter that a live NPC or location names or one of whose scenes a
+  log line names.
+- **A chapter takes its live scenes and threads along**, at the same moment,
+  and its restore brings back exactly those, the scenes at their places in
+  its order. A scene restored on its own lands at the end of its chapter.
+- **What a row names must be live for it to come back:** a scene whose
+  chapter is in the trash is 409 `chapter_in_trash`; a scene whose location
+  or NPC, an NPC or location whose chapter, or a chapter one of whose scenes
+  names something in the trash is 409 `restore_blocked` — both with
+  `blockers`. A chapter that went to the trash `active` comes back `planned`
+  if another chapter has become active in the meantime.
+
 ## References point to existing rows
 
 A reference names a row that exists. Whoever enters an id in a scene's
 `npcs:`, in `location:`, in `chapter:` or in a log line for which there is no
 NPC, no location, no chapter or no scene gets a 400 with the hint to create
-it first — nothing comes into being on the side. Chapters, scenes, NPCs and
+it first — nothing comes into being on the side. A row in the trash counts as
+no row here. Chapters, scenes, NPCs and
 locations come into being through the create actions and through accepting
 a generator proposal, nowhere else.
 

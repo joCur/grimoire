@@ -8,7 +8,7 @@
 // entry write moves the session's.
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { format } from "date-fns";
 import {
   logEntryCreateSchema,
@@ -24,7 +24,7 @@ import { logEntries } from "../db/schema";
 import { mutate } from "./campaigns";
 import { assertSceneRef } from "./scenes";
 import { requireRunningSessionRow, requireSessionRow } from "./session-rows";
-import { nextPos, parseRequest, revConflict } from "./shared";
+import { nextPos, parseRequest, revConflict, type TrashBlocker } from "./shared";
 
 /** One stored log entry row. */
 type LogEntryRow = typeof logEntries.$inferSelect;
@@ -47,6 +47,27 @@ function renderLogEntry(row: LogEntryRow): LogEntry {
     reviewed: row.reviewed !== 0,
     rev: row.rev,
   };
+}
+
+/**
+ * The log entries that name one of these scenes — what keeps a scene, and
+ * its chapter, out of the trash (decisions/trash): a note of the evening
+ * keeps naming the scene it was taken in. Each by its text, beside its
+ * session.
+ */
+export function logEntriesNamingScenes(
+  tx: GrimoireDb,
+  campaign: string,
+  sceneIds: readonly string[],
+): TrashBlocker[] {
+  if (sceneIds.length === 0) return [];
+  return tx
+    .select()
+    .from(logEntries)
+    .where(and(eq(logEntries.campaignId, campaign), inArray(logEntries.sceneId, [...sceneIds])))
+    .orderBy(asc(logEntries.sessionId), asc(logEntries.pos), asc(logEntries.id))
+    .all()
+    .map((row) => ({ kind: "log-entry", id: row.id, name: row.text, session: row.sessionId }));
 }
 
 function logEntryRowsOf(db: GrimoireDb, campaign: string, sessionId: string): LogEntryRow[] {

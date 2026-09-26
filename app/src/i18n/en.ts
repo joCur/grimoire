@@ -291,6 +291,12 @@ export const en: Messages = {
   "server.session_not_empty": "This session has content — end it instead of discarding it.",
   "server.session_ended":
     "This session has already ended, so nothing was saved. Start a new session to carry on.",
+  "server.trash_blocked":
+    "This cannot go to the trash because something still refers to it. Remove those references first.",
+  "server.chapter_in_trash":
+    "This scene cannot be restored because its chapter is in the trash. Restore the chapter first.",
+  "server.restore_blocked":
+    "This cannot be restored because something it refers to is in the trash. Restore that first.",
   "server.rev_conflict": "Changed in the meantime — reload before saving.",
   "server.nothing_to_write": "Nothing to save.",
   "server.body_not_editable": "This list has no editable text — it is maintained row by row.",

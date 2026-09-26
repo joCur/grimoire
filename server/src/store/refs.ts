@@ -32,7 +32,7 @@
 // the expansion may not touch them. That rule lives once,
 // in @grimoire/shared/refs, and the renderer skips the same regions.
 
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, eq, isNull, like, sql } from "drizzle-orm";
 import {
   REF_KINDS,
   bodyReferencesSlug,
@@ -47,7 +47,11 @@ import { campaigns, chapters, locations, npcs, scenes } from "../db/schema";
 export const REF_BODY_KINDS = ["scene", "npc", "location", "chapter", "campaign"] as const;
 export type RefBodyKind = (typeof REF_BODY_KINDS)[number];
 
-/** Display name of one slug IN ONE KIND, or undefined when it has no row. */
+/**
+ * Display name of one slug IN ONE KIND, or undefined when it has no live row:
+ * a row in the trash is not there for a reference (decisions/trash), so its
+ * `[[id]]` reads like one that names nothing.
+ */
 function displayNameOfKind(
   tx: GrimoireDb,
   campaign: string,
@@ -58,7 +62,7 @@ function displayNameOfKind(
     const row = tx
       .select({ name: npcs.name })
       .from(npcs)
-      .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, slug)))
+      .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, slug), isNull(npcs.deletedAt)))
       .all()[0];
     return row === undefined ? undefined : row.name === "" ? slug : row.name;
   }
@@ -66,14 +70,16 @@ function displayNameOfKind(
     const row = tx
       .select({ name: locations.name })
       .from(locations)
-      .where(and(eq(locations.campaignId, campaign), eq(locations.id, slug)))
+      .where(
+        and(eq(locations.campaignId, campaign), eq(locations.id, slug), isNull(locations.deletedAt)),
+      )
       .all()[0];
     return row === undefined ? undefined : row.name === "" ? slug : row.name;
   }
   const row = tx
     .select({ title: scenes.title })
     .from(scenes)
-    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, slug)))
+    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, slug), isNull(scenes.deletedAt)))
     .all()[0];
   return row === undefined ? undefined : row.title === "" ? slug : row.title;
 }
@@ -196,7 +202,8 @@ interface ReferrerRow {
  * The `like` is only a PRE-FILTER — SQL cannot tell prose from code, so every
  * candidate is confirmed in JS with the shared grammar. The campaign row is
  * keyed by its own id (it IS the campaign) and therefore not part of the
- * generic table loop.
+ * generic table loop. A row in the trash has no index row to keep current,
+ * so it is no candidate.
  */
 function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerRow[] {
   const needle = `%${refSource(slug)}%`;
@@ -215,7 +222,7 @@ function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerR
     for (const row of tx
       .select({ id: table.id, body: prose })
       .from(table)
-      .where(and(eq(table.campaignId, campaign), like(prose, needle)))
+      .where(and(eq(table.campaignId, campaign), isNull(table.deletedAt), like(prose, needle)))
       .orderBy(table.id)
       .all()) {
       rows.push({ kind, id: row.id, body: row.body });
