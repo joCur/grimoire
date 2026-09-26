@@ -558,10 +558,8 @@ export const pauses = sqliteTable(
  *
  * COLUMNS ONLY: the note's time, the scene it was taken in, its text and the
  * review flag. `id` is an OPAQUE random string (store/log-entries.ts), unique
- * within its session; `pos` is the order of the log. `hash` is the short
- * sha256 of the row's canonical line `- HH:MM (scene-id) text`
- * (store/log-entries.ts `logLineId`). `rev` is the entry's own guard
- * (rule 4).
+ * within its session; `pos` is the order of the log. `rev` is the entry's
+ * own guard (rule 4).
  */
 export const logEntries = sqliteTable(
   "log_entries",
@@ -580,8 +578,6 @@ export const logEntries = sqliteTable(
     sceneId: text("scene_id"),
     /** The note as the DM typed it, hashtags included (README's vocabulary). */
     text: text("text").notNull().default(""),
-    /** The short hash of the row's canonical line — see the note above. */
-    hash: text("hash").notNull().default(""),
     reviewed: integer("reviewed").notNull().default(0),
     pos: integer("pos").notNull(),
     rev: revColumn(),

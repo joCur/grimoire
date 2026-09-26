@@ -7,10 +7,8 @@
 // fixtures, with the system clock faked.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
-import { createHash } from "node:crypto";
 import type { LogEntry } from "@grimoire/shared/log-entry";
 import type { Session } from "@grimoire/shared/session";
-import { logLineId } from "../src/store/log-entries";
 import { dropStore, seedStore } from "./support/store";
 import {
   FIXTURE_SESSION,
@@ -142,15 +140,6 @@ describe("taking a note — POST …/sessions/:id/log", () => {
     expect(
       (await send("POST", `/api/campaigns/nope/sessions/${session.id}/log`, { text: "x" })).status,
     ).toBe(404);
-  });
-
-  test("the row's hash is the short sha256 of its canonical line", () => {
-    const sha8 = (value: string) =>
-      createHash("sha256").update(value, "utf8").digest("hex").slice(0, 8);
-    expect(logLineId("19:52", "arrival", "Spuren gefunden")).toBe(
-      sha8("- 19:52 (arrival) Spuren gefunden"),
-    );
-    expect(logLineId(null, null, "Spuren")).toBe(sha8("- Spuren"));
   });
 });
 

@@ -7,7 +7,7 @@
 // is the review's `reviewed`. Every entry carries its own guard `rev`, and no
 // entry write moves the session's.
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { format } from "date-fns";
 import {
@@ -31,23 +31,6 @@ type LogEntryRow = typeof logEntries.$inferSelect;
 
 /** `HH:mm` in the server's local time — the time a note carries. */
 const LOCAL_TIME = "HH:mm";
-
-// --- the row's hash -----------------------------------------------------------
-
-/**
- * The `hash` column of a log entry: eight hex characters of the sha256 of its
- * canonical line — `- HH:MM (scene-id) text`, the three content columns in
- * one deterministic spelling. Two entries with the same note in the same
- * minute and scene share it; the id is what tells them apart.
- */
-export function logLineId(at: string | null, sceneId: string | null, text: string): string {
-  const time = at === null || at === "" ? "" : `${at} `;
-  const scene = sceneId === null || sceneId === "" ? "" : `(${sceneId}) `;
-  return createHash("sha256")
-    .update(`- ${time}${scene}${text}`, "utf8")
-    .digest("hex")
-    .slice(0, 8);
-}
 
 // --- rendering and reading ----------------------------------------------------
 
@@ -139,7 +122,6 @@ export async function createLogEntry(
         at,
         sceneId,
         text: request.text,
-        hash: logLineId(at, sceneId, request.text),
         reviewed: 0,
         pos: nextPos(logEntryRowsOf(tx, campaign, sessionId)),
       })
@@ -228,7 +210,6 @@ export function insertLogEntrySeed(
       at,
       sceneId,
       text: seed.text,
-      hash: logLineId(at, sceneId, seed.text),
       reviewed: seed.reviewed ? 1 : 0,
       pos: nextPos(logEntryRowsOf(tx, campaign, sessionId)),
     })

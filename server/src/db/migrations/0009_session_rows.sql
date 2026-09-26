@@ -5,7 +5,7 @@
 -->
 --> The three tables are rebuilt — the pauses as `pauses`, the played scenes as
 --> `played_scenes` —, and every row keeps its session, its content and its
---> order.
+--> order. A log entry is named by its id alone, so its `hash` column goes.
 CREATE TABLE `pauses` (
 	`campaign_id` text NOT NULL,
 	`session_id` text NOT NULL,
@@ -60,7 +60,6 @@ CREATE TABLE `__new_log_entries` (
 	`at` text,
 	`scene_id` text,
 	`text` text DEFAULT '' NOT NULL,
-	`hash` text DEFAULT '' NOT NULL,
 	`reviewed` integer DEFAULT 0 NOT NULL,
 	`pos` integer NOT NULL,
 	`rev` integer DEFAULT 1 NOT NULL,
@@ -68,7 +67,7 @@ CREATE TABLE `__new_log_entries` (
 	FOREIGN KEY (`campaign_id`,`session_id`) REFERENCES `sessions`(`campaign_id`,`id`) ON UPDATE cascade ON DELETE cascade,
 	FOREIGN KEY (`campaign_id`,`scene_id`) REFERENCES `scenes`(`campaign_id`,`id`) ON UPDATE cascade ON DELETE no action
 );--> statement-breakpoint
-INSERT INTO `__new_log_entries` (`campaign_id`, `session_id`, `id`, `at`, `scene_id`, `text`, `hash`, `reviewed`, `pos`)
+INSERT INTO `__new_log_entries` (`campaign_id`, `session_id`, `id`, `at`, `scene_id`, `text`, `reviewed`, `pos`)
 SELECT
   `campaign_id`,
   `session_id`,
@@ -79,7 +78,6 @@ SELECT
   `at`,
   `scene_id`,
   `text`,
-  `hash`,
   `reviewed`,
   `pos`
 FROM `log_entries`;--> statement-breakpoint

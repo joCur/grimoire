@@ -772,14 +772,6 @@
           "autoincrement": false,
           "default": "''"
         },
-        "hash": {
-          "name": "hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
         "reviewed": {
           "name": "reviewed",
           "type": "integer",
