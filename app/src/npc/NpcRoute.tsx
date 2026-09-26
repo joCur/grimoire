@@ -12,9 +12,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 
-import { fetchTree } from "@/api";
+import { fetchTree, isNotFound } from "@/api";
 import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
 
@@ -32,7 +33,7 @@ export function NpcRoute({
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
-  const { data, isPending } = useQuery({
+  const { data, isPending, error } = useQuery({
     ...npcQuery(campaign, id),
     enabled: campaign !== "" && id !== "",
   });
@@ -57,6 +58,7 @@ export function NpcRoute({
   // The error screen only when there is NOTHING to show: a failing background
   // refetch keeps the cached npc — and an open editor with it.
   if (data === undefined) {
+    if (isNotFound(error)) return <NotFound campaign={campaign} />;
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
         {t("scene.notLoadable")}

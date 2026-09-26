@@ -37,6 +37,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Whether a failed read was the server saying the row does not exist. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
 /** Build the ApiError for a failed response, keeping the JSON error body. */
 async function failure(what: string, response: Response): Promise<ApiError> {
   let details: Record<string, unknown> = {};

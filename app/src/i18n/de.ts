@@ -29,6 +29,13 @@ export const de = {
   "common.serverDown":
     "Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.",
 
+  // --- not-found view (components/NotFound.tsx) -----------------------------
+  "notFound.title": "Diese Seite gibt es nicht",
+  "notFound.body":
+    "Unter dieser Adresse liegt nichts. Vielleicht ist der Link vertippt, oder das Verlinkte wurde gelöscht.",
+  "notFound.toCampaign": "Zur Kapitelübersicht",
+  "notFound.toStart": "Zum Anfang",
+
   // --- language switch (campaign switcher menu) -----------------------------
   "language.heading": "Sprache",
   "language.de": "Deutsch",
