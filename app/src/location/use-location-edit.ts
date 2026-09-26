@@ -13,7 +13,7 @@
 //                  the answers are `reload` (continue from what is stored) and
 //                  `forceSave` (write the same fields on top of it).
 
-import type { Location, LocationChange, LocationPatch } from "@grimoire/shared/types";
+import type { Location, LocationChange, LocationPatch } from "@grimoire/shared/location";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 

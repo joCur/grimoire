@@ -9,8 +9,8 @@
 // Type and status are selects over their closed lists and nothing else: a
 // scene always has both, so there is no empty choice.
 
-import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
-import type { CampaignTree, SceneType } from "@grimoire/shared/types";
+import { SCENE_STATUSES, SCENE_TYPES, type SceneType } from "@grimoire/shared/scene";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 
 import { ChipsField } from "@/components/fields/ChipsField";
 import { fieldId } from "@/components/fields/FieldRow";

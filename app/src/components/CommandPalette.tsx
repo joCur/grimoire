@@ -6,7 +6,7 @@
 // server does all filtering/ranking; client-side re-filtering would fight
 // the server's bm25 ordering (FTS5).
 
-import type { SearchResult } from "@grimoire/shared/types";
+import type { SearchResult } from "@grimoire/shared/search";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";

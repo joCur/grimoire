@@ -2,7 +2,7 @@
 // the location read straight from its own type (ADR #31) — name, atmosphere,
 // the Roll20 reference line and the text, never the scene type overline.
 
-import type { Location } from "@grimoire/shared/types";
+import type { Location } from "@grimoire/shared/location";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

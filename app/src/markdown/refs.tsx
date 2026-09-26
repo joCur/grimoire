@@ -24,13 +24,13 @@
 // This module only ASSIGNS a slug to what it names — an npc, a location or a
 // scene — out of the tree. Where the reference leads and what its preview
 // shows come from the one that is named (lib/open-target.ts,
-// components/EntityPreview.tsx, and from there the slice of each).
+// components/RefTargetPreview.tsx, and from there the slice of each).
 
 import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import { ENTITY_REF_KINDS, type EntityRefKind } from "@grimoire/shared/refs";
 
 import { fetchTree } from "@/api";
@@ -43,27 +43,27 @@ import { RefPreview, useCanHover, type RefPreviewTrigger } from "./ref-preview";
  * What a slug resolves to: which of the three it names, and its CURRENT
  * display name. Each is its own resource, reached by its id (ADR #31).
  */
-export interface ResolvedEntityRef {
+export interface ResolvedRef {
   kind: EntityRefKind;
   slug: string;
   name: string;
 }
 
 /** What a resolved reference opens. */
-export function refTarget(target: ResolvedEntityRef): OpenTarget {
+export function refTarget(target: ResolvedRef): OpenTarget {
   return { kind: target.kind, id: target.slug };
 }
 
-interface EntityRefContextValue {
+interface RefContextValue {
   campaign: string;
-  resolve: (slug: string) => ResolvedEntityRef | undefined;
+  resolve: (slug: string) => ResolvedRef | undefined;
   /** Live view only: open the entity in the drawer instead of navigating. */
   onOpen?: (target: OpenTarget) => void;
 }
 
-const NO_REFS: EntityRefContextValue = { campaign: "", resolve: () => undefined };
+const NO_REFS: RefContextValue = { campaign: "", resolve: () => undefined };
 
-const EntityRefContext = createContext<EntityRefContextValue>(NO_REFS);
+const RefContext = createContext<RefContextValue>(NO_REFS);
 
 /**
  * Build the slug→entity lookup from a tree.
@@ -72,13 +72,13 @@ const EntityRefContext = createContext<EntityRefContextValue>(NO_REFS);
  * per kind but not across kinds, so the first kind that knows a slug wins —
  * see @grimoire/shared/refs for why the order is this one.
  */
-export function entityRefIndex(
+export function refIndex(
   tree: CampaignTree | undefined,
-): Map<string, ResolvedEntityRef> {
-  const index = new Map<string, ResolvedEntityRef>();
+): Map<string, ResolvedRef> {
+  const index = new Map<string, ResolvedRef>();
   if (tree === undefined) return index;
 
-  const put = (ref: ResolvedEntityRef): void => {
+  const put = (ref: ResolvedRef): void => {
     if (index.has(ref.slug)) return; // an earlier (higher-priority) kind won
     index.set(ref.slug, { ...ref, name: ref.name === "" ? ref.slug : ref.name });
   };
@@ -103,24 +103,24 @@ export function entityRefIndex(
 
 /**
  * The resolver as a plain value — the seam the render tests use, and what
- * `EntityRefProvider` fills from the tree query.
+ * `RefProvider` fills from the tree query.
  */
-export function EntityRefScope({
+export function RefScope({
   campaign,
   index,
   onOpen,
   children,
 }: {
   campaign: string;
-  index: Map<string, ResolvedEntityRef>;
+  index: Map<string, ResolvedRef>;
   onOpen?: (target: OpenTarget) => void;
   children: ReactNode;
 }) {
-  const value = useMemo<EntityRefContextValue>(
+  const value = useMemo<RefContextValue>(
     () => ({ campaign, resolve: (slug) => index.get(slug), ...(onOpen ? { onOpen } : {}) }),
     [campaign, index, onOpen],
   );
-  return <EntityRefContext.Provider value={value}>{children}</EntityRefContext.Provider>;
+  return <RefContext.Provider value={value}>{children}</RefContext.Provider>;
 }
 
 /**
@@ -128,7 +128,7 @@ export function EntityRefScope({
  * every other view uses, so this adds no extra request — and a changed
  * display name reaches every rendered body through the existing version poll.
  */
-export function EntityRefProvider({
+export function RefProvider({
   campaign,
   children,
 }: {
@@ -140,11 +140,11 @@ export function EntityRefProvider({
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  const index = useMemo(() => entityRefIndex(tree.data), [tree.data]);
+  const index = useMemo(() => refIndex(tree.data), [tree.data]);
   return (
-    <EntityRefScope campaign={campaign} index={index}>
+    <RefScope campaign={campaign} index={index}>
       {children}
-    </EntityRefScope>
+    </RefScope>
   );
 }
 
@@ -152,20 +152,20 @@ export function EntityRefProvider({
  * Live-view wrapper: keeps the resolver, redirects the CLICK into the drawer.
  * Nested inside the provider, so the tree is not fetched twice.
  */
-export function EntityRefDrawerTarget({
+export function RefDrawerTarget({
   onOpen,
   children,
 }: {
   onOpen: (target: OpenTarget) => void;
   children: ReactNode;
 }) {
-  const outer = useContext(EntityRefContext);
-  const value = useMemo<EntityRefContextValue>(() => ({ ...outer, onOpen }), [outer, onOpen]);
-  return <EntityRefContext.Provider value={value}>{children}</EntityRefContext.Provider>;
+  const outer = useContext(RefContext);
+  const value = useMemo<RefContextValue>(() => ({ ...outer, onOpen }), [outer, onOpen]);
+  return <RefContext.Provider value={value}>{children}</RefContext.Provider>;
 }
 
-export function useEntityRefs(): EntityRefContextValue {
-  return useContext(EntityRefContext);
+export function useRefs(): RefContextValue {
+  return useContext(RefContext);
 }
 
 /**
@@ -188,8 +188,8 @@ const REF_CLASS =
  * reference — the DM reads "Falls Jorna gewarnt wurde", not `[[jorna]]` — but
  * it is plain text, so the click stays the toggle's.
  */
-export function EntityRefName({ slug, fallback }: { slug: string; fallback: ReactNode }) {
-  const target = useEntityRefs().resolve(slug);
+export function RefName({ slug, fallback }: { slug: string; fallback: ReactNode }) {
+  const target = useRefs().resolve(slug);
   return <>{target === undefined ? fallback : target.name}</>;
 }
 
@@ -197,8 +197,8 @@ export function EntityRefName({ slug, fallback }: { slug: string; fallback: Reac
  * One `[[slug]]` in a body. `fallback` is the literal source text the plugin
  * put inside the span — what an unresolved reference keeps showing.
  */
-export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNode }) {
-  const { campaign, resolve, onOpen } = useEntityRefs();
+export function RefLink({ slug, fallback }: { slug: string; fallback: ReactNode }) {
+  const { campaign, resolve, onOpen } = useRefs();
   const t = useT();
   const canHover = useCanHover();
   const target = resolve(slug);

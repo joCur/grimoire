@@ -11,7 +11,7 @@
 // a query or a DOM.
 
 import { expandBodyEntityRefs } from "@grimoire/shared/refs";
-import type { NpcProposal, NpcStatus } from "@grimoire/shared/types";
+import type { NpcProposal, NpcStatus } from "@grimoire/shared/npc";
 
 export interface NpcExcerpt {
   role?: string;

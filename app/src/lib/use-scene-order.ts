@@ -12,7 +12,7 @@
 // control, not the properties dialog: it reports the stale state and fetches
 // the current one (critical path 7). The message is quiet and inline.
 
-import type { CampaignTree, ChapterNode } from "@grimoire/shared/types";
+import type { CampaignTree, ChapterNode } from "@grimoire/shared/campaign-tree";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 

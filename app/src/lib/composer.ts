@@ -25,7 +25,7 @@
 // its If-section in this slice) and nested sections (blocks.ts does not model
 // them — a second `## If:` ends the first).
 
-import { CALLOUT_KINDS } from "@grimoire/shared/types";
+import { CALLOUT_KINDS } from "@grimoire/shared/callouts";
 
 import type { Translate } from "@/i18n";
 

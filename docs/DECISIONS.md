@@ -1074,8 +1074,9 @@ ihn weiter im Fehlerbody trägt.
 **Entscheidung:** Die vier geschlossenen Felder des Datenmodells —
 `scenes.status`, `scenes.type`, `npcs.status`, `chapters.status` — sind
 `CHECK`-Constraints ihrer Spalten. Die erlaubten Werte stehen **einmal**, in
-`shared/src/types.ts` (`SCENE_STATUSES`, `SCENE_TYPES`, `NPC_STATUSES`,
-`CHAPTER_STATUSES`); das Schema baut die Constraints aus genau diesen Listen,
+den Modulen ihrer Entität (`SCENE_STATUSES` und `SCENE_TYPES` in
+`shared/src/scene.ts`, `NPC_STATUSES` in `npc.ts`, `CHAPTER_STATUSES` in
+`chapter.ts`); das Schema baut die Constraints aus genau diesen Listen,
 wiederholt sie also nicht. Ein fremder Wert auf dem Schreibweg ist eine 400
 mit `status_not_allowed` bzw. `scene_type_not_allowed`, nicht ein
 `CHECK constraint failed` aus SQLite. Vor der Migration prüft ein

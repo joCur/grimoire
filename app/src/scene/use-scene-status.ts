@@ -7,7 +7,7 @@
 // dimmed while the write runs — which is the write's variables, no second
 // state.
 
-import type { SceneStatus } from "@grimoire/shared/types";
+import type { SceneStatus } from "@grimoire/shared/scene";
 
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 import { withRev } from "@/lib/write-with-rev";

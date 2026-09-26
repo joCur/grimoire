@@ -30,7 +30,8 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { NpcChange, SceneChange } from "@grimoire/shared/types";
+import type { NpcChange } from "@grimoire/shared/npc";
+import type { SceneChange } from "@grimoire/shared/scene";
 import type {
   GeneratorJob,
   GeneratorJobReviewPatch,

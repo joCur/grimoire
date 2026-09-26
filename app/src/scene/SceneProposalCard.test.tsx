@@ -4,7 +4,8 @@
 // fields of its dialog with their labels, its label as a read-only id, and
 // the text on the body editor's surfaces.
 
-import type { CampaignTree, SceneProposal } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 

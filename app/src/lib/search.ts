@@ -2,7 +2,8 @@
 // icon (contingency scenes get the fork, like the chapter overview), result →
 // route. Kept out of the component for unit tests.
 
-import type { CampaignTree, SearchResult } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { SearchResult } from "@grimoire/shared/search";
 import {
   BookA,
   BookMarked,

@@ -14,7 +14,7 @@
 // mobile start surface instead of the overview, so this control is not on the
 // phone at all.
 
-import type { ChapterStatus } from "@grimoire/shared/types";
+import type { ChapterStatus } from "@grimoire/shared/chapter";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 

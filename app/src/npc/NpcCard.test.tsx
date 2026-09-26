@@ -14,9 +14,9 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 
-import type { Npc } from "@grimoire/shared/types";
+import type { Npc } from "@grimoire/shared/npc";
 
-import { EntityRefScope, type ResolvedEntityRef } from "@/markdown/entity-refs";
+import { RefScope, type ResolvedRef } from "@/markdown/refs";
 
 import { NpcCard } from "./NpcCard";
 import { npcKey } from "./npc-query";
@@ -46,7 +46,7 @@ describe("NpcCard — a reference that is no id", () => {
 
 describe("NpcCard — a reference inside the excerpt", () => {
   // The tree's answer for the two slugs the rows below mention.
-  const index = new Map<string, ResolvedEntityRef>([
+  const index = new Map<string, ResolvedRef>([
     ["fenn", { kind: "npc", slug: "fenn", name: "Fenn" }],
     ["bucht", { kind: "location", slug: "bucht", name: "Die Nordbucht" }],
   ]);
@@ -63,9 +63,9 @@ describe("NpcCard — a reference inside the excerpt", () => {
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <EntityRefScope campaign="beispiel" index={index}>
+          <RefScope campaign="beispiel" index={index}>
             {card}
-          </EntityRefScope>
+          </RefScope>
         </MemoryRouter>
       </QueryClientProvider>,
     );

@@ -11,13 +11,11 @@
 // here — `startJob` among them, because an augment run starts on the
 // resource of its scene, npc or location.
 
-import type {
-  CampaignSummary,
-  CampaignTree,
-  InstanceSettings,
-  SceneOrderResponse,
-  SearchResponse,
-} from "@grimoire/shared/types";
+import type { CampaignSummary } from "@grimoire/shared/campaign";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { InstanceSettings } from "@grimoire/shared/settings";
+import type { SceneOrderResponse } from "@grimoire/shared/chapter";
+import type { SearchResponse } from "@grimoire/shared/search";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 export class ApiError extends Error {

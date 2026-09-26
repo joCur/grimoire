@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import type { SceneProposal } from "@grimoire/shared/types";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import { translator } from "@/i18n/format";

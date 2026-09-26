@@ -2,7 +2,7 @@
 // what is written at all, and the lines that block a save. All pure — the
 // write itself is the scene's editing session (./use-scene-edit.ts).
 
-import type { SceneProposal } from "@grimoire/shared/types";
+import type { SceneProposal } from "@grimoire/shared/scene";
 import { describe, expect, test } from "bun:test";
 
 import type { FieldOption } from "@/components/fields/SelectField";

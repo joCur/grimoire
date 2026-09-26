@@ -3,7 +3,7 @@
 // a link in the reading views, a button in the live mode.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
@@ -12,7 +12,7 @@ import { I18nProvider } from "@/i18n";
 import type { OpenTarget } from "@/lib/open-target";
 
 import { Markdown } from "./Markdown";
-import { EntityRefScope, entityRefIndex } from "./entity-refs";
+import { RefScope, refIndex } from "./refs";
 
 const TREE: CampaignTree = {
   campaign: "beispiel",
@@ -54,8 +54,8 @@ const TREE: CampaignTree = {
   sessions: [],
 };
 
-describe("entityRefIndex", () => {
-  const index = entityRefIndex(TREE);
+describe("refIndex", () => {
+  const index = refIndex(TREE);
 
   test("a location resolves by its id — its own resource, no address (ADR #31)", () => {
     expect(index.get("leuchtturm")).toEqual({
@@ -79,8 +79,8 @@ describe("entityRefIndex", () => {
   });
 
   test("a scene resolves by its id when no npc or location claims the slug", () => {
-    expect(entityRefIndex(TREE).get("jorna")?.name).toBe("Hafenmeisterin Jorna");
-    const sceneOnly = entityRefIndex({ ...TREE, npcs: [], locations: [] });
+    expect(refIndex(TREE).get("jorna")?.name).toBe("Hafenmeisterin Jorna");
+    const sceneOnly = refIndex({ ...TREE, npcs: [], locations: [] });
     expect(sceneOnly.get("lighthouse-arrival")).toEqual({
       kind: "scene",
       slug: "lighthouse-arrival",
@@ -93,7 +93,7 @@ describe("entityRefIndex", () => {
   });
 
   test("no tree yet: nothing resolves (and nothing throws)", () => {
-    expect(entityRefIndex(undefined).size).toBe(0);
+    expect(refIndex(undefined).size).toBe(0);
   });
 });
 
@@ -101,9 +101,9 @@ describe("rendered references", () => {
   const render = (markdown: string, onOpen?: (target: OpenTarget) => void) =>
     renderToStaticMarkup(
       <MemoryRouter>
-        <EntityRefScope campaign="beispiel" index={entityRefIndex(TREE)} onOpen={onOpen}>
+        <RefScope campaign="beispiel" index={refIndex(TREE)} onOpen={onOpen}>
           <Markdown>{markdown}</Markdown>
-        </EntityRefScope>
+        </RefScope>
       </MemoryRouter>,
     );
 
@@ -149,9 +149,9 @@ describe("rendered references", () => {
       <QueryClientProvider client={client}>
         <I18nProvider>
           <MemoryRouter>
-            <EntityRefScope campaign="beispiel" index={entityRefIndex(TREE)}>
+            <RefScope campaign="beispiel" index={refIndex(TREE)}>
               <Markdown>{"[[leuchtturm]] und [[jorna]]"}</Markdown>
-            </EntityRefScope>
+            </RefScope>
           </MemoryRouter>
         </I18nProvider>
       </QueryClientProvider>,

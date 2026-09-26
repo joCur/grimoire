@@ -113,7 +113,6 @@ export function Topbar() {
   const liveMatch = matchPath("/campaigns/:campaign/live", pathname);
   const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
   const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
-  const listMatch = matchPath("/campaigns/:campaign/list/*", pathname);
   // A chapter's, a scene's, an npc's and a location's own routes — the
   // reading view, and for the npc and the location their list (ADR #31).
   const chaptersMatch = matchPath("/campaigns/:campaign/chapters/*", pathname);
@@ -135,7 +134,6 @@ export function Topbar() {
     campaignOf(liveMatch) ??
     campaignOf(reviewMatch) ??
     campaignOf(generateMatch) ??
-    campaignOf(listMatch) ??
     campaignOf(npcsMatch) ??
     campaignOf(locationsMatch) ??
     campaignOf(knowledgeMatch) ??
@@ -161,19 +159,18 @@ export function Topbar() {
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
-  const listKind = listMatch?.params["*"] ?? "";
 
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Which nav entry is the current view — the ONE thing that differs between
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
+  const isScenes = campaignOf(scenesMatch) !== undefined;
   const isNpcs = campaignOf(npcsMatch) !== undefined;
   const isLocations = campaignOf(locationsMatch) !== undefined;
   const section = navSection({
     isChapterOverview,
-    listKind,
     isChapter,
-    isScene,
+    isScenes,
     isNpcs,
     isLocations,
   });

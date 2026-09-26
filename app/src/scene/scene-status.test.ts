@@ -3,8 +3,7 @@
 // NOTHING then, so the UI must re-read the scene and let the next attempt
 // carry the fresh rev.
 
-import { SCENE_STATUSES } from "@grimoire/shared/scene";
-import type { Scene, SceneStatus } from "@grimoire/shared/types";
+import { SCENE_STATUSES, type Scene, type SceneStatus } from "@grimoire/shared/scene";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";

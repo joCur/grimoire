@@ -20,7 +20,7 @@ import { PREVIEW_BOUNDARY_ATTR } from "@/markdown/ref-preview";
 import { NpcDrawerBody } from "@/npc/NpcDrawerBody";
 import { SceneDrawerBody } from "@/scene/SceneDrawerBody";
 
-export function LiveEntityDrawer({
+export function LiveDrawer({
   campaign,
   target,
   onClose,

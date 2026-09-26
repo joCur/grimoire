@@ -74,7 +74,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
           {t("lookup.heading")}
         </p>
         <BrowseRow
-          to={`/campaigns/${campaign}/list/scenes`}
+          to={`/campaigns/${campaign}/scenes`}
           icon={Bookmark}
           label={t("browse.title.scenes")}
           meta={countLabel(sceneCount, "mobileStart.count.scenes")}

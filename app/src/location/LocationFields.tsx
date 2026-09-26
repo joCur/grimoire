@@ -2,7 +2,7 @@
 // the `atmosphere` its edit surface writes beside the text (ADR #29). Plain
 // rendering over the form's values (./location-form.ts).
 
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 
 import { fieldId } from "@/components/fields/FieldRow";
 import { ReferenceField, ReferenceNote } from "@/components/fields/ReferenceField";

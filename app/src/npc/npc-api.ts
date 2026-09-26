@@ -1,7 +1,7 @@
 // The API client of an npc (ADR #31): its resource — read, list, create,
 // write — its write conflict and the augment run on it. Built from the shared HTTP helpers (../api.ts).
 
-import type { Npc, NpcPatch } from "@grimoire/shared/types";
+import type { Npc, NpcPatch } from "@grimoire/shared/npc";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {

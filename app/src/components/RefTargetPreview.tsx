@@ -15,17 +15,17 @@
 // inside a short form are plain text.
 
 import { LocationPreview } from "@/location/LocationPreview";
-import type { ResolvedEntityRef } from "@/markdown/entity-refs";
+import type { ResolvedRef } from "@/markdown/refs";
 import { NpcPreview } from "@/npc/NpcPreview";
 import { ScenePreview } from "@/scene/ScenePreview";
 
-export function EntityPreview({
+export function RefTargetPreview({
   campaign,
   target,
   nameOf,
 }: {
   campaign: string;
-  target: ResolvedEntityRef;
+  target: ResolvedRef;
   /** Display name of a slug — references inside a short form read as names. */
   nameOf: (slug: string) => string | undefined;
 }) {

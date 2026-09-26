@@ -35,7 +35,7 @@ export interface LookupTarget {
 export const LOOKUP_TARGETS: readonly LookupTarget[] = [
   {
     id: "scenes",
-    href: (c) => `/campaigns/${c}/list/scenes`,
+    href: (c) => `/campaigns/${c}/scenes`,
     icon: Bookmark,
     label: "browse.title.scenes",
   },

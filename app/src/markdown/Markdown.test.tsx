@@ -15,7 +15,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { CALLOUT_KINDS } from "@grimoire/shared/types";
+import { CALLOUT_KINDS } from "@grimoire/shared/callouts";
 
 import { Markdown } from "./Markdown";
 

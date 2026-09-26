@@ -10,7 +10,8 @@
 // own. A written scene is read-only here: it is a scene now, and its reading
 // view's own editor owns it.
 
-import type { CampaignTree, SceneChange, SceneProposal } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { SceneChange, SceneProposal } from "@grimoire/shared/scene";
 import { Bookmark, Check, GitFork, MapPin } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";

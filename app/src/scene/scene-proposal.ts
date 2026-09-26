@@ -3,8 +3,7 @@
 // first, the buffer the DM is typing in last (`withSceneChange`). Pure, so
 // the rule is unit-testable.
 
-import { withSceneChange } from "@grimoire/shared/scene";
-import type { SceneChange, SceneProposal } from "@grimoire/shared/types";
+import { withSceneChange, type SceneChange, type SceneProposal } from "@grimoire/shared/scene";
 
 export function sceneOf(
   proposed: SceneProposal,

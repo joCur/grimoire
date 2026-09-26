@@ -1,7 +1,8 @@
 // Small lookups against the campaign tree (display-name resolution) and the
 // campaign list (which campaign "/" opens).
 
-import type { CampaignSummary, CampaignTree } from "@grimoire/shared/types";
+import type { CampaignSummary } from "@grimoire/shared/campaign";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import { isValid, parseISO } from "date-fns";
 
 /**

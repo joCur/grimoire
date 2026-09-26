@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
-import type { Npc } from "@grimoire/shared/types";
+import type { Npc } from "@grimoire/shared/npc";
 
 import { npcExcerpt } from "./npc-excerpt";
 

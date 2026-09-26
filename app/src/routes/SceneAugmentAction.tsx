@@ -4,8 +4,7 @@
 // scene's own editing session as the accepting write. App.tsx hands it to the
 // scene's route as its augment slot.
 
-import { sceneChangeSchema } from "@grimoire/shared/scene";
-import type { Scene } from "@grimoire/shared/types";
+import { sceneChangeSchema, type Scene } from "@grimoire/shared/scene";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {

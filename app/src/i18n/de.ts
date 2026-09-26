@@ -365,7 +365,7 @@ export const de = {
   "status.npc.missing": "Vermisst",
   "status.npc.unknown": "Unbekannt",
 
-  // --- browse list pages (/campaigns/:campaign/list/:kind) ---------------------------
+  // --- list pages (/campaigns/:campaign/scenes, …/npcs, …/locations) -------
   "browse.title.scenes": "Szenen",
   "browse.title.npcs": "NPCs",
   "browse.title.locations": "Orte",
@@ -441,8 +441,6 @@ export const de = {
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   // The three list titles are already above under `browse.title.*`.
-  "browse.fallbackTitle": "Nachschlagen",
-  "browse.unknown": "Diese Liste gibt es nicht.",
   "browse.loading": "Lade …",
   "browse.empty.scenes": "Noch keine Szenen.",
   "browse.empty.npcs": "Noch keine NPCs.",
@@ -519,7 +517,7 @@ export const de = {
   "session.log.review.stale":
     "Diese Notiz wurde inzwischen anderswo geändert. Die Session ist neu geladen.",
 
-  // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
+  // --- live detail drawer (components/LiveDrawer.tsx) ------------------------
   "live.drawer.loading": "Lade Details …",
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
   "live.drawer.open": "Eintrag öffnen",
@@ -647,7 +645,7 @@ export const de = {
   "kind.campaign": "Kampagne",
   "kind.session": "Session",
   "kind.glossary": "Glossar",
-  // The accessible name of a `[[ref]]` in a body (markdown/entity-refs.tsx):
+  // The accessible name of a `[[ref]]` in a body (markdown/refs.tsx):
   // what it points at, then its current name.
   "markdown.ref.aria": "{kind}: {name}",
 
@@ -942,7 +940,7 @@ export const de = {
   "locationCard.unloadable": "{id} — Ort nicht ladbar, Server prüfen.",
   "locationCard.roll20": "Roll20-Seite: {value}",
 
-  // --- hover preview of a `[[ref]]` (components/EntityPreview.tsx) ---------
+  // --- hover preview of a `[[ref]]` (components/RefTargetPreview.tsx) --------
   // Everything else it says comes from the shared labels: `kind.*`,
   // `status.*`, `sceneArticle.type.*`, `sceneArticle.trigger.label`,
   // `npcCard.will.inline` and `locationCard.roll20`. Only the scene's

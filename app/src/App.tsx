@@ -5,7 +5,7 @@ import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
-import { EntityRefProvider } from "@/markdown/entity-refs";
+import { RefProvider } from "@/markdown/refs";
 import { BrowseRoute } from "@/routes/browse";
 import { GenerateRoute } from "@/routes/generate";
 import { GlossaryRoute } from "@/glossary-term/GlossaryRoute";
@@ -13,15 +13,20 @@ import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/knowledge-item/KnowledgeRoute";
 import { LiveRoute } from "@/routes/live";
+import { LocationCreateAction } from "@/location/LocationCreateAction";
+import { LocationList } from "@/location/LocationList";
 import { LocationRoute } from "@/location/LocationRoute";
 import { LocationAugmentAction } from "@/routes/LocationAugmentAction";
 import { NpcCard } from "@/npc/NpcCard";
+import { NpcCreateAction } from "@/npc/NpcCreateAction";
+import { NpcList } from "@/npc/NpcList";
 import { NpcRoute } from "@/npc/NpcRoute";
 import { NpcAugmentAction } from "@/routes/NpcAugmentAction";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SettingsRoute } from "@/routes/settings";
 import { SceneAugmentAction } from "@/routes/SceneAugmentAction";
+import { SceneList } from "@/scene/SceneList";
 import { SceneRoute } from "@/scene/SceneRoute";
 import { sceneHref } from "@/scene/scene-links";
 import { SessionRoute } from "@/session/SessionRoute";
@@ -37,9 +42,9 @@ function CampaignScope() {
   // mounted here so EVERY view's markdown bodies resolve the same way, off
   // the tree query the views already share.
   return (
-    <EntityRefProvider campaign={campaign}>
+    <RefProvider campaign={campaign}>
       <Outlet />
-    </EntityRefProvider>
+    </RefProvider>
   );
 }
 
@@ -84,9 +89,6 @@ export function App() {
             collide with one (ADR #22). */}
         <Route path="campaigns/:campaign" element={<CampaignScope />}>
           <Route index element={<ChapterOverviewRoute />} />
-          {/* The scene list — reached from the mobile start surface's
-              lookup rows. */}
-          <Route path="list/:kind" element={<BrowseRoute />} />
           {/* The campaign is its own resource, and its route is the chapter
               overview above. A chapter, a scene, an npc and a location are
               each their own resource as well (ADR #31): their reading views
@@ -97,6 +99,17 @@ export function App() {
               where — and each reading view its augment action, the generator
               job's dialog joined with the entity's own write. */}
           <Route path="chapters/:id" element={<ChapterRoute />} />
+          {/* The scene list — reached from the mobile start surface's
+              lookup rows. Each list page draws the rows of its own slice. */}
+          <Route
+            path="scenes"
+            element={
+              <BrowseRoute
+                titleKey="browse.title.scenes"
+                list={(campaign, tree) => <SceneList campaign={campaign} tree={tree} />}
+              />
+            }
+          />
           <Route
             path="scenes/:id"
             element={
@@ -108,7 +121,16 @@ export function App() {
               />
             }
           />
-          <Route path="npcs" element={<BrowseRoute kind="npcs" />} />
+          <Route
+            path="npcs"
+            element={
+              <BrowseRoute
+                titleKey="browse.title.npcs"
+                action={(campaign) => <NpcCreateAction campaign={campaign} />}
+                list={(campaign) => <NpcList campaign={campaign} />}
+              />
+            }
+          />
           <Route
             path="npcs/:id"
             element={
@@ -117,7 +139,16 @@ export function App() {
               />
             }
           />
-          <Route path="locations" element={<BrowseRoute kind="locations" />} />
+          <Route
+            path="locations"
+            element={
+              <BrowseRoute
+                titleKey="browse.title.locations"
+                action={(campaign) => <LocationCreateAction campaign={campaign} />}
+                list={(campaign, tree) => <LocationList campaign={campaign} tree={tree} />}
+              />
+            }
+          />
           <Route
             path="locations/:id"
             element={

@@ -3,7 +3,7 @@
 // same write, and a 409 is read out as the version and the chapter the server
 // answered with.
 
-import type { Chapter } from "@grimoire/shared/types";
+import type { Chapter } from "@grimoire/shared/chapter";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";

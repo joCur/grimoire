@@ -15,7 +15,8 @@
 // the route owns both and passes them in, so the live view simply passes
 // nothing.
 
-import type { CampaignTree, Scene } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { Scene } from "@grimoire/shared/scene";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 

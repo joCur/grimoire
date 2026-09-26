@@ -2,7 +2,7 @@
 // resource list (already sorted by name): each row its name, the chapter it
 // belongs to, and a link to its reading view.
 
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 

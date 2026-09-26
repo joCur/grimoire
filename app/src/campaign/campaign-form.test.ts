@@ -1,7 +1,7 @@
 // The campaign's form as VALUES: what the dialog starts with, what a save
 // sends and when there is nothing to save.
 
-import type { Campaign } from "@grimoire/shared/types";
+import type { Campaign } from "@grimoire/shared/campaign";
 import { describe, expect, test } from "bun:test";
 
 import {

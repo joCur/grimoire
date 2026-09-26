@@ -2,7 +2,7 @@
 // create, write — its write conflict, and the augment run on it. Built from
 // the shared HTTP helpers (../api.ts).
 
-import type { Location, LocationPatch } from "@grimoire/shared/types";
+import type { Location, LocationPatch } from "@grimoire/shared/location";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {

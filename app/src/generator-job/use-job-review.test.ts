@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import type { SceneChange } from "@grimoire/shared/types";
+import type { SceneChange } from "@grimoire/shared/scene";
 import type { ReviewSaveState } from "@/components/ReviewSaveStatus";
 
 import type { ReviewPatch } from "./generator-job-state";

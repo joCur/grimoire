@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { CampaignSummary, CampaignTree, SceneSummary } from "@grimoire/shared/types";
+import type { CampaignSummary } from "@grimoire/shared/campaign";
+import type { CampaignTree, SceneSummary } from "@grimoire/shared/campaign-tree";
 
 import { hasScene, locationName, pickLastCampaign, sceneTitle, settingsCampaign } from "./campaign";
 

@@ -333,7 +333,7 @@ export const en: Messages = {
   "status.npc.missing": "missing",
   "status.npc.unknown": "unknown",
 
-  // --- browse list pages (/campaigns/:campaign/list/:kind) ---------------------------
+  // --- list pages (/campaigns/:campaign/scenes, …/npcs, …/locations) -------
   "browse.title.scenes": "Scenes",
   "browse.title.npcs": "NPCs",
   "browse.title.locations": "Locations",
@@ -389,8 +389,6 @@ export const en: Messages = {
   "chapterOverview.threads.confirmDelete.confirm": "Delete",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
-  "browse.fallbackTitle": "Look up",
-  "browse.unknown": "No such list.",
   "browse.loading": "Loading …",
   "browse.empty.scenes": "No scenes yet.",
   "browse.empty.npcs": "No NPCs yet.",
@@ -463,7 +461,7 @@ export const en: Messages = {
   "session.log.review.stale":
     "This note was changed elsewhere in the meantime. The session has been reloaded.",
 
-  // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
+  // --- live detail drawer (components/LiveDrawer.tsx) ------------------------
   "live.drawer.loading": "Loading details …",
   "live.drawer.unloadable": "Not loadable — check {path}.",
   "live.drawer.open": "Open entry",
@@ -831,7 +829,7 @@ export const en: Messages = {
   "locationCard.unloadable": "{id} — location not loadable, check the server.",
   "locationCard.roll20": "Roll20 page: {value}",
 
-  // --- hover preview of a `[[ref]]` (components/EntityPreview.tsx) ---------
+  // --- hover preview of a `[[ref]]` (components/RefTargetPreview.tsx) --------
   // Everything else it says comes from the shared labels: `kind.*`,
   // `status.*`, `sceneArticle.type.*`, `sceneArticle.trigger.label`,
   // `npcCard.will.inline` and `locationCard.roll20`. Only the scene's

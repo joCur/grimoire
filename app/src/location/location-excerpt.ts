@@ -10,7 +10,7 @@
 // a query or a DOM.
 
 import { expandBodyEntityRefs } from "@grimoire/shared/refs";
-import type { Location } from "@grimoire/shared/types";
+import type { Location } from "@grimoire/shared/location";
 
 export interface LocationExcerpt {
   /** The `atmosphere` field, references as names. */

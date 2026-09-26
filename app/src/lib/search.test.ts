@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CampaignTree } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import {
   BookA,
   BookMarked,

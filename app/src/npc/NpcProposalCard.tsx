@@ -11,13 +11,14 @@
 // the editor changes is reported as the npc's change (`npcEdits`): the form
 // fields together, the text on its own.
 
-import type { CampaignTree, NpcChange, NpcProposal } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { NpcChange, NpcProposal } from "@grimoire/shared/npc";
 import { useState } from "react";
 
 import { DraftBodySection, DraftFieldsSection } from "@/components/DraftEditor";
 import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
 import { useT } from "@/i18n";
-import { useEntityRefs } from "@/markdown/entity-refs";
+import { useRefs } from "@/markdown/refs";
 import { Markdown } from "@/markdown/Markdown";
 
 import { NpcFields, NpcMotivationField } from "./NpcFields";
@@ -42,7 +43,7 @@ export function NpcProposalCard({
   onFlush: () => void;
 }) {
   const t = useT();
-  const { resolve } = useEntityRefs();
+  const { resolve } = useRefs();
   const { role, voice, will, quickstats } = npcExcerpt(npc, (slug) => resolve(slug)?.name);
   const label = npcLabel(npc.id);
   const editorId = `gen-draft-${label.replace(/[^a-zA-Z0-9-]/g, "-")}`;

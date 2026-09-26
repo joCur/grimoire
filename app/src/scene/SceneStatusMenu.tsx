@@ -12,7 +12,7 @@
 // display state only: the query cache is never written with a guessed value,
 // it always gets the scene the server sent back.
 
-import type { SceneStatus } from "@grimoire/shared/types";
+import type { SceneStatus } from "@grimoire/shared/scene";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 

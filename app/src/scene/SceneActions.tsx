@@ -4,7 +4,8 @@
 // (./scene-form.ts) and its own editing session (./use-scene-edit.ts): what a
 // surface changed becomes ONE scene PATCH.
 
-import type { CampaignTree, Scene } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { Scene } from "@grimoire/shared/scene";
 import { useState } from "react";
 
 import { BodyEditor, useBodyDraft } from "@/components/BodyEditor";

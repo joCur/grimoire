@@ -23,7 +23,7 @@
 //
 // No react, no query, no API imports — pure library, unit-testable.
 
-import type { CalloutKind } from "@grimoire/shared/types";
+import type { CalloutKind } from "@grimoire/shared/callouts";
 
 import type { Translate } from "@/i18n";
 

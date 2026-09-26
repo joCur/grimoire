@@ -2,7 +2,7 @@
 // changes against the location as the run read it. Pure, so the rule is
 // unit-testable.
 
-import type { LocationProposal } from "@grimoire/shared/types";
+import type { LocationProposal } from "@grimoire/shared/location";
 
 import type { FieldProposal } from "@/lib/augment";
 

@@ -3,7 +3,7 @@
 // (../api.ts). The campaign list (`GET /campaigns`, the switcher and "/")
 // answers `CampaignSummary` and is not the campaign itself.
 
-import type { Campaign, CampaignCreate, CampaignPatch } from "@grimoire/shared/types";
+import type { Campaign, CampaignCreate, CampaignPatch } from "@grimoire/shared/campaign";
 
 import { ApiError, campaignPath, getJson, postJson, sendJson } from "@/api";
 

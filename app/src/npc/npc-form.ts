@@ -10,7 +10,7 @@
 // `quickstats` follows the rules of a key/value field
 // (components/fields/pairs.ts).
 
-import type { NpcChange, NpcProposal, NpcStatus } from "@grimoire/shared/types";
+import type { NpcChange, NpcProposal, NpcStatus } from "@grimoire/shared/npc";
 
 import { pairsIssue, pairsOf, pairsValue, samePairs, type Pair } from "@/components/fields/pairs";
 import { textValue } from "@/components/fields/text";

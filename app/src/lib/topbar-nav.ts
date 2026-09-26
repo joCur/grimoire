@@ -19,12 +19,10 @@ export type NavSection = "chapters" | "npcs" | "locations";
 export interface NavView {
   /** The chapter overview ("/campaigns/:campaign"). */
   isChapterOverview: boolean;
-  /** `:kind` of "/campaigns/:campaign/list/:kind", or "" when this is not a list view. */
-  listKind?: string;
   /** A chapter's reading view: "/campaigns/:campaign/chapters/:id". */
   isChapter?: boolean;
-  /** A scene's reading view: "/campaigns/:campaign/scenes/:id". */
-  isScene?: boolean;
+  /** A scene's own routes: "/campaigns/:campaign/scenes" and "…/scenes/:id". */
+  isScenes?: boolean;
   /** An npc's own routes: "/campaigns/:campaign/npcs" and "…/npcs/:id". */
   isNpcs?: boolean;
   /** A location's own routes: "/campaigns/:campaign/locations" and "…/locations/:id". */
@@ -34,16 +32,15 @@ export interface NavView {
 /**
  * The section to mark, or undefined for the views that belong to none.
  *
- * The chapter overview, the scene list and the reading views of a chapter and
- * a scene are Chapters. An npc's and a location's list and reading view are
+ * The chapter overview, a chapter's reading view and a scene's list and
+ * reading view are Chapters. An npc's and a location's list and reading view are
  * NPCs and Locations — each its own route (ADR #31).
  */
 export function navSection(view: NavView): NavSection | undefined {
-  if (view.isChapterOverview || view.isChapter === true || view.isScene === true) {
+  if (view.isChapterOverview || view.isChapter === true || view.isScenes === true) {
     return "chapters";
   }
   if (view.isNpcs === true) return "npcs";
   if (view.isLocations === true) return "locations";
-  if (view.listKind === "scenes") return "chapters";
   return undefined;
 }

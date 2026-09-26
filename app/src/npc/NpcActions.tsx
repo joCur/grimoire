@@ -4,7 +4,8 @@
 // npc's own form (./npc-form.ts) and its own editing session
 // (./use-npc-edit.ts): the fields a surface changed become ONE npc PATCH.
 
-import type { CampaignTree, Npc } from "@grimoire/shared/types";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
+import type { Npc } from "@grimoire/shared/npc";
 
 import { BodyEditor, useBodyDraft } from "@/components/BodyEditor";
 import { FieldsDialog, FieldsDialogAction, useFieldsForm } from "@/components/fields/FieldsDialog";
