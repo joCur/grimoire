@@ -10,8 +10,8 @@
 // editing keep them open.
 //
 // `statusControl` is the status control of the reading view; it rides at the
-// right end of the overline row. `actions` — the edit, properties and augment
-// triggers — sits quietly to its left. The component stays free of queries —
+// right end of the overline row. `actions` — the edit and augment triggers —
+// sits quietly to its left. The component stays free of queries —
 // the route owns both and passes them in, so the live view simply passes
 // nothing.
 
@@ -31,19 +31,12 @@ export function SceneArticle({
   variant,
   statusControl,
   actions,
-  body,
 }: {
   scene: Scene;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
   actions?: ReactNode;
-  /**
-   * Replaces the rendered body — the reading view's edit mode puts its
-   * markdown editor here, header and chips keep standing. Nothing
-   * passed means the scene's body, which is what the live view wants.
-   */
-  body?: ReactNode;
 }) {
   const t = useT();
   const live = variant === "live";
@@ -142,7 +135,7 @@ export function SceneArticle({
           </div>
         )
       )}
-      {body ?? <Markdown ifSections={live ? "collapsed" : "open"}>{scene.body}</Markdown>}
+      <Markdown ifSections={live ? "collapsed" : "open"}>{scene.body}</Markdown>
     </article>
   );
 }

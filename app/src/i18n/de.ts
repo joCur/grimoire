@@ -941,6 +941,32 @@ export const de = {
   "sceneArticle.tag": "#{tag}",
   "sceneArticle.handout": "Handout: {handout}",
 
+  // --- edit mode of a reading view (components/EditMode.tsx, components/FieldChips.tsx)
+  "editMode.changes": "{count, plural, one {# Änderung} other {# Änderungen}}",
+  "editMode.chip.aria": "{field}: {value}",
+  "editMode.chip.changedAria": "{field}: {value}, geändert",
+  "editMode.chip.unset": "nicht gesetzt",
+  "editMode.allFields.chip": "Alle Felder · {count}",
+  "editMode.allFields.title": "Alle Felder",
+  "editMode.done": "Fertig",
+  "editMode.blocked.fields": "Ein Feld lässt sich so nicht speichern — der markierte Chip sagt, warum.",
+
+  // --- edit mode of a scene (scene/SceneEditMode.tsx) ------------------------
+  // Field labels are the shared `properties.scene.*.label`, the type labels
+  // `sceneArticle.type.*`.
+  "sceneEdit.heading": "Szene bearbeiten",
+  "sceneEdit.title.aria": "Titel der Szene",
+  "sceneEdit.blocked.title": "Eine Szene braucht einen Titel.",
+  "sceneEdit.trigger.placeholder": "Wann tritt die Szene ein?",
+  "sceneEdit.trigger.add": "Auslöser",
+  "sceneEdit.type.planned.hint": "steht in der Reihenfolge des Kapitels",
+  "sceneEdit.type.contingency.hint": "tritt ein, wenn etwas passiert",
+  "sceneEdit.location.none": "Kein Ort",
+  "sceneEdit.location.search": "Ort suchen",
+  "sceneEdit.location.noMatch": "Kein Ort passt zur Suche.",
+  "sceneEdit.npcs.title": "NPCs in dieser Reihenfolge",
+  "sceneEdit.handouts.title": "Handouts in Roll20",
+
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} ist keine NPC-Kennung, deshalb gibt es dazu keinen NPC.",
   "npcCard.unloadable": "{id} — NPC nicht ladbar, Server prüfen.",
