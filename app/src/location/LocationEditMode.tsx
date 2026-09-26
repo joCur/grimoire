@@ -23,9 +23,15 @@
 //
 // Leaving with unsaved work asks first — the cancel action here, and a
 // navigation through the page's unsaved-changes guard.
+//
+// The quiet delete action in the header puts the location in the trash after
+// a confirmation (decisions/trash) and leads to the location list, where the
+// undo notice brings it back (lib/use-trash-row.ts). A location a live scene
+// plays at stays; the dialog names the scenes.
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { Location, LocationChange } from "@grimoire/shared/location";
+import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
 import { useState } from "react";
 
 import { BodyEditorSurface, useBodyDraft, useDraftIssues } from "@/components/BodyEditor";
@@ -38,8 +44,10 @@ import { fieldId } from "@/components/fields/FieldRow";
 import { useFieldsForm } from "@/components/fields/use-fields-form";
 import { PickList } from "@/components/fields/PickList";
 import { TextField } from "@/components/fields/TextField";
+import { TrashDialog } from "@/components/TrashDialog";
 import { useUnsavedChanges } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
+import { useTrashRow } from "@/lib/use-trash-row";
 
 import {
   canSubmitLocationForm,
@@ -48,7 +56,9 @@ import {
   locationFormValues,
   type LocationFormValues,
 } from "./location-form";
-import { locationsKey } from "./location-query";
+import { restoreLocation, trashLocation } from "./location-api";
+import { locationsHref } from "./location-links";
+import { locationKey, locationsKey } from "./location-query";
 import { useLocationEdit } from "./use-location-edit";
 
 /**
@@ -86,6 +96,16 @@ export function LocationEditMode({
       draft.reseed(stored.body);
     },
     invalidateOnSuccess: staleAfterWrite(campaign),
+  });
+  const name = location.name === "" ? location.id : location.name;
+  const remove = useTrashRow({
+    campaign,
+    row: { id: location.id, rev: edit.rev },
+    name,
+    trash: (row) => trashLocation(campaign, row),
+    restore: (trashed) => restoreLocation(campaign, trashed),
+    rowKey: locationKey(campaign, location.id),
+    leaveTo: locationsHref(campaign),
   });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
@@ -201,6 +221,7 @@ export function LocationEditMode({
           onSave: () => edit.save(change),
           onCancel: cancel,
         }}
+        onDelete={remove.ask}
       />
       <EditTitleInput
         value={values.name}
@@ -241,6 +262,17 @@ export function LocationEditMode({
           issues={draftIssues}
         />
       </div>
+      {remove.asking && (
+        <TrashDialog
+          title={t("locationEdit.delete.title")}
+          sentences={[t("locationEdit.delete.description", { name, days: TRASH_RETENTION_DAYS })]}
+          unsaved={dirty}
+          error={remove.error}
+          busy={remove.isPending}
+          onConfirm={remove.confirm}
+          onCancel={remove.cancel}
+        />
+      )}
       {confirmDiscard && (
         <DiscardChangesDialog
           onKeep={() => setConfirmDiscard(false)}

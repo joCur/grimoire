@@ -26,6 +26,10 @@
 // report whether they are dirty (`useUnsavedChanges`) and the page owns the
 // one blocker and the one dialog — which is also the honest UX, since "you
 // have unsaved changes" is a statement about the PAGE, not about one list.
+//
+// A navigation the DM already agreed to lose the work for — leaving a row
+// they just put in the trash, after a confirmation that said the changes go
+// with it — passes without asking twice (`useLeaveUnasked`).
 
 import {
   createContext,
@@ -34,6 +38,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -52,6 +57,8 @@ import { useT } from "@/i18n";
 interface GuardApi {
   /** One editor reports its state. `false` (or unmounting) releases it. */
   setDirty: (id: string, dirty: boolean) => void;
+  /** Let the next navigation through without asking. */
+  leaveUnasked: () => void;
 }
 
 const GuardContext = createContext<GuardApi | undefined>(undefined);
@@ -70,6 +77,18 @@ export function useUnsavedChanges(dirty: boolean): void {
   }, [guard, id, dirty]);
 }
 
+/**
+ * A function that lets the next navigation leave the page without the
+ * question — for a caller whose own confirmation already said that the unsaved
+ * work is discarded. A no-op without a provider above it.
+ */
+export function useLeaveUnasked(): () => void {
+  const guard = useContext(GuardContext);
+  return guard?.leaveUnasked ?? noop;
+}
+
+function noop(): void {}
+
 export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
   const t = useT();
   const [dirtyIds, setDirtyIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -82,7 +101,13 @@ export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
-  const api = useMemo<GuardApi>(() => ({ setDirty }), [setDirty]);
+  // Read when the router asks, not when the page rendered: the navigation
+  // that follows `leaveUnasked` runs before the page renders again.
+  const unasked = useRef(false);
+  const leaveUnasked = useCallback(() => {
+    unasked.current = true;
+  }, []);
+  const api = useMemo<GuardApi>(() => ({ setDirty, leaveUnasked }), [setDirty, leaveUnasked]);
   const dirty = dirtyIds.size > 0;
 
   // Any change of LOCATION counts, the query string included: `?from=` is
@@ -95,10 +120,16 @@ export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
     }: {
       currentLocation: { pathname: string; search: string };
       nextLocation: { pathname: string; search: string };
-    }) =>
-      dirty &&
-      (currentLocation.pathname !== nextLocation.pathname ||
-        currentLocation.search !== nextLocation.search),
+    }) => {
+      const leaves =
+        currentLocation.pathname !== nextLocation.pathname ||
+        currentLocation.search !== nextLocation.search;
+      if (leaves && unasked.current) {
+        unasked.current = false;
+        return false;
+      }
+      return dirty && leaves;
+    },
     [dirty],
   );
   const blocker = useBlocker(shouldBlock);

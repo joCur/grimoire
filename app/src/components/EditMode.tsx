@@ -2,8 +2,12 @@
 // mode stands in, without knowing a single field:
 //
 //   header    the overline row: what is being edited, the status control
-//             right beside it, and on the desktop the save actions with the
-//             count of changes at the right end.
+//             right beside it, the quiet delete action after it, and on the
+//             desktop the save actions with the count of changes at the
+//             right end — the delete as far from the save as the row allows.
+//             On the phone the delete stays in this row as an icon, and the
+//             bar at the bottom holds only cancel and save, so the thumb
+//             never finds it by accident.
 //   save bar  below md the same actions sit at the bottom of the screen, in
 //             thumb reach, fixed over the page.
 //   title     the name of the row, editable in place: the reading view's
@@ -15,6 +19,7 @@
 // The breakpoint decides WHERE the save actions render, so there is always
 // exactly one save and one cancel on the page.
 
+import { Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AutoGrowTextarea } from "@/components/ui/autogrow-textarea";
@@ -63,17 +68,43 @@ function SaveActions({ save, large }: { save: EditModeSave; large: boolean }) {
   );
 }
 
+/**
+ * The delete action: quiet until it is pointed at, labelled on the desktop,
+ * an icon with the same accessible name on the phone.
+ */
+function DeleteAction({ onDelete, labelled }: { onDelete: () => void; labelled: boolean }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      onClick={onDelete}
+      aria-label={t("editMode.delete")}
+      title={labelled ? undefined : t("editMode.delete")}
+      className={cn(
+        "inline-flex flex-none items-center gap-1.5 rounded-md text-[12.5px] text-muted-foreground hover:text-destructive focus-visible:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        labelled ? "h-[30px] px-2" : "size-9 justify-center",
+      )}
+    >
+      <Trash2 aria-hidden size={labelled ? 13 : 16} className="flex-none" />
+      {labelled && <span>{t("editMode.delete")}</span>}
+    </button>
+  );
+}
+
 /** The overline row of the edit mode, and on the phone the bar at the bottom. */
 export function EditModeHeader({
   heading,
   status,
   save,
+  onDelete,
 }: {
   /** What is being edited, e.g. "Edit scene". */
   heading: string;
   /** The status control, part of the same save. */
   status?: ReactNode;
   save: EditModeSave;
+  /** Put the row in the trash — the caller asks first. */
+  onDelete?: (() => void) | undefined;
 }) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   return (
@@ -84,6 +115,7 @@ export function EditModeHeader({
             phone, where the save actions are not. */}
         {!desktop && <span className="flex-1" />}
         {status}
+        {onDelete !== undefined && <DeleteAction onDelete={onDelete} labelled={desktop} />}
         {desktop && (
           <span className="flex flex-1 items-center justify-end gap-2.5">
             <SaveActions save={save} large={false} />

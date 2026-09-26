@@ -397,7 +397,7 @@ write paths lie on it:
 | 8 Mobile           | `tests/mobile.e2e.ts`                                          |
 | 9 Edit the text    | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`, `tests/chapter-edit-mode.e2e.ts`, `tests/chapter-overview.e2e.ts` (the edit-campaign dialog) |
 | 10 Cold start      | `tests/cold-start.e2e.ts`                                      |
-| 11 Trash           | `tests/trash.e2e.ts`                                           |
+| 11 Trash           | `tests/trash.e2e.ts`, `tests/trash-edit-mode.e2e.ts` (deleting from the edit modes) |
 
 Paths 3, 4, 5 and 8 read rows instead of texts:
 

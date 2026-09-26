@@ -22,9 +22,15 @@
 //
 // Leaving with unsaved work asks first — the cancel action here, and a
 // navigation through the page's unsaved-changes guard.
+//
+// The quiet delete action in the header puts the npc in the trash after a
+// confirmation (decisions/trash) and leads to the npc list, where the undo
+// notice brings it back (lib/use-trash-row.ts). An npc a live scene names
+// stays; the dialog names the scenes.
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { Npc, NpcChange } from "@grimoire/shared/npc";
+import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
 import { useState } from "react";
 
 import { BodyEditorSurface, useBodyDraft, useDraftIssues } from "@/components/BodyEditor";
@@ -38,8 +44,10 @@ import { useFieldsForm } from "@/components/fields/use-fields-form";
 import { PairsField } from "@/components/fields/PairsField";
 import { PickList } from "@/components/fields/PickList";
 import { TextField } from "@/components/fields/TextField";
+import { TrashDialog } from "@/components/TrashDialog";
 import { useUnsavedChanges } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
+import { useTrashRow } from "@/lib/use-trash-row";
 
 import { NpcStatusMenu } from "./NpcStatusMenu";
 import {
@@ -50,7 +58,9 @@ import {
   npcFormValues,
   type NpcFormValues,
 } from "./npc-form";
-import { npcsKey } from "./npc-query";
+import { restoreNpc, trashNpc } from "./npc-api";
+import { npcsHref } from "./npc-links";
+import { npcKey, npcsKey } from "./npc-query";
 import { useNpcEdit } from "./use-npc-edit";
 
 /**
@@ -94,6 +104,16 @@ export function NpcEditMode({
       draft.reseed(stored.body);
     },
     invalidateOnSuccess: staleAfterWrite(campaign),
+  });
+  const name = npc.name === "" ? npc.id : npc.name;
+  const remove = useTrashRow({
+    campaign,
+    row: { id: npc.id, rev: edit.rev },
+    name,
+    trash: (row) => trashNpc(campaign, row),
+    restore: (trashed) => restoreNpc(campaign, trashed),
+    rowKey: npcKey(campaign, npc.id),
+    leaveTo: npcsHref(campaign),
   });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
@@ -269,6 +289,7 @@ export function NpcEditMode({
           onSave: () => edit.save(change),
           onCancel: cancel,
         }}
+        onDelete={remove.ask}
       />
       <EditTitleInput
         value={values.name}
@@ -310,6 +331,17 @@ export function NpcEditMode({
           issues={draftIssues}
         />
       </div>
+      {remove.asking && (
+        <TrashDialog
+          title={t("npcEdit.delete.title")}
+          sentences={[t("npcEdit.delete.description", { name, days: TRASH_RETENTION_DAYS })]}
+          unsaved={dirty}
+          error={remove.error}
+          busy={remove.isPending}
+          onConfirm={remove.confirm}
+          onCancel={remove.cancel}
+        />
+      )}
       {confirmDiscard && (
         <DiscardChangesDialog
           onKeep={() => setConfirmDiscard(false)}

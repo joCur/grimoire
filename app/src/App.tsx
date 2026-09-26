@@ -33,6 +33,7 @@ import { SceneList } from "@/scene/SceneList";
 import { SceneRoute } from "@/scene/SceneRoute";
 import { sceneHref } from "@/scene/scene-links";
 import { SessionRoute } from "@/session/SessionRoute";
+import { threadsQuery } from "@/thread/thread-query";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
 // exactly once per campaign — when the server bumps the counter (which it
@@ -109,8 +110,10 @@ export function App() {
               mobile lookup rows. The scene's reading view is handed the npc
               cards of its aside — the npc draws them, the scene only says
               where — and each reading view its augment action, the generator
-              job's dialog joined with the entity's own write. */}
-          <Route path="chapters/:id" element={<ChapterRoute />} />
+              job's dialog joined with the entity's own write. The chapter's
+              reading view is handed the query of its threads, which its
+              delete dialog counts. */}
+          <Route path="chapters/:id" element={<ChapterRoute threadsQuery={threadsQuery} />} />
           {/* The scene list — reached from the mobile start surface's
               lookup rows. Each list page draws the rows of its own slice. */}
           <Route

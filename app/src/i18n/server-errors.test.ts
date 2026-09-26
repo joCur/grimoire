@@ -180,6 +180,18 @@ describe("the trash refusals", () => {
     }
   });
 
+  test("a trash held up only by log lines says the row was played", () => {
+    for (const t of [de, en]) {
+      const sentence = serverErrorBodyMessage(body("trash_blocked", { blockers: [note] }), t);
+      expect(sentence).toBe(
+        t("server.trash_blocked.played", {
+          blockers: t("server.blocker.log-entry", { name: note.name }),
+          count: 1,
+        }),
+      );
+    }
+  });
+
   test("a refused restore names what is still in the trash", () => {
     for (const t of [de, en]) {
       const sentence = serverErrorBodyMessage(body("restore_blocked", { blockers: [npc] }), t);

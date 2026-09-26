@@ -23,8 +23,19 @@
 //
 // Leaving with unsaved work asks first — the cancel action here, and a
 // navigation through the page's unsaved-changes guard.
+//
+// The quiet delete action in the header puts the chapter in the trash after a
+// confirmation (decisions/trash) — together with its scenes and threads, which
+// the dialog counts from the campaign tree and the chapter's threads — and
+// leads back to the chapter overview, where the undo notice brings them all
+// back (lib/use-trash-row.ts). A chapter a live npc or location names, or one
+// whose scenes were played, stays; the dialog says what is in the way. The
+// threads are not this slice's to read: the page hands in their query.
 
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { Chapter, ChapterChange } from "@grimoire/shared/chapter";
+import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { BodyEditorSurface, useBodyDraft, useDraftIssues } from "@/components/BodyEditor";
@@ -32,8 +43,10 @@ import { DiscardChangesDialog } from "@/components/DiscardChangesDialog";
 import { EditConflict } from "@/components/EditConflict";
 import { EditModeHeader, EditTitleInput } from "@/components/EditMode";
 import { useFieldsForm } from "@/components/fields/use-fields-form";
+import { TrashDialog } from "@/components/TrashDialog";
 import { useUnsavedChanges } from "@/components/UnsavedChangesGuard";
-import { useT } from "@/i18n";
+import { useT, type Translate } from "@/i18n";
+import { useTrashRow } from "@/lib/use-trash-row";
 
 import {
   canSubmitChapterForm,
@@ -41,7 +54,8 @@ import {
   chapterFormDirty,
   chapterFormValues,
 } from "./chapter-form";
-import { chaptersOf } from "./chapter-query";
+import { restoreChapter, trashChapter } from "./chapter-api";
+import { chapterKey, chaptersOf } from "./chapter-query";
 import { chapterStatusValue, isChapterStatus } from "./chapter-status";
 import { ChapterStatusMenu } from "./ChapterStatusMenu";
 import { useChapterEdit } from "./use-chapter-edit";
@@ -56,14 +70,37 @@ function staleAfterWrite(campaign: string) {
   return [chaptersOf(campaign), ["tree", campaign], ["session", campaign], ["search", campaign]];
 }
 
+/** The query of one chapter's threads — handed in by the page that composes the slices. */
+export type ChapterThreadsQuery = (
+  campaign: string,
+  chapter: string,
+) => { queryKey: QueryKey; queryFn: () => Promise<readonly unknown[]> };
+
+/**
+ * What goes to the trash with the chapter, as a sentence of its own — none
+ * when it has neither scenes nor threads, or while they are not read yet.
+ */
+function alongSentence(scenes: number, threads: number, t: Translate): string[] {
+  if (scenes > 0 && threads > 0) return [t("chapterEdit.delete.along.both", { scenes, threads })];
+  if (scenes > 0) return [t("chapterEdit.delete.along.scenes", { scenes })];
+  if (threads > 0) return [t("chapterEdit.delete.along.threads", { threads })];
+  return [];
+}
+
 export function ChapterEditMode({
   campaign,
   chapter,
+  tree,
+  threadsQuery,
   onClose,
 }: {
   campaign: string;
   /** The chapter on screen when the edit started; mount per chapter (`key`). */
   chapter: Chapter;
+  /** For the scenes that go to the trash with the chapter. */
+  tree: CampaignTree | undefined;
+  /** For the threads that go to the trash with the chapter. */
+  threadsQuery: ChapterThreadsQuery;
   onClose: () => void;
 }) {
   const t = useT();
@@ -78,6 +115,19 @@ export function ChapterEditMode({
     },
     invalidateOnSuccess: staleAfterWrite(campaign),
   });
+  const name = chapter.title.trim() === "" ? chapter.id : chapter.title;
+  const remove = useTrashRow({
+    campaign,
+    row: { id: chapter.id, rev: edit.rev },
+    name,
+    trash: (row) => trashChapter(campaign, row),
+    restore: (trashed) => restoreChapter(campaign, trashed),
+    rowKey: chapterKey(campaign, chapter.id),
+    leaveTo: `/campaigns/${campaign}`,
+  });
+  const threads = useQuery({ ...threadsQuery(campaign, chapter.id), enabled: remove.asking });
+  const sceneCount =
+    tree?.chapters.find((node) => node.id === chapter.id)?.scenes.length ?? 0;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const values = form.values;
@@ -132,6 +182,7 @@ export function ChapterEditMode({
           onSave: () => edit.save(change),
           onCancel: cancel,
         }}
+        onDelete={remove.ask}
       />
       <EditTitleInput
         value={values.title}
@@ -154,6 +205,20 @@ export function ChapterEditMode({
           issues={draftIssues}
         />
       </div>
+      {remove.asking && (
+        <TrashDialog
+          title={t("chapterEdit.delete.title")}
+          sentences={[
+            t("chapterEdit.delete.description", { title: name, days: TRASH_RETENTION_DAYS }),
+            ...alongSentence(sceneCount, threads.data?.length ?? 0, t),
+          ]}
+          unsaved={dirty}
+          error={remove.error}
+          busy={remove.isPending}
+          onConfirm={remove.confirm}
+          onCancel={remove.cancel}
+        />
+      )}
       {confirmDiscard && (
         <DiscardChangesDialog
           onKeep={() => setConfirmDiscard(false)}

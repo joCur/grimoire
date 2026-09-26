@@ -1,5 +1,5 @@
 // The API client of a chapter (decisions/resources): its resource — read, create, write —
-// its write conflict and its way out of the trash (decisions/trash). Built
+// its write conflict and its way into and out of the trash (decisions/trash). Built
 // from the shared HTTP helpers (../api.ts).
 //
 // Which chapter is the active one is its `status`: a write that sets
@@ -77,6 +77,21 @@ export function createChapter(campaign: string, input: ChapterCreate): Promise<C
     ...(input.body === undefined ? {} : { body: input.body }),
     ...(input.id === undefined ? {} : { id: input.id }),
   });
+}
+
+/**
+ * Put ONE chapter in the trash against the `rev` it was read with. The answer
+ * is the chapter with its `deletedMs` and its moved `rev` — the guard its
+ * restore sends back. It takes its live scenes and threads along. A chapter a
+ * live npc or location names, or one of whose scenes a log line names, is 409
+ * `trash_blocked` with the rows in the way; a stale `rev` is 409 with the
+ * current chapter. Nothing is written on a refusal.
+ */
+export function trashChapter(
+  campaign: string,
+  chapter: Pick<Chapter, "id" | "rev">,
+): Promise<Chapter> {
+  return sendJson<Chapter>("DELETE", chaptersUrl(campaign, chapter.id), { rev: chapter.rev });
 }
 
 /** The chapters in the trash, the latest to go there first, each with its `deletedMs`. */

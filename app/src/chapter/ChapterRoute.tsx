@@ -7,6 +7,9 @@
 // (./ChapterEditMode.tsx): the same article, every field of the chapter
 // editable in place and saved together.
 //
+// The threads of the chapter are not this slice's to read: the page is handed
+// their query (`threadsQuery`), which the edit mode's delete dialog counts.
+//
 // Edit mode is remembered BY CHAPTER: this route stays mounted across a
 // navigation, and an editor seeded from another chapter would be a lie. A
 // navigation away from unsaved work asks first (UnsavedChangesGuard).
@@ -25,19 +28,19 @@ import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import { ChapterArticle } from "./ChapterArticle";
-import { ChapterEditMode } from "./ChapterEditMode";
+import { ChapterEditMode, type ChapterThreadsQuery } from "./ChapterEditMode";
 import { chapterPageCrumbs } from "./chapter-links";
 import { chapterQuery } from "./chapter-query";
 
-export function ChapterRoute() {
+export function ChapterRoute({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
   return (
     <UnsavedChangesGuard>
-      <ChapterPage />
+      <ChapterPage threadsQuery={threadsQuery} />
     </UnsavedChangesGuard>
   );
 }
 
-function ChapterPage() {
+function ChapterPage({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
@@ -108,6 +111,8 @@ function ChapterPage() {
               key={data.id}
               campaign={campaign}
               chapter={data}
+              tree={tree.data}
+              threadsQuery={threadsQuery}
               onClose={() => setEditingId(undefined)}
             />
           ) : (
