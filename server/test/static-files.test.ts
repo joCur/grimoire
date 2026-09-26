@@ -61,7 +61,7 @@ describe("index.html", () => {
   });
 
   test("unknown client route falls back to index.html (SPA routing)", async () => {
-    for (const p of ["/beispiel", "/beispiel/live", "/beispiel/list/npcs", "/nope/deep/route"]) {
+    for (const p of ["/example", "/example/live", "/example/list/npcs", "/nope/deep/route"]) {
       const res = await app.request(p);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
@@ -72,7 +72,7 @@ describe("index.html", () => {
   test("a file-like client route keeps working (/…/entry/<scene>)", async () => {
     // The scene route carries a campaign-relative .md path in the URL; that
     // must not be mistaken for a missing build artefact.
-    const res = await app.request("/beispiel/entry/01-salzhafen/hafen/ankunft-leuchtturm");
+    const res = await app.request("/example/entry/01-salt-harbour/harbour/lighthouse-arrival");
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(INDEX_HTML);
   });
@@ -173,7 +173,7 @@ describe("/api is untouched", () => {
     const res = await app.request("/api/campaigns");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Array<{ id: string }>;
-    expect(body.map((c) => c.id)).toContain("beispiel");
+    expect(body.map((c) => c.id)).toContain("example");
   });
 
   test("unknown /api paths 404 instead of falling back to index.html", async () => {
@@ -185,7 +185,7 @@ describe("/api is untouched", () => {
   });
 
   test("POST is not intercepted by the static routes", async () => {
-    const res = await app.request("/beispiel/live", { method: "POST" });
+    const res = await app.request("/example/live", { method: "POST" });
     expect(res.status).toBe(404);
     expect(await res.text()).not.toBe(INDEX_HTML);
   });

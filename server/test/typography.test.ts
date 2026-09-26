@@ -1,21 +1,20 @@
 // The typographic guard of the German quotation marks.
 //
-// The PO case: a model wrote German quotation marks as the opening U+201E
-// closed by an ASCII `"`. Inside a JSON string that `"` ended the string, and
-// an otherwise perfect scene reply was unparseable. The escaping is the
-// TRANSPORT's job now (the reply is a forced object and the body a string it
-// serializes), so that particular breakage is gone; the MIXED spelling is
-// not, and it is ours: the prompts, the few-shots and the example campaign
-// wrote it that way throughout, and the model imitates what it reads.
+// A model can write a German quotation as the opening U+201E closed by an
+// ASCII `"`. Inside a JSON string that `"` would end the string; the escaping
+// is the TRANSPORT's job (the reply is a forced object and the body a string
+// it serializes), so that breakage cannot happen. The MIXED spelling itself
+// is ours to prevent: the model imitates what it reads, so nothing it reads
+// may carry it.
 //
 // So this test forbids the mixed form everywhere the model can see it: the
-// system prompts (`.md`), the few-shot REPLIES (`.json`) and
-// the example campaign in `fixtures/`. A few-shot is one JSON object whose
-// body is a single string, so a whole scene sits on one line — the rule still
-// reads it correctly, because a correctly closed `„…“` cannot be crossed and
-// the string delimiter always stands after it. The catalog carries the same guard over its VALUES (a raw scan
-// of `de.ts` cannot tell a closing quotation mark from the TypeScript string
-// delimiter) — see app/src/i18n/i18n.test.ts.
+// system prompts (`.md`), the few-shot REPLIES (`.json`) and the example
+// campaign in `fixtures/`. A few-shot is one JSON object whose body is a
+// single string, so a whole scene sits on one line — the rule still reads it
+// correctly, because a correctly closed `„…“` cannot be crossed and the string
+// delimiter always stands after it. The catalog carries the same guard over
+// its VALUES (a raw scan of `de.ts` cannot tell a closing quotation mark from
+// the TypeScript string delimiter) — see app/src/i18n/i18n.test.ts.
 //
 // The rule is deliberately narrow: an opening `„` followed, on the SAME line,
 // by an ASCII `"`. Every quotation mark in these files opens and closes on one
@@ -55,13 +54,13 @@ async function offenders(source: string): Promise<string[]> {
 }
 
 describe("German quotation marks", () => {
-  test("the rule catches the PO spelling and passes the correct one", () => {
-    expect(MIXED_QUOTES.test('er sagt „Salzhafen" und meint es')).toBe(true);
-    expect(MIXED_QUOTES.test("er sagt „Salzhafen“ und meint es")).toBe(false);
+  test("the rule catches the mixed spelling and passes the correct one", () => {
+    expect(MIXED_QUOTES.test('he says „Salt Harbour" and means it')).toBe(true);
+    expect(MIXED_QUOTES.test("he says „Salt Harbour“ and means it")).toBe(false);
     // An ASCII quote that is CODE, on a line without an opening quote.
     expect(MIXED_QUOTES.test('statblock: "Roll20: Fenn"')).toBe(false);
     // …and one that is code AFTER a properly closed quotation.
-    expect(MIXED_QUOTES.test('„Fenn“ hat statblock: "Roll20: Fenn"')).toBe(false);
+    expect(MIXED_QUOTES.test('„Fenn“ has statblock: "Roll20: Fenn"')).toBe(false);
   });
 
   test("no prompt and no few-shot mixes them", async () => {

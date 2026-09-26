@@ -9,7 +9,7 @@ import { describe, expect, test } from "bun:test";
 
 import { sceneExcerpt } from "./scene-excerpt";
 
-const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
+const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures");
 
 /** A scene fixture — the scene as its resource answers it (decisions/resources). */
 function fixture(id: string): SceneProposal {
@@ -31,12 +31,12 @@ describe("sceneExcerpt", () => {
   test("type, trigger, the location's display name and status", () => {
     const excerpt = sceneExcerpt(
       fixture("smuggler-captured"),
-      (id) => (id === "bucht" ? "The North Cove" : undefined),
+      (id) => (id === "cove" ? "The North Cove" : undefined),
       nameOf,
     );
     expect(excerpt).toEqual({
       type: "contingency",
-      trigger: "Charaktere werden beim Auskundschaften der Bucht entdeckt",
+      trigger: "The characters are spotted while scouting the cove",
       location: "The North Cove",
       status: "ready",
     });

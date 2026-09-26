@@ -61,10 +61,10 @@ describe("reading a session", () => {
       startedMs: new Date(2026, 0, 15, 19, 30).getTime(),
       ended: "2026-01-15T22:45:00",
       endedMs: new Date(2026, 0, 15, 22, 45).getTime(),
-      body: "\n## Threads\n\n- [ ] Wer bezahlt die Schmuggler?\n- [ ] Old Metta als NPC ausarbeiten?\n",
+      body: "\n## Threads\n\n- [ ] Who pays the smugglers?\n- [ ] Work out Old Metta as an NPC?\n",
       pauses: [
         {
-          id: "abendessen",
+          id: "dinner",
           from: "2026-01-15T20:30:00",
           fromMs: new Date(2026, 0, 15, 20, 30).getTime(),
           to: "2026-01-15T21:10:00",
@@ -74,10 +74,10 @@ describe("reading a session", () => {
       ],
       log: [
         {
-          id: "spuren-gefunden",
+          id: "tracks-found",
           at: "19:52",
           sceneId: "lighthouse-arrival",
-          text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+          text: "Found tracks, the party wants to head straight for the cove #decision",
           reviewed: false,
           rev: 1,
         },
@@ -85,14 +85,14 @@ describe("reading a session", () => {
           id: "old-metta",
           at: "21:10",
           sceneId: "lighthouse-arrival",
-          text: "Improvisiert: Fischerin „Old Metta“ am Steg #npc",
+          text: "Improvised: fisherwoman “Old Metta” at the jetty #npc",
           reviewed: false,
           rev: 1,
         },
         {
-          id: "lichter-in-der-bucht",
+          id: "lights-in-the-cove",
           at: "22:40",
-          text: "Cliffhanger: Lichter in der Bucht gesichtet #thread",
+          text: "Cliffhanger: lights spotted in the cove #thread",
           reviewed: false,
           rev: 1,
         },
@@ -102,7 +102,7 @@ describe("reading a session", () => {
   });
 
   test("404 for an unknown session or campaign", async () => {
-    expect((await app.request(`${SESSIONS}/gibt-es-nicht`)).status).toBe(404);
+    expect((await app.request(`${SESSIONS}/does-not-exist`)).status).toBe(404);
     expect((await app.request("/api/campaigns/nope/sessions")).status).toBe(404);
   });
 
@@ -144,8 +144,8 @@ describe("the session list", () => {
   });
 
   test("a session without a readable `started` stands last", async () => {
-    db = await seedStore({ sessions: [sessionSeed({ id: "notizen", started: "gestern abend" })] });
-    expect((await list()).map((s) => s.id)).toEqual([FIXTURE_SESSION, "notizen"]);
+    db = await seedStore({ sessions: [sessionSeed({ id: "notes", started: "last night" })] });
+    expect((await list()).map((s) => s.id)).toEqual([FIXTURE_SESSION, "notes"]);
   });
 
   test("same-second restarts order by the row's insertion time", async () => {
@@ -180,24 +180,24 @@ describe("the running session — ?running=true", () => {
 
   test("a blank `ended` counts as running", async () => {
     db = await seedStore({
-      sessions: [sessionSeed({ id: "offen", started: "2026-08-19T20:00:00", ended: " " })],
+      sessions: [sessionSeed({ id: "open", started: "2026-08-19T20:00:00", ended: " " })],
     });
-    expect((await runningSession())?.id).toBe("offen");
+    expect((await runningSession())?.id).toBe("open");
   });
 
   test("a session without a readable `started` never runs", async () => {
-    db = await seedStore({ sessions: [sessionSeed({ id: "notizen", started: "gestern abend" })] });
+    db = await seedStore({ sessions: [sessionSeed({ id: "notes", started: "last night" })] });
     expect(await runningSession()).toBeUndefined();
   });
 
   test("of two open sessions, the one started last runs", async () => {
     db = await seedStore({
       sessions: [
-        sessionSeed({ id: "vorgestern", started: "2026-08-17T20:00:00" }),
-        sessionSeed({ id: "gestern", started: "2026-08-18T20:00:00" }),
+        sessionSeed({ id: "day-before-yesterday", started: "2026-08-17T20:00:00" }),
+        sessionSeed({ id: "yesterday", started: "2026-08-18T20:00:00" }),
       ],
     });
-    expect((await runningSession())?.id).toBe("gestern");
+    expect((await runningSession())?.id).toBe("yesterday");
   });
 });
 
@@ -263,12 +263,12 @@ describe("starting a session — POST …/sessions", () => {
   test("a session with an unreadable `started` does not block a start", async () => {
     const broken = await startSession();
     db.update(sessionsTable)
-      .set({ started: "gestern abend" })
+      .set({ started: "last night" })
       .where(eq(sessionsTable.id, broken.id))
       .run();
     const fresh = await startSession();
     expect(fresh.id).not.toBe(broken.id);
-    expect((await readSession(broken.id)).started).toBe("gestern abend");
+    expect((await readSession(broken.id)).started).toBe("last night");
   });
 
   test("400 for a key in the body — a start carries nothing", async () => {
@@ -341,7 +341,7 @@ describe("writing a session — PATCH …/sessions/:id", () => {
       { ended: "2026-01-15T23:00:00" },
       { started: "2026-01-15T19:00:00" },
       { pauses: [] },
-      { endedMs: "spät" },
+      { endedMs: "late" },
     ]) {
       const res = await send("PATCH", `${SESSIONS}/${FIXTURE_SESSION}`, { rev: before.rev, ...field });
       expect(res.status).toBe(400);
@@ -355,7 +355,7 @@ describe("writing a session — PATCH …/sessions/:id", () => {
     const empty = await send("PATCH", `${SESSIONS}/${FIXTURE_SESSION}`, { rev });
     expect(empty.status).toBe(400);
     expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
-    const renamed = await send("PATCH", `${SESSIONS}/${FIXTURE_SESSION}`, { rev, id: "anders" });
+    const renamed = await send("PATCH", `${SESSIONS}/${FIXTURE_SESSION}`, { rev, id: "other" });
     expect(renamed.status).toBe(400);
   });
 
@@ -384,7 +384,7 @@ describe("writing a session — PATCH …/sessions/:id", () => {
   });
 
   test("404 for an unknown session", async () => {
-    const res = await send("PATCH", `${SESSIONS}/gibt-es-nicht`, { rev: 1, endedMs: null });
+    const res = await send("PATCH", `${SESSIONS}/does-not-exist`, { rev: 1, endedMs: null });
     expect(res.status).toBe(404);
   });
 });
@@ -402,7 +402,7 @@ describe("deleting a session — DELETE …/sessions/:id", () => {
   test("a session with a log entry is 409 session_not_empty, and stays", async () => {
     const session = await startSession();
     expect(
-      (await send("POST", `${SESSIONS}/${session.id}/log`, { text: "Ankunft im Hafen" })).status,
+      (await send("POST", `${SESSIONS}/${session.id}/log`, { text: "Arrival at the harbour" })).status,
     ).toBe(201);
     const before = await readSession(session.id);
     const res = await send("DELETE", `${SESSIONS}/${session.id}`, { rev: before.rev });
@@ -426,23 +426,23 @@ describe("deleting a session — DELETE …/sessions/:id", () => {
   test("400 without a rev, 404 for an unknown session", async () => {
     const session = await startSession();
     expect((await send("DELETE", `${SESSIONS}/${session.id}`, {})).status).toBe(400);
-    expect((await send("DELETE", `${SESSIONS}/gibt-es-nicht`, { rev: 1 })).status).toBe(404);
+    expect((await send("DELETE", `${SESSIONS}/does-not-exist`, { rev: 1 })).status).toBe(404);
   });
 });
 
 describe("the addresses that name nothing", () => {
   test("the session verbs, the campaign's log, review/seen and played-scenes are 404", async () => {
     const session = await startSession();
-    expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
+    expect((await app.request("/api/campaigns/example/session")).status).toBe(404);
     for (const verb of ["start", "end", "pause", "continue", "discard", "resume"]) {
-      expect((await send("POST", `/api/campaigns/beispiel/session/${verb}`)).status).toBe(404);
+      expect((await send("POST", `/api/campaigns/example/session/${verb}`)).status).toBe(404);
     }
-    expect((await send("POST", "/api/campaigns/beispiel/log", { text: "x" })).status).toBe(404);
+    expect((await send("POST", "/api/campaigns/example/log", { text: "x" })).status).toBe(404);
     expect(
       (
-        await send("POST", "/api/campaigns/beispiel/review/seen", {
+        await send("POST", "/api/campaigns/example/review/seen", {
           sessionId: FIXTURE_SESSION,
-          logId: "spuren-gefunden",
+          logId: "tracks-found",
         })
       ).status,
     ).toBe(404);

@@ -11,28 +11,28 @@ describe("parseJsonReply", () => {
   test("the whole text wins, then a fence, then the brace span", () => {
     expect(parseJsonReply('{"a":1}')).toEqual({ value: { a: 1 }, repaired: false });
     expect(parseJsonReply('```json\n{"a":1}\n```')).toEqual({ value: { a: 1 }, repaired: false });
-    expect(parseJsonReply('Also: {"a":1} — fertig.')).toEqual({
+    expect(parseJsonReply('So: {"a":1} — done.')).toEqual({
       value: { a: 1 },
       repaired: false,
     });
   });
 
   test("trailing prose with a brace in it does not break the span", () => {
-    // The span used to run from the first `{` to the LAST `}` — one sentence
-    // mentioning a brace and every stage failed on a reply that is perfectly
-    // readable a few characters earlier. So: the last closing brace first,
-    // then progressively earlier ones.
-    expect(parseJsonReply('{"a":1}\n\nFertig — wie `{ "a": 1 }` oben beschrieben.')).toEqual({
+    // A span from the first `{` to the LAST `}` would fail on one sentence
+    // mentioning a brace, although the reply is perfectly readable a few
+    // characters earlier. So: the last closing brace first, then
+    // progressively earlier ones.
+    expect(parseJsonReply('{"a":1}\n\nDone — as `{ "a": 1 }` above describes.')).toEqual({
       value: { a: 1 },
       repaired: false,
     });
     // …and the repair pass walks the same spans.
-    expect(parseJsonReply("{'a': 1,}\n\nSo weit, siehe }.")).toEqual({
+    expect(parseJsonReply("{'a': 1,}\n\nThat is all, see }.")).toEqual({
       value: { a: 1 },
       repaired: true,
     });
     // A nested object still wins as a whole, not as its innermost brace.
-    expect(parseJsonReply('{"a":{"b":2}} — fertig }')).toEqual({
+    expect(parseJsonReply('{"a":{"b":2}} — done }')).toEqual({
       value: { a: { b: 2 } },
       repaired: false,
     });
@@ -42,7 +42,7 @@ describe("parseJsonReply", () => {
     expect(parseJsonReply("{'a': 1,}")).toEqual({ value: { a: 1 }, repaired: true });
     // A sentence would become a JSON string, and the run would then fail with
     // a message about the wrong thing.
-    expect(parseJsonReply("kein Objekt")).toBeNull();
+    expect(parseJsonReply("not an object")).toBeNull();
     expect(parseJsonReply("")).toBeNull();
   });
 });

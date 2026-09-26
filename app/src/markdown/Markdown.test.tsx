@@ -42,7 +42,7 @@ function openBranches(html: string): number {
 
 /** The reference fixtures CLAUDE.md names for renderer changes, body only. */
 function fixtureBody(name: string): string {
-  const raw = readFileSync(new URL(`../../../fixtures/beispiel/${name}`, import.meta.url), "utf8");
+  const raw = readFileSync(new URL(`../../../fixtures/${name}`, import.meta.url), "utf8");
   return (JSON.parse(raw) as { body: string }).body;
 }
 
@@ -170,7 +170,7 @@ describe("HTML in the body", () => {
     // This fixture carries a die table in the `[!note]`.
     expect([...lighthouse.matchAll(/data-callout="/g)]).toHaveLength(4);
     expect([...lighthouse.matchAll(/<table/g)]).toHaveLength(1);
-    expect(lighthouse).toContain("Eine Laterne, das Glas rußgeschwärzt");
+    expect(lighthouse).toContain("A lantern, its glass blackened with soot");
   });
 });
 

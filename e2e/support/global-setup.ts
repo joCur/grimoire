@@ -2,9 +2,9 @@
 //
 //   1. build the app once (the server serves the real Vite bundle via
 //      APP_DIST, exactly like the container does — docs/DEPLOYMENT.md)
-//   2. create a per-run temp directory with a PRISTINE copy of
-//      fixtures/beispiel — the entries every test's `grimoire seed` run
-//      reads, so fixtures/ itself is never touched
+//   2. create a per-run temp directory with a PRISTINE copy of fixtures/ —
+//      the example campaign every test's `grimoire seed` run reads, so
+//      fixtures/ itself is never touched
 //   3. start the stub LLM as a managed process and publish its port
 //
 // The per-test server processes are started by the fixtures (support/test.ts)
@@ -25,7 +25,6 @@ import { promisify } from "node:util";
 import {
   APP_DIST,
   BUN,
-  CAMPAIGN,
   ENV,
   FIXTURES_ROOT,
   REPO_ROOT,
@@ -73,10 +72,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "grimoire-e2e-"));
   // The pristine copy keeps the shape `grimoire seed` expects:
-  // <pristine>/<campaign>/<entry>.json
-  await cp(path.join(FIXTURES_ROOT, CAMPAIGN), path.join(dir, "pristine", CAMPAIGN), {
-    recursive: true,
-  });
+  // <pristine>/<kind>/<id>.json
+  await cp(FIXTURES_ROOT, path.join(dir, "pristine"), { recursive: true });
   process.env[ENV.runDir] = dir;
 
   const port = await freePort();

@@ -42,11 +42,11 @@ export function newChapterId(title: string, chapterIds: readonly string[]): stri
  * Is this string usable as a chapter id? Returns the error text for the field
  * in the UI language, or undefined when the id is fine.
  *
- * A chapter id is a kebab slug (README: `01-salzhafen`), so uppercase,
+ * A chapter id is a kebab slug (README: `01-salt-harbour`), so uppercase,
  * umlauts and underscores are rejected — deliberately as an error, never as a
  * silent rewrite: a typed id is the DM's decision, and an id is a stable
  * reference that must not change under them. A number prefix is optional
- * (`schmugglerbucht` is as valid as `03-schmugglerbucht`). The server stays
+ * (`smugglers-cove` is as valid as `03-smugglers-cove`). The server stays
  * the last instance; checking here only saves the round trip.
  *
  * Order of the checks is by specificity: the most precise complaint wins,

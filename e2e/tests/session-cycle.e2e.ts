@@ -55,6 +55,7 @@ import {
   sessionExists,
   sessionPath,
 } from "../support/session";
+import { CAMPAIGN } from "../support/paths";
 
 const NOTE_TEXT = "The party negotiates with Jorna at the foot of the stairs";
 const NOTE = `${NOTE_TEXT} #thread`;
@@ -84,7 +85,7 @@ const quickNoteField = (page: Page) => page.getByLabel(ui("live.note.aria"));
 const startChip = (page: Page) => page.getByRole("button", { name: ui("session.start") });
 
 /** The chapter of the example campaign — the one that holds a scene order. */
-const CHAPTER = "01-salzhafen";
+const CHAPTER = "01-salt-harbour";
 
 /**
  * Arrange the chapter's scenes through the documented endpoint: the whole
@@ -94,11 +95,11 @@ const CHAPTER = "01-salzhafen";
  */
 async function setSceneOrder(api: Api, order: string[]): Promise<void> {
   const tree = await api.get<{ chapters: { id: string; sceneOrderRev: number }[] }>(
-    "campaigns/beispiel/tree",
+    `campaigns/${CAMPAIGN}/tree`,
   );
   const chapter = tree.chapters.find((c) => c.id === CHAPTER);
   if (chapter === undefined) throw new Error(`the tree has no chapter ${CHAPTER}`);
-  await api.send("PUT", `campaigns/beispiel/chapters/${CHAPTER}/scene-order`, {
+  await api.send("PUT", `campaigns/${CAMPAIGN}/chapters/${CHAPTER}/scene-order`, {
     scenes: order,
     rev: chapter.sceneOrderRev,
   });
@@ -175,21 +176,21 @@ test("a scene's reading view offers the session start, like every reading view",
 }) => {
   // The scene's own route is a reading view: the chip in the topbar offers
   // the start there too, and the chapter trio marks the chapters entry.
-  await page.goto("/campaigns/beispiel/scenes/lighthouse-arrival");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await page.goto(`/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arrival at the Lighthouse");
   await expect(page.getByRole("link", { name: uiExact("topbar.nav.chapters") })).toHaveAttribute(
     "aria-current",
     "page",
   );
   await startChip(page).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 });
 
 test("session start, quick note, pause, end — log and session row follow", async ({
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
 
   // No session running yet — the session row is created by the button.
   expect(await runningSessionId(api)).toBeUndefined();
@@ -203,7 +204,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   const startGeometry = await chipGeometry(start);
 
   await start.click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 
   // WHICH session the notes land in is the server's answer — the id is
   // opaque and carries no date to reconstruct.
@@ -239,21 +240,21 @@ test("session start, quick note, pause, end — log and session row follow", asy
 
   // Left nav of the active chapter — which now names the chapter itself.
   const nav = liveNav(page);
-  await expect(nav).toContainText("Kapitel 1: Der Leuchtturm von Salzhafen");
+  await expect(nav).toContainText("Chapter 1: The Lighthouse of Salt Harbour");
   await expect(nav).toContainText(ui("scene.planned.heading"));
-  await expect(nav).toContainText("Ankunft am Leuchtturm");
+  await expect(nav).toContainText("Arrival at the Lighthouse");
   await expect(nav).toContainText(ui("scene.contingencies.heading"));
   await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
-    "Ankunft am Leuchtturm",
+    "Arrival at the Lighthouse",
   );
   // NPC card of the selected scene in the right aside — a BUTTON here, not a
   // link: in the live mode it opens the drawer.
-  await expect(page.getByRole("button", { name: /Hafenmeisterin Jorna/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Harbourmaster Jorna/ })).toBeVisible();
   // …and the location of the scene, as its own card next to the NPCs. Scoped
   // to the aside: the campaign switcher in the topbar carries the same name
   // now that the live route shares the global chrome.
   const aside = page.getByRole("complementary");
-  await expect(aside.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ })).toBeVisible();
+  await expect(aside.getByRole("button", { name: /The Lighthouse of Salt Harbour/ })).toBeVisible();
 
   // Fresh session: the log is empty and says where entries come from.
   await expect(page.getByText(ui("live.log.empty"))).toBeVisible();
@@ -303,24 +304,24 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // quick note have to survive opening and closing the drawer.
   const draft = "half typed, not sent";
   await quickNote.fill(draft);
-  await page.getByRole("button", { name: /Hafenmeisterin Jorna/ }).click();
+  await page.getByRole("button", { name: /Harbourmaster Jorna/ }).click();
 
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Harbourmaster Jorna");
   // The whole npc, not the card excerpt — and the way out into the npc's
   // own route (decisions/resources).
   await expect(drawer.getByRole("link", { name: ui("live.drawer.open") })).toHaveAttribute(
     "href",
-    "/campaigns/beispiel/npcs/jorna",
+    `/campaigns/${CAMPAIGN}/npcs/jorna`,
   );
   // Still in the live mode, session still running.
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
-  await expect(nav.getByRole("button", { name: /Ankunft am Leuchtturm/ })).toHaveAttribute(
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
+  await expect(nav.getByRole("button", { name: /Arrival at the Lighthouse/ })).toHaveAttribute(
     "aria-current",
     "true",
   );
@@ -328,14 +329,14 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await quickNote.fill("");
 
   // --- the location card opens in the same drawer ---------------------------
-  await aside.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ }).click();
+  await aside.getByRole("button", { name: /The Lighthouse of Salt Harbour/ }).click();
   await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText(
-    "Der Leuchtturm von Salzhafen",
+    "The Lighthouse of Salt Harbour",
   );
   // The way out leads to the location's own route (decisions/resources).
   await expect(page.getByRole("dialog").getByRole("link")).toHaveAttribute(
     "href",
-    "/campaigns/beispiel/locations/leuchtturm",
+    `/campaigns/${CAMPAIGN}/locations/lighthouse`,
   );
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
@@ -343,8 +344,8 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // --- the global live indicator brings the DM back -------------
   // The live topbar has no campaign nav (it belongs to the session), so this
   // is the DM looking something up: away to the chapter overview, then back.
-  await page.goto("/campaigns/beispiel");
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await page.goto(`/campaigns/${CAMPAIGN}`);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
   // No start action anywhere while a session runs …
   await expect(startChip(page)).toHaveCount(0);
   // … but the same chip, in link mode, with the running time — on this route
@@ -353,7 +354,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(backToLive).toBeVisible();
   await expect(backToLive).toContainText(/\d+:\d{2}:\d{2}/);
   await backToLive.click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   await expect(page.getByText(NOTE)).toBeVisible();
 
   // --- pause: the clock really STOPS ----------------------------------------
@@ -412,7 +413,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
 
   // --- end -> review -------------------------------------------------------
   await (await sessionMenuItem(page, "session.menu.end")).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/review$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("review.title"));
   await expect
     .poll(async () => (await getSession(api, sessionId)).ended)
@@ -430,7 +431,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // resumes anywhere — and that press opens a SECOND session of the same
   // day: own row under its own id, empty log, timer back at 0. The first
   // session keeps its `ended`, its log and its pauses.
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   const startAgain = startChip(page);
   await expect(startAgain).toBeVisible();
   // The start chip is the only session control on offer: no second one that
@@ -439,7 +440,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect(visibleSessionControls(page)).toHaveAttribute("data-session-chip", "start");
   await startAgain.click();
 
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   await expect(sessionMenuChip(page)).toBeVisible();
   // The timer of the SECOND session starts at zero too — an end→start never
   // keeps counting the old session's time.
@@ -486,7 +487,7 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // Ending the second one leads to the review of the SECOND session — the
   // harvest works on the LAST STARTED session, which is this one.
   await (await sessionMenuItem(page, "session.menu.end")).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/review$`));
   await expect.poll(async () => (await getSession(api, secondId)).ended).toBeDefined();
   await expect(page.getByText(SECOND_NOTE_TEXT)).toBeVisible();
   await expect(page.getByText(NOTE_TEXT)).toHaveCount(0);
@@ -499,27 +500,27 @@ test("session start, quick note, pause, end — log and session row follow", asy
 test("live scene column: If-sections start closed, open one at a time, reset on a switch", async ({
   page,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await startChip(page).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 
   const nav = liveNav(page);
-  const captured = nav.getByRole("button", { name: /Von den Schmugglern erwischt/ });
+  const captured = nav.getByRole("button", { name: /Caught by the Smugglers/ });
   const article = page.getByRole("article");
   await captured.click();
   await expect(article.getByRole("heading", { level: 1 })).toHaveText(
-    "Von den Schmugglern erwischt",
+    "Caught by the Smugglers",
   );
 
   // Both branches are there as rows — and both are folded away.
   const branches = page.getByRole("main").locator("details[data-if-section]");
   await expect(branches).toHaveCount(2);
   const first = branches.first();
-  const firstBody = first.getByText("Fenn lässt sie in die alte Räucherkammer sperren", {
+  const firstBody = first.getByText("Fenn has them locked in the old smokehouse", {
     exact: false,
   });
   await expect(first.locator("summary")).toContainText(ui("markdown.ifSection.prefix"));
-  await expect(first.locator("summary")).toContainText("sie geben zu, für Jorna zu arbeiten");
+  await expect(first.locator("summary")).toContainText("they admit to working for Jorna");
   await expect(first).not.toHaveAttribute("open", "");
   await expect(firstBody).toBeHidden();
   await expect(branches.nth(1)).not.toHaveAttribute("open", "");
@@ -539,21 +540,21 @@ test("live scene column: If-sections start closed, open one at a time, reset on 
 
   // Nothing is remembered: away to the other scene and back, and the branch
   // is closed again (no localStorage, no server state — quality floor).
-  await nav.getByRole("button", { name: /Ankunft am Leuchtturm/ }).click();
-  await expect(article.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await nav.getByRole("button", { name: /Arrival at the Lighthouse/ }).click();
+  await expect(article.getByRole("heading", { level: 1 })).toHaveText("Arrival at the Lighthouse");
   await captured.click();
   await expect(article.getByRole("heading", { level: 1 })).toHaveText(
-    "Von den Schmugglern erwischt",
+    "Caught by the Smugglers",
   );
   await expect(branches.first()).not.toHaveAttribute("open", "");
   await expect(
-    branches.first().getByText("Fenn lässt sie in die alte Räucherkammer sperren", {
+    branches.first().getByText("Fenn has them locked in the old smokehouse", {
       exact: false,
     }),
   ).toBeHidden();
 
   // Critical path 2, same scene: the reading view is untouched by all this.
-  await page.goto("/campaigns/beispiel/scenes/smuggler-captured");
+  await page.goto(`/campaigns/${CAMPAIGN}/scenes/smuggler-captured`);
   const reading = page.locator("details[data-if-section]");
   await expect(reading).toHaveCount(2);
   await expect(reading.first()).toHaveAttribute("open", "");
@@ -571,8 +572,8 @@ test.describe("two scenes of the same shape", () => {
     id,
     title,
     type: "planned",
-    chapter: "01-salzhafen",
-    location: "bucht",
+    chapter: CHAPTER,
+    location: "cove",
     npcs: [],
     handouts: [],
     tags: ["social"],
@@ -595,9 +596,9 @@ test.describe("two scenes of the same shape", () => {
   test("the branch opened in one scene is closed in the other, and closed on the way back", async ({
     page,
   }) => {
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     await startChip(page).click();
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 
     const nav = liveNav(page);
     const article = page.getByRole("article");
@@ -640,9 +641,9 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there",
   // Path 4 with the PC reminder on top: a `#pc` note written during the
   // session shows up in the aside's player-facing reminder list and is done
   // with right there — the same write the wrap-up would do.
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await startChip(page).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   const sessionId = (await runningSessionId(api)) ?? "";
 
   const aside = page.getByRole("complementary");
@@ -678,11 +679,11 @@ test("discarding a session — the mis-click's undo removes the empty row", asyn
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
 
   // The start action hit by accident.
   await startChip(page).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   const sessionId = (await runningSessionId(api)) ?? "";
   expect(await sessionExists(api, sessionId)).toBe(true);
 
@@ -701,7 +702,7 @@ test("discarding a session — the mis-click's undo removes the empty row", asyn
   await dialog.getByRole("button", { name: uiExact("common.discard") }).click();
 
   // Back in the non-live state: the chapter overview offers a start again …
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
   await expect(startChip(page)).toBeVisible();
   // … no session chip is left over …
   await expect(sessionLinkChip(page)).toHaveCount(0);
@@ -713,7 +714,7 @@ test("discarding a session — the mis-click's undo removes the empty row", asyn
   // id, once handed out, must not name a second evening — with random ids
   // that holds without any bookkeeping.
   await startChip(page).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   const restarted = (await runningSessionId(api)) ?? "";
   expect(restarted).not.toBe("");
   expect(restarted).not.toBe(sessionId);
@@ -727,11 +728,11 @@ test("discarding a session — the mis-click's undo removes the empty row", asyn
 test("an unreachable session lookup dims the chip instead of offering a start", async ({
   page,
 }) => {
-  await page.route("**/api/campaigns/beispiel/sessions?running=true", (route) =>
+  await page.route(`**/api/campaigns/${CAMPAIGN}/sessions?running=true`, (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
   );
 
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
 
   const unknown = page.getByRole("status", { name: ui("session.status.unknown.aria") });
   await expect(unknown).toBeVisible();
@@ -761,8 +762,8 @@ test.describe("played/dropped scenes in the live nav", () => {
           id: "harbor-office-talk",
           title: "Talk at the harbor office",
           type: "planned",
-          chapter: "01-salzhafen",
-          location: "bucht",
+          chapter: CHAPTER,
+          location: "cove",
           npcs: [],
           handouts: [],
           tags: ["social"],
@@ -785,12 +786,12 @@ test.describe("played/dropped scenes in the live nav", () => {
       "harbor-office-talk",
       "smuggler-captured",
     ]);
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     await startChip(page).click();
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 
     const nav = liveNav(page);
-    const arrivalRow = nav.getByRole("button", { name: /Ankunft am Leuchtturm/ });
+    const arrivalRow = nav.getByRole("button", { name: /Arrival at the Lighthouse/ });
     const seededRow = nav.getByRole("button", { name: /Talk at the harbor office/ });
     const heading = page.getByRole("article").getByRole("heading", { level: 1 });
 
@@ -798,7 +799,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     // the order — the arrival scene, where the DM put it.
     await expect(arrivalRow).toBeVisible();
     await expect(seededRow).toBeVisible();
-    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(heading).toHaveText("Arrival at the Lighthouse");
     await expect(arrivalRow).toHaveAttribute("aria-current", "true");
     // … and there is no played group at all yet.
     await expect(playedTrigger(nav)).toHaveCount(0);
@@ -819,12 +820,12 @@ test.describe("played/dropped scenes in the live nav", () => {
 
     // The default selection is the first PLANNED scene, not the played
     // one — which still stands at the top of the chapter's scene order.
-    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(heading).toHaveText("Arrival at the Lighthouse");
     await expect(arrivalRow).toHaveAttribute("aria-current", "true");
 
     // The contingencies are untouched.
     await expect(nav).toContainText(ui("scene.contingencies.heading"));
-    await expect(nav.getByRole("button", { name: /Von den Schmugglern erwischt/ })).toBeVisible();
+    await expect(nav.getByRole("button", { name: /Caught by the Smugglers/ })).toBeVisible();
 
     // Expanding reaches it, and it opens like any other scene.
     await groupTrigger.click();
@@ -832,7 +833,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     await expect(groupedRow).toBeVisible();
     await groupedRow.click();
     await expect(heading).toHaveText("Talk at the harbor office");
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
 
     // The group is view state only — a reload has it collapsed again.
     await page.reload();
@@ -856,7 +857,7 @@ test.describe("played/dropped scenes in the live nav", () => {
       ui("live.nav.playedGroup", { count: "(2)" }),
     );
     // The fallback is the FIRST done scene — the chapter's scene order again.
-    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(heading).toHaveText("Arrival at the Lighthouse");
     await expect(quickNoteField(page)).toBeVisible();
   });
 });
@@ -870,7 +871,7 @@ test("the session page shows a past evening's rows; the old address is gone", as
 }) => {
   // The fixture session of the example campaign: three log rows, two of them
   // in the same scene, and one closed pause.
-  await page.goto("/campaigns/beispiel/sessions/2026-01-15");
+  await page.goto(`/campaigns/${CAMPAIGN}/sessions/2026-01-15`);
 
   // The heading is the DATE, derived from `started` — the id is opaque and is
   // never shown.
@@ -882,16 +883,16 @@ test("the session page shows a past evening's rows; the old address is gone", as
   // TITLE, resolved through the tree) and the note as it was typed.
   const log = page.getByRole("region", { name: ui("session.page.log") });
   await expect(log).toContainText("19:52");
-  await expect(log).toContainText("Spuren gefunden, Gruppe will sofort zur Bucht");
-  await expect(log).toContainText("Improvisiert: Fischerin „Old Metta“ am Steg");
+  await expect(log).toContainText("Found tracks, the party wants to head straight for the cove");
+  await expect(log).toContainText("Improvised: fisherwoman “Old Metta” at the jetty");
   // The scene is a LINK onto its own route — the row's `sceneId` never shows.
-  await expect(log.getByRole("link", { name: "Ankunft am Leuchtturm" }).first()).toHaveAttribute(
+  await expect(log.getByRole("link", { name: "Arrival at the Lighthouse" }).first()).toHaveAttribute(
     "href",
-    "/campaigns/beispiel/scenes/lighthouse-arrival",
+    `/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival`,
   );
   await expect(log).not.toContainText("lighthouse-arrival");
   // The third row names no scene, so it stands with its text alone.
-  await expect(log).toContainText("Cliffhanger: Lichter in der Bucht gesichtet");
+  await expect(log).toContainText("Cliffhanger: lights spotted in the cove");
 
   // The PAUSE is an interval with its duration — 20:30 to 21:10 is 40 minutes.
   const pauses = page.getByRole("region", { name: ui("session.page.pauses") });
@@ -900,16 +901,16 @@ test("the session page shows a past evening's rows; the old address is gone", as
   // The SCENES THE NOTES WERE TAKEN IN, each once, as links onto their own
   // routes; one opens its scene.
   const scenes = page.getByRole("region", { name: ui("session.page.scenes") });
-  await expect(scenes.getByRole("link")).toHaveText(["Ankunft am Leuchtturm"]);
-  await scenes.getByRole("link", { name: "Ankunft am Leuchtturm" }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(scenes.getByRole("link")).toHaveText(["Arrival at the Lighthouse"]);
+  await scenes.getByRole("link", { name: "Arrival at the Lighthouse" }).click();
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival$`));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arrival at the Lighthouse");
 
   // The old ENTRY address of the same session answers 404 — no redirect, no
   // alias (decisions/resources). Assembled from its segments rather than spelled out: a
   // literal address here would read like one the app still uses.
   const address = ["sessions", "2026-01-15"].join("/");
-  const res = await api.fetch(`campaigns/beispiel/entries/${address}`);
+  const res = await api.fetch(`campaigns/${CAMPAIGN}/entries/${address}`);
   expect(res.status).toBe(404);
 });
 
@@ -940,21 +941,21 @@ test.describe("the session view follows the chapter's order", () => {
 
   const DINNER = "Dinner with Jorna";
   const CELLAR = "The cellar beneath the tower";
-  const CONTINGENCY = "Von den Schmugglern erwischt";
+  const CONTINGENCY = "Caught by the Smugglers";
   /** The played group's trigger, as the first word of a nav button's text. */
   const playedHeading = new RegExp(`^${escapeStringRegexp(ui("live.nav.played"))}`);
 
   test.use({
     seed: {
-      scenes: [planned("dinner", DINNER, "bucht"), planned("cellar", CELLAR, "leuchtturm")],
+      scenes: [planned("dinner", DINNER, "cove"), planned("cellar", CELLAR, "lighthouse")],
     },
   });
 
   /** Start the evening from the overview — the session the view needs. */
   async function startSession(page: Page): Promise<void> {
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     await startChip(page).click();
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   }
 
   test("it opens the first planned scene still to come, never a contingency", async ({
@@ -1023,7 +1024,7 @@ test.describe("the session view follows the chapter's order", () => {
     const sessionId = (await runningSessionId(api)) ?? "";
     const noteScenes = async () =>
       (await getSession(api, sessionId)).log.map((row) => row.sceneId);
-    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(heading).toHaveText("Arrival at the Lighthouse");
 
     // No note in the open scene yet: the box starts unticked.
     await expect(box).not.toBeChecked();
@@ -1046,7 +1047,7 @@ test.describe("the session view follows the chapter's order", () => {
     );
     await playedTrigger(nav).click();
     await expect(
-      playedGroup(nav).getByRole("button", { name: /Ankunft am Leuchtturm/ }),
+      playedGroup(nav).getByRole("button", { name: /Arrival at the Lighthouse/ }),
     ).toBeVisible();
 
     // The box starts over in the next scene. A note ticks it; the DM unticks
@@ -1123,12 +1124,12 @@ test.describe("the session view follows the chapter's order", () => {
     await quickNote.press("Enter");
     await expect.poll(noteScenes).toEqual([ARRIVAL, "dinner", "cellar"]);
     await (await sessionMenuItem(page, "session.menu.end")).click();
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/review$`));
     await expect.poll(async () => (await getSession(api, sessionId)).ended).toBeDefined();
     expect((await getScene(api, "cellar")).status).toBe("draft");
 
     // The chapter overview reads the same status (critical path 1).
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     const dinnerRow = page
       .locator("div")
       .filter({ has: page.getByRole("link", { name: new RegExp(DINNER) }) })
@@ -1141,10 +1142,10 @@ test.describe("the session view follows the chapter's order", () => {
 
     // The reading page of the evening lists the scenes its notes were taken
     // in, each once, in the order of their first note.
-    await page.goto(`/campaigns/beispiel/sessions/${sessionId}`);
+    await page.goto(`/campaigns/${CAMPAIGN}/sessions/${sessionId}`);
     await expect(
       page.getByRole("region", { name: ui("session.page.scenes") }).getByRole("link"),
-    ).toHaveText(["Ankunft am Leuchtturm", DINNER, CELLAR]);
+    ).toHaveText(["Arrival at the Lighthouse", DINNER, CELLAR]);
   });
 
   test("a rearranged order moves the entry point with it", async ({ page, api }) => {
@@ -1184,7 +1185,7 @@ test.describe("the session view follows the chapter's order", () => {
     // The contingency stands FIRST in the order and is still `ready` — and it
     // is still not the entry point. The fallback is the first planned scene.
     await expect(liveNav(page)).toContainText(ui("live.nav.noPlanned"));
-    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(heading).toHaveText("Arrival at the Lighthouse");
     await expect(page.getByRole("button", { name: anyNextStep() })).toHaveCount(0);
   });
 });
@@ -1286,7 +1287,7 @@ test("the session resources: flat reads, the running filter, a guard per row, no
 
   // The action endpoints of before are gone. Assembled from their segments:
   // a literal address here would read like one the app still uses.
-  const old = (...segments: string[]) => `campaigns/beispiel/${segments.join("/")}`;
+  const old = (...segments: string[]) => `campaigns/${CAMPAIGN}/${segments.join("/")}`;
   expect((await api.fetch(old("session"))).status).toBe(404);
   expect((await post(old("session", "start"))).status).toBe(404);
   expect((await post(old("log"), { text: "Note" })).status).toBe(404);
@@ -1306,9 +1307,9 @@ test("a note into a session ended elsewhere: the sentence says so, nothing is wr
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await startChip(page).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   const sessionId = (await runningSessionId(api)) ?? "";
   const session = await getSession(api, sessionId);
   await quickNoteField(page).fill("Jotted down just in time");

@@ -12,8 +12,8 @@ fields a `body`: their **text** in Markdown.
 
 The storage shape is stated exactly once, in `server/src/db/schema.ts`; this
 README describes what the fields may hold and what the text can contain.
-All field names are English (stable, machine-readable), all content is
-German.
+All field names are English (stable, machine-readable); the content is free
+text in the DM's language.
 
 Ground rule: **the format degrades, it does not validate.** An unknown
 heading or an unknown callout in the text is shown as normal text; nothing
@@ -90,10 +90,10 @@ schema in `shared/src/campaign.ts`, [decisions/resources](docs/decisions/resourc
 
 ```json
 {
-  "id": "beispiel",
-  "name": "Der Leuchtturm von Salzhafen",
-  "description": "Eine Küstenkampagne um einen erloschenen Leuchtturm, …",
-  "body": "\nKampagnenweite Notizen: …",
+  "id": "example",
+  "name": "The Lighthouse of Salt Harbour",
+  "description": "A coastal campaign about a dark lighthouse, …",
+  "body": "\nCampaign-wide notes: …",
   "glossaryIntro": "",
   "rev": 1
 }
@@ -131,10 +131,10 @@ schema in `shared/src/chapter.ts`, [decisions/resources](docs/decisions/resource
 
 ```json
 {
-  "id": "01-salzhafen",
-  "title": "Kapitel 1: Der Leuchtturm von Salzhafen",
+  "id": "01-salt-harbour",
+  "title": "Chapter 1: The Lighthouse of Salt Harbour",
   "status": "active",
-  "body": "Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.\n",
+  "body": "Find out why the beacon has been dark for three nights.\n",
   "rev": 1
 }
 ```
@@ -175,7 +175,7 @@ it has changes nothing about that ([decisions/data-shape](docs/decisions/data-sh
 
 The **threads** — the plot threads the chapter carries — are neither text
 nor a field of the chapter, but each is its own resource that names its
-chapter (see thread). A `## Offene Fäden` in the text of an older chapter
+chapter (see thread). A `## Open threads` in the text of an older chapter
 stays free text; nothing reads it as a thread.
 
 ### Scene
@@ -194,12 +194,12 @@ fields side by side:
 ```json
 {
   "id": "lighthouse-arrival",
-  "title": "Ankunft am Leuchtturm",
+  "title": "Arrival at the Lighthouse",
   "type": "planned",
-  "chapter": "01-salzhafen",
-  "location": "leuchtturm",
+  "chapter": "01-salt-harbour",
+  "location": "lighthouse",
   "npcs": ["jorna"],
-  "handouts": ["Karte von Salzhafen"],
+  "handouts": ["Map of Salt Harbour"],
   "tags": ["social", "travel"],
   "status": "ready",
   "body": "\n## Flow\n\n…",
@@ -264,16 +264,16 @@ fields side by side:
 ```json
 {
   "id": "jorna",
-  "name": "Hafenmeisterin Jorna",
-  "role": "Auftraggeberin, Hafenmeisterin von Salzhafen",
-  "chapter": "01-salzhafen",
+  "name": "Harbourmaster Jorna",
+  "role": "Employer, harbourmaster of Salt Harbour",
+  "chapter": "01-salt-harbour",
   "status": "alive",
   "statblock": "Roll20: Jorna",
   "quickstats": { "insight": 2, "passive-perception": 12 },
-  "voice": "knapp, wetterrau, duzt jeden",
-  "appearance": "Ölmantel, graue Flechte, fehlender kleiner Finger links",
-  "motivation": "Das Leuchtfeuer muss wieder brennen, …",
-  "body": "\n## Weiß\n\n…",
+  "voice": "curt, weather-beaten, on first-name terms with everyone",
+  "appearance": "oilskin coat, grey braid, missing little finger on the left hand",
+  "motivation": "The beacon has to burn again before the autumn convoys arrive, …",
+  "body": "\n## Knows\n\n…",
   "rev": 4
 }
 ```
@@ -315,8 +315,8 @@ write. Quick stats, statblock and chapter are chips; role, voice, appearance
 and `motivation` form its profile. An `[[id]]` in `motivation` appears as the
 current name when shown, like in the text — a display, not a reference.
 
-Text sections are free; recommended: `## Weiß` (`[!secret]` callouts),
-`## Beziehungen` (one line per counterpart; a counterpart is linked with
+Text sections are free; recommended: `## Knows` (`[!secret]` callouts),
+`## Relationships` (one line per counterpart; a counterpart is linked with
 `[[id]]` as everywhere in the text). No heading has a meaning for the app.
 
 Minor NPCs get no NPC until they recur. Until then: a line in the scene text
@@ -336,12 +336,12 @@ all fields side by side:
 
 ```json
 {
-  "id": "leuchtturm",
-  "name": "Der Leuchtturm von Salzhafen",
-  "chapter": "01-salzhafen",
-  "roll20Page": "Leuchtturm",
-  "atmosphere": "Verlassen in Eile, nicht im Kampf.",
-  "body": "\n## Beim ersten Betreten\n\n…",
+  "id": "lighthouse",
+  "name": "The Lighthouse of Salt Harbour",
+  "chapter": "01-salt-harbour",
+  "roll20Page": "Lighthouse",
+  "atmosphere": "Left in a hurry, not in a fight: …",
+  "body": "\n## On first entering\n\n…",
   "rev": 3
 }
 ```
@@ -373,8 +373,8 @@ its own. An `[[id]]` in `atmosphere` appears as the current name when shown,
 like in the text — a display, not a reference. Without `atmosphere` the
 location card shows the Roll20 page.
 
-Text sections are free; recommended: `## Beim ersten Betreten` (with
-`[!readaloud]`), `## Wer ist hier` (characters at the place, with the id as
+Text sections are free; recommended: `## On first entering` (with
+`[!readaloud]`), `## Who is here` (characters at the place, with the id as
 `[[id]]`).
 
 ### Thread
@@ -386,9 +386,9 @@ own type (`Thread`, from the zod schema in `shared/src/thread.ts`,
 
 ```json
 {
-  "id": "wer-bezahlt-die-schmuggler",
-  "chapter": "01-salzhafen",
-  "text": "Wer bezahlt die Schmuggler?",
+  "id": "who-pays-the-smugglers",
+  "chapter": "01-salt-harbour",
+  "text": "Who pays the smugglers?",
   "done": false,
   "rev": 1
 }
@@ -427,8 +427,8 @@ its own type (`Idea`, from the zod schema in `shared/src/idea.ts`,
 
 ```json
 {
-  "id": "dorfschmied",
-  "text": "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+  "id": "village-smith",
+  "text": "Idea: the village smith repairs smuggling tools suspiciously often #thread",
   "done": false,
   "rev": 1
 }
@@ -461,7 +461,7 @@ schema in `shared/src/glossary-term.ts`, [decisions/resources](docs/decisions/re
 {
   "id": "lighthouse-keeper",
   "term": "lighthouse keeper",
-  "explanation": "Leuchtturmwärter",
+  "explanation": "the Keeper, always capitalised",
   "rev": 1
 }
 ```
@@ -501,8 +501,8 @@ it:
 {
   "id": "7c1f…",
   "kind": "naming",
-  "from": "Salt Harbour",
-  "to": "Salzhafen",
+  "from": "Salt Harbor",
+  "to": "Salt Harbour",
   "text": "",
   "rev": 1
 }
@@ -549,8 +549,8 @@ embedded — each with its own `id` and its own `rev`:
   "ended": "2026-01-15T22:45:00",
   "endedMs": 1768513500000,
   "body": "\n## Threads\n\n…",
-  "pauses": [{ "id": "abendessen", "from": "2026-01-15T20:30:00", "fromMs": 1768505400000, "to": "2026-01-15T21:10:00", "toMs": 1768507800000, "rev": 1 }],
-  "log": [{ "id": "spuren-gefunden", "at": "19:52", "sceneId": "lighthouse-arrival", "text": "Spuren gefunden, …", "reviewed": false, "rev": 1 }],
+  "pauses": [{ "id": "dinner", "from": "2026-01-15T20:30:00", "fromMs": 1768505400000, "to": "2026-01-15T21:10:00", "toMs": 1768507800000, "rev": 1 }],
+  "log": [{ "id": "tracks-found", "at": "19:52", "sceneId": "lighthouse-arrival", "text": "Found tracks, …", "reviewed": false, "rev": 1 }],
   "rev": 1
 }
 ```
@@ -656,7 +656,7 @@ a generator proposal, nowhere else.
 to a chapter; `chapter:` cannot be cleared.
 
 A mention in the **text** is not a reference in this sense: `[[id]]` and
-whatever stands under `## Beziehungen` remain visible text. An `[[id]]` for
+whatever stands under `## Relationships` remain visible text. An `[[id]]` for
 which there is no NPC, no location and no scene is shown as text — no error,
 and nothing is created. An empty NPC or location is normal, by the way:
 created and not yet filled, it appears as a thin card and can be filled at
@@ -673,7 +673,7 @@ produce:
 | Heading | Meaning |
 | ------- | ------- |
 | `## Flow` | standard course when nothing special happens |
-| `## If: <condition>` | branch; the condition is free text (German), rendered collapsible |
+| `## If: <condition>` | branch; the condition is free text, rendered collapsible |
 | everything else | normal section, no special treatment |
 
 ### Callouts (Obsidian syntax)
@@ -696,18 +696,18 @@ right in every row. Tables apply in every text, in **every callout** and in
 `## If:` sections.
 
 ```markdown
-> [!note] Zufallsbegegnung an der Bucht
+> [!note] Random encounter at the cove
 >
-> | W6 | Was die Brandung anschwemmt |
+> | d6 | What the surf washes up |
 > | --- | --- |
-> | 1–2 | Ein leeres Fass mit fremdem Brandzeichen |
-> | 3–4 | Ein Ruder, frisch gekerbt |
-> | 5–6 | Eine Laterne, das Glas rußgeschwärzt |
+> | 1–2 | An empty barrel with a foreign brand |
+> | 3–4 | An oar, freshly notched |
+> | 5–6 | A lantern, its glass blackened with soot |
 ```
 
 (In a callout the table stands in the same `>` block as the text — see the
 scene `lighthouse-arrival`,
-`fixtures/beispiel/scenes/lighthouse-arrival.json`.)
+`fixtures/scenes/lighthouse-arrival.json`.)
 
 - **Tables only.** No strikethrough (`~~x~~`), **no task lists**, no
   autolinks, no footnotes. `- [x]` deliberately stays normal list text: it is
@@ -730,9 +730,9 @@ callout.
   right everywhere without any other row being touched.
 - Referenceable are **NPC, location and scene**. If ids collide across
   kinds, **NPC > location > scene** wins. Chapters are not referenceable.
-- The brackets hold **only the id** in kebab case (`[[alte-mole]]`); there is
+- The brackets hold **only the id** in kebab case (`[[old-jetty]]`); there is
   **no display text** (`[[jorna|Jorna]]` is normal text). Endings stand
-  outside: `[[jorna]]s Boot` → "Jornas Boot".
+  outside: `[[jorna]]'s boat` → "Jorna's boat".
 - **Code is not prose**: in code blocks and in `` `[[jorna]]` `` the spelling
   stays literal — not resolved and not indexed.
 - In the header line of an `## If:` branch the resolved **name appears as
@@ -751,7 +751,7 @@ callout.
 ### Hashtags in the log
 
 `#thread` open thread · `#npc` improvised NPC · `#loot` loot ·
-`#decision` player decision · `#date` in-game date (e.g. `#date Tag 4`)
+`#decision` player decision · `#date` in-game date (e.g. `#date Day 4`)
 
 `#pc` note about a player character. An optional second tag names the
 character (`#pc #kaela`); the names are free, there is no PC entity and
@@ -851,27 +851,27 @@ the DM. An `[[id]]` in code does not count as a reference, as everywhere.
 
 ## Fixtures
 
-The example campaign lies as JSON under `fixtures/beispiel/`, one object per
-file, exactly in the shape the API speaks. Every entity with its own
-resource lies in its own directory, every file exactly the object its
-resource returns, without `rev` ([decisions/resources](docs/decisions/resources.md)): the campaign under
-`fixtures/beispiel/campaigns/<id>.json`, a chapter under
-`fixtures/beispiel/chapters/<id>.json`, a scene under
-`fixtures/beispiel/scenes/<id>.json`, an NPC under
-`fixtures/beispiel/npcs/<id>.json`, a location under
-`fixtures/beispiel/locations/<id>.json`, a thread under
-`fixtures/beispiel/threads/<id>.json`, an idea under
-`fixtures/beispiel/ideas/<id>.json`, a glossary term under
-`fixtures/beispiel/glossary-terms/<id>.json`, a piece of campaign knowledge
-under `fixtures/beispiel/knowledge-items/<id>.json` and a session under
-`fixtures/beispiel/sessions/<id>.json`, its pauses and log lines embedded,
-without `rev` and without the epoch readings — those are the server's
-reading in its time zone. It is the reference for callouts and the only
-source for tests and E2E; the bodies are therefore never reformatted.
+The example campaign lies as JSON directly under `fixtures/`, one object per
+file, exactly in the shape the API speaks. The directory is one campaign;
+every entity with its own resource lies in its own folder in it, every file
+exactly the object its resource returns, without `rev`
+([decisions/resources](docs/decisions/resources.md)): the campaign under
+`fixtures/campaigns/<id>.json`, a chapter under `fixtures/chapters/<id>.json`,
+a scene under `fixtures/scenes/<id>.json`, an NPC under
+`fixtures/npcs/<id>.json`, a location under `fixtures/locations/<id>.json`, a
+thread under `fixtures/threads/<id>.json`, an idea under
+`fixtures/ideas/<id>.json`, a glossary term under
+`fixtures/glossary-terms/<id>.json`, a piece of campaign knowledge under
+`fixtures/knowledge-items/<id>.json` and a session under
+`fixtures/sessions/<id>.json`, its pauses and log lines embedded, without
+`rev` and without the epoch readings — those are the server's reading in its
+time zone. It is the reference for callouts and the only source for tests and
+E2E; the bodies are therefore never reformatted.
 
-`grimoire seed <dir>` is the dev/E2E tool for it: it reads
-`<dir>/<campaign>/*.json` together with the directories `campaigns/`,
-`chapters/`, `scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`,
-`glossary-terms/`, `knowledge-items/` and `sessions/` below it and writes
-the rows into a database through the store layer. The server itself seeds
-nothing — a fresh instance starts empty.
+`grimoire seed [dir]` is the dev/E2E tool for it: it seeds exactly one
+campaign directory, by default `fixtures/`. It reads the folders
+`campaigns/`, `chapters/`, `scenes/`, `npcs/`, `locations/`, `threads/`,
+`ideas/`, `glossary-terms/`, `knowledge-items/` and `sessions/` in it — the
+campaign folder holds exactly one campaign — and writes the rows into a
+database through the store layer. The server itself seeds nothing — a fresh
+instance starts empty.

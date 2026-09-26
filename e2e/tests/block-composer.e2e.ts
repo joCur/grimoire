@@ -27,8 +27,8 @@
 // labels plus heading, text, if-section and markdown block). `exact: true`
 // everywhere: the text card's name is a substring of the read-aloud card's.
 //
-// The scene texts quoted below are the example campaign's in fixtures/, which
-// is German; every text a test types itself is English.
+// The scene texts quoted below are the example campaign's in fixtures/; every
+// text a test types itself is invented here.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -43,15 +43,15 @@ import { ui, uiPattern } from "../support/ui";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
 const SCENE = "lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
-const SCENE_TITLE = "Ankunft am Leuchtturm";
+const SCENE_URL = `/campaigns/example/scenes/${SCENE}`;
+const SCENE_TITLE = "Arrival at the Lighthouse";
 /** The reference scene WITH two `## If:` sections and their children. */
 const IF_SCENE = "smuggler-captured";
-const IF_SCENE_URL = `/campaigns/beispiel/scenes/${IF_SCENE}`;
+const IF_SCENE_URL = `/campaigns/example/scenes/${IF_SCENE}`;
 /** The first read-aloud line of SCENE. */
-const TOWER_LINE = "Der Turm ragt schwarz gegen den Abendhimmel auf.";
+const TOWER_LINE = "The tower rises black against the evening sky.";
 /** The condition of IF_SCENE's first section. */
-const FIRST_CONDITION = "sie geben zu, für Jorna zu arbeiten";
+const FIRST_CONDITION = "they admit to working for Jorna";
 
 /** The label a block type shows: the reading view's callout labels and the four structural ones. */
 const LABEL = {
@@ -312,7 +312,7 @@ test("editing a read-aloud card writes THAT block and nothing else", async ({ pa
     before.body.replace(`${readaloudBefore}\n`, `${readaloudBefore}\n> ${added}\n`),
   );
   // Spelled out for the blocks that must not have moved a byte.
-  for (const head of ["## Flow", "Die Gruppe erreicht", "> [!check]", "> [!secret]", "> [!note]"]) {
+  for (const head of ["## Flow", "The party reaches", "> [!check]", "> [!secret]", "> [!note]"]) {
     expect(blockOf(after.body, head), head).toBe(blockOf(before.body, head));
   }
 });
@@ -425,7 +425,7 @@ test("a child of the first If-section edits without touching the two headings", 
 
   await page.goto(IF_SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Von den Schmugglern erwischt",
+    "Caught by the Smugglers",
   );
   await editAction(page).click();
 
@@ -456,7 +456,7 @@ test("a child of the first If-section edits without touching the two headings", 
   const child = card(page, block(LABEL.text, 1));
   await child.edit.click();
   const field = contentField(page, LABEL.text);
-  await expect(field).toHaveValue(/^Fenn lässt sie in die alte Räucherkammer sperren/);
+  await expect(field).toHaveValue(/^Fenn has them locked in the old smokehouse/);
   await field.fill(`${await field.inputValue()}\n${added}`);
   await saveAction(page).click();
 
@@ -475,14 +475,14 @@ test("a child of the first If-section edits without touching the two headings", 
   await expect.poll(() => bodyOf(api, IF_SCENE)).toContain(added);
   const after = await split(api, IF_SCENE);
   expect(after.fields).toEqual(before.fields);
-  expect(blockOf(after.body, "## If: sie geben zu")).toBe(`## If: ${FIRST_CONDITION}`);
-  expect(blockOf(after.body, "## If: sie lügen")).toBe(
-    blockOf(before.body, "## If: sie lügen"),
+  expect(blockOf(after.body, "## If: they admit")).toBe(`## If: ${FIRST_CONDITION}`);
+  expect(blockOf(after.body, "## If: they lie")).toBe(
+    blockOf(before.body, "## If: they lie"),
   );
-  const paragraph = blockOf(before.body, "Fenn lässt sie in die alte");
+  const paragraph = blockOf(before.body, "Fenn has them locked in the old");
   expect(after.body).toBe(before.body.replace(paragraph, `${paragraph}\n${added}`));
   // The section's other children, spelled out.
-  for (const head of ["- die morschen Bretter", "> [!note]", "> [!check]", "> [!outcome]"]) {
+  for (const head of ["- break open the rotten boards", "> [!note]", "> [!check]", "> [!outcome]"]) {
     expect(blockOf(after.body, head), head).toBe(blockOf(before.body, head));
   }
 });
@@ -494,7 +494,7 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   api,
 }) => {
   const before = await split(api, IF_SCENE);
-  const paragraph = blockOf(before.body, "Fenn lässt sie in die alte");
+  const paragraph = blockOf(before.body, "Fenn has them locked in the old");
 
   await page.goto(IF_SCENE_URL);
   await editAction(page).click();
@@ -536,11 +536,11 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   expect(after.fields).toEqual(before.fields);
   expect(after.body).toBe(before.body.replace(paragraph, `${paragraph}\n### Boom`));
   expect(after.body.indexOf("### Boom")).toBeGreaterThan(
-    after.body.indexOf("## If: sie geben zu"),
+    after.body.indexOf("## If: they admit"),
   );
-  expect(after.body.indexOf("### Boom")).toBeLessThan(after.body.indexOf("## If: sie lügen"));
+  expect(after.body.indexOf("### Boom")).toBeLessThan(after.body.indexOf("## If: they lie"));
   // Both section headings untouched, as in every other save here.
-  for (const head of ["## If: sie geben zu", "## If: sie lügen", "> [!note]"]) {
+  for (const head of ["## If: they admit", "## If: they lie", "> [!note]"]) {
     expect(blockOf(after.body, head), head).toBe(blockOf(before.body, head));
   }
   // And the reading view keeps it in the first collapsible section.
@@ -649,8 +649,8 @@ const ODD_SCENE: SceneProposal = {
   id: "strange-mechanism",
   title: "Strange Mechanism",
   type: "planned",
-  chapter: "01-salzhafen",
-  location: "leuchtturm",
+  chapter: "01-salt-harbour",
+  location: "lighthouse",
   npcs: [],
   handouts: [],
   tags: ["test"],
@@ -681,7 +681,7 @@ test.describe("with a scene of unknown constructs", () => {
     const lead = "The group rolls on the table below.";
     const added = "On a tie the group rolls again.";
 
-    await page.goto(`/campaigns/beispiel/scenes/${rel}`);
+    await page.goto(`/campaigns/example/scenes/${rel}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(ODD_SCENE.title);
     await editAction(page).click();
 
@@ -782,7 +782,7 @@ test.describe("at 390px", () => {
 
     const after = await split(api, SCENE);
     expect(after.fields).toEqual(before.fields);
-    const paragraphBefore = blockOf(before.body, "Die Gruppe erreicht");
+    const paragraphBefore = blockOf(before.body, "The party reaches");
     expect(after.body).toBe(
       before.body.replace(paragraphBefore, `${paragraphBefore}\n${added}`),
     );

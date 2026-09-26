@@ -29,17 +29,18 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { getChapter, patchChapter } from "../support/chapter";
+import { CAMPAIGN } from "../support/paths";
 import { getScene, scenePath } from "../support/scene";
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
-const CHAPTER = "01-salzhafen";
-const CHAPTER_URL = `/campaigns/beispiel/chapters/${CHAPTER}`;
-const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+const CHAPTER = "01-salt-harbour";
+const CHAPTER_URL = `/campaigns/${CAMPAIGN}/chapters/${CHAPTER}`;
+const CHAPTER_TITLE = "Chapter 1: The Lighthouse of Salt Harbour";
 /** A second chapter, seeded where a test needs one to navigate to. */
-const OTHER_CHAPTER = "02-nordbucht";
-const OTHER_CHAPTER_TITLE = "Kapitel 2: Die Nordbucht";
+const OTHER_CHAPTER = "02-the-reef";
+const OTHER_CHAPTER_TITLE = "Chapter 2: The Reef";
 
 /** Open the header's fields action and hand back the dialog. */
 async function openProperties(page: Page) {
@@ -248,9 +249,9 @@ test.describe("with a second chapter", () => {
     await page.keyboard.press("ControlOrMeta+KeyK");
     const search = page.getByRole("combobox");
     await expect(search).toBeFocused();
-    await search.fill("Nordbucht");
+    await search.fill("Reef");
     await page.getByRole("option").filter({ hasText: OTHER_CHAPTER_TITLE }).first().click();
-    await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/chapters/${OTHER_CHAPTER}$`));
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/chapters/${OTHER_CHAPTER}$`));
 
     // The dialog is gone with its chapter — it may not stand over another
     // reading view, holding the frozen values (and the rev) of the one it left.
@@ -285,11 +286,11 @@ test("only the chapter has the dialog — scene, npc and location edit in place,
   // … a scene, an npc and a location do not: their fields are part of their
   // edit modes.
   for (const [route, heading] of [
-    ["scenes/smuggler-captured", "Von den Schmugglern erwischt"],
+    ["scenes/smuggler-captured", "Caught by the Smugglers"],
     ["npcs/fenn", "Fenn"],
-    ["locations/leuchtturm", "Der Leuchtturm von Salzhafen"],
+    ["locations/lighthouse", "The Lighthouse of Salt Harbour"],
   ] as const) {
-    await page.goto(`/campaigns/beispiel/${route}`);
+    await page.goto(`/campaigns/${CAMPAIGN}/${route}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
     await expect(page.getByRole("button", { name: ui("common.edit"), exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: ui("properties.action") })).toHaveCount(0);
@@ -297,8 +298,8 @@ test("only the chapter has the dialog — scene, npc and location edit in place,
 
   // The campaign's route is the chapter overview, and its one edit action in
   // the header opens its own dialog over name, description and text.
-  await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("The Lighthouse of Salt Harbour");
   await page.getByRole("button", { name: ui("common.edit"), exact: true }).click();
   await expect(page.getByRole("dialog", { name: ui("campaignEdit.title") })).toBeVisible();
 });

@@ -44,7 +44,7 @@ import {
 // tests compare against catalog keys, never against spelled-out text.
 const t = translator("de");
 
-const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
+const FIXTURES = new URL("../../../fixtures/", import.meta.url);
 const ARRIVAL = "scenes/lighthouse-arrival.json";
 const SMUGGLERS = "scenes/smuggler-captured.json";
 
@@ -186,7 +186,7 @@ describe("editing a block", () => {
     expect(edited.source).toBeUndefined();
     expect(edited.children).toEqual(first.children);
     expect(serializeBlocks(next)).toBe(
-      body.replace("## If: sie geben zu, für Jorna zu arbeiten", "## If: they stay silent"),
+      body.replace("## If: they admit to working for Jorna", "## If: they stay silent"),
     );
   });
 
@@ -197,7 +197,7 @@ describe("editing a block", () => {
     const next = setBlockText(blocks, child.id, "Jorna hears of it.");
 
     const edited = section(next, 2);
-    expect(edited.source).toBe("## If: sie geben zu, für Jorna zu arbeiten");
+    expect(edited.source).toBe("## If: they admit to working for Jorna");
     expect(at(edited.children, 2).source).toBeUndefined();
     expect(at(edited.children, 0).source).toBe(at(section(blocks, 2).children, 0).source);
     expect(serializeBlocks(next)).toContain("> [!note] Jorna hears of it.");
@@ -341,7 +341,7 @@ describe("insert, move, remove", () => {
 
     expect(section(next, 2).children).toHaveLength(2);
     expect(section(next, 3).children).toEqual(section(blocks, 3).children);
-    expect(serializeBlocks(next)).not.toContain("die morschen Bretter");
+    expect(serializeBlocks(next)).not.toContain("break open the rotten boards");
     // The untouched second section is still in the body verbatim.
     expect(serializeBlocks(next)).toContain(section(blocks, 3).source ?? "");
   });
@@ -352,8 +352,8 @@ describe("insert, move, remove", () => {
     const next = removeAt(blocks, target.id);
     expect(next).toHaveLength(3);
     const markdown = serializeBlocks(next);
-    expect(markdown).not.toContain("## If: sie geben zu");
-    expect(markdown).not.toContain("die morschen Bretter");
+    expect(markdown).not.toContain("## If: they admit");
+    expect(markdown).not.toContain("break open the rotten boards");
   });
 
   test("removing the last block of a raw-only body leaves an empty draft", () => {

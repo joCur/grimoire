@@ -273,14 +273,14 @@ function outlineOf(batch: BatchReply, sourceText: string): string {
         .map((entry) => ({
           id: property(entry.content, "id") ?? "",
           name: property(entry.content, "name") ?? "",
-          summary: "aus dem Quelltext erwähnt",
+          summary: "mentioned in the source text",
         })),
       locations: batch.entries
         .filter((entry) => entry.kind === "location")
         .map((entry) => ({
           id: property(entry.content, "id") ?? "",
           name: property(entry.content, "name") ?? "",
-          summary: "aus dem Quelltext erwähnt",
+          summary: "mentioned in the source text",
         })),
       // Whatever the script says, for every run kind: dropping it for a run
       // into an existing chapter is the server's job, not the fake's.

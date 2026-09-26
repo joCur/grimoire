@@ -10,7 +10,7 @@ import type { Npc } from "@grimoire/shared/npc";
 
 import { npcExcerpt } from "./npc-excerpt";
 
-const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
+const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures");
 
 /** An npc fixture — the npc as its resource answers it (decisions/resources). */
 function npcFixture(id: string): Npc {
@@ -31,10 +31,10 @@ const nameOf = (slug: string): string | undefined => NAMES[slug];
 describe("npcExcerpt", () => {
   test("role, voice, the `motivation` property, quick stats and status", () => {
     const excerpt = npcExcerpt(npcFixture("fenn"), nameOf);
-    expect(excerpt.role).toBe("Anführer der Schmuggler in der Nordbucht");
-    expect(excerpt.voice).toBe("leise, höflich — wird stiller, je gefährlicher es wird");
+    expect(excerpt.role).toBe("Leader of the smugglers in the North Cove");
+    expect(excerpt.voice).toBe("quiet, polite — grows quieter the more dangerous it gets");
     expect(excerpt.will).toBe(
-      "Den Auftrag zu Ende bringen, ohne dass jemand stirbt — er ist Schmuggler, kein Mörder, und das ist sein wunder Punkt.",
+      "Finish the job without anyone dying — he is a smuggler, not a murderer, and that is his weak spot.",
     );
     expect(excerpt.quickstats).toEqual([
       ["wis", "2"],

@@ -15,6 +15,7 @@ import { getIdeas } from "../support/idea";
 import { getNpc } from "../support/npc";
 import { getScene } from "../support/scene";
 import { ui, uiPattern } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
 /** A session that started YESTERDAY and was never ended. */
 const OPEN_SESSION: SessionSeed = (() => {
@@ -34,7 +35,7 @@ const ideaCapture = (page: Page) => page.getByLabel(ui("mobileStart.inbox.label"
 test("mobile start surface: search, idea capture, lookup lists", async ({ page, api }) => {
   const campaign = await getCampaign(api);
   const ideasBefore = await getIdeas(api);
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
 
   // The desktop topbar is desktop chrome — below md the surface carries its
   // own wordmark instead.
@@ -55,7 +56,7 @@ test("mobile start surface: search, idea capture, lookup lists", async ({ page, 
     chapters: { scenes: unknown[] }[];
     npcs: unknown[];
     locations: unknown[];
-  }>("campaigns/beispiel/tree");
+  }>(`campaigns/${CAMPAIGN}/tree`);
   const sceneCount = tree.chapters.reduce((n, chapter) => n + chapter.scenes.length, 0);
   expect([sceneCount, tree.npcs.length, tree.locations.length]).toEqual([2, 2, 2]);
 
@@ -69,7 +70,10 @@ test("mobile start surface: search, idea capture, lookup lists", async ({ page, 
     ui("mobileStart.count.npcs", { count: tree.npcs.length }),
   );
   // The npc row leads to the npc list on its own route (decisions/resources).
-  await expect(lookupRow("browse.title.npcs")).toHaveAttribute("href", "/campaigns/beispiel/npcs");
+  await expect(lookupRow("browse.title.npcs")).toHaveAttribute(
+    "href",
+    `/campaigns/${CAMPAIGN}/npcs`,
+  );
   await expect(lookupRow("browse.title.locations")).toContainText(
     ui("mobileStart.count.locations", { count: tree.locations.length }),
   );
@@ -97,13 +101,13 @@ test("mobile start surface: search, idea capture, lookup lists", async ({ page, 
   await search.fill("fenn");
   await page.getByRole("option").filter({ hasText: fenn.name }).first().click();
 
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/fenn$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/fenn$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(fenn.name);
   // The mobile read view has its own way back to the start surface.
   const back = page.getByRole("link", { name: ui("mobileBack.chapterOverview") });
   await expect(back).toBeVisible();
   await back.click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
   await expect(ideaCapture(page)).toBeVisible();
 });
 
@@ -117,7 +121,7 @@ test.describe("with a session open since yesterday", () => {
   }) => {
     // The session is the server's answer, not something the client derives
     // from today's date — it comes out of the seeded session row.
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     // The same chip the desktop topbar carries — in link mode, in the mobile
     // row: one tap back into the session.
     const row = page.getByRole("link", {
@@ -128,7 +132,7 @@ test.describe("with a session open since yesterday", () => {
     // a real elapsed time (well over an hour by now), not 0:00:00.
     await expect(row).toContainText(/\d+:\d{2}:\d{2}/);
     await row.click();
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));
   });
 });
 
@@ -137,13 +141,13 @@ test("mobile: the reference scene's reading view stays readable", async ({ page,
   const jorna = await getNpc(api, "jorna");
   // Reached the way a phone reaches it: the lookup row of the start surface,
   // then the scene list — onto the scene's own route (decisions/resources).
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await page
     .getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui("browse.title.scenes"))}`) })
     .click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/scenes$`));
   await page.getByRole("link", { name: new RegExp(escapeStringRegexp(scene.title)) }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival$`));
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(scene.title);
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

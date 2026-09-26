@@ -1,9 +1,9 @@
 // Test setup for the database-backed API.
 //
 // Every test case gets its OWN in-memory database, seeded from the committed
-// JSON fixtures in `fixtures/beispiel` through the real seed loader
+// example campaign in `fixtures/` through the real seed loader
 // (src/db/seed.ts) — the same call `grimoire seed` makes. Those fixtures are
-// the fixture of the whole suite (CLAUDE.md, "Arbeitsweise"), and because
+// the fixture of the whole suite (CLAUDE.md, "Way of working"), and because
 // they are written in the shape the API speaks, there is no second data
 // format anywhere.
 //
@@ -33,14 +33,11 @@ import type { GrimoireDb } from "../../src/db/client";
 import { readFixtureCampaign, seedCampaign } from "../../src/db/seed";
 import { closeStore, initStore } from "../../src/store/handle";
 
-/** The committed fixture campaigns — read-only for the suite. */
+/** The committed example campaign every case starts from — read-only for the suite. */
 export const FIXTURES = path.resolve(
   fileURLToPath(new URL(".", import.meta.url)),
   "../../../fixtures",
 );
-
-/** The example campaign every case starts from. */
-const BEISPIEL = path.join(FIXTURES, "beispiel");
 
 /**
  * What a case changes about the example campaign, entity by entity. Each
@@ -99,7 +96,7 @@ const byId = (value: { id: string }): string => value.id;
 export async function seedStore(overrides: SeedOverrides = {}): Promise<GrimoireDb> {
   closeStore();
   const db = await initStore({ dbFile: ":memory:" });
-  const fixture = await readFixtureCampaign(BEISPIEL);
+  const fixture = await readFixtureCampaign(FIXTURES);
   const without = overrides.without ?? {};
   seedCampaign(db, {
     ...fixture,

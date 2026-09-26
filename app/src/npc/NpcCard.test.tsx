@@ -29,7 +29,7 @@ function render(id: string): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <NpcCard campaign="beispiel" id={id} />
+      <NpcCard campaign="example" id={id} />
     </QueryClientProvider>,
   );
 }
@@ -62,7 +62,7 @@ describe("NpcCard — a reference inside the excerpt", () => {
   function renderNpc(fields: Partial<Npc>, card: ReactNode): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const npc: Npc = { id: "grella", name: "Grella", status: "unknown", body: "", rev: 1, ...fields };
-    client.setQueryData(npcKey("beispiel", "grella"), npc);
+    client.setQueryData(npcKey("example", "grella"), npc);
     return renderWith(client, card);
   }
 
@@ -70,7 +70,7 @@ describe("NpcCard — a reference inside the excerpt", () => {
     return renderToStaticMarkup(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <RefScope campaign="beispiel" index={index}>
+          <RefScope campaign="example" index={index}>
             {card}
           </RefScope>
         </MemoryRouter>
@@ -84,13 +84,13 @@ describe("NpcCard — a reference inside the excerpt", () => {
     for (const compact of [false, true]) {
       const html = renderNpc(
         { motivation: MOTIVATION },
-        <NpcCard campaign="beispiel" id="grella" compact={compact} />,
+        <NpcCard campaign="example" id="grella" compact={compact} />,
       );
       expect(html).toContain("Wants to drive Fenn out of The North Cove before");
       expect(html).not.toContain("[[fenn]]");
       // Unresolved stays as written, exactly as the text shows it.
       expect(html).toContain("[[nobody]]");
-      expect(html).toContain('href="/campaigns/beispiel/npcs/grella"');
+      expect(html).toContain('href="/campaigns/example/npcs/grella"');
     }
   });
 
@@ -98,7 +98,7 @@ describe("NpcCard — a reference inside the excerpt", () => {
     for (const compact of [false, true]) {
       const html = renderNpc(
         { body: "## Will\n\nOnly in the text, never on the card.\n" },
-        <NpcCard campaign="beispiel" id="grella" compact={compact} />,
+        <NpcCard campaign="example" id="grella" compact={compact} />,
       );
       expect(html).not.toContain("Only in the text");
     }

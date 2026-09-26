@@ -13,26 +13,26 @@ import {
   splitRefs,
 } from "../src/refs";
 
-const NAMES: Record<string, string> = { jorna: "Hafenmeisterin Jorna", bucht: "Die Bucht" };
+const NAMES: Record<string, string> = { jorna: "Harbourmaster Jorna", cove: "The Cove" };
 const nameOf = (slug: string): string | undefined => NAMES[slug];
 
 describe("splitRefs", () => {
   test("text without a reference stays one piece", () => {
-    expect(splitRefs("Nur Prosa [ein Link](x)")).toEqual([
-      { type: "text", value: "Nur Prosa [ein Link](x)" },
+    expect(splitRefs("Just prose [a link](x)")).toEqual([
+      { type: "text", value: "Just prose [a link](x)" },
     ]);
   });
 
   test("splits around a reference and keeps the suffix", () => {
-    expect(splitRefs("Am Kai wartet [[jorna]]s Boot.")).toEqual([
-      { type: "text", value: "Am Kai wartet " },
+    expect(splitRefs("At the quay waits [[jorna]]s boat.")).toEqual([
+      { type: "text", value: "At the quay waits " },
       { type: "ref", slug: "jorna" },
-      { type: "text", value: "s Boot." },
+      { type: "text", value: "s boat." },
     ]);
   });
 
   test("several references in one text", () => {
-    expect(refSlugs("[[jorna]] und [[fenn]] und wieder [[jorna]]")).toEqual([
+    expect(refSlugs("[[jorna]] and [[fenn]] and again [[jorna]]")).toEqual([
       "jorna",
       "fenn",
     ]);
@@ -42,35 +42,35 @@ describe("splitRefs", () => {
     for (const text of ["[[Jorna]]", "[[jorna ]]", "[[a b]]", "[[]]", "[[jorna|Jorna]]", "[jorna]"]) {
       expect(splitRefs(text)).toEqual([{ type: "text", value: text }]);
     }
-    expect(refSlugs("[[alte-mole]]")).toEqual(["alte-mole"]);
+    expect(refSlugs("[[old-mole]]")).toEqual(["old-mole"]);
   });
 });
 
 describe("expandRefs", () => {
   test("resolved references become the current display name", () => {
-    expect(expandRefs("[[jorna]] steht an [[bucht]].", nameOf)).toBe(
-      "Hafenmeisterin Jorna steht an Die Bucht.",
+    expect(expandRefs("[[jorna]] stands at [[cove]].", nameOf)).toBe(
+      "Harbourmaster Jorna stands at The Cove.",
     );
   });
 
   test("unresolved reference keeps its brackets (degrades, never throws)", () => {
-    expect(expandRefs("Wer ist [[niemand]]?", nameOf)).toBe("Wer ist [[niemand]]?");
+    expect(expandRefs("Who is [[nobody]]?", nameOf)).toBe("Who is [[nobody]]?");
   });
 
   test("an empty display name counts as unresolved", () => {
-    expect(expandRefs("[[leer]]", () => "")).toBe("[[leer]]");
+    expect(expandRefs("[[empty]]", () => "")).toBe("[[empty]]");
   });
 });
 
 describe("code regions are not prose", () => {
   const FENCED = [
-    "Vorher [[jorna]].",
+    "Before [[jorna]].",
     "",
     "```md",
-    "[[jorna]] im Block",
+    "[[jorna]] in the block",
     "```",
     "",
-    "Nachher `[[jorna]]` inline.",
+    "After `[[jorna]]` inline.",
     "",
   ].join("\n");
 
@@ -85,38 +85,38 @@ describe("code regions are not prose", () => {
   });
 
   test("a code span does not reach across a blank line", () => {
-    const text = "ein ` Backtick\n\nund [[jorna]] ` noch einer";
+    const text = "one ` backtick\n\nand [[jorna]] ` another one";
     expect(splitCodeSegments(text).every((segment) => !segment.code)).toBe(true);
-    expect(expandBodyRefs(text, nameOf)).toContain("Hafenmeisterin Jorna");
+    expect(expandBodyRefs(text, nameOf)).toContain("Harbourmaster Jorna");
   });
 
   test("expansion skips fenced blocks and code spans", () => {
     const expanded = expandBodyRefs(FENCED, nameOf);
-    expect(expanded).toContain("Vorher Hafenmeisterin Jorna.");
-    expect(expanded).toContain("[[jorna]] im Block");
+    expect(expanded).toContain("Before Harbourmaster Jorna.");
+    expect(expanded).toContain("[[jorna]] in the block");
     expect(expanded).toContain("`[[jorna]]` inline");
   });
 
   test("a mention only inside code is not a reference", () => {
-    expect(bodyReferencesSlug("nur `[[jorna]]` hier", "jorna")).toBe(false);
+    expect(bodyReferencesSlug("only `[[jorna]]` here", "jorna")).toBe(false);
     expect(bodyReferencesSlug("```\n[[jorna]]\n```\n", "jorna")).toBe(false);
-    expect(bodyReferencesSlug("Am Kai wartet [[jorna]]s Boot.", "jorna")).toBe(true);
-    expect(bodyReferencesSlug("Nur Prosa.", "jorna")).toBe(false);
+    expect(bodyReferencesSlug("At the quay waits [[jorna]]s boat.", "jorna")).toBe(true);
+    expect(bodyReferencesSlug("Just prose.", "jorna")).toBe(false);
   });
 
   test("the slugs of a body are its prose references, once each", () => {
     expect(bodyRefSlugs(FENCED)).toEqual(["jorna"]);
-    expect(bodyRefSlugs("nur `[[fenn]]` und\n```\n[[bucht]]\n```\n")).toEqual([]);
-    expect(bodyRefSlugs("[[fenn]] trifft [[jorna]], dann [[fenn]]s Boot.")).toEqual([
+    expect(bodyRefSlugs("only `[[fenn]]` and\n```\n[[cove]]\n```\n")).toEqual([]);
+    expect(bodyRefSlugs("[[fenn]] meets [[jorna]], then [[fenn]]s boat.")).toEqual([
       "fenn",
       "jorna",
     ]);
-    expect(bodyRefSlugs("Nur Prosa, [[Jorna]] ist Text.")).toEqual([]);
+    expect(bodyRefSlugs("Just prose, [[Jorna]] is text.")).toEqual([]);
   });
 });
 
 test("slug predicate and source spelling", () => {
-  expect(isRefSlug("alte-mole")).toBe(true);
-  expect(isRefSlug("Alte Mole")).toBe(false);
+  expect(isRefSlug("old-mole")).toBe(true);
+  expect(isRefSlug("Old Mole")).toBe(false);
   expect(refSource("jorna")).toBe("[[jorna]]");
 });

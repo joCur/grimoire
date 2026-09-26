@@ -8,6 +8,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
 type BackLink = "notFound.toCampaign" | "notFound.toStart";
 
@@ -22,16 +23,19 @@ test("an unknown route outside a campaign leads back to the start", async ({ pag
   await page.goto("/foo");
   await expectNotFound(page, "notFound.toStart");
   await page.getByRole("link", { name: ui("notFound.toStart") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
 });
 
 test("an unknown route inside a campaign leads back to the chapter overview", async ({ page }) => {
-  for (const path of ["/campaigns/beispiel/doesnotexist", "/campaigns/beispiel/entries/npcs/jorna"]) {
+  for (const path of [
+    `/campaigns/${CAMPAIGN}/doesnotexist`,
+    `/campaigns/${CAMPAIGN}/entries/npcs/jorna`,
+  ]) {
     await page.goto(path);
     await expectNotFound(page, "notFound.toCampaign");
   }
   await page.getByRole("link", { name: ui("notFound.toCampaign") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
 });
 
 test("a row the server does not know is the same view, asked for only once", async ({
@@ -40,12 +44,12 @@ test("a row the server does not know is the same view, asked for only once", asy
   for (const kind of ["chapters", "scenes", "npcs", "locations", "sessions"]) {
     const reads: string[] = [];
     const count = (request: { url(): string }) => {
-      if (request.url().endsWith(`/api/campaigns/beispiel/${kind}/doesnotexist`)) {
+      if (request.url().endsWith(`/api/campaigns/${CAMPAIGN}/${kind}/doesnotexist`)) {
         reads.push(request.url());
       }
     };
     page.on("request", count);
-    await page.goto(`/campaigns/beispiel/${kind}/doesnotexist`);
+    await page.goto(`/campaigns/${CAMPAIGN}/${kind}/doesnotexist`);
     await expectNotFound(page, "notFound.toCampaign");
     // A 404 is not retried: the row is not there, asking again only delays.
     expect(reads).toHaveLength(1);

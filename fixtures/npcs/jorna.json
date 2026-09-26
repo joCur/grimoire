@@ -1,0 +1,16 @@
+{
+  "id": "jorna",
+  "name": "Harbourmaster Jorna",
+  "role": "Employer, harbourmaster of Salt Harbour",
+  "chapter": "01-salt-harbour",
+  "status": "alive",
+  "statblock": "Roll20: Jorna",
+  "quickstats": {
+    "insight": 2,
+    "passive-perception": 12
+  },
+  "voice": "curt, weather-beaten, on first-name terms with everyone",
+  "appearance": "oilskin coat, grey braid, missing little finger on the left hand",
+  "motivation": "The beacon has to burn again before the autumn convoys arrive — her office depends on it.",
+  "body": "\n## Knows\n\n> [!secret] Suspects that someone in the village covers for the smugglers,\n> but has no name.\n\n## Relationships\n\n- [[fenn]]: knows him from before — he once went to sea honestly\n"
+}

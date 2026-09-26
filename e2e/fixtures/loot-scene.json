@@ -2,8 +2,8 @@
   "id": "loot-check",
   "title": "Plunder in the Smokehouse",
   "type": "planned",
-  "chapter": "01-salzhafen",
-  "location": "leuchtturm",
+  "chapter": "01-salt-harbour",
+  "location": "lighthouse",
   "npcs": [],
   "handouts": [],
   "tags": [

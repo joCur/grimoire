@@ -19,7 +19,7 @@ async function send(method: string, url: string, body: unknown): Promise<Respons
  * item is deleted against its `rev`, then each of `items` is created at the
  * end.
  */
-export async function setKnowledge(items: KnowledgeItemCreate[], campaign = "beispiel"): Promise<void> {
+export async function setKnowledge(items: KnowledgeItemCreate[], campaign = "example"): Promise<void> {
   const url = `/api/campaigns/${campaign}/knowledge-items`;
   const stored = (await (await app.request(url)).json()) as KnowledgeItem[];
   for (const item of stored) {

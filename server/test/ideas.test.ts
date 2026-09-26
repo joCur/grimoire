@@ -14,10 +14,10 @@ import { getDb } from "../src/store/handle";
 import { seedCampaign } from "../src/db/seed";
 import { dropStore, seedStore } from "./support/store";
 
-const IDEAS = "/api/campaigns/beispiel/ideas";
+const IDEAS = "/api/campaigns/example/ideas";
 const SEEDED: Idea = {
-  id: "dorfschmied",
-  text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+  id: "village-smith",
+  text: "Idea: the village smith repairs smuggling tools suspiciously often #thread",
   done: false,
   rev: 1,
 };
@@ -56,8 +56,8 @@ describe("reading ideas", () => {
   });
 
   test("a campaign without ideas answers an empty list, not a 404", async () => {
-    seedCampaign(await getDb(), { campaign: { id: "frischling", name: "", body: "", glossaryIntro: "" } });
-    expect(await listIdeas("/api/campaigns/frischling/ideas")).toEqual([]);
+    seedCampaign(await getDb(), { campaign: { id: "newcomer", name: "", body: "", glossaryIntro: "" } });
+    expect(await listIdeas("/api/campaigns/newcomer/ideas")).toEqual([]);
   });
 
   test("404 for an unknown idea or campaign", async () => {
@@ -67,9 +67,9 @@ describe("reading ideas", () => {
   });
 
   test("the inbox and its tick-off action name nothing", async () => {
-    expect((await app.request("/api/campaigns/beispiel/inbox")).status).toBe(404);
-    expect((await send("POST", "/api/campaigns/beispiel/inbox", { text: "x" })).status).toBe(404);
-    const tick = await send("POST", "/api/campaigns/beispiel/review/inbox-done", { id: SEEDED.id });
+    expect((await app.request("/api/campaigns/example/inbox")).status).toBe(404);
+    expect((await send("POST", "/api/campaigns/example/inbox", { text: "x" })).status).toBe(404);
+    const tick = await send("POST", "/api/campaigns/example/review/inbox-done", { id: SEEDED.id });
     expect(tick.status).toBe(404);
     expect(await listIdeas()).toEqual([SEEDED]);
   });
@@ -77,10 +77,10 @@ describe("reading ideas", () => {
 
 describe("throwing an idea in", () => {
   test("a new idea is open, stands at the end, and has an id of its own", async () => {
-    const created = await json<Idea>(createIdea({ text: "Schmied beobachten #thread" }), 201);
+    const created = await json<Idea>(createIdea({ text: "Watch the smith #thread" }), 201);
     expect(created).toEqual({
       id: expect.any(String),
-      text: "Schmied beobachten #thread",
+      text: "Watch the smith #thread",
       done: false,
       rev: 1,
     });
@@ -88,17 +88,17 @@ describe("throwing an idea in", () => {
   });
 
   test("two ideas with the same text are two ideas with two ids", async () => {
-    const first = await json<Idea>(createIdea({ text: "Doppelt" }), 201);
-    const second = await json<Idea>(createIdea({ text: "Doppelt" }), 201);
+    const first = await json<Idea>(createIdea({ text: "Twice" }), 201);
+    const second = await json<Idea>(createIdea({ text: "Twice" }), 201);
     expect(first.id).not.toBe(second.id);
     await json<Idea>(patchIdea({ rev: 1, done: true }, `${IDEAS}/${second.id}`));
-    const doubles = (await listIdeas()).filter((idea) => idea.text === "Doppelt");
+    const doubles = (await listIdeas()).filter((idea) => idea.text === "Twice");
     expect(doubles.map((idea) => idea.done)).toEqual([false, true]);
   });
 
   test("the text is one line: trimmed, inner newlines folded", async () => {
-    const created = await json<Idea>(createIdea({ text: "  eins\n zwei " }), 201);
-    expect(created.text).toBe("eins zwei");
+    const created = await json<Idea>(createIdea({ text: "  one\n two " }), 201);
+    expect(created.text).toBe("one two");
   });
 
   test("400 for empty or missing text and for an unknown key — naming it", async () => {
@@ -136,7 +136,7 @@ describe("ticking an idea off", () => {
   });
 
   test("the text is no field a patch carries: 400 naming it", async () => {
-    const res = await patchIdea({ rev: 1, text: "Anders" });
+    const res = await patchIdea({ rev: 1, text: "Different" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("text");
     expect(await json<Idea>(app.request(SEEDED_URL))).toEqual(SEEDED);
@@ -147,8 +147,8 @@ describe("ticking an idea off", () => {
     const nothing = await patchIdea({ rev: 1 });
     expect(nothing.status).toBe(400);
     expect(await nothing.json()).toMatchObject({ code: "nothing_to_write" });
-    expect((await patchIdea({ rev: 1, done: "ja" })).status).toBe(400);
-    expect((await patchIdea({ rev: 1, id: "anders", done: true })).status).toBe(400);
+    expect((await patchIdea({ rev: 1, done: "yes" })).status).toBe(400);
+    expect((await patchIdea({ rev: 1, id: "other", done: true })).status).toBe(400);
     expect((await patchIdea({ rev: 1, done: true }, `${IDEAS}/no-such-id`)).status).toBe(404);
     expect(await json<Idea>(app.request(SEEDED_URL))).toEqual(SEEDED);
   });

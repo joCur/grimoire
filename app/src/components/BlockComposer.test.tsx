@@ -2,7 +2,7 @@
 // not against invented blocks: what the DM meets is whatever the phase-1
 // parser makes of the fixture bodies.
 //
-// The checks are the acceptance criteria that a rendering can carry: every
+// The checks are what a rendering can carry: every
 // block is a card with the reading view's own type label, every card can be
 // moved and deleted with a REAL BUTTON (drag-and-drop-only is forbidden),
 // If-section children get their own controls, the picker offers all types, and
@@ -31,7 +31,7 @@ import {
   InsertSlot,
 } from "./BlockComposer";
 
-const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
+const FIXTURES = new URL("../../../fixtures/", import.meta.url);
 
 /** The blocks the phase-1 parser makes of a fixture scene's body. */
 function fixtureBlocks(name: string): SceneBlock[] {
@@ -108,7 +108,7 @@ describe("the block list", () => {
       expect(html).toContain(t(key));
     }
     // A collapsed card shows its own content (the seed scene's text), not the markdown markers.
-    expect(html).toContain("Der Turm ragt schwarz");
+    expect(html).toContain("The tower rises black");
     expect(html).not.toContain("&gt; [!readaloud]");
     // …and no form is open until the DM asks for one.
     expect(html).not.toContain("<textarea");
@@ -169,9 +169,9 @@ describe("If-sections", () => {
   test("the section shows its condition and nests its children as cards", () => {
     expect(html).toContain(t("composer.blockType.ifSection"));
     // The condition and the children's text come from the seed scene.
-    expect(html).toContain("sie geben zu, für Jorna zu arbeiten");
+    expect(html).toContain("they admit to working for Jorna");
     // The children of the first section: two text blocks and a note.
-    expect(html).toContain("die morschen Bretter");
+    expect(html).toContain("the rotten boards");
     expect(html).toContain(
       aria("composer.card.edit.aria", { name: card("markdown.callout.note", 3) }),
     );
@@ -232,7 +232,7 @@ describe("the per-block forms", () => {
     expect(html).toContain(
       aria("composer.block.content.aria", { label: t("markdown.callout.readaloud") }),
     );
-    expect(html).toContain("Der Turm ragt schwarz");
+    expect(html).toContain("The tower rises black");
     expect(html).not.toContain("&gt;");
     // The kind is fixed — a callout cannot be turned into another type here.
     expect(html).not.toContain("<select");
@@ -265,7 +265,7 @@ describe("the per-block forms", () => {
   test("a section's form is its condition", () => {
     const html = fields(firstSection(fixtureBlocks(SMUGGLERS)));
     expect(html).toContain(aria("composer.ifSection.condition.aria"));
-    expect(html).toContain("sie geben zu, für Jorna zu arbeiten");
+    expect(html).toContain("they admit to working for Jorna");
     expect(html).toContain("## If:");
   });
 

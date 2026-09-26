@@ -264,8 +264,8 @@ describe("jobErrorBody", () => {
   const failed = (error: unknown) =>
     ({
       id: "j1",
-      campaign: "beispiel",
-      chapter: "01-salzhafen",
+      campaign: "example",
+      chapter: "01-salt-harbour",
       status: "failed",
       startedAt: "2026-08-20T10:00:00.000Z",
       sceneEdits: {},
@@ -291,7 +291,7 @@ describe("jobErrorBody", () => {
       jobErrorBody({
         id: "j2",
         kind: "scene",
-        chapter: "01-salzhafen",
+        chapter: "01-salt-harbour",
         status: "running",
         startedAt: "2026-08-20T10:00:00.000Z",
         sceneEdits: {},
@@ -309,7 +309,7 @@ describe("jobMode", () => {
   const job = (kind?: string) =>
     ({
       id: "j1",
-      campaign: "beispiel",
+      campaign: "example",
       status: "done",
       startedAt: "2026-08-20T10:00:00.000Z",
       sceneEdits: {},
@@ -333,7 +333,7 @@ describe("restoredMode", () => {
   const job = (kind: "scene" | "npc") =>
     ({
       id: "j1",
-      campaign: "beispiel",
+      campaign: "example",
       kind,
       status: "running",
       startedAt: "2026-08-20T10:00:00.000Z",
@@ -567,7 +567,7 @@ describe("the run's parts", () => {
     return {
       id: "j1",
       kind: "scene",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       status: "running",
       startedAt: "2026-09-15T10:00:00.000Z",
       sceneEdits: {},
@@ -626,11 +626,11 @@ describe("the run's parts", () => {
     // unless refetchIntervalInBackground is set, which meant a run that
     // completed while the DM was reading another tab was only noticed when
     // this one regained focus — the view kept showing "working" until then.
-    const options = generateJobQueryOptions("beispiel", { expectJob: true });
+    const options = generateJobQueryOptions("example", { expectJob: true });
     expect(options.refetchIntervalInBackground).toBe(true);
     // The interval itself stays bounded: no run, no polling.
     expect(
-      generateJobQueryOptions("beispiel").refetchInterval({
+      generateJobQueryOptions("example").refetchInterval({
         state: { data: { ...job(["done"]), status: "done" } },
       }),
     ).toBe(false);

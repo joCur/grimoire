@@ -19,7 +19,7 @@ import { CAMPAIGN } from "./paths";
 export interface Api {
   /** The campaign every path under `underCampaign` belongs to. */
   campaignId: string;
-  /** Absolute URL of an API path (`/api/campaigns/beispiel/tree` or just `campaigns/…`). */
+  /** Absolute URL of an API path (`/api/campaigns/example/tree` or just `campaigns/…`). */
   url(apiPath: string): string;
   /** Raw fetch — for status-code assertions (409, 400, 404). */
   fetch(apiPath: string, init?: RequestInit): Promise<Response>;
@@ -64,7 +64,7 @@ export function apiFor(baseUrl: string, campaignId: string = CAMPAIGN): Api {
 
 /**
  * The request path of the bound campaign, or of something under it:
- * `underCampaign(api, "npcs", "fenn")` is `campaigns/beispiel/npcs/fenn`.
+ * `underCampaign(api, "npcs", "fenn")` is `campaigns/example/npcs/fenn`.
  * Every segment is URL-encoded.
  */
 export function underCampaign(api: Api, ...segments: string[]): string {

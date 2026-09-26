@@ -118,11 +118,11 @@ describe("createProvider", () => {
 // --- request shape --------------------------------------------------------------
 
 const REQ: GenerateRequest = {
-  systemPrompt: "System-Prompt",
+  systemPrompt: "System prompt",
   fewShotTarget: "# Few-Shot",
   knowledge: "",
-  glossary: "Glossar",
-  context: { chapter: "01-salzhafen", npcs: [{ id: "fenn", name: "Fenn" }], locations: [] },
+  glossary: "Glossary",
+  context: { chapter: "01-salt-harbour", npcs: [{ id: "fenn", name: "Fenn" }], locations: [] },
   sourceText: "Fenn waits at the docks.",
 };
 
@@ -167,7 +167,7 @@ const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> =
 // decided for BOTH run kinds.
 
 describe("buildPrompt", () => {
-  const KNOWLEDGE = '- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.';
+  const KNOWLEDGE = '- Naming convention: always write "Salt Harbour" as two words.';
 
   test("no knowledge: the prompt starts with the glossary, exactly as before", () => {
     const prompt = buildPrompt(REQ);
@@ -205,9 +205,9 @@ describe("buildPrompt", () => {
   test("a new-chapter outline call says so in the context, every other call does not", () => {
     const outline = buildPrompt({
       ...REQ,
-      context: { chapter: "02-bucht", newChapter: true, npcs: [], locations: [] },
+      context: { chapter: "02-cove", newChapter: true, npcs: [], locations: [] },
     });
-    expect(outline).toContain(`chapter: 02-bucht\n${NEW_CHAPTER_LINE}\n`);
+    expect(outline).toContain(`chapter: 02-cove\n${NEW_CHAPTER_LINE}\n`);
     expect(NEW_CHAPTER_LINE).toBe("neues Kapitel: ja");
     // The outline prompt and its schema name that exact line.
     expect(JSON.stringify(outlineJsonSchema())).toContain(NEW_CHAPTER_LINE);
@@ -332,7 +332,7 @@ describe("OpenAICompatProvider request", () => {
       "assistant",
       "user",
     ]);
-    expect(cap.body.messages[0]!.content).toBe("System-Prompt");
+    expect(cap.body.messages[0]!.content).toBe("System prompt");
     // On the OpenRouter path the first user turn arrives as content parts
     // read as one text it is the prompt it always was.
     const parts = cap.body.messages[1]!.content as Array<{ text: string }>;
@@ -862,7 +862,7 @@ describe("ClaudeProvider reply", () => {
     const sent = await withStubbedFetch(
       {
         content: [
-          { type: "text", text: "Ich gliedere den Quelltext:" },
+          { type: "text", text: "Outlining the source text:" },
           { type: "tool_use", name: OUTLINE_SCHEMA_NAME, input: outline },
         ],
         stop_reason: "tool_use",
@@ -918,9 +918,9 @@ describe("ClaudeProvider reply", () => {
     // reach the validation as text, so the run fails with a message that says
     // what came back — never with an empty reply nobody can explain.
     await withStubbedFetch(
-      { content: [{ type: "text", text: "Ich kann das nicht." }], stop_reason: "end_turn" },
+      { content: [{ type: "text", text: "I cannot do that." }], stop_reason: "end_turn" },
       async (p) => {
-        expect((await p.complete(OUTLINE_REQ)).text).toBe("Ich kann das nicht.");
+        expect((await p.complete(OUTLINE_REQ)).text).toBe("I cannot do that.");
       },
     );
   });
@@ -979,10 +979,10 @@ describe("prompt caching", () => {
   const CACHED: GenerateRequest = {
     systemPrompt: "SYS",
     fewShotTarget: "FEWSHOT",
-    knowledge: "- Salzhafen heißt immer Salzhafen",
-    glossary: "cove → Bucht",
-    context: { chapter: "01-salzhafen", npcs: [{ id: "fenn", name: "Fenn" }], locations: [] },
-    outline: "night-watch-quay — Nachtwache am Kai (planned)",
+    knowledge: "- Salt Harbour is always Salt Harbour",
+    glossary: "cove → inlet",
+    context: { chapter: "01-salt-harbour", npcs: [{ id: "fenn", name: "Fenn" }], locations: [] },
+    outline: "night-watch-quay — Night Watch on the Quay (planned)",
     sourceText: "The party watches the quay.",
   };
 

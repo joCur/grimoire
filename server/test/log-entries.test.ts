@@ -48,7 +48,7 @@ afterEach(() => {
 describe("taking a note — POST …/sessions/:id/log", () => {
   test("one entry: time, scene and text as fields, with an id of its own, 201", async () => {
     const entry = await note(
-      { text: "Spuren am Strand #thread", sceneId: "lighthouse-arrival" },
+      { text: "Tracks on the beach #thread", sceneId: "lighthouse-arrival" },
       new Date(2026, 7, 19, 21, 12),
     );
     // The hashtag stays INSIDE the text: the note travels as the DM typed it.
@@ -56,7 +56,7 @@ describe("taking a note — POST …/sessions/:id/log", () => {
       id: expect.any(String),
       at: "21:12",
       sceneId: "lighthouse-arrival",
-      text: "Spuren am Strand #thread",
+      text: "Tracks on the beach #thread",
       reviewed: false,
       rev: 1,
     });
@@ -66,26 +66,26 @@ describe("taking a note — POST …/sessions/:id/log", () => {
   });
 
   test("entries append in the order they were taken; no scene leaves the field out", async () => {
-    await note({ text: "Ankunft", sceneId: "lighthouse-arrival" }, new Date(2026, 7, 19, 21, 12));
-    await note({ text: "Pause" }, new Date(2026, 7, 19, 21, 20));
-    await note({ text: "Leer", sceneId: "" }, new Date(2026, 7, 19, 21, 21));
+    await note({ text: "Arrival", sceneId: "lighthouse-arrival" }, new Date(2026, 7, 19, 21, 12));
+    await note({ text: "Break" }, new Date(2026, 7, 19, 21, 20));
+    await note({ text: "Empty", sceneId: "" }, new Date(2026, 7, 19, 21, 21));
     expect((await readSession(session.id)).log.map((l) => [l.at, l.sceneId, l.text])).toEqual([
-      ["21:12", "lighthouse-arrival", "Ankunft"],
-      ["21:20", undefined, "Pause"],
-      ["21:21", undefined, "Leer"],
+      ["21:12", "lighthouse-arrival", "Arrival"],
+      ["21:20", undefined, "Break"],
+      ["21:21", undefined, "Empty"],
     ]);
   });
 
   test("a note leaves its scene as it was: whether it was played is the scene's status", async () => {
-    const sceneUrl = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
+    const sceneUrl = "/api/campaigns/example/scenes/lighthouse-arrival";
     const before = await (await app.request(sceneUrl)).json();
-    await note({ text: "Ankunft", sceneId: "lighthouse-arrival" }, new Date(2026, 7, 19, 21, 12));
+    await note({ text: "Arrival", sceneId: "lighthouse-arrival" }, new Date(2026, 7, 19, 21, 12));
     expect(await (await app.request(sceneUrl)).json()).toEqual(before);
   });
 
   test("a multi-line note becomes one line; an empty one is a 400", async () => {
-    const entry = await note({ text: "  Zeile eins\n   Zeile zwei  " }, new Date(2026, 7, 19, 21, 25));
-    expect(entry.text).toBe("Zeile eins Zeile zwei");
+    const entry = await note({ text: "  Line one\n   line two  " }, new Date(2026, 7, 19, 21, 25));
+    expect(entry.text).toBe("Line one line two");
     for (const body of [{ text: "" }, { text: "   \n " }, {}, { text: 42 }]) {
       expect((await send("POST", logUrl(), body)).status).toBe(400);
     }
@@ -99,36 +99,36 @@ describe("taking a note — POST …/sessions/:id/log", () => {
   });
 
   test("a scene that does not exist is 400 log_scene_unknown, and nothing is taken", async () => {
-    const res = await send("POST", logUrl(), { text: "Etwas passiert", sceneId: "gibt-es-nicht" });
+    const res = await send("POST", logUrl(), { text: "Something happened", sceneId: "does-not-exist" });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: "log_scene_unknown", value: "gibt-es-nicht" });
+    expect(await res.json()).toMatchObject({ code: "log_scene_unknown", value: "does-not-exist" });
     expect((await readSession(session.id)).log).toEqual([]);
   });
 
   test("a sceneId outside the slug shape is a 400, and nothing is taken", async () => {
-    for (const sceneId of ["boom) und mehr", "a b", "Gross", "with/slash", "-lead"]) {
-      expect((await send("POST", logUrl(), { text: "Notiz", sceneId })).status).toBe(400);
+    for (const sceneId of ["boom) and more", "a b", "Upper", "with/slash", "-lead"]) {
+      expect((await send("POST", logUrl(), { text: "Note", sceneId })).status).toBe(400);
     }
     expect((await readSession(session.id)).log).toEqual([]);
   });
 
   test("parentheses in the note are text, and name no scene", async () => {
-    const entry = await note({ text: "(vermutlich) der Turmwärter lügt" }, new Date(2026, 7, 19, 21, 30));
-    expect([entry.text, entry.sceneId]).toEqual(["(vermutlich) der Turmwärter lügt", undefined]);
+    const entry = await note({ text: "(probably) the lighthouse keeper is lying" }, new Date(2026, 7, 19, 21, 30));
+    expect([entry.text, entry.sceneId]).toEqual(["(probably) the lighthouse keeper is lying", undefined]);
   });
 
   test("a session past midnight takes the note in its own log", async () => {
     expect((await send("DELETE", `${SESSIONS}/${session.id}`, { rev: session.rev })).status).toBe(204);
     setSystemTime(new Date(2026, 7, 18, 22, 30));
     session = await startSession();
-    const entry = await note({ text: "Nach Mitternacht weiter" }, new Date(2026, 7, 19, 1, 20));
+    const entry = await note({ text: "Still going after midnight" }, new Date(2026, 7, 19, 1, 20));
     expect(entry.at).toBe("01:20");
     expect((await readSession(session.id)).log).toEqual([entry]);
   });
 
   test("409 session_ended once the session is ended — no note in a closed log", async () => {
     await endSession(session.id);
-    const res = await send("POST", logUrl(), { text: "zu spät" });
+    const res = await send("POST", logUrl(), { text: "too late" });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: expect.any(String),
@@ -139,7 +139,7 @@ describe("taking a note — POST …/sessions/:id/log", () => {
   });
 
   test("404 for an unknown session or campaign", async () => {
-    expect((await send("POST", logUrl("gibt-es-nicht"), { text: "x" })).status).toBe(404);
+    expect((await send("POST", logUrl("does-not-exist"), { text: "x" })).status).toBe(404);
     expect(
       (await send("POST", `/api/campaigns/nope/sessions/${session.id}/log`, { text: "x" })).status,
     ).toBe(404);
@@ -167,7 +167,7 @@ describe("reviewing a note — PATCH …/log/:id", () => {
     const [first] = (await readSession(FIXTURE_SESSION)).log;
     const res = await send("PATCH", `${logUrl(FIXTURE_SESSION)}/${first!.id}`, {
       rev: first!.rev,
-      text: "anders",
+      text: "different",
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("text");
@@ -203,10 +203,10 @@ describe("reviewing a note — PATCH …/log/:id", () => {
     ).toBe(404);
     // An entry is named under its own session only.
     expect(
-      (await send("PATCH", `${logUrl()}/spuren-gefunden`, { rev: 1, reviewed: true })).status,
+      (await send("PATCH", `${logUrl()}/tracks-found`, { rev: 1, reviewed: true })).status,
     ).toBe(404);
     expect(
-      (await send("PATCH", `${logUrl("gibt-es-nicht")}/spuren-gefunden`, { rev: 1, reviewed: true }))
+      (await send("PATCH", `${logUrl("does-not-exist")}/tracks-found`, { rev: 1, reviewed: true }))
         .status,
     ).toBe(404);
   });

@@ -49,7 +49,7 @@ const SCENE = "lighthouse-arrival";
  * into this spec.
  */
 async function fixture<T = Record<string, unknown>>(kind: string, id: string): Promise<T> {
-  const source = path.join(FIXTURES_ROOT, CAMPAIGN, kind, `${id}.json`);
+  const source = path.join(FIXTURES_ROOT, kind, `${id}.json`);
   return JSON.parse(await readFile(source, "utf8")) as T;
 }
 
@@ -65,9 +65,9 @@ const COUNTS =
  */
 async function assertCampaignIsThere(api: Api): Promise<void> {
   // --- the tree -------------------------------------------------------------
-  const tree = await api.get<TreeResponse>("campaigns/beispiel/tree");
-  expect(tree.campaign).toBe("beispiel");
-  expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
+  const tree = await api.get<TreeResponse>(`campaigns/${CAMPAIGN}/tree`);
+  expect(tree.campaign).toBe(CAMPAIGN);
+  expect(tree.chapters.map((c) => c.id)).toEqual(["01-salt-harbour"]);
   const scenes = tree.chapters.flatMap((c) => c.scenes);
   // A scene in the tree names itself by its id — it has no address (decisions/resources).
   expect(scenes.map((s) => s.id).sort()).toEqual(["lighthouse-arrival", "smuggler-captured"]);
@@ -79,19 +79,19 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // here. A mention creates nothing (decisions/constraints): a location that does not
   // exist would be a reference to nothing, and the run would fail on the
   // scene that names it.
-  expect(tree.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
+  expect(tree.locations.map((l) => l.id).sort()).toEqual(["cove", "lighthouse"]);
   // What says the location was SEEDED rather than conjured: it carries the
   // name, the chapter and the Roll20 page its fixture
-  // (`locations/bucht.json`) spells, which a synthesized stub would not have.
-  const bucht = await getLocation(api, "bucht");
-  const buchtFixture = await fixture("locations", "bucht");
-  expect(bucht.name).toBe(buchtFixture.name);
-  expect(bucht.chapter).toBe("01-salzhafen");
-  expect(bucht.roll20Page).toBe(buchtFixture.roll20Page);
-  expect(bucht.roll20Page).toEqual(expect.any(String));
+  // (`locations/cove.json`) spells, which a synthesized stub would not have.
+  const cove = await getLocation(api, "cove");
+  const coveFixture = await fixture("locations", "cove");
+  expect(cove.name).toBe(coveFixture.name);
+  expect(cove.chapter).toBe("01-salt-harbour");
+  expect(cove.roll20Page).toBe(coveFixture.roll20Page);
+  expect(cove.roll20Page).toEqual(expect.any(String));
   // …and the resource answers the location itself: every field flat, beside
   // its guard — no kind, no path, no properties (decisions/resources).
-  expect(Object.keys(bucht).sort()).toEqual([
+  expect(Object.keys(cove).sort()).toEqual([
     "atmosphere",
     "body",
     "chapter",
@@ -108,7 +108,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const scene = await getScene(api, SCENE);
   expect(scene.id).toBe("lighthouse-arrival");
   expect(scene.status).toBe("ready");
-  expect(scene.location).toBe("leuchtturm");
+  expect(scene.location).toBe("lighthouse");
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toBe((await fixture<{ body: string }>("scenes", SCENE)).body);
 
@@ -151,9 +151,9 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
     "2026-01-15",
   );
   expect(session.log.map((row) => row.id)).toEqual([
-    "spuren-gefunden",
+    "tracks-found",
     "old-metta",
-    "lichter-in-der-bucht",
+    "lights-in-the-cove",
   ]);
   expect(session.log.map((row) => row.sceneId)).toEqual([
     "lighthouse-arrival",
@@ -167,7 +167,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   // wall clock.
   expect(session.pauses).toEqual([
     {
-      id: "abendessen",
+      id: "dinner",
       from: "2026-01-15T20:30:00",
       fromMs: expect.any(Number),
       to: "2026-01-15T21:10:00",
@@ -178,7 +178,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
 
   // --- the ideas: each its own resource --------------------------------------
   expect(await getIdeas(api)).toEqual([
-    { ...(await fixture("ideas", "dorfschmied")), id: "dorfschmied", done: false, rev: 1 },
+    { ...(await fixture("ideas", "village-smith")), id: "village-smith", done: false, rev: 1 },
   ]);
 
   // --- the glossary terms: each its own resource ----------------------------
@@ -203,7 +203,7 @@ test("a fresh instance boots EMPTY — nothing is loaded at startup", async ({},
     // The server is up (the fixture waited for /api/campaigns) and knows
     // nothing: the fixtures directory next to it was never read.
     expect(await api.get<{ id: string }[]>("campaigns")).toEqual([]);
-    expect((await api.fetch("campaigns/beispiel/tree")).status).toBe(404);
+    expect((await api.fetch(`campaigns/${CAMPAIGN}/tree`)).status).toBe(404);
   } finally {
     await proc.stop();
   }
@@ -220,7 +220,7 @@ test("grimoire seed loads the fixtures; a second run refuses", async ({}, testIn
   // --- run 1: fresh database, the pristine fixtures -------------------------
   const firstOut = await seedCampaigns(pristineDir(), dataDir);
   // The report names the campaign it loaded; the count is the tool's own.
-  expect(firstOut).toContain("seeded: beispiel");
+  expect(firstOut).toContain(`seeded: ${CAMPAIGN}`);
 
   const dbFile = path.join(dataDir, "grimoire.db");
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
@@ -253,7 +253,7 @@ test("grimoire seed loads the fixtures; a second run refuses", async ({}, testIn
     await assertCampaignIsThere(api);
     // … and no second campaign appeared.
     const campaigns = await api.get<{ id: string }[]>("campaigns");
-    expect(campaigns.map((c) => c.id)).toEqual(["beispiel"]);
+    expect(campaigns.map((c) => c.id)).toEqual([CAMPAIGN]);
   } finally {
     await second.proc.stop();
   }

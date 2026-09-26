@@ -37,15 +37,15 @@ import {
   type Selection,
 } from "./support/generator-jobs";
 
-const CAMPAIGN = "beispiel";
+const CAMPAIGN = "example";
 /** The chapter the example campaign brings, with its two fixture scenes. */
-const EXISTING_CHAPTER = "01-salzhafen";
+const EXISTING_CHAPTER = "01-salt-harbour";
 const FIXTURE_SCENES = ["lighthouse-arrival", "smuggler-captured"];
 /** A chapter that does not exist yet — the accept creates it. */
-const NEW_CHAPTER = "04-tiefwasser";
+const NEW_CHAPTER = "04-deep-water";
 
 /** The outline order of the scripted run: first, second, third. */
-const OUTLINE = ["erste-szene", "zweite-szene", "dritte-szene"];
+const OUTLINE = ["first-scene", "second-scene", "third-scene"];
 
 function sceneDraft(id: string, chapter: string): { properties: Record<string, unknown>; body: string } {
   return {
@@ -54,12 +54,12 @@ function sceneDraft(id: string, chapter: string): { properties: Record<string, u
       title: id,
       type: "planned",
       chapter,
-      location: "leuchtturm",
+      location: "lighthouse",
       npcs: ["fenn"],
       tags: ["social"],
       status: "draft",
     },
-    body: "## Flow\n\nFenn wartet am Kai.\n",
+    body: "## Flow\n\nFenn waits at the quay.\n",
   };
 }
 
@@ -92,7 +92,7 @@ async function runJob(chapter: string, newChapter = false): Promise<GeneratorJob
     kind: "scene",
     chapter,
     sourceText: "Fenn waits at the docks.",
-    ...(newChapter ? { newChapter: true, chapterTitle: "Tiefwasser" } : {}),
+    ...(newChapter ? { newChapter: true, chapterTitle: "Deep Water" } : {}),
   });
   expect(res.status).toBe(202);
   for (let i = 0; i < 2000; i++) {
@@ -224,40 +224,40 @@ test("scenes accepted one by one in REVERSE land in outline order behind the cha
 
 test("any order across calls ends in outline order — the middle one first", async () => {
   await runJob(EXISTING_CHAPTER);
-  await acceptOneByOne(EXISTING_CHAPTER, ["zweite-szene", "dritte-szene", "erste-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["second-scene", "third-scene", "first-scene"]);
 
   expect(await sceneIds(EXISTING_CHAPTER)).toEqual([...FIXTURE_SCENES, ...OUTLINE]);
 });
 
 test("a new chapter's run starts at 0 and keeps its order across calls", async () => {
   await runJob(NEW_CHAPTER, true);
-  await acceptOneByOne(NEW_CHAPTER, ["dritte-szene"]);
+  await acceptOneByOne(NEW_CHAPTER, ["third-scene"]);
   expect(await storedSceneStart()).toEqual({ pos: 0, sceneOrderRev: 1 });
 
-  await acceptOneByOne(NEW_CHAPTER, ["erste-szene", "zweite-szene"]);
+  await acceptOneByOne(NEW_CHAPTER, ["first-scene", "second-scene"]);
   expect(await sceneIds(NEW_CHAPTER)).toEqual(OUTLINE);
-  expect(await posOf("erste-szene")).toBe(0);
-  expect(await posOf("dritte-szene")).toBe(2);
+  expect(await posOf("first-scene")).toBe(0);
+  expect(await posOf("third-scene")).toBe(2);
 });
 
 test("a dropped scene keeps its number and leaves a gap", async () => {
   const job = await runJob(EXISTING_CHAPTER);
   const dropped = await send("PATCH", jobUrl(CAMPAIGN, job.id), {
     rev: job.rev,
-    review: { droppedScenes: ["zweite-szene"] },
+    review: { droppedScenes: ["second-scene"] },
   });
   expect(dropped.status).toBe(200);
-  await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene", "erste-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["third-scene", "first-scene"]);
 
   expect(await sceneIds(EXISTING_CHAPTER)).toEqual([
     ...FIXTURE_SCENES,
-    "erste-szene",
-    "dritte-szene",
+    "first-scene",
+    "third-scene",
   ]);
   // Start 2 (behind the two fixture scenes), numbers 0 and 2: the gap is
   // where the dropped scene would have stood.
-  expect(await posOf("erste-szene")).toBe(2);
-  expect(await posOf("dritte-szene")).toBe(4);
+  expect(await posOf("first-scene")).toBe(2);
+  expect(await posOf("third-scene")).toBe(4);
 });
 
 // --- the start ----------------------------------------------------------------
@@ -267,13 +267,13 @@ test("the start is taken at the FIRST scene accept, not when the run starts", as
   // Nothing accepted yet, so nothing is fixed yet.
   expect(await storedSceneStart()).toBeUndefined();
 
-  await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["third-scene"]);
   expect(await storedSceneStart()).toEqual({ pos: 2, sceneOrderRev: 1 });
 });
 
 test("a scene created by hand before the first accept stands before the run", async () => {
   await runJob(EXISTING_CHAPTER);
-  const handMade = await createScene("Von Hand dazwischen", EXISTING_CHAPTER);
+  const handMade = await createScene("Made by hand in between", EXISTING_CHAPTER);
   // Creating a scene is not a reorder: the order guard stays where it was.
   expect((await chapterNode(EXISTING_CHAPTER)).sceneOrderRev).toBe(1);
 
@@ -283,14 +283,14 @@ test("a scene created by hand before the first accept stands before the run", as
 
 test("the start is not recomputed: a later accept of an earlier scene takes its place", async () => {
   await runJob(EXISTING_CHAPTER);
-  await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["third-scene"]);
   // A scene created by hand now goes to the END — behind the accepted one.
   // A start recomputed from here would put the two earlier scenes behind it.
-  const handMade = await createScene("Von Hand danach", EXISTING_CHAPTER);
+  const handMade = await createScene("Made by hand afterwards", EXISTING_CHAPTER);
 
-  await acceptOneByOne(EXISTING_CHAPTER, ["zweite-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["second-scene"]);
   expect(await storedSceneStart()).toEqual({ pos: 2, sceneOrderRev: 1 });
-  await acceptOneByOne(EXISTING_CHAPTER, ["erste-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["first-scene"]);
   expect(await sceneIds(EXISTING_CHAPTER)).toEqual([...FIXTURE_SCENES, ...OUTLINE, handMade]);
 });
 
@@ -301,9 +301,9 @@ test("the start survives a server restart between two accepts", async () => {
   try {
     closeStore();
     const db = await initStore({ dbFile });
-    seedCampaign(db, await readFixtureCampaign(path.join(FIXTURES, "beispiel")));
+    seedCampaign(db, await readFixtureCampaign(FIXTURES));
     await runJob(EXISTING_CHAPTER);
-    await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene"]);
+    await acceptOneByOne(EXISTING_CHAPTER, ["third-scene"]);
     const start = await storedSceneStart();
     expect(start).toEqual({ pos: 2, sceneOrderRev: 1 });
 
@@ -312,7 +312,7 @@ test("the start survives a server restart between two accepts", async () => {
     expect(await storedSceneStart()).toEqual(start);
     // The chapter's end moved with the first accept — only the stored start
     // can put the two earlier scenes in front of it.
-    await acceptOneByOne(EXISTING_CHAPTER, ["zweite-szene", "erste-szene"]);
+    await acceptOneByOne(EXISTING_CHAPTER, ["second-scene", "first-scene"]);
     expect(await sceneIds(EXISTING_CHAPTER)).toEqual([...FIXTURE_SCENES, ...OUTLINE]);
   } finally {
     await clearJobsForTests();
@@ -333,7 +333,7 @@ test("the start outlasts the run's own writes while a part is still running", as
       req: GenerateRequest,
       corrections: CorrectionTurn[] = [],
     ): Promise<CompletionResult> {
-      if (req.assignment?.startsWith("dritte-szene ") === true) await held;
+      if (req.assignment?.startsWith("third-scene ") === true) await held;
       return super.complete(req, corrections);
     }
   }
@@ -350,7 +350,7 @@ test("the start outlasts the run's own writes while a part is still running", as
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
 
-  await acceptOneByOne(EXISTING_CHAPTER, ["zweite-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["second-scene"]);
   expect(await storedSceneStart()).toEqual({ pos: 2, sceneOrderRev: 1 });
 
   release?.();
@@ -360,7 +360,7 @@ test("the start outlasts the run's own writes while a part is still running", as
   }
   expect(await storedSceneStart()).toEqual({ pos: 2, sceneOrderRev: 1 });
 
-  await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene", "erste-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["third-scene", "first-scene"]);
   expect(await sceneIds(EXISTING_CHAPTER)).toEqual([...FIXTURE_SCENES, ...OUTLINE]);
 });
 
@@ -368,15 +368,15 @@ test("the start outlasts the run's own writes while a part is still running", as
 
 test("after a hand reorder the rest of the run goes to the end", async () => {
   await runJob(EXISTING_CHAPTER);
-  await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene"]);
-  const handOrder = ["dritte-szene", ...FIXTURE_SCENES];
+  await acceptOneByOne(EXISTING_CHAPTER, ["third-scene"]);
+  const handOrder = ["third-scene", ...FIXTURE_SCENES];
   await reorder(EXISTING_CHAPTER, handOrder);
   const guard = (await chapterNode(EXISTING_CHAPTER)).sceneOrderRev;
 
-  await acceptOneByOne(EXISTING_CHAPTER, ["zweite-szene", "erste-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["second-scene", "first-scene"]);
   // The DM's order stays as it was, and what came after it is appended in
   // the order it was accepted — like any new scene.
-  expect(await sceneIds(EXISTING_CHAPTER)).toEqual([...handOrder, "zweite-szene", "erste-szene"]);
+  expect(await sceneIds(EXISTING_CHAPTER)).toEqual([...handOrder, "second-scene", "first-scene"]);
   // The start is not re-based either, and the accepts left the guard alone.
   expect((await chapterNode(EXISTING_CHAPTER)).sceneOrderRev).toBe(guard);
 });
@@ -392,7 +392,7 @@ test("no accept moves the order guard, the chapter's rev or an existing scene's 
   };
 
   await runJob(EXISTING_CHAPTER);
-  await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene", "erste-szene"]);
+  await acceptOneByOne(EXISTING_CHAPTER, ["third-scene", "first-scene"]);
   const after = {
     order: (await chapterNode(EXISTING_CHAPTER)).sceneOrderRev,
     chapter: await revOf(`/api/campaigns/${CAMPAIGN}/chapters/${EXISTING_CHAPTER}`),

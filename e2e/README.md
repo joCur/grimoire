@@ -11,9 +11,9 @@ normal `OpenAICompatProvider`.
 - **Seeding goes through the real tool — `grimoire seed`.** Every test gets
   an empty `GRIMOIRE_DATA` directory; the `server` fixture runs
   `grimoire seed <fixtures-directory>` on it with the pristine copy of
-  `fixtures/beispiel` and THEN starts the server (the boot itself loads
+  `fixtures/` and THEN starts the server (the boot itself loads
   nothing).
-- **The fixtures are INPUT**, read once per test. `fixtures/beispiel` holds
+- **The fixtures are INPUT**, read once per test. `fixtures/` holds
   the example campaign as **one JSON per object**, exactly in the shape the
   API speaks. The campaign, a chapter, a scene, an NPC, a location, a thread,
   an idea, a glossary term, a piece of campaign knowledge and a session are
@@ -117,7 +117,7 @@ means four things:
 - **A scene is addressed by its `id`**, wherever it lies:
   `getScene(api, "lighthouse-arrival")`, `sceneExists(api, id)`,
   `scenePath(api, id?)` for raw calls. Both locations of the example campaign
-  exist as their own resource (`…/locations/leuchtturm`, `…/locations/bucht`;
+  exist as their own resource (`…/locations/lighthouse`, `…/locations/cove`;
   `getLocation(api, id)`) — a reference creates nothing
   ([decisions/constraints](../docs/decisions/constraints.md)) —, so the
   campaign has **two** locations. Former addresses like
@@ -175,7 +175,7 @@ Useful switches:
 ```
 playwright.config.ts     project (chromium only), globalSetup, report
 support/global-setup.ts  builds the app, creates the pristine copy of
-                         fixtures/beispiel, starts the stub
+                         fixtures/, starts the stub
 support/test.ts          the suite's `test`: own database + own server +
                          `baseURL` per test, plus the fixtures `api`, `db`
                          and `seed`
@@ -328,7 +328,7 @@ and can serve several workers in parallel:
   (also in the correction turn, so the run ends in a 422)
 - `E2E_TRUNCATED` in the source text → `finish_reason: "length"`
 - `E2E_UNKNOWN_REF` in the source text → the **first** reply of an NPC or
-  augment run names `[[der-fremde]]`, an id that does not exist; the
+  augment run names `[[the-stranger]]`, an id that does not exist; the
   correction turn (the call with the previous reply as the assistant turn)
   gets the good reply. So the run costs exactly one correction round and
   ends without that reference.
@@ -395,11 +395,11 @@ Paths 3, 4, 5 and 8 read rows instead of texts:
 - **Path 3** (`search.e2e.ts`): indexed are campaign, chapters, scenes, NPCs,
   locations and the glossary terms. Every hit carries `kind` + `id` and
   **no** `path` — the spec checks that on the wire and then clicks it in the
-  palette: the campaign hit opens `/campaigns/beispiel`, the others
-  `/campaigns/beispiel/chapters/<id>`, `/campaigns/beispiel/scenes/<id>`,
-  `/campaigns/beispiel/npcs/<id>`, `/campaigns/beispiel/locations/<id>` or —
+  palette: the campaign hit opens `/campaigns/example`, the others
+  `/campaigns/example/chapters/<id>`, `/campaigns/example/scenes/<id>`,
+  `/campaigns/example/npcs/<id>`, `/campaigns/example/locations/<id>` or —
   a glossary hit with `kind: "glossary-term"` and the term's `id` —
-  `/campaigns/beispiel/glossary`. Sessions and ideas are not indexed; a test
+  `/campaigns/example/glossary`. Sessions and ideas are not indexed; a test
   of its own asks for words that occur only there and expects no hit.
 - **Path 4** (`session-cycle.e2e.ts`): the quick note becomes a log **row**
   with `id`, `at`, `sceneId`, the text as the DM typed it, and its `rev` —
@@ -423,8 +423,8 @@ Paths 3, 4, 5 and 8 read rows instead of texts:
   into a session ended elsewhere shows the sentence for it and leaves the
   text in the field; the foreign write and the Enter run in the same
   `page.evaluate` so that the poll does not come in between. Plus the
-  reading page of a past session (`/campaigns/beispiel/sessions/2026-01-15`):
-  log rows with scene links to `/campaigns/beispiel/scenes/<id>`, the closed
+  reading page of a past session (`/campaigns/example/sessions/2026-01-15`):
+  log rows with scene links to `/campaigns/example/scenes/<id>`, the closed
   pause with its duration, the scenes with notes (each once, in the order of
   their first note) — and the old entry address of the same session as a
   404. A scene's reading view offers the session start like every reading
@@ -540,7 +540,7 @@ Plus one spec that lies on none of the ten paths but on the seam beneath
 them: `tests/seed.e2e.ts`, on the seed tool. It shows two things — that a
 fresh instance starts **empty** (the boot loads nothing) and that
 `grimoire seed` reads the fixtures completely (tree, scene bodies, NPC,
-session, ideas, glossary terms, `seeded: beispiel` on stdout — each read
+session, ideas, glossary terms, `seeded: example` on stdout — each read
 through its own endpoint), while a **second** run refuses because the
 database already holds campaigns: same row counts, same content. It needs
 boots of its own and therefore uses `startGrimoireServer`/`seedCampaigns`

@@ -38,13 +38,16 @@ import {
 } from "../support/session";
 import { getThreads, patchThread, threadPath } from "../support/thread";
 import { ui, uiExact } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
 const THREAD_TEXT = "Cliffhanger: lights sighted in the cove";
 const NPC_TEXT = 'Improvised: fisherwoman "Old Metta" at the jetty';
-/** The seeded idea of the example campaign (fixtures/beispiel/ideas). */
-const IDEA_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
-/** The seeded open thread of the chapter (fixtures/beispiel/threads). */
-const SEEDED_THREAD = "Wer bezahlt die Schmuggler?";
+/** The active chapter of the example campaign (fixtures/chapters). */
+const CHAPTER = "01-salt-harbour";
+/** The seeded idea of the example campaign (fixtures/ideas). */
+const IDEA_TEXT = "Idea: the village smith repairs smuggling tools suspiciously often";
+/** The seeded open thread of the chapter (fixtures/threads). */
+const SEEDED_THREAD = "Who pays the smugglers?";
 /** An idea thrown in on the go — no hashtag at all. */
 const NOTE_TEXT = "The lanterns on the quay never burn at low tide";
 /** A note ABOUT a player character — `#pc` plus the name tag. */
@@ -120,9 +123,9 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
   page,
   api,
 }) => {
-  const chapterBefore = await getChapter(api, "01-salzhafen");
-  const threadsBefore = await getThreads(api, "01-salzhafen");
-  await page.goto("/campaigns/beispiel/review");
+  const chapterBefore = await getChapter(api, CHAPTER);
+  const threadsBefore = await getThreads(api, CHAPTER);
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("review.title"));
 
   // The topbar carries the harvest progress (the page repeats it below md).
@@ -153,7 +156,7 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
   // Stored: the chapter gained a THREAD at its end …
   await expect
     .poll(async () =>
-      (await getThreads(api, "01-salzhafen")).map((row) => [row.text, row.done]),
+      (await getThreads(api, CHAPTER)).map((row) => [row.text, row.done]),
     )
     .toEqual([
       [SEEDED_THREAD, false],
@@ -161,23 +164,23 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
     ]);
   // … and the CHAPTER did not move: not its text, not its guard. Neither did
   // the thread that was there.
-  const chapterAfter = await getChapter(api, "01-salzhafen");
+  const chapterAfter = await getChapter(api, CHAPTER);
   expect(chapterAfter.body).toBe(chapterBefore.body);
   expect(chapterAfter.rev).toBe(chapterBefore.rev);
-  const [seededThread, adopted] = await getThreads(api, "01-salzhafen");
+  const [seededThread, adopted] = await getThreads(api, CHAPTER);
   expect(seededThread).toEqual(threadsBefore[0]);
 
   // The adopted thread is its own resource, flat, with its own guard.
   expect(adopted).toEqual({
     id: adopted!.id,
-    chapter: "01-salzhafen",
+    chapter: CHAPTER,
     text: THREAD_TEXT,
     done: false,
     rev: 1,
   });
   const ticked = await patchThread(api, adopted!.id, { rev: adopted!.rev, done: true });
   expect(ticked).toEqual({ ...adopted, done: true, rev: 2 });
-  expect((await getChapter(api, "01-salzhafen")).rev).toBe(chapterBefore.rev);
+  expect((await getChapter(api, CHAPTER)).rev).toBe(chapterBefore.rev);
   const patchRaw = (id: string, body: unknown) =>
     api.fetch(threadPath(api, id), {
       method: "PATCH",
@@ -190,7 +193,7 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
   const stale = await patchRaw(adopted!.id, { rev: adopted!.rev, done: false });
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ code: "rev_conflict", thread: ticked });
-  expect((await getThreads(api, "01-salzhafen")).at(-1)).toEqual(ticked);
+  expect((await getThreads(api, CHAPTER)).at(-1)).toEqual(ticked);
   // … and the source ROW carries the flag: the review named it by the `id`
   // the log handed out, so exactly that row is marked and no other.
   await expect
@@ -240,7 +243,7 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
 
   // The finish action goes back to the chapters.
   await page.getByRole("button", { name: ui("review.finish") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
   // The chapter overview's quiet review affordance counts what is still open.
   await expect(reviewLink(page, 2)).toBeVisible();
 });
@@ -252,7 +255,7 @@ test("an untagged idea is reviewable and can be ticked off", async ({
   // Thrown in the way it happens on the go: the mobile start surface at
   // 390px (critical path 8), no hashtag.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await page.getByLabel(ui("mobileStart.inbox.label")).fill(NOTE_TEXT);
   await page.getByRole("button", { name: ui("mobileStart.inbox.submit") }).click();
   await expect(page.getByText(ui("mobileStart.inbox.saved"))).toBeVisible();
@@ -264,7 +267,7 @@ test("an untagged idea is reviewable and can be ticked off", async ({
   // At the desk it shows up in the session review — in its own untagged-entries
   // section, and counted with everything else (one source for page and topbar).
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
   await expect(topbarProgress(page, 0, 5)).toBeVisible();
   await expect(page.getByRole("heading", { name: ui("review.notes.title") })).toBeVisible();
 
@@ -293,14 +296,14 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   // Thrown in the way it happens on the go: the mobile start surface at
   // 390px (critical path 8), tagged `#pc #kaela`.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await page.getByLabel(ui("mobileStart.inbox.label")).fill(`${PC_TEXT} #pc #kaela`);
   await page.getByRole("button", { name: ui("mobileStart.inbox.submit") }).click();
   await expect(page.getByText(ui("mobileStart.inbox.saved"))).toBeVisible();
 
   // Still at 390px: the session review is a desk task, but it has to stay readable
   // and operable on the phone (quality floor).
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
   const section = page.getByRole("heading", { level: 2, name: ui("review.pc.title") });
   await expect(section).toBeVisible();
   // Grouped under the second tag — not under the general group.
@@ -352,14 +355,14 @@ async function npcRowReviewed(api: Api): Promise<boolean | undefined> {
 }
 
 test("creating an NPC from a #npc log row", async ({ page, api }) => {
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
   // The source chip names the SCENE the row was logged under, resolved from
   // the tree — never the row's `sceneId`.
-  // "Ankunft am Leuchtturm" is the seeded title of `lighthouse-arrival`.
+  // "Arrival at the Lighthouse" is the seeded title of `lighthouse-arrival`.
   await expect(
-    npcCard.getByText(ui("review.source.logScene", { scene: "Ankunft am Leuchtturm" })),
+    npcCard.getByText(ui("review.source.logScene", { scene: "Arrival at the Lighthouse" })),
   ).toBeVisible();
   await expect(npcCard.getByText("lighthouse-arrival")).toHaveCount(0);
   await npcCard.getByRole("button", { name: ui("create.npc.title") }).click();
@@ -390,10 +393,10 @@ test("creating an NPC from a #npc log row", async ({ page, api }) => {
   await expect.poll(() => npcRowReviewed(api)).toBe(true);
 
   // The new NPC is in the list right away, linking to its own route.
-  await page.goto("/campaigns/beispiel/npcs");
+  await page.goto(`/campaigns/${CAMPAIGN}/npcs`);
   await expect(page.getByRole("link", { name: /Old Metta/ })).toHaveAttribute(
     "href",
-    "/campaigns/beispiel/npcs/old-metta",
+    `/campaigns/${CAMPAIGN}/npcs/old-metta`,
   );
 });
 
@@ -402,7 +405,7 @@ test("an EMPTY npc under the id gets the note", async ({ page, api }) => {
   // left it at that. The note fills it instead of colliding.
   const empty = await createNpc(api, { name: "old-metta" });
   expect(empty.body).toBe("");
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
   await npcCard.getByRole("button", { name: ui("create.npc.title") }).click();
@@ -424,7 +427,7 @@ test("an id whose npc has content is refused — nothing written, the note stays
   api,
 }) => {
   const before = await getNpc(api, "fenn");
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
   await expect(topbarProgress(page, 0, 4)).toBeVisible();
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
@@ -469,7 +472,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
     // what names the session (the first of `GET …/sessions`), not the date.
     const yesterday = PAST_MIDNIGHT.id;
 
-    await page.goto("/campaigns/beispiel/review");
+    await page.goto(`/campaigns/${CAMPAIGN}/review`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("review.title"));
     const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
     await expect(threadCard).toBeVisible();
@@ -483,7 +486,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
       .toEqual([true]);
     expect(await sessionExists(api, todaySessionId())).toBe(false);
     await expect
-      .poll(async () => (await getThreads(api, "01-salzhafen")).map((row) => row.text))
+      .poll(async () => (await getThreads(api, CHAPTER)).map((row) => row.text))
       .toContain(THREAD_TEXT);
   });
 });
@@ -535,7 +538,7 @@ test("a log entry changed elsewhere: the card says so, nothing is written, the n
   api,
 }) => {
   const id = todaySessionId();
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto(`/campaigns/${CAMPAIGN}/review`);
   await expect(topbarProgress(page, 0, 4)).toBeVisible();
   const card = page.locator("div").filter({ hasText: "Found tracks" }).last();
   await expect(card.getByRole("button", { name: ui("common.discard") })).toBeVisible();
