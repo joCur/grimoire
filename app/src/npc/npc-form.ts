@@ -1,5 +1,5 @@
-// The form of an npc — what its dialog, the edit surface of its reading view
-// and the card of a proposed npc start with, and the write a save sends. Pure,
+// The form of an npc — what the edit mode of its reading view and the card
+// of a proposed npc start with, and the write a save sends. Pure,
 // so every rule is unit-testable.
 //
 // Only what the DM CHANGED is written: a field nobody touched keeps its

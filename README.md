@@ -48,8 +48,9 @@ most recent session.
 The `id` is derived from the typed name on creation, by exactly one rule
 (`@grimoire/shared/slug`), and is fixed from then on: it is the reference
 key in URLs, links and `[[id]]` references and never changes afterwards
-([decisions/constraints](docs/decisions/constraints.md)). The fields dialog of an NPC, a location or a chapter shows it
-without offering a change; a scene's edit mode has no id field at all.
+([decisions/constraints](docs/decisions/constraints.md)). The fields dialog of a location or a chapter shows it
+without offering a change; the edit modes of a scene and an NPC have no id
+field at all.
 
 The chapter overview is one continuous list of a chapter's scenes in the
 **order the DM sets** ([decisions/scene-order](docs/decisions/scene-order.md)); the location appears by its name in the
@@ -308,10 +309,11 @@ generator proposal are the NPC without `rev`. Augmenting hangs on the NPC:
 `POST …/npcs/<id>/augment` starts the run, `POST …/npcs/<id>/augment/apply`
 accepts it.
 
-In the app an NPC's fields are edited in its fields dialog; `motivation` is
-maintained on the text editing surface, next to the Markdown, not in the
-fields dialog. An `[[id]]` in it appears as the current name when shown,
-like in the text — a display, not a reference.
+In the app an NPC is edited in the edit mode of its reading view: name,
+status, `body` and every other field on one page, saved together as one
+write. Quick stats, statblock and chapter are chips; role, voice, appearance
+and `motivation` form its profile. An `[[id]]` in `motivation` appears as the
+current name when shown, like in the text — a display, not a reference.
 
 Text sections are free; recommended: `## Weiß` (`[!secret]` callouts),
 `## Beziehungen` (one line per counterpart; a counterpart is linked with

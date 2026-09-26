@@ -1,7 +1,7 @@
-// The fields of an npc as form controls: the ones its dialog (and the card of
-// a proposed npc) edits, and the `motivation` its edit surface writes beside
-// the text (decisions/data-shape). Plain rendering over the form's values
-// (./npc-form.ts).
+// The fields of an npc as form controls, as the card of a proposed npc edits
+// them: the list of its fields, and the `motivation` written beside the text
+// (decisions/data-shape). Plain rendering over the form's values
+// (./npc-form.ts). A stored npc is edited in its edit mode (./NpcEditMode.tsx).
 //
 // The status is a select over the closed list and nothing else: an npc
 // always has a status, so there is no empty choice.
@@ -19,7 +19,7 @@ import { useT } from "@/i18n";
 import type { NpcFormValues } from "./npc-form";
 import { npcStatusLabel } from "./npc-status";
 
-/** The dialog's fields, in the order the dialog shows them. */
+/** The fields of the proposal card's editor, in the order it shows them. */
 export function NpcFields({
   values,
   issues,

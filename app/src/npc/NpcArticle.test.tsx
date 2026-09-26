@@ -14,8 +14,6 @@ import { translator } from "@/i18n/format";
 
 import { NpcArticle } from "./NpcArticle";
 
-const t = translator("de");
-
 const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel/npcs");
 
 /** An npc fixture — the npc as its resource answers it. */
@@ -28,6 +26,10 @@ function npcFixture(id: string): Npc {
 }
 
 const jorna = npcFixture("jorna");
+
+// UI text comes from the catalog (decisions/testing); the fixture's own
+// content is data and is asserted as it is stored.
+const t = translator("de");
 
 function render(npc: Npc): string {
   return renderToStaticMarkup(<NpcArticle npc={npc} />);
@@ -74,7 +76,7 @@ describe("NpcArticle", () => {
     expect(html).not.toContain(t("npcCard.will.inline"));
   });
 
-  test("the actions stay ONE spaced group; an editor replaces the text", () => {
+  test("the actions stay ONE spaced group", () => {
     const html = renderToStaticMarkup(
       <NpcArticle
         npc={jorna}
@@ -85,12 +87,12 @@ describe("NpcArticle", () => {
             <button type="button">{"Second"}</button>
           </>
         }
-        body={<textarea defaultValue={"Draft"} />}
       />,
     );
     expect(html).toMatch(
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>First<\/button><button[^>]*>Second<\/button><\/span>/,
     );
-    expect(html).not.toContain("Ahnt, dass jemand im Dorf");
+    // The text stands below the header.
+    expect(html).toContain("Ahnt, dass jemand im Dorf");
   });
 });

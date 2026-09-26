@@ -967,6 +967,15 @@ export const de = {
   "sceneEdit.npcs.title": "NPCs in dieser Reihenfolge",
   "sceneEdit.handouts.title": "Handouts in Roll20",
 
+  // --- edit mode of an npc (npc/NpcEditMode.tsx, components/FieldSection.tsx)
+  // Field labels and hints are the shared `properties.npc.*`.
+  "npcEdit.heading": "NPC bearbeiten",
+  "npcEdit.name.aria": "Name des NPCs",
+  "npcEdit.blocked.name": "Ein NPC braucht einen Namen.",
+  "npcEdit.chapter.none": "Kein Kapitel",
+  "npcEdit.profile.title": "Steckbrief",
+  "npcEdit.profile.empty": "Der Steckbrief ist noch leer.",
+
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} ist keine NPC-Kennung, deshalb gibt es dazu keinen NPC.",
   "npcCard.unloadable": "{id} — NPC nicht ladbar, Server prüfen.",
