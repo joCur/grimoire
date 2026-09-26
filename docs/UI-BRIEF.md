@@ -72,7 +72,7 @@ fokussierbar, Enter sendet). Der rote Faden des Abends ist ein einziger
 Schritt unter der offenen Szene: „Nächste Szene: <Titel>" — er sagt, wohin
 der DM als nächstes greift, ohne dass er die Liste absuchen muss. Beim
 Betreten steht die erste Szene an, die noch nicht gespielt ist.
-Kopfzeile: Sessionzeit (berechnet aus `started`), Pause-Eintrag,
+Kopfzeile: Sessionzeit (berechnet aus `started`), Pause,
 Session beenden. Die Schnellnotiz ist nach dem Read-Aloud das
 zweitwichtigste Element — nichts darf sie verdecken.
 
@@ -83,9 +83,9 @@ Keine Session-Ansicht auf Mobil erzwingen.
 
 ### 5. Nachbereitung (nach der Session; Route `review`)
 Job: fünf Minuten Nachbereitung (der frühere Begriff „Ernte" ist in der UI
-abgelöst — unklare Metaphorik). Log- und Ideen-Einträge mit `#thread`/`#npc`
-gefiltert, je Eintrag Ein-Klick-Aktionen (Handlungsstrang übernehmen,
-vorgeschlagenen NPC-Eintrag anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
+abgelöst — unklare Metaphorik). Notizen und Ideen mit `#thread`/`#npc`
+gefiltert, je Notiz Ein-Klick-Aktionen (Handlungsstrang übernehmen,
+vorgeschlagenen NPC anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
 
 ## Ton der UI-Texte
 
@@ -106,18 +106,17 @@ Callout-Typen, Status-Werte) bleiben davon unberührt.
 | Kapitel | Chapters | Pool |
 | Session-Ansicht | Session view | Live-Modus / Live-Ansicht |
 | Nachbereitung | Session review | Ernte, Wrap-up |
-| Ungetaggte Einträge | Untagged entries | Notizen (Sektion der Nachbereitung) |
+| Ideen ohne Tag | Ideas without a tag | Ungetaggte Einträge, Notizen (Sektion der Nachbereitung) |
 | Ideen | Ideas | Inbox |
 | Entwürfe prüfen | Check drafts | Review (Generator) |
 | Vorschlag prüfen | Check the proposal | Review (NPC-Generator) |
-| Vorgeschlagene Einträge | Suggested entries | Stubs |
+| Vorgeschlagene NPCs und Orte | Suggested NPCs and locations | Vorgeschlagene Einträge, Stubs |
 | Eventualszene | Contingency scene | Kontingenz, „Falls es schiefgeht" |
 | Probe | Check | Check (de) |
 | Ergebnis | Outcome | Konsequenz |
 | Markdown-Block | Markdown block | Roh-Block |
 | Kurzwerte | Quick stats | Quickstats |
 | Handlungsstrang | Storyline | Thread (en) |
-| Eintrag | Entry | Dokument, Datei |
 | Eigenschaften | Properties | Frontmatter |
 | Text | Text | Body |
 
