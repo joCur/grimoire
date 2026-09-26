@@ -273,7 +273,7 @@ export const de = {
     "Namenskonventionen, Fakten und Stilregeln dieser Kampagne. Geht bei jedem Generator-Lauf mit und gilt verbindlich — auch wenn das Quellmaterial etwas anderes sagt. Die Reihenfolge ist die Reihenfolge im Prompt. Referenzen wie [[fenn]] werden zum Namen aufgelöst.",
   "knowledge.filter": "Wissen filtern",
   "knowledge.empty":
-    "Noch kein Kampagnenwissen — lege das erste an, zum Beispiel eine Namenskonvention.",
+    "Noch kein Kampagnenwissen. Fang mit einer Namenskonvention, einer Tatsache oder einer Stilregel an.",
   "knowledge.noMatch": "Nichts passt zum Filter.",
   "knowledge.add": "Wissen hinzufügen",
   "knowledge.blank": "Noch nichts eingetragen",

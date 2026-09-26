@@ -242,7 +242,7 @@ export const en: Messages = {
     "Naming conventions, facts and style rules of this campaign. Travels with every generator run and is binding \u2014 even when the source material says otherwise. The order here is the order in the prompt. References like [[fenn]] are resolved to the name.",
   "knowledge.filter": "Filter the knowledge",
   "knowledge.empty":
-    "No campaign knowledge yet — add the first piece, a naming convention, say.",
+    "No campaign knowledge yet. Start with a naming convention, a fact or a style rule.",
   "knowledge.noMatch": "Nothing matches the filter.",
   "knowledge.add": "Add knowledge",
   "knowledge.blank": "Nothing filled in yet",

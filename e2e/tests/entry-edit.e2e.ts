@@ -521,7 +521,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
 
   // The cached scene is still there, so the PAGE must not swap itself for its
   // error line and take the unsaved text with it.
-  await expect(page.getByText("Nicht ladbar — Server prüfen")).toHaveCount(0);
+  await expect(page.getByText("Eintrag nicht ladbar — Pfad prüfen")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(textarea).toHaveValue(draft);
 });
