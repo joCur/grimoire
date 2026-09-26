@@ -369,8 +369,8 @@ The paths:
    back), name hints at their place while reviewing the proposals,
    accepting still possible, and a server restart (a finished job survives
    it and stays acceptable, a running one is reported as `failed`). The
-   scenes of a run stand in the chapter in outline order, even when they are accepted one by one and in
-   reverse order — start value at the first acceptance plus the number in
+   scenes of a run stand in the chapter in outline order, even when they
+   are accepted one by one and in reverse order — start value at the first acceptance plus the number in
    the outline (decisions/scene-order)
 7. Edit modes of scene, NPC, location and chapter / status control
    including the 409 conflict. No entity has a fields dialog: every field is
