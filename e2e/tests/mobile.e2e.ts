@@ -14,7 +14,7 @@ const OPEN_SESSION: SessionSeed = (() => {
   const d = new Date(Date.now() - 24 * 3600_000);
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  return { id, started: `${id}T22:30:00`, body: "", pauses: [], log: [], playedScenes: [] };
+  return { id, started: `${id}T22:30:00`, body: "", pauses: [], log: [] };
 })();
 
 test.use({ viewport: { width: 390, height: 844 } });

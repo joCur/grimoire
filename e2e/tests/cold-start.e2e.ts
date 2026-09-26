@@ -241,16 +241,16 @@ test("cold start: empty instance → campaign → chapter → scene → usable i
     const log = (await getSession(api, sessionId)).log;
     expect(log.map((row) => [row.text, row.sceneId])).toContainEqual([note, "ankunft-am-leuchtturm"]);
   }).toPass();
-  // A note plays nothing; leaving the scene with a note in it does.
-  expect((await getSession(api, sessionId)).playedScenes).toEqual([]);
+  // A note sets no status; with a note in it, the "gespielt" box beside the
+  // step starts ticked, and leaving the scene marks it played.
+  expect((await getScene(api, "ankunft-am-leuchtturm")).status).not.toBe("played");
+  await expect(page.getByRole("checkbox", { name: "gespielt" })).toBeChecked();
   await page.getByRole("button", { name: "Nächste Szene: Abendessen bei Jorna" }).click();
   await expect(nav.getByRole("button", { name: /Abendessen bei Jorna/ })).toHaveAttribute(
     "aria-current",
     "true",
   );
-  await expect
-    .poll(async () => (await getSession(api, sessionId)).playedScenes.map((row) => row.sceneId))
-    .toEqual(["ankunft-am-leuchtturm"]);
+  expect((await getScene(api, "ankunft-am-leuchtturm")).status).toBe("played");
 });
 
 test("npc and location are created from their lists; a collision writes nothing", async ({

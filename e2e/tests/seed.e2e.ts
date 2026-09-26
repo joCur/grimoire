@@ -130,9 +130,6 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const session = await getSession(api, "2026-01-15");
   expect(session.started).toBe("2026-01-15T19:30:00");
   expect(session.ended).toBe("2026-01-15T22:45:00");
-  expect(session.playedScenes).toEqual([
-    { id: "ankunft", sceneId: "lighthouse-arrival", rev: expect.any(Number) },
-  ]);
   // The log arrives as rows, with the columns the fixture spells — nothing is
   // parsed back out of a rendered line.
   expect(session.log).toEqual([
