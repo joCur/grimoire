@@ -49,8 +49,8 @@ const SCENE = "lighthouse-arrival";
  * into this spec.
  */
 async function fixture<T = Record<string, unknown>>(kind: string, id: string): Promise<T> {
-  const file = path.join(FIXTURES_ROOT, CAMPAIGN, kind, `${id}.json`);
-  return JSON.parse(await readFile(file, "utf8")) as T;
+  const source = path.join(FIXTURES_ROOT, CAMPAIGN, kind, `${id}.json`);
+  return JSON.parse(await readFile(source, "utf8")) as T;
 }
 
 const COUNTS =
