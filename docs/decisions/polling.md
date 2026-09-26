@@ -5,8 +5,8 @@
 Changes become visible in the app without a manual reload. Every write
 increments a version counter of its campaign in the same transaction; the
 app polls that counter and invalidates its queries when it changes. The
-response also carries the build id, and when it differs from the loaded
-bundle, the app offers a reload.
+poll response also carries the server's build id, and when it differs from
+the loaded bundle, the app offers a reload.
 
 ## Why
 

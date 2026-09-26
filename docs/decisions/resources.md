@@ -82,11 +82,11 @@ entity is meant.
 
 zod delivers type, validation and JSON schema from one description in the
 language of the rest of the code; the shapes cannot drift apart because
-there is only one (`decisions/dependencies`).
+there is only one.
 
-With the campaign as a prefix instead of the first segment, campaign-
-independent paths cannot collide with a campaign id, and new paths have a
-pattern instead of special cases.
+With campaign paths under `/campaigns/:id` instead of the campaign id as the
+first path segment, campaign-independent paths cannot collide with a
+campaign id, and new paths have a pattern instead of special cases.
 
 ## Consequences
 

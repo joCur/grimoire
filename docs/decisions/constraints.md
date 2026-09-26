@@ -16,12 +16,12 @@
   (`decisions/data-shape`).
 - **A row may exist before its content only where a proposal references
   it.** An entity that a generator proposal can reference before it has
-  content may exist as a row carrying only its id; it shows thinly. Creating
+  content may exist as a row carrying only its id. Creating
   that id, or applying a proposal for it, fills such a row instead of
   colliding; a row with content is a conflict. Every other entity has no
   empty state: it is created with its content.
-- **ids are immutable.** The id is set on creation and never changes;
-  personalizing it happens once, in the create dialog.
+- **ids are immutable.** The id is set on creation and never changes; the
+  DM can choose it only then, in the create dialog.
 
 ## Why
 
@@ -30,8 +30,9 @@ wrong value from the generator or a direct write would land in the column
 and be shown verbatim afterwards. The row is the truth (`decisions/sqlite`),
 so a rule about a column belongs in the column.
 
-This does not contradict "the format degrades": degrading is a rule for the
-reader of text; what is closed is the write path of columns.
+This does not contradict the rule that the text format degrades
+(`decisions/sqlite`): that rule is about reading bodies; closed lists are
+about writing columns.
 
 The id is the key of the whole model: it appears in URLs, foreign keys and
 `[[id]]` mentions. Renaming it everywhere after the fact would be the most
@@ -50,7 +51,6 @@ no such state, and an empty one would only be an incomplete row.
 - No write changes an id; there is no id cascade in the application.
 - A new value in a closed list is a migration, a decision about the data
   model, not only a constant change.
-- Every error code needs a catalog entry (`decisions/i18n`).
 - Deleting entities that others reference needs a decision of its own; the
   foreign keys do not cascade deletes. References across campaigns are
   impossible.

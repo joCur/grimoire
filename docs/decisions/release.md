@@ -37,5 +37,4 @@ in the release run, where the tag already exists.
 
 ## Consequences
 
-- CI checks, release publishes.
 - The deploy steps are in [docs/DEPLOYMENT.md](../DEPLOYMENT.md).

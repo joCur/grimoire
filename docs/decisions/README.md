@@ -46,7 +46,8 @@ deviation requires a changed or new file.
 - [sqlite.md](sqlite.md) — one SQLite database is the source of truth;
   Markdown bodies, empty start, migrations.
 - [constraints.md](constraints.md) — the database enforces references and
-  closed value lists; referenced-before-filled rows; ids are immutable.
+  closed value lists; rows that exist before their content; ids are
+  immutable.
 - [resources.md](resources.md) — one resource, one type, one zod schema per
   entity; URLs, keys, nesting, app slices.
 - [writes.md](writes.md) — app-first, one guard per row, one write path per

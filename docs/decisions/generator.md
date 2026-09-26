@@ -4,7 +4,7 @@
 
 - **Review before anything is written.** The generator never writes into the
   campaign directly. What a run proposes waits in its job until the DM
-  applies it, and a proposed scene is a draft. Flow and prompts are described
+  applies it. Flow and prompts are described
   in [generator/README.md](../../generator/README.md).
 - **The provider sits behind an interface.** The Claude API is the default;
   an OpenAI-compatible endpoint is the alternative.
@@ -47,8 +47,7 @@
 - Local and compatible endpoints often ignore the requested response format;
   their errors are mechanical, and a deterministic repair is far cheaper
   than a correction round that resends the whole prompt.
-- A text with prepended fields that is carried through job and review and
-  taken apart again on apply can only lose values.
+- Fields assembled into a text and taken apart again can only lose values.
 - Parts let a long run deliver early and let one failure cost one call
   instead of the whole run.
 
