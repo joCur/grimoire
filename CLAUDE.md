@@ -173,10 +173,12 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
 - Repository language (decisions/language): everything in the repo is
   English — code, identifiers, comments, test names, commits, docs,
-  decisions, agent instructions. German exists only in the German UI catalog
-  (`app/src/i18n/de.ts`), the example campaign content in `fixtures/`, and
-  literal UI strings that tests assert against. In code and docs, describe a
-  UI label in English instead of quoting it.
+  decisions, agent instructions, the example campaign content in
+  `fixtures/`, and tests. German exists only in the German UI catalog
+  (`app/src/i18n/de.ts`); tests do not assert against German UI strings but
+  run against the English UI or use catalog keys. German anywhere else is a
+  violation to convert, not an exception. In code and docs, describe a UI
+  label in English instead of quoting it.
 - Comments explain the code and stand on their own: no references to issues,
   PRs or reviews. References to decisions (`decisions/sqlite`) are allowed —
   they point to a document in the repo, not to a ticket.

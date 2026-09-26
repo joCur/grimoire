@@ -40,11 +40,11 @@ deviation requires a changed or new file.
 - [dependencies.md](dependencies.md) — established packages instead of
   building our own.
 - [language.md](language.md) — the repository is written in English; German
-  only as product content; the scout rule.
+  only in the German UI catalog; the scout rule.
 - [sqlite.md](sqlite.md) — one SQLite database is the source of truth;
   Markdown bodies, empty start, migrations.
 - [constraints.md](constraints.md) — the database enforces references and
-  closed value lists; empty rows are valid; ids are immutable.
+  closed value lists; referenced-before-filled rows; ids are immutable.
 - [resources.md](resources.md) — one resource, one type, one zod schema per
   entity; URLs, keys, nesting, app slices.
 - [writes.md](writes.md) — app-first, one guard per row, one write path per

@@ -15,8 +15,8 @@ general endpoint across several entities, neither in the API nor in the app.
 
 ### Wire
 
-- A resource answers with its own type: all fields side by side, `body`
-  included where the entity has one, and its `rev`. There is no common base
+- A resource answers with its own type: all fields side by side and its
+  `rev`. There is no common base
   type, no `kind` and no union of entities; the URL says which one is meant.
 - **No umbrella terms.** Every field is a field of its entity; there are no
   halves of an entity and no shared shape standing for several entities.

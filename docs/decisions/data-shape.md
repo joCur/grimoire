@@ -7,10 +7,8 @@
   a body found by the text of its heading. Headings structure the text for
   the DM; only the renderer's own vocabulary (README.md) has meaning for the
   code.
-- A row is its columns: no Markdown inside structured rows, no reader that
-  parses text back into rows, and no rows that exist only to shape a text.
-- A migration that introduces such a field or row **carries nothing over**
-  from existing text; the old section stays free text (`decisions/sqlite`).
+- A row is its columns: no Markdown inside structured rows and no reader
+  that parses text back into rows.
 - **Fixtures are the shape of the API.** The example campaign lies under
   `fixtures/` as the objects its resources return, one file per entity and
   id, without `rev`. The seed writes them through the store layer; there is
@@ -23,8 +21,7 @@ A section that code finds by its heading is an agreement with the DM that
 breaks silently: reader and writer recognize headings by slightly different
 rules, and whatever the DM writes differently drops out or appears twice.
 Storage derives nothing from text (`decisions/constraints`), and the same
-holds for display, write paths and checks. Cutting a value out of a section
-during a migration would be exactly such a reader.
+holds for display, write paths and checks.
 
 No production path imports; a fresh installation creates its campaign in the
 UI. A seed that runs through a parser would test the parser instead of the

@@ -14,10 +14,12 @@
   text; nothing in storage is derived from it, and one without a row is shown
   as text. A relationship that must be data is a field, not parsed text
   (`decisions/data-shape`).
-- **An empty row is valid.** A row that carries only its id is a normal row:
-  it shows thinly and is filled like any other. Creating an id that exists as
-  an empty row fills it instead of colliding; a row with content is a
-  conflict.
+- **A row may exist before its content only where a proposal references
+  it.** An entity that a generator proposal can reference before it has
+  content may exist as a row carrying only its id; it shows thinly. Creating
+  that id, or applying a proposal for it, fills such a row instead of
+  colliding; a row with content is a conflict. Every other entity has no
+  empty state: it is created with its content.
 - **ids are immutable.** The id is set on creation and never changes;
   personalizing it happens once, in the create dialog.
 
@@ -36,9 +38,12 @@ The id is the key of the whole model: it appears in URLs, foreign keys and
 expensive part of the write layer and is practically never needed; a better
 title needs no new id, because `[[id]]` resolves to the current name.
 
-Entities often exist as a reference key long before they have content; a
-scene names an NPC, and the DM fills it later. That is why creating fills an
-empty row.
+A generator run can name an entity before anything is known about it, for
+example a proposed scene that refers to an NPC or a location that does not
+exist yet. The reference must be a foreign key, so the referenced row has to
+exist, even if it carries nothing but its id; creating or applying that id
+later fills it. Entities that nothing references ahead of their content need
+no such state, and an empty one would only be an incomplete row.
 
 ## Consequences
 

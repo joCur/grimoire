@@ -27,7 +27,7 @@
 
 ## Why
 
-All fields of an entity, `body` included, live in one row. Two write paths
+All fields of an entity live in one row. Two write paths
 onto one row would invalidate each other's responses, and the app would have
 to guess the next `rev` instead of knowing it.
 
