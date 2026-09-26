@@ -18,9 +18,10 @@ import { NpcCard } from "@/npc/NpcCard";
 import { NpcRoute } from "@/npc/NpcRoute";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
-import { SessionRoute } from "@/routes/session";
 import { SettingsRoute } from "@/routes/settings";
 import { SceneRoute } from "@/scene/SceneRoute";
+import { sceneHref } from "@/scene/scene-links";
+import { SessionRoute } from "@/session/SessionRoute";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
 // exactly once per campaign — when the server bumps the counter (which it
@@ -115,8 +116,9 @@ export function App() {
           {/* Review — the session review, entered after ending a session
               and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
-          {/* One evening, read-only. Reached from ⌘K. */}
-          <Route path="sessions/:id" element={<SessionRoute />} />
+          {/* One evening, read-only. Reached from ⌘K. Its played scenes
+              link to the scene's own route, handed in from here. */}
+          <Route path="sessions/:id" element={<SessionRoute sceneHref={sceneHref} />} />
         </Route>
       </Route>
     </Routes>

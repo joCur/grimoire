@@ -1,19 +1,21 @@
 // Shared API types of Grimoire: the shapes that are no entity of their own —
-// the campaign list, the campaign tree, the sessions, search and the
-// generator job — plus the instance settings.
+// the campaign list, the campaign tree, search and the generator job — plus
+// the instance settings.
 //
 // An entity with its own resource (ADR #31) has its type from its zod schema
 // in its own module — the campaign in ./campaign.ts, the chapter in
 // ./chapter.ts, the scene in ./scene.ts, the npc in ./npc.ts and the
 // location in ./location.ts, whose types are re-exported here, and the
 // thread in ./thread.ts, the idea in ./idea.ts, the glossary term in
-// ./glossary-term.ts and the knowledge item in ./knowledge-item.ts, imported
-// from there.
+// ./glossary-term.ts, the knowledge item in ./knowledge-item.ts and the
+// session with its pauses, log entries and played scenes in ./session.ts,
+// ./pause.ts, ./log-entry.ts and ./played-scene.ts, imported from there.
 
 import type { ChapterStatus } from "./chapter";
 import type { LocationProposal } from "./location";
 import type { NpcChange, NpcProposal, NpcStatus } from "./npc";
 import type { SceneChange, SceneProposal, SceneStatus, SceneType } from "./scene";
+import type { SessionSummary } from "./session";
 
 export type {
   Campaign,
@@ -102,7 +104,7 @@ export interface CampaignSummary {
   lastSession?: string;
   /**
    * `started` of that newest session — the zone-less wall-clock string the
-   * property carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
+   * session carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
    * means, and the only orderable thing about a session the client
    * gets. Absent when the campaign has no session, or when that session has no
    * usable `started` — either way it then sorts behind every campaign that
@@ -193,94 +195,6 @@ export interface LocationSummary {
   id: string;
   name: string;
   chapter?: string;
-}
-
-/**
- * One session in a LIST — `GET /api/campaigns/:campaign/sessions` and the
- * campaign tree. It is the identifying head of `SessionResponse`: what a list
- * shows of a session is its id and when it ran.
- *
- * No address and no `scenes_played`: a session is not an entry (ADR #26), and
- * its log and its played scenes come from the session itself.
- */
-export interface SessionSummary {
-  /** Opaque id — `GET /api/campaigns/:campaign/sessions/<id>` reads it. */
-  id: string;
-  /** Zone-less local wall clock `yyyy-mm-ddTHH:MM:SS`; empty when never set. */
-  started: string;
-  /** The server's epoch reading of `started`; absent when it says nothing. */
-  startedMs?: number;
-  /** Absent while the session runs. */
-  ended?: string;
-  /** The server's epoch reading of `ended`. */
-  endedMs?: number;
-}
-
-/**
- * One pause interval of a session. The strings are the zone-less wall clock
- * the columns hold; the `…Ms` values are the SERVER's reading of them — only
- * the server knows which wall clock those digits belong to, so a client in
- * another timezone still computes the right runtime. A missing `to` is the
- * RUNNING pause: the clock stands.
- */
-export interface SessionPauseInterval {
-  from: string;
-  fromMs?: number;
-  to?: string;
-  toMs?: number;
-}
-
-/**
- * One line of a session's log. APPEND-ONLY, and structured: `text` is the
- * note as the DM typed it, hashtags included — they are body vocabulary
- * (README) and belong to the text, not beside it.
- */
-export interface SessionLogEntry {
-  /** The row's stable id — what `POST /review/seen` names the line by. */
-  id: string;
-  /** `HH:mm` local, the time the note was taken. */
-  at: string;
-  /** The scene the note was taken in; absent when it names none. */
-  sceneId?: string;
-  text: string;
-  reviewed: boolean;
-}
-
-/**
- * ONE SESSION, as every session endpoint answers it: `GET …/session`,
- * `GET …/sessions/:id`, the four session verbs, `POST …/log`,
- * `POST …/review/seen` and `PATCH …/sessions/:id`.
- *
- * A session is a table, not an entry (ADR #26): no address, no `properties`
- * map, no markdown text. Its log is a list of rows and its pauses are
- * intervals, each with the server's epoch reading beside the string.
- */
-export interface SessionResponse extends SessionSummary {
-  pauses: SessionPauseInterval[];
-  log: SessionLogEntry[];
-  /** Scene ids in the order they were played; a revisited scene stands twice. */
-  scenesPlayed: string[];
-  /** Guard token of the session row — `PATCH …/sessions/:id` sends it back. */
-  rev: number;
-}
-
-/**
- * The body of `PATCH /api/campaigns/:campaign/sessions/:id` — the timestamps
- * of a session, the only fields of it the DM edits by hand (a mistyped start,
- * a forgotten pause).
- *
- * `rev` is the guard token the session was read with; a mismatch is the same
- * 409 `rev_conflict` every other write answers. At least one of the three
- * fields has to be there, otherwise 400 `nothing_to_write`. The log and
- * `scenesPlayed` are not among them: they grow through their own endpoints.
- */
-export interface PatchSessionRequest {
-  rev: number;
-  started?: string;
-  /** `null` clears it — the session runs again. */
-  ended?: string | null;
-  /** Replaces the whole list; an entry without `to` is the running pause. */
-  pauses?: Array<{ from: string; to?: string | null }>;
 }
 
 /** GET /api/:campaign/tree */

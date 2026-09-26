@@ -9,8 +9,8 @@ und einem **Text** in Markdown.
 Ein **Faden** — ein Handlungsstrang, den ein Kapitel trägt —, eine
 **Idee**, ein **Glossar-Begriff** und das **Kampagnenwissen** — jede
 Namenskonvention, jeder Fakt, jede Stilregel für sich — haben keinen Text; jeder ist seine eigene Ressource mit
-seinen eigenen Feldern (ADR #31). Dazu kommen die **Sessions**: Zeilen mit
-ihren Listen, ohne Adresse, auf ihren eigenen Endpoints.
+seinen eigenen Feldern (ADR #31). Ebenso die **Session** mit ihren
+**Pausen**, **Log-Zeilen** und **gespielten Szenen**, die unter ihr hängen.
 
 Die Speicherform steht genau einmal in `server/src/db/schema.ts`; dieses
 README beschreibt, was in den Feldern stehen darf und was der Text
@@ -39,6 +39,10 @@ nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
 | Idee | `GET/PATCH /api/campaigns/<kampagne>/ideas/<id>` | `GET/POST /api/campaigns/<kampagne>/ideas` | in der Nachbereitung und auf der Mobil-Startfläche |
 | Glossar-Begriff | `GET/PATCH/DELETE /api/campaigns/<kampagne>/glossary-terms/<id>` | `GET/POST /api/campaigns/<kampagne>/glossary-terms` | auf der Glossar-Seite `/campaigns/<kampagne>/glossary` |
 | Kampagnenwissen | `GET/PATCH/DELETE /api/campaigns/<kampagne>/knowledge-items/<id>` | `GET/POST /api/campaigns/<kampagne>/knowledge-items` | auf der Wissens-Seite `/campaigns/<kampagne>/knowledge` |
+| Session | `GET/PATCH/DELETE /api/campaigns/<kampagne>/sessions/<id>` | `GET/POST /api/campaigns/<kampagne>/sessions` | `/campaigns/<kampagne>/sessions/<id>`, live `/campaigns/<kampagne>/live` |
+| Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in der Session |
+| Log-Zeile | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in der Session und der Nachbereitung |
+| Gespielte Szene | — | `POST …/sessions/<session>/played-scenes` | in der Session |
 
 Die Kapitelübersicht bleibt `/campaigns/<kampagne>`; die Liste der Kampagnen
 (`GET /api/campaigns`) antwortet mit ihrer eigenen Form, dem Namen neben der
@@ -61,12 +65,6 @@ wird sie über Hoch/Runter in der Kapitelübersicht; eine neue Szene landet am
 Ende ihres Kapitels. Die Szenen eines Generator-Laufs behalten dabei die
 Reihenfolge seiner Gliederung, auch wenn sie einzeln und durcheinander
 übernommen werden (ADR #27).
-
-**Sessions** antworten auf ihren eigenen Endpoints:
-
-| Lesen | Schreiben |
-| ----- | --------- |
-| `GET …/session[?includeEnded=1]` (die laufende, sonst `null`), `GET …/sessions`, `GET …/sessions/<id>` | `POST …/session/start`, `/end`, `/pause`, `/continue`, `/discard`, `POST …/log`, `PATCH …/sessions/<id>` |
 
 Glossar-Begriffe und Kampagnenwissen bekommt der Generator als Kontext; beide
 werden auf ihren eigenen Seiten gepflegt.
@@ -215,7 +213,7 @@ nebeneinander:
 
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | stabil, wird referenziert (`scenesPlayed`, `sceneId` einer Log-Zeile, `[[id]]`) |
+| `id` | stabil, wird referenziert (`sceneId` einer Log-Zeile und einer gespielten Szene, `[[id]]`) |
 | `title` | Anzeigename, frei änderbar; ohne eigenen Titel zeigt die Szene ihre id |
 | `type` | `planned` oder `contingency` (Eventualszene) |
 | `trigger` | nur bei `contingency`: wann feuert sie? Freitext; optional |
@@ -537,43 +535,128 @@ ihm:
 
 ### Session
 
-Eine Session ist **kein Eintrag**, sondern eine Zeile mit ihren Listen
-(ADR #26); die App verwaltet sie, der DM schreibt nur ins Log. So antwortet
-sie:
+Eine Session ist ein Spielabend und ihre eigene Ressource mit ihrem eigenen
+Typ (`Session`, aus dem zod-Schema in `shared/src/session.ts`, ADR #31).
+`GET /api/campaigns/<kampagne>/sessions/<id>` antwortet mit ihr, ihre
+Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
+
+```json
+{
+  "id": "2026-01-15",
+  "started": "2026-01-15T19:30:00",
+  "startedMs": 1768501800000,
+  "ended": "2026-01-15T22:45:00",
+  "endedMs": 1768513500000,
+  "body": "\n## Threads\n\n…",
+  "pauses": [{ "id": "abendessen", "from": "2026-01-15T20:30:00", "fromMs": 1768505400000, "to": "2026-01-15T21:10:00", "toMs": 1768507800000, "rev": 1 }],
+  "log": [{ "id": "spuren-gefunden", "at": "19:52", "sceneId": "lighthouse-arrival", "text": "Spuren gefunden, …", "reviewed": false, "rev": 1 }],
+  "playedScenes": [{ "id": "ankunft", "sceneId": "lighthouse-arrival", "rev": 1 }],
+  "rev": 1
+}
+```
 
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | opake Zufalls-id (UUID); Reihenfolge und Datum kommen aus `started` |
-| `started` | Start, sekundengenau, zonenlose Lokalzeit (`yyyy-mm-ddTHH:MM:SS`) |
-| `startedMs` | dieselbe Zeit als Epochen-Wert, gelesen in der Zeitzone des Servers |
-| `ended` / `endedMs` | gesetzt bei „Session beenden" |
-| `pauses` | Liste `{ from, fromMs, to?, toMs? }`; ein Eintrag ohne `to` ist die laufende Pause — die Uhr steht |
-| `log` | Liste `{ id, at, sceneId?, text, reviewed }`, append-only |
-| `scenesPlayed` | Szenen-ids in Spielreihenfolge, automatisch gepflegt |
-| `rev` | Wächter-Token für `PATCH …/sessions/<id>` |
+| `id` | stabil und opak, vergibt der Server beim Start; Reihenfolge und Datum kommen aus `started` |
+| `started` / `startedMs` | Start, sekundengenau, zonenlose Lokalzeit des Servers (`yyyy-mm-ddTHH:MM:SS`), daneben die Epochen-Lesung des Servers |
+| `ended` / `endedMs` | Ende, ebenso; beide fehlen, solange die Session läuft |
+| `body` | freier Markdown-Text der Session |
+| `pauses` | ihre Pausen (siehe Pause) |
+| `log` | ihre Log-Zeilen (siehe Log-Zeile) |
+| `playedScenes` | ihre gespielten Szenen (siehe Gespielte Szene) |
+| `rev` | Zeilenversion der Session; jedes Kind trägt sein eigenes |
 
-- Eine Log-Zeile sind **Spalten**, keine Markdown-Zeile: Zeitstempel und
-  Szenen-Kontext setzt die App, die Hashtags stehen im Text. `id` ist die
-  stabile Kennung der Zeile — der Kurzhash (erste 8 Hex-Zeichen von SHA-256)
-  ihrer kanonischen Zeile `- HH:MM (szenen-id) Text` —, und `POST
-  …/review/seen` benennt eine Zeile damit.
-- Pause und „Weiter" schreiben **keine** Log-Zeile: eine Pause ist ein
-  Eintrag in `pauses` und sonst nichts — die Markierung im Log war dieselbe
-  Pause ein zweites Mal.
-- `PATCH …/sessions/<id>` ändert nur `started`, `ended` und `pauses` — die
-  von Hand korrigierbaren Zeiten. Log und `scenesPlayed` wachsen über ihre
-  eigenen Endpoints.
-- Der freie Text der Session (`## Threads`, in der Nachbereitung befüllt)
-  bleibt am Kapitel bzw. an der Zeile und ist kein Teil dieser Antwort.
-- Timer = (`ended` ?? jetzt) − `started` − Summe der geschlossenen Pausen.
-  Den Epochen-Wert der zonenlosen Zeitstempel liefert der Server; der Client
-  rechnet nur noch mit Zahlen und hält keinen laufenden Zustand.
+- **Zeit:** Nur der Server weiß, zu welcher Uhr die zonenlosen Zeitstempel
+  gehören, darum liefert er die Epochen-Lesung daneben (`…Ms`), und der
+  Client rechnet nur mit Zahlen: Laufzeit = (`endedMs` ?? jetzt) −
+  `startedMs` − Summe der geschlossenen Pausen. Einen Zeitpunkt schreibt der
+  Client ebenfalls als Epochen-Wert; der Server speichert dessen Lesung in
+  seiner Zeitzone.
+- `GET …/sessions` antwortet mit allen Sessions, **neueste zuerst** (nach
+  `started`, bei Gleichstand nach der Reihenfolge des Anlegens), jede mit
+  ihren Kindern. Die erste ist die zuletzt gestartete, beendet oder nicht —
+  die Session der Nachbereitung, auch wenn der Abend über Mitternacht ging.
+- `GET …/sessions?running=true` antwortet mit der **laufenden** Session oder
+  keiner: der zuletzt gestarteten, die nicht beendet ist — heute oder früher
+  gestartet, eine Session über Mitternacht läuft also weiter. Welche Session
+  läuft, sagt immer der Server, nie das Datum des Browsers.
+- `POST …/sessions {}` startet eine Session jetzt und antwortet mit ihr
+  (201). Läuft schon eine, die heute gestartet wurde, kommt sie unverändert
+  zurück (200); läuft eine von einem früheren Tag, ist das 409
+  `session_running` mit ihrer `id`, und nichts startet. Beenden ist endgültig:
+  ein Start danach ist eine neue Session, auch am selben Tag.
+- `PATCH …/sessions/<id> { rev, force?, startedMs?, endedMs? }` beendet die
+  Session (`endedMs`), lässt sie weiterlaufen (`endedMs: null`) oder
+  korrigiert ihren Start. Beenden schließt eine offene Pause im selben
+  Vorgang, und deren `rev` bewegt sich mit. Die Kinder schreibt ein
+  Session-`PATCH` nicht; ein Feld, das er nicht nimmt, ist eine 400, die es
+  nennt, ein veralteter `rev` 409 mit der aktuellen Session unter `session`.
+- `DELETE …/sessions/<id> { rev }` verwirft eine **leere** Session (204) —
+  das Rückgängig eines versehentlichen Starts. Hat sie eine Log-Zeile, eine
+  gespielte Szene oder Text, ist das 409 `session_not_empty`: sie wird
+  beendet, nicht gelöscht.
+- Eine beendete Session nimmt keine neue Pause, Log-Zeile oder gespielte
+  Szene an (409 `session_ended`); ihre Pausen korrigieren und ihre
+  Log-Zeilen sichten geht weiter.
+
+### Pause
+
+Eine Pause ist ein Intervall, in dem die Uhr der Session steht, und ihre
+eigene Ressource (`Pause`, aus `shared/src/pause.ts`) unter ihrer Session:
+`{ id, from, fromMs?, to?, toMs?, rev }`. Eine Pause ohne `to` ist die
+laufende.
+
+- `POST …/sessions/<session>/pauses {}` beginnt eine Pause jetzt (201). Eine
+  Session hat höchstens eine offene Pause: ist schon eine offen, kommt sie
+  unverändert zurück (200).
+- `PATCH …/sessions/<session>/pauses/<id> { rev, force?, fromMs?, toMs? }`
+  beendet sie (`toMs`) oder korrigiert ein Ende, als Epochen-Wert. Ein
+  veralteter `rev` ist 409 mit der aktuellen Pause unter `pause`.
+- Eine Pause schreibt **keine** Log-Zeile, und kein Schreibzugriff auf eine
+  Pause bewegt das `rev` der Session.
+
+### Log-Zeile
+
+Eine Log-Zeile ist eine Schnellnotiz des DM und ihre eigene Ressource
+(`LogEntry`, aus `shared/src/log-entry.ts`) unter ihrer Session:
+`{ id, at, sceneId?, text, reviewed, rev }`.
+
+- Eine Log-Zeile sind **Spalten**, keine Markdown-Zeile: `at` (`HH:mm`, die
+  Uhr des Servers) und `sceneId` setzt die Anlage, die Hashtags stehen im
+  `text`. `id` ist stabil und opak.
+- `POST …/sessions/<session>/log { text, sceneId? }` legt eine Zeile am Ende
+  an (201). Der Text ist eine Zeile (getrimmt, Zeilenumbrüche werden zu
+  Leerzeichen, leer ist 400); `sceneId` muss eine Szene nennen (400
+  `log_scene_unknown` sonst).
+- Das Log ist append-only: `PATCH …/sessions/<session>/log/<id> { rev,
+  force?, reviewed }` ist die einzige Änderung — die Nachbereitung sichtet
+  die Zeile. Jedes andere Feld, `text` eingeschlossen, ist eine 400; ein
+  veralteter `rev` ist 409 mit der aktuellen Zeile unter `logEntry`.
+
+### Gespielte Szene
+
+Eine gespielte Szene ist ein Schritt des Abends durch die Szenen und ihre
+eigene Ressource (`PlayedScene`, aus `shared/src/played-scene.ts`) unter
+ihrer Session: `{ id, sceneId, rev }`. Die gespielten Szenen sind eine
+Folge in Spielreihenfolge; eine Szene, zu der die Gruppe zurückkehrt, steht
+darin zweimal.
+
+- `POST …/sessions/<session>/played-scenes { sceneId }` legt eine gespielte
+  Szene an: die Szene steht danach am Ende (201). Sie muss existieren (400
+  `played_scene_unknown` sonst).
+- Als gespielt gilt eine Szene, wenn der DM sie in der Live-Ansicht mit
+  „Nächste Szene“ **verlässt** und die Session mindestens eine Log-Zeile mit
+  ihrer `sceneId` hat; dann legt die App sie an, einmal je Session. Ohne
+  Notiz legt sie nichts an, und der DM markiert die Szene später selbst.
+- Eine Log-Zeile spielt keine Szene, und das Beenden der Session legt die
+  gerade offene Szene nicht an: die gespielten Szenen wachsen nur über ihre
+  eigene Ressource.
 
 ## Referenzen zeigen auf vorhandene Einträge
 
 Eine Referenz nennt einen Eintrag, den es gibt. Wer in `npcs:` einer Szene,
-in `location:`, in `chapter:`, in einer Schnellnotiz oder in
-`scenes_played:` etwas einträgt, das keinen Eintrag hat, bekommt 400 mit dem
+in `location:`, in `chapter:`, in einer Log-Zeile oder in einer gespielten
+Szene etwas einträgt, das keinen Eintrag hat, bekommt 400 mit dem
 Hinweis, den Eintrag zuerst anzulegen — es entsteht nichts nebenbei.
 Einträge entstehen über „Neu anlegen" und über das Übernehmen eines
 Generator-Vorschlags, sonst nirgends.
@@ -713,9 +796,9 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
   `server/src/routes/<ressource>.ts`): Log, Nachbereitung,
   Generator-Entwürfe — und für jede Entität ihr eigener `PATCH` auf ihrer
   Ressource, der jede Teilmenge ihrer Felder, `body` eingeschlossen, in einem
-  Zug schreibt (ADR #23, ADR #31); Faden, Idee, Glossar-Begriff und
-  Kampagnenwissen eingeschlossen, die keinen `body` haben. Keine Liste wird
-  als Ganzes getauscht.
+  Zug schreibt (ADR #23, ADR #31); Faden, Idee, Glossar-Begriff,
+  Kampagnenwissen, Pause und Log-Zeile eingeschlossen, die keinen `body`
+  haben. Keine Liste wird als Ganzes getauscht.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu
@@ -732,7 +815,8 @@ Idee); die Nachbereitung zeigt die offenen zusammen mit dem Log.
   Konflikt läuft (ADR #27). Dieselbe Bauart hat die Reihenfolge des
   Kampagnenwissens (`PUT …/knowledge-item-order { items, rev }`, siehe
   Kampagnenwissen).
-- Das Log ist append-only (ADR #4). Eine Idee wird einmal geschrieben und
+- Das Log ist append-only (ADR #4): eine Log-Zeile wird einmal geschrieben
+  und danach nur noch gesichtet. Eine Idee wird einmal geschrieben und
   danach nur noch abgehakt.
 
 ## Generator
@@ -787,16 +871,16 @@ das ihre Ressource liefert, ohne `rev` (ADR #31): die Kampagne unter
 `fixtures/beispiel/locations/<id>.json`, ein Faden unter
 `fixtures/beispiel/threads/<id>.json`, eine Idee unter
 `fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
-`fixtures/beispiel/glossary-terms/<id>.json` und ein Stück Kampagnenwissen
-unter `fixtures/beispiel/knowledge-items/<id>.json`. Eine Session trägt ihre
-Listen strukturiert, als Zeilen mit ihren Spalten, unter `kind: "session"`:
-eine Log-Zeile ist `{ at, sceneId?, text, reviewed? }`. Eine Markdown-Zeile steht in keiner
-davon. Sie ist die Referenz für Callouts und die einzige
+`fixtures/beispiel/glossary-terms/<id>.json`, ein Stück Kampagnenwissen
+unter `fixtures/beispiel/knowledge-items/<id>.json` und eine Session unter
+`fixtures/beispiel/sessions/<id>.json`, ihre Pausen, Log-Zeilen und
+gespielten Szenen eingebettet, ohne `rev` und ohne die Epochen-Lesungen —
+die sind die Lesung des Servers in seiner Zeitzone. Sie ist die Referenz für Callouts und die einzige
 Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
 
 `grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest
 `<dir>/<kampagne>/*.json` samt den Verzeichnissen `campaigns/`, `chapters/`,
-`scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`, `glossary-terms/` und
-`knowledge-items/` darunter und
+`scenes/`, `npcs/`, `locations/`, `threads/`, `ideas/`, `glossary-terms/`,
+`knowledge-items/` und `sessions/` darunter und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.

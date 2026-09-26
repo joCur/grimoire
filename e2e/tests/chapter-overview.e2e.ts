@@ -20,9 +20,9 @@ import type { Locator, Page } from "@playwright/test";
 
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { SessionSeed } from "@grimoire/shared/session";
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { expect, test } from "../support/test";
-import type { SeedSession } from "../../server/src/db/seed";
 import type { Api } from "../support/api";
 import { getCampaign, patchCampaign } from "../support/campaign";
 import { chapterPath, getChapter, patchChapter } from "../support/chapter";
@@ -100,11 +100,13 @@ const SCENE_WITHOUT_LOCATION: SceneProposal = {
 };
 
 /** Today's session, started at 19:30 and never ended. */
-const RUNNING_SESSION: SeedSession = {
-  kind: "session",
-  properties: { id: todaySessionId(), started: `${todaySessionId()}T19:30:00`, scenes_played: [] },
-  log: [],
+const RUNNING_SESSION: SessionSeed = {
+  id: todaySessionId(),
+  started: `${todaySessionId()}T19:30:00`,
   body: "",
+  pauses: [],
+  log: [],
+  playedScenes: [],
 };
 
 /**

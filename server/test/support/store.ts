@@ -27,9 +27,10 @@ import type { KnowledgeItemSeed } from "@grimoire/shared/knowledge-item";
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { SessionSeed } from "@grimoire/shared/session";
 import type { ThreadSeed } from "@grimoire/shared/thread";
 import type { GrimoireDb } from "../../src/db/client";
-import { readFixtureCampaign, seedCampaign, type SeedSession } from "../../src/db/seed";
+import { readFixtureCampaign, seedCampaign } from "../../src/db/seed";
 import { closeStore, initStore } from "../../src/store/handle";
 
 /** The committed fixture campaigns — read-only for the suite. */
@@ -58,7 +59,7 @@ export interface SeedOverrides {
   ideas?: IdeaSeed[];
   glossaryTerms?: GlossaryTermSeed[];
   knowledgeItems?: KnowledgeItemSeed[];
-  sessions?: SeedSession[];
+  sessions?: SessionSeed[];
   /** Fixture objects to leave out, by their id, e.g. `{ sessions: ["2026-01-15"] }`. */
   without?: {
     chapters?: string[];
@@ -121,12 +122,7 @@ export async function seedStore(overrides: SeedOverrides = {}): Promise<Grimoire
       without.knowledgeItems,
       byId,
     ),
-    sessions: merged(
-      fixture.sessions,
-      overrides.sessions,
-      without.sessions,
-      (session) => session.properties.id,
-    ),
+    sessions: merged(fixture.sessions, overrides.sessions, without.sessions, byId),
   });
   return db;
 }

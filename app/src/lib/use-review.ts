@@ -4,10 +4,11 @@
 // Used by the review route and by the topbar (progress, chapter overview
 // affordance); both share the same query cache, so nothing fetches twice.
 //
-// Rows in, rows out: the session answers its log and the ideas answer
+// Rows in, rows out: the session embeds its log and the ideas answer
 // themselves, so the only thing derived here is which SECTION a row belongs to
-// and which actions its tag allows. Marking a log row done names its id,
-// ticking an idea off sends the idea's own guard.
+// and which actions its tag allows. Reviewing a log entry and ticking an idea
+// off each send that row's own guard to its own resource. This is where the
+// two meet — neither the session nor the idea knows the other.
 //
 // It is a HOOK, not a pure helper, so the two readable labels it produces —
 // the source chip and the progress line — come from the catalog through
@@ -15,7 +16,7 @@
 // its own.
 
 import type { Idea } from "@grimoire/shared/idea";
-import type { SessionLogEntry } from "@grimoire/shared/types";
+import type { LogEntry } from "@grimoire/shared/log-entry";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -36,7 +37,7 @@ import {
   tagAllowsNpc,
   tagAllowsThread,
 } from "@/lib/review";
-import { useLastStartedSession } from "@/lib/use-session";
+import { useLastStartedSession } from "@/session/use-session";
 
 export interface ReviewEntry {
   /** Stable identity: the source plus the row's own id. */
@@ -61,8 +62,10 @@ export interface ReviewEntry {
   tag: string;
   /** Display text — hashtags stripped. */
   text: string;
-  /** The row's id: what `review/seen` names a log row by. */
+  /** The row's id. */
   id: string;
+  /** The log entry itself, for an entry from the log — reviewing it sends its `rev`. */
+  logEntry?: LogEntry;
   /** The idea itself, for an entry from the ideas — ticking it off sends its `rev`. */
   idea?: Idea;
   /** The character tag of a `#pc` entry — undefined means the general group. */
@@ -85,7 +88,7 @@ export interface ReviewModel {
   noSession: boolean;
   /** The session could not be loaded at all (server down …). */
   isError: boolean;
-  /** Id of the harvested session — what a `review/seen` write names. */
+  /** Id of the harvested session — the one its log entries hang under. */
   sessionId: string;
 }
 
@@ -103,7 +106,7 @@ export function pcGroups(entries: readonly ReviewEntry[]) {
 
 /** A log row the review shows — with the tag that put it there. */
 interface HarvestedLogRow {
-  row: SessionLogEntry;
+  row: LogEntry;
   tag: string;
   /** A `#pc` row — its own section, no adoption. */
   pc: boolean;
@@ -129,10 +132,8 @@ export function useReviewEntries(
     [acted],
   );
   // WHICH session is harvested is the server's answer: the last STARTED one,
-  // ended or not. Deriving today's session id here would break every session
-  // that runs past midnight — `end` writes into the session that started it,
-  // so the harvest would be empty and `review/seen` would name a session that
-  // does not exist.
+  // ended or not — the first of the list. Deriving today's session here would
+  // break every session that runs past midnight: the harvest would be empty.
   const session = useLastStartedSession(campaign, enabled);
   const sessionId = session.data?.id ?? "";
   // The tree turns a log row's scene id into the scene TITLE for the
@@ -196,6 +197,7 @@ export function useReviewEntries(
         tag,
         text: stripHashtags(row.text),
         id: row.id,
+        logEntry: row,
         done: row.reviewed,
         // A PC note is never adopted into chapter or NPC.
         canThread: !pc && tagAllowsThread(tag),

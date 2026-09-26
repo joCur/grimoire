@@ -62,15 +62,9 @@ export const ERROR_CODES = [
    * no value to name.
    */
   "chapter_required",
-  /** The scene of a quick note names no scene entry. */
+  /** The scene of a quick note (a session's log entry) names no scene. */
   "log_scene_unknown",
-  /**
-   * NO LONGER SENT. It named an unknown scene in a `scenes_played` PATCH, and
-   * a session's played scenes have no write path of their own since ADR #26:
-   * the list is maintained by the quick note that named the scene, and that
-   * one answers `log_scene_unknown` above. The string stays because codes are
-   * APPEND-ONLY.
-   */
+  /** The scene of a played scene — the session's next step — names no scene. */
   "played_scene_unknown",
   /**
    * NO LONGER SENT. It was the 400 for a whole-glossary write that named one
@@ -90,7 +84,7 @@ export const ERROR_CODES = [
   "scene_order_mismatch",
   /** 409, session start: an older session is still running. `{ id }` */
   "session_running",
-  /** 409, session discard: the session already carries content. `{ id }` */
+  /** 409, session delete: the session already carries content. `{ id }` */
   "session_not_empty",
   /**
    * 409, any rev-checked write: what was written changed underneath.
@@ -98,16 +92,16 @@ export const ERROR_CODES = [
    * so the app can show what is in the way instead of fetching it again,
    * under the key of what was written: `{ campaign }`, `{ chapter }`,
    * `{ scene }`, `{ npc }`, `{ location }`, `{ thread }`, `{ idea }`,
-   * `{ glossaryTerm }` or `{ knowledgeItem }` for the write of one of those,
-   * `{ session }` for `PATCH /sessions/:id`, and `{ knowledgeItemOrder }` for
-   * the order of the knowledge items. The scene order carries none of them —
+   * `{ glossaryTerm }`, `{ knowledgeItem }`, `{ session }`, `{ pause }` or
+   * `{ logEntry }` for the write of one of those, and `{ knowledgeItemOrder }`
+   * for the order of the knowledge items. The scene order carries none of them —
    * the chapter overview reloads its tree.
    */
   "rev_conflict",
   /**
    * 400, a patch that names nothing to change: a campaign, chapter, scene,
-   * npc, location, thread, idea, glossary-term or knowledge-item patch without
-   * a field, a session patch without a timestamp. No parameters.
+   * npc, location, thread, idea, glossary-term, knowledge-item, session,
+   * pause or log-entry patch without a field. No parameters.
    */
   "nothing_to_write",
   /**
@@ -147,13 +141,11 @@ export const ERROR_CODES = [
    */
   "scene_type_not_allowed",
   /**
-   * 400, `PATCH /sessions/:id`: a `started`, `ended` or pause timestamp is not in the
-   * one shape those columns hold (`yyyy-mm-ddThh:mm:ss`). The shape is closed
-   * the way a status is: the reader reads only it, and the boot check refuses
-   * a database holding anything else — so a value from the wire is refused
-   * here instead of surviving until the next start. `{ field, value }`, where
-   * `field` is addressing (`started`, `ended`, `pauses[0].from`) and `value`
-   * is what the sentence names.
+   * NO LONGER SENT. It was the 400 for a session or pause timestamp written as
+   * a string outside the one shape those columns hold. A moment is written as
+   * an epoch value, which the server reads into that shape itself, so there
+   * is no string from the wire left to refuse. The string stays because codes
+   * are APPEND-ONLY.
    */
   "timestamp_not_allowed",
   /**
@@ -162,6 +154,11 @@ export const ERROR_CODES = [
    * `{ term }`
    */
   "glossary_term_taken",
+  /**
+   * 409, a write that needs a running session — a log entry, a pause, a
+   * played scene — on one that is ended. Nothing is written. `{ id }`
+   */
+  "session_ended",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

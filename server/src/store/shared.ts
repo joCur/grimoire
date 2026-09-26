@@ -1,10 +1,9 @@
 // The helpers of the store that have no domain of their own.
 //
-// Value coercions for hand-edited timestamps, the 400 of a request a kind's
-// zod schema refuses, the closed-field and reference 400s, the `rev` guard's
-// 409, the stored form of a body, the chronological order of two sessions and
-// the ids a create endpoint hands out. None of them touches the database, so
-// this module imports nothing from the store.
+// The 400 of a request an entity's zod schema refuses, the append order of a
+// row, the closed-field and reference 400s, the `rev` guard's 409, the stored
+// form of a body and the ids a create endpoint hands out. None of them
+// touches the database, so this module imports nothing from the store.
 
 import type { z } from "zod";
 import {
@@ -19,13 +18,11 @@ import {
   type ErrorKind,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
-import { localDateTimeToMs } from "./time";
-import type { SessionRow } from "./render";
 
-// --- a request a kind's schema refuses ---------------------------------------
+// --- a request an entity's schema refuses -------------------------------------
 
 /**
- * Parse a request body with a kind's zod schema (ADR #31) — or answer 400.
+ * Parse a request body with an entity's zod schema (ADR #31) — or answer 400.
  * The message names every issue with its field (`name: Invalid input: …`, an
  * unknown key by its name), in English like every technical fallback.
  */
@@ -43,7 +40,7 @@ export function parseRequest<T extends z.ZodType>(schema: T, raw: unknown, what:
 /**
  * A non-empty body gets its closing newline. The text is handed to a
  * markdown editor and to the generator's prompt, and a body without its
- * final newline made the next appended section run into the last line.
+ * final newline makes the next appended section run into the last line.
  * EXISTING trailing newlines are left alone, so a read/write roundtrip
  * changes nothing; an empty body stays empty.
  */
@@ -51,22 +48,7 @@ export function normalizeBody(markdown: string): string {
   return markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
 }
 
-// --- defensive coercions (a session's timestamps are hand-edited) -----------
-
-export function asOptStr(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return null;
-}
-
-export function asMap(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-// --- append order of a list row ----------------------------------------------
+// --- append order of a row ---------------------------------------------------
 
 export function nextPos(rows: Array<{ pos: number }>): number {
   return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
@@ -176,52 +158,6 @@ export function assertSafeChapterId(chapter: string): void {
   ) {
     throw new ApiError(400, "invalid chapter");
   }
-}
-
-// --- the chronological order of two sessions ---------------------------------
-
-// Two lists are ordered by it — the sessions of a campaign (./sessions.ts) and
-// the campaign list's "last session" (./campaigns.ts) — so the rule lives
-// here rather than in either of them.
-
-/** The only three session columns the ordering rule below looks at. */
-export type SessionOrderFields = Pick<SessionRow, "id" | "started" | "createdAt">;
-
-/**
- * Chronological order key of a session in epoch milliseconds, or undefined
- * when the row says nothing usable about WHEN it started.
- *
- * `started` is the ONLY source. The id is an opaque random string
- * (db/schema.ts) and there is nothing in it to read, so a row without a
- * usable `started` wins nothing.
- *
- * Takes only the columns it reads, so callers that need nothing else of a
- * session (the campaign list) can select just those.
- */
-export function sessionOrderKey(row: Pick<SessionOrderFields, "started">): number | undefined {
-  return localDateTimeToMs(row.started);
-}
-
-/**
- * Newest-first comparator: `started` decides, and `createdAt` — the row's
- * insertion time in milliseconds — breaks the tie. Two sessions of the same
- * evening can share a `started` to the SECOND (start, end, start again), and
- * "the last started one" has to be the second of them, deterministically.
- * The opaque id cannot say which came first, so the row records it.
- *
- * Last resort for two rows that share both (migrated rows carry `createdAt`
- * 0): a plain string compare of the ids. Which of them then counts as newer
- * is arbitrary — but it is STABLE, and that is the property callers need.
- */
-export function compareSessionsNewestFirst(
-  a: SessionOrderFields,
-  b: SessionOrderFields,
-): number {
-  const ka = sessionOrderKey(a) ?? -Infinity;
-  const kb = sessionOrderKey(b) ?? -Infinity;
-  if (ka !== kb) return kb - ka;
-  if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
-  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
 // --- creating content --------------------------------------------------------

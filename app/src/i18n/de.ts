@@ -328,6 +328,8 @@ export const de = {
     "Die Reihenfolge passt nicht mehr zu den Szenen des Kapitels — bitte neu laden.",
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
   "server.session_not_empty": "Diese Session hat Inhalt — beenden statt verwerfen.",
+  "server.session_ended":
+    "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. Starte eine neue Session, um weiterzumachen.",
   "server.rev_conflict": "Inzwischen geändert — neu laden vor dem Speichern.",
   "server.nothing_to_write": "Nichts zu speichern.",
   "server.body_not_editable":
@@ -476,6 +478,7 @@ export const de = {
 
   // The one step of the evening, under the open scene.
   "live.next": "Nächste Szene: {title}",
+  "live.next.failed": "Die nächste Szene ließ sich nicht öffnen, weil die gespielte Szene nicht gespeichert wurde — Server prüfen.",
 
   "live.scene.none":
     "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",
@@ -511,6 +514,10 @@ export const de = {
   // An idea ticked off against a stale state: nothing was written, the ideas
   // were read again (review and live aside).
   "idea.tick.stale": "Diese Idee wurde inzwischen geändert. Die Liste ist neu geladen.",
+  // A log entry reviewed against a stale state: nothing was written, the
+  // session was read again (review and live aside).
+  "session.log.review.stale":
+    "Diese Notiz wurde inzwischen anderswo geändert. Die Session ist neu geladen.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Lade Details …",

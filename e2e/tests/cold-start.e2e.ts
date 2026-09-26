@@ -29,7 +29,7 @@ import { chapterExists, getChapter } from "../support/chapter";
 import { getLocation } from "../support/location";
 import { getNpc, npcExists, npcPath } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
-import { activeSessionId, getSession } from "../support/session";
+import { getSession, runningSessionId } from "../support/session";
 
 /**
  * The chapter overview's scene rows in DOM order, by the title they show.
@@ -208,10 +208,10 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await patchScene(api, "abendessen-bei-jorna", { chapter: "01-salzhafen" });
 
   // --- start the session, use the scene live --------------------------------
-  expect(await activeSessionId(api)).toBeUndefined();
+  expect(await runningSessionId(api)).toBeUndefined();
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/live$`));
-  expect(await activeSessionId(api)).toBeDefined();
+  expect(await runningSessionId(api)).toBeDefined();
 
   // The scene created three steps ago is the live view's default selection,
   // its text is on screen, and a quick note lands in the session's log.
@@ -236,12 +236,21 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const note = "Gruppe klopft an die Turmtür";
   await page.getByRole("textbox", { name: "Schnellnotiz" }).fill(note);
   await page.keyboard.press("Enter");
-  const sessionId = (await activeSessionId(api)) ?? "";
+  const sessionId = (await runningSessionId(api)) ?? "";
   await expect(async () => {
-    expect((await getSession(api, sessionId)).log.map((row) => row.text)).toContain(note);
+    const log = (await getSession(api, sessionId)).log;
+    expect(log.map((row) => [row.text, row.sceneId])).toContainEqual([note, "ankunft-am-leuchtturm"]);
   }).toPass();
-  // The note carried the scene, so the session knows what was played.
-  expect((await getSession(api, sessionId)).scenesPlayed).toContain("ankunft-am-leuchtturm");
+  // A note plays nothing; leaving the scene with a note in it does.
+  expect((await getSession(api, sessionId)).playedScenes).toEqual([]);
+  await page.getByRole("button", { name: "Nächste Szene: Abendessen bei Jorna" }).click();
+  await expect(nav.getByRole("button", { name: /Abendessen bei Jorna/ })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect
+    .poll(async () => (await getSession(api, sessionId)).playedScenes.map((row) => row.sceneId))
+    .toEqual(["ankunft-am-leuchtturm"]);
 });
 
 test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", async ({

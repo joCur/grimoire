@@ -5,8 +5,9 @@
 // (campaign/campaign-api.ts, chapter/chapter-api.ts, scene/scene-api.ts,
 // npc/npc-api.ts, location/location-api.ts, thread/thread-api.ts,
 // idea/idea-api.ts, glossary-term/glossary-term-api.ts,
-// knowledge-item/knowledge-item-api.ts), built from the HTTP helpers exported
-// here.
+// knowledge-item/knowledge-item-api.ts, session/session-api.ts with the
+// clients of its pauses, log entries and played scenes beside it), built from
+// the HTTP helpers exported here.
 
 import type {
   CampaignSummary,
@@ -18,8 +19,6 @@ import type {
   SceneChange,
   SceneOrderResponse,
   SearchResponse,
-  SessionResponse,
-  SessionSummary,
 } from "@grimoire/shared/types";
 
 export class ApiError extends Error {
@@ -220,131 +219,6 @@ export function runTexts(input: { sourceText?: string; instruction?: string }) {
 /** The request path of one campaign — every resource hangs under it. */
 export function campaignPath(campaign: string): string {
   return `/campaigns/${encodeURIComponent(campaign)}`;
-}
-
-/**
- * The ACTIVE session, or null when none is running — "no session" is a 200
- * whose body is `null` (ADR #26), never an error state in the UI.
- *
- * The app must NOT derive the session from its own date: a session that
- * runs past midnight lives in yesterday's session, and a browser in another
- * timezone than the server would guess wrong. The response carries
- * `startedMs`/`endedMs` and the same reading per pause (epoch, resolved by the
- * server), which is what makes the live runtime correct.
- */
-export async function fetchActiveSession(campaign: string): Promise<SessionResponse | null> {
-  return currentSession(campaign, false);
-}
-
-/**
- * The LAST STARTED session, ended or not (`?includeEnded=1`) — the REVIEW's
- * session. Same reason the app must not guess it: an evening that ran past
- * midnight was ended in yesterday's session, so "today's session" would harvest
- * nothing (or the wrong log). null when the campaign has no session at all.
- */
-export async function fetchLastStartedSession(campaign: string): Promise<SessionResponse | null> {
-  return currentSession(campaign, true);
-}
-
-async function currentSession(
-  campaign: string,
-  includeEnded: boolean,
-): Promise<SessionResponse | null> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
-  const response = await fetch(`/api${path}`);
-  if (!response.ok) throw await failure(`GET /api${path}`, response);
-  // "Nothing runs" is a null body, so an absent session is a value here, not
-  // a status to branch on.
-  return ((await response.json()) as SessionResponse | null) ?? null;
-}
-
-/** ONE session by its id — the reading page of a past evening. */
-export function fetchSession(campaign: string, id: string): Promise<SessionResponse> {
-  return getJson<SessionResponse>(
-    `/campaigns/${encodeURIComponent(campaign)}/sessions/${encodeURIComponent(id)}`,
-  );
-}
-
-/** The campaign's sessions, newest first — id and the two timestamps only. */
-export function fetchSessions(campaign: string): Promise<SessionSummary[]> {
-  return getJson<SessionSummary[]>(`/campaigns/${encodeURIComponent(campaign)}/sessions`);
-}
-
-/**
- * Start a NEW session: ending one is final, so a start after an
- * ended session creates the next one of the day with an
- * empty log. Idempotent only while today's session is the RUNNING one; the
- * single 409 left is `session_running` — an OLDER session is still open (see
- * sessionStartConflict).
- */
-export function startSession(campaign: string): Promise<SessionResponse> {
-  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/start`);
-}
-
-/** Set `ended` on the ACTIVE session (404 when there is none). */
-export function endSession(campaign: string): Promise<SessionResponse> {
-  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/end`);
-}
-
-/**
- * Pause the ACTIVE session: the server opens a `pauses`
- * interval — the runtime really stops — and writes the pause log row.
- * Idempotent; 404 when no session is running.
- */
-export function pauseSession(campaign: string): Promise<SessionResponse> {
-  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/pause`);
-}
-
-/**
- * Close the open pause interval and log the resume row. It ends a
- * PAUSE; an ENDED session is never re-opened.
- */
-export function continueSession(campaign: string): Promise<SessionResponse> {
-  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/continue`);
-}
-
-/**
- * DELETE the active session — the undo of a mis-clicked start. Only an EMPTY
- * session may be discarded; the server answers 409
- * (`code: "session_not_empty"`) otherwise and 404 when nothing is running.
- * The caller needs nothing from the answer: after this there is no session to
- * show, and which older one becomes the last started is the server's answer.
- */
-export function discardSession(campaign: string): Promise<{ id?: string }> {
-  return postJson<{ id?: string }>(`/campaigns/${encodeURIComponent(campaign)}/session/discard`);
-}
-
-/**
- * Append a log row to the ACTIVE session (404 when none runs) — which may be
- * yesterday's session when the session ran past midnight; the server picks it.
- * With a sceneId the server also maintains the played scenes.
- */
-export function appendLog(
-  campaign: string,
-  text: string,
-  sceneId?: string,
-): Promise<SessionResponse> {
-  return postJson<SessionResponse>(
-    `/campaigns/${encodeURIComponent(campaign)}/log`,
-    sceneId === undefined ? { text } : { text, sceneId },
-  );
-}
-
-// --- review actions ---------------------------------------------------------
-
-/**
- * Mark ONE log row as reviewed, named by the session and the row's id
- * (idempotent). Returns the session.
- */
-export function markLogLineSeen(
-  campaign: string,
-  sessionId: string,
-  logId: string,
-): Promise<SessionResponse> {
-  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/seen`, {
-    sessionId,
-    logId,
-  });
 }
 
 // --- generator ---------------------------------------------------------------

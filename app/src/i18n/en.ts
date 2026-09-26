@@ -294,6 +294,8 @@ export const en: Messages = {
     "The order no longer matches the chapter's scenes — please reload.",
   "server.session_running": "An older session is still running — end it first.",
   "server.session_not_empty": "This session has content — end it instead of discarding it.",
+  "server.session_ended":
+    "This session has already ended, so nothing was saved. Start a new session to carry on.",
   "server.rev_conflict": "Changed in the meantime — reload before saving.",
   "server.nothing_to_write": "Nothing to save.",
   "server.body_not_editable": "This entry has no editable text — it is maintained as a list.",
@@ -424,6 +426,7 @@ export const en: Messages = {
   "live.nav.playedGroup": "Played {count}",
 
   "live.next": "Next scene: {title}",
+  "live.next.failed": "The next scene did not open because the played scene was not saved — check the server.",
 
   "live.scene.none":
     "No scene in the active chapter — create scenes on the chapters page.",
@@ -457,6 +460,8 @@ export const en: Messages = {
   "live.pc.allDone": "All done.",
   "live.pc.failed": "Not saved — check the server.",
   "idea.tick.stale": "This idea was changed in the meantime. The list has been reloaded.",
+  "session.log.review.stale":
+    "This note was changed elsewhere in the meantime. The session has been reloaded.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Loading details …",

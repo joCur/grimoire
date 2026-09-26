@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
+import { translator } from "@/i18n/format";
+
 import {
-  formatElapsed,
-  parseLocalDateTime,
+  formatDuration,
+  openPause,
   sessionDateLabel,
   sessionElapsedLabel,
   sessionElapsedMs,
-  sessionIsEnded,
   sessionIsPaused,
   sessionPausedMs,
   sessionPausedSinceMs,
   sessionTimeLabel,
-} from "./session";
-import { translator } from "@/i18n/format";
+} from "./session-time";
 
 // The language the assertions below are written in: the helpers take the
 // translator as an argument, so a test says so explicitly instead of leaning
@@ -29,40 +29,22 @@ function pause(fromMs: number, toMs?: number) {
   };
 }
 
-describe("parseLocalDateTime", () => {
-  test("parses the wall-clock datetime format", () => {
-    expect(parseLocalDateTime("2026-01-15T19:30")).toBe(new Date(2026, 0, 15, 19, 30).getTime());
-  });
-
-  test("a date-only value is midnight", () => {
-    expect(parseLocalDateTime("2026-01-15")).toBe(new Date(2026, 0, 15, 0, 0).getTime());
-  });
-
-  test("returns undefined for garbage and non-strings", () => {
-    expect(parseLocalDateTime("gestern Abend")).toBeUndefined();
-    expect(parseLocalDateTime(undefined)).toBeUndefined();
-    expect(parseLocalDateTime(1234)).toBeUndefined();
-  });
-});
-
-describe("formatElapsed", () => {
-  const start = new Date(2026, 0, 15, 19, 30).getTime();
-
+describe("formatDuration", () => {
   test("formats H:MM:SS", () => {
-    expect(formatElapsed(start, start)).toBe("0:00:00");
-    expect(formatElapsed(start, start + 5 * 60_000)).toBe("0:05:00");
-    expect(formatElapsed(start, start + 95 * 60_000)).toBe("1:35:00");
-    expect(formatElapsed(start, start + 10 * 60 * 60_000)).toBe("10:00:00");
+    expect(formatDuration(0)).toBe("0:00:00");
+    expect(formatDuration(5 * 60_000)).toBe("0:05:00");
+    expect(formatDuration(95 * 60_000)).toBe("1:35:00");
+    expect(formatDuration(10 * 60 * 60_000)).toBe("10:00:00");
   });
 
   test("clamps negative differences to 0:00:00", () => {
-    expect(formatElapsed(start, start - 60_000)).toBe("0:00:00");
+    expect(formatDuration(-60_000)).toBe("0:00:00");
   });
 
   test("ticks in seconds", () => {
-    expect(formatElapsed(start, start + 1_000)).toBe("0:00:01");
-    expect(formatElapsed(start, start + 59_000)).toBe("0:00:59");
-    expect(formatElapsed(start, start + 61_500)).toBe("0:01:01");
+    expect(formatDuration(1_000)).toBe("0:00:01");
+    expect(formatDuration(59_000)).toBe("0:00:59");
+    expect(formatDuration(61_500)).toBe("0:01:01");
   });
 });
 
@@ -180,11 +162,22 @@ describe("sessionPausedMs / sessionPausedSinceMs", () => {
   });
 });
 
-describe("sessionIsEnded", () => {
-  test("a set `ended` finishes the session, a blank one does not", () => {
-    expect(sessionIsEnded({ ended: "2026-01-15T23:30:00" })).toBe(true);
-    expect(sessionIsEnded({})).toBe(false);
-    expect(sessionIsEnded({ ended: "   " })).toBe(false);
+describe("openPause", () => {
+  const row = (id: string, to?: string) => ({
+    id,
+    from: "2026-01-15T19:10:00",
+    ...(to === undefined ? {} : { to }),
+    rev: 1,
+  });
+
+  test("the LAST pause without an end is the running one", () => {
+    const pauses = [row("a"), row("b", "2026-01-15T19:20:00"), row("c")];
+    expect(openPause({ pauses })?.id).toBe("c");
+  });
+
+  test("every pause ended, or none at all: nothing runs", () => {
+    expect(openPause({ pauses: [row("a", "2026-01-15T19:20:00")] })).toBeUndefined();
+    expect(openPause({ pauses: [] })).toBeUndefined();
   });
 });
 
@@ -211,7 +204,7 @@ describe("sessionDateLabel", () => {
 describe("sessionTimeLabel", () => {
   test("the wall-clock time of a timestamp, zero-padded", () => {
     expect(sessionTimeLabel("2026-01-15T19:30:00")).toBe("19:30");
-    expect(sessionTimeLabel("2026-01-15T9:05")).toBe("09:05");
+    expect(sessionTimeLabel("2026-01-15T09:05")).toBe("09:05");
   });
 
   test("no time part, no label", () => {

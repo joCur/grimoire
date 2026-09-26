@@ -72,10 +72,12 @@ describe("GET /api/campaigns", () => {
       return {
         campaign: { name: "", ...fields, body: "", glossaryIntro: "" },
         sessions: sessionIds.map((id) => ({
-          kind: "session",
-          properties: { id, scenes_played: [] },
+          id,
+          started: "",
           body: "",
+          pauses: [],
           log: [],
+          playedScenes: [],
         })),
       };
     }
@@ -168,10 +170,9 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     // own — a reference never creates one.
     expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
-    // The tree's item for a session is its identifying HEAD: when it ran, and
-    // nothing of its content. The log and the played scenes come from the
-    // session itself (GET /sessions/:id) — a session is not an entry, and the
-    // tree is a navigation index (ADR #26).
+    // The tree's item for a session is when it ran, and nothing of its
+    // children: the pauses, the log and the played scenes come with the
+    // session itself (GET /sessions/:id) — the tree is a navigation index.
     expect(t.sessions[0]).toEqual({
       id: "2026-01-15",
       started: "2026-01-15T19:30:00",
@@ -232,7 +233,7 @@ describe("a fresh database (nothing loaded at boot)", () => {
       "/api/campaigns/beispiel/version",
       "/api/campaigns/beispiel",
       "/api/campaigns/beispiel/chapters",
-      "/api/campaigns/beispiel/session",
+      "/api/campaigns/beispiel/sessions",
     ]) {
       expect((await app.request(p)).status).toBe(404);
     }

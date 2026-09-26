@@ -40,6 +40,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   scene_order_mismatch: "server.scene_order_mismatch",
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
+  session_ended: "server.session_ended",
   rev_conflict: "server.rev_conflict",
   nothing_to_write: "server.nothing_to_write",
   body_not_editable: "server.body_not_editable",
@@ -129,9 +130,7 @@ function paramsFor(
     case "log_scene_unknown":
     case "played_scene_unknown": {
       // The reference refusals share one shape: the value that names nothing.
-      // Without it there is no sentence worth showing. `played_scene_unknown`
-      // has no sender left — played scenes have no write path of their own —
-      // but the code list is append-only, so its sentence stays reachable.
+      // Without it there is no sentence worth showing.
       const value = text(body.value);
       return value === undefined ? undefined : { value };
     }
@@ -174,6 +173,7 @@ function paramsFor(
     case "chapter_required":
     case "session_running":
     case "session_not_empty":
+    case "session_ended":
     case "rev_conflict":
     case "job_restarted":
     case "job_draft_format":

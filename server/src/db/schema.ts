@@ -12,7 +12,7 @@
 //      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
 //      npcs of a scene, the chapter of an npc, a location and a thread, the
-//      scene of a log line and of a played-scenes entry each carry a
+//      scene of a log entry and of a played scene each carry a
 //      composite `(campaign_id, <ref>)` foreign key with
 //      `ON UPDATE CASCADE` (rule 5) and `ON DELETE NO ACTION`. So a stored
 //      reference names an entry that EXISTS, and the database is what
@@ -23,7 +23,7 @@
 //      entry which does not exist is refused (400) instead of storing a
 //      hole, and NOTHING creates an entry because something mentioned it.
 //      The creation paths are: the create endpoints (the review's create-npc
-//      action from a log line among them), accepting a generator
+//      action from a log entry among them), accepting a generator
 //      proposal — and, inside that
 //      accept, the chapter a new-chapter run decided on. Nowhere else.
 //      A `[[slug]]` in prose is not a
@@ -463,35 +463,26 @@ export const locations = sqliteTable(
 // --- sessions ---------------------------------------------------------------
 
 /**
- * One game session. `started`/`ended` keep the zone-less wall-clock strings
- * of the README's writing rules; the epoch reading stays the server's job.
- * An `ended` that is NULL or blank means the session runs (session-state.ts).
+ * One game SESSION (ADR #31). `started`/`ended` keep the zone-less
+ * wall-clock strings of rule 6; the epoch reading stays the server's job. An
+ * `ended` that is NULL or blank means the session runs
+ * (@grimoire/shared/session `isSessionEnded`).
  *
- * IDENTITY (PO decision): the id of a NEW session is an OPAQUE
- * RANDOM string — `crypto.randomUUID()` (store/sessions.ts `newSessionId`).
- * Nobody reads it: it is an address (`sessions/<id>`) and nothing else,
- * and everything DISPLAYABLE about a session is derived from `started`.
+ * `id` is an OPAQUE random string (store/sessions.ts), the session's key on
+ * the wire. Everything displayable about a session comes from `started`, so
+ * nothing reads the id; date-shaped ids (`2026-01-15`) are just as valid and
+ * are not parsed either.
  *
- * Why randomUUID and not a ULID or a date+sequence: it is URL-safe, needs no
- * new npm dependency AND no hand-rolled encoder (node:crypto ships it), and —
- * unlike a ULID — it carries no timestamp, so no reader can be tempted to
- * order sessions by their id again. It also needs no coordination at all: the
- * former `yyyy-mm-dd-<n>` scheme required a persisted per-day high-water mark
- * so a discarded session's id could never be re-issued. That whole machinery
- * is gone.
- *
- * COMPATIBILITY: session ids are plain strings, so the date-shaped ids written
- * before this (`2026-01-15`, `2026-01-15-2`) stay valid and need no migration.
- * They are simply not parsed.
- *
- * ORDER is `started` alone (store/shared.ts `compareSessionsNewestFirst`), with
- * `createdAt` as the tie-break — see that column.
+ * ORDER is `started` alone (store/session-rows.ts `compareSessionsNewestFirst`),
+ * with `createdAt` as the tie-break — see that column. `rev` guards the
+ * session's own fields; its pauses, log entries and played scenes carry
+ * their own.
  */
 export const sessions = sqliteTable(
   "sessions",
   {
     campaignId: text("campaign_id").notNull(),
-    /** Opaque random id (see above); older rows carry a date-shaped id. */
+    /** Opaque random id (see above). */
     id: text("id").notNull(),
     started: text("started"),
     ended: text("ended"),
@@ -504,21 +495,16 @@ export const sessions = sqliteTable(
      * when it was written.
      *
      * NOT a wall-clock string like `started`: this is bookkeeping of the
-     * database, never entry content, and an entry has no property for it.
-     * It is also STRICTLY INCREASING per campaign rather than a plain
-     * `Date.now()` (store/sessions.ts `nextCreatedAt`) — a clock that stands
-     * still or jumps back must not make two rows unorderable.
+     * database and no field of the session. It is also STRICTLY INCREASING
+     * per campaign rather than a plain `Date.now()` (store/sessions.ts
+     * `nextCreatedAt`) — a clock that stands still or jumps back must not make
+     * two rows unorderable.
      *
-     * `0` for rows written before the column existed and for the markdown
-     * import — they then fall back to the id compare, which only ever decides
-     * between sessions that already share a `started`.
+     * `0` for a seeded row: seeded sessions are ordered by `started`, and the
+     * id compare decides between two that share it.
      */
     createdAt: integer("created_at").notNull().default(0),
-    /**
-     * Everything in the session's text that is not `## Log` — `## Threads`
-     * above all. Kept as one markdown field so no hand-written section is
-     * lost.
-     */
+    /** The session's free Markdown text. */
     body: text("body").notNull().default(""),
     rev: revColumn(),
   },
@@ -535,26 +521,30 @@ export const sessions = sqliteTable(
 );
 
 /**
- * One pause interval of a session, second-precise and zone-less like
- * `started`/`ended`. `toTs` NULL is the RUNNING pause (README).
- * `pos` is the position in the session's pause list and therefore the key —
- * two pauses may legitimately share a `from`.
+ * One PAUSE of a session (ADR #31), second-precise and zone-less like
+ * `started`/`ended`. `toTs` NULL is the RUNNING pause: the session's clock
+ * stands. `id` is an OPAQUE random string (store/pauses.ts), unique within
+ * its session; `pos` is the order of creation. `rev` is the pause's own guard
+ * (rule 4).
  */
-export const sessionPauses = sqliteTable(
-  "session_pauses",
+export const pauses = sqliteTable(
+  "pauses",
   {
     campaignId: text("campaign_id").notNull(),
     sessionId: text("session_id").notNull(),
-    pos: integer("pos").notNull(),
+    /** Opaque random id — the pause's identity on the wire. */
+    id: text("id").notNull(),
     fromTs: text("from_ts").notNull(),
     toTs: text("to_ts"),
+    pos: integer("pos").notNull(),
+    rev: revColumn(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.sessionId, t.pos] }),
+    primaryKey({ columns: [t.campaignId, t.sessionId, t.id] }),
     foreignKey({
       columns: [t.campaignId, t.sessionId],
       foreignColumns: [sessions.campaignId, sessions.id],
-      name: "session_pauses_session_fk",
+      name: "pauses_session_fk",
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
@@ -562,24 +552,22 @@ export const sessionPauses = sqliteTable(
 );
 
 /**
- * One line of a session's log. APPEND-ONLY stays the rule; `pos` is the
- * append counter and the key.
+ * One LOG ENTRY of a session (ADR #31): a quick note the DM took. The log is
+ * APPEND-ONLY — a note is written once, and the one thing that changes later
+ * is `reviewed`, the review's flag on the row.
  *
- * COLUMNS ONLY: the row holds the note's time, the scene it was taken in, its
- * text and the review flag. There is no markdown line beside them — the log
- * is a table the API answers as rows (ADR #26), and a row that carried both a
- * line and its parse had two truths about one note.
- *
- * `hash` is the row's stable ID, the short hash of its canonical line
- * (store/body-parse.ts). The review names a line by it, and `reviewed` is a
- * plain flag on the row rather than a hash list beside the session.
+ * COLUMNS ONLY: the note's time, the scene it was taken in, its text and the
+ * review flag. `id` is an OPAQUE random string (store/log-entries.ts), unique
+ * within its session; `pos` is the order of the log. `rev` is the entry's
+ * own guard (rule 4).
  */
 export const logEntries = sqliteTable(
   "log_entries",
   {
     campaignId: text("campaign_id").notNull(),
     sessionId: text("session_id").notNull(),
-    pos: integer("pos").notNull(),
+    /** Opaque random id — the log entry's identity on the wire. */
+    id: text("id").notNull(),
     /** `HH:MM` local, the time the note was taken; NULL when it carries none. */
     at: text("at"),
     /**
@@ -590,12 +578,12 @@ export const logEntries = sqliteTable(
     sceneId: text("scene_id"),
     /** The note as the DM typed it, hashtags included (README's vocabulary). */
     text: text("text").notNull().default(""),
-    /** The row's stable id — see the note above. */
-    hash: text("hash").notNull().default(""),
     reviewed: integer("reviewed").notNull().default(0),
+    pos: integer("pos").notNull(),
+    rev: revColumn(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.sessionId, t.pos] }),
+    primaryKey({ columns: [t.campaignId, t.sessionId, t.id] }),
     foreignKey({
       columns: [t.campaignId, t.sessionId],
       foreignColumns: [sessions.campaignId, sessions.id],
@@ -614,35 +602,37 @@ export const logEntries = sqliteTable(
 );
 
 /**
- * `scenes_played: [...]` of a session — ordered, soft scene references.
- *
- * The key is (campaign, session, POS), not (…, scene): the list is a
- * SEQUENCE, and a scene the party returned to later stands in it twice. A
- * scene-keyed table swallowed that repetition, and with it the order the
- * review reads the evening back in.
+ * One PLAYED SCENE of a session (ADR #31): a step of the evening through the
+ * scenes. The played scenes are a SEQUENCE — a scene the group returned to
+ * later stands in it twice —, so the scene is no key: `id` is an OPAQUE
+ * random string (store/played-scenes.ts), unique within its session, and
+ * `pos` is the order of play. `rev` is the row's own guard (rule 4).
  */
-export const sessionScenesPlayed = sqliteTable(
-  "session_scenes_played",
+export const playedScenes = sqliteTable(
+  "played_scenes",
   {
     campaignId: text("campaign_id").notNull(),
     sessionId: text("session_id").notNull(),
+    /** Opaque random id — the played scene's identity on the wire. */
+    id: text("id").notNull(),
     /** The scene — a foreign key to an existing scene (rule 3). */
     sceneId: text("scene_id").notNull(),
     pos: integer("pos").notNull(),
+    rev: revColumn(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.sessionId, t.pos] }),
+    primaryKey({ columns: [t.campaignId, t.sessionId, t.id] }),
     foreignKey({
       columns: [t.campaignId, t.sessionId],
       foreignColumns: [sessions.campaignId, sessions.id],
-      name: "session_scenes_played_session_fk",
+      name: "played_scenes_session_fk",
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
     foreignKey({
       columns: [t.campaignId, t.sceneId],
       foreignColumns: [scenes.campaignId, scenes.id],
-      name: "session_scenes_played_scene_fk",
+      name: "played_scenes_scene_fk",
     })
       .onUpdate("cascade")
       .onDelete("no action"),
@@ -903,15 +893,12 @@ export const generateJobs = sqliteTable(
 // --- bookkeeping ------------------------------------------------------------
 
 /**
- * Key/value bookkeeping of the database itself. NOTHING writes a key here at
- * the moment; the table stays because it is where the next piece of
- * bookkeeping belongs and because old databases carry keys in it.
+ * Key/value bookkeeping of the database itself. NOTHING writes a key here;
+ * the table is where the next piece of bookkeeping belongs.
  *
- * Those old keys are inert and deliberately not deleted: the `migrated_*`
- * markers of the one-time markdown migration, and `session_seq:<campaign>:
- * <date>` from the time session ids were date+sequence (with opaque random
- * ids — see `sessions` — nothing has to be reserved any more). A `meta` row
- * costs nothing, and a migration that removes bookkeeping can only fail.
+ * Keys an older database carries (`migrated_*`, `session_seq:*`) are inert
+ * and deliberately not deleted: nothing reads them, a `meta` row costs
+ * nothing, and a migration that removes bookkeeping can only fail.
  */
 export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),
@@ -989,9 +976,9 @@ export const schema = {
   npcs,
   locations,
   sessions,
-  sessionPauses,
+  pauses,
   logEntries,
-  sessionScenesPlayed,
+  playedScenes,
   ideas,
   glossaryTerms,
   knowledgeItems,

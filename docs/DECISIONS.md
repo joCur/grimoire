@@ -1812,6 +1812,10 @@ Die Ressourcen der bisher erfassten Entitäten:
 | Idee | `GET/PATCH /campaigns/:c/ideas/:id` | `GET/POST /campaigns/:c/ideas` | in Nachbereitung und Mobil-Startfläche |
 | Glossar-Begriff | `GET/PATCH/DELETE /campaigns/:c/glossary-terms/:id` | `GET/POST /campaigns/:c/glossary-terms` | auf der Glossar-Seite `/campaigns/:c/glossary` |
 | Kampagnenwissen | `GET/PATCH/DELETE /campaigns/:c/knowledge-items/:id` | `GET/POST /campaigns/:c/knowledge-items` | auf der Wissens-Seite `/campaigns/:c/knowledge` |
+| Session | `GET/PATCH/DELETE /campaigns/:c/sessions/:id` | `GET/POST /campaigns/:c/sessions` | `/campaigns/:c/sessions/:id`, live `/campaigns/:c/live` |
+| Pause | `PATCH /campaigns/:c/sessions/:s/pauses/:id` | `POST /campaigns/:c/sessions/:s/pauses` | in der Session |
+| Log-Zeile | `PATCH /campaigns/:c/sessions/:s/log/:id` | `POST /campaigns/:c/sessions/:s/log` | in Session und Nachbereitung |
+| Gespielte Szene | — | `POST /campaigns/:c/sessions/:s/played-scenes` | in der Session |
 
 Die API-Pfade stehen unter `/api` (ADR #22). URL-Segmente sind der
 englische Plural der Entität.
@@ -1835,7 +1839,10 @@ englische Plural der Entität.
   nicht, wenn sie wandert; die Liste filtert nach dem Elternteil
   (`…/threads?chapter=<id>`). Eine Entität, die ohne ihren Elternteil nicht
   existiert und nie wandert, hängt unter ihm
-  (`…/<eltern>/:id/<entitäten>/:id`).
+  (`…/<eltern>/:id/<entitäten>/:id`): Pause, Log-Zeile und gespielte Szene
+  unter ihrer Session. Gelesen wird ein solches Kind mit seinem Elternteil,
+  das es eingebettet liefert; geschrieben wird es nur über seine eigene
+  Ressource, und ein Schreibzugriff auf den Elternteil schreibt es nicht.
 - **Keine Sammelbegriffe.** Jedes Feld ist ein Feld seiner Entität, `body`
   eingeschlossen. Typen, Code und Doku beschreiben jede Entität mit ihren
   eigenen Feldern; es gibt keine Hälften einer Entität und keine gemeinsame
@@ -1845,6 +1852,11 @@ englische Plural der Entität.
   `POST`, ein Verwerfen ein `DELETE`. Eine Idee abhaken ist
   `PATCH …/ideas/:id { rev, done }`. Welches Kapitel aktiv ist, sagt sein
   `status`, und je Kampagne ist höchstens ein Kapitel aktiv.
+  Eine Session startet mit `POST …/sessions`, endet mit
+  `PATCH …/sessions/:id { rev, endedMs }` und wird verworfen mit `DELETE`;
+  eine Pause beginnt mit `POST` und endet mit `PATCH` auf die Pause. Welche
+  Session läuft, sagt ein Filter der Liste (`…/sessions?running=true`), kein
+  eigener Endpunkt.
   `PATCH …/chapters/:id { rev, status: "active" }` und `POST …/chapters` mit
   `status: "active"` aktivieren ein Kapitel; der Server setzt das bisher
   aktive Kapitel in derselben Transaktion auf `planned`, und dessen `rev`
@@ -1858,6 +1870,11 @@ englische Plural der Entität.
   `nothing_to_write` gelten wie in ADR #23. Anlegen antwortet mit dem Typ der
   Entität und trägt kein `rev`, denn eine neue Zeile überschreibt nichts.
   `DELETE` trägt `{ rev }` wie jeder Schreibzugriff mit Wächter.
+- **Zeitpunkte schreibt der Client als Epochen-Wert.** Gespeichert ist ein
+  Zeitpunkt als zonenlose Lokalzeit des Servers; nur der Server weiß, zu
+  welcher Uhr sie gehört. Er liefert darum die Epochen-Lesung daneben
+  (`startedMs`, `toMs` …), und ein Schreibzugriff nennt einen Zeitpunkt in
+  genau dieser Form — die Lokalzeit daraus bildet der Server.
 - **Ein Wächter je Zeile.** Jede Entität trägt ihr eigenes `rev`, und ein
   Schreibzugriff bewegt nur das der Zeile, die er schreibt. Einen Zähler über
   alle Zeilen einer Art gibt es nicht.
