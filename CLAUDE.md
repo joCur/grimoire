@@ -18,6 +18,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
    fest: keine befristeten Entscheidungen, keine Zwischenstände. Der
    Zwischenstand eines in Scheiben geschnittenen Umbaus steht allein im
    Ticket.
+   A decision records only real decisions with lasting validity (principle,
+   why, consequences) — never inventories (tables, columns, endpoints, error
+   codes, file or function names), implementation detail, or anything from
+   older versions. It must stay true when the code grows.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
 ## Stack (Kurzfassung, Details in docs/decisions/stack.md)
@@ -167,15 +171,19 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `PATCH …/parts/<key> { status: "running" }` wiederholt einen Teil,
   `DELETE { rev }` verwirft den Job.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
-  Code, Kommentare, Commits: Englisch.
-- Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
-  auf Issues, PRs oder Reviews. Verweise auf Entscheidungen (`decisions/sqlite`)
-  sind erlaubt — sie zeigen auf ein Dokument im Repo, nicht auf ein Ticket.
-- Pfadfinder-Prinzip: Wer eine Datei aus einem anderen Grund anfasst, räumt
-  in dieser ganzen Datei mit auf, was gegen die Kommentar-Regeln verstößt —
-  Issue-Verweise ebenso wie deutsche Begriffe in englischen Kommentaren —,
-  nicht nur in den geänderten Zeilen. Dafür gibt es keinen eigenen
-  Aufräum-PR.
+- Repository language (decisions/language): everything in the repo is
+  English — code, identifiers, comments, test names, commits, docs,
+  decisions, agent instructions. German exists only in the German UI catalog
+  (`app/src/i18n/de.ts`), the example campaign content in `fixtures/`, and
+  literal UI strings that tests assert against. In code and docs, describe a
+  UI label in English instead of quoting it.
+- Comments explain the code and stand on their own: no references to issues,
+  PRs or reviews. References to decisions (`decisions/sqlite`) are allowed —
+  they point to a document in the repo, not to a ticket.
+- Scout rule: whoever touches a file for another reason brings the whole
+  file in line with the two rules above in the same change — German prose,
+  comments and test names become English, issue references go — not only the
+  changed lines. There is no separate cleanup PR.
 - Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
   sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
 - Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
