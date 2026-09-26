@@ -905,7 +905,13 @@ under `result.scenes`, the NPCs under `result.npcs` and the locations under
 The DM's changes to a proposal are kept per scene under `sceneEdits` and per
 NPC under `npcEdits`. The job is its own resource (`…/generator-jobs/<id>`,
 at most one per campaign): it is reviewed and accepted with `PATCH` on it,
-discarded with `DELETE`. Details in `generator/README.md`.
+discarded with `DELETE`. The review of a scene run walks in stages — the new
+locations, then the new NPCs, then the scenes — and the stage is part of the
+review on the job. Accepting a proposal writes exactly that proposal; a
+scene whose `npcs` or `location` names a proposal of the run that is not
+written is refused (409 `proposal_not_written`) and nothing is written
+([decisions/generator](docs/decisions/generator.md)). Details in
+`generator/README.md`.
 
 The mechanical check reads the fields and the text, but no heading
 ([decisions/data-shape](docs/decisions/data-shape.md)): the sections of a proposal are the prompts' recommendation.

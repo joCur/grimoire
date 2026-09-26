@@ -72,7 +72,7 @@ describe("flush", () => {
   test("with nothing pending it still waits for what is in flight", async () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 0);
-    queue.decide({ npcs: { grella: "accepted" } });
+    queue.decide({ npcs: { grella: "rejected" } });
     // Nothing of its own to send — but the decision above must be done.
     await queue.flush();
     expect(h.sent).toHaveLength(1);
@@ -148,12 +148,12 @@ describe("a failed patch", () => {
 
     // A LATER decision succeeds — but the failed edit is still waiting, so
     // reporting the review as saved would be a lie about it as a whole.
-    queue.decide({ npcs: { grella: "accepted" } });
+    queue.decide({ npcs: { grella: "rejected" } });
     await queue.flush();
     expect(last(h.statuses)).toBe("saved");
     // …and the retried edit went along with it.
     expect(h.sent).toEqual([
-      { sceneEdits: { quay: { body: "in the rain" } }, review: { npcs: { grella: "accepted" } } },
+      { sceneEdits: { quay: { body: "in the rain" } }, review: { npcs: { grella: "rejected" } } },
     ]);
   });
 
@@ -161,7 +161,7 @@ describe("a failed patch", () => {
     const h = harness();
     const queue = createReviewQueue(h.io, 10_000);
     h.fail = new ApiError(409, "conflict", { code: "rev_conflict", rev: 7 });
-    queue.decide({ npcs: { grella: "accepted" } });
+    queue.decide({ npcs: { grella: "rejected" } });
     await queue.flush();
     expect(last(h.statuses)).toBe("conflict");
     expect(h.rereads).toBe(1);

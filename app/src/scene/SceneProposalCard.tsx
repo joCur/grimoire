@@ -2,7 +2,9 @@
 // status pill, edit toggle and its mono label, the chip row out of its fields,
 // then either its text through the normal markdown pipeline or the editor over
 // its fields and its text — and below, what can be done with it: write it on
-// its own, drop it, or, once written, open the scene it became.
+// its own, drop it, or, once written, open the scene it became. What keeps it
+// from being written is the caller's to say, in the notice slot above those
+// actions.
 //
 // Title and chips read the scene the card is given, so a field the DM changes
 // shows up in the header as well. What the editor changes is reported as the
@@ -13,7 +15,7 @@
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { SceneChange, SceneProposal } from "@grimoire/shared/scene";
 import { Bookmark, Check, GitFork, MapPin } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { ProposalBodySection, ProposalFieldsSection } from "@/components/ProposalEditor";
@@ -45,6 +47,8 @@ export function SceneProposalCard({
   busy,
   editing,
   cardRef,
+  notice,
+  acceptBlocked = false,
   onToggleEditing,
   onChange,
   onFlush,
@@ -65,6 +69,10 @@ export function SceneProposalCard({
    * card.
    */
   cardRef?: (el: HTMLElement | null) => void;
+  /** What stands between the scene and its accept, above the actions. */
+  notice?: ReactNode;
+  /** The scene cannot be written as it is — its accept action is off. */
+  acceptBlocked?: boolean;
   onToggleEditing: () => void;
   onChange: (change: SceneChange) => void;
   /** Send what is pending now — the text surface calls it on blur. */
@@ -84,6 +92,8 @@ export function SceneProposalCard({
       ref={cardRef}
       // Focusable only programmatically, like the status card it replaces.
       tabIndex={-1}
+      data-testid={`scene-proposal:${scene.id}`}
+      data-state={state}
       className={cn(
         "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:px-6",
         state === "dropped" && "opacity-55",
@@ -135,6 +145,7 @@ export function SceneProposalCard({
       ) : (
         <Markdown>{scene.body}</Markdown>
       )}
+      {!written && notice}
       {written ? (
         <p className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
           <Check aria-hidden size={14} className="flex-none text-success-text" />
@@ -151,7 +162,7 @@ export function SceneProposalCard({
           <Button
             type="button"
             variant="outline"
-            disabled={busy || state === "dropped"}
+            disabled={busy || state === "dropped" || acceptBlocked}
             onClick={onAccept}
             className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
           >

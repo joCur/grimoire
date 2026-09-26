@@ -334,6 +334,8 @@ export const en: Messages = {
     "This scene cannot be restored because its chapter “{chapter}” is in the trash. Restore the chapter first.",
   "server.restore_blocked":
     "This cannot be restored while {blockers} {count, plural, one {is} other {are}} in the trash. Restore {count, plural, one {it} other {them}} first.",
+  "server.proposal_not_written":
+    "Not written — this scene names an NPC or a location of the run that has not been accepted. Accept it first or remove it from the scene.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": "the chapter “{name}”",
@@ -721,10 +723,9 @@ export const en: Messages = {
   "generate.review.pending": "{summary} · nothing written yet",
   "generate.review.pendingNpc": "1 NPC · nothing written yet",
   "generate.review.lead":
-    "Check, adjust, decide on the suggested NPCs and locations one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
+    "The review walks through the run in steps: first the new locations, then the new NPCs, then the scenes. Every proposal is decided on its own, and accepting one writes exactly that one — never overwriting.",
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the NPC — existing NPCs are never overwritten.",
-  "generate.review.stubsHeading": "Suggested NPCs and locations — decide one by one",
   // --- naming hints of the post-run check -----------------------------------
   "generate.review.namingHeading":
     "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
@@ -737,7 +738,6 @@ export const en: Messages = {
   "generate.review.applyStale":
     "Not written — the run has moved on. Reloading the view.",
   "generate.review.discardFailed": "Not discarded — check the server.",
-  "generate.review.apply": "Apply ({count})",
   "generate.review.applyNpc": "Apply",
   // --- generator: review state on the job ----------------------------------
   "generate.review.saving": "Saving …",
@@ -749,7 +749,8 @@ export const en: Messages = {
   "generate.review.partWritten": "Applied",
   "generate.review.drop": "Drop from the run",
   "generate.review.undrop": "Put back",
-  "generate.review.applyRest": "Apply the rest ({count})",
+  "generate.review.applyScenes":
+    "{count, plural, one {Apply the open scene} other {Apply the # open scenes}}",
   "generate.review.discardRest": "Discard the rest",
   "generate.review.allDecided": "Everything decided.",
   "generate.review.plannedScene": "Planned scene",
@@ -787,9 +788,40 @@ export const en: Messages = {
   "generate.stub.reason.scenes": "from {title} and others",
   "generate.stub.accept": "Accept",
   "generate.stub.reject": "Reject",
-  "generate.stub.undo": "Undo decision",
-  "generate.stub.accepted": "Accepted",
   "generate.stub.rejected": "Rejected",
+  "generate.stub.acceptAnyway": "Accept after all",
+
+  // --- generator: the stages of a scene run's review ------------------------
+  "generate.stage.nav": "Steps of the review",
+  "generate.stage.locations": "Locations",
+  "generate.stage.npcs": "NPCs",
+  "generate.stage.scenes": "Scenes",
+  "generate.stage.decided": "{decided} of {total} decided",
+  "generate.stage.locked":
+    "The scenes come once every new location and every new NPC is decided.",
+  "generate.stage.lead.locations":
+    "The run proposes these new locations. Accept or reject each one — a scene can only be set at a location that exists.",
+  "generate.stage.lead.npcs":
+    "The run proposes these new NPCs. Accept or reject each one — a scene can only name an NPC that exists.",
+  "generate.stage.lead.scenes":
+    "Every new location and NPC is decided. Accepting a scene writes that scene and nothing else.",
+  "generate.stage.open":
+    "{count, plural, one {# proposal is still undecided.} other {# proposals are still undecided.}}",
+  "generate.stage.next.npcs": "Continue to the NPCs",
+  "generate.stage.next.scenes": "Continue to the scenes",
+  "generate.stage.back.locations": "Back to the locations",
+  "generate.stage.back.npcs": "Back to the NPCs",
+
+  // --- generator: a scene that names a rejected proposal --------------------
+  "generate.incomplete.npc":
+    "This scene names the NPC “{name}”, which you rejected — it does not exist, so the scene cannot be applied like this.",
+  "generate.incomplete.location":
+    "This scene is set at the location “{name}”, which you rejected — it does not exist, so the scene cannot be applied like this.",
+  "generate.incomplete.acceptNpc": "Accept {name} after all",
+  "generate.incomplete.removeNpc": "Remove {name} from the scene",
+  "generate.incomplete.acceptLocation": "Accept {name} after all",
+  "generate.incomplete.removeLocation": "Remove the location from the scene",
+  "generate.incomplete.drop": "Drop the scene",
 
   // --- generator: what was written (routes/generate.tsx) ------------------
   "generate.written.title.scene": "Written — all as draft",

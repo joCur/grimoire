@@ -118,11 +118,15 @@ export function patchGeneratorJob(
 /**
  * Accept proposals of a run: the proposed scenes (`scenes`), npcs (`npcs` —
  * the NPC run's one npc among them) and locations (`locations`) it names, by
- * id. Answers the job as the write leaves it — as it ended, once nothing is
+ * id. Naming an npc or a location is the decision to take it, so a rejected
+ * one is accepted after all: its rejection is taken back in the same patch.
+ * Answers the job as the write leaves it — as it ended, once nothing is
  * open. `rev` is the job's rev as the caller read it: a 409 `rev_conflict`
- * means another tab decided in between and nothing was written. A 409 with
- * `details.chapters`/`scenes`/`npcs`/`locations` is the ordinary write
- * conflict — the rows that already exist, per entity.
+ * means another tab decided in between and nothing was written; a 409
+ * `proposal_not_written` names a scene that names a proposal of the run that
+ * is not written. A 409 with `details.chapters`/`scenes`/`npcs`/`locations`
+ * and no code is the ordinary write conflict — the rows that already exist,
+ * per entity.
  */
 export function acceptJobParts(
   campaign: string,
@@ -130,12 +134,18 @@ export function acceptJobParts(
   rev: number,
   selection: { scenes?: string[]; npcs?: string[]; locations?: string[] },
 ): Promise<GeneratorJob> {
+  const reopen = (ids: string[] | undefined) =>
+    Object.fromEntries((ids ?? []).map((id) => [id, null]));
   return patchGeneratorJob(campaign, jobId, {
     rev,
     review: {
       ...(selection.scenes === undefined ? {} : { writtenScenes: selection.scenes }),
-      ...(selection.npcs === undefined ? {} : { writtenNpcs: selection.npcs }),
-      ...(selection.locations === undefined ? {} : { writtenLocations: selection.locations }),
+      ...(selection.npcs === undefined
+        ? {}
+        : { writtenNpcs: selection.npcs, npcs: reopen(selection.npcs) }),
+      ...(selection.locations === undefined
+        ? {}
+        : { writtenLocations: selection.locations, locations: reopen(selection.locations) }),
     },
   });
 }

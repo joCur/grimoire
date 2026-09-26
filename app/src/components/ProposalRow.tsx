@@ -1,8 +1,8 @@
 // One proposal row of a generator review: marker, name, mono label, italic
-// reason, and the decision — take, reject, write it on its own, or undo.
-// What the row proposes is the caller's; the row knows only its state.
+// reason, and the decision — accept (which writes it), reject, or accept a
+// rejected one after all. What the row proposes is the caller's; the row
+// knows only its state.
 
-import type { GenerateReviewDecision } from "@grimoire/shared/generator-job";
 import { Check, type LucideIcon } from "lucide-react";
 import { Link } from "react-router";
 
@@ -13,26 +13,30 @@ import { cn } from "@/lib/utils";
 /** What became of one part of a run — what a proposal row shows. */
 export type PartState = "open" | "written" | "dropped" | "rejected";
 
+const ACCEPT =
+  "h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover";
+const QUIET =
+  "h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground";
+
 export function ProposalRow({
   icon: Icon,
   name,
   label,
   reason,
-  decision,
   state,
   writtenHref,
   writtenLabel,
   busy,
   cardRef,
-  onDecide,
+  testId,
   onAccept,
+  onReject,
 }: {
   icon: LucideIcon;
   name: string;
   /** What the row names, in mono beside the name. */
   label: string;
   reason: string;
-  decision: GenerateReviewDecision | undefined;
   state: PartState;
   /** Where the written row lives, once it is written. */
   writtenHref: string | undefined;
@@ -40,17 +44,21 @@ export function ProposalRow({
   busy: boolean;
   /** The retry's focus follows the part here too. */
   cardRef?: (el: HTMLElement | null) => void;
-  onDecide: (decision: GenerateReviewDecision | undefined) => void;
+  testId?: string;
+  /** Write the proposal — a rejected one after all. */
   onAccept: () => void;
+  onReject: () => void;
 }) {
   const t = useT();
   return (
     <div
       ref={cardRef}
       tabIndex={-1}
+      data-testid={testId}
+      data-state={state}
       className={cn(
         "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-        (decision === "rejected" || state === "rejected") && "opacity-55",
+        state === "rejected" && "opacity-55",
       )}
     >
       <Icon aria-hidden size={16} className="flex-none text-muted-foreground" />
@@ -74,54 +82,23 @@ export function ProposalRow({
             </Link>
           )}
         </p>
-      ) : decision === undefined ? (
-        <div className="flex flex-none gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onDecide("accepted")}
-            className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
-          >
-            {t("generate.stub.accept")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onDecide("rejected")}
-            className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-          >
-            {t("generate.stub.reject")}
+      ) : state === "rejected" ? (
+        <div className="flex flex-none items-center gap-2">
+          <span className="px-1.5 py-1 text-[12.5px] text-muted-foreground">
+            {t("generate.stub.rejected")}
+          </span>
+          <Button type="button" variant="outline" disabled={busy} onClick={onAccept} className={QUIET}>
+            {t("generate.stub.acceptAnyway")}
           </Button>
         </div>
       ) : (
-        <div className="flex flex-none items-center gap-2">
-          {/* An ACCEPTED proposal can be written on its own — the
-              rest of the run stays reviewable. */}
-          {decision === "accepted" && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={onAccept}
-              className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-            >
-              {t("generate.review.acceptOne")}
-            </Button>
-          )}
-          {/* The decided row stays a control so a wrong decision is
-              reversible (the prototype shows a label; a click puts the
-              buttons back). */}
-          <button
-            type="button"
-            onClick={() => onDecide(undefined)}
-            title={t("generate.stub.undo")}
-            className={cn(
-              "flex-none rounded-md px-1.5 py-1 text-[12.5px]",
-              decision === "accepted" ? "text-primary-hover" : "text-muted-foreground",
-            )}
-          >
-            {t(decision === "accepted" ? "generate.stub.accepted" : "generate.stub.rejected")}
-          </button>
+        <div className="flex flex-none gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onAccept} className={ACCEPT}>
+            {t("generate.stub.accept")}
+          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={onReject} className={QUIET}>
+            {t("generate.stub.reject")}
+          </Button>
         </div>
       )}
     </div>

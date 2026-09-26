@@ -27,6 +27,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { SceneProposal } from "@grimoire/shared/scene";
+import { LOCATION_STUB_ID, NPC_STUB_ID } from "../fixtures/replies";
+import {
+  expectStage,
+  locationProposal,
+  nextStage,
+  npcProposal,
+  rejectProposal,
+} from "../support/generator-review";
 import { E2E_FIXTURES_DIR } from "../support/paths";
 import { expect, test } from "../support/test";
 import { getLocation, patchLocation } from "../support/location";
@@ -409,6 +417,15 @@ test("draft review: a resolved reference previews, an unresolved one stays text"
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
+  // The run's new location and npc are rejected on the way to its scene, so
+  // `[[grella]]` stays a proposal that was never written.
+  await expectStage(page, "locations");
+  await rejectProposal(locationProposal(page, LOCATION_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "npcs");
+  await rejectProposal(npcProposal(page, NPC_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "scenes");
 
   const fenn = page.getByRole("link", { name: refName("npc", "Fenn") }).first();
   await fenn.hover();
@@ -417,7 +434,7 @@ test("draft review: a resolved reference previews, an unresolved one stays text"
   await expect(tooltip).toContainText(ui("status.npc.alive"));
   await expect(tooltip).toContainText("Leader of the smugglers in the North Cove");
 
-  // `[[grella]]` is only proposed in this run — no entry, no link, no preview.
+  // `[[grella]]` was only proposed in this run — no entry, no link, no preview.
   await expect(page.getByRole("link", { name: /grella/i })).toHaveCount(0);
 });
 

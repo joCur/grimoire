@@ -3,7 +3,6 @@
 // and — once written — the link to its reading view.
 
 import type { NpcProposal } from "@grimoire/shared/npc";
-import type { GenerateReviewDecision } from "@grimoire/shared/generator-job";
 import { User } from "lucide-react";
 
 import { ProposalRow } from "@/components/ProposalRow";
@@ -21,10 +20,10 @@ export function NpcProposalRow({
   npc: NpcProposal;
   state: PartState;
   reason: string;
-  decision: GenerateReviewDecision | undefined;
   busy: boolean;
   cardRef?: (el: HTMLElement | null) => void;
-  onDecide: (decision: GenerateReviewDecision | undefined) => void;
+  testId?: string;
+  onReject: () => void;
   onAccept: () => void;
 }) {
   const written = state === "written";

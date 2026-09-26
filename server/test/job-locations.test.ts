@@ -131,7 +131,7 @@ test("the decision is stored by id; an id the run did not propose is a 400", asy
   expect(after.review?.locations).toEqual({ "old-mole": "rejected" });
   const undone = (await (await patchReview(after, { locations: { "old-mole": null } })).json()) as GeneratorJob;
   expect(undone.review?.locations).toEqual({});
-  expect((await patchReview(undone, { locations: { "does-not-exist": "accepted" } })).status).toBe(400);
+  expect((await patchReview(undone, { locations: { "does-not-exist": "rejected" } })).status).toBe(400);
 });
 
 test("accepting one location by id writes it to the location resource", async () => {
@@ -156,38 +156,64 @@ test("accepting one location by id writes it to the location resource", async ()
   expect((await accept(unchanged, { locations: ["does-not-exist"] })).status).toBe(400);
 });
 
-test("a scene carries the location it is set at; the other scene does not", async () => {
+test("a scene writes only itself; one set at an unwritten location is refused", async () => {
   const job = await runJob();
   const tower = await accept(job, { scenes: [SCENE_AT_TOWER] });
-  expect(writtenBy(job, (await tower.json()) as GeneratorJob).locations).toEqual([]);
+  expect(tower.status).toBe(200);
+  expect(writtenBy(job, (await tower.json()) as GeneratorJob)).toEqual({
+    scenes: [SCENE_AT_TOWER],
+    npcs: [],
+    locations: [],
+  });
   expect(await readLocation("old-mole")).toBeUndefined();
 
+  // The mole is still undecided: the scene set there is refused, names the
+  // location, and nothing moves.
   const before = (await fetchJob())!;
-  const mole = await accept(before, { scenes: [SCENE_AT_MOLE] });
-  expect(mole.status).toBe(200);
-  expect(writtenBy(before, (await mole.json()) as GeneratorJob)).toEqual({
+  const refused = await accept(before, { scenes: [SCENE_AT_MOLE] });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({
+    code: "proposal_not_written",
     scenes: [SCENE_AT_MOLE],
     npcs: [],
     locations: ["old-mole"],
   });
+  expect(await readLocation("old-mole")).toBeUndefined();
+  expect((await fetchJob())!.rev).toBe(before.rev);
+
+  // Once the location is written, the scene is.
+  const located = await accept(before, { locations: ["old-mole"] });
+  expect(located.status).toBe(200);
+  const afterLocation = (await located.json()) as GeneratorJob;
+  const mole = await accept(afterLocation, { scenes: [SCENE_AT_MOLE] });
+  expect(mole.status).toBe(200);
+  expect(writtenBy(afterLocation, (await mole.json()) as GeneratorJob)).toEqual({
+    scenes: [SCENE_AT_MOLE],
+    npcs: [],
+    locations: [],
+  });
   // Everything is written now, so the job is gone.
   expect(await fetchJob()).toBeNull();
-  expect(await readLocation("old-mole")).toBeDefined();
 });
 
-test("accepting all that is open names an ACCEPTED location, never an undecided one", async () => {
-  const undecided = await runJob();
-  const scenesOnly = (await (await patchReview(undecided, { droppedScenes: [SCENE_AT_MOLE] })).json()) as GeneratorJob;
+test("a location named in the same accept as its scene is written with it", async () => {
+  const job = await runJob();
+  const res = await accept(job, { scenes: [SCENE_AT_MOLE], locations: ["old-mole"] });
+  expect(res.status).toBe(200);
+  expect(writtenBy(job, (await res.json()) as GeneratorJob)).toEqual({
+    scenes: [SCENE_AT_MOLE],
+    npcs: [],
+    locations: ["old-mole"],
+  });
+});
+
+test("accepting all that is open never writes a location", async () => {
+  const job = await runJob();
+  const scenesOnly = (await (await patchReview(job, { droppedScenes: [SCENE_AT_MOLE] })).json()) as GeneratorJob;
   const all = await accept(scenesOnly);
+  expect(all.status).toBe(200);
   expect(writtenBy(scenesOnly, (await all.json()) as GeneratorJob).locations).toEqual([]);
   expect(await readLocation("old-mole")).toBeUndefined();
-
-  const open = (await fetchJob())!;
-  const accepted = (await (await patchReview(open, { locations: { "old-mole": "accepted" } })).json()) as GeneratorJob;
-  const second = await accept(accepted);
-  expect(writtenBy(accepted, (await second.json()) as GeneratorJob).locations).toEqual(["old-mole"]);
-  expect(await fetchJob()).toBeNull();
-  expect(await readLocation("old-mole")).toBeDefined();
 });
 
 test("a location that already holds content is a conflict, reported by id", async () => {

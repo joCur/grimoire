@@ -50,6 +50,8 @@
 //   - the prompt carries the outline and a pinned id          -> an NPC or a
 //     LOCATION part (by which prompt the system message is)
 //   - TRIGGER.threeScenes  -> the outline has three scenes, no npc, no location
+//   - TRIGGER.twoScenes    -> the default outline plus a second scene that
+//     names no new npc and no new location
 //   - TRIGGER.partFail:<nonce> -> the middle scene fails its whole FIRST
 //     ROUND for that nonce — the initial call AND the correction turn the
 //     server spends on it — and succeeds from the second round on. That is
@@ -290,6 +292,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const knowledge = knowledgeBlock(prompt);
   const oldName = source.includes(TRIGGER.oldName);
   const three = source.includes(TRIGGER.threeScenes);
+  const two = source.includes(TRIGGER.twoScenes);
   const asciiQuotes = source.includes(TRIGGER.asciiQuotes);
   // Only the PARTS are late; the outline answers at once, so the run reaches
   // `running` with its parts still pending.
@@ -368,6 +371,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
             source,
             knowledge,
             three,
+            two,
             oldName,
             asciiQuotes,
             // The context's own line, as a model reads it.

@@ -276,16 +276,35 @@ export const generatorJobErrorSchema = z.strictObject({
 
 export type GeneratorJobError = z.infer<typeof generatorJobErrorSchema>;
 
-/** What the DM decided about one proposed npc or location. */
-export const generateReviewDecisionSchema = z.enum(["accepted", "rejected"]);
+/**
+ * What the DM decided about one proposed npc or location that is not
+ * written: it is rejected. Accepting a proposal writes it, so an accepted one
+ * is in `writtenNpcs` or `writtenLocations`, not here.
+ */
+export const generateReviewDecisionSchema = z.enum(["rejected"]);
 
 export type GenerateReviewDecision = z.infer<typeof generateReviewDecisionSchema>;
+
+/**
+ * The stages the review of a scene run walks through, in reference order: a
+ * scene names npcs and locations, so every new location and every new npc is
+ * decided before the scenes that name them (decisions/generator).
+ */
+export const GENERATOR_REVIEW_STAGES = ["locations", "npcs", "scenes"] as const;
+export type GeneratorReviewStage = (typeof GENERATOR_REVIEW_STAGES)[number];
 
 /**
  * The review state of a job: what the DM DID with the proposals — a small
  * record of decisions, never a second copy of the result.
  */
 export const generatorJobReviewSchema = z.strictObject({
+  /**
+   * Scene run only: the stage the DM is in. A stage without proposals is
+   * skipped, and the app shows the scene stage only once every location and
+   * npc is decided — the stored value is where the DM went, the app decides
+   * what of it can be shown.
+   */
+  stage: z.enum(GENERATOR_REVIEW_STAGES),
   /** The ids of the proposed scenes the DM dropped from the run — never written. */
   droppedScenes: z.array(z.string()),
   /**
@@ -303,13 +322,14 @@ export const generatorJobReviewSchema = z.strictObject({
    */
   writtenScenes: z.array(z.string()),
   /**
-   * Decision per proposed npc, keyed by its id. A key that is absent is OPEN
-   * — the review's third state, which is why "open" is not a value here.
+   * Decision per proposed npc that is not written, keyed by its id. A key
+   * that is absent is OPEN — undecided, which is why "open" is not a value
+   * here.
    */
   npcs: z.record(z.string(), generateReviewDecisionSchema),
   /** The ids of the proposed npcs that are accepted — rows of the campaign now. */
   writtenNpcs: z.array(z.string()),
-  /** Decision per proposed location, keyed by its id. Absent is open, as in `npcs`. */
+  /** Decision per proposed location that is not written. Absent is open, as in `npcs`. */
   locations: z.record(z.string(), generateReviewDecisionSchema),
   /** The ids of the proposed locations that are accepted — rows of the campaign now. */
   writtenLocations: z.array(z.string()),
@@ -412,6 +432,7 @@ export type GeneratorJobCreate = z.infer<typeof generatorJobCreateSchema>;
  * The part of the review a PATCH may change. Every key merges into the stored
  * review, so the app sends the one decision that was just made:
  *
+ *   - `stage` replaces the stored one;
  *   - `npcs`, `locations`, `fields` and `blocks` merge key by key, and `null`
  *     takes a decision back — to undecided, and the only way to clear
  *     decisions whose keys no longer exist;
@@ -420,7 +441,9 @@ export type GeneratorJobCreate = z.infer<typeof generatorJobCreateSchema>;
  *   - `writtenScenes`, `writtenNpcs` and `writtenLocations` ACCEPT: every
  *     proposal they name is written into the campaign in this request and
  *     joins its list. A list only grows — an accepted proposal is a row of
- *     the campaign, not a decision to take back.
+ *     the campaign, not a decision to take back. A rejected npc or location
+ *     is accepted after all by taking its decision back (`null`) in the same
+ *     patch that names it here.
  */
 export const generatorJobReviewPatchSchema = generatorJobReviewSchema.partial().extend({
   fields: z.record(z.string(), z.boolean().nullable()).optional(),
@@ -512,6 +535,29 @@ export function openLocationIds(job: JobState): Set<string> {
           !job.review.writtenLocations.includes(id) && job.review.locations[id] !== "rejected",
       ),
   );
+}
+
+/**
+ * The npcs and locations of this run that `scene` names in its `npcs` and
+ * `location` fields and that are not written yet. A scene is written only
+ * once everything it names exists (decisions/generator); a `[[id]]` mention in
+ * its text is not a reference and does not count.
+ */
+export function unwrittenReferences(
+  job: JobState,
+  scene: { npcs: readonly string[]; location?: string | undefined },
+): { npcs: string[]; locations: string[] } {
+  const npcs = new Set(proposedNpcIds(job));
+  const locations = new Set((job.result?.locations ?? []).map((location) => location.id));
+  return {
+    npcs: scene.npcs.filter((id) => npcs.has(id) && !job.review.writtenNpcs.includes(id)),
+    locations:
+      scene.location !== undefined &&
+      locations.has(scene.location) &&
+      !job.review.writtenLocations.includes(scene.location)
+        ? [scene.location]
+        : [],
+  };
 }
 
 /**

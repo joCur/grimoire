@@ -159,6 +159,7 @@ test("a fresh job carries an empty review state and rev 0", async () => {
   const job = await runJob();
   expect(job.rev).toBe(0);
   expect(job.review).toEqual({
+    stage: "locations",
     droppedScenes: [],
     fields: {},
     blocks: {},
@@ -267,14 +268,15 @@ test("the review state comes back from the row — the round trip a restart make
   const started = await runJob();
   const job = await patch(started, {
     sceneEdits: { [SCENE_A]: { body: "survives" } },
-    review: { npcs: { [NPC_ID]: "accepted" }, droppedScenes: [SCENE_B] },
+    review: { stage: "npcs", npcs: { [NPC_ID]: "rejected" }, droppedScenes: [SCENE_B] },
   });
 
   // A restart is nothing but a fresh read of the row: the process keeps no
   // review state of its own, which is the whole point of the column.
   const again = await fetchJob();
   expect(again?.sceneEdits[SCENE_A]).toEqual({ body: "survives" });
-  expect(again?.review?.npcs[NPC_ID]).toBe("accepted");
+  expect(again?.review?.stage).toBe("npcs");
+  expect(again?.review?.npcs[NPC_ID]).toBe("rejected");
   expect(again?.review?.droppedScenes).toEqual([SCENE_B]);
   expect(again?.rev).toBe(job.rev);
 });

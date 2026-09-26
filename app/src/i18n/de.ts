@@ -370,6 +370,10 @@ export const de = {
     'Diese Szene kann nicht zurückgeholt werden, weil ihr Kapitel „{chapter}“ im Papierkorb liegt. Hol zuerst das Kapitel zurück.',
   "server.restore_blocked":
     "Das kann nicht zurückgeholt werden, solange {blockers} im Papierkorb {count, plural, one {liegt} other {liegen}}. Hol {count, plural, one {das} other {sie}} zuerst zurück.",
+  // A scene of a generator run is written only once every npc and location
+  // of the run it names exists. Nothing was written.
+  "server.proposal_not_written":
+    "Nicht geschrieben — diese Szene nennt einen NPC oder Ort des Laufs, der nicht angenommen ist. Nimm ihn zuerst an oder entferne ihn aus der Szene.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": 'das Kapitel „{name}“',
@@ -795,10 +799,9 @@ export const de = {
   "generate.review.pending": "{summary} · noch nichts geschrieben",
   "generate.review.pendingNpc": "1 NPC · noch nichts geschrieben",
   "generate.review.lead":
-    "Prüfen, anpassen, über vorgeschlagene NPCs und Orte einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Entwürfe, nie überschreibend.",
+    "Die Prüfung geht den Lauf in Schritten durch: erst die neuen Orte, dann die neuen NPCs, dann die Szenen. Jeder Vorschlag wird einzeln entschieden, und Annehmen schreibt genau diesen einen — nie überschreibend.",
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den NPC — bestehende NPCs werden nie überschrieben.",
-  "generate.review.stubsHeading": "Vorgeschlagene NPCs und Orte — einzeln entscheiden",
   // --- naming hints of the post-run check -----------------------------------
   // Deliberately NOT a warning: the check is a plain text search and the DM
   // decides. So the heading counts and the row states the finding plus where
@@ -817,7 +820,6 @@ export const de = {
   "generate.review.applyStale":
     "Nicht geschrieben — der Lauf hat sich geändert. Die Ansicht wird neu geladen.",
   "generate.review.discardFailed": "Nicht verworfen — Server prüfen.",
-  "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
   // --- generator: review state on the job ----------------------------------
   // Everything the DM does here is saved on the SERVER — the line says so
@@ -834,7 +836,8 @@ export const de = {
   "generate.review.partWritten": "Übernommen",
   "generate.review.drop": "Aus dem Lauf nehmen",
   "generate.review.undrop": "Wieder aufnehmen",
-  "generate.review.applyRest": "Rest übernehmen ({count})",
+  "generate.review.applyScenes":
+    "{count, plural, one {Die offene Szene übernehmen} other {Die # offenen Szenen übernehmen}}",
   "generate.review.discardRest": "Rest verwerfen",
   "generate.review.allDecided": "Alles entschieden.",
   "generate.review.plannedScene": "Geplante Szene",
@@ -888,9 +891,43 @@ export const de = {
   "generate.stub.reason.scenes": "aus {title} u. a.",
   "generate.stub.accept": "Annehmen",
   "generate.stub.reject": "Ablehnen",
-  "generate.stub.undo": "Entscheidung zurücknehmen",
-  "generate.stub.accepted": "Angenommen",
   "generate.stub.rejected": "Abgelehnt",
+  "generate.stub.acceptAnyway": "Doch annehmen",
+
+  // --- generator: the stages of a scene run's review ------------------------
+  // A scene names npcs and locations, so the review decides those first: the
+  // locations, then the npcs, then the scenes. A stage without proposals is
+  // skipped.
+  "generate.stage.nav": "Schritte der Prüfung",
+  "generate.stage.locations": "Orte",
+  "generate.stage.npcs": "NPCs",
+  "generate.stage.scenes": "Szenen",
+  "generate.stage.decided": "{decided} von {total} entschieden",
+  "generate.stage.locked":
+    "Die Szenen kommen, sobald jeder neue Ort und jeder neue NPC entschieden ist.",
+  "generate.stage.lead.locations":
+    "Der Lauf schlägt diese neuen Orte vor. Nimm jeden einzeln an oder lehne ihn ab — eine Szene kann nur an einem Ort spielen, den es gibt.",
+  "generate.stage.lead.npcs":
+    "Der Lauf schlägt diese neuen NPCs vor. Nimm jeden einzeln an oder lehne ihn ab — eine Szene kann nur einen NPC nennen, den es gibt.",
+  "generate.stage.lead.scenes":
+    "Jeder neue Ort und NPC ist entschieden. Eine Szene zu übernehmen schreibt diese Szene und sonst nichts.",
+  "generate.stage.open":
+    "{count, plural, one {# Vorschlag ist noch nicht entschieden.} other {# Vorschläge sind noch nicht entschieden.}}",
+  "generate.stage.next.npcs": "Weiter zu den NPCs",
+  "generate.stage.next.scenes": "Weiter zu den Szenen",
+  "generate.stage.back.locations": "Zurück zu den Orten",
+  "generate.stage.back.npcs": "Zurück zu den NPCs",
+
+  // --- generator: a scene that names a rejected proposal --------------------
+  "generate.incomplete.npc":
+    "Diese Szene nennt den NPC „{name}“, den du abgelehnt hast — es gibt ihn nicht, so kann die Szene nicht übernommen werden.",
+  "generate.incomplete.location":
+    "Diese Szene spielt am Ort „{name}“, den du abgelehnt hast — es gibt ihn nicht, so kann die Szene nicht übernommen werden.",
+  "generate.incomplete.acceptNpc": "{name} doch annehmen",
+  "generate.incomplete.removeNpc": "{name} aus der Szene entfernen",
+  "generate.incomplete.acceptLocation": "{name} doch annehmen",
+  "generate.incomplete.removeLocation": "Den Ort aus der Szene entfernen",
+  "generate.incomplete.drop": "Szene verwerfen",
 
   // --- generator: what was written (routes/generate.tsx) ------------------
   "generate.written.title.scene": "Geschrieben — alles als Entwurf",

@@ -336,7 +336,17 @@ The paths:
    404, a stale `rev` 409 with the current line, and the card says that the
    note was changed elsewhere; `review/seen` responds 404
 6. Generator cycle (stub LLM): job → review proposals → accept →
-   scene in the chapters; plus the 409/error path. A proposed scene is
+   scene in the chapters; plus the 409/error path. The review of a scene
+   run walks in stages (decisions/generator): the new locations, then the
+   new NPCs, then the scenes; a stage without proposals is skipped, and the
+   stage is stored on the job (`review.stage`). Each location and NPC is
+   accepted (written right away) or rejected on its own; the scene stage
+   opens only when both are decided, and going back stays possible.
+   Accepting a scene writes only that scene: one whose `npcs` or `location`
+   names an unwritten proposal of the run is 409 `proposal_not_written` and
+   writes nothing (a `[[id]]` in the text never blocks), and its card says
+   so in a whole sentence and offers to accept the proposal after all,
+   remove the reference, or drop the scene. A proposed scene is
    the scene without `rev` (`result.scenes`, decisions/resources): the edit
    action opens its fields and its text, the changed fields are saved per
    scene (`sceneEdits`), and the accept action writes them over the model's

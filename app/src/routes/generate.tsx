@@ -5,11 +5,14 @@
 //           a live id preview) + source text + the context hint
 //   working the spinner while the SERVER's job runs (correction turns happen
 //           inside that job, generator/README.md)
-//   review  the proposed scenes of a finished job: rendered through the SAME
-//           markdown pipeline as a real scene, editable in the fields and on
-//           the surfaces the scene itself is edited with (the scene's slice,
-//           scene/SceneProposalCard.tsx), proposed npcs and locations
-//           accepted/rejected one by one. NOTHING is written yet.
+//   review  what a job proposes, in stages (decisions/generator): first the
+//           new locations, then the new npcs, each accepted — which writes
+//           it — or rejected on its own, then the scenes, rendered through
+//           the SAME markdown pipeline as a real scene and editable in the
+//           fields and on the surfaces the scene itself is edited with (the
+//           scene's slice, scene/SceneProposalCard.tsx). A scene that names
+//           a rejected npc or location says so on its card and offers the
+//           ways out (generator-job/SceneReferenceNotice.tsx).
 //   done    what the accept wrote — the scenes as drafts
 //
 // An augment run is the campaign's one job as well, but it is reviewed at
@@ -42,8 +45,9 @@
 //
 // Local state is only what the server cannot know: the current edit buffers
 // (mirrored into the job, debounced, so they survive too), which cards are
-// in edit mode, and what a finished accept wrote. The decisions live on the
-// job (review.npcs, review.locations).
+// in edit mode, and what a finished accept wrote. The decisions and the
+// stage the review is in live on the job (review.npcs, review.locations,
+// review.stage).
 
 import type { LocationProposal } from "@grimoire/shared/location";
 import type { NpcProposal } from "@grimoire/shared/npc";
@@ -52,6 +56,7 @@ import {
   isGeneratorJobSettled,
   type GeneratorJob,
   type GeneratorJobPart,
+  type GeneratorReviewStage,
   type GenerateResult,
   type NamingHint,
 } from "@grimoire/shared/generator-job";
@@ -69,12 +74,20 @@ import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { serverErrorBodyMessage, serverErrorMessage, useT, type Translate } from "@/i18n";
 import {
+  serverErrorBodyMessage,
+  serverErrorMessage,
+  useT,
+  type MessageKey,
+  type Translate,
+} from "@/i18n";
+import {
+  acceptableScenes,
   applySummary,
   augmentTarget,
   augmentTargetName,
   contextHint,
+  currentStage,
   knowledgeHint,
   generatePhase,
   runJobArrived,
@@ -93,9 +106,12 @@ import {
   partsStillRunning,
   pipelineCostLabel,
   pipelineProgress,
+  rejectedReferences,
   restoredMode,
   reviewOf,
+  reviewStages,
   sceneState,
+  sceneWritable,
   stringField,
   stringList,
   usageLabel,
@@ -118,6 +134,8 @@ import {
 import { GeneratorJobPartCard } from "@/generator-job/GeneratorJobPartCard";
 import { GeneratorJobWorking } from "@/generator-job/GeneratorJobWorking";
 import { jobHref } from "@/generator-job/job-links";
+import { ReviewStageNav, ReviewStageSteps } from "@/generator-job/ReviewStages";
+import { SceneReferenceNotice } from "@/generator-job/SceneReferenceNotice";
 import { useJobReview } from "@/generator-job/use-job-review";
 import { cn } from "@/lib/utils";
 import { LocationProposalRow } from "@/location/LocationProposalRow";
@@ -290,11 +308,7 @@ export function GenerateRoute() {
   // The proposed npcs and locations are their own lists (decisions/resources), decided
   // and accepted by id.
   const proposedNpcs = result?.npcs ?? [];
-  const acceptedNpcs = proposedNpcs.filter((npc) => reviewState.npcs[npc.id] === "accepted");
   const proposedLocations = result?.locations ?? [];
-  const acceptedLocations = proposedLocations.filter(
-    (location) => reviewState.locations[location.id] === "accepted",
-  );
   /**
    * One proposed scene as the review shows it: what the run produced, with
    * the job's stored change and then the local buffer laid over it.
@@ -309,13 +323,26 @@ export function GenerateRoute() {
   /** What is still reviewable — the accept-all and discard actions work on it. */
   const rest = openScenes(job);
   const progress = jobProgress(job);
-  const openProposedScenes = scenes.filter((scene) => sceneState(job, scene.id) === "open");
-  const openAcceptedNpcs = acceptedNpcs.filter((npc) => npcState(job, npc.id) === "open");
-  const openAcceptedLocations = acceptedLocations.filter(
-    (location) => locationState(job, location.id) === "open",
-  );
+  /** The open scenes the scene stage's accept action writes. */
+  const acceptable = acceptableScenes(job);
   const restNpcs = openNpcs(job);
   const restLocations = openLocations(job);
+  // The stages of the review: which one is shown is the job's stored stage,
+  // corrected for what can be shown (generator-job-state.ts `currentStage`).
+  const stages = reviewStages(job);
+  const stage = currentStage(job);
+  /** The stage section — the focus goes there when the DM changes the stage. */
+  const stageSection = useRef<HTMLElement>(null);
+  const [stageMoved, setStageMoved] = useState(false);
+  const goToStage = (next: GeneratorReviewStage): void => {
+    setStageMoved(true);
+    review.decide({ stage: next });
+  };
+  useEffect(() => {
+    if (!stageMoved) return;
+    setStageMoved(false);
+    stageSection.current?.focus();
+  }, [stage, stageMoved]);
 
   const start = useMutation({
     mutationFn: () =>
@@ -354,12 +381,12 @@ export function GenerateRoute() {
   });
 
   /**
-   * Accepting. ONE write for both buttons and both modes, the job's PATCH:
-   * without a selection it names everything that is still open (the
-   * accepted npcs and locations included, an undecided one not); with one
-   * it names exactly that part and leaves the rest reviewable. The answer is
-   * the job the write leaves — settled once nothing is open, which is what
-   * ends the review.
+   * Accepting. ONE write for every accept action and both modes, the job's
+   * PATCH: without a selection it names what the run's accept action writes
+   * (`openSelection`: the open scenes whose references are written, or the
+   * NPC run's npc); with one it names exactly that part and leaves the rest
+   * reviewable. The answer is the job the write leaves — settled once
+   * nothing is open, which is what ends the review.
    */
   const apply = useMutation({
     mutationFn: async (selection?: AcceptSelection) => {
@@ -390,7 +417,8 @@ export function GenerateRoute() {
         return;
       }
       // Any OTHER 409 says the run moved on: a part that is not open any
-      // more. Nothing was written — re-read and say so in one line.
+      // more, or a scene that names a proposal that is not written. Nothing
+      // was written — re-read and say so in one line.
       if (error instanceof ApiError && error.status === 409) {
         void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       }
@@ -498,7 +526,8 @@ export function GenerateRoute() {
 
   const parts = jobPipelineParts(job);
   const sceneParts = parts.filter((part) => part.kind === "scene");
-  const proposalParts = parts.filter((part) => part.kind !== "scene");
+  const locationParts = parts.filter((part) => part.kind === "location");
+  const npcParts = parts.filter((part) => part.kind === "npc");
   const running = partsStillRunning(job);
   /**
    * Hand the focus to the card that NOW represents the retried part — after
@@ -537,31 +566,30 @@ export function GenerateRoute() {
     part.kind === "location"
       ? proposedLocations.find((location) => location.id === part.id)
       : undefined;
-  /** Npcs and locations in the result that no PART accounts for (see the list below). */
+  /** Npcs and locations in the result that no PART accounts for (see the lists below). */
   const unclaimedNpcs = proposedNpcs.filter(
-    (npc) => !proposalParts.some((part) => part.kind === "npc" && part.id === npc.id),
+    (npc) => !npcParts.some((part) => part.id === npc.id),
   );
   const unclaimedLocations = proposedLocations.filter(
-    (location) =>
-      !proposalParts.some((part) => part.kind === "location" && part.id === location.id),
+    (location) => !locationParts.some((part) => part.id === location.id),
   );
 
-  /** One proposed npc of the run, decided and accepted by its id (decisions/resources). */
+  /** One proposed npc of the run, accepted — written — or rejected by its id (decisions/resources). */
   const npcRow = (npc: NpcProposal, cardRef?: (el: HTMLElement | null) => void) => (
     <NpcProposalRow
       key={`npc:${npc.id}`}
       campaign={campaign}
       npc={npc}
       {...(cardRef === undefined ? {} : { cardRef })}
+      testId={`npc-proposal:${npc.id}`}
       reason={proposalReason(scenes, t)}
-      decision={reviewState.npcs[npc.id]}
       state={npcState(job, npc.id)}
       busy={apply.isPending}
-      onDecide={(decision) => review.decide({ npcs: { [npc.id]: decision ?? null } })}
+      onReject={() => review.decide({ npcs: { [npc.id]: "rejected" } })}
       onAccept={() => apply.mutate({ npcs: [npc.id] })}
     />
   );
-  /** One proposed location of the run, decided and accepted by its id (decisions/resources). */
+  /** One proposed location of the run, accepted — written — or rejected by its id (decisions/resources). */
   const locationRow = (
     location: LocationProposal,
     cardRef?: (el: HTMLElement | null) => void,
@@ -571,42 +599,95 @@ export function GenerateRoute() {
       campaign={campaign}
       location={location}
       {...(cardRef === undefined ? {} : { cardRef })}
+      testId={`location-proposal:${location.id}`}
       reason={proposalReason(scenes, t)}
-      decision={reviewState.locations[location.id]}
       state={locationState(job, location.id)}
       busy={apply.isPending}
-      onDecide={(decision) => review.decide({ locations: { [location.id]: decision ?? null } })}
+      onReject={() => review.decide({ locations: { [location.id]: "rejected" } })}
       onAccept={() => apply.mutate({ locations: [location.id] })}
     />
   );
-
-  /** One proposed scene of the run, edited, dropped and accepted by its id (decisions/resources). */
-  const sceneCard = (proposed: SceneProposal, cardRef?: (el: HTMLElement | null) => void) => (
-    <SceneProposalCard
-      key={proposed.id}
-      campaign={campaign}
-      scene={sceneFor(proposed)}
-      tree={tree.data}
-      state={sceneState(job, proposed.id)}
-      busy={apply.isPending}
-      editing={editing[proposed.id] === true}
-      {...(cardRef === undefined ? {} : { cardRef })}
-      onToggleEditing={() =>
-        setEditing((prev) => ({ ...prev, [proposed.id]: prev[proposed.id] !== true }))
-      }
-      onChange={(change) => editScene(proposed.id, change)}
-      // Leaving a field is the last cheap moment to be sure.
-      onFlush={review.flush}
-      onAccept={() => apply.mutate({ scenes: [proposed.id] })}
-      onDrop={() =>
-        review.decide({
-          droppedScenes: reviewState.droppedScenes.includes(proposed.id)
-            ? reviewState.droppedScenes.filter((id) => id !== proposed.id)
-            : [...reviewState.droppedScenes, proposed.id],
-        })
-      }
+  /** The status card of a part that has no proposal to show yet. */
+  const partCard = (part: GeneratorJobPart, cardRef: (el: HTMLElement | null) => void) => (
+    <GeneratorJobPartCard
+      key={part.key}
+      part={part}
+      // A part that says `done` and has no proposal in the result is a
+      // broken run, not a waiting one.
+      mismatch={part.status === "done"}
+      busy={retryBusy(part.key)}
+      error={retryError(part.key)}
+      cardRef={cardRef}
+      onRetry={() => retry.mutate(part.key)}
     />
   );
+  /** Drop a proposed scene from the run, or put it back. */
+  const toggleDrop = (id: string): void =>
+    review.decide({
+      droppedScenes: reviewState.droppedScenes.includes(id)
+        ? reviewState.droppedScenes.filter((dropped) => dropped !== id)
+        : [...reviewState.droppedScenes, id],
+    });
+  /**
+   * Take a rejected npc or location out of a proposed scene — a change of
+   * the scene like every other, sent at once. The card's editor is closed:
+   * it was seeded with the reference and would put it back.
+   */
+  const removeReference = (scene: SceneProposal, kind: "npc" | "location", id: string): void => {
+    editScene(
+      scene.id,
+      kind === "npc" ? { npcs: scene.npcs.filter((npc) => npc !== id) } : { location: null },
+    );
+    setEditing((prev) => ({ ...prev, [scene.id]: false }));
+    void review.flush();
+  };
+
+  /**
+   * One proposed scene of the run, edited, dropped and accepted by its id
+   * (decisions/resources). It is accepted only once every npc and location of
+   * the run it names is written; one that names a rejected proposal says so
+   * on its card.
+   */
+  const sceneCard = (proposed: SceneProposal, cardRef?: (el: HTMLElement | null) => void) => {
+    const shown = sceneFor(proposed);
+    const open = sceneState(job, proposed.id) === "open";
+    const missing = rejectedReferences(job, shown);
+    return (
+      <SceneProposalCard
+        key={proposed.id}
+        campaign={campaign}
+        scene={shown}
+        tree={tree.data}
+        state={sceneState(job, proposed.id)}
+        busy={apply.isPending}
+        editing={editing[proposed.id] === true}
+        {...(cardRef === undefined ? {} : { cardRef })}
+        acceptBlocked={!sceneWritable(job, shown)}
+        notice={
+          open && job !== null ? (
+            <SceneReferenceNotice
+              job={job}
+              missing={missing}
+              busy={apply.isPending}
+              onAccept={(kind, id) =>
+                apply.mutate(kind === "npc" ? { npcs: [id] } : { locations: [id] })
+              }
+              onRemove={(kind, id) => removeReference(shown, kind, id)}
+              onDrop={() => toggleDrop(proposed.id)}
+            />
+          ) : undefined
+        }
+        onToggleEditing={() =>
+          setEditing((prev) => ({ ...prev, [proposed.id]: prev[proposed.id] !== true }))
+        }
+        onChange={(change) => editScene(proposed.id, change)}
+        // Leaving a field is the last cheap moment to be sure.
+        onFlush={review.flush}
+        onAccept={() => apply.mutate({ scenes: [proposed.id] })}
+        onDrop={() => toggleDrop(proposed.id)}
+      />
+    );
+  };
 
   const applied = written !== undefined;
   // The window between the click and this run's job being readable is the
@@ -656,9 +737,12 @@ export function GenerateRoute() {
   const failedMessage = serverErrorBodyMessage(failed, t);
   const resultUsage = usageLabel(result?.usage ?? npcResult?.usage, t);
   // A write conflict names what is in the way: the chapter, the scenes, npcs
-  // and locations, each by its resource segment and id.
+  // and locations, each by its resource segment and id. It is the 409 without
+  // a code; a 409 with one says its own sentence.
   const conflicts =
-    apply.error instanceof ApiError && apply.error.status === 409
+    apply.error instanceof ApiError &&
+    apply.error.status === 409 &&
+    apply.error.details.code === undefined
       ? [
           ...stringList(apply.error.details.chapters).map(chapterLabel),
           ...stringList(apply.error.details.scenes).map(sceneLabel),
@@ -1057,63 +1141,61 @@ export function GenerateRoute() {
 
             <NamingHints hints={result?.namingHints} t={t} />
 
-            {/* The parts in OUTLINE order: a finished one is its
-                draft, an open one a status card, a failed one its error plus
-                its retry action. A run without parts — an older job — falls
-                back to the plain draft list below. */}
-            {sceneParts.map((part) => {
-              const scene = part.status === "done" ? sceneOfPart(part) : undefined;
-              if (scene === undefined) {
-                return (
-                  <GeneratorJobPartCard
-                    key={part.key}
-                    part={part}
-                    // A part that says `done` and has no draft in the result
-                    // is a broken run, not a waiting one.
-                    mismatch={part.status === "done"}
-                    busy={retryBusy(part.key)}
-                    error={retryError(part.key)}
-                    cardRef={(el) => partCards.current.set(part.key, el)}
-                    onRetry={() => retry.mutate(part.key)}
-                  />
-                );
-              }
-              return sceneCard(scene, (el) => partCards.current.set(part.key, el));
-            })}
+            <ReviewStageSteps stages={stages} current={stage} onGo={goToStage} />
 
-            {sceneParts.length === 0 &&
-              scenes.map((scene) => sceneCard(scene))}
+            <section
+              ref={stageSection}
+              tabIndex={-1}
+              data-testid="review-stage"
+              data-stage={stage}
+              aria-label={t(STAGE_LABEL[stage])}
+              className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            >
+              <p className="mb-[18px] text-[13.5px] leading-[1.6] text-body-secondary">
+                {t(STAGE_LEAD[stage])}
+              </p>
 
-            {(proposedNpcs.length > 0 ||
-              proposedLocations.length > 0 ||
-              proposalParts.length > 0) && (
-              <>
-                <div className={cn(OVERLINE, "mb-2.5")}>{t("generate.review.stubsHeading")}</div>
-                {proposalParts.map((part) => {
-                  const npc = part.status === "done" ? npcOfPart(part) : undefined;
-                  const location = part.status === "done" ? locationOfPart(part) : undefined;
-                  const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
-                  if (npc !== undefined) return npcRow(npc, cardRef);
-                  if (location !== undefined) return locationRow(location, cardRef);
-                  return (
-                    <GeneratorJobPartCard
-                      key={part.key}
-                      part={part}
-                      mismatch={part.status === "done"}
-                      busy={retryBusy(part.key)}
-                      error={retryError(part.key)}
-                      cardRef={cardRef}
-                      onRetry={() => retry.mutate(part.key)}
-                    />
-                  );
-                })}
-                {/* Npcs and locations no part claims: a run whose outline
-                    proposed nothing but whose SCENE replies carried them, and
-                    one whose part id drifted. */}
-                {unclaimedNpcs.map((npc) => npcRow(npc))}
-                {unclaimedLocations.map((location) => locationRow(location))}
-              </>
-            )}
+              {/* Each stage in OUTLINE order: a finished part is its
+                  proposal, an open one a status card, a failed one its error
+                  plus its retry action. */}
+              {stage === "locations" && (
+                <>
+                  {locationParts.map((part) => {
+                    const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                    const location = part.status === "done" ? locationOfPart(part) : undefined;
+                    return location === undefined ? partCard(part, cardRef) : locationRow(location, cardRef);
+                  })}
+                  {/* Locations no part claims: a run whose outline proposed
+                      none but whose scene replies carried them, and one whose
+                      part id drifted. */}
+                  {unclaimedLocations.map((location) => locationRow(location))}
+                </>
+              )}
+
+              {stage === "npcs" && (
+                <>
+                  {npcParts.map((part) => {
+                    const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                    const npc = part.status === "done" ? npcOfPart(part) : undefined;
+                    return npc === undefined ? partCard(part, cardRef) : npcRow(npc, cardRef);
+                  })}
+                  {unclaimedNpcs.map((npc) => npcRow(npc))}
+                </>
+              )}
+
+              {stage === "scenes" && (
+                <>
+                  {sceneParts.map((part) => {
+                    const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                    const scene = part.status === "done" ? sceneOfPart(part) : undefined;
+                    return scene === undefined ? partCard(part, cardRef) : sceneCard(scene, cardRef);
+                  })}
+                  {sceneParts.length === 0 && scenes.map((scene) => sceneCard(scene))}
+                </>
+              )}
+
+              <ReviewStageNav stages={stages} current={stage} onGo={goToStage} />
+            </section>
 
             {conflicts.length > 0 && (
               <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
@@ -1133,7 +1215,9 @@ export function GenerateRoute() {
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
                 {/* A refusal the server names — a run whose chapter is gone,
                     say — is its own sentence; everything else the review's. */}
-                {apply.error instanceof ApiError && apply.error.status === 409
+                {apply.error instanceof ApiError &&
+                apply.error.status === 409 &&
+                apply.error.details.code !== "proposal_not_written"
                   ? t("generate.review.applyStale")
                   : serverErrorMessage(apply.error, t, "generate.review.applyFailed")}
               </p>
@@ -1145,29 +1229,20 @@ export function GenerateRoute() {
             )}
 
             <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
-              {/* The accept-all action writes what is LEFT — the count follows
-                  the partial accepts instead of promising the whole run
-                  again. */}
-              <Button
-                type="button"
-                disabled={
-                  apply.isPending ||
-                  openProposedScenes.length +
-                    openAcceptedNpcs.length +
-                    openAcceptedLocations.length ===
-                    0
-                }
-                onClick={() => apply.mutate(undefined)}
-                className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
-              >
-                {t(progress.written === 0 ? "generate.review.apply" : "generate.review.applyRest", {
-                  count: applySummary(
-                    openProposedScenes.length,
-                    openAcceptedNpcs.length + openAcceptedLocations.length,
-                    t,
-                  ),
-                })}
-              </Button>
+              {/* The scene stage's accept action writes the open scenes that
+                  can be written — the count follows the partial accepts
+                  instead of promising the whole run again. */}
+              {stage === "scenes" && (
+                <Button
+                  type="button"
+                  data-testid="review-apply-scenes"
+                  disabled={apply.isPending || acceptable.length === 0}
+                  onClick={() => apply.mutate(undefined)}
+                  className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
+                >
+                  {t("generate.review.applyScenes", { count: acceptable.length })}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1251,6 +1326,20 @@ export function GenerateRoute() {
     </>
   );
 }
+
+/** The name of each stage, as its section is labelled. */
+const STAGE_LABEL: Record<GeneratorReviewStage, MessageKey> = {
+  locations: "generate.stage.locations",
+  npcs: "generate.stage.npcs",
+  scenes: "generate.stage.scenes",
+};
+
+/** What each stage asks of the DM. */
+const STAGE_LEAD: Record<GeneratorReviewStage, MessageKey> = {
+  locations: "generate.stage.lead.locations",
+  npcs: "generate.stage.lead.npcs",
+  scenes: "generate.stage.lead.scenes",
+};
 
 /**
  * The API has no reason field per proposal — the honest reason is the batch

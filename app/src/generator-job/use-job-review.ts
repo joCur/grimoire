@@ -98,6 +98,7 @@ function prune(patch: ReviewPatch): ReviewPatch {
   if (Object.keys(patch.npcEdits ?? {}).length > 0) out.npcEdits = patch.npcEdits;
   const decided = patch.review ?? {};
   const review: GeneratorJobReviewPatch = {};
+  if (decided.stage !== undefined) review.stage = decided.stage;
   if (Object.keys(decided.npcs ?? {}).length > 0) review.npcs = decided.npcs;
   if (Object.keys(decided.locations ?? {}).length > 0) review.locations = decided.locations;
   if (Object.keys(decided.fields ?? {}).length > 0) review.fields = decided.fields;
