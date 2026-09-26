@@ -1,4 +1,4 @@
---> The open threads of a chapter become a list of rows (ADR #26, #29).
+--> The open threads of a chapter become a list of rows (ADR #29).
 -->
 --> A new table and the list's own guard counter on the chapter, and no data
 --> step: the list starts empty. An existing `## Offene Fäden` section stays

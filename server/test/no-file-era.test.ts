@@ -371,7 +371,7 @@ const RULES: readonly Rule[] = [
   {
     // The app's own parser: it read a session's log back out of the rendered
     // text, so a note had to satisfy a grammar to keep its time and its
-    // scene. The session endpoints answer rows (ADR #26), so there is nothing
+    // scene. The session endpoints answer rows (ADR #31), so there is nothing
     // left to parse and nothing left to lose in the round trip.
     id: "log-line-parser",
     pattern: /\bparseLogEntries\b/,

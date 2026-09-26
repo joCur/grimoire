@@ -885,7 +885,7 @@ test("the session page shows a past evening's rows; the old address is gone", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
   // The old ENTRY address of the same session answers 404 — no redirect, no
-  // alias (ADR #26). Assembled from its segments rather than spelled out: a
+  // alias (ADR #22). Assembled from its segments rather than spelled out: a
   // literal address here would read like one the app still uses.
   const address = ["sessions", "2026-01-15"].join("/");
   const res = await api.fetch(`campaigns/beispiel/entries/${address}`);

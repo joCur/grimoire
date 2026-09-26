@@ -8,9 +8,9 @@
 // there is no watcher to wait for.
 //
 // And what the index HOLDS: campaign, chapters, scenes, npcs, locations and the
-// glossary terms. The campaign, a chapter, a scene, an npc and a location are
-// each their own resource (ADR #31) and a glossary term a row of a list
-// (ADR #26), so every hit carries `kind` and `id` and no address — the palette
+// glossary terms. The campaign, a chapter, a scene, an npc, a location and a
+// glossary term are each their own resource (ADR #31), so every hit carries
+// `kind` and `id` and no address — the palette
 // opens the campaign's route (the chapter overview), the chapter's, the
 // scene's, the npc's and the location's route and the glossary page.
 // Sessions and ideas are not indexed at all, so no query can produce one.

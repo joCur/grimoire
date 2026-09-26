@@ -37,7 +37,7 @@ interface TreeResponse {
   chapters: { id: string; title: string; scenes: { path?: string; id: string; title: string }[] }[];
   npcs: { id: string; path?: string }[];
   locations: { id: string }[];
-  /** A session SUMMARY — id and timestamps, no address (ADR #26). */
+  /** A session SUMMARY — id and timestamps, no address (ADR #31). */
   sessions: { id: string; started: string }[];
 }
 

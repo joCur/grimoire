@@ -743,7 +743,7 @@ test("Ort and Kapitel have the form too — the campaign brings its own", async 
     await expect(page.getByRole("dialog")).toHaveCount(0);
   }
 
-  // The lists have no reading view (ADR #26), so there is none on which a
+  // The lists have no reading view (ADR #31), so there is none on which a
   // form could be missing.
 
   // The campaign's route is the chapter overview, and its one edit action in
