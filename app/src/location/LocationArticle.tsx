@@ -20,13 +20,10 @@ import { locationExcerpt } from "./location-excerpt";
 export function LocationArticle({
   location,
   actions,
-  body,
 }: {
   location: Location;
   /** The header's quiet action slot — the route owns the actions. */
   actions?: ReactNode;
-  /** Replaces the rendered text — edit mode puts its editor here. */
-  body?: ReactNode;
 }) {
   const t = useT();
   const { resolve } = useRefs();
@@ -47,7 +44,7 @@ export function LocationArticle({
           </p>
         )}
       </header>
-      {body ?? <Markdown>{location.body}</Markdown>}
+      <Markdown>{location.body}</Markdown>
     </article>
   );
 }

@@ -193,7 +193,7 @@ export const de = {
 
   // Field labels/hints/placeholders — a scene's (scene/SceneFields.tsx), a
   // chapter's (chapter/ChapterFields.tsx), an npc's (npc/NpcFields.tsx) and a
-  // location's (location/LocationFields.tsx)
+  // location's (location/LocationEditMode.tsx)
   "properties.scene.title.label": "Titel",
   "properties.scene.type.label": "Typ",
   "properties.scene.type.planned": "Geplante Szene",
@@ -231,7 +231,6 @@ export const de = {
   "properties.npc.motivation.hint":
     "Was die Figur will — die NPC-Karte und die Vorschau zeigen es. [[id]] erscheint dort als Name.",
 
-  "properties.location.name.label": "Name",
   "properties.location.chapter.label": "Kapitel",
   "properties.location.roll20.label": "Roll20-Seite",
   "properties.location.roll20.hint": "Verweis auf die Page, keine Karten-Kopie.",
@@ -637,8 +636,6 @@ export const de = {
   // --- body editor (components/BodyEditor.tsx) ------------------------------
   "bodyEditor.markdown.aria": "Markdown-Text von {path}",
   "bodyEditor.hint": "Nur der Textkörper — die Eigenschaften bleiben unverändert.",
-  "bodyEditor.hint.withFields":
-    "Textkörper und {fields} — die übrigen Eigenschaften bleiben unverändert.",
   "bodyEditor.blocked": "Ein Block muss noch geklärt werden — siehe Hinweis am Block.",
   "bodyEditor.discard.title": "Änderungen verwerfen?",
   "bodyEditor.discard.description":
@@ -975,6 +972,14 @@ export const de = {
   "npcEdit.chapter.none": "Kein Kapitel",
   "npcEdit.profile.title": "Steckbrief",
   "npcEdit.profile.empty": "Der Steckbrief ist noch leer.",
+
+  // --- edit mode of a location (location/LocationEditMode.tsx)
+  // Field labels and hints are the shared `properties.location.*`.
+  "locationEdit.heading": "Ort bearbeiten",
+  "locationEdit.name.aria": "Name des Orts",
+  "locationEdit.blocked.name": "Ein Ort braucht einen Namen.",
+  "locationEdit.chapter.none": "Kein Kapitel",
+  "locationEdit.atmosphere.empty": "Die Atmosphäre ist noch nicht beschrieben.",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} ist keine NPC-Kennung, deshalb gibt es dazu keinen NPC.",

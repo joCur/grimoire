@@ -22,14 +22,10 @@
 // actions in the page header) puts only the surface into its layout and
 // reads what blocks a save from `useDraftIssues`.
 //
-// What the DM sees stays the same page: the header (title, chips, status
-// control) keeps standing, only the body below it becomes editable. Beside
-// the text the surface carries the PROSE FIELDS its caller puts there — an
-// npc's `motivation`, a location's `atmosphere` (decisions/data-shape): prose the cards
-// show, written where prose is written. They share the row's one guard
-// (decisions/writes), so a save is ONE write of whatever changed, and a forced save
-// resends exactly that. Every other field stays with the status control and
-// the dialog.
+// What the DM sees stays the same page: the header (title, status control)
+// keeps standing, only the body below it becomes editable. A save writes the
+// text alone, so a forced save resends only the text (decisions/writes); every
+// other field stays with the status control and the dialog.
 //
 // Losing work is the one real risk here, so:
 //   * a conflict (409) keeps the draft and puts the shared conflict line under
@@ -142,18 +138,9 @@ export function useDraftIssues(draft: ComposerDraft): Record<string, string> {
   );
 }
 
-/** The prose fields beside the text: their controls, labels, and what changed in them. */
-export interface BodyEditFields<F extends object> {
-  controls: ReactNode;
-  /** The fields' labels, for the hint under the editor. */
-  labels: readonly string[];
-  /** The change of the fields that moved — empty when none did. */
-  change: F;
-}
-
 /** What the surface needs from the editing session behind it. */
-export interface BodyEditSession<F extends object = Record<string, unknown>> {
-  save: (change: BodyEditChange<F>) => void;
+export interface BodyEditSession {
+  save: (change: BodyEditChange) => void;
   isSaving: boolean;
   message?: string | undefined;
   /** Present while a write stands refused — the conflict line shows. */
@@ -166,8 +153,8 @@ export interface BodyEditSession<F extends object = Record<string, unknown>> {
 
 /**
  * The framed text surface: the mode switch, the preview toggle of the raw
- * surface, the caller's toolbar actions and the prose fields, over the block
- * composer or the textarea.
+ * surface and the caller's toolbar actions, over the block composer or the
+ * textarea.
  */
 export function BodyEditorSurface({
   editorKey,
@@ -175,7 +162,6 @@ export function BodyEditorSurface({
   draft: state,
   issues,
   actions,
-  fields,
 }: {
   /** What the DOM ids are built from — unique per edited row. */
   editorKey: string;
@@ -186,8 +172,6 @@ export function BodyEditorSurface({
   issues: Record<string, string>;
   /** The caller's actions at the right end of the toolbar. */
   actions?: ReactNode;
-  /** The prose fields' controls, above the text. */
-  fields?: ReactNode;
 }) {
   const t = useT();
   const { draft, setDraft } = state;
@@ -215,9 +199,6 @@ export function BodyEditorSurface({
       }
       actions={actions}
     >
-      {fields !== undefined && (
-        <div className="mt-3.5 flex flex-col gap-3.5 border-b border-border pb-4">{fields}</div>
-      )}
       {draft.mode === "blocks" ? (
         <BlockComposer
           blocks={draft.blocks}
@@ -241,13 +222,12 @@ export function BodyEditorSurface({
 
 /**
  * The editing surface itself, the same on every reading view: the text on
- * two surfaces over one draft, the prose fields beside it, save and cancel in
- * its toolbar, the conflict line and the discard guard.
+ * two surfaces over one draft, save and cancel in its toolbar, the conflict
+ * line and the discard guard.
  */
-export function BodyEditor<F extends object>({
+export function BodyEditor({
   editorKey,
   label,
-  fields,
   draft: state,
   session: edit,
   onClose,
@@ -256,14 +236,12 @@ export function BodyEditor<F extends object>({
   editorKey: string;
   /** How the surface is named for assistive technology. */
   label: string;
-  /** The prose fields beside the text, when the row has any. */
-  fields?: BodyEditFields<F>;
   draft: BodyDraft;
-  session: BodyEditSession<F>;
+  session: BodyEditSession;
   onClose: () => void;
 }) {
   const t = useT();
-  const write = bodyEditorChange(state.baseline, state.body, fields?.change);
+  const write = bodyEditorChange(state.baseline, state.body);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const { isSaving, message } = edit;
   const dirty = hasBodyEditChange(write);
@@ -283,7 +261,6 @@ export function BodyEditor<F extends object>({
         label={label}
         draft={state}
         issues={issues}
-        fields={fields?.controls}
         actions={
           <>
             <Button
@@ -309,9 +286,7 @@ export function BodyEditor<F extends object>({
       />
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-[12px] text-faint">
-          {fields === undefined
-            ? t("bodyEditor.hint")
-            : t("bodyEditor.hint.withFields", { fields: fields.labels.join(", ") })}
+          {t("bodyEditor.hint")}
         </p>
         {/* A write error wins the line; without one it says why the save
             button is dead, because a disabled button next to a card-level hint

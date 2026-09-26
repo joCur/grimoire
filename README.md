@@ -48,9 +48,9 @@ most recent session.
 The `id` is derived from the typed name on creation, by exactly one rule
 (`@grimoire/shared/slug`), and is fixed from then on: it is the reference
 key in URLs, links and `[[id]]` references and never changes afterwards
-([decisions/constraints](docs/decisions/constraints.md)). The fields dialog of a location or a chapter shows it
-without offering a change; the edit modes of a scene and an NPC have no id
-field at all.
+([decisions/constraints](docs/decisions/constraints.md)). The fields dialog of a chapter shows it
+without offering a change; the edit modes of a scene, an NPC and a location
+have no id field at all.
 
 The chapter overview is one continuous list of a chapter's scenes in the
 **order the DM sets** ([decisions/scene-order](docs/decisions/scene-order.md)); the location appears by its name in the
@@ -366,10 +366,12 @@ Fixture and generator proposal are the location without `rev`. Augmenting
 hangs on the location: `POST …/locations/<id>/augment` starts the run, `POST
 …/locations/<id>/augment/apply` accepts it.
 
-In the app a location's fields are edited in its fields dialog;
-`atmosphere`, like an NPC's `motivation`, is maintained on the text editing
-surface, next to the Markdown, and an `[[id]]` in it appears as a name.
-Without `atmosphere` the location card shows the Roll20 page.
+In the app a location is edited in the edit mode of its reading view: name,
+`body` and every other field on one page, saved together as one write.
+Chapter and Roll20 page are chips; `atmosphere` is a collapsible section of
+its own. An `[[id]]` in `atmosphere` appears as the current name when shown,
+like in the text — a display, not a reference. Without `atmosphere` the
+location card shows the Roll20 page.
 
 Text sections are free; recommended: `## Beim ersten Betreten` (with
 `[!readaloud]`), `## Wer ist hier` (characters at the place, with the id as

@@ -207,7 +207,6 @@ export const en: Messages = {
   "properties.npc.motivation.hint":
     "What the character wants — the NPC card and the preview show it. [[id]] reads as a name there.",
 
-  "properties.location.name.label": "Name",
   "properties.location.chapter.label": "Chapter",
   "properties.location.roll20.label": "Roll20 page",
   "properties.location.roll20.hint": "A reference to the page, not a copy of the map.",
@@ -578,7 +577,6 @@ export const en: Messages = {
   // --- body editor (components/BodyEditor.tsx) ------------------------------
   "bodyEditor.markdown.aria": "Markdown text of {path}",
   "bodyEditor.hint": "The body only — the properties stay unchanged.",
-  "bodyEditor.hint.withFields": "The body and {fields} — the other properties stay unchanged.",
   "bodyEditor.blocked": "One block still needs a decision — see the note on the block.",
   "bodyEditor.discard.title": "Discard changes?",
   "bodyEditor.discard.description":
@@ -860,6 +858,13 @@ export const en: Messages = {
   "npcEdit.chapter.none": "No chapter",
   "npcEdit.profile.title": "Profile",
   "npcEdit.profile.empty": "The profile is still empty.",
+
+  // --- edit mode of a location (location/LocationEditMode.tsx) --------------
+  "locationEdit.heading": "Edit location",
+  "locationEdit.name.aria": "Location name",
+  "locationEdit.blocked.name": "A location needs a name.",
+  "locationEdit.chapter.none": "No chapter",
+  "locationEdit.atmosphere.empty": "The atmosphere is not described yet.",
 
   // --- the aside cards (npc/NpcCard.tsx, location/LocationCard.tsx) ---------
   "npcCard.noId": "{id} is not an NPC ID, so there is no NPC for it.",
