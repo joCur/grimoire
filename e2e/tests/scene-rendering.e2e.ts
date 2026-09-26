@@ -271,7 +271,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/holm$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
   // And it is editable from here like every other npc.
-  await expect(page.getByRole("button", { name: ui("properties.action") })).toBeVisible();
+  await expect(page.getByRole("button", { name: ui("common.edit"), exact: true })).toBeVisible();
 });
 
 test("a scene location is a REFERENCE: a location that exists, or a 400", async ({ page, api }) => {

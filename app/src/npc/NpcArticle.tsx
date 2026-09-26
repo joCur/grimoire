@@ -22,13 +22,10 @@ import { npcStatusLabel } from "./npc-status";
 export function NpcArticle({
   npc,
   actions,
-  body,
 }: {
   npc: Npc;
   /** The header's quiet action slot — the route owns the actions. */
   actions?: ReactNode;
-  /** Replaces the rendered text — edit mode puts its editor here. */
-  body?: ReactNode;
 }) {
   const t = useT();
   const { resolve } = useRefs();
@@ -79,7 +76,7 @@ export function NpcArticle({
           </p>
         )}
       </header>
-      {body ?? <Markdown>{npc.body}</Markdown>}
+      <Markdown>{npc.body}</Markdown>
     </article>
   );
 }
