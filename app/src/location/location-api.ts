@@ -2,7 +2,8 @@
 // create, write — its write conflict, and the augment run on it. Built from
 // the shared HTTP helpers (../api.ts).
 
-import type { GenerateJobStarted, Location, LocationPatch } from "@grimoire/shared/types";
+import type { Location, LocationPatch } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   ApiError,
@@ -91,14 +92,14 @@ export function createLocation(
 
 /**
  * Start an augment run on a location, on the location's own resource — the
- * same job model as every other run (`startJob`); the proposal is fetched via
- * fetchGenerateJob (`kind: "location-augment"`, `locationAugmentResult`).
+ * same job model as every other run (`startJob`); the proposal is read
+ * on the job (`kind: "location-augment"`, `locationAugmentResult`).
  */
 export function startLocationAugmentJob(
   campaign: string,
   id: string,
   input: { sourceText?: string; instruction?: string },
-): Promise<GenerateJobStarted> {
+): Promise<GeneratorJob> {
   return startJob(`${locationsUrl(campaign, id)}/augment`, runTexts(input));
 }
 

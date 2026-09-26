@@ -35,6 +35,7 @@ import {
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getChapter } from "../support/chapter";
+import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation, locationExists } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
@@ -148,14 +149,8 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // The run's proposed scenes, npcs and locations are each their own typed
   // list (ADR #31): the scene, the npc and the location themselves, no kind,
   // no path, no properties map.
-  const run = await api.get<{
-    result: {
-      scenes: Array<Record<string, unknown>>;
-      npcs: Array<Record<string, unknown>>;
-      locations: Array<Record<string, unknown>>;
-    };
-  }>("campaigns/beispiel/generate/job");
-  expect(run.result.scenes).toEqual([
+  const run = (await getGeneratorJob(api)).result!;
+  expect(run.scenes).toEqual([
     expect.objectContaining({
       id: SCENE_ID,
       title: SCENE_TITLE,
@@ -164,13 +159,13 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
       status: "draft",
     }),
   ]);
-  expect(run.result.npcs).toEqual([
+  expect(run.npcs).toEqual([
     expect.objectContaining({ id: NPC_STUB_ID, name: NPC_STUB_NAME, status: "alive" }),
   ]);
-  expect(run.result.locations).toEqual([
+  expect(run.locations).toEqual([
     expect.objectContaining({ id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME }),
   ]);
-  for (const proposal of [...run.result.scenes, ...run.result.npcs, ...run.result.locations]) {
+  for (const proposal of [...run.scenes, ...run.npcs, ...run.locations]) {
     for (const key of ["kind", "path", "properties", "rev"]) {
       expect(Object.keys(proposal)).not.toContain(key);
     }
@@ -179,14 +174,14 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
     // travel apart.
     expect(Object.values(proposal)).not.toContain(null);
   }
-  expect(Object.keys(run.result.npcs[0]!).sort()).toEqual([
+  expect(Object.keys(run.npcs[0]!).sort()).toEqual([
     "body",
     "id",
     "motivation",
     "name",
     "status",
   ]);
-  expect(Object.keys(run.result.locations[0]!).sort()).toEqual([
+  expect(Object.keys(run.locations[0]!).sort()).toEqual([
     "atmosphere",
     "body",
     "id",
@@ -255,7 +250,9 @@ test("the review appears as soon as the job is done — even with the start requ
   page,
 }) => {
   let released = false;
-  const start = page.route("**/api/campaigns/*/generate", async (route) => {
+  // Only the start is held; the polls of the same list go through untouched.
+  const start = page.route("**/api/campaigns/*/generator-jobs", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
     const response = await route.fetch();
     const body = await response.text();
     await new Promise((resolve) => setTimeout(resolve, 8_000));
@@ -372,17 +369,13 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   // The run's npc is the npc itself (ADR #31) — no properties map, no `null`
   // — and the DM's change travels as an npc edit by id, the one field that
   // was touched; a scene edit is something else.
-  const job = await api.get<{
-    npcResult: { npc: Record<string, unknown> };
-    npcEdits: Record<string, Record<string, unknown>>;
-    sceneEdits: Record<string, unknown>;
-  }>("campaigns/beispiel/generate/job");
-  expect(job.npcResult.npc).toMatchObject({ id: "brakk", name: NPC_DEFAULT_NAME, status: "alive" });
+  const job = await getGeneratorJob(api);
+  expect(job.npcResult!.npc).toMatchObject({ id: "brakk", name: NPC_DEFAULT_NAME, status: "alive" });
   for (const key of ["kind", "path", "properties", "rev"]) {
-    expect(Object.keys(job.npcResult.npc)).not.toContain(key);
+    expect(Object.keys(job.npcResult!.npc)).not.toContain(key);
   }
-  expect(Object.values(job.npcResult.npc)).not.toContain(null);
-  expect(job.npcResult.npc.motivation).toBe(NPC_MOTIVATION);
+  expect(Object.values(job.npcResult!.npc)).not.toContain(null);
+  expect(job.npcResult!.npc.motivation).toBe(NPC_MOTIVATION);
   expect(Object.keys(job.npcEdits)).toEqual(["brakk"]);
   expect(job.npcEdits.brakk).toMatchObject({ motivation: edited });
   expect(job.sceneEdits).toEqual({});
@@ -507,9 +500,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   await expect(page.getByText("Gespeichert")).toBeVisible();
 
   // The job row carries the scene's change under its id, field by field.
-  const stored = await api.get<{ sceneEdits: Record<string, SceneEdit> }>(
-    "campaigns/beispiel/generate/job",
-  );
+  const stored = await getGeneratorJob(api);
   expect(stored.sceneEdits[SCENE_ID]).toMatchObject({ title: EDITED_TITLE });
   expect(stored.sceneEdits[SCENE_ID]!.body).toContain("Die Flut zieht sich im Regen");
 
@@ -541,9 +532,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
   // Accepted is a decision, not a write.
   expect(await npcExists(api, NPC_STUB_ID)).toBe(false);
-  const decided = await api.get<{ review: { npcs: Record<string, string> } }>(
-    "campaigns/beispiel/generate/job",
-  );
+  const decided = await getGeneratorJob(api);
   expect(decided.review.npcs).toEqual({ [NPC_STUB_ID]: "accepted" });
 
   // (4) Accepting the scene writes the scene AND the accepted npc and
@@ -567,7 +556,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect((await getNpc(api, NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
   expect((await getLocation(api, LOCATION_STUB_ID)).name).toBe(LOCATION_STUB_NAME);
   // Nothing is left open, so the job is gone.
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
 });
 
 // An edit sets the fields it names and leaves every other one the model's.
@@ -634,10 +623,8 @@ async function runAndOpenDraftEditor(page: Page): Promise<Locator> {
 
 /** The proposed scene as the RUN produced it — the job's result, not the edits. */
 async function generatedScene(api: Api): Promise<Record<string, unknown> & { body: string }> {
-  const job = await api.get<{
-    result: { scenes: Array<Record<string, unknown> & { id: string; body: string }> };
-  }>("campaigns/beispiel/generate/job");
-  return job.result.scenes.find((scene) => scene.id === SCENE_ID)!;
+  const job = await getGeneratorJob(api);
+  return job.result!.scenes.find((scene) => scene.id === SCENE_ID)!;
 }
 
 async function generatedSceneBody(api: Api): Promise<string> {
@@ -652,9 +639,7 @@ async function generatedSceneFields(api: Api): Promise<Record<string, unknown>> 
 
 /** The stored change of the proposed scene. */
 async function storedSceneEdit(api: Api): Promise<SceneEdit> {
-  const job = await api.get<{ sceneEdits: Record<string, SceneEdit> }>(
-    "campaigns/beispiel/generate/job",
-  );
+  const job = await getGeneratorJob(api);
   return job.sceneEdits[SCENE_ID]!;
 }
 
@@ -705,9 +690,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
     "href",
     `/campaigns/beispiel/npcs/${NPC_STUB_ID}`,
   );
-  const partial = await api.get<{ review: { writtenNpcs: string[] } }>(
-    "campaigns/beispiel/generate/job",
-  );
+  const partial = await getGeneratorJob(api);
   expect(partial.review.writtenNpcs).toEqual([NPC_STUB_ID]);
 
   await page.getByRole("button", { name: "Rest verwerfen" }).click();
@@ -716,7 +699,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   expect((await getNpc(api, NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
   expect(await locationExists(api, LOCATION_STUB_ID)).toBe(false);
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
 });
 
 // Critical path 6: start a run into a new chapter → leave the page → come

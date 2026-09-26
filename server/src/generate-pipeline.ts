@@ -41,7 +41,7 @@
 
 import {
   SCENE_TYPES,
-  type GenerateJobPart,
+  type GeneratorJobPart,
   type GenerateUsage,
   type LocationProposal,
   type NamingHint,
@@ -652,7 +652,7 @@ export interface PipelineSink {
    * it, and neither has anything but the row to read it from. It is never
    * serialized to the client (PipelineRecord).
    */
-  outlineReady(outline: RunOutline, parts: GenerateJobPart[], usage: PartUsage): Promise<void>;
+  outlineReady(outline: RunOutline, parts: GeneratorJobPart[], usage: PartUsage): Promise<void>;
   partRunning(key: string): Promise<void>;
   partDone(key: string, outcome: PartOutcome, usage: PartUsage): Promise<void>;
   partFailed(
@@ -678,10 +678,10 @@ export function locationPartKey(id: string): string {
 }
 
 /** The parts an outline produces, in the order the review shows them. */
-export function outlineParts(outline: RunOutline): GenerateJobPart[] {
+export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
   return [
     ...outline.scenes.map(
-      (scene): GenerateJobPart => ({
+      (scene): GeneratorJobPart => ({
         key: scenePartKey(scene.id),
         kind: "scene",
         id: scene.id,
@@ -690,7 +690,7 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
       }),
     ),
     ...outline.npcs.map(
-      (npc): GenerateJobPart => ({
+      (npc): GeneratorJobPart => ({
         key: npcPartKey(npc.id),
         kind: "npc",
         id: npc.id,
@@ -699,7 +699,7 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
       }),
     ),
     ...outline.locations.map(
-      (location): GenerateJobPart => ({
+      (location): GeneratorJobPart => ({
         key: locationPartKey(location.id),
         kind: "location",
         id: location.id,
@@ -1082,7 +1082,7 @@ function excerptOf(plan: RunPlan, scene: OutlineScene): { text: string; matched:
  */
 export async function runPart(
   plan: RunPlan,
-  part: GenerateJobPart,
+  part: GeneratorJobPart,
   provider: LLMProvider,
   sink: PipelineSink,
 ): Promise<void> {
@@ -1136,7 +1136,7 @@ export function locationOf(outline: RunOutline, id: string): OutlineLocation {
 /** Run `parts` with at most PART_CONCURRENCY in flight; failures never stop siblings. */
 export async function runPartsPooled(
   plan: RunPlan,
-  parts: readonly GenerateJobPart[],
+  parts: readonly GeneratorJobPart[],
   provider: LLMProvider,
   sink: PipelineSink,
 ): Promise<void> {

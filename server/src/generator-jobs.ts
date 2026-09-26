@@ -1,18 +1,19 @@
-// Background generate jobs — a generation must not die with a
-// browser-back gesture, which is what happens when the run is one
-// synchronous request and the result lives only in client state.
+// The generator job (ADR #31, `GeneratorJob` in @grimoire/shared) — a
+// generation must not die with a browser-back gesture, which is what happens
+// when the run is one synchronous request and the result lives only in client
+// state.
 //
 // The model is deliberately small:
 //
 //   - ONE job per campaign — regardless of its KIND: a scene
 //     run and an NPC run share the store and the 409 gate, `kind` only says
 //     which result field is filled (and which UI mode to restore).
-//   - POST /generate validates as before, then starts a job and answers 202;
-//     the pipeline (./generator runGenerate) is untouched — same prompt, same
-//     validation, same correction turns, same 422 shaping.
-//   - a finished job KEEPS its result until it is applied, discarded or
-//     replaced by the next run, so navigation/reload/restart of the tab
-//     costs nothing.
+//   - `POST …/generator-jobs` (or an augment start on the resource it
+//     augments) checks the request, then starts a job and answers 202 with
+//     it; the run itself happens in the background.
+//   - a finished job KEEPS its result until every proposal is accepted,
+//     dropped or rejected, until it is discarded or until the next run
+//     replaces it, so navigation/reload/restart of the tab costs nothing.
 //   - review edits live in the job too — `sceneEdits` for the proposed
 //     scenes and `npcEdits` for the proposed npcs, one change per id — so an
 //     edited proposal survives the same way.
@@ -43,15 +44,24 @@
 
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { GENERATE_JOB_KINDS, npcChangeSchema, sceneChangeSchema } from "@grimoire/shared";
+import {
+  GENERATOR_JOB_KINDS,
+  isGeneratorJobSettled,
+  npcEditSchema,
+  openLocationIds,
+  openNpcIds,
+  openSceneIds,
+  proposedNpcIds,
+  sceneEditSchema,
+} from "@grimoire/shared";
 import type {
-  GenerateJob,
-  GenerateJobPart,
-  GenerateJobPipeline,
-  GenerateJobReview,
-  GenerateReviewDecision,
-  GenerateJobError,
-  GenerateJobKind,
+  GeneratorJob,
+  GeneratorJobPart,
+  GeneratorJobPatch,
+  GeneratorJobPipeline,
+  GeneratorJobReview,
+  GeneratorJobError,
+  GeneratorJobKind,
   GenerateNpcResult,
   GenerateResult,
   LocationAugmentResult,
@@ -79,14 +89,14 @@ import {
 import type { LLMProvider } from "./llm-provider";
 import type { SceneRunStart } from "./store/chapters";
 import { getDb } from "./store/handle";
-import { parseRequest } from "./store/shared";
+import { revConflict } from "./store/shared";
 
-/** Server-side job record. */
-interface Job {
+/** Server-side job record: the wire shape plus what only the server keeps. */
+export interface Job {
   id: string;
   campaign: string;
   /** Scene run or NPC run — still one job per campaign. */
-  kind: GenerateJobKind;
+  kind: GeneratorJobKind;
   /** Target chapter; only a scene run has one. */
   chapter?: string;
   /** Id of the scene a SCENE AUGMENT run works on. */
@@ -101,7 +111,7 @@ interface Job {
   sceneAugmentResult?: SceneAugmentResult;
   npcAugmentResult?: NpcAugmentResult;
   locationAugmentResult?: LocationAugmentResult;
-  error?: GenerateJobError;
+  error?: GeneratorJobError;
   startedAt: string;
   finishedAt?: string;
   /** The DM's changes to the proposed scenes, by scene id. */
@@ -109,7 +119,7 @@ interface Job {
   /** The DM's changes to the proposed npcs, by npc id. */
   npcEdits: Record<string, NpcChange>;
   /** The DM's review state — decisions, drops, written parts. */
-  review: GenerateJobReview;
+  review: GeneratorJobReview;
   /** Optimistic-concurrency token of that review state. */
   rev: number;
   /**
@@ -160,7 +170,7 @@ export interface PipelineRecord {
  * failed one, which is where the app has read it, but that is
  * one reply for a run with many parts.
  */
-export type StoredPart = GenerateJobPart & { usage?: PartUsage; rawReply?: string };
+export type StoredPart = GeneratorJobPart & { usage?: PartUsage; rawReply?: string };
 
 /** An empty pipeline — a run whose outline has not come back yet. */
 export function emptyPipeline(): PipelineRecord {
@@ -173,7 +183,7 @@ export function emptyPipeline(): PipelineRecord {
  * which the review shows with the chapter the accept will create. Deliberately
  * NOT the outline itself — see PipelineRecord.
  */
-function serializePipeline(pipeline: PipelineRecord): GenerateJobPipeline {
+function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
   const chapterDescription = pipeline.outline?.chapterDescription;
   return {
     ...(chapterDescription === undefined ? {} : { chapterDescription }),
@@ -207,7 +217,7 @@ function timestamp(): string {
  * rawReply/usage/validationErrors live), anything else is a real 500 and is
  * logged like an unexpected error, never swallowed.
  */
-function shapeError(err: unknown): GenerateJobError {
+function shapeError(err: unknown): GeneratorJobError {
   if (err instanceof ApiError) {
     return { status: err.status, body: { error: err.message, ...err.extra } };
   }
@@ -216,10 +226,9 @@ function shapeError(err: unknown): GenerateJobError {
 }
 
 /** The wire shape. */
-export function serializeJob(job: Job): GenerateJob {
+export function serializeJob(job: Job): GeneratorJob {
   return {
     id: job.id,
-    campaign: job.campaign,
     kind: job.kind,
     ...(job.chapter === undefined ? {} : { chapter: job.chapter }),
     ...(job.scene === undefined ? {} : { scene: job.scene }),
@@ -271,12 +280,6 @@ function unpackPayload<T>(value: string | null): T | undefined {
 }
 
 /**
- * What a review edit may change about a proposed scene: any of its fields but
- * the id, which is what the edit is keyed by (ADR #21).
- */
-const sceneEditSchema = sceneChangeSchema.omit({ id: true });
-
-/**
  * Parse the scene-edits column: one `SceneChange` per scene id, each checked
  * against the scene's schema. Like every other payload here it DEGRADES — a
  * value that is not a change is dropped rather than making the job
@@ -292,12 +295,6 @@ function unpackSceneEdits(value: string): Record<string, SceneChange> {
   }
   return edits;
 }
-
-/**
- * What a review edit may change about a proposed npc: any of its fields but
- * the id, which is what the edit is keyed by (ADR #21).
- */
-const npcEditSchema = npcChangeSchema.omit({ id: true });
 
 /**
  * Parse the npc-edits column: one `NpcChange` per npc id, each checked
@@ -317,7 +314,7 @@ function unpackNpcEdits(value: string): Record<string, NpcChange> {
 }
 
 /** The review state of a job that has not been touched yet. */
-export function emptyReview(): GenerateJobReview {
+export function emptyReview(): GeneratorJobReview {
   return {
     droppedScenes: [],
     fields: {},
@@ -346,7 +343,7 @@ function stringRecord<T>(value: unknown, pick: (v: unknown) => T | undefined): R
  * becomes "nothing decided yet" instead of making the job unreachable — the
  * decisions are cheap to redo, the generation is not.
  */
-function unpackReview(value: string): GenerateJobReview {
+function unpackReview(value: string): GeneratorJobReview {
   const parsed = unpackPayload<Record<string, unknown>>(value);
   if (parsed === undefined) return emptyReview();
   return {
@@ -377,9 +374,9 @@ export const UNREADABLE_PAYLOAD_MESSAGE =
   "Das Ergebnis dieses Durchlaufs ist nicht mehr lesbar. Verwirf den Job und starte ihn neu.";
 
 /** The kind of a stored job; anything unknown reads as a scene run. */
-function jobKind(value: string): GenerateJobKind {
-  return (GENERATE_JOB_KINDS as readonly string[]).includes(value)
-    ? (value as GenerateJobKind)
+function jobKind(value: string): GeneratorJobKind {
+  return (GENERATOR_JOB_KINDS as readonly string[]).includes(value)
+    ? (value as GeneratorJobKind)
     : "scene";
 }
 
@@ -397,7 +394,7 @@ function toJob(row: JobRow): Job {
     kind === "npc-augment" ? (proposal as NpcAugmentResult | undefined) : undefined;
   const locationAugmentResult =
     kind === "location-augment" ? (proposal as LocationAugmentResult | undefined) : undefined;
-  let error = unpackPayload<GenerateJobError>(row.error);
+  let error = unpackPayload<GeneratorJobError>(row.error);
   const pipeline = unpackPipeline(row.pipeline);
 
   // A finished job with nothing readable to show is degraded to `failed` with
@@ -552,7 +549,7 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
 
 /**
  * Start a run in the background. One job per campaign: while one is RUNNING
- * a second start is a 409 carrying the running job's id (the app adopts it
+ * a second start is a 409 carrying the running job (the app adopts it
  * instead of erroring). A finished job — done or failed — is simply replaced;
  * the DM asked for a new run.
  *
@@ -560,7 +557,7 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
  * arrive together cannot both win: the second finds the first row and gets
  * its 409, and the table holds at most one row per campaign at all times.
  *
- * The provider is passed in because POST /generate resolves it up front, so
+ * The provider is passed in because the start resolves it up front, so
  * "no provider configured" stays a synchronous 503 instead of becoming a
  * failed job.
  */
@@ -593,8 +590,8 @@ export async function startJob(input: JobInput): Promise<Job> {
     const tx = handle as unknown as GrimoireDb;
     const running = jobRow(tx, input.campaign);
     if (running !== undefined && running.status === "running") {
-      throw new ApiError(409, "a generate job is already running for this campaign", {
-        jobId: running.id,
+      throw new ApiError(409, "a generator job is already running for this campaign", {
+        generatorJob: serializeJob(toJob(running)),
       });
     }
     // Replace rather than update: a new run is a new job with a new id, and
@@ -691,7 +688,7 @@ export async function startJob(input: JobInput): Promise<Job> {
       try {
         await finish(job, { status: "failed", error: JSON.stringify(shapeError(err)) });
       } catch (finishErr) {
-        console.error("could not record the failed generate job", finishErr);
+        console.error("could not record the failed generator job", finishErr);
       }
     }
   })();
@@ -850,7 +847,7 @@ export function partsSettled(pipeline: PipelineRecord): boolean {
  * what the app's failure block renders — with the per-part messages as the
  * error list, since that is what went wrong.
  */
-function allPartsFailed(pipeline: PipelineRecord): GenerateJobError {
+function allPartsFailed(pipeline: PipelineRecord): GeneratorJobError {
   const errors: string[] = [];
   let lastRawReply: string | undefined;
   for (const part of pipeline.parts) {
@@ -1049,7 +1046,7 @@ export async function retryJobPart(
   // NOT running any more.
   const preread = jobRow(db, campaign);
   if (preread === undefined || preread.id !== jobId) {
-    throw new ApiError(404, "no generate job for this campaign");
+    throw noJob();
   }
   const prejob = toJob(preread);
   // The guards run TWICE: here, so a 404/409 costs no context read at all,
@@ -1072,7 +1069,7 @@ export async function retryJobPart(
     const tx = handle as unknown as GrimoireDb;
     const row = jobRow(tx, campaign);
     if (row === undefined || row.id !== jobId) {
-      throw new ApiError(404, "no generate job for this campaign");
+      throw noJob();
     }
     const job = toJob(row);
     const target = assertRetryable(job, key);
@@ -1135,84 +1132,83 @@ function assertRetryable(job: Job, key: string): StoredPart {
   return part;
 }
 
-// --- discard -----------------------------------------------------------------
+// --- one job by its id --------------------------------------------------------
 
-/** Discard the campaign's job (any status). False when there was none. */
-export async function deleteJob(campaign: string): Promise<boolean> {
-  const db = await getDb();
-  if (jobRow(db, campaign) === undefined) return false;
-  db.delete(generateJobs).where(eq(generateJobs.campaignId, campaign)).run();
-  return true;
+/** The 404 of a job that is not there. */
+function noJob(): ApiError {
+  return new ApiError(404, "no such generator job for this campaign");
 }
 
-// Discarding the job an apply came from is NOT here: it belongs to the same
-// transaction as the writes, so it lives in store/generated.ts
-// `writeGenerated`. A separate "delete if current" call after the write would
-// leave a window in which a crash kept a done job whose proposals were
-// already stored.
+/**
+ * The campaign's job under its id, or the 404 — for a campaign without a job
+ * and for an id that names a different one: a request for a run that was
+ * replaced must not land on its successor.
+ */
+export async function requireJob(campaign: string, jobId: string): Promise<Job> {
+  const job = await getJob(campaign);
+  if (job === undefined || job.id !== jobId) throw noJob();
+  return job;
+}
+
+/**
+ * The 409 of a stale guard: `code: "rev_conflict"`, the current `rev` and the
+ * job as it stands now under the name of its entity (ADR #31).
+ */
+export function jobConflict(job: Job): ApiError {
+  return revConflict(job.rev, "the generator job changed", {
+    generatorJob: serializeJob(job),
+  });
+}
+
+// --- discard -----------------------------------------------------------------
+
+/**
+ * Discard the campaign's job, whatever its status: a running run is
+ * abandoned and its result never lands (see `finish`). What an accept already
+ * wrote stays — it is a row of the campaign, not part of the job. `rev` is
+ * the guard the job was read with: a decision taken in another tab in between
+ * is a 409 carrying the job as it stands, and nothing is deleted.
+ */
+export async function deleteJob(campaign: string, jobId: string, rev: number): Promise<void> {
+  const db = await getDb();
+  db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) throw noJob();
+    if (row.rev !== rev) throw jobConflict(toJob(row));
+    tx.delete(generateJobs).where(eq(generateJobs.id, row.id)).run();
+  });
+}
+
+// Discarding the job an accept settles is NOT here: it belongs to the same
+// transaction as the writes (`markWrittenInTx`). A separate "delete if
+// current" call after the write would leave a window in which a crash kept a
+// job whose proposals were already stored.
 
 // --- review state ------------------------------------------------------------
 
 /**
- * What one `PATCH …/review` may change. Every field is OPTIONAL and MERGES:
- * the app sends the one decision the DM just made (or the text of the one
- * proposal they are typing in), never the whole state — so two half-finished
- * reviews of different parts cannot overwrite each other inside one rev.
+ * Store the review part of a `PATCH …/generator-jobs/:id` — the DM's changes
+ * to a proposal and their decisions. A patch that also ACCEPTS goes through
+ * `acceptJobParts` (./generator-job-accept.ts), which applies the same review
+ * part inside its write.
  *
- * A `sceneEdits` or `npcEdits` entry merges field by field onto the stored
- * change of that scene or npc, so a text edit keeps an earlier field edit;
- * `null` in it clears the field (see `withSceneChange`, `withNpcChange`).
- *
- * `droppedScenes` is the one exception: a set, sent whole, because "no longer
- * dropped" has to be expressible too. In `npcs`, `locations`, `fields` and
- * `blocks` a `null` value DELETES the key — back to undecided, and the only
- * way to clear decisions whose keys no longer exist (an augment re-alignment
- * cuts new block ids).
- */
-export interface ReviewPatch {
-  /** The DM's changes to a proposed scene, by its id. */
-  sceneEdits?: Record<string, unknown>;
-  /** The DM's changes to a proposed npc, by its id. */
-  npcEdits?: Record<string, unknown>;
-  /** The decision per proposed npc, by its id. */
-  npcs?: Record<string, GenerateReviewDecision | null>;
-  /** The decision per proposed location, by its id. */
-  locations?: Record<string, GenerateReviewDecision | null>;
-  droppedScenes?: string[];
-  fields?: Record<string, boolean | null>;
-  blocks?: Record<string, boolean | null>;
-}
-
-/**
- * Store a review patch on the job. The `rev` the client read
- * must still be the row's — a second tab that decided something first makes
- * this a 409 `rev_conflict` carrying the CURRENT rev, and the app reloads
- * the state instead of silently winning.
- *
- * 404 when the campaign has no job or when `jobId` names a different one: a
- * patch for a run that was replaced must not land on its successor.
+ * `rev` is the guard the client read: a second tab that decided something
+ * first makes this a 409 carrying the job as it stands, and nothing is
+ * written.
  */
 export async function patchJobReview(
   campaign: string,
   jobId: string,
-  rev: number,
-  patch: ReviewPatch,
+  patch: GeneratorJobPatch,
 ): Promise<Job> {
   const db = await getDb();
   return db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
     const row = jobRow(tx, campaign);
-    if (row === undefined || row.id !== jobId) {
-      throw new ApiError(404, "no generate job for this campaign");
-    }
-    if (row.rev !== rev) {
-      throw new ApiError(409, "the review state changed — reload before saving", {
-        code: "rev_conflict",
-        rev: row.rev,
-      });
-    }
+    if (row === undefined || row.id !== jobId) throw noJob();
     const job = toJob(row);
-    assertKnownProposals(job, patch);
+    if (row.rev !== patch.rev) throw jobConflict(job);
     applyReviewPatch(job, patch);
     tx.update(generateJobs)
       .set({
@@ -1227,66 +1223,68 @@ export async function patchJobReview(
   }) as Job;
 }
 
-/** The ids of the npcs a run proposes — a scene run's list, or the NPC run's one npc. */
-function proposedNpcIds(job: Job): Set<string> {
-  return new Set([
-    ...(job.result?.npcs ?? []).map((npc) => npc.id),
-    ...(job.npcResult === undefined ? [] : [job.npcResult.npc.id]),
-  ]);
-}
-
 /**
  * A scene, npc or location id the run never produced is a client bug, not
  * state to store: a typo would grow a key nothing would ever read again.
  */
-function assertKnownProposals(job: Job, patch: ReviewPatch): void {
+function assertKnownProposals(job: Job, patch: GeneratorJobPatch): void {
+  const review = patch.review ?? {};
   const sceneIds = new Set((job.result?.scenes ?? []).map((scene) => scene.id));
-  for (const id of [...Object.keys(patch.sceneEdits ?? {}), ...(patch.droppedScenes ?? [])]) {
+  for (const id of [
+    ...Object.keys(patch.sceneEdits ?? {}),
+    ...(review.droppedScenes ?? []),
+    ...(review.writtenScenes ?? []),
+  ]) {
     if (!sceneIds.has(id)) throw new ApiError(400, `unknown scene: ${id}`);
   }
-  const npcIds = proposedNpcIds(job);
-  for (const id of [...Object.keys(patch.npcEdits ?? {}), ...Object.keys(patch.npcs ?? {})]) {
+  const npcIds = new Set(proposedNpcIds(job));
+  for (const id of [
+    ...Object.keys(patch.npcEdits ?? {}),
+    ...Object.keys(review.npcs ?? {}),
+    ...(review.writtenNpcs ?? []),
+  ]) {
     if (!npcIds.has(id)) throw new ApiError(400, `unknown npc: ${id}`);
   }
-  for (const id of Object.keys(patch.locations ?? {})) {
-    if (job.result?.locations.some((location) => location.id === id) !== true) {
-      throw new ApiError(400, `unknown location: ${id}`);
-    }
+  const locationIds = new Set((job.result?.locations ?? []).map((location) => location.id));
+  for (const id of [...Object.keys(review.locations ?? {}), ...(review.writtenLocations ?? [])]) {
+    if (!locationIds.has(id)) throw new ApiError(400, `unknown location: ${id}`);
   }
 }
 
-/** Merge a patch into a job in memory (the transaction writes the result). */
-function applyReviewPatch(job: Job, patch: ReviewPatch): void {
-  for (const [id, raw] of Object.entries(patch.sceneEdits ?? {})) {
-    // Checked against the scene's schema: a field a scene does not have, a
-    // value of the wrong shape or an `id` is a 400 that names it.
-    const change = parseRequest(sceneEditSchema, raw, `scene edit "${id}"`);
+/**
+ * Merge the review part of a patch into a job in memory (the caller's
+ * transaction writes the result). A change to a proposal merges field by
+ * field onto the stored one, so a text edit keeps an earlier field edit; a
+ * decision merges key by key, `null` taking it back. The accepted lists are
+ * not merged here: only the write that accepts them adds to them.
+ */
+export function applyReviewPatch(job: Job, patch: GeneratorJobPatch): void {
+  assertKnownProposals(job, patch);
+  for (const [id, change] of Object.entries(patch.sceneEdits ?? {})) {
     job.sceneEdits[id] = { ...job.sceneEdits[id], ...change };
   }
-  for (const [id, raw] of Object.entries(patch.npcEdits ?? {})) {
-    // Checked against the npc's schema: a field an npc does not have, a
-    // value of the wrong shape or an `id` is a 400 that names it.
-    const change = parseRequest(npcEditSchema, raw, `npc edit "${id}"`);
+  for (const [id, change] of Object.entries(patch.npcEdits ?? {})) {
     job.npcEdits[id] = { ...job.npcEdits[id], ...change };
   }
-  for (const [id, decision] of Object.entries(patch.npcs ?? {})) {
+  const review = patch.review ?? {};
+  for (const [id, decision] of Object.entries(review.npcs ?? {})) {
     // `null` is undecided — the review's third state, which is why an
     // undo has to be expressible and is not just a missing key.
     if (decision === null) delete job.review.npcs[id];
     else job.review.npcs[id] = decision;
   }
-  for (const [id, decision] of Object.entries(patch.locations ?? {})) {
+  for (const [id, decision] of Object.entries(review.locations ?? {})) {
     if (decision === null) delete job.review.locations[id];
     else job.review.locations[id] = decision;
   }
-  if (patch.droppedScenes !== undefined) {
-    job.review.droppedScenes = [...new Set(patch.droppedScenes)];
+  if (review.droppedScenes !== undefined) {
+    job.review.droppedScenes = [...new Set(review.droppedScenes)];
   }
-  assignFlags(job.review.fields, patch.fields);
-  assignFlags(job.review.blocks, patch.blocks);
+  assignFlags(job.review.fields, review.fields);
+  assignFlags(job.review.blocks, review.blocks);
 }
 
-/** Merge boolean decisions; `null` deletes the key (see ReviewPatch). */
+/** Merge boolean decisions; `null` deletes the key. */
 function assignFlags(into: Record<string, boolean>, patch?: Record<string, boolean | null>): void {
   for (const [key, value] of Object.entries(patch ?? {})) {
     if (value === null) delete into[key];
@@ -1295,47 +1293,38 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
 }
 
 /**
- * Record a partial accept on the job — called INSIDE the write transaction
+ * Record an accept on the job — called INSIDE the write transaction
  * (store/generated.ts `writeGenerated`), so the job and the rows it produced
- * can never disagree after a crash: either both landed or neither did (the same
- * rule the whole-run apply follows).
+ * can never disagree after a crash: either both landed or neither did.
+ *
+ * The row is re-read HERE, and the patch's guard is checked against it: a
+ * job that MOVED or VANISHED since the accept planned throws, which rolls the
+ * whole write back. The review part of the patch is applied to this row, and
+ * the written proposals join the accepted lists.
  *
  * `sceneStart` is the start this accept TOOK — given only by the run's first
  * scene accept, and stored on the pipeline in the same commit as the scenes
  * it placed.
  *
- * Returns true when the job row was deleted because nothing is left open.
- *
- * `rev` is the review rev the client read.
- * The row is re-read HERE, inside the transaction. A job that MOVED (rev) or
- * VANISHED in the meantime throws, which rolls the whole write back — the
- * pre-read the accept planned with is then stale. Reporting a lost job as a
- * quiet `false` would commit the proposals while silently dropping the
- * bookkeeping that says they were written, so the next accept-all
- * would write them a second time.
+ * Answers the job as this write leaves it. When nothing is left open the row
+ * is deleted in the same commit, and the answer is the job as it ended.
  */
 export function markWrittenInTx(
   tx: GrimoireDb,
   campaign: string,
   jobId: string,
-  rev: number,
+  patch: GeneratorJobPatch,
   written: { scenes: readonly string[]; npcs: readonly string[]; locations: readonly string[] },
   sceneStart?: SceneRunStart,
-): boolean {
+): Job {
   const row = jobRow(tx, campaign);
-  if (row === undefined || row.id !== jobId) {
-    throw new ApiError(404, "no generate job for this campaign");
-  }
-  if (row.rev !== rev) {
-    throw new ApiError(409, "the review state changed — reload before accepting", {
-      code: "rev_conflict",
-      rev: row.rev,
-    });
-  }
+  if (row === undefined || row.id !== jobId) throw noJob();
   const job = toJob(row);
+  if (row.rev !== patch.rev) throw jobConflict(job);
+  applyReviewPatch(job, patch);
   // Openness is recomputed from the row THIS transaction sees, never from
   // the caller's pre-read: a part that was dropped or rejected in between
-  // must not be assigned `written`.
+  // must not be recorded as written.
   const openScenes = openSceneIds(job);
   const openNpcs = openNpcIds(job);
   const openLocations = openLocationIds(job);
@@ -1343,21 +1332,19 @@ export function markWrittenInTx(
     written.scenes.some((id) => !openScenes.has(id)) ||
     written.npcs.some((id) => !openNpcs.has(id)) ||
     written.locations.some((id) => !openLocations.has(id));
-  if (stale) {
-    throw new ApiError(409, "the review state changed — reload before accepting", {
-      code: "rev_conflict",
-      rev: row.rev,
-    });
-  }
+  if (stale) throw jobConflict(toJob(row));
   job.review.writtenScenes.push(...written.scenes);
   job.review.writtenNpcs.push(...written.npcs);
   job.review.writtenLocations.push(...written.locations);
-  if (jobIsSettled(job)) {
+  const next: Job = { ...job, rev: row.rev + 1 };
+  if (isGeneratorJobSettled(job)) {
     tx.delete(generateJobs).where(eq(generateJobs.id, row.id)).run();
-    return true;
+    return next;
   }
   tx.update(generateJobs)
     .set({
+      sceneEdits: JSON.stringify(job.sceneEdits),
+      npcEdits: JSON.stringify(job.npcEdits),
       review: JSON.stringify(job.review),
       rev: row.rev + 1,
       // Merged onto the stored column rather than re-serialized from the
@@ -1373,63 +1360,7 @@ export function markWrittenInTx(
     })
     .where(eq(generateJobs.id, row.id))
     .run();
-  return false;
-}
-
-/**
- * Which proposed scenes of a finished run are still OPEN, by id. The one
- * place that question is answered — the accept reads it INSIDE its
- * transaction so a decision made between the pre-read and the commit cannot
- * be written over.
- */
-export function openSceneIds(job: Job): Set<string> {
-  const written = new Set(job.review.writtenScenes);
-  const dropped = new Set(job.review.droppedScenes);
-  return new Set(
-    (job.result?.scenes ?? [])
-      .map((scene) => scene.id)
-      .filter((id) => !written.has(id) && !dropped.has(id)),
-  );
-}
-
-/** Which proposed npcs of a finished run are still OPEN, by id — the same question. */
-export function openNpcIds(job: Job): Set<string> {
-  return new Set(
-    [...proposedNpcIds(job)].filter(
-      (id) => !job.review.writtenNpcs.includes(id) && job.review.npcs[id] !== "rejected",
-    ),
-  );
-}
-
-/** Which proposed locations of a finished run are still OPEN, by id. */
-export function openLocationIds(job: Job): Set<string> {
-  return new Set(
-    (job.result?.locations ?? [])
-      .map((location) => location.id)
-      .filter(
-        (id) =>
-          !job.review.writtenLocations.includes(id) && job.review.locations[id] !== "rejected",
-      ),
-  );
-}
-
-/**
- * Is there anything left to decide? Every scene is written or dropped, and
- * every proposed npc and location — an NPC run's one npc among them — is
- * written or rejected. That question is what makes the job DISAPPEAR on its
- * own instead of leaving an empty review behind.
- */
-export function jobIsSettled(job: Job): boolean {
-  // A pipelined run with parts still pending, running or failed is NOT
-  // settled, however much of it the DM has accepted: deleting
-  // the row would throw away the outline every open part still needs.
-  if (job.pipeline !== undefined && job.pipeline.parts.length > 0) {
-    if (job.pipeline.parts.some((p) => p.status !== "done")) return false;
-  }
-  if (openSceneIds(job).size > 0) return false;
-  if (openNpcIds(job).size > 0) return false;
-  if (openLocationIds(job).size > 0) return false;
-  return true;
+  return next;
 }
 
 /** Test-only: drop every job row. */

@@ -1,13 +1,13 @@
 // What the boot does to generator jobs this server cannot honour any more:
 // a job that was RUNNING when the process died.
 //
-// Its own module, small on purpose: the job store (../generate-jobs.ts) needs
+// Its own module, small on purpose: the job store (../generator-jobs.ts) needs
 // the database handle (../store/handle.ts), and the handle needs this
 // function — putting it next to the job store would close that import
 // cycle. Everything here depends on the schema only.
 
 import { eq } from "drizzle-orm";
-import type { GenerateJobError } from "@grimoire/shared";
+import type { GeneratorJobError } from "@grimoire/shared";
 import type { GrimoireDb } from "./client";
 import { generateJobs } from "./schema";
 
@@ -21,7 +21,7 @@ import { generateJobs } from "./schema";
 export const RESTART_FAILURE_MESSAGE =
   "the server was restarted while the job was running — start the job again";
 
-export const RESTART_FAILURE: GenerateJobError = {
+export const RESTART_FAILURE: GeneratorJobError = {
   status: 503,
   body: { code: "job_restarted", error: RESTART_FAILURE_MESSAGE },
 };

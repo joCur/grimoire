@@ -1,43 +1,45 @@
-// Partial accept of a finished generator run.
+// Accepting what a generator run proposed — the `writtenScenes`,
+// `writtenNpcs` and `writtenLocations` of a `PATCH …/generator-jobs/:id`.
 //
 // Its own module and not part of generator.ts for one reason: it needs both
-// the proposal VALIDATION (generator.ts) and the JOB store (generate-jobs.ts),
-// and generate-jobs.ts already imports generator.ts to run the pipeline. A
+// the proposal VALIDATION (generator.ts) and the JOB store (generator-jobs.ts),
+// and generator-jobs.ts already imports generator.ts to run the pipeline. A
 // third module keeps that import graph a tree — the same split db/job-boot.ts
 // exists for.
 
 import {
   withNpcChange,
   withSceneChange,
+  type GeneratorJobPatch,
   type LocationProposal,
   type NpcProposal,
   type SceneProposal,
 } from "@grimoire/shared";
 import { ApiError } from "./api-error";
-import { getJob, markWrittenInTx, outlineSceneNumbers } from "./generate-jobs";
+import {
+  applyReviewPatch,
+  markWrittenInTx,
+  outlineSceneNumbers,
+  jobConflict,
+  patchJobReview,
+  requireJob,
+  type Job,
+} from "./generator-jobs";
 import { applyLocationItem, applyNpcItem, applySceneItem, jobChapterTarget } from "./generator";
 import { requireCampaign } from "./store/campaigns";
 import { sceneRunPos, takeSceneRunStart, type SceneRunStart } from "./store/chapters";
 import { writeGenerated, type ScenePlacement } from "./store/generated";
 
 /**
- * Accept PART of a finished run — the accept of one scene, npc or location,
- * and accept-all for whatever is left.
+ * Accept proposals of a run — every proposed scene, npc and location the
+ * patch names in `review.writtenScenes`, `writtenNpcs` and `writtenLocations`
+ * — together with the rest of the patch, the DM's changes and decisions:
  *
- * The whole-run apply (`applyGenerated`) stays exactly as it was; this is
- * the same write with a selection in front of it and different job
- * bookkeeping behind it:
- *
- *   selection   proposed scenes by id under `scenes`, proposed npcs by id
- *               under `npcs`, proposed locations by id under `locations`. All
- *               three absent is "accept all": every scene that is neither
- *               written nor dropped, plus the npcs and locations the DM
- *               ACCEPTED — an undecided one is not written by a bulk action,
- *               and a rejected one never is. The NPC run's one npc is
- *               written by a bulk action unless it was rejected: it is the
- *               whole run. Naming one explicitly is the one way an
- *               undecided npc or location gets written (the accept action on
- *               its row is the decision).
+ *   selection   exactly the named proposals. Naming one is the decision to
+ *               take it: an undecided npc or location is written, a dropped
+ *               scene or a rejected npc or location is not open and is a 409.
+ *               A proposal that is already written has nothing left to do (a
+ *               double click, a second tab) and is skipped.
  *               A SCENE CARRIES WHAT IT NAMES. A scene cannot be written
  *               while its `npcs`/`location` name nothing (ADR #19), so a
  *               selected scene pulls in the run's own npcs and locations for
@@ -54,33 +56,25 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  *               order. The start is the chapter's end at the FIRST scene
  *               accept, taken in that transaction and stored on the job in
  *               the same commit.
- *   job         the written parts are recorded ON the job in that same
- *               commit, and the row is deleted the moment nothing is left
- *               open. Discarding (DELETE …/job) therefore removes only the
- *               open rest — what was written is a row now, not a job.
+ *   job         the patch's review part and the written proposals are
+ *               recorded ON the job in that same commit, and the row is
+ *               deleted the moment nothing is left open. Discarding the job
+ *               therefore removes only the open rest — what was written is a
+ *               row now, not a job.
+ *
+ * Answers the job as the write leaves it — as it ended, when nothing is left
+ * open.
  */
 export async function acceptJobParts(
   campaign: string,
   jobId: string,
-  rev: number,
-  body: {
-    scenes?: unknown;
-    npcs?: unknown;
-    locations?: unknown;
-    chapter?: unknown;
-    chapterTitle?: unknown;
-  },
-): Promise<{
-  scenes: string[];
-  npcs: string[];
-  locations: string[];
-  jobDeleted: boolean;
-}> {
+  patch: GeneratorJobPatch,
+): Promise<Job> {
   await requireCampaign(campaign);
-  const job = await getJob(campaign);
-  if (job === undefined || job.id !== jobId) {
-    throw new ApiError(404, "no generate job for this campaign");
-  }
+  const job = await requireJob(campaign, jobId);
+  // The guard is checked binding inside the write; checked here too, a stale
+  // one costs no planning and gets the same answer.
+  if (job.rev !== patch.rev) throw jobConflict(job);
   // A RUNNING job is acceptable too, part by part: a
   // pipelined run stays `running` while parts are open, and the whole point
   // of the pipeline is that a finished part is reviewable and acceptable
@@ -95,6 +89,9 @@ export async function acceptJobParts(
     throw new ApiError(409, "this job has no finished part to accept");
   }
 
+  // The plan reads the job as the patch leaves it: a change to a proposal
+  // sent together with its accept is what gets written.
+  applyReviewPatch(job, patch);
   const review = job.review;
   const dropped = new Set(review.droppedScenes);
   /**
@@ -102,7 +99,7 @@ export async function acceptJobParts(
    * applied on top of the model's scene (`withSceneChange`) and checked
    * against the scene's schema like any other scene the accept writes.
    */
-  const sceneParts = new Map<string, { scene: SceneProposal; open: boolean; bulk: boolean }>();
+  const sceneParts = new Map<string, { scene: SceneProposal; open: boolean }>();
   job.result?.scenes.forEach((proposal, index) => {
     const open = !review.writtenScenes.includes(proposal.id) && !dropped.has(proposal.id);
     const change = job.sceneEdits[proposal.id];
@@ -112,7 +109,6 @@ export async function acceptJobParts(
         index,
       ),
       open,
-      bulk: open,
     });
   });
   /**
@@ -120,32 +116,25 @@ export async function acceptJobParts(
    * on top of the model's npc (`withNpcChange`) and checked against the
    * npc's schema like any other npc the accept writes.
    */
-  const npcParts = new Map<string, { npc: NpcProposal; open: boolean; bulk: boolean }>();
-  const addNpc = (proposal: NpcProposal, index: number, wholeRun: boolean): void => {
-    const decision = review.npcs[proposal.id];
-    const open = !review.writtenNpcs.includes(proposal.id) && decision !== "rejected";
+  const npcParts = new Map<string, { npc: NpcProposal; open: boolean }>();
+  const addNpc = (proposal: NpcProposal, index: number): void => {
+    const open =
+      !review.writtenNpcs.includes(proposal.id) && review.npcs[proposal.id] !== "rejected";
     const change = job.npcEdits[proposal.id];
     npcParts.set(proposal.id, {
       npc: applyNpcItem(change === undefined ? proposal : withNpcChange(proposal, change), index),
       open,
-      bulk: open && (wholeRun || decision === "accepted"),
     });
   };
-  job.result?.npcs.forEach((proposal, index) => addNpc(proposal, index, false));
-  if (job.npcResult !== undefined) addNpc(job.npcResult.npc, 0, true);
+  job.result?.npcs.forEach((proposal, index) => addNpc(proposal, index));
+  if (job.npcResult !== undefined) addNpc(job.npcResult.npc, 0);
   /** Every proposed location of this run, by its id. */
-  const locationParts = new Map<
-    string,
-    { location: LocationProposal; open: boolean; bulk: boolean }
-  >();
+  const locationParts = new Map<string, { location: LocationProposal; open: boolean }>();
   job.result?.locations.forEach((proposal, index) => {
-    const decision = review.locations[proposal.id];
-    const open = !review.writtenLocations.includes(proposal.id) && decision !== "rejected";
-    locationParts.set(proposal.id, {
-      location: applyLocationItem(proposal, index),
-      open,
-      bulk: open && decision === "accepted",
-    });
+    const open =
+      !review.writtenLocations.includes(proposal.id) &&
+      review.locations[proposal.id] !== "rejected";
+    locationParts.set(proposal.id, { location: applyLocationItem(proposal, index), open });
   });
 
   /**
@@ -171,30 +160,23 @@ export async function acceptJobParts(
   const chosenScenes = new Set<string>();
   const chosenNpcs = new Set<string>();
   const chosenLocations = new Set<string>();
-  const bulk = body.scenes === undefined && body.npcs === undefined && body.locations === undefined;
-  if (bulk) {
-    for (const [id, part] of sceneParts) if (part.bulk) chosenScenes.add(id);
-    for (const [id, part] of npcParts) if (part.bulk) chosenNpcs.add(id);
-    for (const [id, part] of locationParts) if (part.bulk) chosenLocations.add(id);
-  } else {
-    // An unknown id is a client bug worth seeing; an already WRITTEN one is
-    // not an error but has nothing left to do (a double click, a second tab)
-    // and is simply skipped.
-    for (const id of stringList(body.scenes, "scenes")) {
-      const part = sceneParts.get(id);
-      if (part === undefined) throw new ApiError(400, `unknown scene: ${id}`);
-      if (part.open) chosenScenes.add(id);
-    }
-    for (const id of stringList(body.npcs, "npcs")) {
-      const part = npcParts.get(id);
-      if (part === undefined) throw new ApiError(400, `unknown npc: ${id}`);
-      if (part.open) chosenNpcs.add(id);
-    }
-    for (const id of stringList(body.locations, "locations")) {
-      const part = locationParts.get(id);
-      if (part === undefined) throw new ApiError(400, `unknown location: ${id}`);
-      if (part.open) chosenLocations.add(id);
-    }
+  const selection = patch.review ?? {};
+  // An unknown id is a 400 (`applyReviewPatch`); an already WRITTEN one is
+  // skipped. One that is dropped or rejected cannot be written.
+  for (const id of selection.writtenScenes ?? []) {
+    const part = sceneParts.get(id)!;
+    if (part.open) chosenScenes.add(id);
+    else if (!review.writtenScenes.includes(id)) throw notOpen("scene", id);
+  }
+  for (const id of selection.writtenNpcs ?? []) {
+    const part = npcParts.get(id)!;
+    if (part.open) chosenNpcs.add(id);
+    else if (!review.writtenNpcs.includes(id)) throw notOpen("npc", id);
+  }
+  for (const id of selection.writtenLocations ?? []) {
+    const part = locationParts.get(id)!;
+    if (part.open) chosenLocations.add(id);
+    else if (!review.writtenLocations.includes(id)) throw notOpen("location", id);
   }
   for (const id of [...chosenScenes]) {
     const referenced = referencedOf(id);
@@ -222,22 +204,18 @@ export async function acceptJobParts(
     .map(([, part]) => part.scene);
   // A selection whose parts are ALL written already is a double click or a
   // second tab, not an error: the caller asked for a state that is the
-  // state, so it gets the honest empty answer.
-  // Only a BULK accept with nothing open left stays a 400 — there the caller
-  // named nothing and there was nothing, which is a client bug.
+  // state. What else the patch carries is stored as a review patch.
   if (scenes.length === 0 && npcs.length === 0 && locations.length === 0) {
-    if (!bulk) return { scenes: [], npcs: [], locations: [], jobDeleted: false };
-    throw new ApiError(400, "nothing to apply");
+    return patchJobReview(campaign, jobId, patch);
   }
 
   // The chapter comes first — the scenes live inside it. Idempotent:
   // an existing chapter yields null, so only the FIRST partial accept of a
   // new-chapter run actually creates it.
   //
-  // Decided from the JOB and not from the body: the review state is
-  // persistent, so the accept regularly happens in a browser that never saw
-  // the start form. The body fields remain an override.
-  const newChapter = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
+  // Decided from the JOB: the review state is persistent, so the accept
+  // regularly happens in a browser that never saw the start form.
+  const newChapter = await jobChapterTarget(campaign, job);
   /**
    * The run's start, stored or — at the first scene accept — taken inside
    * the write transaction. Reading the stored one off the pre-read job is
@@ -263,7 +241,7 @@ export async function acceptJobParts(
   const writtenScenes = scenes.map((scene) => scene.id);
   const writtenNpcs = npcs.map((npc) => npc.id);
   const writtenLocations = locations.map((location) => location.id);
-  let jobDeleted = false;
+  let accepted: Job | undefined;
   await writeGenerated(campaign, {
     ...(newChapter === null ? {} : { chapter: newChapter }),
     scenes,
@@ -272,25 +250,20 @@ export async function acceptJobParts(
     runChapters: job.chapter === undefined ? [] : [job.chapter],
     placeScene,
     onWritten: (tx) => {
-      jobDeleted = markWrittenInTx(
+      accepted = markWrittenInTx(
         tx,
         campaign,
         jobId,
-        rev,
+        patch,
         { scenes: writtenScenes, npcs: writtenNpcs, locations: writtenLocations },
         tookStart ? sceneStart : undefined,
       );
     },
   });
-  return { scenes: writtenScenes, npcs: writtenNpcs, locations: writtenLocations, jobDeleted };
+  return accepted!;
 }
 
-/** A request list of strings, or none; anything else is a 400 naming it. */
-function stringList(value: unknown, what: string): string[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new ApiError(400, `${what} must be an array of strings`);
-  }
-  return value as string[];
+/** The 409 of a proposal the DM dropped or rejected — it is not open to accept. */
+function notOpen(entity: string, id: string): ApiError {
+  return new ApiError(409, `the proposed ${entity} ${id} is dropped or rejected — it is not open`);
 }
-

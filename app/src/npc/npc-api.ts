@@ -2,11 +2,13 @@
 // write — its write conflict, the NPC run of the generator and the augment
 // run on it. Built from the shared HTTP helpers (../api.ts).
 
-import type { GenerateJobStarted, Npc, NpcPatch } from "@grimoire/shared/types";
+import type { Npc, NpcPatch } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   ApiError,
   campaignPath,
+  generatorJobsPath,
   getJson,
   postJson,
   runTexts,
@@ -92,18 +94,19 @@ export function createNpc(
 
 /**
  * Start an NPC run: source material in, ONE proposed npc out. Same job model
- * as the scene run (`startJob`); the result is fetched via fetchGenerateJob
- * (its `npcResult`).
+ * as the scene run (`startJob`); the proposal is read on the job (its
+ * `npcResult`).
  *
- * `id` is optional: empty means the model picks the id. A 409 WITHOUT a jobId
- * is the other collision — the pinned id's npc already holds something (never
- * overwritten).
+ * `id` is optional: empty means the model picks the id. A 409 WITHOUT a
+ * running job is the other collision — the pinned id's npc already holds
+ * something (never overwritten).
  */
 export function startGenerateNpcJob(
   campaign: string,
   input: { sourceText: string; id?: string },
-): Promise<GenerateJobStarted> {
-  return startJob(`${campaignPath(campaign)}/generate/npc`, {
+): Promise<GeneratorJob> {
+  return startJob(generatorJobsPath(campaign), {
+    kind: "npc",
     sourceText: input.sourceText,
     ...(input.id === undefined || input.id === "" ? {} : { id: input.id }),
   });
@@ -111,14 +114,14 @@ export function startGenerateNpcJob(
 
 /**
  * Start an augment run on an npc, on the npc's own resource — the same job
- * model as every other run (`startJob`); the proposal is fetched via
- * fetchGenerateJob (`kind: "npc-augment"`, `npcAugmentResult`).
+ * model as every other run (`startJob`); the proposal is read on the job
+ * (`kind: "npc-augment"`, `npcAugmentResult`).
  */
 export function startNpcAugmentJob(
   campaign: string,
   id: string,
   input: { sourceText?: string; instruction?: string },
-): Promise<GenerateJobStarted> {
+): Promise<GeneratorJob> {
   return startJob(`${npcsUrl(campaign, id)}/augment`, runTexts(input));
 }
 

@@ -1,8 +1,8 @@
 // Writing the review state back to the job.
 //
-// The review used to keep everything in component state; a navigation, a
-// reload or a second tab threw it away. Now the JOB is the state and this
-// module is the one place that writes to it:
+// The JOB is the review's state — a navigation, a reload or a second tab
+// comes back to it — and this module is the one place that writes to it
+// (`PATCH …/generator-jobs/:id`):
 //
 //   edits       of a proposed scene or npc, debounced (~600 ms)
 //               while the DM types, and FLUSHED before
@@ -13,7 +13,7 @@
 //               no question.
 //   decisions   immediately — one click, one request.
 //
-// Every patch carries the job's review `rev`. The answer IS the new job, so
+// Every patch carries the job's `rev`. The answer IS the new job, so
 // it seeds the query cache and the next patch is automatically current; a
 // 409 means another tab decided first, and then the job is re-read and the
 // status line says so instead of the DM's click silently winning.
@@ -30,9 +30,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GenerateJob, NpcChange, SceneChange } from "@grimoire/shared/types";
+import type { NpcChange, SceneChange } from "@grimoire/shared/types";
+import type {
+  GeneratorJob,
+  GeneratorJobReviewPatch,
+} from "@grimoire/shared/generator-job";
 
-import { ApiError, patchJobReview } from "@/api";
+import { ApiError, patchGeneratorJob } from "@/api";
 import { mergeEdits, mergeReviewPatch, type ReviewPatch } from "@/lib/generate";
 import { generateJobKey } from "@/lib/use-generate-job";
 
@@ -52,7 +56,7 @@ export interface JobReviewSync {
   /** A change of one proposed npc, by its id — debounced the same way. */
   editNpc: (id: string, change: NpcChange) => void;
   /** A decision — sent right away. */
-  decide: (patch: ReviewPatch) => void;
+  decide: (review: GeneratorJobReviewPatch) => void;
   /**
    * Send whatever is still pending now (blur, unmount, page hide) and
    * RESOLVE when it has landed. The accept action awaits this: the server
@@ -70,15 +74,19 @@ export interface JobReviewSync {
 }
 
 function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
+  const was = into.review ?? {};
+  const is = patch.review ?? {};
   return {
-    ...into,
-    ...patch,
     sceneEdits: mergeEdits(into.sceneEdits ?? {}, patch.sceneEdits),
     npcEdits: mergeEdits(into.npcEdits ?? {}, patch.npcEdits),
-    npcs: { ...into.npcs, ...patch.npcs },
-    locations: { ...into.locations, ...patch.locations },
-    fields: { ...into.fields, ...patch.fields },
-    blocks: { ...into.blocks, ...patch.blocks },
+    review: {
+      ...was,
+      ...is,
+      npcs: { ...was.npcs, ...is.npcs },
+      locations: { ...was.locations, ...is.locations },
+      fields: { ...was.fields, ...is.fields },
+      blocks: { ...was.blocks, ...is.blocks },
+    },
   };
 }
 
@@ -87,11 +95,14 @@ function prune(patch: ReviewPatch): ReviewPatch {
   const out: ReviewPatch = {};
   if (Object.keys(patch.sceneEdits ?? {}).length > 0) out.sceneEdits = patch.sceneEdits;
   if (Object.keys(patch.npcEdits ?? {}).length > 0) out.npcEdits = patch.npcEdits;
-  if (Object.keys(patch.npcs ?? {}).length > 0) out.npcs = patch.npcs;
-  if (Object.keys(patch.locations ?? {}).length > 0) out.locations = patch.locations;
-  if (Object.keys(patch.fields ?? {}).length > 0) out.fields = patch.fields;
-  if (Object.keys(patch.blocks ?? {}).length > 0) out.blocks = patch.blocks;
-  if (patch.droppedScenes !== undefined) out.droppedScenes = patch.droppedScenes;
+  const decided = patch.review ?? {};
+  const review: GeneratorJobReviewPatch = {};
+  if (Object.keys(decided.npcs ?? {}).length > 0) review.npcs = decided.npcs;
+  if (Object.keys(decided.locations ?? {}).length > 0) review.locations = decided.locations;
+  if (Object.keys(decided.fields ?? {}).length > 0) review.fields = decided.fields;
+  if (Object.keys(decided.blocks ?? {}).length > 0) review.blocks = decided.blocks;
+  if (decided.droppedScenes !== undefined) review.droppedScenes = decided.droppedScenes;
+  if (Object.keys(review).length > 0) out.review = review;
   return out;
 }
 
@@ -114,7 +125,7 @@ export interface ReviewQueueIo {
 export interface ReviewQueue {
   editScene: (id: string, change: SceneChange) => void;
   editNpc: (id: string, change: NpcChange) => void;
-  decide: (patch: ReviewPatch) => void;
+  decide: (review: GeneratorJobReviewPatch) => void;
   flush: () => Promise<void>;
 }
 
@@ -183,8 +194,8 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
   return {
     editScene: (id, change) => debounce({ sceneEdits: { [id]: change } }),
     editNpc: (id, change) => debounce({ npcEdits: { [id]: change } }),
-    decide: (patch) => {
-      pending = mergePatch(pending, patch);
+    decide: (review) => {
+      pending = mergePatch(pending, { review });
       void send();
     },
     flush: send,
@@ -193,7 +204,7 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
 
 export function useJobReview(
   campaign: string,
-  job: GenerateJob | null | undefined,
+  job: GeneratorJob | null | undefined,
   delayMs: number = REVIEW_DEBOUNCE_MS,
 ): JobReviewSync {
   const queryClient = useQueryClient();
@@ -211,7 +222,7 @@ export function useJobReview(
         {
           optimistic: (patch) => {
             const key = generateJobKey(target.current.campaign);
-            const before = queryClient.getQueryData<GenerateJob | null>(key);
+            const before = queryClient.getQueryData<GeneratorJob | null>(key);
             if (before === undefined || before === null) return undefined;
             const after = mergeReviewPatch(before, patch);
             queryClient.setQueryData(key, after);
@@ -219,7 +230,7 @@ export function useJobReview(
               // Only if nothing landed on top in the meantime — a later
               // patch's answer is fresher than our snapshot, and the failed
               // patch is retried anyway.
-              if (queryClient.getQueryData<GenerateJob | null>(key) === after) {
+              if (queryClient.getQueryData<GeneratorJob | null>(key) === after) {
                 queryClient.setQueryData(key, before);
               }
             };
@@ -228,8 +239,11 @@ export function useJobReview(
             const { campaign: forCampaign, jobId } = target.current;
             if (jobId === undefined) return;
             const key = generateJobKey(forCampaign);
-            const rev = queryClient.getQueryData<GenerateJob | null>(key)?.rev ?? 0;
-            queryClient.setQueryData(key, await patchJobReview(forCampaign, jobId, rev, patch));
+            const rev = queryClient.getQueryData<GeneratorJob | null>(key)?.rev ?? 0;
+            queryClient.setQueryData(
+              key,
+              await patchGeneratorJob(forCampaign, jobId, { rev, ...patch }),
+            );
           },
           reread: () => {
             void queryClient.invalidateQueries({

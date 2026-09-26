@@ -57,11 +57,20 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 - **Eine vorgeschlagene Szene des Generators ist die Szene ohne `rev`**
   (ADR #31) — auf der Leitung `result.scenes`, jede mit ihrer `id`, alle
   Felder flach. Änderungen des Prüfschritts reisen **je Szene und je Feld**:
-  `sceneEdits: { "<id>": { title?, …, body? } }` im Review-PATCH und am Job;
-  ein genanntes Feld ersetzt den Wert des Modells, `null` leert
+  `sceneEdits: { "<id>": { title?, …, body? } }` im `PATCH` des Jobs und am
+  Job; ein genanntes Feld ersetzt den Wert des Modells, `null` leert
   `trigger`/`location`, jedes andere Feld bleibt das des Modells. Verworfen
-  und geschrieben wird je `id` (`droppedScenes`, `writtenScenes`), das
-  Übernehmen nimmt `scenes: [<id>]`.
+  und geschrieben wird je `id` (`droppedScenes`, `writtenScenes`): das
+  Übernehmen ist derselbe `PATCH` mit `review.writtenScenes`,
+  `writtenNpcs` bzw. `writtenLocations` — die ids, die geschrieben werden.
+- **Der Generator-Job ist eine eigene Ressource** (ADR #31):
+  `…/generator-jobs` ist die Liste mit dem einen Job der Kampagne oder
+  keinem (`readGeneratorJob(api)`), `POST` startet einen Lauf und antwortet
+  202 mit dem Job selbst, `PATCH …/generator-jobs/<id> { rev, … }` prüft und
+  übernimmt, `PATCH …/parts/<key> { status: "running" }` startet einen
+  fehlgeschlagenen Teil neu, `DELETE …/generator-jobs/<id> { rev }` verwirft.
+  Die Helfer liegen in `support/generator-job.ts`. Die früheren Adressen
+  `…/generate`, `…/generate/job` und `…/generate/apply` sind ein 404.
 - **Eine Szene hat EINEN Schreibweg**: `PATCH …/scenes/<id>` mit
   `{ rev, force?, …Teilmenge der Felder }` (`patchScene`). Felder und
   Text zusammen sind **ein** Schreibvorgang gegen **einen** `rev` — ein
@@ -471,7 +480,8 @@ Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
 da (Ergebnis, `sceneEdits` je Szene und Feld) und wird mit dem bearbeiteten
 Titel und Text übernommen; ein **laufender** steht als `failed` mit
 „Server wurde während des Laufs neu gestartet — Job neu starten" statt als
-endloser Spinner.
+endloser Spinner, und die früheren Adressen `GET …/generate/job` und
+`POST …/generate/apply` antworten 404.
 
 `tests/generator-pipeline.e2e.ts` ist die **Pipeline-Hälfte** von Pfad 6
 die Pipeline: ein Lauf mit drei Szenen, von denen eine fehlschlägt — die anderen

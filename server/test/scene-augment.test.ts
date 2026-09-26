@@ -3,10 +3,10 @@
 // `POST …/scenes/:id/augment/apply` writes what the DM took.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { sceneToReply, type GenerateJob, type Scene, type SceneProposal } from "@grimoire/shared";
+import { sceneToReply, type GeneratorJob, type Scene, type SceneProposal } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setKnowledge } from "./support/knowledge-items";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests } from "../src/generator-jobs";
 import {
   MAX_CORRECTION_TURNS,
   campaignRefIds,
@@ -27,6 +27,7 @@ import {
   type LLMProvider,
 } from "../src/llm-provider";
 import { dropStore, seedStore } from "./support/store";
+import { jobsUrl, readJob } from "./support/generator-jobs";
 
 const CAMPAIGN = "beispiel";
 const SCENES = `/api/campaigns/${CAMPAIGN}/scenes`;
@@ -82,16 +83,23 @@ async function post(url: string, body: Record<string, unknown>): Promise<Respons
   });
 }
 
-async function currentJob(): Promise<GenerateJob> {
-  return (await (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+async function currentJob(): Promise<GeneratorJob> {
+  const job = await readJob(CAMPAIGN);
+  expect(job).not.toBeNull();
+  return job!;
 }
 
 /** Start a run on the scene and wait for the job to leave `running`. */
-async function runJob(body: Record<string, unknown>): Promise<GenerateJob> {
+async function runJob(body: Record<string, unknown>): Promise<GeneratorJob> {
   const res = await post(`${ARRIVAL}/augment`, body);
   expect(res.status).toBe(202);
+  // The answer is the job itself, naming the scene from the moment it starts.
+  const started = (await res.json()) as GeneratorJob;
+  expect(started.kind).toBe("scene-augment");
+  expect(started.scene).toBe("lighthouse-arrival");
   for (let i = 0; i < 200; i += 1) {
     const job = await currentJob();
+    expect(job.id).toBe(started.id);
     if (job.status !== "running") return job;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -152,7 +160,7 @@ describe("the prompt", () => {
 });
 
 describe("the run", () => {
-  test("202, and the job carries the scene as read and as proposed", async () => {
+  test("202 with the running job, and the finished job carries the scene as read and as proposed", async () => {
     const stored = await read();
     const body = `${stored.body}\n> [!secret] Der Spitzel sitzt in der Hafenwache.\n`;
     const fake = useFake([
@@ -201,9 +209,12 @@ describe("the run", () => {
     expect((await post(`${ARRIVAL}/augment`, { path: "x", instruction: "x" })).status).toBe(400);
     const unknown = await post(`${SCENES}/gibt-es-nicht/augment`, { instruction: "x" });
     expect(unknown.status).toBe(404);
-    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
-    // The augment run of a scene lives on the scene; the generator has none.
-    expect((await post(`/api/campaigns/${CAMPAIGN}/generate/augment`, { instruction: "x" })).status).toBe(404);
+    expect(await readJob(CAMPAIGN)).toBeNull();
+    // The augment run of a scene starts on the scene; the generator jobs'
+    // own start takes no augment kind.
+    const onJobs = await post(jobsUrl(CAMPAIGN), { kind: "scene-augment", instruction: "x" });
+    expect(onJobs.status).toBe(400);
+    expect(await readJob(CAMPAIGN)).toBeNull();
   });
 
   test("a changed id, an unknown callout or an added unknown [[id]] goes back to the model", async () => {
@@ -308,22 +319,33 @@ describe("the run", () => {
 describe("one job per campaign, whatever its kind", () => {
   test("an augment start while a SCENE run is going is a 409, and the other way round", async () => {
     setProviderForTests(new StuckProvider());
-    const scene = await post(`/api/campaigns/${CAMPAIGN}/generate`, {
+    const scene = await post(jobsUrl(CAMPAIGN), {
+      kind: "scene",
       chapter: "01-salzhafen",
       sourceText: "source",
     });
     expect(scene.status).toBe(202);
+    const sceneJob = (await scene.json()) as GeneratorJob;
     const res = await post(`${ARRIVAL}/augment`, { instruction: "x" });
     expect(res.status).toBe(409);
-    expect(((await res.json()) as { jobId: unknown }).jobId).toBeString();
+    // The refusal carries the running job.
+    const refused = (await res.json()) as { generatorJob: GeneratorJob };
+    expect(refused.generatorJob.id).toBe(sceneJob.id);
+    expect(refused.generatorJob.kind).toBe("scene");
     await clearJobsForTests();
 
-    expect((await post(`${ARRIVAL}/augment`, { instruction: "x" })).status).toBe(202);
-    const run = await post(`/api/campaigns/${CAMPAIGN}/generate`, {
+    const augment = await post(`${ARRIVAL}/augment`, { instruction: "x" });
+    expect(augment.status).toBe(202);
+    const augmentJob = (await augment.json()) as GeneratorJob;
+    const run = await post(jobsUrl(CAMPAIGN), {
+      kind: "scene",
       chapter: "01-salzhafen",
       sourceText: "source",
     });
     expect(run.status).toBe(409);
+    expect(((await run.json()) as { generatorJob: GeneratorJob }).generatorJob.id).toBe(
+      augmentJob.id,
+    );
   });
 
   test("a leftover `running` augment row becomes a failed job at the next boot", async () => {
@@ -357,7 +379,7 @@ describe("accepting", () => {
     expect(written.status).toBe(before.status);
     expect(written.rev).toBe(before.rev + 1);
     expect(await read()).toEqual(written);
-    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
+    expect(await readJob(CAMPAIGN)).toBeNull();
   });
 
   test("a scene may change chapter with its body in the same write", async () => {

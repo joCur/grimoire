@@ -1,7 +1,7 @@
 // Generator pipeline tests. They run against a DATABASE seeded from the
-// example campaign, and the apply step writes ROWS — so "was it written?" is
+// example campaign, and an accept writes ROWS — so "was it written?" is
 // asked through the API. The database is seeded ONCE for this file (not
-// per case): several cases build on what an earlier one applied (a conflict
+// per case): several cases build on what an earlier one accepted (a conflict
 // needs an existing entity).
 //
 // No real LLM and no ANTHROPIC_API_KEY: a FakeProvider with scripted raw
@@ -13,12 +13,13 @@
 // reported) or the full CompletionResult shape — that is how the truncation
 // fail-fast and the token accounting are exercised.
 //
-// The run is a background job, so the pipeline tests go
-// through `generate()`: POST /generate (202), poll the job in-process, then
-// read the answer off the finished job. The job endpoints
-// themselves (lifecycle, 409, drafts, apply cleanup, restart) have their own
-// describe block at the end; a FakeProvider that waits on a manual gate
-// makes "running" observable without a single timer.
+// The run is a background job, the generator job resource (ADR #31), so the
+// pipeline tests go through `generate()`: POST …/generator-jobs (202), poll
+// the job in-process, then read the answer off the finished job. What an
+// accept writes goes through the job's PATCH, and the job resource itself
+// (lifecycle, 409, review edits, accept cleanup, restart) has its own
+// describe block; a FakeProvider that waits on a manual gate makes "running"
+// observable without a single timer.
 //
 // The job is a ROW, so a "restart" is `failInterruptedJobs()` — literally
 // what the boot runs — over the same database. That is why the restart cases
@@ -27,7 +28,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type {
   Chapter,
-  GenerateJob,
+  GeneratorJob,
   GenerateResult,
   GenerateUsage,
   Location,
@@ -36,9 +37,18 @@ import type {
   SceneProposal,
 } from "@grimoire/shared";
 import { app } from "../src/server";
+import {
+  acceptBody,
+  jobsUrl,
+  jobUrl,
+  openSelection,
+  readJob,
+  writtenBy,
+  type Selection,
+} from "./support/generator-jobs";
 import { setKnowledge } from "./support/knowledge-items";
 import { eq } from "drizzle-orm";
-import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
+import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generator-jobs";
 import { generateJobs } from "../src/db/schema";
 import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
@@ -61,7 +71,7 @@ import {
 
 /**
  * Whether a scene is there, on its own resource (ADR #31). A proposal that
- * was applied is a ROW, and the only thing that matters is that the app can
+ * was accepted is a ROW, and the only thing that matters is that the app can
  * open it.
  */
 async function exists(id: string): Promise<boolean> {
@@ -81,24 +91,18 @@ async function readLocation(id: string): Promise<Location | undefined> {
   return res.status === 200 ? ((await res.json()) as Location) : undefined;
 }
 
-/** A proposed location as the apply body carries it: the location without its guard. */
-function locationItem(over: { status?: string } = {}): Record<string, unknown> {
-  const stub = locationStub(over);
-  return { ...stub.properties, body: stub.body };
-}
-
 /** GET of an npc — its own resource (ADR #31); undefined when there is none. */
 async function readNpc(id: string): Promise<Npc | undefined> {
   const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
   return res.status === 200 ? ((await res.json()) as Npc) : undefined;
 }
 
-/** A proposed npc as the job and the apply body carry it: the npc without its guard. */
+/** A proposed npc as the job carries it: the npc without its guard. */
 function npcItem(entry: ScriptedEntry = PROPOSED_NPC): Record<string, unknown> {
   return { ...entry.properties, body: entry.body };
 }
 
-/** GET of an applied scene — its own resource (ADR #31). */
+/** GET of an accepted scene — its own resource (ADR #31). */
 async function read(id: string): Promise<Scene> {
   const res = await app.request(`/api/campaigns/beispiel/scenes/${id}`);
   expect(res.status).toBe(200);
@@ -302,7 +306,7 @@ function servedScene(over: ReplyOver = {}): string {
 }
 
 /**
- * A proposed scene as the result and the apply body carry it: the scripted
+ * A proposed scene as the result carries it: the scripted
  * scene as the scene without its guard, read back from its reply form — an
  * optional field the script leaves out absent, a list it leaves out empty.
  */
@@ -337,30 +341,30 @@ function proseThenJson(json: string): string {
   ].join("\n");
 }
 
-async function postJson(url: string, body?: unknown): Promise<Response> {
+async function send(method: string, url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json" },
     body: body === undefined ? "{}" : JSON.stringify(body),
   });
 }
 
-const generateBody = { chapter: "01-salzhafen", sourceText: "Fenn waits at the docks." };
+const postJson = (url: string, body?: unknown): Promise<Response> => send("POST", url, body);
+
+const generateBody = {
+  kind: "scene",
+  chapter: "01-salzhafen",
+  sourceText: "Fenn waits at the docks.",
+};
 
 // --- job helpers ------------------------------------------------------------
 
-/** GET the campaign's job, or null on the 404 "there is none". */
-async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
-  const res = await app.request(`/api/campaigns/${campaign}/generate/job`);
-  if (res.status === 404) return null;
-  expect(res.status).toBe(200);
-  return (await res.json()) as GenerateJob;
-}
+/** The campaign's job, or null when its list is empty. */
+const fetchJob = (campaign = "beispiel"): Promise<GeneratorJob | null> => readJob(campaign);
 
 /**
- * PATCH the review with one draft edit — the endpoint that replaced
- * `PUT …/job/drafts`. `jobId`/`rev` default to
- * the campaign's current job, which is what every caller here wants.
+ * PATCH the review with one draft edit. `jobId`/`rev` default to the
+ * campaign's current job, which is what every caller here wants.
  */
 async function patchReview(
   campaign: string,
@@ -370,19 +374,23 @@ async function patchReview(
   const job = await fetchJob(campaign);
   const jobId = over.jobId ?? job?.id ?? "no-job";
   const rev = over.rev ?? job?.rev ?? 0;
-  return app.request(`/api/campaigns/${campaign}/generate/job/${jobId}/review`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev, ...body }),
-  });
+  return send("PATCH", jobUrl(campaign, jobId), { rev, ...body });
 }
 
 /** The common case: store the edited body of one proposed scene. */
 const putSceneEdit = (campaign: string, id: string, body: string): Promise<Response> =>
   patchReview(campaign, { sceneEdits: { [id]: { body } } });
 
+/** Accept a selection of a job — or, without one, everything "accept all" names. */
+const accept = (job: GeneratorJob, selection: Selection = openSelection(job)): Promise<Response> =>
+  send("PATCH", jobUrl("beispiel", job.id), acceptBody(job, selection));
+
+/** Discard a job with the rev it was read with. */
+const discard = (job: GeneratorJob): Promise<Response> =>
+  send("DELETE", jobUrl("beispiel", job.id), { rev: job.rev });
+
 /** Poll the in-process app until the job is no longer running. */
-async function waitForJob(campaign = "beispiel"): Promise<GenerateJob> {
+async function waitForJob(campaign = "beispiel"): Promise<GeneratorJob> {
   for (let i = 0; i < 2000; i++) {
     const job = await fetchJob(campaign);
     if (job === null) throw new Error("job disappeared while waiting");
@@ -392,7 +400,7 @@ async function waitForJob(campaign = "beispiel"): Promise<GenerateJob> {
   throw new Error("job never finished");
 }
 
-/** What the synchronous endpoint answered, rebuilt over the job flow. */
+/** What a finished run answers, read off its job. */
 interface GenerateOutcome {
   status: number;
   json: () => Promise<unknown>;
@@ -405,12 +413,22 @@ interface GenerateOutcome {
  * passed through unchanged.
  */
 async function generate(body?: unknown, campaign = "beispiel"): Promise<GenerateOutcome> {
-  const res = await postJson(`/api/campaigns/${campaign}/generate`, body);
+  const res = await postJson(jobsUrl(campaign), body);
   if (res.status !== 202) return { status: res.status, json: () => res.json() };
-  expect(await res.json()).toEqual({ jobId: expect.any(String) });
+  expect(await res.json()).toMatchObject({
+    id: expect.any(String),
+    kind: "scene",
+    status: "running",
+  });
   const job = await waitForJob(campaign);
   if (job.status === "done") return { status: 200, json: async () => job.result };
   return { status: job.error?.status ?? 500, json: async () => job.error?.body };
+}
+
+/** Start a scene run, wait for it and answer its finished job. */
+async function runJob(body: Record<string, unknown> = generateBody): Promise<GeneratorJob> {
+  expect((await generate(body)).status).toBe(200);
+  return (await fetchJob())!;
 }
 
 // --- reading a reply: by schema ---------------------------------------------
@@ -492,9 +510,9 @@ describe("parseJsonReply", () => {
   });
 });
 
-// --- POST /api/campaigns/:campaign/generate --------------------------------------------------
+// --- POST /api/campaigns/:campaign/generator-jobs { kind: "scene" } ---------------------------
 
-describe("POST /api/campaigns/:campaign/generate", () => {
+describe("POST /api/campaigns/:campaign/generator-jobs { kind: scene }", () => {
   test("happy path: GenerateResult from one call, nothing written", async () => {
     const fake = useFake([reply()]);
     const res = await generate(generateBody);
@@ -1127,13 +1145,16 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     const fake = useFake([]);
     const bad = [
       {}, // missing everything
-      { chapter: "01-salzhafen" }, // missing sourceText
-      { chapter: "", sourceText: "x" }, // empty chapter
-      { chapter: "01-salzhafen", sourceText: "  " }, // empty sourceText
-      { chapter: "01-salzhafen", sourceText: "x", extra: 1 }, // unknown key
-      { chapter: 42, sourceText: "x" }, // chapter not a string
-      { chapter: "a/b", sourceText: "x" }, // chapter with a separator
-      { chapter: "..", sourceText: "x" }, // traversal
+      { chapter: "01-salzhafen", sourceText: "x" }, // missing kind
+      { kind: "szene", chapter: "01-salzhafen", sourceText: "x" }, // unknown kind
+      { kind: "scene", chapter: "01-salzhafen" }, // missing sourceText
+      { kind: "scene", chapter: "", sourceText: "x" }, // empty chapter
+      { kind: "scene", chapter: "01-salzhafen", sourceText: "  " }, // empty sourceText
+      { kind: "scene", chapter: "01-salzhafen", sourceText: "x", extra: 1 }, // unknown key
+      { kind: "scene", chapter: "01-salzhafen", sourceText: "x", id: "x" }, // a key only an npc run takes
+      { kind: "scene", chapter: 42, sourceText: "x" }, // chapter not a string
+      { kind: "scene", chapter: "a/b", sourceText: "x" }, // chapter with a separator
+      { kind: "scene", chapter: "..", sourceText: "x" }, // traversal
     ];
     for (const b of bad) {
       expect((await generate(b)).status).toBe(400);
@@ -1166,6 +1187,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       }),
     ]);
     const res = await generate({
+      kind: "scene",
       chapter,
       sourceText: "A hidden cove full of smugglers.",
       newChapter: true,
@@ -1203,6 +1225,15 @@ describe("POST /api/campaigns/:campaign/generate", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  test("a new chapter whose id is no slug answers 400 and names it — before any job", async () => {
+    const fake = useFake([]);
+    const res = await generate({ ...generateBody, chapter: "Kapitel_1", newChapter: true });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
+    expect(fake.calls).toHaveLength(0);
+    expect(await readJob("beispiel")).toBeNull();
+  });
+
   test("503 with the factory message when no provider is configured", async () => {
     setProviderForTests(null);
     const savedKey = process.env.ANTHROPIC_API_KEY;
@@ -1220,25 +1251,21 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   });
 });
 
-// --- POST /api/campaigns/:campaign/generate/apply ----------------------------------------------
+// --- PATCH …/generator-jobs/:id — accepting a run ----------------------------
 
-describe("POST /api/campaigns/:campaign/generate/apply", () => {
-  test("writes the reviewed proposals — GenerateResult pieces pass through verbatim", async () => {
-    // What the client sends is what /generate returned — the endpoint accepts
-    // the documented shapes as-is.
+describe("accepting a scene run", () => {
+  test("writes the accepted proposals — every field of the result survives", async () => {
     const fake = useFake([reply()]);
-    const gen = await generate(generateBody);
-    const result = (await gen.json()) as GenerateResult;
+    const job = await runJob();
     // outline + scene + npc
     expect(fake.calls).toHaveLength(3);
 
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: result.scenes,
-      npcs: result.npcs,
-    });
+    const res = await accept(job, { scenes: [SCENE_ID], npcs: ["grella"] });
     expect(res.status).toBe(200);
-    // Every proposal is named by its id.
-    expect(await res.json()).toEqual({ scenes: [SCENE_ID], npcs: ["grella"], locations: [] });
+    // Every proposal is named by its id — in the review of the job as it ended.
+    const ended = (await res.json()) as GeneratorJob;
+    expect(ended.id).toBe(job.id);
+    expect(writtenBy(job, ended)).toEqual({ scenes: [SCENE_ID], npcs: ["grella"], locations: [] });
 
     // the proposals are rows now — every field the review showed survived
     // the insert, `status: draft` included (that is what the app filters on)
@@ -1258,13 +1285,20 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
 
   test("409 lists every conflicting scene and npc by id and writes nothing", async () => {
     const before = await read("lighthouse-arrival");
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [
-        sceneItem(sceneWithId("lighthouse-arrival")),
-        sceneItem(sceneWithId("ganz-neu")),
-        sceneItem(), // written by the previous test
-      ],
-      npcs: [npcItem()], // also exists now
+    useFake([
+      reply({
+        scenes: [
+          { content: sceneWithId("lighthouse-arrival") },
+          { content: sceneWithId("ganz-neu") },
+          { content: sceneDraft() }, // written by the previous test
+        ],
+        entries: [{ kind: "npc", content: PROPOSED_NPC }], // also exists now
+      }),
+    ]);
+    const job = await runJob();
+    const res = await accept(job, {
+      scenes: ["lighthouse-arrival", "ganz-neu", SCENE_ID],
+      npcs: ["grella"],
     });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { scenes: string[]; npcs: string[] };
@@ -1273,25 +1307,21 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     // nothing written, nothing overwritten
     expect(await exists("ganz-neu")).toBe(false);
     expect(await read("lighthouse-arrival")).toEqual(before); // the row's rev never moved
-  });
-
-  test("400 for a scene id that is no kebab slug — nothing written", async () => {
-    // The `id` BECOMES the primary key: an id nothing can reach is refused
-    // before anything is written.
-    for (const id of ["a/b", "Gross", "trailing-", "../evil", "mit leerzeichen", ""]) {
-      const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-        scenes: [sceneItem(sceneWithId(id))],
-      });
-      expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toContain("id");
-    }
+    expect((await fetchJob())!.review.writtenScenes).toEqual([]);
   });
 
   test("400 re-validation: a status other than draft, or a key a scene does not have", async () => {
-    // status was flipped after review — apply must not trust the client
-    let res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [sceneItem(sceneDraft({ id: "nicht-draft", status: "ready" }))],
-    });
+    useFake([reply({ scenes: [{ content: sceneWithId("nicht-draft") }], entries: [] })]);
+    const job = await runJob();
+    /** The accept of the scene, with a change of the DM sent along. */
+    const acceptWith = (change: unknown): Promise<Response> =>
+      send("PATCH", jobUrl("beispiel", job.id), {
+        ...acceptBody(job, { scenes: ["nicht-draft"] }),
+        sceneEdits: { "nicht-draft": change },
+      });
+
+    // status was flipped in the review — the accept must not trust it
+    let res = await acceptWith({ status: "ready" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain('"status" must be "draft"');
 
@@ -1301,109 +1331,133 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
       ["properties", { title: "X" }],
       ["kind", "scene"],
     ] as const) {
-      res = await postJson("/api/campaigns/beispiel/generate/apply", {
-        scenes: [{ ...sceneItem(sceneWithId("nicht-draft")), [key]: value }],
-      });
+      res = await acceptWith({ [key]: value });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain(key);
     }
 
     // `body` is not a text
-    res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [{ ...sceneItem(sceneWithId("nicht-draft")), body: 7 }],
-    });
+    res = await acceptWith({ body: 7 });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("body");
     expect(await exists("nicht-draft")).toBe(false);
+    // …and the job is as it was read: no change, no rev bump.
+    const after = (await fetchJob())!;
+    expect(after.rev).toBe(job.rev);
+    expect(after.sceneEdits).toEqual({});
   });
 
-  test("400 re-validation: the status rules of npc and location — nothing written", async () => {
+  test("400 re-validation: the status rules of an npc — nothing written", async () => {
     const brix = { id: "brix", name: "Brix" };
-    for (const npc of [
-      // the scene status sneaked into an npc after the review
-      npcItem(proposedNpc({ ...brix, status: "draft" })),
+    useFake([
+      reply({
+        scenes: [{ content: sceneDraft({ id: "brix-am-kai", npcs: ["fenn"] }) }],
+        entries: [
+          { kind: "npc", content: proposedNpc(brix) },
+          { kind: "location", content: locationStub() },
+        ],
+      }),
+    ]);
+    const job = await runJob();
+    for (const change of [
+      // the scene status sneaked into an npc in the review
+      { status: "draft" },
       // an npc without any status
-      npcItem(proposedNpc({ ...brix, status: null })),
+      { status: null },
     ]) {
-      const res = await postJson("/api/campaigns/beispiel/generate/apply", { npcs: [npc] });
+      const res = await send("PATCH", jobUrl("beispiel", job.id), {
+        ...acceptBody(job, { npcs: ["brix"] }),
+        npcEdits: { brix: change },
+      });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain("status");
     }
-    // A location is no npc at all…
-    const asNpc = await postJson("/api/campaigns/beispiel/generate/apply", {
-      npcs: [locationItem()],
-    });
-    expect(asNpc.status).toBe(400);
-    // …and a proposed location carries no status: its schema has no such field.
-    const withStatus = await postJson("/api/campaigns/beispiel/generate/apply", {
-      locations: [locationItem({ status: "alive" })],
-    });
-    expect(withStatus.status).toBe(400);
-    expect(((await withStatus.json()) as { error: string }).error).toContain("status");
     expect(await readNpc("brix")).toBeUndefined();
     expect(await readLocation("raeucherkammer")).toBeUndefined();
 
     // the prompt-conform forms write fine
-    const ok = await postJson("/api/campaigns/beispiel/generate/apply", {
-      npcs: [npcItem(proposedNpc({ ...brix, status: "missing" }))],
-      locations: [locationItem()],
+    const ok = await send("PATCH", jobUrl("beispiel", job.id), {
+      ...acceptBody(job, { npcs: ["brix"], locations: ["raeucherkammer"] }),
+      npcEdits: { brix: { status: "missing" } },
     });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ scenes: [], npcs: ["brix"], locations: ["raeucherkammer"] });
+    expect(writtenBy(job, (await ok.json()) as GeneratorJob)).toEqual({
+      scenes: [],
+      npcs: ["brix"],
+      locations: ["raeucherkammer"],
+    });
+    expect((await readNpc("brix"))?.status).toBe("missing");
     // The location's atmosphere came through the accept as its own field.
     expect((await readLocation("raeucherkammer"))?.atmosphere).toBe(
       "Im Quelltext nur erwähnt — Details fehlen.",
     );
   });
 
-  test("400 on malformed bodies", async () => {
-    const bad = [
-      {}, // nothing to apply
-      { scenes: [], npcs: [] }, // still nothing to apply
-      { scenes: "x" }, // not an array
-      { scenes: [{ body: "" }] }, // no scene at all
-      { npcs: [{ ...npcItem(), id: undefined }] }, // missing id
-      { scenes: [], npcs: [], extra: 1 }, // unknown top-level key
-    ];
-    for (const b of bad) {
-      expect((await postJson("/api/campaigns/beispiel/generate/apply", b)).status).toBe(400);
-    }
-  });
+  test("400 on malformed patches — nothing written", async () => {
+    useFake([reply({ scenes: [{ content: sceneWithId("unfertig") }], entries: [] })]);
+    const job = await runJob();
+    const patch = (body: Record<string, unknown>): Promise<Response> =>
+      send("PATCH", jobUrl("beispiel", job.id), body);
 
-  test("TWO proposals for one scene are a 409 naming it — nothing is written", async () => {
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [
-        sceneItem(sceneWithId("doppelt")),
-        sceneItem(sceneDraft({ id: "doppelt", location: "bucht" })),
-      ],
-    });
-    expect(res.status).toBe(409);
-    expect(((await res.json()) as { scenes: string[] }).scenes).toEqual(["doppelt"]);
-    expect(await exists("doppelt")).toBe(false);
+    // a patch that names nothing to write
+    for (const body of [{ rev: job.rev }, { rev: job.rev, review: {} }]) {
+      const res = await patch(body);
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { code?: string }).code).toBe("nothing_to_write");
+    }
+    for (const body of [
+      { rev: job.rev, review: { writtenScenes: "unfertig" } }, // not a list
+      { rev: job.rev, review: { writtenScenes: ["nirgends"] } }, // not a proposal of the run
+      { rev: job.rev, review: { writtenNpcs: ["niemand"] } }, // not a proposal of the run
+      { review: { writtenScenes: ["unfertig"] } }, // no guard
+      { ...acceptBody(job, { scenes: ["unfertig"] }), extra: 1 }, // unknown top-level key
+      { rev: job.rev, review: { writtenScenes: ["unfertig"], extra: 1 } }, // unknown review key
+    ]) {
+      expect((await patch(body)).status).toBe(400);
+    }
+    expect(await exists("unfertig")).toBe(false);
+    expect((await fetchJob())!.rev).toBe(job.rev);
   });
 
   test("404 for an unknown campaign", async () => {
-    const res = await postJson("/api/campaigns/nope/generate/apply", {
-      scenes: [sceneItem()],
-    });
+    useFake([reply({ scenes: [{ content: sceneWithId("fremde-kampagne") }], entries: [] })]);
+    const job = await runJob();
+    const res = await send(
+      "PATCH",
+      jobUrl("nope", job.id),
+      acceptBody(job, { scenes: ["fremde-kampagne"] }),
+    );
     expect(res.status).toBe(404);
+    expect(await exists("fremde-kampagne")).toBe(false);
   });
 
   // --- new-chapter flow -----------------------------------------------------
 
-  test("chapter + chapterTitle create chapter entry once — and never twice", async () => {
+  test("a new-chapter run creates its chapter once — and never twice", async () => {
     const chapter = "03-neues-kapitel";
-    let res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [sceneItem(sceneDraft({ id: "erste-szene", chapter }))],
+    useFake([
+      reply({
+        scenes: [
+          { content: sceneDraft({ id: "erste-szene", chapter }) },
+          { content: sceneDraft({ id: "zweite-szene", chapter }) },
+        ],
+        entries: [],
+      }),
+    ]);
+    const job = await runJob({
+      ...generateBody,
       chapter,
+      newChapter: true,
       chapterTitle: "Kapitel 3: Die Schmugglerbucht",
     });
+    let res = await accept(job, { scenes: ["erste-szene"] });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ scenes: ["erste-szene"], npcs: [], locations: [] });
+    const first = (await res.json()) as GeneratorJob;
+    expect(writtenBy(job, first).scenes).toEqual(["erste-szene"]);
     expect((await read("erste-szene")).chapter).toBe(chapter);
 
-    // the chapter row carries the title the app sent, and the `planned`
-    // status the generator gives a chapter it created (never `active`)
+    // the chapter row carries the title the run was started with, and the
+    // `planned` status the generator gives a chapter it created (never `active`)
     const written = await readChapter(chapter);
     expect(written).toEqual({
       id: chapter,
@@ -1413,61 +1467,61 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
       rev: written.rev,
     });
 
-    // second apply into the SAME chapter: the existing chapter is left
+    // the next accept into the SAME chapter: the existing chapter is left
     // untouched (not a conflict, not rewritten) — only the new scene lands
-    res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [sceneItem(sceneDraft({ id: "zweite-szene", chapter }))],
-      chapter,
-      chapterTitle: "Ein anderer Titel",
-    });
+    res = await accept(first, { scenes: ["zweite-szene"] });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ scenes: ["zweite-szene"], npcs: [], locations: [] });
-    const again = await readChapter(chapter);
+    expect(writtenBy(first, (await res.json()) as GeneratorJob).scenes).toEqual(["zweite-szene"]);
+    let again = await readChapter(chapter);
     expect(again.title).toBe(written.title);
     expect(again.rev).toBe(written.rev); // not even a rev bump
+
+    // …and so does a later run that names the chapter under another title
+    useFake([
+      reply({ scenes: [{ content: sceneDraft({ id: "dritte-szene", chapter }) }], entries: [] }),
+    ]);
+    const later = await runJob({
+      ...generateBody,
+      chapter,
+      newChapter: true,
+      chapterTitle: "Ein anderer Titel",
+    });
+    res = await accept(later, { scenes: ["dritte-szene"] });
+    expect(res.status).toBe(200);
+    expect(await exists("dritte-szene")).toBe(true);
+    again = await readChapter(chapter);
+    expect(again.title).toBe(written.title);
+    expect(again.rev).toBe(written.rev);
   });
 
-  test("new-chapter batch stays all-or-nothing: a scene conflict writes no chapter entry", async () => {
+  test("a new-chapter accept stays all-or-nothing: a scene conflict writes no chapter", async () => {
     const chapter = "04-konflikt";
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [
-        sceneItem(sceneDraft({ id: "konflikt-neu", chapter })),
-        sceneItem(sceneDraft({ id: "lighthouse-arrival", chapter })),
-      ],
+    useFake([
+      reply({
+        scenes: [
+          { content: sceneDraft({ id: "konflikt-neu", chapter }) },
+          { content: sceneDraft({ id: "lighthouse-arrival", chapter }) },
+        ],
+        entries: [],
+      }),
+    ]);
+    const job = await runJob({
+      ...generateBody,
       chapter,
+      newChapter: true,
       chapterTitle: "Kapitel 4",
     });
+    const res = await accept(job, { scenes: ["konflikt-neu", "lighthouse-arrival"] });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { scenes: string[] }).scenes).toEqual(["lighthouse-arrival"]);
     expect(await chapterExists(chapter)).toBe(false);
     expect(await exists("konflikt-neu")).toBe(false);
   });
-
-  test("400 on half or unusable chapter arguments — nothing written", async () => {
-    const scene = sceneItem(sceneDraft({ id: "neu", chapter: "05-halb" }));
-    const bad = [
-      // the two belong together
-      { scenes: [scene], chapter: "05-halb" },
-      { scenes: [scene], chapterTitle: "Halb" },
-      // empty / whitespace-only title
-      { scenes: [scene], chapter: "05-halb", chapterTitle: "  " },
-      // unsafe chapter ids
-      { scenes: [scene], chapter: "..", chapterTitle: "X" },
-      { scenes: [scene], chapter: "a/b", chapterTitle: "X" },
-      // nothing to apply — a chapter alone is not a proposal
-      { chapter: "05-halb", chapterTitle: "Halb" },
-    ];
-    for (const b of bad) {
-      expect((await postJson("/api/campaigns/beispiel/generate/apply", b)).status).toBe(400);
-    }
-    expect(await exists("neu")).toBe(false);
-    expect(await chapterExists("05-halb")).toBe(false);
-  });
 });
 
 // --- background jobs --------------------------------------------------------
 
-describe("generate jobs", () => {
+describe("generator jobs", () => {
   /** A reply proposing one fresh scene, without a proposed npc (grella exists by now). */
   function jobReply(id: string): string {
     return reply({
@@ -1476,63 +1530,71 @@ describe("generate jobs", () => {
     });
   }
 
-  test("202 { jobId }, status running, then done — the result waits in the store", async () => {
+  test("202 with the job, status running, then done — the result waits in the store", async () => {
     const open = gate();
     const sceneId = "job-lifecycle";
     const fake = useFake([jobReply(sceneId)], undefined, open.promise);
 
-    const res = await postJson("/api/campaigns/beispiel/generate", generateBody);
+    const res = await postJson(jobsUrl("beispiel"), generateBody);
     expect(res.status).toBe(202);
-    const { jobId } = (await res.json()) as { jobId: string };
-    expect(jobId).toEqual(expect.any(String));
+    const started = (await res.json()) as GeneratorJob;
+    expect(started.id).toEqual(expect.any(String));
 
     // The provider has not answered yet — the job is observably running.
     const running = await fetchJob();
     expect(running).toMatchObject({
-      id: jobId,
-      campaign: "beispiel",
+      id: started.id,
+      kind: "scene",
       chapter: "01-salzhafen",
       status: "running",
       sceneEdits: {},
+      npcEdits: {},
+      rev: started.rev,
     });
+    expect(running!.review).toEqual(started.review);
     expect(running!.startedAt).toEqual(expect.any(String));
     expect(running!.finishedAt).toBeUndefined();
     expect(running!.result).toBeUndefined();
     expect(running!.error).toBeUndefined();
+    // The job resource answers the same job under its id.
+    const byId = await app.request(jobUrl("beispiel", started.id));
+    expect(byId.status).toBe(200);
+    expect(((await byId.json()) as GeneratorJob).id).toBe(started.id);
 
     open.open();
     const done = await waitForJob();
     expect(done.status).toBe("done");
-    expect(done.id).toBe(jobId);
+    expect(done.id).toBe(started.id);
     expect(done.finishedAt).toEqual(expect.any(String));
     expect(done.result!.scenes[0]!.id).toBe(sceneId);
     expect(done.error).toBeUndefined();
     // outline + the one scene (this reply proposes no entries)
     expect(fake.calls).toHaveLength(2);
 
-    // Still there on the next GET: only apply/discard/a new start remove it.
-    expect((await fetchJob())!.id).toBe(jobId);
+    // Still there on the next GET: only an accept of everything, a discard
+    // or a new start remove it.
+    expect((await fetchJob())!.id).toBe(started.id);
     // …and nothing was written (the pipeline is still a preview)
     expect(await exists(sceneId)).toBe(false);
   });
 
-  test("a second start while one runs answers 409 with the running jobId", async () => {
+  test("a second start while one runs answers 409 with the running job", async () => {
     const open = gate();
     useFake([jobReply("job-parallel")], undefined, open.promise);
 
-    const first = await postJson("/api/campaigns/beispiel/generate", generateBody);
+    const first = await postJson(jobsUrl("beispiel"), generateBody);
     expect(first.status).toBe(202);
-    const { jobId } = (await first.json()) as { jobId: string };
+    const started = (await first.json()) as GeneratorJob;
 
-    const second = await postJson("/api/campaigns/beispiel/generate", generateBody);
+    const second = await postJson(jobsUrl("beispiel"), generateBody);
     expect(second.status).toBe(409);
     expect(await second.json()).toEqual({
-      error: "a generate job is already running for this campaign",
-      jobId,
+      error: "a generator job is already running for this campaign",
+      generatorJob: expect.objectContaining({ id: started.id, status: "running" }),
     });
 
     open.open();
-    expect((await waitForJob()).id).toBe(jobId);
+    expect((await waitForJob()).id).toBe(started.id);
   });
 
   test("a failed run keeps the 422 body — rawReply, usage, validationErrors", async () => {
@@ -1546,7 +1608,7 @@ describe("generate jobs", () => {
       { text: bad, usage: usage(1000, 100) },
       { text: bad, usage: usage(2000, 200) },
     ]);
-    expect((await postJson("/api/campaigns/beispiel/generate", generateBody)).status).toBe(202);
+    expect((await postJson(jobsUrl("beispiel"), generateBody)).status).toBe(202);
 
     const job = await waitForJob();
     expect(job.status).toBe("failed");
@@ -1580,7 +1642,7 @@ describe("generate jobs", () => {
   test("a truncated run keeps the fail-fast 422 body (through the job)", async () => {
     const cut = '{"scenes":[{"path":"01-salzhafen/hafen/x","content":"---\\nid: x';
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }], 8000);
-    expect((await postJson("/api/campaigns/beispiel/generate", generateBody)).status).toBe(202);
+    expect((await postJson(jobsUrl("beispiel"), generateBody)).status).toBe(202);
 
     const job = await waitForJob();
     expect(job.status).toBe("failed");
@@ -1591,37 +1653,44 @@ describe("generate jobs", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("DELETE discards the job — also a finished one; 404 afterwards", async () => {
+  test("DELETE discards the job — also a finished one; a stale rev is 409, 404 afterwards", async () => {
     useFake([jobReply("job-delete")]);
-    await generate(generateBody);
-    expect((await fetchJob())!.status).toBe("done");
+    const job = await runJob();
+    expect(job.status).toBe("done");
 
-    const res = await app.request("/api/campaigns/beispiel/generate/job", { method: "DELETE" });
+    // A stale guard discards nothing and answers the job as it stands.
+    const stale = await send("DELETE", jobUrl("beispiel", job.id), { rev: job.rev + 1 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({
+      code: "rev_conflict",
+      rev: job.rev,
+      generatorJob: { id: job.id },
+    });
+    expect((await fetchJob())!.id).toBe(job.id);
+
+    const res = await discard(job);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ deleted: true });
     expect(await fetchJob()).toBeNull();
     // nothing left to discard
-    expect(
-      (await app.request("/api/campaigns/beispiel/generate/job", { method: "DELETE" })).status,
-    ).toBe(404);
+    expect((await discard(job)).status).toBe(404);
   });
 
   test("DELETE of a RUNNING job abandons it — its result never lands", async () => {
     const open = gate();
     useFake([jobReply("job-abandon")], undefined, open.promise);
-    expect((await postJson("/api/campaigns/beispiel/generate", generateBody)).status).toBe(202);
-    expect((await fetchJob())!.status).toBe("running");
+    expect((await postJson(jobsUrl("beispiel"), generateBody)).status).toBe(202);
+    const running = (await fetchJob())!;
+    expect(running.status).toBe("running");
 
-    expect(
-      (await app.request("/api/campaigns/beispiel/generate/job", { method: "DELETE" })).status,
-    ).toBe(200);
+    expect((await discard(running)).status).toBe(200);
     open.open();
     // Let the abandoned run finish into nothing.
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(await fetchJob()).toBeNull();
   });
 
-  test("review edits: 404 without a job, 400 for an unknown path, and edits survive", async () => {
+  test("review edits: 404 without a job, 400 for an unknown scene, and edits survive", async () => {
     const sceneId = "job-drafts";
     const edited = `${sceneDraft({ npcs: ["fenn"] }).body}\nHandgeschriebene Ergänzung.\n`;
 
@@ -1632,8 +1701,8 @@ describe("generate jobs", () => {
     useFake([jobReply(sceneId)]);
     await generate(generateBody);
 
-    // a path that is not part of the result: the review patch stores only
-    // keys the result knows
+    // a scene that is not part of the result: the review patch stores only
+    // ids the result knows
     res = await putSceneEdit("beispiel", "fremd", edited);
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("unknown scene");
@@ -1659,7 +1728,7 @@ describe("generate jobs", () => {
       (await patchReview("beispiel", { sceneEdits: { [sceneId]: { body: edited } }, extra: 1 }))
         .status,
     ).toBe(400);
-    // The old key names a form that is gone.
+    // `edits` is no field of the job.
     expect((await patchReview("beispiel", { edits: { [sceneId]: { body: edited } } })).status).toBe(
       400,
     );
@@ -1699,67 +1768,59 @@ describe("generate jobs", () => {
     expect((await fetchJob())!.sceneEdits[sceneId]).toEqual({ title: "Von Hand benannt", body });
 
     // …and the accept writes exactly those fields on top of the model's scene.
-    const job = await fetchJob();
-    const res = await postJson(
-      `/api/campaigns/beispiel/generate/job/${job!.id}/accept`,
-      { rev: job!.rev, scenes: [sceneId] },
-    );
+    const job = (await fetchJob())!;
+    const res = await accept(job, { scenes: [sceneId] });
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { scenes: string[] }).scenes).toEqual([sceneId]);
+    expect(writtenBy(job, (await res.json()) as GeneratorJob).scenes).toEqual([sceneId]);
     const stored = await read(sceneId);
     expect(stored.title).toBe("Von Hand benannt");
     expect(stored.body).toBe(body);
     expect(stored.npcs).toEqual(served.npcs);
   });
 
-  test("apply with jobId discards the job; a stale id leaves it alone", async () => {
-    const sceneId = "job-apply";
+  test("accepting the last open proposal removes the job — the answer is the job as it ended", async () => {
+    const sceneId = "job-accept";
     useFake([jobReply(sceneId)]);
-    await generate(generateBody);
-    const job = await fetchJob();
+    const job = await runJob();
 
-    // a stale id (a newer run started meanwhile) must not drop this job
-    let res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [sceneItem(sceneWithId("job-apply-stale"))],
-      jobId: "00000000-0000-0000-0000-000000000000",
-    });
+    const res = await accept(job);
     expect(res.status).toBe(200);
-    expect((await fetchJob())!.id).toBe(job!.id);
-
-    res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: job!.result!.scenes,
-      npcs: [],
-      jobId: job!.id,
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ scenes: [sceneId], npcs: [], locations: [] });
+    const ended = (await res.json()) as GeneratorJob;
+    expect(ended.id).toBe(job.id);
+    expect(ended.review.writtenScenes).toEqual([sceneId]);
     expect(await exists(sceneId)).toBe(true);
     // the scenes are rows now — there is nothing left to restore
     expect(await fetchJob()).toBeNull();
+    expect((await app.request(jobUrl("beispiel", job.id))).status).toBe(404);
   });
 
-  test("a FAILED apply keeps the job — the review must stay restorable", async () => {
-    const sceneId = "job-apply"; // written by the test above
+  test("a FAILED accept keeps the job — the review must stay restorable", async () => {
+    const sceneId = "job-accept"; // written by the test above
     useFake([jobReply(sceneId)]);
-    await generate(generateBody);
-    const job = await fetchJob();
+    const job = await runJob();
 
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: job!.result!.scenes,
-      npcs: [],
-      jobId: job!.id,
-    });
+    const res = await accept(job);
     expect(res.status).toBe(409);
-    expect((await fetchJob())!.id).toBe(job!.id);
+    const kept = (await fetchJob())!;
+    expect(kept.id).toBe(job.id);
+    expect(kept.review.writtenScenes).toEqual([]);
   });
 
-  test("400 for a jobId that is not a string", async () => {
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [sceneItem(sceneWithId("job-badid"))],
-      jobId: 7,
+  test("an accept with a stale rev is 409 with the job as it stands — nothing written", async () => {
+    useFake([jobReply("job-stale")]);
+    const job = await runJob();
+    const res = await send(
+      "PATCH",
+      jobUrl("beispiel", job.id),
+      acceptBody({ ...job, rev: job.rev + 1 }, { scenes: ["job-stale"] }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "rev_conflict",
+      rev: job.rev,
+      generatorJob: { id: job.id, rev: job.rev },
     });
-    expect(res.status).toBe(400);
-    expect(await exists("job-badid")).toBe(false);
+    expect(await exists("job-stale")).toBe(false);
   });
 
   test("a new start replaces a finished job", async () => {
@@ -1780,7 +1841,7 @@ describe("generate jobs", () => {
 
   // --- surviving a restart --------------------------------------------------
 
-  test("a FINISHED job survives a restart whole — result, edits, applyable", async () => {
+  test("a FINISHED job survives a restart whole — result, edits, acceptable", async () => {
     const sceneId = "job-restart";
     const edited = `${sceneDraft({ npcs: ["fenn"] }).body}\nNach dem Neustart noch da.\n`;
     useFake([jobReply(sceneId)]);
@@ -1802,21 +1863,18 @@ describe("generate jobs", () => {
     expect(after.result).toEqual(before.result!);
     expect(after.sceneEdits).toEqual({ [sceneId]: { body: edited } });
 
-    // …and it can still be applied, which is the whole point of keeping it.
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: after.result!.scenes,
-      npcs: [],
-      jobId: after.id,
-    });
+    // …and it can still be accepted, which is the whole point of keeping it.
+    const res = await accept(after);
     expect(res.status).toBe(200);
     expect(await exists(sceneId)).toBe(true);
+    expect((await read(sceneId)).body).toBe(edited);
     expect(await fetchJob()).toBeNull();
   });
 
   test("a RUNNING job cannot survive — the boot fails it with the restart message", async () => {
     const open = gate();
     useFake([jobReply("job-interrupted")], undefined, open.promise);
-    expect((await postJson("/api/campaigns/beispiel/generate", generateBody)).status).toBe(202);
+    expect((await postJson(jobsUrl("beispiel"), generateBody)).status).toBe(202);
     const started = (await fetchJob())!;
     expect(started.status).toBe("running");
 
@@ -1837,17 +1895,18 @@ describe("generate jobs", () => {
     expect((await fetchJob())!.status).toBe("failed");
   });
 
-  test("a discarded job stays gone across a restart — GET answers 404", async () => {
+  test("a discarded job stays gone across a restart — the list is empty, the job 404", async () => {
     useFake([jobReply("job-discarded")]);
-    await generate(generateBody);
-    expect(
-      (await app.request("/api/campaigns/beispiel/generate/job", { method: "DELETE" })).status,
-    ).toBe(200);
+    const job = await runJob();
+    expect((await discard(job)).status).toBe(200);
 
     expect(await restartServer()).toBe(0);
-    const res = await app.request("/api/campaigns/beispiel/generate/job");
+    const list = await app.request(jobsUrl("beispiel"));
+    expect(list.status).toBe(200);
+    expect(await list.json()).toEqual([]);
+    const res = await app.request(jobUrl("beispiel", job.id));
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: "no generate job for this campaign" });
+    expect(await res.json()).toEqual({ error: "no such generator job for this campaign" });
   });
 
   // --- a row that cannot be read --------------------------------------------
@@ -1872,7 +1931,7 @@ describe("generate jobs", () => {
     expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
 
     // …and the promise of that message holds: discarding works.
-    expect((await app.request("/api/campaigns/beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
+    expect((await discard(job)).status).toBe(200);
     expect(await fetchJob()).toBeNull();
   });
 
@@ -1913,19 +1972,14 @@ describe("generate jobs", () => {
     ).toThrow(/constraint/i);
   });
 
-  // --- apply and job cleanup commit together --------------------------------
+  // --- the accept and the job cleanup commit together -----------------------
 
-  test("apply discards the job in the SAME commit as the scenes", async () => {
+  test("the last accept deletes the job in the SAME commit as the scenes", async () => {
     const sceneId = "job-atomic";
     useFake([jobReply(sceneId)]);
-    await generate(generateBody);
-    const job = (await fetchJob())!;
+    const job = await runJob();
 
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: job.result!.scenes,
-      npcs: [],
-      jobId: job.id,
-    });
+    const res = await accept(job);
     expect(res.status).toBe(200);
     // Both halves of the commit are visible…
     expect(await exists(sceneId)).toBe(true);
@@ -1938,7 +1992,7 @@ describe("generate jobs", () => {
     expect(await restartServer()).toBe(0);
   });
 
-  test("a 409 apply rolls back BOTH halves — job kept, nothing written", async () => {
+  test("a 409 accept rolls back BOTH halves — job kept, nothing written", async () => {
     const taken = "job-atomic"; // written by the test above
     const fresh = "job-atomic-fresh";
     useFake([
@@ -1947,16 +2001,14 @@ describe("generate jobs", () => {
         entries: [],
       }),
     ]);
-    await generate(generateBody);
-    const job = (await fetchJob())!;
+    const job = await runJob();
 
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: job.result!.scenes,
-      npcs: [],
-      jobId: job.id,
-    });
+    const res = await accept(job);
     expect(res.status).toBe(409);
-    expect((await fetchJob())!.id).toBe(job.id);
+    const kept = (await fetchJob())!;
+    expect(kept.id).toBe(job.id);
+    expect(kept.rev).toBe(job.rev);
+    expect(kept.review.writtenScenes).toEqual([]);
     expect(await exists(fresh)).toBe(false);
   });
 
@@ -1966,6 +2018,18 @@ describe("generate jobs", () => {
     await generate(generateBody);
     expect((await fetchJob("beispiel"))!.status).toBe("done");
     expect(await fetchJob("nope")).toBeNull();
+  });
+
+  test("POST …/generate, …/generate/npc, …/generate/apply and GET …/generate/job answer 404", async () => {
+    const fake = useFake([]);
+    const base = "/api/campaigns/beispiel/generate";
+    const scene = { chapter: "01-salzhafen", sourceText: "Fenn waits at the docks." };
+    expect((await postJson(base, scene)).status).toBe(404);
+    expect((await postJson(`${base}/npc`, { sourceText: "A fisherman." })).status).toBe(404);
+    expect((await app.request(`${base}/job`)).status).toBe(404);
+    expect((await postJson(`${base}/apply`, { scenes: [sceneItem()] })).status).toBe(404);
+    expect(fake.calls).toHaveLength(0);
+    expect(await fetchJob()).toBeNull();
   });
 });
 
@@ -2042,7 +2106,7 @@ describe("LLM_CORRECTION_TURNS", () => {
 describe("campaign knowledge", () => {
   /**
    * A reply whose proposed npc is one the campaign does NOT have yet. The
-   * database is shared by this file and the apply cases above already
+   * database is shared by this file and the accept cases above already
    * wrote the npc `grella`, and a proposal for an npc that holds content
    * cannot be accepted, so these cases bring their own.
    */
@@ -2130,47 +2194,35 @@ describe("campaign knowledge", () => {
 
 describe("a proposed scene whose chapter has no row", () => {
   test("gets the chapter in the same write, named by its id", async () => {
-    // The apply path is the ONE scene write without a dialog in front of it,
-    // and it is what let scenes land under a chapter that had none: the
-    // overview lists chapters, so chapter and scenes were both unreachable.
-    // `ensureChapterRow` closes it, and it is the ONE creation path inside
-    // the accept: the run decided the chapter, so accepting has to write it
-    // (ADR #18). A location a scene names is not created that way — the
+    // The accept is the ONE scene write without a dialog in front of it: the
+    // run decided the chapter, so accepting has to write it (ADR #18), or
+    // chapter and scenes would both be unreachable — the overview lists
+    // chapters. A location a scene names is not created that way — the
     // proposal has to bring it, or the scene is refused.
-    const draft = sceneDraft({ id: "brut-im-dunkeln", chapter: "03-drachenbrut" });
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      // No `chapter`/`chapterTitle` in the body on purpose — this is the net
-      // under the job-driven creation, not the creation itself.
-      scenes: [sceneItem(draft)],
-    });
-    expect(res.status).toBe(200);
+    const chapter = "03-drachenbrut";
+    useFake([
+      reply({
+        scenes: [{ content: sceneDraft({ id: "brut-im-dunkeln", chapter, npcs: ["fenn"] }) }],
+        entries: [],
+      }),
+    ]);
+    // No `chapterTitle` on purpose — this is the net under a run that knows
+    // no title, not the titled creation.
+    const job = await runJob({ ...generateBody, chapter, newChapter: true });
+    expect((await accept(job)).status).toBe(200);
 
-    const chapter = await readChapter("03-drachenbrut");
+    const written = await readChapter(chapter);
     // No title was known here, so the chapter is called by its slug — which
     // is at least readable in the overview, where an unreachable chapter was not.
-    expect(chapter.title).toBe("03-drachenbrut");
-    expect(chapter.status).toBe("planned");
+    expect(written.title).toBe(chapter);
+    expect(written.status).toBe("planned");
 
     // …and the scene really hangs in it.
     const tree = (await (await app.request("/api/campaigns/beispiel/tree")).json()) as {
       chapters: Array<{ id: string; scenes: Array<{ id: string }> }>;
     };
-    const node = tree.chapters.find((c) => c.id === "03-drachenbrut");
+    const node = tree.chapters.find((c) => c.id === chapter);
     expect(node?.scenes.map((s) => s.id)).toContain("brut-im-dunkeln");
-  });
-
-  test("a chapter id that is no slug answers 400 and names the chapter", async () => {
-    // `ensureChapterRow` only creates a chapter for a real entity slug. An id
-    // like `Kapitel_1` is not one, so the apply says so instead of storing a
-    // scene nothing can reach.
-    const draft = sceneDraft({ id: "brut-im-schacht", chapter: "Kapitel_1" });
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      scenes: [sceneItem(draft)],
-    });
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
-    // Nothing was written — not the scene, and not a chapter either.
-    expect(await chapterExists("Kapitel_1")).toBe(false);
   });
 
   test("a DIALOG still refuses an unknown chapter — ADR #19 stands", async () => {

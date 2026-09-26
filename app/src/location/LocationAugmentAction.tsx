@@ -4,7 +4,8 @@
 // as the accepting write.
 
 import { locationChangeSchema } from "@grimoire/shared/location";
-import type { GenerateJob, Location } from "@grimoire/shared/types";
+import type { Location } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   AugmentDialog,
@@ -75,7 +76,7 @@ function LocationAugmentReview({
 }: {
   campaign: string;
   location: Location;
-  job: GenerateJob;
+  job: GeneratorJob;
   proposal: ProposalView;
   onDone: () => void;
 }) {

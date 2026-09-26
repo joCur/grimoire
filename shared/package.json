@@ -21,7 +21,8 @@
     "./session": "./src/session.ts",
     "./log-entry": "./src/log-entry.ts",
     "./pause": "./src/pause.ts",
-    "./played-scene": "./src/played-scene.ts"
+    "./played-scene": "./src/played-scene.ts",
+    "./generator-job": "./src/generator-job.ts"
   },
   "scripts": {
     "test": "bun test",

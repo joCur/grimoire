@@ -52,6 +52,7 @@ import {
 } from "../fixtures/replies";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
+import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation } from "../support/location";
 import { createNpc, getNpc, patchNpc } from "../support/npc";
 import { getScene, patchScene } from "../support/scene";
@@ -140,7 +141,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
 
   // The job is the npc's own run (ADR #31): kind, id and a typed proposal —
   // the npc as read beside the npc as proposed, no address anywhere.
-  const job = await api.get<Record<string, unknown>>("campaigns/beispiel/generate/job");
+  const job: Record<string, unknown> = await getGeneratorJob(api);
   expect(job.kind).toBe("npc-augment");
   expect(job.npc).toBe(EMPTY_NPC);
   expect(job.target).toBeUndefined();
@@ -181,7 +182,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   expect(npc.status).toBe("unknown");
   expect(npc.status).not.toBe(AUGMENT_NPC_STATUS);
   // The job is gone with the same transaction.
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
 
   // Path 2: the reading view shows the filled npc at once — the motivation
   // in the header, the callout as a callout with the `[[fenn]]` inside it
@@ -209,7 +210,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // The job is the scene's own run (ADR #31): kind, id and a typed proposal —
   // the scene as read beside the scene as proposed, flat, no address anywhere.
-  const job = await api.get<Record<string, unknown>>("campaigns/beispiel/generate/job");
+  const job: Record<string, unknown> = await getGeneratorJob(api);
   expect(job.kind).toBe("scene-augment");
   expect(job.scene).toBe(SCENE);
   const proposal = job.sceneAugmentResult as {
@@ -312,11 +313,9 @@ test("an unknown [[id]] in the proposal costs one correction turn", async ({ pag
   await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
     timeout: 30_000,
   });
-  const job = await api.get<{
-    npcAugmentResult: { proposed: { body: string }; usage?: { attempts: number } };
-  }>("campaigns/beispiel/generate/job");
-  expect(job.npcAugmentResult.usage?.attempts).toBe(2);
-  expect(job.npcAugmentResult.proposed.body).not.toContain(UNKNOWN_REF_ID);
+  const job = await getGeneratorJob(api);
+  expect(job.npcAugmentResult!.usage?.attempts).toBe(2);
+  expect(job.npcAugmentResult!.proposed.body).not.toContain(UNKNOWN_REF_ID);
   await expect(page.getByRole("dialog")).not.toContainText(UNKNOWN_REF_ID);
 
   await acceptButton(page).click();
@@ -391,7 +390,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
 
   // Nothing written — not even a new row version — and the job is gone.
   expect(await getScene(api, SCENE)).toEqual(before);
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
 
   // And the reading view carries none of the proposal.
   await page.reload();
@@ -477,7 +476,7 @@ test("a location is augmented on its own resource: the proposal, then one write"
 
   // The job is the location's own run: kind, id and a typed proposal — the
   // location as read beside the location as proposed, no address anywhere.
-  const job = await api.get<Record<string, unknown>>("campaigns/beispiel/generate/job");
+  const job: Record<string, unknown> = await getGeneratorJob(api);
   expect(job.kind).toBe("location-augment");
   expect(job.location).toBe("leuchtturm");
   expect(job.target).toBeUndefined();
@@ -513,7 +512,7 @@ test("a location is augmented on its own resource: the proposal, then one write"
   expect(after.atmosphere).toBe(before.atmosphere);
   expect(after.rev).toBe(before.rev + 1);
   // The job went with the write, and the reading view shows the new text.
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
   await expect(page.getByRole("article")).toContainText(AUGMENT_THREAD_CONDITION);
 });
 

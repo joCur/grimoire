@@ -10,7 +10,7 @@
 import { Hono } from "hono";
 import { sceneCreateSchema } from "@grimoire/shared";
 import { ApiError } from "../api-error";
-import { startJob } from "../generate-jobs";
+import { serializeJob, startJob } from "../generator-jobs";
 import { obtainProvider } from "../generator";
 import { applySceneAugment } from "../scene-augment";
 import { createScene, listScenes, patchScene, readScene } from "../store/scenes";
@@ -85,10 +85,10 @@ sceneRoutes.patch("/campaigns/:campaign/scenes/:id", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/scenes/:id/augment { sourceText?, instruction? }
-// -> 202 { jobId } — the AI augment run of one scene, on the scene's own
+// -> 202 GeneratorJob — the AI augment run of one scene, on the scene's own
 // resource: the same background job model as every other run
 // (`kind: "scene-augment"`, the job's `scene` the id), ONE generator job per
-// campaign, so a start while ANY run is going answers 409 { jobId }. Writes
+// campaign, so a start while ANY run is going answers 409 { generatorJob }. Writes
 // NOTHING; the proposal waits in the job as `sceneAugmentResult` — the scene
 // as the run read it (`current`) beside the scene as the model proposes it
 // (`proposed`), both without their guard.
@@ -115,7 +115,7 @@ sceneRoutes.post("/campaigns/:campaign/scenes/:id/augment", async (c) => {
     instruction,
     provider,
   });
-  return c.json({ jobId: job.id }, 202);
+  return c.json(serializeJob(job), 202);
 });
 
 // POST /api/campaigns/:campaign/scenes/:id/augment/apply

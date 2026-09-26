@@ -6,7 +6,7 @@
 
 import { Hono } from "hono";
 import { ApiError } from "../api-error";
-import { startJob } from "../generate-jobs";
+import { serializeJob, startJob } from "../generator-jobs";
 import { obtainProvider } from "../generator";
 import { applyLocationAugment } from "../location-augment";
 import { createLocation, listLocations, patchLocation, readLocation } from "../store/locations";
@@ -61,10 +61,10 @@ locationRoutes.patch("/campaigns/:campaign/locations/:id", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/locations/:id/augment { sourceText?, instruction? }
-// -> 202 { jobId } — the AI augment run of one location, on the location's
+// -> 202 GeneratorJob — the AI augment run of one location, on the location's
 // own resource: the same background job model as every other run
 // (`kind: "location-augment"`, the job's `location` the id), ONE generator
-// job per campaign, so a start while ANY run is going answers 409 { jobId }.
+// job per campaign, so a start while ANY run is going answers 409 { generatorJob }.
 // Writes NOTHING; the proposal waits in the job as `locationAugmentResult` —
 // the location as the run read it (`current`) beside the location as the
 // model proposes it (`proposed`), both without their guard.
@@ -91,7 +91,7 @@ locationRoutes.post("/campaigns/:campaign/locations/:id/augment", async (c) => {
     instruction,
     provider,
   });
-  return c.json({ jobId: job.id }, 202);
+  return c.json(serializeJob(job), 202);
 });
 
 // POST /api/campaigns/:campaign/locations/:id/augment/apply

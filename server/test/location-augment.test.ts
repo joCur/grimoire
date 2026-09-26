@@ -4,10 +4,10 @@
 // writes what the DM took.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { GenerateJob, Location, LocationProposal } from "@grimoire/shared";
+import type { GeneratorJob, Location, LocationProposal } from "@grimoire/shared";
 import { locationProposalSchema } from "@grimoire/shared";
 import { app } from "../src/server";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests } from "../src/generator-jobs";
 import { ASSET_FILES, campaignRefIds, collectContext, loadAsset, setProviderForTests } from "../src/generator";
 import {
   locationAugmentSystemPrompt,
@@ -24,6 +24,7 @@ import {
   type LLMProvider,
 } from "../src/llm-provider";
 import { dropStore, seedStore } from "./support/store";
+import { readJob } from "./support/generator-jobs";
 
 const CAMPAIGN = "beispiel";
 const TOWER = `/api/campaigns/${CAMPAIGN}/locations/leuchtturm`;
@@ -67,11 +68,16 @@ async function post(url: string, body: Record<string, unknown>): Promise<Respons
 }
 
 /** Start a run on the location and wait for the job to leave `running`. */
-async function runJob(body: Record<string, unknown>): Promise<GenerateJob> {
+async function runJob(body: Record<string, unknown>): Promise<GeneratorJob> {
   const res = await post(`${TOWER}/augment`, body);
   expect(res.status).toBe(202);
+  // The answer is the job itself, naming the location from the moment it starts.
+  const started = (await res.json()) as GeneratorJob;
+  expect(started.kind).toBe("location-augment");
+  expect(started.location).toBe("leuchtturm");
   for (let i = 0; i < 200; i += 1) {
-    const job = (await (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    const job = (await readJob(CAMPAIGN))!;
+    expect(job.id).toBe(started.id);
     if (job.status !== "running") return job;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -217,7 +223,7 @@ describe("accepting", () => {
     expect(written.body).toContain("ein Logbuch unter der Treppe");
     expect(written.rev).toBe(before.rev + 1);
     expect(await read()).toEqual(written);
-    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
+    expect(await readJob(CAMPAIGN)).toBeNull();
   });
 
   test("a stale rev is 409 with the current location, and nothing is written", async () => {

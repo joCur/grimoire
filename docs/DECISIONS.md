@@ -209,8 +209,8 @@ Konsequenzen für das Job-Modell:
   Neustart-Meldung, **fertige bleiben stehen** und übernehmbar. Ein Job ohne
   Teile — der Ergänzen- und der NPC-Lauf bleiben Ein-Aufruf-Läufe — verhält
   sich unverändert.
-- **„Erneut versuchen" je Teil:** `POST …/generate/job/:id/parts/:key/retry`
-  startet genau diesen Teil neu, aus der gespeicherten Gliederung — in **einer
+- **„Erneut versuchen" je Teil:** `PATCH …/generator-jobs/:id/parts/:key
+  { status: "running" }` startet genau diesen Teil neu, aus der gespeicherten Gliederung — in **einer
   Transaktion** über der neu gelesenen Zeile, die nur diesen Teil anfasst:
   während der Kontext-Lesung kann ein Geschwister-Teil fertig werden, und ein
   Rückschreiben der ganzen `pipeline`-Spalte hat dessen Ergebnis überschrieben.
@@ -1056,8 +1056,8 @@ Generator selbst.
   Runde, die diese Entscheidung abschafft, und ein Lauf kostet ein paar
   Token; ein halb konvertierter Entwurf kostet einen falschen Eintrag in der
   Kampagne.
-- `POST …/generate/apply`, `POST …/generate/job/:id/accept` und `PATCH
-  …/generate/job/:id/review` sprechen die Objektform. Das ist ein Bruch der
+- Prüfen und Übernehmen eines Jobs (`PATCH …/generator-jobs/:id`, ADR #31)
+  sprechen die Objektform. Das ist ein Bruch der
   Schnittstelle, und er ist keiner in der Praxis: ein Entwurf lebt nur
   zwischen einem Lauf und seinem Übernehmen.
 
@@ -1816,6 +1816,8 @@ Die Ressourcen der bisher erfassten Entitäten:
 | Pause | `PATCH /campaigns/:c/sessions/:s/pauses/:id` | `POST /campaigns/:c/sessions/:s/pauses` | in der Session |
 | Log-Zeile | `PATCH /campaigns/:c/sessions/:s/log/:id` | `POST /campaigns/:c/sessions/:s/log` | in Session und Nachbereitung |
 | Gespielte Szene | — | `POST /campaigns/:c/sessions/:s/played-scenes` | in der Session |
+| Generator-Job | `GET/PATCH/DELETE /campaigns/:c/generator-jobs/:id` | `GET/POST /campaigns/:c/generator-jobs` | auf der Generator-Seite `/campaigns/:c/generate` und in den Ergänzen-Dialogen |
+| Teil eines Laufs | `PATCH /campaigns/:c/generator-jobs/:j/parts/:key` | — | im Generator-Job |
 
 Die API-Pfade stehen unter `/api` (ADR #22). URL-Segmente sind der
 englische Plural der Entität.
@@ -1857,6 +1859,16 @@ englische Plural der Entität.
   eine Pause beginnt mit `POST` und endet mit `PATCH` auf die Pause. Welche
   Session läuft, sagt ein Filter der Liste (`…/sessions?running=true`), kein
   eigener Endpunkt.
+  Ein Generator-Lauf beginnt mit `POST …/generator-jobs { kind, … }` (ein
+  Szenen- oder NPC-Lauf) oder auf der Ressource, die er ergänzt. Geprüft und
+  übernommen wird er mit `PATCH …/generator-jobs/:id { rev, … }`: die
+  Entscheidungen stehen unter `review`, und wer Vorschläge in
+  `review.writtenScenes`, `writtenNpcs` oder `writtenLocations` nennt,
+  schreibt sie in die Kampagne. Ist danach nichts mehr offen, ist der Job
+  erledigt, und die Antwort ist sein letzter Stand. Ein gescheiterter Teil
+  läuft erneut mit `PATCH …/parts/:key { status: "running" }`; verworfen wird
+  der Job mit `DELETE`. Je Kampagne gibt es höchstens einen Job, darum ist
+  seine Liste leer oder hat genau einen Eintrag.
   `PATCH …/chapters/:id { rev, status: "active" }` und `POST …/chapters` mit
   `status: "active"` aktivieren ein Kapitel; der Server setzt das bisher
   aktive Kapitel in derselben Transaktion auf `planned`, und dessen `rev`
@@ -1908,7 +1920,7 @@ englische Plural der Entität.
   Treffer `kind`, und die App öffnet daraus die Route der Entität.
   `[[id]]`-Verweise lösen gegen die Ressourcen auf.
 - **Ergänzen hängt an der Ressource:** `POST …/<ressource>/:id/augment`
-  startet den Lauf, `POST …/<ressource>/:id/augment/apply` übernimmt ihn. Der
+  startet den Lauf und antwortet mit seinem Generator-Job, `POST …/<ressource>/:id/augment/apply` übernimmt ihn. Der
   Vorschlag ist der gelesene Stand neben dem vorgeschlagenen, beide im Typ der
   Entität ohne `rev`.
 - **Generator-Ergebnis:** Ein Job listet in seinem Ergebnis `scenes`, `npcs`

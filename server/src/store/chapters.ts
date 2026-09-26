@@ -590,7 +590,7 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
  * empty text.
  *
  * Both ways a chapter comes into being with a text use it: the create dialog
- * and a new-chapter generator run (generator.ts `newChapterTarget`).
+ * and a new-chapter generator run (generator.ts `jobChapterTarget`).
  */
 export function newChapterBody(body?: string): string {
   const trimmed = body?.trim() ?? "";

@@ -848,7 +848,10 @@ Modell über ihre Felder wissen muss, steht in ihrem Prompt
 Szenen unter `result.scenes`, die NPCs unter `result.npcs` und die Orte unter
 `result.locations`; ein NPC-Lauf trägt seinen einen NPC unter
 `npcResult.npc`. Änderungen des DM an einem Vorschlag liegen je Szene unter
-`sceneEdits` und je NPC unter `npcEdits`. Details in `generator/README.md`.
+`sceneEdits` und je NPC unter `npcEdits`. Der Job ist seine eigene Ressource
+(`…/generator-jobs/<id>`, höchstens einer je Kampagne): geprüft und
+übernommen wird mit `PATCH` auf ihn, verworfen mit `DELETE`. Details in
+`generator/README.md`.
 
 Die mechanische Prüfung liest die Felder und den Text, aber keine
 Überschrift (ADR #29): die Abschnitte eines Vorschlags sind die Empfehlung

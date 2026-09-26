@@ -9,9 +9,10 @@
 // the real endpoints against the real job row.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import type { GenerateJob } from "@grimoire/shared";
+import type { GeneratorJob } from "@grimoire/shared";
 import { app } from "../src/server";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests } from "../src/generator-jobs";
+import { acceptBody, jobsUrl, jobUrl, partUrl, readJob } from "./support/generator-jobs";
 import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
@@ -216,7 +217,7 @@ test("the outline's ids are kebab slugs and unique across scenes, npcs AND locat
 test("an id the campaign already has is NOT an outline error", () => {
   // A reference creates an EMPTY row, so „fenn exists“ can mean „a scene
   // mentions him and nobody has written him yet“ — which is exactly the entry
-  // this run should fill. Collisions are the apply path's question.
+  // this run should fill. Collisions are the accept's question.
   expect(
     outlineErrors(
       outlineReply({ npcs: [{ id: "fenn", name: "Fenn", summary: "x" }] }),
@@ -606,22 +607,22 @@ async function send(method: string, url: string, body?: unknown): Promise<Respon
   });
 }
 
-async function fetchJob(): Promise<GenerateJob | null> {
-  const res = await app.request("/api/campaigns/beispiel/generate/job");
-  if (res.status === 404) return null;
-  expect(res.status).toBe(200);
-  return (await res.json()) as GenerateJob;
-}
+const fetchJob = (): Promise<GeneratorJob | null> => readJob("beispiel");
 
-async function runJob(): Promise<GenerateJob> {
-  expect(
-    (
-      await send("POST", "/api/campaigns/beispiel/generate", {
-        chapter: "01-salzhafen",
-        sourceText: "Fenn waits at the docks.",
-      })
-    ).status,
-  ).toBe(202);
+/** Start the scene run every case here is about. */
+const startRun = (): Promise<Response> =>
+  send("POST", jobsUrl("beispiel"), {
+    kind: "scene",
+    chapter: "01-salzhafen",
+    sourceText: "Fenn waits at the docks.",
+  });
+
+/** Retry one part of a job. */
+const retryPart = (id: string, key: string): Promise<Response> =>
+  send("PATCH", partUrl("beispiel", id, key), { status: "running" });
+
+async function runJob(): Promise<GeneratorJob> {
+  expect((await startRun()).status).toBe(202);
   for (let i = 0; i < 2000; i += 1) {
     const job = await fetchJob();
     if (job === null) throw new Error("job disappeared");
@@ -633,8 +634,8 @@ async function runJob(): Promise<GenerateJob> {
 
 /** Poll the job until its parts look the way a case needs them to. */
 async function waitForParts(
-  ready: (parts: NonNullable<GenerateJob["pipeline"]>["parts"]) => boolean,
-): Promise<GenerateJob> {
+  ready: (parts: NonNullable<GeneratorJob["pipeline"]>["parts"]) => boolean,
+): Promise<GeneratorJob> {
   for (let i = 0; i < 4000; i += 1) {
     const job = await fetchJob();
     if (job !== null && ready(job.pipeline?.parts ?? [])) return job;
@@ -683,18 +684,13 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect(provider.calls.filter((c) => c === "zwei")).toHaveLength(2);
 
   // …and one of them can be accepted while the failed part is still open.
-  const accepted = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
-    rev: job.rev ?? 0,
-    scenes: ["eins"],
-  });
+  const accepted = await send("PATCH", jobUrl("beispiel", job.id), acceptBody(job, { scenes: ["eins"] }));
   expect(accepted.status).toBe(200);
-  expect(await accepted.json()).toEqual({
-    scenes: ["eins"],
-    npcs: [],
-    locations: [],
-    // The job stays: the failed part is not settled.
-    jobDeleted: false,
-  });
+  const answer = (await accepted.json()) as GeneratorJob;
+  expect(answer.review.writtenScenes).toEqual(["eins"]);
+  expect(answer.review.writtenNpcs).toEqual([]);
+  expect(answer.review.writtenLocations).toEqual([]);
+  // The job stays: the failed part is not settled.
   expect((await fetchJob())!.id).toBe(job.id);
 });
 
@@ -714,26 +710,18 @@ test("a done part is acceptable while the run is still RUNNING (AK2)", async () 
     }
   }
   setProviderForTests(new HoldsLast(null));
-  await send("POST", "/api/campaigns/beispiel/generate", {
-    chapter: "01-salzhafen",
-    sourceText: "Fenn waits at the docks.",
-  });
+  await startRun();
   const job = await waitForParts(
     (parts) => parts.filter((p) => p.status === "done").length === 2,
   );
   expect(job.status).toBe("running");
 
-  const accepted = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
-    rev: job.rev,
-    scenes: ["eins"],
-  });
+  const accepted = await send("PATCH", jobUrl("beispiel", job.id), acceptBody(job, { scenes: ["eins"] }));
   expect(accepted.status).toBe(200);
-  expect(await accepted.json()).toEqual({
-    scenes: ["eins"],
-    npcs: [],
-    locations: [],
-    jobDeleted: false,
-  });
+  const answer = (await accepted.json()) as GeneratorJob;
+  expect(answer.review.writtenScenes).toEqual(["eins"]);
+  expect(answer.review.writtenNpcs).toEqual([]);
+  expect(answer.review.writtenLocations).toEqual([]);
   // The run is untouched by it: still running, still holding its third part.
   const after = (await fetchJob())!;
   expect(after.status).toBe("running");
@@ -756,12 +744,13 @@ test("a run that has produced nothing yet is not acceptable", async () => {
     }
   }
   setProviderForTests(new HoldsEverything(null));
-  await send("POST", "/api/campaigns/beispiel/generate", {
-    chapter: "01-salzhafen",
-    sourceText: "Fenn waits at the docks.",
-  });
+  await startRun();
   const job = await waitForParts((parts) => parts.length === 3);
-  const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
+  const res = await send(
+    "PATCH",
+    jobUrl("beispiel", job.id),
+    acceptBody(job, { scenes: ["eins", "zwei", "drei"] }),
+  );
   expect(res.status).toBe(409);
 });
 
@@ -774,10 +763,7 @@ test("„Erneut versuchen“ re-runs ONE part and leaves the rest alone (AK3)", 
   // the STORED outline, so the run is not started again.
   const retryProvider = new ThreeSceneProvider(null);
   setProviderForTests(retryProvider);
-  const res = await send(
-    "POST",
-    `/api/campaigns/beispiel/generate/job/${first.id}/parts/scene:zwei/retry`,
-  );
+  const res = await retryPart(first.id, "scene:zwei");
   expect(res.status).toBe(202);
   for (let i = 0; i < 2000; i += 1) {
     const job = await fetchJob();
@@ -819,14 +805,7 @@ test("a retry that races a sibling's result does not clobber it", async () => {
     }
   }
   setProviderForTests(new HoldsLast("zwei"));
-  expect(
-    (
-      await send("POST", "/api/campaigns/beispiel/generate", {
-        chapter: "01-salzhafen",
-        sourceText: "Fenn waits at the docks.",
-      })
-    ).status,
-  ).toBe(202);
+  expect((await startRun()).status).toBe(202);
   const before = await waitForParts((parts) =>
     parts.map((p) => p.status).join() === "done,failed,running",
   );
@@ -834,7 +813,7 @@ test("a retry that races a sibling's result does not clobber it", async () => {
 
   // Fire the retry and let „drei" answer INTO its context read.
   setProviderForTests(new HoldsLast(null));
-  const retry = send("POST", `/api/campaigns/beispiel/generate/job/${before.id}/parts/scene:zwei/retry`);
+  const retry = retryPart(before.id, "scene:zwei");
   release?.();
   expect((await retry).status).toBe(202);
 
@@ -865,14 +844,11 @@ test("a PENDING part is the pool's, not the retry's", async () => {
     }
   }
   setProviderForTests(new HoldsEverything(null, [...SCENE_IDS, "vier"]));
-  await send("POST", "/api/campaigns/beispiel/generate", {
-    chapter: "01-salzhafen",
-    sourceText: "Fenn waits at the docks.",
-  });
+  await startRun();
   const job = await waitForParts(
     (parts) => parts.length === 4 && parts[3]!.status === "pending",
   );
-  const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/parts/scene:vier/retry`);
+  const res = await retryPart(job.id, "scene:vier");
   expect(res.status).toBe(409);
   expect((await fetchJob())!.pipeline!.parts[3]!.status).toBe("pending");
 });
@@ -881,13 +857,13 @@ test("a retry is refused for a part that is done, and for an unknown key", async
   setProviderForTests(new ThreeSceneProvider(null));
   const job = await runJob();
   expect(
-    (await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/parts/scene:eins/retry`)).status,
+    (await retryPart(job.id, "scene:eins")).status,
   ).toBe(409);
   expect(
-    (await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/parts/scene:nope/retry`)).status,
+    (await retryPart(job.id, "scene:nope")).status,
   ).toBe(404);
   expect(
-    (await send("POST", "/api/campaigns/beispiel/generate/job/not-this-one/parts/scene:eins/retry")).status,
+    (await retryPart("not-this-one", "scene:eins")).status,
   ).toBe(404);
 });
 
@@ -911,10 +887,7 @@ test("a restart fails the open parts and keeps the finished ones (AK3)", async (
     }
   }
   setProviderForTests(new HoldingProvider(null));
-  await send("POST", "/api/campaigns/beispiel/generate", {
-    chapter: "01-salzhafen",
-    sourceText: "Fenn waits at the docks.",
-  });
+  await startRun();
   // Wait until the two answering parts have landed.
   for (let i = 0; i < 2000; i += 1) {
     const job = await fetchJob();
@@ -956,16 +929,9 @@ test("„Verwerfen“ stops the open parts — nothing of them lands afterwards"
     }
   }
   setProviderForTests(new SlowProvider(null));
-  await send("POST", "/api/campaigns/beispiel/generate", {
-    chapter: "01-salzhafen",
-    sourceText: "Fenn waits at the docks.",
-  });
-  for (let i = 0; i < 2000; i += 1) {
-    const job = await fetchJob();
-    if ((job?.pipeline?.parts.length ?? 0) === 3) break;
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-  expect((await send("DELETE", "/api/campaigns/beispiel/generate/job")).status).toBe(200);
+  await startRun();
+  const job = await waitForParts((parts) => parts.length === 3);
+  expect((await send("DELETE", jobUrl("beispiel", job.id), { rev: job.rev })).status).toBe(200);
   release?.();
   await new Promise((resolve) => setTimeout(resolve, 20));
   // The discarded run is gone and stays gone.
@@ -987,7 +953,7 @@ test("the pipeline is not serialized for a single-call run", async () => {
     ]),
   );
   expect(
-    (await send("POST", "/api/campaigns/beispiel/generate/npc", { sourceText: "An ageing fisherman." }))
+    (await send("POST", jobsUrl("beispiel"), { kind: "npc", sourceText: "An ageing fisherman." }))
       .status,
   ).toBe(202);
   for (let i = 0; i < 2000; i += 1) {

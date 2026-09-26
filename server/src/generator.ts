@@ -19,20 +19,19 @@
 //      cannot succeed and a correction turn resends the whole prompt plus
 //      the previous reply — the most expensive retry there is.
 //   5. the app shows the result as a review preview — generating writes
-//      NOTHING; only POST /generate/apply stores anything, and it
+//      NOTHING; only the accept on the job stores anything, and it
 //      re-validates server-side instead of trusting the client.
 //
 // A proposed scene, npc or location is a `SceneProposal`, an `NpcProposal`
 // or a `LocationProposal` — the entity without its guard (ADR #31): nothing
 // here renders one into one markdown text and nothing parses one back.
 //
-// Steps 1-4 run in the BACKGROUND: POST /generate starts a
-// job (./generate-jobs) and answers 202, the result waits in the job store
-// until it is applied or discarded. runGenerate itself is unchanged by that
-// — it is the job runner's one call.
+// Steps 1-4 run in the BACKGROUND: `POST …/generator-jobs` starts a job
+// (./generator-jobs) and answers 202, the result waits in the job until it
+// is accepted or discarded.
 //
 // There is a SECOND run kind next to scenes: one npc from source material
-// (runGenerateNpc, POST /generate/npc). It shares everything that is
+// (runGenerateNpc, an npc run of the generator job). It shares everything that is
 // mechanics — provider factory, correction turns, truncation fail-fast, usage
 // accounting (runPipeline) and the accept — and differs only in its prompt
 // assets (generator/npc-*.md), its context (no chapter), its reply (the npc's
@@ -277,9 +276,10 @@ export interface SceneContext extends CampaignContext {
  * The cheap request-level checks of a generate target, without touching the
  * LLM: unsafe campaign/chapter id -> 400, unknown campaign/chapter -> 404.
  * `allowMissingChapter` is the "new chapter" flow: the chapter does not exist
- * yet — it is created on apply, so generating into it must not 404.
+ * yet — the first accept creates it, so generating into it must not 404,
+ * and its id has to be a kebab slug (400 otherwise).
  *
- * Exported because POST /generate runs these BEFORE it creates a background
+ * Exported because a scene run's start runs these BEFORE it creates a background
  * job: a 400/404 is a request error and must stay a synchronous
  * answer instead of becoming a failed job the DM has to go and read.
  */
@@ -290,8 +290,12 @@ export async function assertGenerateTarget(
 ): Promise<void> {
   await requireCampaign(campaign); // 400 unsafe id, 404 unknown campaign
   assertSafeChapterId(chapter);
-  if (!(await chapterExists(campaign, chapter)) && !allowMissingChapter) {
-    throw new ApiError(404, "chapter not found");
+  if (await chapterExists(campaign, chapter)) return;
+  if (!allowMissingChapter) throw new ApiError(404, "chapter not found");
+  // The chapter the first accept creates is an entity like any other, and
+  // its id a kebab slug.
+  if (!ENTITY_SLUG.test(chapter)) {
+    throw new ApiError(400, `chapter "${chapter}" must be a kebab-case slug`);
   }
 }
 
@@ -301,7 +305,7 @@ export async function assertGenerateTarget(
  * id whose npc already holds something -> 409 `{ id }` (never overwrite — an
  * existing npc is augmented on its own resource). An npc the DM created and
  * left empty is no conflict: the run fills it. Exported for the same reason
- * as assertGenerateTarget: POST /generate/npc runs it BEFORE it creates a
+ * as assertGenerateTarget: an npc run's start runs it BEFORE it creates a
  * background job.
  */
 export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<void> {
@@ -775,7 +779,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   }
 }
 
-// --- POST /api/campaigns/:campaign/generate/npc ----------------------------------------
+// --- the npc run -----------------------------------------------------------------------
 
 /**
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
@@ -819,13 +823,12 @@ export async function runGenerateNpc(
   return withNamingHints(result, [{ npc: result.npc.id, fields, body }], ctx.namingRules);
 }
 
-// --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
+// --- the accept ------------------------------------------------------------------------
 
 /**
- * Deep-validate one proposed scene of the apply body: a scene without its
- * guard, checked against the scene's schema — a key a scene does not have (a
- * `path`, a `properties`) is a 400 that names it —, a kebab id, and a draft:
- * apply is a separate request and never trusts the client.
+ * Deep-validate one proposed scene before the accept writes it: a scene
+ * without its guard, checked against the scene's schema — a key a scene does
+ * not have is a 400 that names it —, a kebab id, and a draft.
  */
 export function applySceneItem(item: unknown, index: number): SceneProposal {
   const label = `scenes[${index}]`;
@@ -838,9 +841,9 @@ export function applySceneItem(item: unknown, index: number): SceneProposal {
 }
 
 /**
- * Deep-validate one proposed npc of the apply body: an npc without its
- * guard, checked against the npc's schema — a key an npc does not have (a
- * `kind`, a `properties`) is a 400 that names it — and a kebab id.
+ * Deep-validate one proposed npc before the accept writes it: an npc
+ * without its guard, checked against the npc's schema — a key an npc does
+ * not have is a 400 that names it — and a kebab id.
  */
 export function applyNpcItem(item: unknown, index: number): NpcProposal {
   const label = `npcs[${index}]`;
@@ -852,9 +855,9 @@ export function applyNpcItem(item: unknown, index: number): NpcProposal {
 }
 
 /**
- * Deep-validate one proposed location of the apply body: a location without
- * its guard, checked against the location's schema — a key a location does
- * not have (a `status`, a `kind`) is a 400 that names it — and a kebab id.
+ * Deep-validate one proposed location before the accept writes it: a
+ * location without its guard, checked against the location's schema — a key
+ * a location does not have is a 400 that names it — and a kebab id.
  */
 export function applyLocationItem(item: unknown, index: number): LocationProposal {
   const label = `locations[${index}]`;
@@ -866,20 +869,18 @@ export function applyLocationItem(item: unknown, index: number): LocationProposa
 }
 
 /**
- * The chapter target of a new-chapter run, decided from the JOB.
+ * The chapter a new-chapter run creates, decided from the JOB: the run knows
+ * what chapter it is for (`generate_jobs.chapter`) and what it is CALLED
+ * (`generate_jobs.new_chapter_title`), so the accept needs no browser that
+ * still holds the start form. Null for a run into an existing chapter, and
+ * once the chapter is there (idempotent — an existing chapter is not a
+ * conflict, and its text is never touched).
  *
- * The app must not decide it from its own state: the review state is
- * persistent, so that state is gone after a navigation or a reload, and the
- * scenes would land under a chapter that has no entry of its own — invisible
- * in the overview, together with every scene in it. The run knows what
- * chapter it is for (`generate_jobs.chapter`) and what it is CALLED
- * (`generate_jobs.new_chapter_title`), so the decision is made here and needs
- * no browser.
- *
- * The body fields stay an OVERRIDE for compatibility (an older app build, and
- * the whole-run `POST /generate/apply`, which has no job to read): sent, they
- * decide; absent, the job does. Idempotent either way — an existing chapter
- * yields null.
+ * The chapter is `planned` — a generator-created chapter is upcoming, never
+ * the active one —, and its `body` is the chapter description the OUTLINE
+ * wrote from the source material, or empty when there is none. A job without
+ * a title falls back to the id: a chapter called by its slug is at least
+ * readable in the overview, an invisible one is not.
  */
 export async function jobChapterTarget(
   campaign: string,
@@ -889,119 +890,15 @@ export async function jobChapterTarget(
     newChapterTitle?: string;
     pipeline?: { outline?: { chapterDescription?: string } };
   },
-  bodyChapter: unknown,
-  bodyChapterTitle: unknown,
 ): Promise<ChapterProposal | null> {
-  // The description is the OUTLINE's (it read the source material) and only
-  // a new-chapter run's outline has one, so it comes from the job on either
-  // path: the override names the chapter, it does not describe it.
-  const description = job.newChapter ? job.pipeline?.outline?.chapterDescription : undefined;
-  if (bodyChapter !== undefined || bodyChapterTitle !== undefined) {
-    return newChapterTarget(campaign, bodyChapter, bodyChapterTitle, description);
-  }
-  if (!job.newChapter || job.chapter === undefined) return null;
-  // No stored title (a run started before the column existed) falls back to
-  // the id: a chapter called by its slug is at least readable in the
-  // overview, an invisible one is not.
-  return newChapterTarget(
-    campaign,
-    job.chapter,
-    job.newChapterTitle ?? job.chapter,
-    description,
-  );
-}
-
-/**
- * The new-chapter flow: `chapter` + `chapterTitle` mean "the scenes go into
- * a chapter that does not exist yet". Returns the chapter to create in the
- * same batch, or null when the chapter is already there (idempotent — an
- * existing chapter is not a conflict, and its text is never touched). The
- * chapter is `planned` — a generator-created chapter is upcoming, never the
- * active one —, and its `body` is the run's chapter description, or empty
- * when there is none.
- */
-export async function newChapterTarget(
-  campaign: string,
-  chapter: unknown,
-  chapterTitle: unknown,
-  description?: string,
-): Promise<ChapterProposal | null> {
-  if (chapter === undefined && chapterTitle === undefined) return null;
-  if (typeof chapter !== "string" || typeof chapterTitle !== "string") {
-    throw new ApiError(400, "chapter and chapterTitle must be sent together as strings");
-  }
-  const title = chapterTitle.replace(/\s*\r?\n\s*/g, " ").trim();
-  if (title === "") throw new ApiError(400, "chapterTitle must be a non-empty string");
-  assertSafeChapterId(chapter); // 400 unsafe id
-  // An existing chapter is not a conflict — idempotent.
+  const chapter = job.chapter;
+  if (!job.newChapter || chapter === undefined) return null;
   if (await chapterExists(campaign, chapter)) return null;
-  return { id: chapter, title, status: "planned", body: newChapterBody(description) };
-}
-
-/**
- * Write the reviewed run (as ROWS). Validates ALL scenes, npcs and locations
- * first (400), then checks ALL targets for conflicts (409 with the
- * conflicting scene, npc and location ids, nothing partially written), then
- * inserts them in ONE transaction — which is what "all or nothing" means
- * literally. Returns the written scene, npc and location ids.
- *
- * `chapter`/`chapterTitle` (both or neither) add the chapter to the SAME
- * all-or-nothing batch when it does not exist yet — the app's new-chapter
- * flow.
- *
- * `npcs` are proposed npcs, each an npc without its guard — a scene run's
- * and the NPC run's one npc alike: conflict handling, atomic writes and the
- * job cleanup are identical. The same holds for `scenes` and `locations`.
- *
- * `jobId` is the background job the proposals came from: a
- * successful apply discards it — in the SAME transaction as the writes,
- * so a crash can never leave a finished job behind whose proposals are
- * already stored. A stale id is ignored rather than dropping the wrong job.
- */
-export async function applyGenerated(
-  campaign: string,
-  body: {
-    scenes?: unknown;
-    npcs?: unknown;
-    locations?: unknown;
-    chapter?: unknown;
-    chapterTitle?: unknown;
-  },
-  jobId?: string,
-): Promise<{ scenes: string[]; npcs: string[]; locations: string[] }> {
-  await requireCampaign(campaign);
-  const { chapter, chapterTitle } = body;
-  for (const key of ["scenes", "npcs", "locations"] as const) {
-    if (body[key] !== undefined && !Array.isArray(body[key])) {
-      throw new ApiError(400, `${key} must be an array`);
-    }
-  }
-  const scenes = ((body.scenes as unknown[] | undefined) ?? []).map(applySceneItem);
-  const npcs = ((body.npcs as unknown[] | undefined) ?? []).map(applyNpcItem);
-  const locations = ((body.locations as unknown[] | undefined) ?? []).map(applyLocationItem);
-  if (scenes.length === 0 && npcs.length === 0 && locations.length === 0) {
-    throw new ApiError(400, "nothing to apply");
-  }
-
-  // The chapter comes first — the scenes live inside it. The conflict check
-  // runs in the SAME transaction as the inserts (store/generated.ts
-  // `writeGenerated`): asking here first would leave a window between "free"
-  // and "inserted" in which a target could appear, and the documented
-  // `409 { scenes }` would become a primary-key violation (a 500).
-  const newChapter = await newChapterTarget(campaign, chapter, chapterTitle);
-  await writeGenerated(campaign, {
-    ...(newChapter === null ? {} : { chapter: newChapter }),
-    scenes,
-    npcs,
-    locations,
-    // Without a job, the chapters the run decided on are the ones its scenes
-    // name (ADR #18).
-    runChapters: [...new Set(scenes.map((scene) => scene.chapter))],
-    jobId,
-  });
   return {
-    scenes: scenes.map((scene) => scene.id),
-    npcs: npcs.map((npc) => npc.id),
-    locations: locations.map((location) => location.id),
+    id: chapter,
+    title: job.newChapterTitle ?? chapter,
+    status: "planned",
+    body: newChapterBody(job.pipeline?.outline?.chapterDescription),
   };
 }
+
