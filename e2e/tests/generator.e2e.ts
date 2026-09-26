@@ -3,7 +3,7 @@
 // Job → review → apply → draft in the chapter overview, plus the NPC mode and the failure
 // path.
 //
-// A proposed scene is the scene without its guard (ADR #31): the review names
+// A proposed scene is the scene without its guard (decisions/resources): the review names
 // it by its resource segment and id, `scenes/<id>`, and once written it is
 // the scene at `…/scenes/<id>`.
 //
@@ -85,7 +85,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // campaign has none, so it says so. The knowledge path itself is
   // campaign-knowledge.e2e.ts.
   // Two locations: each location a scene names has an entry of its own,
-  // because a reference creates nothing (ADR #19).
+  // because a reference creates nothing (decisions/constraints).
   await expect(page.getByText("2 NPCs · 2 Orte")).toBeVisible();
   // The knowledge and the glossary halves are LINKS to their own pages —
   // this line is where the DM notices a rule is missing, so the fix is one
@@ -147,7 +147,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   };
   await expect(page.getByText("Vorgeschlagene Einträge — einzeln entscheiden")).toBeVisible();
   // The run's proposed scenes, npcs and locations are each their own typed
-  // list (ADR #31): the scene, the npc and the location themselves, no kind,
+  // list (decisions/resources): the scene, the npc and the location themselves, no kind,
   // no path, no properties map.
   const run = (await getGeneratorJob(api)).result!;
   expect(run.scenes).toEqual([
@@ -366,7 +366,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await motivation.blur();
   await expect(page.getByText("Gespeichert")).toBeVisible();
 
-  // The run's npc is the npc itself (ADR #31) — no properties map, no `null`
+  // The run's npc is the npc itself (decisions/resources) — no properties map, no `null`
   // — and the DM's change travels as an npc edit by id, the one field that
   // was touched; a scene edit is something else.
   const job = await getGeneratorJob(api);
@@ -527,7 +527,7 @@ test("review state survives navigation and reload; parts are accepted one by one
 
   // (3) The proposed location, decided as well: the scene NAMES both of
   // them, and a scene cannot be written while a reference names nothing
-  // (ADR #19) — accepting is that decision, the write comes below.
+  // (decisions/constraints) — accepting is that decision, the write comes below.
   await proposalRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
   // Accepted is a decision, not a write.
@@ -646,7 +646,7 @@ async function storedSceneEdit(api: Api): Promise<SceneEdit> {
 /**
  * Accept the whole run: the proposed npc and location, then the bulk accept.
  * The scene NAMES them, and a scene cannot be written while a reference names
- * nothing (ADR #19), so they have to be decided first.
+ * nothing (decisions/constraints), so they have to be decided first.
  */
 async function acceptWholeRun(page: Page): Promise<void> {
   for (const targetPath of [`npcs/${NPC_STUB_ID}`, `locations/${LOCATION_STUB_ID}`]) {
@@ -685,7 +685,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  // Once written, the row links to the npc's own route (ADR #31).
+  // Once written, the row links to the npc's own route (decisions/resources).
   await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toHaveAttribute(
     "href",
     `/campaigns/beispiel/npcs/${NPC_STUB_ID}`,
@@ -754,7 +754,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
   // The accept writes the scene, the chapter it hangs in and the npc and the
   // location the scene NAMES — a scene cannot be written while a
-  // reference names nothing (ADR #19), so they come along. Nothing is left
+  // reference names nothing (decisions/constraints), so they come along. Nothing is left
   // open afterwards, so the review is done.
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
 

@@ -1,5 +1,5 @@
 // Augmenting an NPC: the generator pointed at an npc that already exists, on
-// the npc's own resource (ADR #31) — `POST …/npcs/:id/augment` starts the run
+// the npc's own resource (decisions/resources) — `POST …/npcs/:id/augment` starts the run
 // and `POST …/npcs/:id/augment/apply` writes what the DM took.
 //
 // The mechanics are the generator's (./generator.ts `runPipeline`): same
@@ -85,7 +85,7 @@ function quickstatsText(quickstats: NpcProposal["quickstats"]): Record<string, s
  * Mechanical validation of one raw reply against the npc it is about.
  * Returns the PROPOSAL, or the error list for the correction turn.
  *
- * The id stays (ADR #21), only known callouts, and every `[[id]]` the
+ * The id stays (decisions/constraints), only known callouts, and every `[[id]]` the
  * proposal ADDS names something of the campaign — one the stored body
  * already carries is the DM's, and the augmentation rule tells the model to
  * keep it. A `quickstats` set the proposal repeats with its values written

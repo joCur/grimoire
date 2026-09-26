@@ -1,6 +1,6 @@
 // The log of a session: take a note and review it.
 //
-// A LOG ENTRY IS ITS OWN RESOURCE (ADR #31), hanging under its session:
+// A LOG ENTRY IS ITS OWN RESOURCE (decisions/resources), hanging under its session:
 // `…/sessions/:session/log` and `…/sessions/:session/log/:id`, answering the
 // `LogEntry` type — `{ id, at, sceneId?, text, reviewed, rev }`. The session
 // embeds its log when it is read. The log is append-only: a note is written

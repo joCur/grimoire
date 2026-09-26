@@ -236,7 +236,7 @@ describe("the guard", () => {
     await reorder([CAPTURED, ARRIVAL]);
 
     // An open scene editor and an open chapter-text editor both still save:
-    // the reorder is a write of neither (ADR #23).
+    // the reorder is a write of neither (decisions/writes).
     expect((await scene(ARRIVAL)).rev).toBe(arrivalBefore.rev);
     expect((await scene(CAPTURED)).rev).toBe(capturedBefore.rev);
     expect((await chapter(CHAPTER)).rev).toBe(chapterBefore.rev);

@@ -1,6 +1,6 @@
 // The locations: list, read, create, write and the AI augment run.
 //
-// A LOCATION IS ITS OWN RESOURCE (ADR #31): `…/locations` and
+// A LOCATION IS ITS OWN RESOURCE (decisions/resources): `…/locations` and
 // `…/locations/:id`, answering the `Location` type — every field of the
 // location flat, `body` among them, beside its `rev`.
 
@@ -42,7 +42,7 @@ locationRoutes.post("/campaigns/:campaign/locations", async (c) => {
 
 // PATCH /api/campaigns/:campaign/locations/:id
 //   { rev, force?, id?, name?, chapter?, roll20Page?, atmosphere?, body? } -> Location
-// THE write of one location (ADR #23): any subset of its fields — `body` is
+// THE write of one location (decisions/writes): any subset of its fields — `body` is
 // one of them — in ONE row update against ONE `rev`, checked against the
 // location's schema. `null` clears an optional field; a key that is not a
 // field of a location, or a value of the wrong shape, is a 400 that names it.

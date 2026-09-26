@@ -17,7 +17,7 @@
 //   LLM_MODEL=stub bun run --cwd server src/server.ts
 //
 // node:http instead of Bun.serve on purpose: the same runtime-neutrality rule
-// the server follows (DECISIONS #7) — this script runs under Bun and Node.
+// the server follows (decisions/stack) — this script runs under Bun and Node.
 //
 // Which reply comes back is decided by the PROMPT, never by hidden state, so
 // the stub stays stateless and can serve several test workers at once:
@@ -185,7 +185,7 @@ const partCalls = new Map<string, number>();
 /**
  * The scene a SCENE augment run works on, out of the fenced JSON below the
  * „Bestehende Szene" heading — every field of the scene in its reply form (an
- * absent field `null`), the very object the reply is forced into (ADR #31).
+ * absent field `null`), the very object the reply is forced into (decisions/resources).
  * Null for every other prompt — which is every create run, and then nothing
  * about the stub changes.
  */
@@ -210,7 +210,7 @@ function existingScene(prompt: string): SceneFields | null {
  * The npc an NPC augment run works on, out of the fenced JSON below the
  * „Bestehender NPC" heading — every field of the npc in its reply form
  * (`quickstats` as pairs, an absent field `null`), the very object the reply
- * is forced into (ADR #31). Null for every other prompt.
+ * is forced into (decisions/resources). Null for every other prompt.
  */
 function existingNpc(prompt: string): NpcFields | null {
   const start = prompt.indexOf(EXISTING_NPC_HEADING);
@@ -229,7 +229,7 @@ function existingNpc(prompt: string): NpcFields | null {
 /**
  * The location a LOCATION augment run works on, out of the fenced JSON below
  * the „Bestehender Ort" heading — every field of the location, the very
- * object the reply is forced into (ADR #31). Null for every other prompt.
+ * object the reply is forced into (decisions/resources). Null for every other prompt.
  */
 function existingLocation(prompt: string): ExistingLocation | null {
   const start = prompt.indexOf(EXISTING_LOCATION_HEADING);
@@ -295,7 +295,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const unknownRef =
     source.includes(TRIGGER.unknownRef) && !messages.some((m) => m.role === "assistant");
 
-  // A location augment run carries the location it works on (ADR #31).
+  // A location augment run carries the location it works on (decisions/resources).
   const location = existingLocation(prompt);
   if (location !== null) {
     return {
@@ -311,7 +311,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
     };
   }
 
-  // An npc augment run carries the npc it works on (ADR #31).
+  // An npc augment run carries the npc it works on (decisions/resources).
   const npc = existingNpc(prompt);
   if (npc !== null) {
     return {

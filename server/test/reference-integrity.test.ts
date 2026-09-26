@@ -31,7 +31,7 @@ const SCENE_B = "smuggler-captured";
 const SCENES = "/api/campaigns/beispiel/scenes";
 const NPCS = "/api/campaigns/beispiel/npcs";
 
-/** A scene, read from its own resource (ADR #31). */
+/** A scene, read from its own resource (decisions/resources). */
 async function getScene(id: string): Promise<Scene> {
   const res = await app.request(`${SCENES}/${id}`);
   expect(res.status).toBe(200);
@@ -83,7 +83,7 @@ async function post(rel: string, body: unknown): Promise<Response> {
   });
 }
 
-/** An npc, read from its own resource (ADR #31). */
+/** An npc, read from its own resource (decisions/resources). */
 async function getNpc(id: string): Promise<Npc> {
   const res = await app.request(`${NPCS}/${id}`);
   expect(res.status).toBe(200);

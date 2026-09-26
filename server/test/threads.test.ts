@@ -1,4 +1,4 @@
-// The thread resource (ADR #31): `GET/POST …/threads`, `GET/PATCH/DELETE
+// The thread resource (decisions/resources): `GET/POST …/threads`, `GET/PATCH/DELETE
 // …/threads/:id`, every field of a thread flat — `{ id, chapter, text, done,
 // rev }` — and every write checked against the thread's schema.
 //

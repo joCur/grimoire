@@ -1,7 +1,7 @@
 // The short form of a scene — what the hover preview of a `[[slug]]`
 // reference shows of it: its type, its trigger, its location and its status,
-// read off its own fields (ADR #31), never off a section of its text
-// (ADR #29).
+// read off its own fields (decisions/resources), never off a section of its text
+// (decisions/data-shape).
 //
 // References INSIDE the trigger read as the current display name, plain text
 // (a short form is no place for a second link). An unresolved slug keeps its

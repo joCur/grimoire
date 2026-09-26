@@ -1,4 +1,4 @@
-// The API client of a chapter (ADR #31): its resource — read, create, write —
+// The API client of a chapter (decisions/resources): its resource — read, create, write —
 // and its write conflict. Built from the shared HTTP helpers (../api.ts).
 //
 // Which chapter is the active one is its `status`: a write that sets

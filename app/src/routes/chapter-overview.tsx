@@ -1,7 +1,7 @@
 // "/campaigns/:campaign" — the campaign's route, the chapter overview per the
 // design reference: the campaign header with the campaign's text, chapter
 // accordions with the chapter's text and threads, the chapter's planned
-// scenes as ONE list in the order the DM arranged (ADR #27) and a separate
+// scenes as ONE list in the order the DM arranged (decisions/scene-order) and a separate
 // contingency group at the end.
 //
 // The overview shows several entities, so it is composed from their slices,
@@ -107,7 +107,7 @@ export function ChapterOverviewRoute() {
                 </p>
               )}
               {/* The whole text, a few lines of it at first — nothing is
-                  picked out of it by a heading (ADR #29). A campaign without
+                  picked out of it by a heading (decisions/data-shape). A campaign without
                   one shows nothing here. */}
               <ClampedText className="mt-2.5 max-w-[62ch]">
                 {campaignRead.data?.body ?? ""}

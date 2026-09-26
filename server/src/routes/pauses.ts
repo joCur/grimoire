@@ -1,6 +1,6 @@
 // The pauses of a session: begin and end.
 //
-// A PAUSE IS ITS OWN RESOURCE (ADR #31), hanging under its session:
+// A PAUSE IS ITS OWN RESOURCE (decisions/resources), hanging under its session:
 // `…/sessions/:session/pauses` and `…/sessions/:session/pauses/:id`,
 // answering the `Pause` type — `{ id, from, fromMs?, to?, toMs?, rev }`. The
 // session embeds its pauses when it is read. A pause is an interval of the

@@ -20,7 +20,7 @@ describe("LocationCard — a reference inside the excerpt", () => {
     ["fenn", { kind: "npc", slug: "fenn", name: "Fenn" }],
   ]);
 
-  /** A location card over a cached location — the location's own resource (ADR #31). */
+  /** A location card over a cached location — the location's own resource (decisions/resources). */
   function renderLocation(fields: Partial<Location>): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const location: Location = { id: "kai", name: "Der Kai", body: "", rev: 1, ...fields };

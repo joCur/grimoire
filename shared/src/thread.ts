@@ -1,5 +1,5 @@
 // A THREAD — a storyline the DM keeps track of — its one zod schema and the
-// forms derived from it (ADR #31).
+// forms derived from it (decisions/resources).
 //
 // `threadSchema` is the thread as `GET /api/campaigns/:c/threads/:id` answers
 // it. The TypeScript type, the POST and the PATCH the resource accepts, and

@@ -1,4 +1,4 @@
-// The API client of a thread (ADR #31): its resource — list, create, write,
+// The API client of a thread (decisions/resources): its resource — list, create, write,
 // delete. Built from the shared HTTP helpers (../api.ts).
 //
 // A thread lies flat under its campaign, and its chapter is a field, so no

@@ -1,5 +1,5 @@
 // A LOG ENTRY — one quick note the DM takes during a session — its one zod
-// schema and the forms derived from it (ADR #31).
+// schema and the forms derived from it (decisions/resources).
 //
 // `logEntrySchema` is the entry as the session embeds it and as
 // `POST`/`PATCH /api/campaigns/:c/sessions/:s/log[/:id]` answer it. The

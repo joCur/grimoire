@@ -1,6 +1,6 @@
 // LLM provider abstraction: Claude API to start with, any OpenAI-compatible
 // endpoint (OpenRouter, LM Studio, …) as the alternative — switching is a
-// config change, not a code change (DECISIONS #6).
+// config change, not a code change (decisions/generator).
 //
 // Providers are pure transports: they build the prompt, replay prior
 // correction turns and return the model's RAW text reply. Parsing and
@@ -22,9 +22,9 @@
 //       the field (detected once per process, and only on a 400 that actually
 //       blames the format).
 //
-// The assistant prefill of `{` is gone for good: a forced tool
-// and a forced `response_format` do the job, and a prefilled brace in front
-// of a reply the API already shapes is only in the way.
+// There is no assistant prefill of `{`: a forced tool and a forced
+// `response_format` do the job, and a prefilled brace in front of a reply the
+// API already shapes would only be in the way.
 //
 // Two facts travel WITH the text, because only the transport can see them:
 // whether the model hit its output cap (`finish_reason: length`
@@ -447,10 +447,9 @@ export function cachedMessages(
 
 // --- JSON forcing: every call, by schema ------------------------------------
 //
-// An earlier shape forced JSON by prefilling `{` and by `response_format:
-// json_object`. Both are replaced by the SCHEMA of the request: a forced tool
-// on the Messages API, `json_schema` with `strict: true` on the OpenAI path —
-// the shape is guaranteed rather than merely asked for.
+// JSON is forced by the SCHEMA of the request: a forced tool on the Messages
+// API, `json_schema` with `strict: true` on the OpenAI path — the shape is
+// guaranteed rather than merely asked for.
 
 // --- Claude API ------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 // A glossary term in the suite: its resource `…/glossary-terms/:id`
-// (ADR #31), every field flat — `{ id, term, explanation, rev }`. Its type is
+// (decisions/resources), every field flat — `{ id, term, explanation, rev }`. Its type is
 // the one `@grimoire/shared/glossary-term` derives from the term's schema.
 
 import type {

@@ -1,4 +1,4 @@
-// The API client of a knowledge item (ADR #31): its resource — list,
+// The API client of a knowledge item (decisions/resources): its resource — list,
 // create, write, delete — and the order of the items, which has its own
 // endpoint and its own guard. Built from the shared HTTP helpers (../api.ts).
 

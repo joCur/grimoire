@@ -1,5 +1,5 @@
 // Augmenting a SCENE: the generator pointed at a scene that already exists,
-// on the scene's own resource (ADR #31) — `POST …/scenes/:id/augment` starts
+// on the scene's own resource (decisions/resources) — `POST …/scenes/:id/augment` starts
 // the run and `POST …/scenes/:id/augment/apply` writes what the DM took.
 //
 // The mechanics are the generator's (./generator.ts `runPipeline`): same
@@ -73,7 +73,7 @@ export async function sceneAugmentSystemPrompt(): Promise<string> {
  * Mechanical validation of one raw reply against the scene it is about.
  * Returns the PROPOSAL, or the error list for the correction turn.
  *
- * The id stays (ADR #21), only known callouts, and every `[[id]]` the
+ * The id stays (decisions/constraints), only known callouts, and every `[[id]]` the
  * proposal ADDS names something of the campaign — one the stored body
  * already carries is the DM's, and the augmentation rule tells the model to
  * keep it. The status is whatever the DM made it and may stay so: the reply

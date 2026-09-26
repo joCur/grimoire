@@ -10,11 +10,11 @@
 //     A writes with T    -> ok, the row's rev is now T + 1
 //     B writes with T    -> 409, carrying the CURRENT rev and scene
 //
-// That is what this file pins, on the scene resource (ADR #31). A write
+// That is what this file pins, on the scene resource (decisions/resources). A write
 // against a spent `rev` is a 409 that carries the rev the app needs to
 // reload and retry, and the loser's change never lands — for the status, for
 // the text, and across the two, because every field of a scene, `body`
-// among them, is one row and therefore one guard (ADR #23).
+// among them, is one row and therefore one guard (decisions/writes).
 //
 // The system time is deliberately FROZEN: the guard is independent of
 // wall-clock time, and a test that is not about timing is the point.

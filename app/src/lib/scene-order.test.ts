@@ -1,4 +1,4 @@
-// The rules both views read out of the chapter's scene order (ADR #27):
+// The rules both views read out of the chapter's scene order (decisions/scene-order):
 // which scene a move trades places with, which scene the session view opens
 // with, and where its "next scene" step leads.
 //

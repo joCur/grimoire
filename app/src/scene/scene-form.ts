@@ -7,7 +7,7 @@
 // left blank clears the value (`null`) instead of writing an empty one. A
 // scene always has a title, a type, a chapter and a status, so a blank title
 // is no save, a blank chapter blocks the save with its own line, and type and
-// status are chosen from their closed lists (ADR #25). The three lists hold
+// status are chosen from their closed lists (decisions/constraints). The three lists hold
 // what the chips show, trimmed and without blanks, in their order.
 //
 // Two fields take text that is not what they store:
@@ -38,7 +38,7 @@ type TextKey = Exclude<keyof SceneProposal, "id" | "body" | "type" | "status" | 
 
 /**
  * The form's values — typed against the scene, so a field the form does not
- * handle does not compile. `id` is fixed at creation (ADR #21) and `body` has
+ * handle does not compile. `id` is fixed at creation (decisions/constraints) and `body` has
  * its own editor.
  */
 export type SceneFormValues = { [K in TextKey]-?: string } & {

@@ -1,4 +1,4 @@
-// The location resource (ADR #31): `GET …/locations`, `GET` and `PATCH
+// The location resource (decisions/resources): `GET …/locations`, `GET` and `PATCH
 // …/locations/:id`, every field of a location flat — `body` among them —
 // beside its `rev`, and the PATCH checked against the location's schema.
 // `…/entries/locations/<id>` names nothing.

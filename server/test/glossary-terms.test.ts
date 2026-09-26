@@ -1,4 +1,4 @@
-// The glossary-term resource (ADR #31): `GET/POST …/glossary-terms`,
+// The glossary-term resource (decisions/resources): `GET/POST …/glossary-terms`,
 // `GET/PATCH/DELETE …/glossary-terms/:id`, every field of a term flat —
 // `{ id, term, explanation, rev }`.
 //

@@ -1,4 +1,4 @@
-// Render test for one row of the chapter overview (ADR #27): the location is
+// Render test for one row of the chapter overview (decisions/scene-order): the location is
 // a word in the meta line, not a heading above the row, and every row carries
 // the two controls that set the order.
 //

@@ -1,13 +1,13 @@
 // Chapters: the chapter resource, the campaign tree, and the order of the
 // scenes in a chapter.
 //
-// The chapter is its own resource with its own type (ADR #31,
+// The chapter is its own resource with its own type (decisions/resources,
 // @grimoire/shared/chapter): read, listed, written, created and taken over
 // from a proposal here, typed by its one zod schema, and this module holds
 // the one-active-chapter rule every write that sets `active` runs. Beside it
 // stand the campaign tree — a shape that shows several entities and belongs
 // to its endpoint — and the order of a chapter's scenes: the chapter's
-// statement about its scenes, with its own guard (ADR #27). A scene itself
+// statement about its scenes, with its own guard (decisions/scene-order). A scene itself
 // is its own resource (./scenes.ts), and so is a thread (./threads.ts).
 
 import { and, asc, eq } from "drizzle-orm";
@@ -124,7 +124,7 @@ export function nextScenePos(tx: GrimoireDb, campaign: string, chapter: string):
 }
 
 /**
- * Where the scenes of ONE generator run are placed from (ADR #27): the
+ * Where the scenes of ONE generator run are placed from (decisions/scene-order): the
  * chapter's end at the run's first scene accept, and the chapter's order
  * guard at that moment. It is taken once and stored on the run, so a scene
  * accepted later still lands at its outline place instead of behind whatever
@@ -207,7 +207,7 @@ function sceneOrderMismatch(
  *
  * THE GUARD IS `chapters.scene_order_rev`, a counter of its own, and the
  * write bumps only that one. Neither `chapters.rev` nor `scenes.rev` moves:
- * those guard a chapter's fields and a scene's fields (ADR #23), and
+ * those guard a chapter's fields and a scene's fields (decisions/writes), and
  * reordering touches none of them.
  * Bumping either would turn an editor that is open on something else into a
  * conflict the moment somebody rearranges the chapter around it, which is a
@@ -283,7 +283,7 @@ export function renderChapter(row: ChapterRow): Chapter {
   return {
     id: row.id,
     title: row.title === "" ? row.id : row.title,
-    // The column is a CHECK constraint over the shared list (ADR #25), so the
+    // The column is a CHECK constraint over the shared list (decisions/constraints), so the
     // stored text is one of its values — the narrowing the row type cannot
     // express.
     ...(row.status === null ? {} : { status: row.status as ChapterStatus }),
@@ -331,7 +331,7 @@ export async function listChapters(campaign: string): Promise<Chapter[]> {
  * guard, `force` and any subset of the fields, `body` among them — a key that
  * is none of these, or a value of the wrong shape, is a 400 that names it. A
  * `status` outside the three comes first, with the code the app has a
- * sentence for (`status_not_allowed`, ADR #25).
+ * sentence for (`status_not_allowed`, decisions/constraints).
  */
 export function readChapterPatch(raw: unknown): ChapterPatch {
   if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
@@ -342,7 +342,7 @@ export function readChapterPatch(raw: unknown): ChapterPatch {
 
 /**
  * PATCH /api/campaigns/:campaign/chapters/:id — THE write of one chapter
- * (ADR #23): any subset of its fields in one row update against one `rev`.
+ * (decisions/writes): any subset of its fields in one row update against one `rev`.
  */
 export async function patchChapter(campaign: string, id: string, raw: unknown): Promise<Chapter> {
   const patch = readChapterPatch(raw);
@@ -355,13 +355,13 @@ export async function patchChapter(campaign: string, id: string, raw: unknown): 
  * Only the fields the patch names are touched; `null` clears the status.
  * `force` replaces the guard by the row's current rev — the DM's answer to
  * the conflict dialog, which writes only what this request carries. The id
- * never changes (ADR #21): a patch may echo it, never alter it. A patch that
+ * never changes (decisions/constraints): a patch may echo it, never alter it. A patch that
  * names no field is a 400 `nothing_to_write`.
  *
  * A patch that makes the chapter `active` takes `active` off the chapter that
  * held it, in this transaction (`clearOtherActiveChapters`). The scene
  * order's guard does not move: the order is no field of the chapter
- * (ADR #27).
+ * (decisions/scene-order).
  */
 export function patchChapterIn(
   tx: GrimoireDb,
@@ -472,7 +472,7 @@ export function sceneSummaryRow(
   const summary: SceneSummary = {
     id: row.id,
     title: row.title === "" ? row.id : row.title,
-    // Both columns are CHECK constraints over the shared lists (ADR #25), so
+    // Both columns are CHECK constraints over the shared lists (decisions/constraints), so
     // the stored text is one of their values — the narrowing the row type
     // cannot express.
     type: row.type as SceneType,
@@ -540,7 +540,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     db.select().from(npcs).where(eq(npcs.campaignId, campaign)).all() as NpcRow[]
   )
     .map((row) => {
-      // No address: an npc is its own resource (ADR #31).
+      // No address: an npc is its own resource (decisions/resources).
       const summary: NpcSummary = {
         id: row.id,
         name: row.name === "" ? row.id : row.name,
@@ -554,7 +554,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
 
   const locationList: LocationSummary[] = locationRows
     .map((row) => {
-      // No address: a location is its own resource (ADR #31).
+      // No address: a location is its own resource (decisions/resources).
       const summary: LocationSummary = {
         id: row.id,
         name: row.name === "" ? row.id : row.name,
@@ -589,7 +589,7 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 /**
  * The text a new chapter starts with: the body it was given, verbatim,
  * trimmed and ending in one newline — no heading around it, because nothing
- * reads a chapter's text by its headings (ADR #29). Blank or absent is the
+ * reads a chapter's text by its headings (decisions/data-shape). Blank or absent is the
  * empty text.
  *
  * Both ways a chapter comes into being with a text use it: the create dialog
@@ -604,7 +604,7 @@ export function newChapterBody(body?: string): string {
  * The body of a chapter POST, checked against the chapter's create form — a
  * key that is none of its fields, or a value of the wrong shape, is a 400
  * that names it. A `status` outside the three comes first, with the code the
- * app has a sentence for (`status_not_allowed`, ADR #25).
+ * app has a sentence for (`status_not_allowed`, decisions/constraints).
  */
 export function readChapterCreate(raw: unknown): ChapterCreate {
   if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {

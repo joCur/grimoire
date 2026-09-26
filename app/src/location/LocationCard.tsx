@@ -1,4 +1,4 @@
-// Location card fed from the location's own resource (ADR #31) — for the live
+// Location card fed from the location's own resource (decisions/resources) — for the live
 // aside, beside the cards of the scene's people: the DM needs the PLACE of the
 // running scene as readily as them ("where are we right now?").
 //

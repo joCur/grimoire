@@ -4,7 +4,7 @@
 // ../schema — and can slowly disagree with the validation that reads the
 // same data; its tests assert it against the constants the server checks
 // with. A scene's, an npc's and a location's reply schema is DERIVED from the
-// entity's zod schema via `z.toJSONSchema` (ADR #31) and cannot drift from
+// entity's zod schema via `z.toJSONSchema` (decisions/resources) and cannot drift from
 // its entity — it is the entity — so for them only the form has to hold:
 //
 //   1. strict mode, for every schema: no keyword OpenAI rejects (`pattern`,

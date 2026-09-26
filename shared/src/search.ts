@@ -1,5 +1,5 @@
 // The search (`GET /api/campaigns/:c/search`): the one truly mixed answer,
-// so every hit names its entity by `kind` and `id` (ADR #31).
+// so every hit names its entity by `kind` and `id` (decisions/resources).
 
 /**
  * What a search hit names, by `kind` and `id` (see SearchResult).
@@ -20,7 +20,7 @@ export type SearchKind =
  * glossary terms — see server/src/store/fts.ts. The search is truly mixed, so
  * a hit names its entity by `kind` and `id`, and the app opens the resource
  * of that entity — or, for a glossary term, the glossary page, where the
- * terms are kept (ADR #31).
+ * terms are kept (decisions/resources).
  */
 export interface SearchResult {
   kind: SearchKind;

@@ -25,7 +25,7 @@ describe("the chapter's fields", () => {
   });
 
   test("the status select offers the closed list, plus clearing it", () => {
-    // The column is a CHECK constraint (ADR #25), so the three values are the
+    // The column is a CHECK constraint (decisions/constraints), so the three values are the
     // whole list — plus the empty option, which clears the status on save.
     const html = render({ title: "Salzhafen", status: "active" });
     expect(html).toContain('value="active" selected');

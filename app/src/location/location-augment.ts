@@ -1,4 +1,4 @@
-// A location's augment proposal, field by field (ADR #31): what the model
+// A location's augment proposal, field by field (decisions/resources): what the model
 // changes against the location as the run read it. Pure, so the rule is
 // unit-testable.
 

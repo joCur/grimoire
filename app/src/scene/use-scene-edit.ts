@@ -1,4 +1,4 @@
-// One editing session over ONE scene (ADR #31), with the rules every
+// One editing session over ONE scene (decisions/resources), with the rules every
 // editing session in the app follows:
 //
 //   the write       ONE PATCH of the scene per interaction — any subset of

@@ -121,7 +121,7 @@ describe("chips and selects", () => {
   });
 
   test("type and status offer their closed lists and nothing else", () => {
-    // Both are CHECK constraints (ADR #25) and a scene always has both, so
+    // Both are CHECK constraints (decisions/constraints) and a scene always has both, so
     // there is no empty choice.
     const html = render();
     expect(html).toContain('value="draft" selected');

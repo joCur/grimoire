@@ -1,4 +1,4 @@
-// The campaign in the suite: its resource `/campaigns/:campaign` (ADR #31),
+// The campaign in the suite: its resource `/campaigns/:campaign` (decisions/resources),
 // every field flat, `body` among them, beside its guard. Its type is the one
 // `@grimoire/shared/campaign` derives from the campaign's schema.
 

@@ -1,7 +1,7 @@
 // A chapter's threads on the app side: the query the review and the chapter
 // overview both read, and the writes of the overview.
 //
-// A thread is its own resource with its own guard (ADR #31): a write answers
+// A thread is its own resource with its own guard (decisions/resources): a write answers
 // the one thread it wrote, which the cached list takes in place, and nothing
 // here touches the chapter's cache.
 //

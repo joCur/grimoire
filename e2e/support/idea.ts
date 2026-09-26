@@ -1,4 +1,4 @@
-// An idea in the suite: its resource `…/ideas/:id` (ADR #31), every field
+// An idea in the suite: its resource `…/ideas/:id` (decisions/resources), every field
 // flat — `{ id, text, done, rev }`. Its type is the one
 // `@grimoire/shared/idea` derives from the idea's schema.
 

@@ -1,6 +1,6 @@
 // Played scenes: the played scene resource.
 //
-// A played scene is its own resource with its own type (ADR #31,
+// A played scene is its own resource with its own type (decisions/resources,
 // @grimoire/shared/played-scene), hanging under its session: one step of the
 // evening through the scenes, written here when the session reaches the next
 // scene. The played scenes are a SEQUENCE in the order of play — a scene the

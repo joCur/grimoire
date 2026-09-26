@@ -1,6 +1,6 @@
 // The knowledge items: list, read, create, write, delete — and their order.
 //
-// A KNOWLEDGE ITEM IS ITS OWN RESOURCE (ADR #31): `…/knowledge-items` and
+// A KNOWLEDGE ITEM IS ITS OWN RESOURCE (decisions/resources): `…/knowledge-items` and
 // `…/knowledge-items/:id`, answering the `KnowledgeItem` type —
 // `{ id, kind, from, to, text, rev }`: a naming convention ("write <from> as
 // <to>"), a fact or a style rule that outranks the source material. Its own

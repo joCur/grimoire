@@ -3,7 +3,7 @@
 // mobile start surface's lookup rows and from the topbar's quiet npc and
 // location links on the desktop. The page is the frame: the heading, the
 // loading states and the place of the list's create action; the list itself
-// and its action come from the slice of what it lists (ADR #31), handed in by
+// and its action come from the slice of what it lists (decisions/resources), handed in by
 // App.tsx. The layout is width-agnostic (a plain list).
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";

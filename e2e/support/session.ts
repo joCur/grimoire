@@ -1,4 +1,4 @@
-// A session in the suite: its resource `…/sessions/:id` (ADR #31), every
+// A session in the suite: its resource `…/sessions/:id` (decisions/resources), every
 // field flat, its pauses, log entries and played scenes embedded — each child
 // with its own id and rev. Its type is the one `@grimoire/shared/session`
 // derives from the session's schema.

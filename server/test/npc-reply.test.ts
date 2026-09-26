@@ -1,4 +1,4 @@
-// The reply of an npc call (ADR #31): every field of the npc beside the
+// The reply of an npc call (decisions/resources): every field of the npc beside the
 // model's `warnings`, read by the very reply schema the provider enforced —
 // `quickstats` as its list of pairs, folded into the npc's key/value set.
 

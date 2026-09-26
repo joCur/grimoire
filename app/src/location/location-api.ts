@@ -1,4 +1,4 @@
-// The API client of a location (ADR #31): its resource — read, list,
+// The API client of a location (decisions/resources): its resource — read, list,
 // create, write — its write conflict, and the augment run on it. Built from
 // the shared HTTP helpers (../api.ts).
 

@@ -1,5 +1,5 @@
 // The knowledge items of a case, written through their own resource
-// (ADR #31) — for the cases that need a campaign's knowledge to be exactly
+// (decisions/resources) — for the cases that need a campaign's knowledge to be exactly
 // something before a generator run.
 
 import { expect } from "bun:test";

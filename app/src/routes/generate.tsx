@@ -278,7 +278,7 @@ export function GenerateRoute() {
       : undefined;
   const npcResult = job?.status === "done" && jobKind === "npc" ? job.npcResult : undefined;
   const scenes = result?.scenes ?? [];
-  // The proposed npcs and locations are their own lists (ADR #31), decided
+  // The proposed npcs and locations are their own lists (decisions/resources), decided
   // and accepted by id.
   const proposedNpcs = result?.npcs ?? [];
   const acceptedNpcs = proposedNpcs.filter((npc) => reviewState.npcs[npc.id] === "accepted");
@@ -537,7 +537,7 @@ export function GenerateRoute() {
       !proposalParts.some((part) => part.kind === "location" && part.id === location.id),
   );
 
-  /** One proposed npc of the run, decided and accepted by its id (ADR #31). */
+  /** One proposed npc of the run, decided and accepted by its id (decisions/resources). */
   const npcRow = (npc: NpcProposal, cardRef?: (el: HTMLElement | null) => void) => (
     <NpcProposalRow
       key={`npc:${npc.id}`}
@@ -552,7 +552,7 @@ export function GenerateRoute() {
       onAccept={() => apply.mutate({ npcs: [npc.id] })}
     />
   );
-  /** One proposed location of the run, decided and accepted by its id (ADR #31). */
+  /** One proposed location of the run, decided and accepted by its id (decisions/resources). */
   const locationRow = (
     location: LocationProposal,
     cardRef?: (el: HTMLElement | null) => void,
@@ -571,7 +571,7 @@ export function GenerateRoute() {
     />
   );
 
-  /** One proposed scene of the run, edited, dropped and accepted by its id (ADR #31). */
+  /** One proposed scene of the run, edited, dropped and accepted by its id (decisions/resources). */
   const sceneCard = (proposed: SceneProposal, cardRef?: (el: HTMLElement | null) => void) => (
     <SceneProposalCard
       key={proposed.id}
@@ -1283,7 +1283,7 @@ function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Transla
       <ul className="flex flex-col gap-2">
         {hints.map((hint, index) => {
           // WHAT the hit sits in: a proposed scene, npc or location by its
-          // resource segment and id (ADR #31).
+          // resource segment and id (decisions/resources).
           const where =
             hint.scene !== undefined
               ? sceneLabel(hint.scene)

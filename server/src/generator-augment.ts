@@ -2,7 +2,7 @@
 // entity's fields, and the comparison of a current value with a proposed one.
 //
 // Each entity is augmented on its own resource by its own module
-// (./scene-augment.ts, ./npc-augment.ts, ./location-augment.ts, ADR #31); the
+// (./scene-augment.ts, ./npc-augment.ts, ./location-augment.ts, decisions/resources); the
 // helpers here know nothing about any entity.
 //
 // WHY A PROPOSAL CARRIES WHOLE BODIES and not a block list: the block model

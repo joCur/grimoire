@@ -14,7 +14,7 @@ import { textValue } from "@/components/fields/text";
 /**
  * The form's values, one text per field — typed against the location, so a
  * field the form does not handle does not compile. `id` is fixed at creation
- * (ADR #21) and `body` has its own editor.
+ * (decisions/constraints) and `body` has its own editor.
  */
 export type LocationFormValues = {
   [K in Exclude<keyof LocationProposal, "id" | "body">]-?: string;

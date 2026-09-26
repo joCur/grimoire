@@ -2,7 +2,7 @@
 
 Grimoire ist ein selbst gehostetes Einzelnutzer-Tool für einen D&D-Spielleiter:
 Session-Vorbereitung und Live-Moderation über einer Kampagnen-Datenbank
-(SQLite, ADR #13; Markdown ist das Inhaltsformat der Bodies).
+(SQLite, decisions/sqlite; Markdown ist das Inhaltsformat der Bodies).
 Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Pflichtlektüre vor jeder Aufgabe
@@ -11,21 +11,28 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
    Felder und Adressen, das Text-Vokabular (Callouts,
    `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
    normativ.
-2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
-   Ein ADR hält nur Zielentscheidungen fest: keine befristeten ADRs, keine
-   Zwischenstände. Der Zwischenstand eines in Scheiben geschnittenen Umbaus
-   steht allein im Ticket.
+2. `docs/decisions/` — Architektur-Entscheidungen inkl. Tech-Stack, eine
+   Datei je Thema (Übersicht in `docs/decisions/README.md`). Entscheidungen
+   dort sind bindend; Abweichungen nur, indem die Datei neu geschrieben oder
+   eine neue angelegt wird. Eine Entscheidung hält nur Zielentscheidungen
+   fest: keine befristeten Entscheidungen, keine Zwischenstände. Der
+   Zwischenstand eines in Scheiben geschnittenen Umbaus steht allein im
+   Ticket.
+   A decision records only real decisions with lasting validity (principle,
+   why, consequences) — never inventories (tables, columns, endpoints, error
+   codes, file or function names), implementation detail, or anything from
+   older versions. It must stay true when the code grows.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
-## Stack (Kurzfassung, Details in docs/DECISIONS.md #5)
+## Stack (Kurzfassung, Details in docs/decisions/stack.md)
 
 - Frontend: Vite + React 19 + Tailwind v4 + shadcn/ui, TanStack Query,
   react-markdown + eigenes Remark-Plugin für Callouts und `## If:`
 - Backend: Bun + Hono, SQLite über Drizzle (`server/src/db/`), Suche als
   FTS5-Index
-- Speicher: **eine SQLite-Datei ist die Quelle der Wahrheit** (ADR #13),
+- Speicher: **eine SQLite-Datei ist die Quelle der Wahrheit** (decisions/sqlite),
   `GRIMOIRE_DATA/grimoire.db`
-- Regel: Keine Bun-only-APIs ohne Eintrag in docs/DECISIONS.md
+- Regel: Keine Bun-only-APIs ohne Eintrag in decisions/stack
   (Node-Portabilität). Eingetragen ist genau eine: `bun:sqlite` als Fallback
   hinter `server/src/db/driver.ts`
 
@@ -54,7 +61,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   gemeinsam genutzt. Autorität über das Format ist
   `server/src/db/schema.ts` (Speicherform), beschrieben in README.md — beide
   synchron halten. Eine Entität mit eigener Ressource hat ihr zod-Schema in
-  `shared/src/<entität>.ts` (ADR #31).
+  `shared/src/<entität>.ts` (decisions/resources).
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   ein Routen-Modul je Ressource, `server/src/routes/<ressource>.ts`, ein
   Kommentar je Route — keine Liste zum Abhaken. `server/src/routes/api.ts`
@@ -76,7 +83,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
   `session/`, `generator-job/`) mit allem, was die App über sie weiß
-  (ADR #31); **Slices importieren einander nicht.** Pause, Log-Zeile und
+  (decisions/resources); **Slices importieren einander nicht.** Pause, Log-Zeile und
   gespielte Szene gehören zum Slice `session/`: die App liest sie nur
   eingebettet in ihrer Session, und jeder ihrer Schreibzugriffe landet im
   Cache der Session; ihre Ressourcen haben dort je ein eigenes Modul
@@ -96,15 +103,16 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
   siehe design/README.md). Bei Widerspruch zu docs/UI-BRIEF.md gewinnt design/.
-- `docs/` — die längeren Dokumente: `DECISIONS.md` (bindende ADRs),
-  `UI-BRIEF.md` (Design-Intention), `DEPLOYMENT.md` (Betrieb).
+- `docs/` — die längeren Dokumente: `decisions/` (bindende Entscheidungen,
+  eine Datei je Thema), `UI-BRIEF.md` (Design-Intention), `DEPLOYMENT.md`
+  (Betrieb).
   `README.md` und `CLAUDE.md` bleiben im Root (Tooling-Konvention).
 
 ## Arbeitsweise
 
 - Vertikale Scheiben, eine pro Auftrag. Nicht mehrere Views gleichzeitig.
 - Gegen echte Daten entwickeln: keine erfundenen Mock-Objekte. Die Datenbank
-  ist die Wahrheit (ADR #13), und der Server startet **leer**: einmal
+  ist die Wahrheit (decisions/sqlite), und der Server startet **leer**: einmal
   `bun run --filter @grimoire/server seed` (liest `fixtures/`) füllt
   `GRIMOIRE_DATA/grimoire.db`. Tests bekommen pro Fall eine frische
   In-Memory-DB, geseedet aus denselben Fixtures
@@ -123,7 +131,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Konflikt, nie stilles Überschreiben.
 - Kampagne, Kapitel, Szene, NPC, Ort, Faden, Idee, Glossar-Begriff,
   Kampagnenwissen und Session samt Pause, Log-Zeile und gespielter Szene sind
-  jeweils ihre eigene Ressource (ADR #31):
+  jeweils ihre eigene Ressource (decisions/resources):
   `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>` mit
   `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
   `…/locations/<id>` mit `Location`, `…/threads/<id>` mit `Thread`,
@@ -163,22 +171,29 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `PATCH …/parts/<key> { status: "running" }` wiederholt einen Teil,
   `DELETE { rev }` verwirft den Job.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
-  Code, Kommentare, Commits: Englisch.
-- Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
-  auf Issues, PRs oder Reviews. Verweise auf ADRs (`ADR #13`) sind erlaubt —
-  sie zeigen auf ein Dokument im Repo, nicht auf ein Ticket.
-- Pfadfinder-Prinzip: Wer eine Datei aus einem anderen Grund anfasst, räumt
-  in dieser ganzen Datei mit auf, was gegen die Kommentar-Regeln verstößt —
-  Issue-Verweise ebenso wie deutsche Begriffe in englischen Kommentaren —,
-  nicht nur in den geänderten Zeilen. Dafür gibt es keinen eigenen
-  Aufräum-PR.
+- Repository language (decisions/language): everything in the repo is
+  English — code, identifiers, comments, test names, commits, docs,
+  decisions, agent instructions, the example campaign content in
+  `fixtures/`, and tests. German exists only in the German UI catalog
+  (`app/src/i18n/de.ts`). German anywhere else is a violation to convert,
+  not an exception. In code and docs, describe a UI label in English instead
+  of quoting it.
+- Tests (decisions/testing): never assert against or locate by UI text; use
+  roles, test ids or catalog keys and assert on behavior and data.
+- Comments explain the code and stand on their own: no references to issues,
+  PRs or reviews. References to decisions (`decisions/sqlite`) are allowed —
+  they point to a document in the repo, not to a ticket.
+- Scout rule: whoever touches a file for another reason brings the whole
+  file in line with the two rules above in the same change — German prose,
+  comments and test names become English, issue references go — not only the
+  changed lines. There is no separate cleanup PR.
 - Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
   sie ermöglichen (Constraint-Fehler am Schreibpfad), nicht ihr SQL.
 - Datenänderungen sind Teil der Migration selbst (SQL, dieselbe Transaktion):
   kein Preflight, kein Datenschritt, kein Boot-Durchgang daneben.
   Übergangscode gibt es nicht: Ein Umbau wird so geschnitten, dass weder
   Adapter noch Doppelwege entstehen.
-- Eine Ressource je Entität (ADR #31): Jede Entität der Datenbank hat ihren
+- Eine Ressource je Entität (decisions/resources): Jede Entität der Datenbank hat ihren
   eigenen Endpunkt, ihren eigenen Typ, ihr eigenes zod-Modul als einzige
   Quelle und ihre eigene App-Route; einen allgemeinen Endpunkt über mehrere
   Entitäten gibt es nicht. Jedes Feld ist ein Feld der Entität, `body`
@@ -193,20 +208,20 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Tests und keine Betriebsdoku über den Auftrag hinaus. Kommentare
   beschreiben den Zustand, nie die Geschichte eines Fehlers oder das Setup
   des PO.
-- Abhängigkeiten statt Eigenbau (ADR #30): Für allgemeine Aufgaben
+- Abhängigkeiten statt Eigenbau (decisions/dependencies): Für allgemeine Aufgaben
   (Validierung, Schemata, Datum und Zeit, …) wird ein etabliertes Paket
-  eingebunden, nicht selbst gebaut. Eintragspflichtig in docs/DECISIONS.md
+  eingebunden, nicht selbst gebaut. Eintragspflichtig in decisions/stack
   bleiben allein Bun-only-APIs (Node-Portabilität).
 - Ein Schema hat genau eine Quelle; eine abgeleitete Form wird nie von Hand
   nachgebaut. Das Schema einer Entität ist ihr zod-Schema, und Typ,
-  Patch-, Seed- und Generator-Form werden daraus abgeleitet (ADR #31).
+  Patch-, Seed- und Generator-Form werden daraus abgeleitet (decisions/resources).
   Fixtures liegen weiter als das Objekt selbst vor (eine Antwort-Fixture als
   das Objekt selbst, eine Entität als das Objekt, das ihre Ressource
   liefert).
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
-  `app/src/lib/` bekommen den Translator als Argument. Details: ADR #15.
+  `app/src/lib/` bekommen den Translator als Argument. Details: decisions/i18n.
   `bun run lint` ist das Gate — scharf für migrierte Dateien, `warn` für den
   Rest (Scheibe 2 von #69 arbeitet die Warnungen ab).
 - UI-Texte sind ganze Sätze, die der DM versteht: Ändert sich das Verhalten
@@ -247,11 +262,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Der Lead-Klickpfad läuft auf dem FINALEN PR-Stand nach dem letzten Commit,
   auch nach Review-Fix-Runden. Ungetestet geht kein PR zum PO.
 - main ist per Definition deploybar, veröffentlicht aber nichts: Images
-  entstehen nur beim Release (DECISIONS #12). Der PO pullt bewusst einen
+  entstehen nur beim Release (decisions/release). Der PO pullt bewusst einen
   Versions-Tag (nie direkt vor einer Session); Rollback = älterer
   Versions-Tag.
 
-## Commit- & Release-Konventionen (DECISIONS #12)
+## Commit- & Release-Konventionen (decisions/release)
 
 - **Conventional Commits sind Pflicht**, sie erzeugen den Changelog:
   `feat: …` (Minor), `fix: …` (Patch), `docs:`/`chore:`/`refactor:`/`test:`/
@@ -328,7 +343,7 @@ Die Pfade:
    die Notiz anderswo geändert wurde; `review/seen` antwortet 404
 6. Generator-Zyklus (Stub-LLM): Job → Vorschläge prüfen → Übernehmen →
    Szene in den Kapiteln; plus 409-/Fehlerpfad. Eine vorgeschlagene Szene ist
-   die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
+   die Szene ohne `rev` (`result.scenes`, decisions/resources): „Bearbeiten" öffnet ihre
    Felder und ihren Text, gespeichert werden die geänderten Felder je Szene
    (`sceneEdits`), und „Übernehmen" schreibt sie über dem Vorschlag des
    Modells; geprüft, verworfen und übernommen wird je `id`, alles über
@@ -350,7 +365,7 @@ Die Pfade:
    laufender wird als `failed` gemeldet). Die Szenen eines Laufs stehen im
    Kapitel in Gliederungsreihenfolge, auch wenn sie einzeln und in
    umgekehrter Reihenfolge übernommen werden — Startwert bei der ersten
-   Übernahme plus Nummer in der Gliederung (ADR #27)
+   Übernahme plus Nummer in der Gliederung (decisions/scene-order)
 7. Felder-Dialog (im UI „Eigenschaften“)/Status-Regler inkl. 409-Konflikt: der
    Dialog über die Felder einer Szene, eines NPCs, eines Orts oder eines Kapitels zeigt
    die Konfliktzeile mit ihren zwei Aktionen — „Neu laden" holt die aktuellen
@@ -369,9 +384,9 @@ Die Pfade:
    Konfliktzeile statt still überschreiben. „Neu laden" verwirft den
    ungespeicherten Text und übernimmt den gespeicherten Stand, „Trotzdem
    speichern" schreibt nur `body`, sodass ein fremd geändertes Feld bleibt. Weil alle Felder einer Szene,
-   `body` eingeschlossen, EINE Zeile und EINEN Wächter teilen (ADR #23), ist
+   `body` eingeschlossen, EINE Zeile und EINEN Wächter teilen (decisions/writes), ist
    auch ein reiner Status-Write eines Zweitschreibers ein Konflikt — der
-   Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
+   Status neben dem offenen Editor wird nicht stillschweigend übernommen. Seit decisions/sqlite gibt
    es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
    Der Text eines Kapitels ist auf seiner Leseansicht
    (`/campaigns/:id/chapters/<id>`) bearbeitbar wie der einer Szene. Die
@@ -382,7 +397,7 @@ Die Pfade:
    als Markdown wie im Textdialog eines Kapitels —, mit derselben
    Konfliktzeile, deren „Trotzdem speichern" nur die geänderten Felder
    schreibt.
-10. Kaltstart: leere Instanz ohne Seed — seit ADR #13 der Normalfall
+10. Kaltstart: leere Instanz ohne Seed — seit decisions/sqlite der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
     Szene befüllen → Session starten → Szene in der Session-Ansicht
     nutzbar; jede neue Szene hängt sich ans Ende ihres Kapitels, ein
