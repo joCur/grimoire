@@ -7,8 +7,8 @@
 // What is asserted here: the NPC run uses the SAME mechanics as the scene run
 // (correction turns, truncation fail-fast, usage summing, JSON extraction,
 // one job per campaign) with its own prompt assets, its own context (no
-// chapter), its own reply — the npc's own fields, flat (decisions/resources) — and its
-// own validation rules.
+// chapter), its own reply — the npc's own fields, flat (decisions/resources)
+// — and its own validation rules.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type { GeneratorJob, GenerateNpcResult, GenerateUsage, Npc } from "@grimoire/shared";
@@ -29,13 +29,13 @@ import type {
 
 /** Whether an npc is there: its own resource answers. */
 async function exists(id: string): Promise<boolean> {
-  const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  const res = await app.request(`/api/campaigns/example/npcs/${id}`);
   return res.status === 200;
 }
 
 /** An accepted npc, read from its own resource. */
 async function read(id: string): Promise<Npc> {
-  const res = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  const res = await app.request(`/api/campaigns/example/npcs/${id}`);
   expect(res.status).toBe(200);
   return (await res.json()) as Npc;
 }
@@ -135,23 +135,23 @@ function npcDraft(
       properties: {
         id: over.id ?? "grella",
         ...(name === null ? {} : { name }),
-        role: "Schmugglerin mit eigenen Plänen",
-        ...(over.chapter === true ? { chapter: "01-salzhafen" } : {}),
+        role: "Smuggler with plans of her own",
+        ...(over.chapter === true ? { chapter: "01-salt-harbour" } : {}),
         ...(status === null ? {} : { status }),
         statblock: "Roll20: Grella",
         quickstats: over.quickstats ?? { insight: "+3", deception: "+5" },
-        voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
-        appearance: "geflickter Ölmantel, rußige Finger",
-        motivation: "Die Route durch die Nordbucht für sich allein — ohne [[fenn]].",
+        voice: "quick, mocking — turns polite when she lies",
+        appearance: "patched oilskin coat, sooty fingers",
+        motivation: "The route through the North Cove to herself — without [[fenn]].",
       },
       body: [
-        "## Weiß",
+        "## Knows",
         "",
-        over.knowledge ?? "> [!secret] Kennt ein zweites Versteck unter dem Kai.",
+        over.knowledge ?? "> [!secret] Knows a second hiding place under the quay.",
         "",
-        "## Beziehungen",
+        "## Relationships",
         "",
-        ...(over.relations ?? ["- [[jorna]]: schuldet ihr einen Gefallen"]),
+        ...(over.relations ?? ["- [[jorna]]: owes her a favour"]),
         "",
       ].join("\n"),
     },
@@ -173,7 +173,7 @@ function without(entry: ScriptedEntry, keys: readonly string[]): ScriptedEntry {
  */
 function npcReply(over: { content?: ScriptedEntry; warnings?: string[] } = {}): string {
   const entry = over.content ?? npcDraft();
-  const warnings = over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"];
+  const warnings = over.warnings ?? ["The source text names no status — set to alive"];
   return entryReply(entry, warnings, "npc");
 }
 
@@ -199,20 +199,20 @@ const npcBody = {
 
 // --- job helpers ----------------------------------------------------------------
 
-const fetchJob = (campaign = "beispiel"): Promise<GeneratorJob | null> => readJob(campaign);
+const fetchJob = (campaign = "example"): Promise<GeneratorJob | null> => readJob(campaign);
 
 /** PATCH the campaign's job with the rev the caller read. */
 const patchJob = (job: GeneratorJob, body: Record<string, unknown>): Promise<Response> =>
-  send("PATCH", jobUrl("beispiel", job.id), { rev: job.rev, ...body });
+  send("PATCH", jobUrl("example", job.id), { rev: job.rev, ...body });
 
 /** The body of a scene run — the other kind of job a campaign has. */
 const sceneBody = {
   kind: "scene",
-  chapter: "01-salzhafen",
+  chapter: "01-salt-harbour",
   sourceText: "Fenn waits at the docks.",
 };
 
-async function waitForJob(campaign = "beispiel"): Promise<GeneratorJob> {
+async function waitForJob(campaign = "example"): Promise<GeneratorJob> {
   for (let i = 0; i < 2000; i++) {
     const job = await fetchJob(campaign);
     if (job === null) throw new Error("job disappeared while waiting");
@@ -228,7 +228,7 @@ interface GenerateOutcome {
 }
 
 /** Start an NPC run and wait for it — the synchronous view of the job flow. */
-async function generateNpc(body?: unknown, campaign = "beispiel"): Promise<GenerateOutcome> {
+async function generateNpc(body?: unknown, campaign = "example"): Promise<GenerateOutcome> {
   const res = await postJson(jobsUrl(campaign), body);
   if (res.status !== 202) return { status: res.status, json: () => res.json() };
   expect(await res.json()).toMatchObject({ id: expect.any(String), kind: "npc", status: "running" });
@@ -263,17 +263,17 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(result.npc).toEqual({
       id: "grella",
       name: "Grella",
-      role: "Schmugglerin mit eigenen Plänen",
+      role: "Smuggler with plans of her own",
       status: "alive",
       statblock: "Roll20: Grella",
       // quoted quickstats survive as strings — the plus is the whole point
       quickstats: { insight: "+3", deception: "+5" },
-      voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
-      appearance: "geflickter Ölmantel, rußige Finger",
-      motivation: "Die Route durch die Nordbucht für sich allein — ohne [[fenn]].",
+      voice: "quick, mocking — turns polite when she lies",
+      appearance: "patched oilskin coat, sooty fingers",
+      motivation: "The route through the North Cove to herself — without [[fenn]].",
       body: npcDraft().body,
     });
-    expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
+    expect(result.warnings).toEqual(["The source text names no status — set to alive"]);
     expect(result.usage).toBeUndefined();
 
     // exactly one provider call, no correction turns
@@ -285,8 +285,8 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(req.systemPrompt).toContain("System-Prompt: NPC-Generator");
     expect(req.fewShotTarget).toContain('"id": "fenn"');
     expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-    expect(req.context.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
-    expect(req.glossary).toContain("Leuchtturmwärter");
+    expect(req.context.locations.map((l) => l.id).sort()).toEqual(["cove", "lighthouse"]);
+    expect(req.glossary).toContain("lighthouse keeper");
     // an NPC run has no chapter and (without a pinned id) no target id
     expect(req.context.chapter).toBeUndefined();
     expect(req.context.targetId).toBeUndefined();
@@ -297,28 +297,28 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
   });
 
   test("a pinned id travels in the context and decides the npc's id", async () => {
-    const fake = useFake([replyFor("die-krähe")]);
-    // an id with an umlaut is not kebab-safe -> 400 before the provider runs
-    expect((await generateNpc({ ...npcBody, id: "die-krähe" })).status).toBe(400);
+    const fake = useFake([replyFor("café-owner")]);
+    // an id with a diacritic is not kebab-safe -> 400 before the provider runs
+    expect((await generateNpc({ ...npcBody, id: "café-owner" })).status).toBe(400);
     expect(fake.calls).toHaveLength(0);
 
-    useFake([replyFor("krieger-ohne-namen")]);
-    const res = await generateNpc({ ...npcBody, id: "krieger-ohne-namen" });
+    useFake([replyFor("warrior-without-a-name")]);
+    const res = await generateNpc({ ...npcBody, id: "warrior-without-a-name" });
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateNpcResult;
-    expect(result.npc.id).toBe("krieger-ohne-namen");
+    expect(result.npc.id).toBe("warrior-without-a-name");
   });
 
   test("a pinned id the model ignores is a correction turn", async () => {
-    const bad = replyFor("etwas-anderes");
-    const fake = useFake([bad, replyFor("die-graue")]);
-    const res = await generateNpc({ ...npcBody, id: "die-graue" });
+    const bad = replyFor("something-else");
+    const fake = useFake([bad, replyFor("the-grey-one")]);
+    const res = await generateNpc({ ...npcBody, id: "the-grey-one" });
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[0]!.req.context.targetId).toBe("die-graue");
+    expect(fake.calls[0]!.req.context.targetId).toBe("the-grey-one");
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"die-graue"');
-    // the correction turn names the npc, not "alle Szenen"
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"the-grey-one"');
+    // the correction turn names the npc, not all scenes
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständigen NPC enthalten");
   });
 
@@ -340,7 +340,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
   // --- the validation rules (each one a correction turn) ------------------------
 
   test("an unknown [[id]] triggers a correction turn, then succeeds", async () => {
-    const bad = npcReply({ content: npcDraft({ relations: ["- [[niemand]]: alter Feind"] }) });
+    const bad = npcReply({ content: npcDraft({ relations: ["- [[nobody]]: old enemy"] }) });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
@@ -349,7 +349,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(fake.calls[1]!.corrections).toHaveLength(1);
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     const correction = fake.calls[1]!.corrections[0]!.correction;
-    expect(correction).toContain("[[niemand]] nennt nichts");
+    expect(correction).toContain("[[nobody]] nennt nichts");
     // ONE error, not a cascade
     expect(correction.match(/^- /gm)).toHaveLength(1);
     expect(await exists("grella")).toBe(false);
@@ -359,14 +359,14 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     // A lowercase heading, CRLF line ends, a paragraph under no heading at
     // all: the rule is about the reference, so none of that hides one.
     const bodies = [
-      "## weiß\r\n\r\n> [!secret] [[niemand]] zahlt.\r\n",
-      "Vor jeder Überschrift steht [[niemand]].\n\n## Weiß\n\n> [!secret] Nichts.\n",
-      "## Auftreten\n\n- [[niemand]]s Boot liegt am Kai.\n",
+      "## knows\r\n\r\n> [!secret] [[nobody]] pays.\r\n",
+      "Before any heading stands [[nobody]].\n\n## Knows\n\n> [!secret] Nothing.\n",
+      "## Appearance\n\n- [[nobody]]s boat lies at the quay.\n",
     ];
     for (const body of bodies) {
       expect(
         await firstValidationError([npcReply({ content: { ...npcDraft(), body } })]),
-      ).toContain("[[niemand]] nennt nichts");
+      ).toContain("[[nobody]] nennt nichts");
     }
   });
 
@@ -375,15 +375,15 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     // the npc this run proposes is an entry of the run. Inside a code span the
     // brackets are literal text, as on the rendered page.
     const body = [
-      "## Weiß",
+      "## Knows",
       "",
-      "> [!secret] Trifft [[jorna]] am [[leuchtturm]]; gehört zu [[smuggler-captured]].",
+      "> [!secret] Meets [[jorna]] at the [[lighthouse]]; belongs to [[smuggler-captured]].",
       "",
-      "## Beziehungen",
+      "## Relationships",
       "",
-      "- [[fenn]]: alter Rivale",
+      "- [[fenn]]: old rival",
       "",
-      "[[grella]] schreibt sich im Log als `[[niemand]]`.",
+      "[[grella]] signs the log as `[[nobody]]`.",
       "",
     ].join("\n");
     const fake = useFake([npcReply({ content: { ...npcDraft(), body } })]);
@@ -397,9 +397,9 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     // without the brackets or without an id is the model's prose, not an
     // error.
     for (const relations of [
-      ["- jorna: alte Bekannte"],
-      ["- Jorna, die Hafenmeisterin"],
-      ["Keine belegten Beziehungen."],
+      ["- jorna: an old acquaintance"],
+      ["- Jorna, the harbourmaster"],
+      ["No recorded relationships."],
     ]) {
       const fake = useFake([npcReply({ content: npcDraft({ relations }) })]);
       expect((await generateNpc(npcBody)).status).toBe(200);
@@ -427,9 +427,9 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     );
   });
 
-  test("any known callout passes under ## Weiß — no rule reads a heading", async () => {
+  test("any known callout passes under ## Knows — no rule reads a heading", async () => {
     const fake = useFake([
-      npcReply({ content: npcDraft({ knowledge: "> [!note] Nur ein DM-Hinweis." }) }),
+      npcReply({ content: npcDraft({ knowledge: "> [!note] Just a DM hint." }) }),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(1);
@@ -437,13 +437,13 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
 
   test("an unknown callout anywhere is an error", async () => {
     const errors = await firstValidationError([
-      npcReply({ content: npcDraft({ knowledge: "> [!danger] Sie lügt immer." }) }),
+      npcReply({ content: npcDraft({ knowledge: "> [!danger] She always lies." }) }),
     ]);
     expect(errors).toContain('unknown callout "[!danger]"');
   });
 
   test("quickstats travel as key/value pairs — a mapping is a shape error", async () => {
-    // The „quote the plus" rule is the SCHEMA's job: `quickstats` is a list
+    // The "quote the plus" rule is the SCHEMA's job: `quickstats` is a list
     // of `{ key, value }` with string values, and the npc's reply folds it
     // into its key/value set (@grimoire/shared/npc `npcFromReply`). So what
     // a reply can still get wrong is the SHAPE, and that is what it is told.
@@ -452,7 +452,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(await firstValidationError([mapping])).toContain('"quickstats"');
   });
 
-  test("an invented chapter is an error; a ## Notizen section is free text", async () => {
+  test("an invented chapter is an error; a ## Notes section is free text", async () => {
     expect(
       await firstValidationError([npcReply({ content: npcDraft({ chapter: true }) })]),
     ).toContain("kennt kein Ziel-Kapitel");
@@ -461,7 +461,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
       npcReply({
         content: {
           ...npcDraft(),
-          body: `${npcDraft().body}\n## Notizen\n\nSie könnte die Schwester von [[fenn]] sein.\n`,
+          body: `${npcDraft().body}\n## Notes\n\nShe could be the sister of [[fenn]].\n`,
         },
       }),
     ]);
@@ -485,21 +485,21 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     // degrade rule stays where it belongs, on the READ path.
     expect(
       await firstValidationError([
-        npcReply({ content: npcDraft({ id: "namenlos", name: null }) }),
+        npcReply({ content: npcDraft({ id: "nameless", name: null }) }),
       ]),
     ).toContain('"name"');
     expect(
-      await firstValidationError([npcReply({ content: npcDraft({ id: "namenlos", name: "  " }) })]),
+      await firstValidationError([npcReply({ content: npcDraft({ id: "nameless", name: "  " }) })]),
     ).toContain('"name" fehlt');
   });
 
   test("a reply that is not the reply object is a validation error", async () => {
     // Prose, an empty reply, a JSON value that is not an object: all of them
-    // are „das ist kein Objekt des Schemas", and the message names the
-    // npc's fields.
+    // are told that the reply is not an object of the schema, and the
+    // message names the npc's fields.
     for (const raw of [
-      "kein Objekt",
-      "## Will\n\nnur Text, kein Objekt\n",
+      "not an object",
+      "## Wants\n\njust text, not an object\n",
       "",
       JSON.stringify([{ id: "grella" }]),
     ]) {
@@ -521,7 +521,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     // correction turn.
     const fake = useFake([
       [
-        "Hier ist der NPC-Eintrag — ich habe den Status auf alive gesetzt:",
+        "Here is the NPC — I set the status to alive:",
         "",
         "```json",
         npcReply(),
@@ -537,7 +537,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(result.npc.id).toBe("grella");
     expect(result.npc.body).toBe(npcDraft().body);
     expect(result.npc.body).not.toContain("```");
-    expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
+    expect(result.warnings).toEqual(["The source text names no status — set to alive"]);
   });
 
   test("an almost-JSON reply is repaired once, with a warning", async () => {
@@ -646,7 +646,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
       { kind: "npc", sourceText: "ok", id: 7 },
       { kind: "npc", sourceText: "ok", extra: true },
       // a key only a scene run takes
-      { kind: "npc", sourceText: "ok", chapter: "01-salzhafen" },
+      { kind: "npc", sourceText: "ok", chapter: "01-salt-harbour" },
       { sourceText: "ok" }, // no kind
     ]) {
       expect((await generateNpc(body)).status).toBe(400);
@@ -655,14 +655,14 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
   });
 
   test("an empty id string means 'the model chooses'", async () => {
-    const fake = useFake([replyFor("leer-id")]);
+    const fake = useFake([replyFor("empty-id")]);
     expect((await generateNpc({ ...npcBody, id: "  " })).status).toBe(200);
     expect(fake.calls[0]!.req.context.targetId).toBeUndefined();
   });
 
   test("404 for an unknown campaign", async () => {
     const fake = useFake([npcReply()]);
-    expect((await generateNpc(npcBody, "gibtsnicht")).status).toBe(404);
+    expect((await generateNpc(npcBody, "does-not-exist")).status).toBe(404);
     expect(fake.calls).toHaveLength(0);
   });
 
@@ -672,7 +672,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.LLM_PROVIDER;
     try {
-      const res = await postJson(jobsUrl("beispiel"), npcBody);
+      const res = await postJson(jobsUrl("example"), npcBody);
       expect(res.status).toBe(503);
       expect(await res.json()).toEqual({ error: "ANTHROPIC_API_KEY fehlt" });
       expect(await fetchJob()).toBeNull();
@@ -689,7 +689,7 @@ describe("npc generate jobs", () => {
     const open = gate();
     useFake([replyFor("job-kind")], undefined, open.promise);
 
-    const res = await postJson(jobsUrl("beispiel"), npcBody);
+    const res = await postJson(jobsUrl("example"), npcBody);
     expect(res.status).toBe(202);
     const started = (await res.json()) as GeneratorJob;
     expect(started).toMatchObject({ kind: "npc", status: "running" });
@@ -715,11 +715,11 @@ describe("npc generate jobs", () => {
     const open = gate();
     process.env.LLM_CORRECTION_TURNS = "0";
     useFake(["{}"], undefined, open.promise);
-    const scene = await postJson(jobsUrl("beispiel"), sceneBody);
+    const scene = await postJson(jobsUrl("example"), sceneBody);
     expect(scene.status).toBe(202);
     const sceneJob = (await scene.json()) as GeneratorJob;
 
-    const npc = await postJson(jobsUrl("beispiel"), npcBody);
+    const npc = await postJson(jobsUrl("example"), npcBody);
     expect(npc.status).toBe(409);
     expect(await npc.json()).toEqual({
       error: "a generator job is already running for this campaign",
@@ -733,10 +733,10 @@ describe("npc generate jobs", () => {
     // …and the other way round: npc job running -> scene start is a 409
     const open2 = gate();
     useFake([replyFor("job-block")], undefined, open2.promise);
-    const started = await postJson(jobsUrl("beispiel"), npcBody);
+    const started = await postJson(jobsUrl("example"), npcBody);
     expect(started.status).toBe(202);
     const npcJob = (await started.json()) as GeneratorJob;
-    const second = await postJson(jobsUrl("beispiel"), sceneBody);
+    const second = await postJson(jobsUrl("example"), sceneBody);
     expect(second.status).toBe(409);
     expect(((await second.json()) as { generatorJob: GeneratorJob }).generatorJob.id).toBe(
       npcJob.id,
@@ -749,11 +749,11 @@ describe("npc generate jobs", () => {
     useFake([
       // a scene run whose reply fails validation is enough — the point is the
       // finished job being replaced, not its content
-      "kein json",
+      "no json",
       replyFor("job-replace"),
     ]);
     process.env.LLM_CORRECTION_TURNS = "0";
-    await postJson(jobsUrl("beispiel"), sceneBody);
+    await postJson(jobsUrl("example"), sceneBody);
     const failed = await waitForJob();
     expect(failed.kind).toBe("scene");
     expect(failed.status).toBe("failed");
@@ -768,12 +768,12 @@ describe("npc generate jobs", () => {
   test("a review edit names the proposed npc by its id and rejects anything else", async () => {
     useFake([replyFor("job-drafts")]);
     await generateNpc(npcBody);
-    const edited = `${npcDraft({ id: "job-drafts" }).body}\nHandgeschriebene Ergänzung.\n`;
+    const edited = `${npcDraft({ id: "job-drafts" }).body}\nA handwritten addition.\n`;
 
     const edit = async (id: string) =>
       patchJob((await fetchJob())!, { npcEdits: { [id]: { body: edited } } });
 
-    expect((await edit("fremd")).status).toBe(400);
+    expect((await edit("foreign")).status).toBe(400);
     const res = await edit("job-drafts");
     expect(res.status).toBe(200);
 
@@ -797,7 +797,7 @@ describe("accept the npc of an NPC run", () => {
 
   /** Accept the one npc of an NPC run. */
   const acceptNpc = (job: GeneratorJob, id: string): Promise<Response> =>
-    send("PATCH", jobUrl("beispiel", job.id), acceptBody(job, { npcs: [id] }));
+    send("PATCH", jobUrl("example", job.id), acceptBody(job, { npcs: [id] }));
 
   test("accepting the npc writes it, and the settled job is gone", async () => {
     const job = await runFor("accept-happy");
@@ -821,15 +821,15 @@ describe("accept the npc of an NPC run", () => {
     expect(written.statblock).toBe("Roll20: Grella");
     // The motivation is a field of the reply, and the accept writes it.
     expect(written.motivation).toBe(
-      "Die Route durch die Nordbucht für sich allein — ohne [[fenn]].",
+      "The route through the North Cove to herself — without [[fenn]].",
     );
-    expect(written.body).toContain("> [!secret] Kennt ein zweites Versteck unter dem Kai.");
-    expect(written.body).toContain("- [[jorna]]: schuldet ihr einen Gefallen");
+    expect(written.body).toContain("> [!secret] Knows a second hiding place under the quay.");
+    expect(written.body).toContain("- [[jorna]]: owes her a favour");
   });
 
   test("the accept writes the npc by its id, with the DM's change on top", async () => {
     let job = await runFor("accept-edit");
-    const patched = await patchJob(job, { npcEdits: { "accept-edit": { name: "Grella die Ältere" } } });
+    const patched = await patchJob(job, { npcEdits: { "accept-edit": { name: "Grella the Elder" } } });
     expect(patched.status).toBe(200);
     job = (await patched.json()) as GeneratorJob;
     const res = await acceptNpc(job, "accept-edit");
@@ -838,8 +838,8 @@ describe("accept the npc of an NPC run", () => {
     // The run's one npc was all there was to decide.
     expect(await fetchJob()).toBeNull();
     const written = await read("accept-edit");
-    expect(written.name).toBe("Grella die Ältere");
-    expect(written.role).toBe("Schmugglerin mit eigenen Plänen");
+    expect(written.name).toBe("Grella the Elder");
+    expect(written.role).toBe("Smuggler with plans of her own");
   });
 
   test("409 when the npc holds content by the accept — nothing overwritten", async () => {
@@ -852,10 +852,10 @@ describe("accept the npc of an NPC run", () => {
     // …and an npc that gets content between the run and its accept is a 409
     // naming its id
     const job = await runFor("race-npc");
-    const created = await postJson("/api/campaigns/beispiel/npcs", {
+    const created = await postJson("/api/campaigns/example/npcs", {
       id: "race-npc",
-      name: "Die andere Grella",
-      body: "## Will\n\nSchon da.\n",
+      name: "The other Grella",
+      body: "## Wants\n\nAlready here.\n",
     });
     expect(created.status).toBe(201);
     const before = await read("race-npc");
@@ -874,25 +874,25 @@ describe("accept the npc of an NPC run", () => {
   });
 
   test("400 re-validation: the npc the accept writes is checked against the npc's schema — nothing written", async () => {
-    const job = await runFor("anders");
+    const job = await runFor("other");
     const cases: Array<[string, unknown]> = [
-      ["an id", { id: "Anders" }],
+      ["an id", { id: "Other" }],
       ["invalid status", { status: "draft" }],
       ["missing status", { status: null }],
-      ["the earlier properties pair", { properties: { name: "Anders" } }],
+      ["the earlier properties pair", { properties: { name: "Other" } }],
       ["body of the wrong shape", { body: 7 }],
       ["unknown key", { extra: 1 }],
       ["a kind", { kind: "npc" }],
-      ["not an object", "anders"],
+      ["not an object", "other"],
     ];
     for (const [what, change] of cases) {
-      const res = await send("PATCH", jobUrl("beispiel", job.id), {
-        ...acceptBody(job, { npcs: ["anders"] }),
-        npcEdits: { anders: change },
+      const res = await send("PATCH", jobUrl("example", job.id), {
+        ...acceptBody(job, { npcs: ["other"] }),
+        npcEdits: { other: change },
       });
       expect(res.status, what).toBe(400);
     }
-    expect(await exists("anders")).toBe(false);
+    expect(await exists("other")).toBe(false);
     // Nothing of it reached the job either.
     const after = (await fetchJob())!;
     expect(after.rev).toBe(job.rev);
@@ -915,8 +915,8 @@ describe("campaign knowledge", () => {
 
   test("the block travels although the run has no chapter, refs resolved", async () => {
     await setKnowledge([
-      { kind: "fact", from: "", to: "", text: "[[fenn]] lügt über die Ladung." },
-      { kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" },
+      { kind: "fact", from: "", to: "", text: "[[fenn]] lies about the cargo." },
+      { kind: "naming", from: "Salt Harbor", to: "Salt Harbour", text: "" },
     ]);
     const fake = useFake([replyFor("kennel-hand")]);
     expect((await generateNpc({ kind: "npc", sourceText: "A kennel hand.", id: "kennel-hand" })).status).toBe(
@@ -927,25 +927,25 @@ describe("campaign knowledge", () => {
     // `[[fenn]]` reaches the model as the npc's NAME, never as a slug.
     expect(req.knowledge).toBe(
       [
-        "- Fakt: Fenn lügt über die Ladung.",
-        '- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.',
+        "- Fakt: Fenn lies about the cargo.",
+        '- Namenskonvention: schreibe „Salt Harbor“ immer als „Salt Harbour“.',
       ].join("\n"),
     );
   });
 
   test("a wrong spelling in a PROPERTY is reported with the key, not a line", async () => {
     await setKnowledge([
-      { kind: "naming", from: "Schmugglerin", to: "Freihändlerin", text: "" },
+      { kind: "naming", from: "Smuggler", to: "Free trader", text: "" },
     ]);
     useFake([replyFor("wharf-hand")]);
     const result = (await (
       await generateNpc({ kind: "npc", sourceText: "A wharf hand.", id: "wharf-hand" })
     ).json()) as GenerateNpcResult;
-    // The fixture's `role` is „Schmugglerin mit eigenen Plänen“.
+    // The fixture's `role` is "Smuggler with plans of her own".
     const hint = (result.namingHints ?? []).find((h) => h.field === "role");
     expect(hint).toMatchObject({
-      from: "Schmugglerin",
-      to: "Freihändlerin",
+      from: "Smuggler",
+      to: "Free trader",
       npc: "wharf-hand",
       field: "role",
     });

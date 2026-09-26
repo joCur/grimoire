@@ -10,8 +10,8 @@ import { ENTITY_SLUG, freeSlug, isEntityId, slugVariant, toSlug } from "../src/s
 
 describe("toSlug", () => {
   test("kebab-cases a display name", () => {
-    expect(toSlug("Ankunft am Leuchtturm")).toBe("ankunft-am-leuchtturm");
-    expect(toSlug("01 Salzhafen")).toBe("01-salzhafen");
+    expect(toSlug("Arrival at the Lighthouse")).toBe("arrival-at-the-lighthouse");
+    expect(toSlug("01 Salt Harbour")).toBe("01-salt-harbour");
   });
 
   test("transliterates the German four rather than folding them", () => {
@@ -27,9 +27,9 @@ describe("toSlug", () => {
   });
 
   test("collapses punctuation and trims the dashes", () => {
-    expect(toSlug("  Der alte Hafen!  ")).toBe("der-alte-hafen");
-    expect(toSlug("Was nun??? — Der Sturm")).toBe("was-nun-der-sturm");
-    expect(toSlug("-Rand-")).toBe("rand");
+    expect(toSlug("  The Old Harbour!  ")).toBe("the-old-harbour");
+    expect(toSlug("What now??? — The Storm")).toBe("what-now-the-storm");
+    expect(toSlug("-Edge-")).toBe("edge");
   });
 
   test("yields nothing when nothing maps into a-z0-9", () => {
@@ -40,7 +40,7 @@ describe("toSlug", () => {
   });
 
   test("what it produces is always a legal id", () => {
-    for (const name of ["Küste von Salzhafen", "01 — Prolog", "Señor Núñez!!", "a"]) {
+    for (const name of ["Harbour Straße", "01 — Prologue", "Señor Núñez!!", "a"]) {
       expect(isEntityId(toSlug(name))).toBe(true);
     }
   });
@@ -48,49 +48,49 @@ describe("toSlug", () => {
 
 describe("isEntityId", () => {
   test("accepts kebab slugs", () => {
-    expect(isEntityId("hafen")).toBe(true);
-    expect(isEntityId("alte-fischerin")).toBe(true);
-    expect(isEntityId("01-salzhafen")).toBe(true);
+    expect(isEntityId("harbour")).toBe(true);
+    expect(isEntityId("old-fisherwoman")).toBe(true);
+    expect(isEntityId("01-salt-harbour")).toBe(true);
   });
 
   test("rejects everything the format's reference keys are not", () => {
-    for (const value of ["", "Hafen", "der alte hafen", "hafen--2", "-hafen", "hafen-", "npcs/x", "hä"]) {
+    for (const value of ["", "Harbour", "the old harbour", "harbour--2", "-harbour", "harbour-", "npcs/x", "hä"]) {
       expect(isEntityId(value)).toBe(false);
     }
   });
 
   test("the regex is the same predicate (it is exported for the server's guards)", () => {
-    expect(ENTITY_SLUG.test("hafen")).toBe(true);
-    expect(ENTITY_SLUG.test("Hafen")).toBe(false);
+    expect(ENTITY_SLUG.test("harbour")).toBe(true);
+    expect(ENTITY_SLUG.test("Harbour")).toBe(false);
   });
 });
 
 describe("slugVariant / freeSlug", () => {
   test("the first variant is the slug itself", () => {
-    expect(slugVariant("hafen", 1)).toBe("hafen");
-    expect(slugVariant("hafen", 2)).toBe("hafen-2");
+    expect(slugVariant("harbour", 1)).toBe("harbour");
+    expect(slugVariant("harbour", 2)).toBe("harbour-2");
   });
 
   test("a trailing number is not parsed apart", () => {
-    // `kapitel-2` can perfectly well be the name a DM chose.
-    expect(slugVariant("kapitel-2", 2)).toBe("kapitel-2-2");
+    // `chapter-2` can perfectly well be the name a DM chose.
+    expect(slugVariant("chapter-2", 2)).toBe("chapter-2-2");
   });
 
   test("freeSlug returns the slug when it is free", () => {
-    expect(freeSlug("hafen", () => false)).toBe("hafen");
+    expect(freeSlug("harbour", () => false)).toBe("harbour");
   });
 
   test("freeSlug walks past every taken variant", () => {
-    const taken = new Set(["hafen", "hafen-2", "hafen-3"]);
-    expect(freeSlug("hafen", (c) => taken.has(c))).toBe("hafen-4");
+    const taken = new Set(["harbour", "harbour-2", "harbour-3"]);
+    expect(freeSlug("harbour", (c) => taken.has(c))).toBe("harbour-4");
   });
 
   test("freeSlug terminates even when everything is taken", () => {
-    expect(freeSlug("hafen", () => true)).toBe("hafen-200");
+    expect(freeSlug("harbour", () => true)).toBe("harbour-200");
   });
 
   test("every proposal is itself a legal id", () => {
-    const taken = new Set(["hafen"]);
-    expect(isEntityId(freeSlug("hafen", (c) => taken.has(c)))).toBe(true);
+    const taken = new Set(["harbour"]);
+    expect(isEntityId(freeSlug("harbour", (c) => taken.has(c)))).toBe(true);
   });
 });

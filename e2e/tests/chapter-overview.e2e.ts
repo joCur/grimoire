@@ -32,29 +32,29 @@ import { getScene, patchScene } from "../support/scene";
 import { todaySessionId } from "../support/session";
 import { ui, uiExact, uiPattern } from "../support/ui";
 
-// Seeded content of the example campaign (fixtures/beispiel) the overview
+// Seeded content of the example campaign (fixtures/) the overview
 // shows — data the spec checks for, not UI text.
 
 /** The campaign's name. */
-const CAMPAIGN_NAME = "Der Leuchtturm von Salzhafen";
+const CAMPAIGN_NAME = "The Lighthouse of Salt Harbour";
 /** The opening of the campaign's description. */
-const CAMPAIGN_DESCRIPTION = "Eine Küstenkampagne um einen erloschenen Leuchtturm";
+const CAMPAIGN_DESCRIPTION = "A coastal campaign about a dark lighthouse";
 /** The opening of the campaign's text. */
-const CAMPAIGN_BODY = "Kampagnenweite Notizen: Ton ist bodenständige";
-/** The title of the active chapter `01-salzhafen`. */
-const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+const CAMPAIGN_BODY = "Campaign-wide notes: the tone is down-to-earth";
+/** The title of the active chapter `01-salt-harbour`. */
+const CHAPTER_TITLE = "Chapter 1: The Lighthouse of Salt Harbour";
 /** The whole text of that chapter. */
-const CHAPTER_BODY = "Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.";
-/** The name of the location `leuchtturm`. */
-const LIGHTHOUSE = "Der Leuchtturm von Salzhafen";
+const CHAPTER_BODY = "Find out why the beacon has been dark for three nights.";
+/** The name of the location `lighthouse`. */
+const LIGHTHOUSE = "The Lighthouse of Salt Harbour";
 /** The planned scene `lighthouse-arrival`. */
-const ARRIVAL = "Ankunft am Leuchtturm";
+const ARRIVAL = "Arrival at the Lighthouse";
 /** The contingency scene `smuggler-captured` and its trigger. */
-const CAPTURED = "Von den Schmugglern erwischt";
-const CAPTURED_TRIGGER = "Charaktere werden beim Auskundschaften der Bucht entdeckt";
+const CAPTURED = "Caught by the Smugglers";
+const CAPTURED_TRIGGER = "The characters are spotted while scouting the cove";
 /** The names of the npcs `fenn` and `jorna`. */
 const FENN = "Fenn";
-const JORNA = "Hafenmeisterin Jorna";
+const JORNA = "Harbourmaster Jorna";
 
 /** The label of a chapter status in the UI. */
 const chapterStatus = (status: "planned" | "active" | "done") =>
@@ -135,7 +135,7 @@ const SCENE_WITHOUT_LOCATION: SceneProposal = {
   id: "no-location-scene",
   title: "Somewhere on the road",
   type: "planned",
-  chapter: "01-salzhafen",
+  chapter: "01-salt-harbour",
   npcs: [],
   handouts: [],
   tags: ["travel"],
@@ -158,8 +158,8 @@ const RUNNING_SESSION: SessionSeed = {
  * has no name to show.
  */
 const NAMELESS_CAMPAIGN: CampaignSeed = {
-  id: "beispiel",
-  name: "beispiel",
+  id: "example",
+  name: "example",
   body: "",
   glossaryIntro: "",
 };
@@ -171,12 +171,12 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   await page.goto("/");
 
   // The redirect target comes from the server (lastSession per campaign).
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/example$/);
 
   // Campaign header from the campaign.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   // The counter counts what the tree holds: one chapter, two scenes.
-  const tree = await api.get<{ chapters: { scenes: unknown[] }[] }>("campaigns/beispiel/tree");
+  const tree = await api.get<{ chapters: { scenes: unknown[] }[] }>("campaigns/example/tree");
   expect(tree.chapters.map((chapter) => chapter.scenes.length)).toEqual([2]);
   await expect(
     page.getByText(
@@ -211,11 +211,11 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   // The planned scene is a ROW of the chapter's one list — no location
   // heading over it (decisions/scene-order). The location stands in the row's meta
   // line, and it stands there with the NAME of its entry: the bare slug
-  // `leuchtturm` is no location for the reader and appears nowhere.
+  // `lighthouse` is no location for the reader and appears nowhere.
   await expect(
     page.getByRole("heading", { level: 3, name: LIGHTHOUSE }),
   ).toHaveCount(0);
-  await expect(page.getByText("leuchtturm", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("lighthouse", { exact: true })).toHaveCount(0);
   const planned = page.getByRole("link", { name: new RegExp(escapeStringRegexp(ARRIVAL)) });
   await expect(planned).toBeVisible();
   await expect(planned).toContainText(`${LIGHTHOUSE} · #social #travel`);
@@ -235,7 +235,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   // Opening a row is the chapter overview's job — the scene's own reading
   // view takes over from here (decisions/resources).
   await planned.click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
+  await expect(page).toHaveURL(/\/campaigns\/example\/scenes\/lighthouse-arrival$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARRIVAL);
 });
 
@@ -247,7 +247,7 @@ test.describe("a scene without a location", () => {
   test("a scene that names no location keeps its row, without a location part", async ({
     page,
   }) => {
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     // No section for it and none for the scenes that DO name a location: the
     // contingency block is the only heading the list has left.
     await expect(page.getByRole("heading", { level: 3 })).toHaveText([
@@ -265,7 +265,7 @@ test.describe("a scene without a location", () => {
     // …and it opens on its own route like every scene.
     await expect(scene).toHaveAttribute(
       "href",
-      `/campaigns/beispiel/scenes/${SCENE_WITHOUT_LOCATION.id}`,
+      `/campaigns/example/scenes/${SCENE_WITHOUT_LOCATION.id}`,
     );
   });
 });
@@ -306,7 +306,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
   };
 
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
   await expect(nav.getByRole("link")).toHaveText(NAV_KEYS.map((key) => ui(key)));
   // The chapter overview marks its own entry.
@@ -329,7 +329,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   ]);
 
   await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/locations$/);
+  await expect(page).toHaveURL(/\/campaigns\/example\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.locations"));
   // Both example locations sit in the same chapter and each row names that
   // chapter under the location, so the name is anchored: the row STARTS with
@@ -348,7 +348,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
 
   // The npc list is the npc's own route (decisions/resources).
   await nav.getByRole("link", { name: ui("topbar.nav.npcs") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs$/);
+  await expect(page).toHaveURL(/\/campaigns\/example\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.npcs"));
   await expect(current).toHaveText(ui("topbar.nav.npcs"));
   await assertChromeIsStable(onChapterOverview);
@@ -356,7 +356,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // --- entry views: same chrome, section marking follows the entity ---------
   // A scene belongs to the chapters section; its hierarchy lives in the page's
   // context line, not in the topbar.
-  await page.goto("/campaigns/beispiel/scenes/lighthouse-arrival");
+  await page.goto("/campaigns/example/scenes/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARRIVAL);
   await expect(current).toHaveText(ui("topbar.nav.chapters"));
   await assertChromeIsStable(onChapterOverview);
@@ -364,7 +364,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // An NPC belongs to NPCs — whichever chapter happens to mention it. A
   // breadcrumb claiming a chapter path here would be plain misleading for an
   // NPC opened from the NPC list.
-  await page.goto("/campaigns/beispiel/npcs/fenn");
+  await page.goto("/campaigns/example/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(FENN);
   await expect(current).toHaveText(ui("topbar.nav.npcs"));
   await assertChromeIsStable(onChapterOverview);
@@ -373,20 +373,20 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page
       .getByRole("navigation", { name: ui("context.aria") })
       .getByRole("link", { name: ui("browse.title.npcs") }),
-  ).toHaveAttribute("href", "/campaigns/beispiel/npcs");
+  ).toHaveAttribute("href", "/campaigns/example/npcs");
 
   // Views that belong to no section mark nothing at all.
-  await page.goto("/campaigns/beispiel/generate");
+  await page.goto("/campaigns/example/generate");
   await expect(current).toHaveCount(0);
   await assertChromeIsStable(onChapterOverview);
-  await page.goto("/campaigns/beispiel/review");
+  await page.goto("/campaigns/example/review");
   await expect(current).toHaveCount(0);
   await assertChromeIsStable(onChapterOverview);
 
   // The chapters link is the way back to the chapter overview — the reason the
   // trio exists.
   await nav.getByRole("link", { name: ui("topbar.nav.chapters") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/example$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   await expect(current).toHaveText(ui("topbar.nav.chapters"));
   await assertChromeIsStable(onChapterOverview);
@@ -395,7 +395,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
   await label.click();
   await page.getByRole("menuitem", { name: new RegExp(escapeStringRegexp(CAMPAIGN_NAME)) }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/example$/);
 });
 
 /**
@@ -447,7 +447,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
       gearBox: await gear.boundingBox(),
     });
 
-    await page.goto("/campaigns/beispiel/npcs");
+    await page.goto("/campaigns/example/npcs");
     await expect(label).toHaveAccessibleName(
       ui("campaign.switcher.current", { name: CAMPAIGN_NAME }),
     );
@@ -458,7 +458,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
     const before = await chrome();
 
     await gear.click();
-    await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
+    await expect(page).toHaveURL(/\/settings\?from=example$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("settings.title"));
 
     // Nothing moved, nothing vanished, nothing appeared.
@@ -472,7 +472,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
     // And the chip is still the running session's, so the live clock the
     // version poll keeps fresh is reachable from here as well.
     await chip.click();
-    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
+    await expect(page).toHaveURL(/\/campaigns\/example\/live$/);
   });
 });
 
@@ -493,7 +493,7 @@ test.describe("with a session running since 19:30", () => {
   }) => {
     for (const width of TOPBAR_WIDTHS) {
       await page.setViewportSize({ width, height: 800 });
-      await page.goto("/campaigns/beispiel");
+      await page.goto("/campaigns/example");
       await expect(page.getByRole("link", { name: RUNNING_CHIP })).toBeVisible();
       // The gear is on the row at every width the topbar IS the
       // chrome at — icon-only on purpose, so it cannot grow the row. Below md
@@ -515,7 +515,7 @@ test.describe("with a session running since 19:30", () => {
       // …and the live route, whose chip is the menu trigger — from md up,
       // where the topbar IS the chrome; below that the mobile row's link chip
       // is the one on screen.
-      await page.goto("/campaigns/beispiel/live");
+      await page.goto("/campaigns/example/live");
       await expect(
         width >= 768
           ? page.getByRole("button", { name: RUNNING_CHIP })
@@ -547,7 +547,7 @@ test("the topbar does not overflow at medium widths with no session running", as
 }) => {
   for (const width of TOPBAR_WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     if (width >= 768) {
       await expect(page.getByRole("button", { name: ui("session.start") })).toBeVisible();
       // The review link is part of THIS row on purpose — it is the widest
@@ -583,7 +583,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
   // third keeps the run `running` for as long as this test needs it.
   const started = await startGeneratorJob(api, {
     kind: "scene",
-    chapter: "01-salzhafen",
+    chapter: "01-salt-harbour",
     sourceText: [
       "The party watches the quay at low tide.",
       TRIGGER.threeScenes,
@@ -614,7 +614,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
 
   for (const width of TOPBAR_WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     // Below md the topbar is hidden (the mobile start surface is the chrome
     // there), so the chip is only on the row from 768 up.
     if (width >= 768) {
@@ -646,7 +646,7 @@ test("the edit-campaign dialog writes name, description and text — header, swi
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
 
   // `exact`: a per-chapter edit action stands on the same page, and a
   // role name matches as a substring.
@@ -668,7 +668,7 @@ test("the edit-campaign dialog writes name, description and text — header, swi
   const save = dialog.getByRole("button", { name: ui("common.save") });
   await expect(save).toBeDisabled();
 
-  const name = "Salzhafen, second draft";
+  const name = "Salt Harbour, second draft";
   const description = "Now with more smuggling and fewer gulls.";
   await dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true }).fill(name);
   await dialog.getByLabel(ui("campaignEdit.field.description")).fill(description);
@@ -703,13 +703,13 @@ test.describe("a campaign without a name", () => {
     // The campaign is a row like any other, and its name falls back to its
     // id — so there is nothing to create and the ordinary patch path covers
     // this case too.
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     // Without a name the header degrades to the id.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("example");
     const nameless = await getCampaign(api);
     expect(nameless).toEqual({
-      id: "beispiel",
-      name: "beispiel",
+      id: "example",
+      name: "example",
       body: "",
       glossaryIntro: "",
       rev: nameless.rev,
@@ -721,18 +721,18 @@ test.describe("a campaign without a name", () => {
     // The id is the placeholder, never a proposed name.
     const nameField = dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true });
     await expect(nameField).toHaveValue("");
-    await expect(nameField).toHaveAttribute("placeholder", "beispiel");
+    await expect(nameField).toHaveAttribute("placeholder", "example");
     await expect(dialog.getByLabel(ui("campaignEdit.field.description"))).toHaveValue("");
 
-    await nameField.fill("Salzhafen from scratch");
+    await nameField.fill("Salt Harbour from scratch");
     await dialog.getByLabel(ui("campaignEdit.field.description")).fill("Freshly created from the app.");
     await dialog.getByRole("button", { name: ui("common.save") }).click();
 
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen from scratch");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salt Harbour from scratch");
     // The id does not move — the server sets it, never the client.
     const campaign = await getCampaign(api);
-    expect(campaign.id).toBe("beispiel");
-    expect(campaign.name).toBe("Salzhafen from scratch");
+    expect(campaign.id).toBe("example");
+    expect(campaign.name).toBe("Salt Harbour from scratch");
     expect(campaign.description).toBe("Freshly created from the app.");
     expect(campaign.body).toBe("");
   });
@@ -742,12 +742,12 @@ test("the edit-campaign dialog and a second writer: the conflict line, and the s
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   await page.getByRole("button", { name: uiExact("common.edit") }).click();
   const dialog = page.getByRole("dialog", { name: ui("campaignEdit.title") });
   const name = dialog.getByLabel(ui("campaignEdit.field.name"), { exact: true });
   await expect(name).toHaveValue(CAMPAIGN_NAME);
-  await name.fill("Salzhafen in the fog");
+  await name.fill("Salt Harbour in the fog");
 
   // The second writer changes the TEXT while the dialog stands.
   await patchCampaign(api, { body: "Written by the API.\n" });
@@ -755,16 +755,16 @@ test("the edit-campaign dialog and a second writer: the conflict line, and the s
 
   // Nothing written: the typed name stays, the conflict line asks.
   await expect(dialog.getByRole("alert")).toContainText(ui("editConflict.line"));
-  await expect(name).toHaveValue("Salzhafen in the fog");
+  await expect(name).toHaveValue("Salt Harbour in the fog");
   expect((await getCampaign(api)).name).toBe(CAMPAIGN_NAME);
 
   // Forcing writes the one field the DM changed — the other writer's text
   // survives.
   await dialog.getByRole("button", { name: ui("editConflict.force") }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen in the fog");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salt Harbour in the fog");
   const stored = await getCampaign(api);
-  expect(stored.name).toBe("Salzhafen in the fog");
+  expect(stored.name).toBe("Salt Harbour in the fog");
   expect(stored.body).toBe("Written by the API.\n");
 });
 
@@ -778,7 +778,7 @@ test("the chapter overview header is ONE row: the actions right beside the title
   // geometry rather than by class names.
   for (const width of [1024, 1280, 1536]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     const title = page.getByRole("heading", { level: 1 });
     await expect(title).toHaveText(CAMPAIGN_NAME);
     const counter = page.getByText(
@@ -855,8 +855,8 @@ test("a long chapter text is clamped, opens and closes; a link in the cut-off pa
   page,
   api,
 }) => {
-  await patchChapter(api, "01-salzhafen", { body: `${LONG_TEXT}\n` });
-  await page.goto("/campaigns/beispiel");
+  await patchChapter(api, "01-salt-harbour", { body: `${LONG_TEXT}\n` });
+  await page.goto("/campaigns/example");
 
   // Rendered through the one renderer: the heading, the callout, the reference.
   await expect(page.getByRole("heading", { level: 2, name: LONG_TEXT_HEADING })).toBeVisible();
@@ -895,7 +895,7 @@ test("the campaign's text stands under its description, clamped the same way", a
 }) => {
   await patchCampaign(api, { body: `${LONG_TEXT}\n` });
   // The chapter's own text is short, so the one toggle is the header's.
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   await expect(page.getByText(LONG_TEXT_OPENING, { exact: false })).toBeVisible();
   const toggle = showMore(page);
   await expect(toggle).toHaveCount(1);
@@ -926,14 +926,14 @@ test("a chapter's title and text are editable from the chapter overview", async 
   page,
   api,
 }) => {
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   // The active chapter is open by default, so its action is on screen.
   await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/chapters\/01-salzhafen$/);
+  await expect(page).toHaveURL(/\/campaigns\/example\/chapters\/01-salt-harbour$/);
 
   const title = page.getByRole("textbox", { name: ui("chapterEdit.title.aria") });
   await expect(title).toHaveValue(CHAPTER_TITLE);
-  await title.fill("Chapter 1: Salzhafen");
+  await title.fill("Chapter 1: Salt Harbour");
   await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
   const body = page.getByRole("textbox", {
     name: ui("bodyEditor.markdown.aria", { path: CHAPTER_TITLE }),
@@ -942,16 +942,16 @@ test("a chapter's title and text are editable from the chapter overview", async 
   // A heading is text like any other: it is shown, and so is what follows.
   await body.fill("## What it is about\n\nLight the lighthouse again.\n");
   await page.getByRole("button", { name: uiExact("common.save") }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Chapter 1: Salzhafen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Chapter 1: Salt Harbour");
 
   // The overview heading and the text follow — the save invalidated the tree
   // and the chapter.
-  await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("heading", { level: 2, name: "Chapter 1: Salzhafen" })).toBeVisible();
+  await page.goto("/campaigns/example");
+  await expect(page.getByRole("heading", { level: 2, name: "Chapter 1: Salt Harbour" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "What it is about" })).toBeVisible();
   await expect(page.getByText("Light the lighthouse again.", { exact: true })).toBeVisible();
-  const stored = await getChapter(api, "01-salzhafen");
-  expect(stored.title).toBe("Chapter 1: Salzhafen");
+  const stored = await getChapter(api, "01-salt-harbour");
+  expect(stored.title).toBe("Chapter 1: Salt Harbour");
   expect(stored.body).toContain("Light the lighthouse again.");
 });
 
@@ -981,7 +981,7 @@ const SECOND_CHAPTER = "Chapter 2: The Cove";
 /** The ids of the campaign's active chapters, as the tree lists them. */
 async function activeChapters(api: Api): Promise<string[]> {
   const tree = await api.get<{ chapters: { id: string; status?: string }[] }>(
-    "campaigns/beispiel/tree",
+    "campaigns/example/tree",
   );
   return tree.chapters.filter((chapter) => chapter.status === "active").map((chapter) => chapter.id);
 }
@@ -996,7 +996,7 @@ test("the chapter status control shows the localized labels and makes another ch
   });
   expect(created.id).toBe("chapter-2-the-cove");
 
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
 
   // The active chapter's control names its current value for a screen reader…
   const activeMenu = page.getByRole("button", { name: chapterStatusName("active") });
@@ -1024,13 +1024,13 @@ test("the chapter status control shows the localized labels and makes another ch
 
   // B is active, A went back to planned — in one write.
   await expect(page.getByRole("button", { name: chapterStatusName("active") })).toHaveCount(1);
-  await expect.poll(async () => (await getChapter(api, "01-salzhafen")).status).toBe("planned");
+  await expect.poll(async () => (await getChapter(api, "01-salt-harbour")).status).toBe("planned");
   expect((await getChapter(api, created.id)).status).toBe("active");
   expect(await activeChapters(api)).toEqual([created.id]);
 
   // Exactly ONE write, and it named the chapter the DM picked, with its rev.
   expect(writes).toHaveLength(1);
-  expect(writes[0]).toMatch(new RegExp(`^campaigns/beispiel/chapters/${created.id} `));
+  expect(writes[0]).toMatch(new RegExp(`^campaigns/example/chapters/${created.id} `));
   expect(JSON.parse(writes[0]!.replace(/^\S+ /, ""))).toMatchObject({ status: "active" });
   expect(JSON.parse(writes[0]!.replace(/^\S+ /, ""))).toHaveProperty("rev");
 
@@ -1056,7 +1056,7 @@ test("a second writer: the chapter status pick reports the conflict inline, the 
   const created = await api.send<{ id: string }>("POST", chapterPath(api), {
     title: SECOND_CHAPTER,
   });
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   const trigger = page.getByRole("button", { name: chapterStatusName("planned") });
   const message = page.getByText(ui("write.stale"));
 
@@ -1091,7 +1091,7 @@ test("a second writer: the chapter status pick reports the conflict inline, the 
     page.getByRole("button", { name: chapterStatusName("done") }),
   ).toBeVisible();
   await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
-  expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
+  expect((await getChapter(api, "01-salt-harbour")).status).toBe("active");
 });
 
 // The control is a RADIO group, so the checked option is the state —
@@ -1100,7 +1100,7 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
   await api.send("POST", chapterPath(api), { title: SECOND_CHAPTER });
   const writes = chapterPatches(page);
 
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   const activeMenu = page.getByRole("button", { name: chapterStatusName("active") });
   await activeMenu.click();
   await page.getByRole("menuitemradio", { name: chapterStatus("active") }).click();
@@ -1108,7 +1108,7 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
 
   expect(writes).toEqual([]);
   await expect(activeMenu).toBeVisible();
-  expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
+  expect((await getChapter(api, "01-salt-harbour")).status).toBe("active");
 });
 
 // A value other than `active` moves only the chapter it names.
@@ -1120,7 +1120,7 @@ test("picking done writes that chapter and leaves the active one alone", async (
     title: SECOND_CHAPTER,
   });
 
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   await page.getByRole("button", { name: chapterStatusName("planned") }).click();
   await page.getByRole("menuitemradio", { name: chapterStatus("done") }).click();
 
@@ -1129,15 +1129,15 @@ test("picking done writes that chapter and leaves the active one alone", async (
   ).toBeVisible();
   await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
   // The evening's chapter is untouched.
-  expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
+  expect((await getChapter(api, "01-salt-harbour")).status).toBe("active");
 });
 
 // --- the scene order: one list, up/down, one guard of its own (decisions/scene-order) -----
 
 /** The chapter of the example campaign — the one that holds an order. */
-const CHAPTER = "01-salzhafen";
+const CHAPTER = "01-salt-harbour";
 /** The write path of that order: the whole list, against its own guard. */
-const ORDER_PATH = `campaigns/beispiel/chapters/${CHAPTER}/scene-order`;
+const ORDER_PATH = `campaigns/example/chapters/${CHAPTER}/scene-order`;
 /** The conflict line of the order — it reports and reloads, it does not force. */
 const ORDER_CONFLICT = ui("chapterOverview.order.conflict");
 
@@ -1154,8 +1154,8 @@ interface OrderTree {
 /** Scene id -> the title its row and its move controls carry. */
 const TITLES: Record<string, string> = {
   "lighthouse-arrival": ARRIVAL,
-  "order-keller": "The cellar under the tower",
-  "order-steg": "At the jetty by night",
+  "order-cellar": "The cellar under the tower",
+  "order-jetty": "At the jetty by night",
   "smuggler-captured": CAPTURED,
 };
 
@@ -1188,15 +1188,15 @@ function plannedScene(id: string, location: string): SceneProposal {
  * (`smuggler-captured`) behind them.
  */
 const ORDER_SEED = {
-  scenes: [plannedScene("order-keller", "leuchtturm"), plannedScene("order-steg", "bucht")],
+  scenes: [plannedScene("order-cellar", "lighthouse"), plannedScene("order-jetty", "cove")],
 };
 
 /** The seeded order, by id — where every test of this block starts. */
-const SEEDED_ORDER = ["lighthouse-arrival", "order-keller", "order-steg", "smuggler-captured"];
+const SEEDED_ORDER = ["lighthouse-arrival", "order-cellar", "order-jetty", "smuggler-captured"];
 
 /** The chapter node of the tree: its scenes in order and the order's guard. */
 async function orderNode(api: Api): Promise<OrderTree["chapters"][number]> {
-  const tree = await api.get<OrderTree>("campaigns/beispiel/tree");
+  const tree = await api.get<OrderTree>("campaigns/example/tree");
   const chapter = tree.chapters.find((c) => c.id === CHAPTER);
   if (chapter === undefined) throw new Error(`the tree has no chapter ${CHAPTER}`);
   return chapter;
@@ -1238,7 +1238,7 @@ test.describe("the scene order of a chapter", () => {
     });
 
   test("the scenes are ONE list, and a step down survives a reload", async ({ page, api }) => {
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     await expect.poll(() => shownOrder(page)).toEqual(titlesOf(SEEDED_ORDER));
 
     // The ends of a BLOCK are the ends of the move: the first row cannot go
@@ -1246,13 +1246,13 @@ test.describe("the scene order of a chapter", () => {
     // nowhere to go at all — its block is one row long.
     await expect(up(page, "lighthouse-arrival")).toBeDisabled();
     await expect(down(page, "lighthouse-arrival")).toBeEnabled();
-    await expect(up(page, "order-steg")).toBeEnabled();
-    await expect(down(page, "order-steg")).toBeDisabled();
+    await expect(up(page, "order-jetty")).toBeEnabled();
+    await expect(down(page, "order-jetty")).toBeDisabled();
     await expect(up(page, "smuggler-captured")).toBeDisabled();
     await expect(down(page, "smuggler-captured")).toBeDisabled();
 
     // One step down swaps the first two rows — visibly …
-    const moved = ["order-keller", "lighthouse-arrival", "order-steg", "smuggler-captured"];
+    const moved = ["order-cellar", "lighthouse-arrival", "order-jetty", "smuggler-captured"];
     await down(page, "lighthouse-arrival").click();
     await expect.poll(() => shownOrder(page)).toEqual(titlesOf(moved));
     // … and in the database, which is what the reload reads back.
@@ -1260,7 +1260,7 @@ test.describe("the scene order of a chapter", () => {
     await page.reload();
     await expect.poll(() => shownOrder(page)).toEqual(titlesOf(moved));
     // The moved row took its ends with it: now IT is the one that cannot go up.
-    await expect(up(page, "order-keller")).toBeDisabled();
+    await expect(up(page, "order-cellar")).toBeDisabled();
     await expect(up(page, "lighthouse-arrival")).toBeEnabled();
   });
 
@@ -1268,7 +1268,7 @@ test.describe("the scene order of a chapter", () => {
     page,
     api,
   }) => {
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     await expect.poll(() => shownOrder(page)).toEqual(titlesOf(SEEDED_ORDER));
 
     const message = page.getByText(ORDER_CONFLICT);
@@ -1279,7 +1279,7 @@ test.describe("the scene order of a chapter", () => {
     let written: string[] = [];
     for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
       const node = await orderNode(api);
-      const front = attempt % 2 === 1 ? "order-steg" : "order-keller";
+      const front = attempt % 2 === 1 ? "order-jetty" : "order-cellar";
       written = [front, ...node.scenes.map((scene) => scene.id).filter((id) => id !== front)];
       await api.send("PUT", ORDER_PATH, { scenes: written, rev: node.sceneOrderRev });
       await down(page, "lighthouse-arrival").click();
@@ -1308,8 +1308,8 @@ test.describe("the scene order of a chapter", () => {
     // The other direction of the three guards: writing a scene bumps its own
     // `rev` and nothing of the chapter's order (decisions/scene-order).
     const node = await orderNode(api);
-    const before = await getScene(api, "order-keller");
-    const written = await patchScene(api, "order-keller", { title: "The cellar, measured anew" });
+    const before = await getScene(api, "order-cellar");
+    const written = await patchScene(api, "order-cellar", { title: "The cellar, measured anew" });
     expect(written.rev).not.toBe(before.rev);
     const after = await orderNode(api);
     expect(after.sceneOrderRev).toBe(node.sceneOrderRev);
@@ -1326,7 +1326,7 @@ test.describe("the scene order of a chapter", () => {
     const addition = "A line that survives the reordering.";
 
     // The scene's text editor stands open on the version it started from.
-    await page.goto(`/campaigns/beispiel/scenes/${scene}`);
+    await page.goto(`/campaigns/example/scenes/${scene}`);
     await page.getByRole("button", { name: ui("common.edit") }).click();
     await page.getByRole("button", { name: uiExact("composer.mode.markdown") }).click();
     const textarea = page.getByRole("textbox", {
@@ -1337,7 +1337,7 @@ test.describe("the scene order of a chapter", () => {
 
     // The order moves underneath — the one write the up/down buttons make.
     const node = await orderNode(api);
-    const reordered = ["order-keller", "lighthouse-arrival", "order-steg", "smuggler-captured"];
+    const reordered = ["order-cellar", "lighthouse-arrival", "order-jetty", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: reordered, rev: node.sceneOrderRev });
 
     // It bumped its OWN guard and nobody else's: neither the scene's row
@@ -1356,7 +1356,7 @@ test.describe("the scene order of a chapter", () => {
 
     // The chapter's own text holds `chapters.rev`, which the order does not
     // touch either — same promise, other half of the chapter.
-    await page.goto("/campaigns/beispiel");
+    await page.goto("/campaigns/example");
     await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
     await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
     const chapterText = page.getByRole("textbox", {
@@ -1365,7 +1365,7 @@ test.describe("the scene order of a chapter", () => {
     await expect(chapterText).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
     await chapterText.fill("Light the lighthouse again.");
     const second = await orderNode(api);
-    const again = ["order-steg", "order-keller", "lighthouse-arrival", "smuggler-captured"];
+    const again = ["order-jetty", "order-cellar", "lighthouse-arrival", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });
     await page.getByRole("button", { name: uiExact("common.save") }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
@@ -1384,18 +1384,18 @@ test("the npc's and the location's reading views offer the session start like ev
 
   // The npc's and the location's own routes are reading views: with no
   // session running the chip offers the start, exactly as it does on a scene.
-  await page.goto("/campaigns/beispiel/npcs/jorna");
+  await page.goto("/campaigns/example/npcs/jorna");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(JORNA);
   await expect(start).toBeVisible();
-  await page.goto("/campaigns/beispiel/locations/leuchtturm");
+  await page.goto("/campaigns/example/locations/lighthouse");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(LIGHTHOUSE);
   await expect(start).toBeVisible();
 
   // The lists are lists, not reading views — no start offered there.
-  await page.goto("/campaigns/beispiel/npcs");
+  await page.goto("/campaigns/example/npcs");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.npcs"));
   await expect(start).toHaveCount(0);
-  await page.goto("/campaigns/beispiel/locations");
+  await page.goto("/campaigns/example/locations");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.locations"));
   await expect(start).toHaveCount(0);
 });

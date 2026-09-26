@@ -24,6 +24,7 @@ import { getLocation, locationExists } from "../support/location";
 import { createNpc, getNpc, npcExists } from "../support/npc";
 import { getScene, patchScene, sceneExists, scenePath } from "../support/scene";
 import { ui } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
 /** Reads one of the suite's own scene fixtures. */
 function scene(name: string): SceneProposal {
@@ -40,8 +41,8 @@ const LOOT_SCENE = scene("loot-scene.json");
  */
 const WIDE_TABLE_SCENE = scene("wide-table-scene.json");
 
-const ARRIVAL = "/campaigns/beispiel/scenes/lighthouse-arrival";
-const CAPTURED = "/campaigns/beispiel/scenes/smuggler-captured";
+const ARRIVAL = `/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival`;
+const CAPTURED = `/campaigns/${CAMPAIGN}/scenes/smuggler-captured`;
 
 test("a scene is its own resource: flat on the wire, 404 at its old address", async ({ api }) => {
   // Every field of the scene flat, beside its guard — no `kind`, no `path`,
@@ -49,12 +50,12 @@ test("a scene is its own resource: flat on the wire, 404 at its old address", as
   const arrival = await getScene(api, "lighthouse-arrival");
   expect(arrival).toMatchObject({
     id: "lighthouse-arrival",
-    title: "Ankunft am Leuchtturm",
+    title: "Arrival at the Lighthouse",
     type: "planned",
-    chapter: "01-salzhafen",
-    location: "leuchtturm",
+    chapter: "01-salt-harbour",
+    location: "lighthouse",
     npcs: ["jorna"],
-    handouts: ["Karte von Salzhafen"],
+    handouts: ["Map of Salt Harbour"],
     tags: ["social", "travel"],
     status: "ready",
   });
@@ -64,10 +65,10 @@ test("a scene is its own resource: flat on the wire, 404 at its old address", as
 
   // A nested path under chapter and location names nothing: a scene is reached by its id.
   for (const address of [
-    "01-salzhafen/leuchtturm/lighthouse-arrival",
-    "01-salzhafen/lighthouse-arrival",
+    "01-salt-harbour/lighthouse/lighthouse-arrival",
+    "01-salt-harbour/lighthouse-arrival",
   ]) {
-    expect((await api.fetch(`campaigns/beispiel/entries/${address}`)).status).toBe(404);
+    expect((await api.fetch(`campaigns/${CAMPAIGN}/entries/${address}`)).status).toBe(404);
   }
 });
 
@@ -95,13 +96,13 @@ test("a scene write: a stale rev is 409, an unknown field 400 naming it", async 
     rev: moved.rev,
     scene: { id: "lighthouse-arrival", status: "played" },
   });
-  expect((await getScene(api, "lighthouse-arrival")).title).toBe("Ankunft am Leuchtturm");
+  expect((await getScene(api, "lighthouse-arrival")).title).toBe("Arrival at the Lighthouse");
 
   // A field a scene does not have is refused, by name — on PATCH and POST.
   const unknownPatch = await patch({ rev: moved.rev, atmosphere: "Fog" });
   expect(unknownPatch.status).toBe(400);
   expect(((await unknownPatch.json()) as { error: string }).error).toContain("atmosphere");
-  const unknownCreate = await create({ title: "New", chapter: "01-salzhafen", roll20Page: "x" });
+  const unknownCreate = await create({ title: "New", chapter: "01-salt-harbour", roll20Page: "x" });
   expect(unknownCreate.status).toBe(400);
   expect(((await unknownCreate.json()) as { error: string }).error).toContain("roll20Page");
   expect(await sceneExists(api, "new")).toBe(false);
@@ -113,8 +114,8 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
 }) => {
   // The example campaign's own names, read from their resources.
   const scene = await getScene(api, "lighthouse-arrival");
-  const chapter = await getChapter(api, "01-salzhafen");
-  const location = await getLocation(api, "leuchtturm");
+  const chapter = await getChapter(api, "01-salt-harbour");
+  const location = await getLocation(api, "lighthouse");
   const campaign = await getCampaign(api);
   const jorna = await getNpc(api, "jorna");
 
@@ -152,7 +153,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   // The signature element: no label row, brass ribbon, copy button on hover.
   const readaloud = page.locator("[data-callout='readaloud']");
   await expect(readaloud).toHaveCount(1);
-  await expect(readaloud).toContainText("Der Turm ragt schwarz gegen den Abendhimmel auf.");
+  await expect(readaloud).toContainText("The tower rises black against the evening sky.");
   await expect(
     readaloud.getByRole("button", { name: ui("markdown.readaloud.copy.aria") }),
   ).toBeAttached();
@@ -163,11 +164,11 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
 
   const secret = page.locator("[data-callout='secret']");
   await expect(secret).toContainText(ui("markdown.callout.secret"));
-  await expect(secret).toContainText("Der Leuchtturmwärter ist nicht verschwunden");
+  await expect(secret).toContainText("The lighthouse keeper has not vanished");
 
   const note = page.locator("[data-callout='note']");
   await expect(note).toContainText(ui("markdown.callout.note"));
-  await expect(note).toContainText("Kontingenz");
+  await expect(note).toContainText("contingency smuggler-captured");
 
   // NPC card of the scene: name, mono id, voice, "Will" (the npc's
   // `motivation` field — the body carries no such section), quickstats
@@ -178,18 +179,18 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText(jorna.name);
   await expect(aside).toContainText("jorna");
   await expect(aside).toContainText(ui("npcCard.voice"));
-  await expect(aside).toContainText("knapp, wetterrau, duzt jeden");
+  await expect(aside).toContainText("curt, weather-beaten, on first-name terms with everyone");
   await expect(aside).toContainText(ui("npcCard.will"));
-  await expect(aside).toContainText("Das Leuchtfeuer muss wieder brennen");
+  await expect(aside).toContainText("The beacon has to burn again");
   // …and it can only have come from the field: the text does not say it.
-  expect(jorna.body).not.toContain("Das Leuchtfeuer");
+  expect(jorna.body).not.toContain("The beacon");
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 
   // The card links into the NPC reading view, on the npc's own route
   // (decisions/resources).
   await aside.getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/jorna$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(jorna.name);
 });
 
@@ -213,9 +214,9 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
   const first = branches.first();
   await expect(first.locator("summary")).toContainText(ui("markdown.ifSection.prefix"));
   await expect(first.locator("summary")).toContainText(
-    "sie geben zu, für Jorna zu arbeiten",
+    "they admit to working for Jorna",
   );
-  const firstBody = first.getByText("Fenn lässt sie in die alte Räucherkammer sperren", {
+  const firstBody = first.getByText("Fenn has them locked in the old smokehouse", {
     exact: false,
   });
   await expect(firstBody).toBeVisible();
@@ -232,10 +233,10 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
   );
   const outcome = page.locator("[data-callout='outcome']");
   await expect(outcome).toContainText(ui("markdown.callout.outcome"));
-  await expect(outcome).toContainText("Fenn kennt nach dieser Szene die Gesichter der Gruppe");
+  await expect(outcome).toContainText("After this scene Fenn knows the party's faces");
 
   await expect(page.locator("[data-callout='note']")).toContainText(
-    "Notfall-Ventil: Der gefangene Leuchtturmwärter",
+    "Safety valve: the captured lighthouse keeper",
   );
 
   // Fenn is the scene's npc.
@@ -244,7 +245,7 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
     .getByRole("complementary")
     .filter({ hasText: ui("scene.npcs.heading") });
   await expect(aside).toContainText(fenn.name);
-  await expect(aside).toContainText("leise, höflich");
+  await expect(aside).toContainText("quiet, polite");
 });
 
 test("a referenced NPC without information is a thin card, not a gap", async ({ page, api }) => {
@@ -267,7 +268,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(aside.getByRole("button")).toHaveCount(0);
 
   await holm.click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/holm$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/holm$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
   // And it is editable from here like every other npc.
   await expect(page.getByRole("button", { name: ui("common.edit"), exact: true })).toBeVisible();
@@ -285,13 +286,13 @@ test("a scene location is a REFERENCE: a location that exists, or a 400", async 
 
   // An id nothing holds: refused, and no location appears for it.
   const before = await getScene(api, "smuggler-captured");
-  const unknown = await patchLocation("north-cove", before.rev);
+  const unknown = await patchLocation("seal-rocks", before.rev);
   expect(unknown.status).toBe(400);
   expect(await unknown.json()).toMatchObject({
     code: "location_unknown",
-    value: "north-cove",
+    value: "seal-rocks",
   });
-  expect(await locationExists(api, "north-cove")).toBe(false);
+  expect(await locationExists(api, "seal-rocks")).toBe(false);
 
   // Free text is refused too, with the slug it would have used — the
   // README's free-text exception is gone.
@@ -305,11 +306,11 @@ test("a scene location is a REFERENCE: a location that exists, or a 400", async 
 
   // With the location created, the patch lands — and the scene stays at its
   // own route, whatever its location says.
-  await api.send("POST", "campaigns/beispiel/locations", { name: "North Cove" });
-  await patchScene(api, "smuggler-captured", { location: "north-cove" });
-  expect((await getScene(api, "smuggler-captured")).location).toBe("north-cove");
+  await api.send("POST", `campaigns/${CAMPAIGN}/locations`, { name: "Seal Rocks" });
+  await patchScene(api, "smuggler-captured", { location: "seal-rocks" });
+  expect((await getScene(api, "smuggler-captured")).location).toBe("seal-rocks");
   await page.goto(CAPTURED);
-  await expect(page.getByRole("article")).toContainText("North Cove");
+  await expect(page.getByRole("article")).toContainText("Seal Rocks");
 });
 
 test.describe("with a seeded loot scene", () => {
@@ -320,7 +321,7 @@ test.describe("with a seeded loot scene", () => {
   }) => {
     // [!loot] is missing from the reference scenes, so the sixth kind is
     // checked on a scene this test seeds into its own copy of the fixtures.
-    await page.goto(`/campaigns/beispiel/scenes/${LOOT_SCENE.id}`);
+    await page.goto(`/campaigns/${CAMPAIGN}/scenes/${LOOT_SCENE.id}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOOT_SCENE.title);
 
     const loot = page.locator("[data-callout='loot']");
@@ -344,9 +345,9 @@ test("the reference scene's d6 table renders as a table inside the note callout"
   const table = page.locator("[data-callout='note'] table");
   await expect(table).toHaveCount(1);
   // Header row distinguished, and the rows are rows — not a wall of pipes.
-  await expect(table.locator("thead th").first()).toHaveText("W6");
+  await expect(table.locator("thead th").first()).toHaveText("d6");
   await expect(table.locator("tbody tr")).toHaveCount(3);
-  await expect(table).toContainText("Eine Laterne, das Glas rußgeschwärzt");
+  await expect(table).toContainText("A lantern, its glass blackened with soot");
   // No pipe survived into the rendered text.
   await expect(page.getByRole("article")).not.toContainText("| --- |");
 });
@@ -360,7 +361,7 @@ test.describe("the table at 390px", () => {
   test("a table too wide for the phone scrolls in its own box, the page does not", async ({
     page,
   }) => {
-    await page.goto(`/campaigns/beispiel/scenes/${WIDE_TABLE_SCENE.id}`);
+    await page.goto(`/campaigns/${CAMPAIGN}/scenes/${WIDE_TABLE_SCENE.id}`);
 
     // Overflowing, so the box IS a named region: the tab stop and the
     // landmark only appear once there is something to scroll.

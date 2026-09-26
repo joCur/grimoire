@@ -22,13 +22,13 @@ import type { Thread } from "@grimoire/shared/thread";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 
-const CAMPAIGN = "beispiel";
-const CHAPTER = "01-salzhafen";
+const CAMPAIGN = "example";
+const CHAPTER = "01-salt-harbour";
 const THREADS = `/api/campaigns/${CAMPAIGN}/threads`;
 const SEEDED: Thread = {
-  id: "wer-bezahlt-die-schmuggler",
+  id: "who-pays-the-smugglers",
   chapter: CHAPTER,
-  text: "Wer bezahlt die Schmuggler?",
+  text: "Who pays the smugglers?",
   done: false,
   rev: 1,
 };
@@ -81,14 +81,14 @@ describe("reading threads", () => {
   });
 
   test("the list answers every thread of the campaign, ?chapter= those of one chapter", async () => {
-    const other = await newChapter("Zwei");
-    const foreign = await json<Thread>(createThread({ chapter: other, text: "Fremder Faden" }), 201);
+    const other = await newChapter("Two");
+    const foreign = await json<Thread>(createThread({ chapter: other, text: "Foreign thread" }), 201);
     expect(await listThreads()).toEqual([SEEDED, foreign]);
     expect(await listThreads(`?chapter=${CHAPTER}`)).toEqual([SEEDED]);
     expect(await listThreads(`?chapter=${other}`)).toEqual([foreign]);
     // A filter names no resource: a chapter without threads, or none at all,
     // is an empty list.
-    expect(await listThreads("?chapter=99-nix")).toEqual([]);
+    expect(await listThreads("?chapter=99-none")).toEqual([]);
   });
 
   test("404 for an unknown thread or campaign", async () => {
@@ -108,13 +108,13 @@ describe("creating a thread", () => {
     const before = await readChapter();
     const beforeVersion = await version();
     const created = await json<Thread>(
-      createThread({ chapter: CHAPTER, text: "Lichter in der Bucht untersuchen" }),
+      createThread({ chapter: CHAPTER, text: "Investigate the lights in the cove" }),
       201,
     );
     expect(created).toEqual({
       id: expect.any(String),
       chapter: CHAPTER,
-      text: "Lichter in der Bucht untersuchen",
+      text: "Investigate the lights in the cove",
       done: false,
       rev: 1,
     });
@@ -130,16 +130,16 @@ describe("creating a thread", () => {
   });
 
   test("needs no rev, and leaves the other threads' guards where they were", async () => {
-    await json<Thread>(createThread({ chapter: CHAPTER, text: "Noch ein Faden" }), 201);
+    await json<Thread>(createThread({ chapter: CHAPTER, text: "One more thread" }), 201);
     expect((await readThread()).rev).toBe(1);
   });
 
   test("the text is one line: trimmed, inner newlines folded", async () => {
     const created = await json<Thread>(
-      createThread({ chapter: CHAPTER, text: "  Zeile eins\n  Zeile zwei  " }),
+      createThread({ chapter: CHAPTER, text: "  Line one\n  line two  " }),
       201,
     );
-    expect(created.text).toBe("Zeile eins Zeile zwei");
+    expect(created.text).toBe("Line one line two");
   });
 
   test("400 for empty or missing text, a missing chapter and an unknown key — naming it", async () => {
@@ -154,10 +154,10 @@ describe("creating a thread", () => {
   });
 
   test("400 chapter_unknown for a chapter the campaign does not have — naming creates nothing", async () => {
-    const res = await createThread({ chapter: "99-nix", text: "x" });
+    const res = await createThread({ chapter: "99-none", text: "x" });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: "chapter_unknown", value: "99-nix" });
-    expect((await app.request(`/api/campaigns/${CAMPAIGN}/chapters/99-nix`)).status).toBe(404);
+    expect(await res.json()).toMatchObject({ code: "chapter_unknown", value: "99-none" });
+    expect((await app.request(`/api/campaigns/${CAMPAIGN}/chapters/99-none`)).status).toBe(404);
   });
 });
 
@@ -166,10 +166,10 @@ describe("writing a thread", () => {
     const before = await readChapter();
     const ticked = await json<Thread>(patchThread({ rev: 1, done: true }));
     expect(ticked).toEqual({ ...SEEDED, done: true, rev: 2 });
-    const reworded = await json<Thread>(patchThread({ rev: 2, text: " Wer zahlt?\n wirklich " }));
-    expect(reworded).toEqual({ ...SEEDED, text: "Wer zahlt? wirklich", done: true, rev: 3 });
-    const both = await json<Thread>(patchThread({ rev: 3, done: false, text: "Wer zahlt?" }));
-    expect(both).toEqual({ ...SEEDED, text: "Wer zahlt?", rev: 4 });
+    const reworded = await json<Thread>(patchThread({ rev: 2, text: " Who pays?\n really " }));
+    expect(reworded).toEqual({ ...SEEDED, text: "Who pays? really", done: true, rev: 3 });
+    const both = await json<Thread>(patchThread({ rev: 3, done: false, text: "Who pays?" }));
+    expect(both).toEqual({ ...SEEDED, text: "Who pays?", rev: 4 });
     expect(await readThread()).toEqual(both);
     const after = await readChapter();
     expect(after.body).toBe(before.body);
@@ -177,33 +177,33 @@ describe("writing a thread", () => {
   });
 
   test("moves to another chapter: the chapter is a field, the URL stays", async () => {
-    const other = await newChapter("Zwei");
+    const other = await newChapter("Two");
     const moved = await json<Thread>(patchThread({ rev: 1, chapter: other }));
     expect(moved).toEqual({ ...SEEDED, chapter: other, rev: 2 });
     expect(await listThreads(`?chapter=${CHAPTER}`)).toEqual([]);
     expect(await listThreads(`?chapter=${other}`)).toEqual([moved]);
-    const unknown = await patchThread({ rev: 2, chapter: "99-nix" });
+    const unknown = await patchThread({ rev: 2, chapter: "99-none" });
     expect(unknown.status).toBe(400);
     expect(await unknown.json()).toMatchObject({ code: "chapter_unknown" });
   });
 
   test("a stale rev is 409 with the current thread and writes nothing; force writes on top", async () => {
-    await json<Thread>(patchThread({ rev: 1, text: "Umformuliert" }));
+    await json<Thread>(patchThread({ rev: 1, text: "Reworded" }));
     const stale = await patchThread({ rev: 1, done: true });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({
       code: "rev_conflict",
       rev: 2,
-      thread: { ...SEEDED, text: "Umformuliert", rev: 2 },
+      thread: { ...SEEDED, text: "Reworded", rev: 2 },
     });
     expect((await readThread()).done).toBe(false);
     // `force` writes only what it carries: the text changed in between stays.
     const forced = await json<Thread>(patchThread({ rev: 1, force: true, done: true }));
-    expect(forced).toEqual({ ...SEEDED, text: "Umformuliert", done: true, rev: 3 });
+    expect(forced).toEqual({ ...SEEDED, text: "Reworded", done: true, rev: 3 });
   });
 
   test("a write of one thread leaves another one's rev alone", async () => {
-    const second = await json<Thread>(createThread({ chapter: CHAPTER, text: "Zweiter" }), 201);
+    const second = await json<Thread>(createThread({ chapter: CHAPTER, text: "Second" }), 201);
     await json<Thread>(patchThread({ rev: 1, done: true }));
     // The tick prepared against the second thread before still goes through.
     expect(await json<Thread>(patchThread({ rev: 1, done: true }, `${THREADS}/${second.id}`))).toEqual({
@@ -218,12 +218,12 @@ describe("writing a thread", () => {
     const nothing = await patchThread({ rev: 1 });
     expect(nothing.status).toBe(400);
     expect(await nothing.json()).toMatchObject({ code: "nothing_to_write" });
-    expect((await patchThread({ rev: 1, done: "ja" })).status).toBe(400);
+    expect((await patchThread({ rev: 1, done: "yes" })).status).toBe(400);
     expect((await patchThread({ rev: 1, text: "  " })).status).toBe(400);
     const unknown = await patchThread({ rev: 1, done: true, pos: 3 });
     expect(unknown.status).toBe(400);
     expect(((await unknown.json()) as { error: string }).error).toContain("pos");
-    expect((await patchThread({ rev: 1, id: "anders" })).status).toBe(400);
+    expect((await patchThread({ rev: 1, id: "other" })).status).toBe(400);
     expect(await readThread()).toEqual(SEEDED);
   });
 
@@ -234,7 +234,7 @@ describe("writing a thread", () => {
 
 describe("deleting a thread", () => {
   test("removes the one thread, 204", async () => {
-    const second = await json<Thread>(createThread({ chapter: CHAPTER, text: "Bleibt" }), 201);
+    const second = await json<Thread>(createThread({ chapter: CHAPTER, text: "Stays" }), 201);
     const res = await deleteThread({ rev: 1 });
     expect(res.status).toBe(204);
     expect(await listThreads()).toEqual([second]);
@@ -257,7 +257,7 @@ describe("the chapter and its threads keep their own guards", () => {
     const before = await readChapter();
     const res = await send("PATCH", CHAPTER_URL, {
       rev: before.rev,
-      body: `${before.body}\nNeuer Absatz.\n`,
+      body: `${before.body}\nNew paragraph.\n`,
     });
     expect(res.status).toBe(200);
     expect(await json<Thread>(patchThread({ rev: 1, done: true }))).toMatchObject({ rev: 2 });
@@ -267,7 +267,7 @@ describe("the chapter and its threads keep their own guards", () => {
 describe("the seed", () => {
   test("a fixture thread naming a chapter the campaign does not have is refused", async () => {
     await expect(
-      seedStore({ threads: [{ ...SEEDED_FIXTURE, id: "verwaist", chapter: "99-nix" }] }),
+      seedStore({ threads: [{ ...SEEDED_FIXTURE, id: "orphaned", chapter: "99-none" }] }),
     ).rejects.toThrow();
   });
 });

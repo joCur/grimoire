@@ -52,17 +52,17 @@ import { expect, test } from "../support/test";
 import { ui, uiPattern } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
-const SCENE_TITLE = "Ankunft am Leuchtturm";
+const SCENE_URL = `/campaigns/example/scenes/${SCENE}`;
+const SCENE_TITLE = "Arrival at the Lighthouse";
 /** The npc the npc cases edit — its own resource and route (decisions/resources). */
 const NPC = "jorna";
-const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
-const NPC_NAME = "Hafenmeisterin Jorna";
-const CHAPTER = "01-salzhafen";
-const CHAPTER_URL = `/campaigns/beispiel/chapters/${CHAPTER}`;
-const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
+const NPC_URL = `/campaigns/example/npcs/${NPC}`;
+const NPC_NAME = "Harbourmaster Jorna";
+const CHAPTER = "01-salt-harbour";
+const CHAPTER_URL = `/campaigns/example/chapters/${CHAPTER}`;
+const CHAPTER_TITLE = "Chapter 1: The Lighthouse of Salt Harbour";
 /** The read-aloud line of the scene's text, as the reading view renders it. */
-const READ_ALOUD = "Der Turm ragt schwarz gegen den Abendhimmel auf.";
+const READ_ALOUD = "The tower rises black against the evening sky.";
 
 /**
  * Read a scene: its text, and every other field beside it — what a text save
@@ -226,7 +226,7 @@ test("a scene whose location changed stays at its route and stays editable", asy
   // field, not the link — a bookmark written before still opens it, and the
   // text saves through it like any other edit.
   // The location has to exist before a scene can name it (decisions/constraints).
-  await api.send("POST", "campaigns/beispiel/locations", { name: "North Cove" });
+  await api.send("POST", "campaigns/example/locations", { name: "North Cove" });
   await patchScene(api, SCENE, { location: "north-cove" });
 
   await page.goto(SCENE_URL);
@@ -496,11 +496,11 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   // path, so the view is not remounted and could carry edit mode over. The
   // unsaved work makes it ask first; discarding goes on.
   await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Schmugglern");
-  await page.getByRole("option").filter({ hasText: "Von den Schmugglern erwischt" }).first().click();
+  await page.getByRole("combobox").fill("Caught");
+  await page.getByRole("option").filter({ hasText: "Caught by the Smugglers" }).first().click();
   const leave = page.getByRole("dialog", { name: ui("properties.discard.title") });
   await leave.getByRole("button", { name: ui("common.discard") }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Von den Schmugglern erwischt");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Caught by the Smugglers");
   // The other scene opens in its reading view, not in an edit mode seeded
   // from it.
   await expect(sceneTitleInput(page)).toHaveCount(0);
@@ -531,7 +531,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   // Every further READ of this scene fails — a restarted server, a network
   // blip. Only GET is blocked, so the write endpoint stays reachable.
   let aborted = 0;
-  await page.route("**/api/campaigns/beispiel/scenes/**", (route) => {
+  await page.route("**/api/campaigns/example/scenes/**", (route) => {
     if (route.request().method() !== "GET") {
       void route.fallback();
       return;
@@ -618,7 +618,7 @@ test("a location and a chapter offer the text editor in their edit modes", async
   // The entities whose prose the DM maintains offer the text editor in their
   // edit modes — each on its own route (decisions/resources).
   for (const [url, name] of [
-    ["/campaigns/beispiel/locations/leuchtturm", "Der Leuchtturm von Salzhafen"],
+    ["/campaigns/example/locations/lighthouse", "The Lighthouse of Salt Harbour"],
     [CHAPTER_URL, CHAPTER_TITLE],
   ] as const) {
     await page.goto(url);
@@ -647,7 +647,7 @@ test("the chapter and the campaign are their own resources; the entry addresses 
     "name",
     "rev",
   ]);
-  expect(campaign.name).toBe("Der Leuchtturm von Salzhafen");
+  expect(campaign.name).toBe("The Lighthouse of Salt Harbour");
 
   // A stale rev is 409 with the current state and writes nothing.
   const staleChapter = await api.fetch(chapterPath(api, CHAPTER), {
@@ -671,7 +671,7 @@ test("the chapter and the campaign are their own resources; the entry addresses 
   const unknownChapter = await api.fetch(chapterPath(api, CHAPTER), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: chapter.rev, location: "leuchtturm" }),
+    body: JSON.stringify({ rev: chapter.rev, location: "lighthouse" }),
   });
   expect(unknownChapter.status).toBe(400);
   expect(await unknownChapter.text()).toContain("location");
@@ -695,12 +695,12 @@ test("the chapter and the campaign are their own resources; the entry addresses 
     "inbox",
     "glossary",
     "npcs/jorna",
-    "locations/leuchtturm",
+    "locations/lighthouse",
     `${CHAPTER}/${SCENE}`,
   ]) {
     const address = rel.split("/").map(encodeURIComponent).join("/");
     for (const method of ["GET", "PATCH"] as const) {
-      const res = await api.fetch(`campaigns/beispiel/entries/${address}`, {
+      const res = await api.fetch(`campaigns/example/entries/${address}`, {
         method,
         headers: { "content-type": "application/json" },
         body: method === "GET" ? undefined : JSON.stringify({ rev: 1, body: "\nAll new.\n" }),
@@ -718,7 +718,7 @@ test("a glossary term is a row of its own, kept on the glossary page", async ({ 
   expect((await getGlossaryTerms(api)).map((term) => term.id)).toContain(created.id);
 
   // The glossary page shows the term, and carries no markdown editor.
-  await page.goto("/campaigns/beispiel/glossary");
+  await page.goto("/campaigns/example/glossary");
   await expect(page.getByText("Tidal flat")).toBeVisible();
   await expect(
     page.getByRole("textbox", {

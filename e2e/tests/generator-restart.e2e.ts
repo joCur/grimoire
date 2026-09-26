@@ -69,7 +69,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
     // The start answers with the job itself.
     const started = await startGeneratorJob(api, {
       kind: "scene",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       sourceText: `${SOURCE}\n\n${TRIGGER.slow}`,
     });
     jobId = started.id;
@@ -114,8 +114,8 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
 
     // The job is its own resource (decisions/resources): the generator's former
     // addresses answer 404.
-    expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
-    const oldApply = await api.fetch("campaigns/beispiel/generate/apply", {
+    expect((await api.fetch("campaigns/example/generate/job")).status).toBe(404);
+    const oldApply = await api.fetch("campaigns/example/generate/apply", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ scenes: [], jobId }),
@@ -137,7 +137,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
   let before: GeneratorJob;
   try {
     const api = apiFor(first.handle.url);
-    await startGeneratorJob(api, { kind: "scene", chapter: "01-salzhafen", sourceText: SOURCE });
+    await startGeneratorJob(api, { kind: "scene", chapter: "01-salt-harbour", sourceText: SOURCE });
     const finished = await waitForGeneratorJob(api);
     expect(finished.status).toBe("done");
 
@@ -167,7 +167,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(after.rev).toBe(before.rev);
     expect(after.status).toBe("done");
     expect(after.kind).toBe("scene");
-    expect(after.chapter).toBe("01-salzhafen");
+    expect(after.chapter).toBe("01-salt-harbour");
     expect(after.startedAt).toBe(before.startedAt);
     expect(after.finishedAt).toBe(before.finishedAt);
     expect(after.result).toEqual(before.result);

@@ -1,5 +1,5 @@
 // Read-API tests against the DATABASE, seeded from the committed JSON fixtures
-// in `fixtures/beispiel` — the example campaign is the fixture of the whole
+// in `fixtures/` — the example campaign is the fixture of the whole
 // suite (see test/support/store.ts). The Hono app runs in-process via
 // app.request(), so no live port is needed.
 //
@@ -29,19 +29,18 @@ describe("GET /api/campaigns", () => {
       dropStore();
     });
 
-    test("lists example campaign directories", async () => {
+    test("lists the example campaign", async () => {
       const body = await campaigns();
       // The example campaign carries a campaign, so name and
       // description come along additively.
       expect(body).toContainEqual({
-        id: "beispiel",
+        id: "example",
         lastSession: "2026-01-15",
         lastSessionStarted: "2026-01-15T19:30:00",
-        name: "Der Leuchtturm von Salzhafen",
+        name: "The Lighthouse of Salt Harbour",
         description: expect.any(String),
       });
-      // Only campaign rows, never a stray name that happened to sit in the
-      // root of the tree the migration read.
+      // Only campaign rows, never anything else the database holds.
       for (const c of body) {
         expect(c.id.startsWith(".")).toBe(false);
         expect(c.id.endsWith(".md")).toBe(false);
@@ -49,17 +48,17 @@ describe("GET /api/campaigns", () => {
     });
 
     test("lastSession/lastSessionStarted name the newest session of the example", async () => {
-      const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
-      expect(beispiel?.lastSession).toBe("2026-01-15");
-      // `lastSessionStarted` is the ORDERABLE half: the id is
-      // opaque for every session written since, so the app sorts by this.
-      expect(beispiel?.lastSessionStarted).toBe("2026-01-15T19:30:00");
+      const example = (await campaigns()).find((c) => c.id === "example");
+      expect(example?.lastSession).toBe("2026-01-15");
+      // `lastSessionStarted` is the ORDERABLE half: a session id is opaque,
+      // so the app sorts by this.
+      expect(example?.lastSessionStarted).toBe("2026-01-15T19:30:00");
     });
 
     test("name/description come from the campaign", async () => {
-      const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
-      expect(beispiel?.name).toBe("Der Leuchtturm von Salzhafen");
-      expect(beispiel?.description).toContain("Leuchtturm");
+      const example = (await campaigns()).find((c) => c.id === "example");
+      expect(example?.name).toBe("The Lighthouse of Salt Harbour");
+      expect(example?.description).toContain("lighthouse");
     });
   });
 
@@ -83,13 +82,13 @@ describe("GET /api/campaigns", () => {
 
     beforeEach(async () => {
       const db = await emptyStore();
-      seedCampaign(db, campaign({ id: "mit-sessions" }, ["2026-02-01", "2026-03-09"]));
-      seedCampaign(db, campaign({ id: "ohne-sessions" }));
+      seedCampaign(db, campaign({ id: "with-sessions" }, ["2026-02-01", "2026-03-09"]));
+      seedCampaign(db, campaign({ id: "without-sessions" }));
       seedCampaign(
         db,
-        campaign({ id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." }),
+        campaign({ id: "with-meta", name: "Tyranny of Dragons", description: "Dragons, everywhere." }),
       );
-      seedCampaign(db, campaign({ id: "meta-ohne-name" }));
+      seedCampaign(db, campaign({ id: "meta-without-name" }));
     });
 
     afterEach(() => {
@@ -102,10 +101,10 @@ describe("GET /api/campaigns", () => {
       // authored name is listed under its id, exactly as `GET /campaigns/:c`
       // answers it.
       expect(body).toEqual([
-        { id: "meta-ohne-name", name: "meta-ohne-name" },
-        { id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." },
-        { id: "mit-sessions", name: "mit-sessions", lastSession: "2026-03-09" },
-        { id: "ohne-sessions", name: "ohne-sessions" },
+        { id: "meta-without-name", name: "meta-without-name" },
+        { id: "with-meta", name: "Tyranny of Dragons", description: "Dragons, everywhere." },
+        { id: "with-sessions", name: "with-sessions", lastSession: "2026-03-09" },
+        { id: "without-sessions", name: "without-sessions" },
       ]);
     });
   });
@@ -120,17 +119,17 @@ describe("GET /api/campaigns/:campaign/tree", () => {
   });
 
   const tree = async (): Promise<CampaignTree> => {
-    const res = await app.request("/api/campaigns/beispiel/tree");
+    const res = await app.request("/api/campaigns/example/tree");
     expect(res.status).toBe(200);
     return (await res.json()) as CampaignTree;
   };
 
-  test("chapter 01-salzhafen with the chapter's title and status", async () => {
+  test("chapter 01-salt-harbour with the chapter's title and status", async () => {
     const t = await tree();
-    expect(t.campaign).toBe("beispiel");
-    const chapter = t.chapters.find((c) => c.id === "01-salzhafen");
+    expect(t.campaign).toBe("example");
+    const chapter = t.chapters.find((c) => c.id === "01-salt-harbour");
     expect(chapter).toBeDefined();
-    expect(chapter!.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
+    expect(chapter!.title).toBe("Chapter 1: The Lighthouse of Salt Harbour");
     expect(chapter!.status).toBe("active");
     // No address: a chapter is its own resource (decisions/resources).
     expect(Object.hasOwn(chapter!, "path")).toBe(false);
@@ -138,11 +137,9 @@ describe("GET /api/campaigns/:campaign/tree", () => {
 
   test("a chapter lists its scenes as ONE ordered list", async () => {
     const t = await tree();
-    const chapter = t.chapters.find((c) => c.id === "01-salzhafen")!;
-    // A flat list in `pos` order, not buckets per location: the migration
-    // gave the fixture scenes the positions they were displayed at, which
-    // ordered them by the location's display NAME ("Der Leuchtturm von
-    // Salzhafen" before "Die Nordbucht").
+    const chapter = t.chapters.find((c) => c.id === "01-salt-harbour")!;
+    // A flat list in `pos` order, not buckets per location: the seed loads
+    // the fixture scenes in id order, each at the end of its chapter.
     expect(chapter.scenes.map((s) => s.id)).toEqual([
       "lighthouse-arrival",
       "smuggler-captured",
@@ -151,8 +148,8 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(arrival.status).toBe("ready");
     // The location travels as the ID (address, links) AND as the resolved
     // display name the meta line shows.
-    expect(arrival.location).toBe("leuchtturm");
-    expect(arrival.locationName).toBe("Der Leuchtturm von Salzhafen");
+    expect(arrival.location).toBe("lighthouse");
+    expect(arrival.locationName).toBe("The Lighthouse of Salt Harbour");
     // A scene is its own resource and carries no address (decisions/resources).
     expect(Object.hasOwn(arrival, "path")).toBe(false);
     expect(chapter.scenes[1]!.type).toBe("contingency");
@@ -163,11 +160,11 @@ describe("GET /api/campaigns/:campaign/tree", () => {
 
   test("npcs sorted by name, locations and sessions present", async () => {
     const t = await tree();
-    expect(t.npcs.map((n) => n.id)).toEqual(["fenn", "jorna"]); // Fenn < Hafenmeisterin Jorna
+    expect(t.npcs.map((n) => n.id)).toEqual(["fenn", "jorna"]); // Fenn < Harbourmaster Jorna
     expect(t.npcs[0]!.name).toBe("Fenn");
     // Both locations the example campaign's scenes name have a row of their
     // own — a reference never creates one.
-    expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
+    expect(t.locations.map((l) => l.id).sort()).toEqual(["cove", "lighthouse"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
     // The tree's item for a session is when it ran, and nothing of its
     // children: the pauses and the log come with the session itself
@@ -188,7 +185,7 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     const t = await tree();
     // The tree has no slot for the campaign's own fields; the campaign is
     // read at its own resource.
-    expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
+    expect(t.chapters.map((c) => c.id)).toEqual(["01-salt-harbour"]);
   });
 
   test("404 for unknown campaign", async () => {
@@ -228,11 +225,11 @@ describe("a fresh database (nothing loaded at boot)", () => {
 
   test("every campaign-scoped endpoint answers 404", async () => {
     for (const p of [
-      "/api/campaigns/beispiel/tree",
-      "/api/campaigns/beispiel/version",
-      "/api/campaigns/beispiel",
-      "/api/campaigns/beispiel/chapters",
-      "/api/campaigns/beispiel/sessions",
+      "/api/campaigns/example/tree",
+      "/api/campaigns/example/version",
+      "/api/campaigns/example",
+      "/api/campaigns/example/chapters",
+      "/api/campaigns/example/sessions",
     ]) {
       expect((await app.request(p)).status).toBe(404);
     }

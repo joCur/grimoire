@@ -2,7 +2,7 @@
 //
 // Search is a query against the `search_fts` table, maintained by the store
 // on every write (store/fts.ts). There is nothing to invalidate — a case
-// gets a fresh in-memory database seeded from `examples/` and asks the
+// gets a fresh in-memory database seeded from `fixtures/` and asks the
 // endpoint.
 //
 // The two properties the reference queries below rely on are PREFIX terms (a
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 async function search(q: string): Promise<SearchResult[]> {
-  const res = await app.request(`/api/campaigns/beispiel/search?q=${encodeURIComponent(q)}`);
+  const res = await app.request(`/api/campaigns/example/search?q=${encodeURIComponent(q)}`);
   expect(res.status).toBe(200);
   const body = (await res.json()) as { results: SearchResult[] };
   expect(Array.isArray(body.results)).toBe(true);
@@ -36,9 +36,20 @@ async function search(q: string): Promise<SearchResult[]> {
 
 /** Write one npc on its own resource (decisions/resources) — its fields flat. */
 async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Response> {
-  const read = await app.request(`/api/campaigns/beispiel/npcs/${id}`);
+  const read = await app.request(`/api/campaigns/example/npcs/${id}`);
   const { rev } = (await read.json()) as { rev: number };
-  return app.request(`/api/campaigns/beispiel/npcs/${id}`, {
+  return app.request(`/api/campaigns/example/npcs/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev, ...fields }),
+  });
+}
+
+/** Write one location on its own resource — its fields flat. */
+async function patchLocation(id: string, fields: Record<string, unknown>): Promise<Response> {
+  const read = await app.request(`/api/campaigns/example/locations/${id}`);
+  const { rev } = (await read.json()) as { rev: number };
+  return app.request(`/api/campaigns/example/locations/${id}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev, ...fields }),
@@ -47,7 +58,7 @@ async function patchNpc(id: string, fields: Record<string, unknown>): Promise<Re
 
 /** Read one scene on its own resource — the write cases below need its guard token. */
 async function readScene(id: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(`/api/campaigns/beispiel/scenes/${id}`);
+  const res = await app.request(`/api/campaigns/example/scenes/${id}`);
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
@@ -56,10 +67,10 @@ async function readScene(id: string): Promise<{ rev: number; body: string }> {
 
 describe("ftsQuery", () => {
   test("every token becomes a quoted prefix term, ANDed", () => {
-    expect(ftsQuery("leucht")).toBe('"leucht"*');
+    expect(ftsQuery("light")).toBe('"light"*');
     expect(ftsQuery("lighthouse keeper")).toBe('"lighthouse"* "keeper"*');
     // punctuation is a separator, not a term
-    expect(ftsQuery("  jorna,  hafen ")).toBe('"jorna"* "hafen"*');
+    expect(ftsQuery("  jorna,  harbour ")).toBe('"jorna"* "harbour"*');
   });
 
   test("FTS5 operators inside the input cannot become syntax", () => {
@@ -97,14 +108,14 @@ describe("scoreFromRank", () => {
 
 describe("GET /api/campaigns/:campaign/search", () => {
   test("400 on missing or empty q", async () => {
-    expect((await app.request("/api/campaigns/beispiel/search")).status).toBe(400);
-    expect((await app.request("/api/campaigns/beispiel/search?q=")).status).toBe(400);
-    expect((await app.request("/api/campaigns/beispiel/search?q=%20%20")).status).toBe(400);
+    expect((await app.request("/api/campaigns/example/search")).status).toBe(400);
+    expect((await app.request("/api/campaigns/example/search?q=")).status).toBe(400);
+    expect((await app.request("/api/campaigns/example/search?q=%20%20")).status).toBe(400);
   });
 
   test("404 for an unknown campaign, 400 for an unsafe id", async () => {
     expect((await app.request("/api/campaigns/nope/search?q=Fenn")).status).toBe(404);
-    expect((await app.request("/api/campaigns/..%2fbeispiel/search?q=Fenn")).status).toBe(400);
+    expect((await app.request("/api/campaigns/..%2fexample/search?q=Fenn")).status).toBe(400);
   });
 
   test("results are capped at 20 and every score is a number in 0..1", async () => {
@@ -129,7 +140,7 @@ describe("GET /api/campaigns/:campaign/search", () => {
   });
 
   test("nonsense query yields empty results", async () => {
-    expect(await search("qxzvywunbekannt")).toEqual([]);
+    expect(await search("qxzvywunknown")).toEqual([]);
   });
 });
 
@@ -141,7 +152,7 @@ describe("reference queries", () => {
     expect(results[0]).toMatchObject({
       kind: "npc",
       id: "jorna",
-      title: "Hafenmeisterin Jorna",
+      title: "Harbourmaster Jorna",
     });
     // An npc is its own resource (decisions/resources): the hit names it by kind and id.
     expect(Object.hasOwn(results[0]!, "path")).toBe(false);
@@ -149,44 +160,53 @@ describe("reference queries", () => {
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
 
-  test("'leucht' finds the chapter, the location and the campaign (prefix)", async () => {
-    // Nobody types "Leuchtturm" in full into ⌘K — prefix matching is what
+  test("'lightho' finds the chapter, the location and the campaign (prefix)", async () => {
+    // Nobody types "Lighthouse" in full into ⌘K — prefix matching is what
     // makes a partial word enough.
-    const results = await search("leucht");
+    const results = await search("lightho");
     const byKind = new Map(results.map((r) => [r.kind, r]));
     // Every entity is its own resource (decisions/resources): a hit names its kind and id
     // and carries no address.
     expect(byKind.get("chapter")).toMatchObject({
-      id: "01-salzhafen",
-      title: "Kapitel 1: Der Leuchtturm von Salzhafen",
+      id: "01-salt-harbour",
+      title: "Chapter 1: The Lighthouse of Salt Harbour",
     });
     expect(Object.hasOwn(byKind.get("chapter")!, "path")).toBe(false);
     expect(byKind.get("location")).toMatchObject({
-      id: "leuchtturm",
-      title: "Der Leuchtturm von Salzhafen",
+      id: "lighthouse",
+      title: "The Lighthouse of Salt Harbour",
     });
     expect(Object.hasOwn(byKind.get("location")!, "path")).toBe(false);
     expect(byKind.get("campaign")).toMatchObject({
-      id: "beispiel",
-      title: "Der Leuchtturm von Salzhafen",
+      id: "example",
+      title: "The Lighthouse of Salt Harbour",
     });
     expect(Object.hasOwn(byKind.get("campaign")!, "path")).toBe(false);
     // and the scene: no address either.
     const scene = results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival");
-    expect(scene).toMatchObject({ id: "lighthouse-arrival", title: "Ankunft am Leuchtturm" });
+    expect(scene).toMatchObject({ id: "lighthouse-arrival", title: "Arrival at the Lighthouse" });
     expect(Object.hasOwn(scene!, "path")).toBe(false);
   });
 
-  test("diacritics are folded: 'lampenol' finds the Lampenöl body", async () => {
-    const results = await search("lampenol");
-    expect(results.some((r) => r.kind === "location" && r.id === "leuchtturm")).toBe(true);
+  test("diacritics are folded both ways: 'cafe' finds a café in a field and 'café' a cafe", async () => {
+    // The example campaign is plain ASCII, so the accented word is written here.
+    const res = await patchLocation("lighthouse", {
+      atmosphere: "Quieter than the café by the quay.",
+    });
+    expect(res.status).toBe(200);
+    expect((await search("cafe")).some((r) => r.kind === "location" && r.id === "lighthouse")).toBe(
+      true,
+    );
+    const cove = await patchLocation("cove", { atmosphere: "Louder than the cafe by the quay." });
+    expect(cove.status).toBe(200);
+    expect((await search("café")).some((r) => r.kind === "location" && r.id === "cove")).toBe(true);
   });
 
   test("a body match carries a snippet with context", async () => {
-    const results = await search("Lampenöl"); // only in the location body
-    const location = results.find((r) => r.id === "leuchtturm");
+    const results = await search("spiral"); // only in the location body
+    const location = results.find((r) => r.id === "lighthouse");
     expect(location).toBeDefined();
-    expect(location!.snippet).toContain("Lampenöl");
+    expect(location!.snippet).toContain("spiral");
     expect(location!.snippet!.length).toBeLessThanOrEqual(140);
   });
 
@@ -202,9 +222,9 @@ describe("reference queries", () => {
     const results = await search("lighthouse keeper");
     const entry = results.find((r) => r.kind === "glossary-term");
     expect(entry).toMatchObject({ id: "lighthouse-keeper", title: "lighthouse keeper" });
-    // the explanation is the body, so it is searchable from the German side
+    // the explanation is the body, so a word of it finds the term too
     expect(
-      (await search("Leuchtturmwärter")).some((r) => r.kind === "glossary-term"),
+      (await search("capitalised")).some((r) => r.kind === "glossary-term"),
     ).toBe(true);
   });
 });
@@ -215,56 +235,56 @@ describe("the index follows every write", () => {
   test("a body written through the scene PATCH is searchable immediately", async () => {
     // The write and the index row are one transaction, so there is no window
     // in which the DM cannot find what they just typed.
-    expect(await search("nachtwache")).toEqual([]);
+    expect(await search("nightwatch")).toEqual([]);
 
     const entry = await readScene("lighthouse-arrival");
-    const res = await app.request("/api/campaigns/beispiel/scenes/lighthouse-arrival", {
+    const res = await app.request("/api/campaigns/example/scenes/lighthouse-arrival", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         rev: entry.rev,
-        body: `${entry.body}\n## Nachtwache\n\nJemand hält Wache am Turm.\n`,
+        body: `${entry.body}\n## Nightwatch\n\nSomeone keeps watch at the tower.\n`,
       }),
     });
     expect(res.status).toBe(200);
 
-    const results = await search("nachtwache");
+    const results = await search("nightwatch");
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
 
   test("a field write re-indexes the name", async () => {
-    expect(await search("bucht-kapitaen")).toEqual([]);
+    expect(await search("cove-skipper")).toEqual([]);
 
-    const res = await patchNpc("fenn", { name: "Bucht-Kapitaen Fenn" });
+    const res = await patchNpc("fenn", { name: "Cove-Skipper Fenn" });
     expect(res.status).toBe(200);
 
-    const results = await search("bucht-kapitaen");
-    expect(results[0]).toMatchObject({ kind: "npc", id: "fenn", title: "Bucht-Kapitaen Fenn" });
+    const results = await search("cove-skipper");
+    expect(results[0]).toMatchObject({ kind: "npc", id: "fenn", title: "Cove-Skipper Fenn" });
   });
 
   test("motivation and atmosphere are indexed, and a patch re-indexes them", async () => {
     // The seeded values: jorna's motivation names the autumn convoys, the
     // cove's atmosphere says there is no romance there.
-    expect((await search("Herbstkonvois")).some((r) => r.kind === "npc" && r.id === "jorna")).toBe(
+    expect((await search("convoys")).some((r) => r.kind === "npc" && r.id === "jorna")).toBe(
       true,
     );
-    expect((await search("Romantik")).some((r) => r.kind === "location" && r.id === "bucht")).toBe(
+    expect((await search("romance")).some((r) => r.kind === "location" && r.id === "cove")).toBe(
       true,
     );
 
-    const res = await patchNpc("jorna", { motivation: "Die Sturmflut überstehen." });
+    const res = await patchNpc("jorna", { motivation: "Survive the storm surge." });
     expect(res.status).toBe(200);
-    expect((await search("Sturmflut")).some((r) => r.id === "jorna")).toBe(true);
-    expect((await search("Herbstkonvois")).some((r) => r.id === "jorna")).toBe(false);
+    expect((await search("surge")).some((r) => r.id === "jorna")).toBe(true);
+    expect((await search("convoys")).some((r) => r.id === "jorna")).toBe(false);
   });
 
   test("a field write does not un-index an npc's relationship note", async () => {
     // ONE rule for the indexed text of an npc: its motivation and its whole
-    // text. A status change must not drop `## Beziehungen` out of the index.
-    expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
+    // text. A status change must not drop `## Relationships` out of the index.
+    expect((await search("eyes")).some((r) => r.id === "fenn")).toBe(true);
     const res = await patchNpc("fenn", { status: "dead" });
     expect(res.status).toBe(200);
-    expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
+    expect((await search("eyes")).some((r) => r.id === "fenn")).toBe(true);
   });
 });
 
@@ -272,7 +292,7 @@ describe("the index follows every write", () => {
 
 describe("GET /api/campaigns/:campaign/version", () => {
   async function version(): Promise<number> {
-    const res = await app.request("/api/campaigns/beispiel/version");
+    const res = await app.request("/api/campaigns/example/version");
     expect(res.status).toBe(200);
     return ((await res.json()) as { version: number }).version;
   }
@@ -284,10 +304,10 @@ describe("GET /api/campaigns/:campaign/version", () => {
     const before = await version();
     expect(await version()).toBe(before);
 
-    const res = await app.request("/api/campaigns/beispiel/ideas", {
+    const res = await app.request("/api/campaigns/example/ideas", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: "Notiz aus dem Versionstest" }),
+      body: JSON.stringify({ text: "Note from the version test" }),
     });
     expect(res.status).toBe(201);
     expect(await version()).toBeGreaterThan(before);

@@ -24,7 +24,7 @@ import type { Scene, ScenePatch } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 
-const SCENE = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
+const SCENE = "/api/campaigns/example/scenes/lighthouse-arrival";
 
 async function getScene(url: string): Promise<Scene> {
   const res = await app.request(url);
@@ -161,14 +161,14 @@ describe("two writes with the same guard token, same clock second", () => {
 
     const staleBody = await patchReq({
       rev: read.rev,
-      body: "\n## Flow\n\nAus einem alten Tab.\n",
+      body: "\n## Flow\n\nFrom an old tab.\n",
     });
     expect(staleBody.status).toBe(409);
     expect(((await staleBody.json()) as Conflict).rev).toBe(read.rev + 1);
     expect((await getScene(SCENE)).body).toBe(read.body);
 
     // …and the reverse direction, still in the same second.
-    const body = await patchReq({ rev: read.rev + 1, body: "\n## Flow\n\nJetzt aber.\n" });
+    const body = await patchReq({ rev: read.rev + 1, body: "\n## Flow\n\nNow for real.\n" });
     expect(body.status).toBe(200);
     const staleProps = await patchReq({ rev: read.rev + 1, status: "draft" });
     expect(staleProps.status).toBe(409);
@@ -181,30 +181,30 @@ describe("two writes with the same guard token, same clock second", () => {
     const res = await patchReq({
       rev: read.rev,
       status: "played",
-      body: "\n## Flow\n\nBeides zusammen.\n",
+      body: "\n## Flow\n\nBoth together.\n",
     });
     expect(res.status).toBe(200);
     const written = (await res.json()) as Scene;
     expect(written.status).toBe("played");
-    expect(written.body).toBe("\n## Flow\n\nBeides zusammen.\n");
+    expect(written.body).toBe("\n## Flow\n\nBoth together.\n");
     // ONE write: one row update, one rev step, one version bump — the token
     // the client gets back is the one it must send next.
     expect(written.rev).toBe(read.rev + 1);
     const after = await getScene(SCENE);
     expect(after.rev).toBe(written.rev);
     expect(after.status).toBe("played");
-    expect(after.body).toBe("\n## Flow\n\nBeides zusammen.\n");
+    expect(after.body).toBe("\n## Flow\n\nBoth together.\n");
 
     // A refused request writes NOTHING: an unknown key with a valid body.
     const refused = await patchReq({
       rev: written.rev,
       nonsense: "x",
-      body: "\n## Flow\n\nDarf nicht landen.\n",
+      body: "\n## Flow\n\nMust not land.\n",
     });
     expect(refused.status).toBe(400);
     const unchanged = await getScene(SCENE);
     expect(unchanged.rev).toBe(written.rev);
-    expect(unchanged.body).toBe("\n## Flow\n\nBeides zusammen.\n");
+    expect(unchanged.body).toBe("\n## Flow\n\nBoth together.\n");
   });
 
   test("force writes the held fields on top of the current row", async () => {
@@ -217,18 +217,18 @@ describe("two writes with the same guard token, same clock second", () => {
 
     const forced = await patchReq({
       rev: read.rev, // the stale token the editor still holds
-      body: "\n## Flow\n\nMein Text gewinnt.\n",
+      body: "\n## Flow\n\nMy text wins.\n",
       force: true,
     });
     expect(forced.status).toBe(200);
     const written = (await forced.json()) as Scene;
-    expect(written.body).toBe("\n## Flow\n\nMein Text gewinnt.\n");
+    expect(written.body).toBe("\n## Flow\n\nMy text wins.\n");
     expect(written.status).toBe("played");
     // The other tab's write and this one: two writes, two rev steps.
     expect(written.rev).toBe(read.rev + 2);
 
     const after = await getScene(SCENE);
-    expect(after.body).toBe("\n## Flow\n\nMein Text gewinnt.\n");
+    expect(after.body).toBe("\n## Flow\n\nMy text wins.\n");
     expect(after.status).toBe("played");
   });
 });

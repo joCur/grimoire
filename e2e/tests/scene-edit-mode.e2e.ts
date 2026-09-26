@@ -21,11 +21,12 @@ import type { Api } from "../support/api";
 import { ui } from "../support/ui";
 import { getScene, patchScene } from "../support/scene";
 import { expect, test } from "../support/test";
+import { CAMPAIGN } from "../support/paths";
 
 const SCENE = "lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
+const SCENE_URL = `/campaigns/${CAMPAIGN}/scenes/${SCENE}`;
 /** The stored title of the scene — the name of its text editor. */
-const SCENE_TITLE = "Ankunft am Leuchtturm";
+const SCENE_TITLE = "Arrival at the Lighthouse";
 
 /** The scene without its guard, split into its text and every other field. */
 async function sceneSplit(api: Api) {
@@ -105,7 +106,7 @@ test("fields, status and text change together and are ONE patch of exactly those
   const pristine = await sceneSplit(api);
   const rev = (await getScene(api, SCENE)).rev;
   // The location the scene moves to has to exist (decisions/constraints).
-  await api.send("POST", "campaigns/beispiel/locations", { name: "North Cove" });
+  await api.send("POST", `campaigns/${CAMPAIGN}/locations`, { name: "Seal Rocks" });
   const sent = recordScenePatches(page);
   const title = "Arrival at dusk";
   const added = "A brass whistle lies in the sand at the foot of the stairs.";
@@ -140,10 +141,10 @@ test("fields, status and text change together and are ONE patch of exactly those
 
   // The location is picked from the locations that exist, narrowed by a search.
   const location = await openChip(page, "location", ui("properties.scene.location.label"));
-  await location.getByRole("searchbox").fill("north");
+  await location.getByRole("searchbox").fill("seal");
   await expect(location.getByRole("radio")).toHaveCount(1);
-  await location.getByRole("radio", { name: "North Cove" }).click();
-  await expect(location.getByRole("radio", { name: "North Cove" })).toHaveAttribute(
+  await location.getByRole("radio", { name: "Seal Rocks" }).click();
+  await expect(location.getByRole("radio", { name: "Seal Rocks" })).toHaveAttribute(
     "aria-checked",
     "true",
   );
@@ -168,7 +169,7 @@ test("fields, status and text change together and are ONE patch of exactly those
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
   const article = page.getByRole("article");
   await expect(article).toContainText(added);
-  await expect(article).toContainText("North Cove");
+  await expect(article).toContainText("Seal Rocks");
   await expect(article).toContainText("#stealth");
   await expect(article).toContainText("#night");
   await expect(statusControl(page, ui("status.scene.draft"))).toBeVisible();
@@ -190,7 +191,7 @@ test("fields, status and text change together and are ONE patch of exactly those
     ...pristine.fields,
     title,
     tags: ["social", "travel", "stealth", "night"],
-    location: "north-cove",
+    location: "seal-rocks",
     status: "draft",
   });
   expect(after.body).toBe(`${pristine.body}\n${added}\n`);
@@ -223,7 +224,7 @@ test("a planned scene becomes a contingency one with its trigger; cleared fields
   // The last handout goes, and the location is cleared.
   const handouts = await openChip(page, "handouts", ui("sceneEdit.handouts.title"));
   await handouts
-    .getByRole("button", { name: ui("properties.field.remove.aria", { item: "Karte von Salzhafen" }) })
+    .getByRole("button", { name: ui("properties.field.remove.aria", { item: "Map of Salt Harbour" }) })
     .click();
   await page.keyboard.press("Escape");
   const location = await openChip(page, "location", ui("properties.scene.location.label"));
@@ -357,7 +358,7 @@ test("leaving with unsaved work asks first — cancel and navigation alike", asy
   // A navigation asks the same question: ⌘K works over the edit mode.
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByRole("combobox").fill("Jorna");
-  await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
+  await page.getByRole("option").filter({ hasText: "Harbourmaster Jorna" }).first().click();
   const leaveDialog = page.getByRole("dialog", { name: ui("properties.discard.title") });
   await expect(leaveDialog).toBeVisible();
   await leaveDialog.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
@@ -367,9 +368,9 @@ test("leaving with unsaved work asks first — cancel and navigation alike", asy
   // Discarding goes on to the npc, and nothing was written.
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByRole("combobox").fill("Jorna");
-  await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
+  await page.getByRole("option").filter({ hasText: "Harbourmaster Jorna" }).first().click();
   await leaveDialog.getByRole("button", { name: ui("common.discard") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/jorna$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/jorna$`));
   expect(await sceneSplit(api)).toEqual(before);
 
   // Back on the scene: the reading view, never an edit mode seeded anew.
@@ -403,8 +404,14 @@ test("an npc that is no id blocks the save and says why", async ({ page, api }) 
 });
 
 test("the chapter chip moves the scene to the end of the other chapter", async ({ page, api }) => {
-  await api.send("POST", "campaigns/beispiel/chapters", { title: "Under the Cliff", id: "02-cliff" });
-  await api.send("POST", "campaigns/beispiel/scenes", { title: "At the Beach", chapter: "02-cliff" });
+  await api.send("POST", `campaigns/${CAMPAIGN}/chapters`, {
+    title: "Under the Cliff",
+    id: "02-cliff",
+  });
+  await api.send("POST", `campaigns/${CAMPAIGN}/scenes`, {
+    title: "At the Beach",
+    chapter: "02-cliff",
+  });
 
   await openEditMode(page);
   const chapter = await openChip(page, "chapter", ui("properties.scene.chapter.label"));
@@ -415,7 +422,7 @@ test("the chapter chip moves the scene to the end of the other chapter", async (
 
   expect((await getScene(api, SCENE)).chapter).toBe("02-cliff");
   const tree = await api.get<{ chapters: { id: string; scenes: { id: string }[] }[] }>(
-    "campaigns/beispiel/tree",
+    `campaigns/${CAMPAIGN}/tree`,
   );
   expect(tree.chapters.find((node) => node.id === "02-cliff")?.scenes.map((s) => s.id)).toEqual([
     "at-the-beach",

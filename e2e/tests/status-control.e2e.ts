@@ -11,9 +11,10 @@ import type { SceneStatus } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { ui, uiPattern } from "../support/ui";
+import { CAMPAIGN } from "../support/paths";
 
 const SCENE = "lighthouse-arrival";
-const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
+const SCENE_URL = `/campaigns/${CAMPAIGN}/scenes/${SCENE}`;
 
 /** The label of a scene status in the UI. */
 const statusLabel = (status: SceneStatus) => ui(`status.scene.${status}`);
@@ -57,7 +58,7 @@ test("the status control writes the status of the scene", async ({ page, api }) 
   await expect.poll(() => getScene(api, SCENE)).toHaveProperty("status", "ready");
 
   // The chapter overview row shows the same control with the same label.
-  await page.goto("/campaigns/beispiel");
+  await page.goto(`/campaigns/${CAMPAIGN}`);
   await expect(page.getByRole("button", { name: triggerName("ready") }).first()).toBeVisible();
 });
 

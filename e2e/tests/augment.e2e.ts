@@ -64,21 +64,21 @@ import type { MessageKey } from "../../app/src/i18n/messages";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
 const SCENE = "smuggler-captured";
-const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
+const SCENE_URL = `/campaigns/example/scenes/${SCENE}`;
 
 /** The example campaign's filled npc — the one that carries `quickstats`. */
 const FILLED_NPC = "jorna";
-const FILLED_NPC_URL = `/campaigns/beispiel/npcs/${FILLED_NPC}`;
+const FILLED_NPC_URL = `/campaigns/example/npcs/${FILLED_NPC}`;
 
 /** The empty npc — created, never filled in. */
 const EMPTY_NPC = "informer";
-const NPC_URL = `/campaigns/beispiel/npcs/${EMPTY_NPC}`;
+const NPC_URL = `/campaigns/example/npcs/${EMPTY_NPC}`;
 
 const INSTRUCTION = "Introduce a plot thread around the smugglers' informer";
 
 /** The example campaign's location — the augment target of (f). */
-const LOCATION = "leuchtturm";
-const LOCATION_URL = `/campaigns/beispiel/locations/${LOCATION}`;
+const LOCATION = "lighthouse";
+const LOCATION_URL = `/campaigns/example/locations/${LOCATION}`;
 
 /** What a second writer puts into the scene while the review is open. */
 const OTHER_WRITER_TEXT = "Someone else rewrote the scene.";
@@ -484,12 +484,12 @@ test("the entry point: npc, location and scene — and nothing else", async ({
 
   // A chapter and the campaign are not augmentable — no augment prompt, no
   // action on the chapter's reading view or the campaign's route.
-  await page.goto("/campaigns/beispiel/chapters/01-salzhafen");
+  await page.goto("/campaigns/example/chapters/01-salt-harbour");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    (await getChapter(api, "01-salzhafen")).title,
+    (await getChapter(api, "01-salt-harbour")).title,
   );
   await expect(action).toHaveCount(0);
-  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/example");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText((await getCampaign(api)).name);
   await expect(action).toHaveCount(0);
 });
@@ -560,7 +560,7 @@ test.describe("at 390px (critical path 8)", () => {
     // API — the phone's job is to READ the result, not to review a diff.
     await patchNpc(api, EMPTY_NPC, {
       motivation: AUGMENT_NPC_MOTIVATION,
-      body: `\n## Weiß\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
+      body: `\n## Knows\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
     });
 
     await page.goto(NPC_URL);

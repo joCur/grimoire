@@ -15,9 +15,9 @@
 // really means storage, through `db`.
 //
 // The FIXTURES are therefore only an INPUT, read exactly once per test — by
-// that seed run. `fixtures/beispiel/` holds one object per fixture in the
-// shape the API speaks, and a test that needs content the example campaign
-// does not have overrides the fixtures in its own copy of that directory,
+// that seed run. `fixtures/` holds one object per fixture in the shape the
+// API speaks, and a test that needs content the example campaign does not
+// have overrides the fixtures in its own copy of that directory,
 // entity by entity:
 //
 //   test.use({ seed: { scenes: [{ id: "loot", … }] } });
@@ -45,7 +45,7 @@
 //
 //   test.use({ seed: { skip: true } });
 //
-// That is the starting point of critical path 10 ("Kaltstart"). The `api`
+// That is the starting point of critical path 10 (cold start). The `api`
 // fixture is bound to the example campaign's id, so a spec that creates its
 // own campaign builds its helper with `apiFor(server.url, id)`.
 //
@@ -81,7 +81,6 @@ import { apiFor, type Api } from "./api";
 import {
   APP_DIST,
   BUN,
-  CAMPAIGN,
   CLI_ENTRY,
   SERVER_ENTRY,
   REPO_ROOT,
@@ -350,7 +349,7 @@ export const test = base.extend<Fixtures>({
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     await cp(pristineDir(), dir, { recursive: true });
-    await overrideFixtures(path.join(dir, CAMPAIGN), seed);
+    await overrideFixtures(dir, seed);
     await use(dir);
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   },

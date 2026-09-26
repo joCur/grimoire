@@ -5,8 +5,8 @@
 // it. CLAUDE.md names exactly these two scenes as the check for renderer
 // changes.
 
-import lighthouseFixture from "../../../fixtures/beispiel/scenes/lighthouse-arrival.json";
-import smugglersFixture from "../../../fixtures/beispiel/scenes/smuggler-captured.json";
+import lighthouseFixture from "../../../fixtures/scenes/lighthouse-arrival.json";
+import smugglersFixture from "../../../fixtures/scenes/smuggler-captured.json";
 
 import { useT } from "@/i18n";
 import { Markdown } from "@/markdown/Markdown";
@@ -15,15 +15,15 @@ import { Markdown } from "@/markdown/Markdown";
 type Fixture = { body: string } & Record<string, unknown>;
 
 // Extra snippet exercising the degrade paths that the fixtures do not cover.
-const degradeSample = `## If: die Gruppe flieht sofort
+const degradeSample = `## If: the party flees at once
 
-Ein Absatz innerhalb der Verzweigung.
+A paragraph inside the branch.
 
-> [!homebrew] Unbekannter Callout — muss als normales Zitat erscheinen.
+> [!homebrew] Unknown callout — must appear as a plain quote.
 
-## Ganz normale Überschrift
+## An ordinary heading
 
-Text nach der Verzweigung, außerhalb des details-Elements.
+Text after the branch, outside the details element.
 `;
 
 function FixtureSection({ name, fixture }: { name: string; fixture: Fixture }) {
@@ -57,7 +57,7 @@ export function HarnessRoute() {
       </header>
       <FixtureSection name="scenes/lighthouse-arrival" fixture={lighthouseFixture} />
       <FixtureSection name="scenes/smuggler-captured" fixture={smugglersFixture} />
-      <FixtureSection name="degrade-beispiele (inline)" fixture={{ body: degradeSample }} />
+      <FixtureSection name="degrade samples (inline)" fixture={{ body: degradeSample }} />
     </div>
   );
 }

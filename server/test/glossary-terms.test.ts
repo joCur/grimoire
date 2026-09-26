@@ -22,12 +22,12 @@ import { app } from "../src/server";
 import { glossaryText } from "../src/store/glossary-terms";
 import { dropStore, seedStore } from "./support/store";
 
-const CAMPAIGN = "beispiel";
+const CAMPAIGN = "example";
 const TERMS = `/api/campaigns/${CAMPAIGN}/glossary-terms`;
 const KEEPER: GlossaryTerm = {
   id: "lighthouse-keeper",
   term: "lighthouse keeper",
-  explanation: "Leuchtturmwärter",
+  explanation: "the Keeper, always capitalised",
   rev: 1,
 };
 const KEEPER_URL = `${TERMS}/${KEEPER.id}`;
@@ -92,10 +92,10 @@ describe("creating a glossary term", () => {
   test("POST answers the term at the end, trimmed, with a server id", async () => {
     const before = await listTerms();
     const created = await json<GlossaryTerm>(
-      send("POST", TERMS, { term: "  tidal flat ", explanation: "Watt" }),
+      send("POST", TERMS, { term: "  tidal flat ", explanation: "mudflat" }),
       201,
     );
-    expect(created).toEqual({ id: created.id, term: "tidal flat", explanation: "Watt", rev: 1 });
+    expect(created).toEqual({ id: created.id, term: "tidal flat", explanation: "mudflat", rev: 1 });
     expect((await listTerms()).map((term) => term.id)).toEqual([
       ...before.map((term) => term.id),
       created.id,
@@ -106,15 +106,15 @@ describe("creating a glossary term", () => {
     const bare = await json<GlossaryTerm>(send("POST", TERMS, { term: "cove" }), 201);
     expect(bare.explanation).toBe("");
     const long = await json<GlossaryTerm>(
-      send("POST", TERMS, { term: "tide", explanation: "Gezeiten.\nZweite Zeile." }),
+      send("POST", TERMS, { term: "tide", explanation: "The tides.\nSecond line." }),
       201,
     );
-    expect(long.explanation).toBe("Gezeiten.\nZweite Zeile.");
+    expect(long.explanation).toBe("The tides.\nSecond line.");
   });
 
   test("a term the glossary already has is 409 glossary_term_taken and writes nothing", async () => {
     const before = await listTerms();
-    const res = await send("POST", TERMS, { term: " lighthouse keeper ", explanation: "Wärter" });
+    const res = await send("POST", TERMS, { term: " lighthouse keeper ", explanation: "warden" });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
       code: "glossary_term_taken",
@@ -127,7 +127,7 @@ describe("creating a glossary term", () => {
     const before = await listTerms();
     for (const body of [
       { term: "   " },
-      { explanation: "ohne Begriff" },
+      { explanation: "without a term" },
       { term: "x", rev: 1 },
       { term: 7 },
     ]) {
@@ -138,11 +138,11 @@ describe("creating a glossary term", () => {
 
   test("a new term is found by the search, named by its kind and id", async () => {
     const created = await json<GlossaryTerm>(
-      send("POST", TERMS, { term: "Priel", explanation: "Wasserrinne im Watt" }),
+      send("POST", TERMS, { term: "Tideway", explanation: "a channel through the mudflat" }),
       201,
     );
-    expect(await searchHits("Priel")).toContainEqual(
-      expect.objectContaining({ kind: "glossary-term", id: created.id, title: "Priel" }),
+    expect(await searchHits("Tideway")).toContainEqual(
+      expect.objectContaining({ kind: "glossary-term", id: created.id, title: "Tideway" }),
     );
   });
 });
@@ -150,9 +150,9 @@ describe("creating a glossary term", () => {
 describe("writing a glossary term", () => {
   test("PATCH changes the named fields and moves only this term's rev", async () => {
     const written = await json<GlossaryTerm>(
-      send("PATCH", KEEPER_URL, { rev: 1, explanation: "Leuchtturmwärterin" }),
+      send("PATCH", KEEPER_URL, { rev: 1, explanation: "the Keeper, never abbreviated" }),
     );
-    expect(written).toEqual({ ...KEEPER, explanation: "Leuchtturmwärterin", rev: 2 });
+    expect(written).toEqual({ ...KEEPER, explanation: "the Keeper, never abbreviated", rev: 2 });
     expect((await readTerm(`${TERMS}/read-aloud`)).rev).toBe(1);
   });
 
@@ -174,22 +174,22 @@ describe("writing a glossary term", () => {
   });
 
   test("a stale rev is 409 with the current term, and nothing is written", async () => {
-    await json(send("PATCH", KEEPER_URL, { rev: 1, explanation: "Erst." }));
-    const res = await send("PATCH", KEEPER_URL, { rev: 1, explanation: "Zweit." });
+    await json(send("PATCH", KEEPER_URL, { rev: 1, explanation: "First." }));
+    const res = await send("PATCH", KEEPER_URL, { rev: 1, explanation: "Second." });
     expect(res.status).toBe(409);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.code).toBe("rev_conflict");
     expect(body.rev).toBe(2);
-    expect(body.glossaryTerm).toEqual({ ...KEEPER, explanation: "Erst.", rev: 2 });
-    expect((await readTerm()).explanation).toBe("Erst.");
+    expect(body.glossaryTerm).toEqual({ ...KEEPER, explanation: "First.", rev: 2 });
+    expect((await readTerm()).explanation).toBe("First.");
   });
 
   test("force writes the named fields on top of the current term", async () => {
     await json(send("PATCH", KEEPER_URL, { rev: 1, term: "keeper" }));
     const forced = await json<GlossaryTerm>(
-      send("PATCH", KEEPER_URL, { rev: 1, force: true, explanation: "Wärter" }),
+      send("PATCH", KEEPER_URL, { rev: 1, force: true, explanation: "warden" }),
     );
-    expect(forced).toEqual({ ...KEEPER, term: "keeper", explanation: "Wärter", rev: 3 });
+    expect(forced).toEqual({ ...KEEPER, term: "keeper", explanation: "warden", rev: 3 });
   });
 
   test("a field a term does not have or a wrong value is a 400 naming it", async () => {
@@ -217,19 +217,19 @@ describe("deleting a glossary term", () => {
   test("DELETE removes the term and its search hit", async () => {
     expect((await send("DELETE", KEEPER_URL, { rev: 1 })).status).toBe(204);
     expect((await listTerms()).map((term) => term.id)).not.toContain(KEEPER.id);
-    expect(await searchHits("Leuchtturmwärter")).not.toContainEqual(
+    expect(await searchHits("capitalised")).not.toContainEqual(
       expect.objectContaining({ kind: "glossary-term" }),
     );
   });
 
   test("a stale rev is 409 with the current term and removes nothing", async () => {
-    await json(send("PATCH", KEEPER_URL, { rev: 1, explanation: "Neu." }));
+    await json(send("PATCH", KEEPER_URL, { rev: 1, explanation: "New." }));
     const res = await send("DELETE", KEEPER_URL, { rev: 1 });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { glossaryTerm: GlossaryTerm }).glossaryTerm.explanation).toBe(
-      "Neu.",
+      "New.",
     );
-    expect((await readTerm()).explanation).toBe("Neu.");
+    expect((await readTerm()).explanation).toBe("New.");
   });
 
   test("an unknown term is a 404", async () => {
@@ -244,12 +244,12 @@ describe("the prompt block (store/glossary-terms.ts glossaryText)", () => {
         glossaryTerms: (await listTerms()).map((term) => term.id),
       },
       glossaryTerms: [
-        { id: "keeper", term: "lighthouse keeper", explanation: "Leuchtturmwärter" },
-        { id: "stil", term: "Stil", explanation: "- Englisch bleibt:\n  „check“." },
+        { id: "keeper", term: "lighthouse keeper", explanation: "the Keeper" },
+        { id: "style", term: "Style", explanation: "- Rules terms stay:\n  \"check\"." },
       ],
     });
     expect(await glossaryText(CAMPAIGN)).toBe(
-      "- lighthouse keeper → Leuchtturmwärter\n- Stil → - Englisch bleibt: „check“.",
+      "- lighthouse keeper → the Keeper\n- Style → - Rules terms stay: \"check\".",
     );
   });
 
@@ -267,18 +267,18 @@ describe("glossary terms — rows, each with its own guard", () => {
       expect((await send("DELETE", `${TERMS}/${term.id}`, { rev: term.rev })).status).toBe(204);
     }
     expect(await listTerms()).toEqual([]);
-    const res = await send("POST", TERMS, { term: "tide pool", explanation: "Gezeitentümpel" });
+    const res = await send("POST", TERMS, { term: "tide pool", explanation: "rock pool" });
     expect(res.status).toBe(201);
     expect((await listTerms()).map(({ term, explanation }) => ({ term, explanation }))).toEqual([
-      { term: "tide pool", explanation: "Gezeitentümpel" },
+      { term: "tide pool", explanation: "rock pool" },
     ]);
   });
 
   test("a multi-line explanation keeps its line breaks through a save", async () => {
     // Nothing flattens an explanation on the way in or out: it is one column
     // and travels as one string.
-    const explanation = "Zeile eins\nZeile zwei";
-    const res = await send("POST", TERMS, { term: "Ton", explanation });
+    const explanation = "Line one\nLine two";
+    const res = await send("POST", TERMS, { term: "Tone", explanation });
     expect(res.status).toBe(201);
     const created = (await res.json()) as GlossaryTerm;
     expect(created.explanation).toBe(explanation);
@@ -291,29 +291,29 @@ describe("glossary terms — rows, each with its own guard", () => {
     // A term's guard is its own row version, not `campaigns.version`, which
     // any write — a quick note during a running session — moves.
     const [open] = await listTerms();
-    const started = await send("POST", "/api/campaigns/beispiel/sessions", {});
+    const started = await send("POST", "/api/campaigns/example/sessions", {});
     expect(started.status).toBe(201);
     const { id: session } = (await started.json()) as { id: string };
     expect(
-      (await send("POST", `/api/campaigns/beispiel/sessions/${session}/log`, { text: "Etwas passiert" }))
+      (await send("POST", `/api/campaigns/example/sessions/${session}/log`, { text: "Something happened" }))
         .status,
     ).toBe(201);
-    expect((await send("POST", "/api/campaigns/beispiel/ideas", { text: "Idee #idee" })).status).toBe(201);
+    expect((await send("POST", "/api/campaigns/example/ideas", { text: "Idea #idea" })).status).toBe(201);
     expect(await version()).toBeGreaterThan(1);
 
     const saved = await send("PATCH", `${TERMS}/${open!.id}`, {
       rev: open!.rev,
-      explanation: "Gezeitentümpel",
+      explanation: "rock pool",
     });
     expect(saved.status).toBe(200);
     // Its own writes DO move it: the same guard again is a 409 with the term.
     const stale = await send("PATCH", `${TERMS}/${open!.id}`, {
       rev: open!.rev,
-      explanation: "Überschrieben",
+      explanation: "Overwritten",
     });
     expect(stale.status).toBe(409);
     const conflict = (await stale.json()) as { code: string; glossaryTerm: GlossaryTerm };
     expect(conflict.code).toBe("rev_conflict");
-    expect(conflict.glossaryTerm.explanation).toBe("Gezeitentümpel");
+    expect(conflict.glossaryTerm.explanation).toBe("rock pool");
   });
 });

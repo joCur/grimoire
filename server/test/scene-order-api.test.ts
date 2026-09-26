@@ -19,8 +19,8 @@ import type {
 import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 
-const CAMPAIGN = "beispiel";
-const CHAPTER = "01-salzhafen";
+const CAMPAIGN = "example";
+const CHAPTER = "01-salt-harbour";
 
 /** The two scenes the example campaign brings, in their stored order. */
 const ARRIVAL = "lighthouse-arrival";
@@ -124,21 +124,21 @@ describe("the tree reads the stored order", () => {
 
   test("a scene names its location as an id AND as a display name", async () => {
     const [arrival] = (await chapterNode()).scenes;
-    expect(arrival?.location).toBe("leuchtturm");
-    expect(arrival?.locationName).toBe("Der Leuchtturm von Salzhafen");
+    expect(arrival?.location).toBe("lighthouse");
+    expect(arrival?.locationName).toBe("The Lighthouse of Salt Harbour");
   });
 
   test("a new scene lands at the END of its chapter", async () => {
-    await createScene("Ganz zum Schluss");
-    expect(await sceneIds()).toEqual([ARRIVAL, CAPTURED, "ganz-zum-schluss"]);
+    await createScene("At the very end");
+    expect(await sceneIds()).toEqual([ARRIVAL, CAPTURED, "at-the-very-end"]);
   });
 
   test("the position counts within the chapter, so a second chapter starts at 0", async () => {
-    await createChapter("Zweites Kapitel");
-    await createScene("Erste Fremde", "zweites-kapitel");
-    await createScene("Zweite Fremde", "zweites-kapitel");
+    await createChapter("Second chapter");
+    await createScene("First stranger", "second-chapter");
+    await createScene("Second stranger", "second-chapter");
     // The campaign already has scenes, but this chapter's count starts over.
-    expect(await sceneIds("zweites-kapitel")).toEqual(["erste-fremde", "zweite-fremde"]);
+    expect(await sceneIds("second-chapter")).toEqual(["first-stranger", "second-stranger"]);
     // …and the first chapter is untouched by them.
     expect(await sceneIds()).toEqual([ARRIVAL, CAPTURED]);
   });
@@ -154,14 +154,14 @@ describe("PUT …/chapters/:chapter/scene-order", () => {
   });
 
   test("a third scene can be moved to the front", async () => {
-    await createScene("Der Nachzügler");
-    const saved = await reorder(["der-nachzuegler", ARRIVAL, CAPTURED]);
-    expect(saved.scenes).toEqual(["der-nachzuegler", ARRIVAL, CAPTURED]);
-    expect(await sceneIds()).toEqual(["der-nachzuegler", ARRIVAL, CAPTURED]);
+    await createScene("The latecomer");
+    const saved = await reorder(["the-latecomer", ARRIVAL, CAPTURED]);
+    expect(saved.scenes).toEqual(["the-latecomer", ARRIVAL, CAPTURED]);
+    expect(await sceneIds()).toEqual(["the-latecomer", ARRIVAL, CAPTURED]);
   });
 
   test("an unknown chapter is a 404", async () => {
-    const res = await putOrder([ARRIVAL], 1, "gibt-es-nicht");
+    const res = await putOrder([ARRIVAL], 1, "does-not-exist");
     expect(res.status).toBe(404);
   });
 });
@@ -189,16 +189,16 @@ describe("a list that is not exactly the chapter's scenes is refused whole", () 
   });
 
   test("a scene from ANOTHER chapter", async () => {
-    await createChapter("Zweites Kapitel");
-    await createScene("Die Fremde", "zweites-kapitel");
-    const body = await refused([ARRIVAL, CAPTURED, "die-fremde"]);
-    expect(body.unknown).toEqual(["die-fremde"]);
+    await createChapter("Second chapter");
+    await createScene("The stranger", "second-chapter");
+    const body = await refused([ARRIVAL, CAPTURED, "the-stranger"]);
+    expect(body.unknown).toEqual(["the-stranger"]);
     expect(body.missing).toEqual([]);
   });
 
   test("an id that does not exist at all", async () => {
-    const body = await refused([ARRIVAL, CAPTURED, "gibt-es-nicht"]);
-    expect(body.unknown).toEqual(["gibt-es-nicht"]);
+    const body = await refused([ARRIVAL, CAPTURED, "does-not-exist"]);
+    expect(body.unknown).toEqual(["does-not-exist"]);
   });
 
   test("a scene named TWICE — and the one it crowds out is reported with it", async () => {
@@ -248,7 +248,7 @@ describe("the guard", () => {
     const patched = await app.request(`/api/campaigns/${CAMPAIGN}/chapters/${CHAPTER}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: before.rev, body: "Etwas Neues.\n" }),
+      body: JSON.stringify({ rev: before.rev, body: "Something new.\n" }),
     });
     expect(patched.status).toBe(200);
 
@@ -260,22 +260,22 @@ describe("the guard", () => {
 
 describe("moving a scene between chapters", () => {
   test("it lands at the END of the chapter it arrives in", async () => {
-    await createChapter("Zweites Kapitel");
-    await createScene("Die Erste Dort", "zweites-kapitel");
-    await createScene("Die Zweite Dort", "zweites-kapitel");
+    await createChapter("Second chapter");
+    await createScene("The first one there", "second-chapter");
+    await createScene("The second one there", "second-chapter");
 
     const tokens = async (): Promise<unknown[]> => [
       (await chapterNode()).sceneOrderRev,
-      (await chapterNode("zweites-kapitel")).sceneOrderRev,
+      (await chapterNode("second-chapter")).sceneOrderRev,
     ];
     const tokensBefore = await tokens();
-    const res = await patchScene(ARRIVAL, { chapter: "zweites-kapitel" });
+    const res = await patchScene(ARRIVAL, { chapter: "second-chapter" });
     expect(res.status).toBe(200);
-    expect(((await res.json()) as Scene).chapter).toBe("zweites-kapitel");
+    expect(((await res.json()) as Scene).chapter).toBe("second-chapter");
 
-    expect(await sceneIds("zweites-kapitel")).toEqual([
-      "die-erste-dort",
-      "die-zweite-dort",
+    expect(await sceneIds("second-chapter")).toEqual([
+      "the-first-one-there",
+      "the-second-one-there",
       ARRIVAL,
     ]);
     expect(await sceneIds()).toEqual([CAPTURED]);
@@ -284,11 +284,11 @@ describe("moving a scene between chapters", () => {
   });
 
   test("a patch that leaves the chapter alone leaves the order alone", async () => {
-    await createScene("Der Dritte");
-    await reorder(["der-dritte", ARRIVAL, CAPTURED]);
+    await createScene("The third");
+    await reorder(["the-third", ARRIVAL, CAPTURED]);
 
     const res = await patchScene(ARRIVAL, { status: "played" });
     expect(res.status).toBe(200);
-    expect(await sceneIds()).toEqual(["der-dritte", ARRIVAL, CAPTURED]);
+    expect(await sceneIds()).toEqual(["the-third", ARRIVAL, CAPTURED]);
   });
 });

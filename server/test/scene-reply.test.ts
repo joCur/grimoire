@@ -4,10 +4,10 @@
 // with all four.
 //
 // The cases are the ones the schema cannot cover: a reply that is not the
-// object at all, the tolerant way in, `null` read as „not given", and the PO
-// case — a body whose German quotation marks are closed with an ASCII `"`
-// travels byte for byte, because the transport escapes it and nobody
-// hand-writes the JSON.
+// object at all, the tolerant way in, `null` read as "not given", and the
+// mixed spelling — a body whose German quotation mark is closed with an
+// ASCII `"` travels byte for byte, because the transport escapes it and
+// nobody hand-writes the JSON.
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -16,23 +16,23 @@ import { sceneToReply, type SceneProposal } from "@grimoire/shared";
 import { REPAIRED_OBJECT_WARNING } from "../src/json-reply";
 import { NOT_A_SCENE_ERROR, parseSceneReply, sceneReplyRequest } from "../src/scene-reply";
 
-/** The PO case: opening U+201E, closed with the ASCII `"`. */
-const PO_LINE = '„Wer nachts hier steht, hat was zu verbergen", murrt die Wache.';
+/** The mixed spelling: opening U+201E, closed with the ASCII `"`. */
+const MIXED_LINE = '„Whoever stands here at night has something to hide", the guard grumbles.';
 
 function scene(over: Record<string, unknown> = {}): string {
   return JSON.stringify({
     id: "night-watch-quay",
-    title: " Nachtwache am Kai ",
+    title: " Night Watch at the Quay ",
     type: "planned",
     trigger: null,
-    chapter: "01-salzhafen",
+    chapter: "01-salt-harbour",
     location: "",
     npcs: ["fenn", " "],
     handouts: [],
     tags: ["stealth"],
     status: "draft",
-    body: `\n\n## Flow\n\n${PO_LINE}`,
-    warnings: [" Der Quelltext nennt keinen DC — DC 13 gesetzt. ", ""],
+    body: `\n\n## Flow\n\n${MIXED_LINE}`,
+    warnings: [" The source names no DC — DC 13 set. ", ""],
     ...over,
   });
 }
@@ -52,7 +52,7 @@ function errors(raw: string, mode: "create" | "augment" = "create"): string[] {
 /** The example campaign's smuggler scene, as its fixture holds it — the scene without its guard. */
 const CAPTURED = JSON.parse(
   readFileSync(
-    join(import.meta.dir, "..", "..", "fixtures", "beispiel", "scenes", "smuggler-captured.json"),
+    join(import.meta.dir, "..", "..", "fixtures", "scenes", "smuggler-captured.json"),
     "utf8",
   ),
 ) as SceneProposal;
@@ -62,23 +62,23 @@ describe("parseSceneReply", () => {
     const reply = read(scene());
     expect(reply.scene).toEqual({
       id: "night-watch-quay",
-      title: "Nachtwache am Kai",
+      title: "Night Watch at the Quay",
       type: "planned",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       npcs: ["fenn"],
       handouts: [],
       tags: ["stealth"],
       status: "draft",
       // Stored the way the store keeps a body: no leading blank lines, one
       // closing newline.
-      body: `## Flow\n\n${PO_LINE}\n`,
+      body: `## Flow\n\n${MIXED_LINE}\n`,
     });
-    expect(reply.warnings).toEqual(["Der Quelltext nennt keinen DC — DC 13 gesetzt."]);
+    expect(reply.warnings).toEqual(["The source names no DC — DC 13 set."]);
     expect(reply.ignored).toEqual([]);
   });
 
-  test("the body survives the PO spelling byte for byte", () => {
-    expect(read(scene()).scene.body).toContain(PO_LINE);
+  test("the body survives the mixed spelling byte for byte", () => {
+    expect(read(scene()).scene.body).toContain(MIXED_LINE);
   });
 
   test("a list left out or answered with null is empty; a missing type is planned", () => {
@@ -90,7 +90,7 @@ describe("parseSceneReply", () => {
   });
 
   test("a fence, prose around it and a single repair all cost no correction turn", () => {
-    expect(read(`Hier ist die Szene:\n\n\`\`\`json\n${scene()}\n\`\`\`\n`).scene.id).toBe(
+    expect(read(`Here is the scene:\n\n\`\`\`json\n${scene()}\n\`\`\`\n`).scene.id).toBe(
       "night-watch-quay",
     );
     const repaired = read(scene().replace(/}$/, ",}"));
@@ -100,7 +100,7 @@ describe("parseSceneReply", () => {
   });
 
   test("anything that is not the object is the ONE shape error, naming the fields", () => {
-    for (const raw of ["", "kein Objekt", "---\nid: kai\n---\n\n## Flow\n", "[1]"]) {
+    for (const raw of ["", "not an object", "---\nid: kai\n---\n\n## Flow\n", "[1]"]) {
       expect(errors(raw)).toEqual([NOT_A_SCENE_ERROR]);
     }
     for (const key of ["`id`", "`chapter`", "`npcs`", "`body`", "`warnings`"]) {
@@ -114,8 +114,9 @@ describe("parseSceneReply", () => {
   });
 
   test("a field the scene does not have, and a value of the wrong shape", () => {
-    const unknown = errors(scene({ mood: "düster" })).join(" ");
+    const unknown = errors(scene({ mood: "gloomy" })).join(" ");
     expect(unknown).toContain("mood");
+    // The correction messages are German production text sent back to the model.
     expect(unknown).toContain("erlaubt sind");
     expect(errors(scene({ npcs: "fenn" })).join(" ")).toContain('"npcs"');
     expect(errors(scene({ title: 7 })).join(" ")).toContain('"title"');
@@ -123,13 +124,14 @@ describe("parseSceneReply", () => {
   });
 
   test("a title or an id of whitespace only is missing, not empty", () => {
+    // The correction messages are German production text sent back to the model.
     expect(errors(scene({ title: "   " }))).toEqual(['"title" fehlt — das Feld ist verpflichtend']);
     expect(errors(scene({ id: " " })).join(" ")).toContain('"id" fehlt');
   });
 
   test("an unknown key fails a create run and is dropped by an augment run", () => {
-    expect(errors(scene({ mood: "düster" })).join(" ")).toContain("mood");
-    const augmented = read(scene({ mood: "düster" }), "augment");
+    expect(errors(scene({ mood: "gloomy" })).join(" ")).toContain("mood");
+    const augmented = read(scene({ mood: "gloomy" }), "augment");
     expect(Object.hasOwn(augmented.scene, "mood")).toBe(false);
     expect(augmented.ignored).toEqual(["mood"]);
   });

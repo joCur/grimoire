@@ -20,16 +20,17 @@ import type { Page, Request } from "@playwright/test";
 
 import type { Api } from "../support/api";
 import { getLocation, patchLocation } from "../support/location";
+import { CAMPAIGN } from "../support/paths";
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
 
-const LOCATION = "leuchtturm";
-const LOCATION_URL = `/campaigns/beispiel/locations/${LOCATION}`;
+const LOCATION = "lighthouse";
+const LOCATION_URL = `/campaigns/${CAMPAIGN}/locations/${LOCATION}`;
 /** The stored name of the location — the name of its text editor. */
-const LOCATION_NAME = "Der Leuchtturm von Salzhafen";
+const LOCATION_NAME = "The Lighthouse of Salt Harbour";
 /** The other location of the example campaign. */
-const OTHER_LOCATION = "bucht";
-const OTHER_LOCATION_NAME = "Die Nordbucht";
+const OTHER_LOCATION = "cove";
+const OTHER_LOCATION_NAME = "The North Cove";
 
 /** The location without its guard, split into its text and every other field. */
 async function locationSplit(api: Api) {
@@ -334,7 +335,7 @@ test("leaving with unsaved work asks first — cancel and navigation alike", asy
   // A navigation asks the same question: ⌘K works over the edit mode.
   const leaveDialog = page.getByRole("dialog", { name: ui("properties.discard.title") });
   await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Nordbucht");
+  await page.getByRole("combobox").fill("North Cove");
   await page.getByRole("option").filter({ hasText: OTHER_LOCATION_NAME }).first().click();
   await expect(leaveDialog).toBeVisible();
   await leaveDialog.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
@@ -343,10 +344,10 @@ test("leaving with unsaved work asks first — cancel and navigation alike", asy
 
   // Discarding goes on to the other location, which opens in its reading view.
   await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill("Nordbucht");
+  await page.getByRole("combobox").fill("North Cove");
   await page.getByRole("option").filter({ hasText: OTHER_LOCATION_NAME }).first().click();
   await leaveDialog.getByRole("button", { name: ui("common.discard") }).click();
-  await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/locations/${OTHER_LOCATION}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/locations/${OTHER_LOCATION}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(OTHER_LOCATION_NAME);
   await expect(nameInput(page)).toHaveCount(0);
   expect(await locationSplit(api)).toEqual(before);

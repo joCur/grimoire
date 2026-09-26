@@ -9,7 +9,7 @@ import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-const NPCS = "/api/campaigns/beispiel/npcs";
+const NPCS = "/api/campaigns/example/npcs";
 const JORNA = `${NPCS}/jorna`;
 const FENN = `${NPCS}/fenn`;
 
@@ -51,22 +51,22 @@ describe("reading an npc", () => {
     const jorna = await getNpc();
     expect(jorna).toEqual({
       id: "jorna",
-      name: "Hafenmeisterin Jorna",
-      role: "Auftraggeberin, Hafenmeisterin von Salzhafen",
-      chapter: "01-salzhafen",
+      name: "Harbourmaster Jorna",
+      role: "Employer, harbourmaster of Salt Harbour",
+      chapter: "01-salt-harbour",
       status: "alive",
       statblock: "Roll20: Jorna",
       quickstats: { insight: 2, "passive-perception": 12 },
-      voice: "knapp, wetterrau, duzt jeden",
-      appearance: "Ölmantel, graue Flechte, fehlender kleiner Finger links",
+      voice: "curt, weather-beaten, on first-name terms with everyone",
+      appearance: "oilskin coat, grey braid, missing little finger on the left hand",
       motivation:
-        "Das Leuchtfeuer muss wieder brennen, bevor die Herbstkonvois kommen — ihr Amt hängt daran.",
+        "The beacon has to burn again before the autumn convoys arrive — her office depends on it.",
       body: jorna.body,
       rev: jorna.rev,
     });
     // The motivation is a field, not a section of the text (decisions/data-shape).
-    expect(jorna.body).toContain("## Beziehungen");
-    expect(jorna.body).not.toContain("## Will");
+    expect(jorna.body).toContain("## Relationships");
+    expect(jorna.body).not.toContain("## Wants");
   });
 
   test("the list answers every npc in its own shape, sorted by name", async () => {
@@ -78,15 +78,15 @@ describe("reading an npc", () => {
   });
 
   test("404 for an unknown npc or campaign", async () => {
-    expect((await app.request(`${NPCS}/gibt-es-nicht`)).status).toBe(404);
-    expect((await app.request("/api/campaigns/nirgends/npcs/jorna")).status).toBe(404);
+    expect((await app.request(`${NPCS}/does-not-exist`)).status).toBe(404);
+    expect((await app.request("/api/campaigns/nowhere/npcs/jorna")).status).toBe(404);
   });
 
   test("the entry address of an npc names nothing — GET and PATCH are 404", async () => {
-    const url = entriesUrl("beispiel", "npcs/jorna");
+    const url = entriesUrl("example", "npcs/jorna");
     expect((await app.request(url)).status).toBe(404);
     const before = await getNpc();
-    const res = await send("PATCH", url, { rev: before.rev, body: "Überschrieben.\n" });
+    const res = await send("PATCH", url, { rev: before.rev, body: "Overwritten.\n" });
     expect(res.status).toBe(404);
     expect(await getNpc()).toEqual(before);
   });
@@ -95,10 +95,10 @@ describe("reading an npc", () => {
 describe("writing an npc", () => {
   test("only the named fields change; `null` clears an optional one", async () => {
     const before = await getNpc();
-    const res = await patchNpc({ rev: before.rev, role: "Hafenmeisterin", statblock: null });
+    const res = await patchNpc({ rev: before.rev, role: "Harbourmaster", statblock: null });
     expect(res.status).toBe(200);
     const after = (await res.json()) as Npc;
-    expect(after.role).toBe("Hafenmeisterin");
+    expect(after.role).toBe("Harbourmaster");
     expect(Object.hasOwn(after, "statblock")).toBe(false);
     expect(after.motivation).toBe(before.motivation);
     expect(after.quickstats).toEqual(before.quickstats);
@@ -111,13 +111,13 @@ describe("writing an npc", () => {
     const before = await getNpc();
     const res = await patchNpc({
       rev: before.rev,
-      motivation: "Ruhe am Kai — und dass [[fenn]] verschwindet.",
-      body: "\n## Weiß\n\nNichts Neues.",
+      motivation: "Quiet on the quay — and [[fenn]] gone.",
+      body: "\n## Knows\n\nNothing new.",
     });
     expect(res.status).toBe(200);
     const after = (await res.json()) as Npc;
-    expect(after.motivation).toBe("Ruhe am Kai — und dass [[fenn]] verschwindet.");
-    expect(after.body).toBe("\n## Weiß\n\nNichts Neues.\n");
+    expect(after.motivation).toBe("Quiet on the quay — and [[fenn]] gone.");
+    expect(after.body).toBe("\n## Knows\n\nNothing new.\n");
     expect(after.rev).toBe(before.rev + 1);
 
     const cleared = await patchNpc({ rev: after.rev, motivation: null });
@@ -140,7 +140,7 @@ describe("writing an npc", () => {
   test("400 for a field an npc does not have — named, and nothing written", async () => {
     const before = await getNpc();
     for (const extra of [
-      { atmosphere: "Nebel" },
+      { atmosphere: "Fog" },
       { properties: { name: "X" } },
       { kind: "npc" },
       { path: "npcs/jorna" },
@@ -160,20 +160,20 @@ describe("writing an npc", () => {
       ["name", null],
       ["status", null],
       ["quickstats", ["+2"]],
-      ["motivation", ["Ruhe"]],
+      ["motivation", ["Quiet"]],
       ["body", 3],
     ] as const) {
       const res = await patchNpc({ rev: before.rev, [key]: value });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain(key);
     }
-    expect((await patchNpc({ name: "ohne rev" })).status).toBe(400);
+    expect((await patchNpc({ name: "without rev" })).status).toBe(400);
     expect((await getNpc()).rev).toBe(before.rev);
   });
 
   test("a status outside the four is a 400 with the code the app has a sentence for", async () => {
     const before = await getNpc();
-    const res = await patchNpc({ rev: before.rev, status: "tot" });
+    const res = await patchNpc({ rev: before.rev, status: "deceased" });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "status_not_allowed", kind: "npc" });
     const dead = await patchNpc({ rev: before.rev, status: "dead" });
@@ -191,7 +191,7 @@ describe("writing an npc", () => {
 
   test("a chapter has to exist — 400 with the create-this-first code", async () => {
     const before = await getNpc();
-    const res = await patchNpc({ rev: before.rev, chapter: "99-nirgends" });
+    const res = await patchNpc({ rev: before.rev, chapter: "99-nowhere" });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "chapter_unknown" });
     expect(await getNpc()).toEqual(before);
@@ -202,80 +202,80 @@ describe("writing an npc", () => {
     // Somebody else changes the status while the edit surface is open.
     expect((await patchNpc({ rev: read.rev, status: "missing" })).status).toBe(200);
 
-    const refused = await patchNpc({ rev: read.rev, motivation: "Neue Motivation." });
+    const refused = await patchNpc({ rev: read.rev, motivation: "A new motivation." });
     expect(refused.status).toBe(409);
     const conflict = (await refused.json()) as { code: string; rev: number; npc: Npc };
     expect(conflict.code).toBe("rev_conflict");
     expect(conflict.npc.status).toBe("missing");
     expect(conflict.rev).toBe(conflict.npc.rev);
 
-    // „Trotzdem speichern": what the surface shows — text and motivation —
-    // and nothing else.
+    // The save-anyway action writes what the surface shows — text and
+    // motivation — and nothing else.
     const forced = await patchNpc({
       rev: read.rev,
-      motivation: "Neue Motivation.",
-      body: "\n## Weiß\n\nNeuer Text.\n",
+      motivation: "A new motivation.",
+      body: "\n## Knows\n\nNew text.\n",
       force: true,
     });
     expect(forced.status).toBe(200);
     const written = (await forced.json()) as Npc;
-    expect(written.motivation).toBe("Neue Motivation.");
-    expect(written.body).toBe("\n## Weiß\n\nNeuer Text.\n");
+    expect(written.motivation).toBe("A new motivation.");
+    expect(written.body).toBe("\n## Knows\n\nNew text.\n");
     expect(written.status).toBe("missing");
   });
 
   test("404 for an unknown npc", async () => {
-    expect((await patchNpc({ rev: 1, name: "X" }, `${NPCS}/gibt-es-nicht`)).status).toBe(404);
+    expect((await patchNpc({ rev: 1, name: "X" }, `${NPCS}/does-not-exist`)).status).toBe(404);
   });
 
   test("the search index follows a rename, and the hit carries no address", async () => {
     const before = await getNpc();
-    expect((await patchNpc({ rev: before.rev, name: "Jorna Salzhand" })).status).toBe(200);
-    const res = await app.request("/api/campaigns/beispiel/search?q=Salzhand");
+    expect((await patchNpc({ rev: before.rev, name: "Jorna Saltmarsh" })).status).toBe(200);
+    const res = await app.request("/api/campaigns/example/search?q=Saltmarsh");
     const { results } = (await res.json()) as { results: Array<Record<string, unknown>> };
     const hit = results.find((r) => r.kind === "npc" && r.id === "jorna");
-    expect(hit?.title).toBe("Jorna Salzhand");
+    expect(hit?.title).toBe("Jorna Saltmarsh");
     expect(Object.hasOwn(hit!, "path")).toBe(false);
   });
 });
 
 describe("creating an npc", () => {
   test("from the name alone: the id is derived, the status is unknown, the text empty", async () => {
-    const res = await createNpc({ name: "Holm der Fischer" });
+    const res = await createNpc({ name: "Holm the Fisher" });
     expect(res.status).toBe(201);
     const holm = (await res.json()) as Npc;
     expect(holm).toEqual({
-      id: "holm-der-fischer",
-      name: "Holm der Fischer",
+      id: "holm-the-fisher",
+      name: "Holm the Fisher",
       status: "unknown",
       body: "",
       rev: holm.rev,
     });
-    expect(await getNpc(`${NPCS}/holm-der-fischer`)).toEqual(holm);
+    expect(await getNpc(`${NPCS}/holm-the-fisher`)).toEqual(holm);
   });
 
   test("with a body: the note is the npc's text, as typed, without a heading", async () => {
-    const res = await createNpc({ name: "Grella", id: "grella", body: "Bringt die Ladung ins Dorf." });
+    const res = await createNpc({ name: "Grella", id: "grella", body: "Brings the cargo into the village." });
     expect(res.status).toBe(201);
     const grella = (await res.json()) as Npc;
-    expect(grella.body).toBe("Bringt die Ladung ins Dorf.\n");
+    expect(grella.body).toBe("Brings the cargo into the village.\n");
     expect(grella.status).toBe("unknown");
   });
 
   test("an EMPTY npc under the id is filled with the name and the body", async () => {
     const created = (await (await createNpc({ name: "holm" })).json()) as Npc;
     expect(created.name).toBe("holm");
-    const filled = await createNpc({ name: "Holm", id: "holm", body: "Kennt die Strömung." });
+    const filled = await createNpc({ name: "Holm", id: "holm", body: "Knows the current." });
     expect(filled.status).toBe(201);
     const holm = (await filled.json()) as Npc;
     expect(holm.name).toBe("Holm");
-    expect(holm.body).toBe("Kennt die Strömung.\n");
+    expect(holm.body).toBe("Knows the current.\n");
     expect(holm.rev).toBe(created.rev + 1);
   });
 
   test("an npc with content is a 409 with a free proposal — nothing is written", async () => {
     const before = await getNpc();
-    const res = await createNpc({ name: "Jorna", id: "jorna", body: "Eine Notiz." });
+    const res = await createNpc({ name: "Jorna", id: "jorna", body: "A note." });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
       code: "slug_taken",
@@ -288,41 +288,39 @@ describe("creating an npc", () => {
 
   test("400 for a key the create does not take, and for a missing name", async () => {
     expect((await createNpc({ name: "Holm", status: "alive" })).status).toBe(400);
-    expect((await createNpc({ body: "Nur eine Notiz." })).status).toBe(400);
+    expect((await createNpc({ body: "Only a note." })).status).toBe(400);
     expect((await createNpc({ name: "   " })).status).toBe(400);
-    expect((await createNpc({ name: "Holm", id: "Kein Slug" })).status).toBe(400);
+    expect((await createNpc({ name: "Holm", id: "Not A Slug" })).status).toBe(400);
   });
 });
 
-describe("an npc's `## Beziehungen` keeps what became no row", () => {
-  test("prose and a duplicate counterpart survive the save", async () => {
+describe("an npc's `## Relationships` is prose in its body", () => {
+  test("every line under the heading survives the save verbatim", async () => {
     const before = await getNpc(FENN);
-    expect(before.body).toContain("- [[jorna]]: alte Bekannte");
+    expect(before.body).toContain("- [[jorna]]: old acquaintance");
 
-    // Three things under the heading: one relation line (a row), one prose
-    // line (no row), and a SECOND line for jorna (the composite key allows
-    // only one row per counterpart). Only the first is a relation.
+    // Three lines under the heading: a relation line, a prose line, and a
+    // SECOND line for the same counterpart. Storage is never derived from
+    // body text, so all three stay as written.
     const body =
-      "\n## Beziehungen\n\n- jorna: alte Bekannte\n" +
-      "Beide kennen sich aus der Zeit vor dem Leuchtturm.\n" +
-      "- jorna: und schuldet ihr Geld\n\n## Notizen\n";
+      "\n## Relationships\n\n- jorna: old acquaintance\n" +
+      "They know each other from before the lighthouse.\n" +
+      "- jorna: and owes her money\n\n## Notes\n";
     const after = await patchNpcOk({ rev: before.rev, body });
 
-    // the relation is a row and comes back rendered …
-    expect(after.body).toContain("- jorna: alte Bekannte");
-    // … and NEITHER of the two lines that could not become a row is gone
-    expect(after.body).toContain("Beide kennen sich aus der Zeit vor dem Leuchtturm.");
-    expect(after.body).toContain("- jorna: und schuldet ihr Geld");
+    expect(after.body).toContain("- jorna: old acquaintance");
+    expect(after.body).toContain("They know each other from before the lighthouse.");
+    expect(after.body).toContain("- jorna: and owes her money");
     // one heading, in its original place — not a second one appended
-    expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
-    expect(after.body.indexOf("## Beziehungen")).toBeLessThan(after.body.indexOf("## Notizen"));
+    expect(after.body.match(/^## Relationships$/gm)).toHaveLength(1);
+    expect(after.body.indexOf("## Relationships")).toBeLessThan(after.body.indexOf("## Notes"));
     expect(await getNpc(FENN)).toEqual(after);
   });
 
-  test("saving the rendered body again is a fixed point", async () => {
+  test("saving the stored body again is a fixed point", async () => {
     const before = await getNpc(FENN);
     const body =
-      "\n## Beziehungen\n\n- jorna: alte Bekannte\nEin Satz, der keine Beziehung ist.\n";
+      "\n## Relationships\n\n- jorna: old acquaintance\nA sentence that is no relation.\n";
     const first = await patchNpcOk({ rev: before.rev, body });
     const second = await patchNpcOk({ rev: first.rev, body: first.body });
     expect(second.body).toBe(first.body);
@@ -330,12 +328,13 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
     expect(third.body).toBe(first.body);
   });
 
-  test("a section that is ONLY relations still renders once, at the end", async () => {
+  test("a section that is ONLY relations stays once, at the end", async () => {
     const before = await getNpc(FENN);
-    const body = "\n## Will\n\nRaus aus dem Geschäft.\n\n## Beziehungen\n\n- jorna: Ex-Kollegin\n";
+    const body =
+      "\n## Wants\n\nOut of the business.\n\n## Relationships\n\n- jorna: former colleague\n";
     const after = await patchNpcOk({ rev: before.rev, body });
-    expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
-    expect(after.body).toContain("- jorna: Ex-Kollegin");
-    expect(after.body).toContain("Raus aus dem Geschäft.");
+    expect(after.body.match(/^## Relationships$/gm)).toHaveLength(1);
+    expect(after.body).toContain("- jorna: former colleague");
+    expect(after.body).toContain("Out of the business.");
   });
 });

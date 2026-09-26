@@ -20,13 +20,14 @@ import type { Page, Request } from "@playwright/test";
 
 import type { Api } from "../support/api";
 import { getNpc, npcPath, patchNpc } from "../support/npc";
+import { CAMPAIGN } from "../support/paths";
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
 
 const NPC = "jorna";
-const NPC_URL = `/campaigns/beispiel/npcs/${NPC}`;
+const NPC_URL = `/campaigns/${CAMPAIGN}/npcs/${NPC}`;
 /** The stored name of the npc — the name of its text editor. */
-const NPC_NAME = "Hafenmeisterin Jorna";
+const NPC_NAME = "Harbourmaster Jorna";
 
 /** The npc without its guard, split into its text and every other field. */
 async function npcSplit(api: Api) {
@@ -420,7 +421,7 @@ test("leaving with unsaved work asks first — cancel and navigation alike", asy
   await page.getByRole("combobox").fill("Fenn");
   await page.getByRole("option").filter({ hasText: "Fenn" }).first().click();
   await leaveDialog.getByRole("button", { name: ui("common.discard") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/beispiel\/npcs\/fenn$/);
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/fenn$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   await expect(nameInput(page)).toHaveCount(0);
   expect(await npcSplit(api)).toEqual(before);

@@ -29,7 +29,7 @@ import {
 import { dropStore, seedStore } from "./support/store";
 import { jobsUrl, readJob } from "./support/generator-jobs";
 
-const CAMPAIGN = "beispiel";
+const CAMPAIGN = "example";
 const SCENES = `/api/campaigns/${CAMPAIGN}/scenes`;
 const ARRIVAL = `${SCENES}/lighthouse-arrival`;
 
@@ -123,20 +123,20 @@ describe("the prompt", () => {
     const prompt = buildPrompt({
       systemPrompt: "SYS",
       fewShotTarget: "FEWSHOT",
-      knowledge: "- Salzhafen heißt immer Salzhafen",
-      glossary: "cove → Bucht",
+      knowledge: "- Salt Harbour is always Salt Harbour",
+      glossary: "cove → inlet",
       context: { chapter: stored.chapter, npcs: [], locations: [] },
       sourceText: "A spy among the smugglers.",
       existingScene: sceneToReply(withoutGuard(stored)),
-      instruction: "Führe einen Handlungsstrang um den Spitzel ein",
+      instruction: "Introduce a plot thread around the informer",
     });
     expect(prompt).toContain(`${EXISTING_SCENE_HEADING} (lighthouse-arrival)`);
-    expect(prompt).toContain('"title": "Ankunft am Leuchtturm"');
+    expect(prompt).toContain('"title": "Arrival at the Lighthouse"');
     // An absent optional field is `null` — the form the model answers in.
     expect(prompt).toContain('"trigger": null');
     expect(prompt).toContain(INSTRUCTION_HEADING);
-    expect(prompt).toContain("cove → Bucht");
-    expect(prompt).toContain("Salzhafen heißt immer Salzhafen");
+    expect(prompt).toContain("cove → inlet");
+    expect(prompt).toContain("Salt Harbour is always Salt Harbour");
     expect(prompt).not.toContain(EXISTING_NPC_HEADING);
     // The existing scene stands BELOW the few-shot and ABOVE the source text.
     expect(prompt.indexOf("FEWSHOT")).toBeLessThan(prompt.indexOf(EXISTING_SCENE_HEADING));
@@ -152,7 +152,7 @@ describe("the prompt", () => {
       context: { npcs: [], locations: [] },
       sourceText: "",
       existingScene: sceneToReply(withoutGuard(await read())),
-      instruction: "Ergänze die Stimmung",
+      instruction: "Add to the mood",
     });
     expect(prompt).not.toContain("## Quelltext");
     expect(prompt).toContain(INSTRUCTION_HEADING);
@@ -162,11 +162,11 @@ describe("the prompt", () => {
 describe("the run", () => {
   test("202 with the running job, and the finished job carries the scene as read and as proposed", async () => {
     const stored = await read();
-    const body = `${stored.body}\n> [!secret] Der Spitzel sitzt in der Hafenwache.\n`;
+    const body = `${stored.body}\n> [!secret] The informer serves in the harbour watch.\n`;
     const fake = useFake([
-      reply(stored, { title: "Ankunft im Nebel", body }, ["Neuer Handlungsstrang ergänzt"]),
+      reply(stored, { title: "Arrival in the Fog", body }, ["new plot thread added"]),
     ]);
-    const job = await runJob({ instruction: "Spitzel einführen" });
+    const job = await runJob({ instruction: "Introduce an informer" });
     expect(job.status).toBe("done");
     expect(job.kind).toBe("scene-augment");
     expect(job.scene).toBe("lighthouse-arrival");
@@ -175,11 +175,11 @@ describe("the run", () => {
     expect(result.id).toBe("lighthouse-arrival");
     expect(result.rev).toBe(stored.rev);
     expect(result.current).toEqual(withoutGuard(stored));
-    expect(result.proposed.title).toBe("Ankunft im Nebel");
-    expect(result.proposed.body).toContain("Der Spitzel sitzt in der Hafenwache");
+    expect(result.proposed.title).toBe("Arrival in the Fog");
+    expect(result.proposed.body).toContain("The informer serves in the harbour watch");
     // The status the DM gave the scene is not the model's to reset.
     expect(result.proposed.status).toBe("ready");
-    expect(result.warnings).toEqual(["Neuer Handlungsstrang ergänzt"]);
+    expect(result.warnings).toEqual(["new plot thread added"]);
     // Nothing is written by a run.
     expect(await read()).toEqual(stored);
 
@@ -190,12 +190,12 @@ describe("the run", () => {
     expect(req.systemPrompt).toContain("System-Prompt: Szene ergänzen");
     expect(req.fewShotTarget).toContain('"id": "smuggler-captured"');
     // A scene's chapter belongs in the context, as it does for a scene run.
-    expect(req.context.chapter).toBe("01-salzhafen");
+    expect(req.context.chapter).toBe("01-salt-harbour");
   });
 
   test("the proposal round-trips through the job row", async () => {
     const stored = await read();
-    useFake([reply(stored, { tags: ["social", "travel", "mystery"] }, ["geprüft"])]);
+    useFake([reply(stored, { tags: ["social", "travel", "mystery"] }, ["checked"])]);
     const started = await runJob({ instruction: "x" });
     const job = await currentJob();
     expect(job.id).toBe(started.id);
@@ -207,7 +207,7 @@ describe("the run", () => {
     expect((await post(`${ARRIVAL}/augment`, {})).status).toBe(400);
     expect((await post(`${ARRIVAL}/augment`, { sourceText: "  " })).status).toBe(400);
     expect((await post(`${ARRIVAL}/augment`, { path: "x", instruction: "x" })).status).toBe(400);
-    const unknown = await post(`${SCENES}/gibt-es-nicht/augment`, { instruction: "x" });
+    const unknown = await post(`${SCENES}/does-not-exist/augment`, { instruction: "x" });
     expect(unknown.status).toBe(404);
     expect(await readJob(CAMPAIGN)).toBeNull();
     // The augment run of a scene starts on the scene; the generator jobs'
@@ -231,33 +231,33 @@ describe("the run", () => {
     expect(callout.ok).toBe(false);
     if (!callout.ok) expect(callout.errors.join(" ")).toContain("[!spoiler]");
     const unknownRef = validateSceneAugmentReply(
-      reply(stored, { body: `${stored.body}\nSie misstraut [[niemand]].\n` }),
+      reply(stored, { body: `${stored.body}\nShe distrusts [[nobody]].\n` }),
       stored,
       refIds,
     );
     expect(unknownRef.ok).toBe(false);
-    if (!unknownRef.ok) expect(unknownRef.errors[0]).toContain("[[niemand]] nennt nichts");
+    if (!unknownRef.ok) expect(unknownRef.errors[0]).toContain("[[nobody]] nennt nichts");
     // An npc, a location and a scene of the campaign all resolve; a slug in
     // code is literal text and not a reference at all.
     const good = validateSceneAugmentReply(
       reply(stored, {
         body:
-          `${stored.body}\n[[fenn]] am [[leuchtturm]], danach [[smuggler-captured]].\n` +
-          "Im Log steht `[[niemand]]`.\n",
+          `${stored.body}\n[[fenn]] at the [[lighthouse]], then [[smuggler-captured]].\n` +
+          "The log says `[[nobody]]`.\n",
       }),
       stored,
       refIds,
     );
     expect(good.ok).toBe(true);
     // A reference the stored body already carries is the DM's, not the run's.
-    const dangling = { ...stored, body: `${stored.body}\nVielleicht [[der-fremde]].\n` };
+    const dangling = { ...stored, body: `${stored.body}\nPerhaps [[the-stranger]].\n` };
     expect(validateSceneAugmentReply(reply(dangling), dangling, refIds).ok).toBe(true);
   });
 
   test("a key a scene does not have is an echo, not a failed run", async () => {
     const stored = await read();
     const outcome = validateSceneAugmentReply(
-      reply(stored, { mood: "düster" }),
+      reply(stored, { mood: "gloomy" }),
       stored,
       campaignRefIds(await collectContext(CAMPAIGN)),
     );
@@ -267,21 +267,21 @@ describe("the run", () => {
 
   test("an unknown [[id]] in the proposal costs one correction turn", async () => {
     const stored = await read();
-    const bad = reply(stored, { body: `${stored.body}\nDer Spitzel ist [[der-spitzel]].\n` });
-    const good = reply(stored, { body: `${stored.body}\nDer Spitzel sitzt in der Hafenwache.\n` });
+    const bad = reply(stored, { body: `${stored.body}\nThe informer is [[the-informer]].\n` });
+    const good = reply(stored, { body: `${stored.body}\nThe informer serves in the harbour watch.\n` });
     const fake = useFake([bad, good]);
-    const job = await runJob({ instruction: "Spitzel einführen" });
+    const job = await runJob({ instruction: "Introduce an informer" });
     expect(job.status).toBe("done");
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain("[[der-spitzel]]");
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain("[[the-informer]]");
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("die vollständige ergänzte Szene");
-    expect(job.sceneAugmentResult?.proposed.body).not.toContain("[[der-spitzel]]");
+    expect(job.sceneAugmentResult?.proposed.body).not.toContain("[[the-informer]]");
   });
 
   test("every reply malformed is a terminal 422 llm_invalid, and nothing is written", async () => {
     const before = await read();
-    const fake = useFake(Array.from({ length: 5 }, () => "kein JSON, nur Prosa"));
+    const fake = useFake(Array.from({ length: 5 }, () => "no JSON, only prose"));
     const job = await runJob({ instruction: "x" });
     expect(job.status).toBe("failed");
     expect(job.error?.status).toBe(422);
@@ -292,16 +292,16 @@ describe("the run", () => {
   });
 
   test("a spelling a naming convention replaces is a hint on the scene, never a failure", async () => {
-    await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
+    await setKnowledge([{ kind: "naming", from: "Salt Harbor", to: "Salt Harbour", text: "" }]);
     try {
       const stored = await read();
       useFake([
         reply(stored, {
-          title: "Ankunft: Salt Harbour",
-          body: `${stored.body}\n> [!secret] Jorna kam aus Salt Harbour zurück.\n`,
+          title: "Arrival: Salt Harbor",
+          body: `${stored.body}\n> [!secret] Jorna came back from Salt Harbor.\n`,
         }),
       ]);
-      const job = await runJob({ instruction: "Hintergrund ergänzen" });
+      const job = await runJob({ instruction: "Add background" });
       expect(job.status).toBe("done");
       const hints = job.sceneAugmentResult?.namingHints ?? [];
       // A field the proposal changes is checked as that field, the text line
@@ -321,7 +321,7 @@ describe("one job per campaign, whatever its kind", () => {
     setProviderForTests(new StuckProvider());
     const scene = await post(jobsUrl(CAMPAIGN), {
       kind: "scene",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       sourceText: "source",
     });
     expect(scene.status).toBe(202);
@@ -339,7 +339,7 @@ describe("one job per campaign, whatever its kind", () => {
     const augmentJob = (await augment.json()) as GeneratorJob;
     const run = await post(jobsUrl(CAMPAIGN), {
       kind: "scene",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       sourceText: "source",
     });
     expect(run.status).toBe(409);
@@ -365,17 +365,17 @@ describe("accepting", () => {
     const before = await read();
     useFake([reply(before)]);
     const job = await runJob({ instruction: "x" });
-    const body = `${before.body}\n## If: Nebel\n\n- mehr als sie sagt\n`;
+    const body = `${before.body}\n## If: fog\n\n- more than she says\n`;
     const res = await post(`${ARRIVAL}/augment/apply`, {
       rev: before.rev,
-      title: "Ankunft am Leuchtturm (neu)",
+      title: "Arrival at the Lighthouse (new)",
       body,
       jobId: job.id,
     });
     expect(res.status).toBe(200);
     const written = (await res.json()) as Scene;
-    expect(written.title).toBe("Ankunft am Leuchtturm (neu)");
-    expect(written.body).toContain("- mehr als sie sagt");
+    expect(written.title).toBe("Arrival at the Lighthouse (new)");
+    expect(written.body).toContain("- more than she says");
     expect(written.status).toBe(before.status);
     expect(written.rev).toBe(before.rev + 1);
     expect(await read()).toEqual(written);
@@ -384,25 +384,25 @@ describe("accepting", () => {
 
   test("a scene may change chapter with its body in the same write", async () => {
     const chapter = await post(`/api/campaigns/${CAMPAIGN}/chapters`, {
-      title: "Zweites Kapitel",
-      id: "02-umzug",
+      title: "Second Chapter",
+      id: "02-move",
     });
     expect(chapter.status).toBe(201);
     const created = await post(SCENES, {
-      title: "Umzugsszene",
-      chapter: "01-salzhafen",
+      title: "Moving Scene",
+      chapter: "01-salt-harbour",
       id: "moving-scene",
     });
     const scene = (await created.json()) as Scene;
     const res = await post(`${SCENES}/moving-scene/augment/apply`, {
       rev: scene.rev,
-      chapter: "02-umzug",
-      body: "## Flow\n\nSie ziehen um.\n",
+      chapter: "02-move",
+      body: "## Flow\n\nThey move.\n",
     });
     expect(res.status).toBe(200);
     const written = (await res.json()) as Scene;
-    expect(written.chapter).toBe("02-umzug");
-    expect(written.body).toBe("## Flow\n\nSie ziehen um.\n");
+    expect(written.chapter).toBe("02-move");
+    expect(written.body).toBe("## Flow\n\nThey move.\n");
     expect(await read(`${SCENES}/moving-scene`)).toEqual(written);
   });
 
@@ -410,8 +410,8 @@ describe("accepting", () => {
     const before = await read();
     const res = await post(`${ARRIVAL}/augment/apply`, {
       rev: before.rev - 1,
-      title: "ganz anders",
-      body: "## Flow\n\nüberschrieben\n",
+      title: "entirely different",
+      body: "## Flow\n\noverwritten\n",
     });
     expect(res.status).toBe(409);
     const conflict = (await res.json()) as { code: string; scene: Scene };

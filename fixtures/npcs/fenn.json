@@ -1,0 +1,17 @@
+{
+  "id": "fenn",
+  "name": "Fenn",
+  "role": "Leader of the smugglers in the North Cove",
+  "chapter": "01-salt-harbour",
+  "status": "alive",
+  "statblock": "Roll20: Fenn",
+  "quickstats": {
+    "wis": 2,
+    "insight": 2,
+    "passive-perception": 13
+  },
+  "voice": "quiet, polite — grows quieter the more dangerous it gets",
+  "appearance": "salt-crusted leather jacket, silver ring on his thumb",
+  "motivation": "Finish the job without anyone dying — he is a smuggler, not a murderer, and that is his weak spot.",
+  "body": "\n## Knows\n\n> [!secret] Knows the name of whoever hired him, but only gives it\n> once his way out is secured.\n\n## Relationships\n\n- [[jorna]]: old acquaintance; he avoids her eyes\n"
+}

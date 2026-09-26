@@ -141,7 +141,7 @@ export const chapters = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** Chapter id, e.g. "01-salzhafen". */
+    /** Chapter id, e.g. "01-salt-harbour". */
     id: text("id").notNull(),
     title: text("title").notNull().default(""),
     /**
@@ -879,8 +879,8 @@ export const meta = sqliteTable("meta", {
 // Shape (see the migration for the authoritative DDL):
 //   indexed:   title, ref, tags, body   — bm25 weights 10 / 6 / 4 / 1
 //   unindexed: campaign_id, kind, entity_id
-//   tokenizer: unicode61 remove_diacritics 2   (so "leuchtturm" finds
-//              "Leuchtturm" and "muller" finds "Müller")
+//   tokenizer: unicode61 remove_diacritics 2   (so "lighthouse" finds
+//              "Lighthouse" and "muller" finds "Müller")
 
 /** Table name of the FTS5 index — referenced from raw `sql` templates. */
 export const SEARCH_FTS = "search_fts";

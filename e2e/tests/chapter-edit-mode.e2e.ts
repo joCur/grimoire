@@ -21,14 +21,15 @@ import type { Page, Request } from "@playwright/test";
 
 import type { Api } from "../support/api";
 import { getChapter, patchChapter } from "../support/chapter";
+import { CAMPAIGN } from "../support/paths";
 import { expect, test } from "../support/test";
 import { ui } from "../support/ui";
 
-const CHAPTER = "01-salzhafen";
-const CHAPTER_URL = `/campaigns/beispiel/chapters/${CHAPTER}`;
+const CHAPTER = "01-salt-harbour";
+const CHAPTER_URL = `/campaigns/${CAMPAIGN}/chapters/${CHAPTER}`;
 /** A second chapter, seeded where a test needs one. */
-const OTHER_CHAPTER = "02-nordbucht";
-const OTHER_CHAPTER_TITLE = "Chapter 2: The north cove";
+const OTHER_CHAPTER = "02-the-reef";
+const OTHER_CHAPTER_TITLE = "Chapter 2: The Reef";
 const OTHER_CHAPTER_SEED = {
   seed: {
     chapters: [
@@ -36,7 +37,7 @@ const OTHER_CHAPTER_SEED = {
         id: OTHER_CHAPTER,
         title: OTHER_CHAPTER_TITLE,
         status: "planned" as const,
-        body: "What waits in the north cove.\n",
+        body: "What waits on the reef.\n",
       },
     ],
   },
@@ -62,7 +63,7 @@ function recordChapterPatches(page: Page, id: string = CHAPTER): Array<Record<st
 /** The stored chapters of the campaign that are active. */
 async function activeChapters(api: Api): Promise<string[]> {
   const tree = await api.get<{ chapters: { id: string; status?: string }[] }>(
-    "campaigns/beispiel/tree",
+    `campaigns/${CAMPAIGN}/tree`,
   );
   return tree.chapters.filter((chapter) => chapter.status === "active").map((chapter) => chapter.id);
 }
@@ -121,7 +122,7 @@ function conflict(page: Page) {
 /** Open the reading view of a chapter and switch it into edit mode. */
 async function openEditMode(page: Page, api: Api, id: string = CHAPTER) {
   const { title } = await getChapter(api, id);
-  await page.goto(`/campaigns/beispiel/chapters/${id}`);
+  await page.goto(`/campaigns/${CAMPAIGN}/chapters/${id}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
   await editAction(page).click();
   await expect(titleInput(page)).toHaveValue(title);
@@ -224,14 +225,14 @@ test.describe("with a second chapter", () => {
     expect(await activeChapters(api)).toEqual([OTHER_CHAPTER]);
 
     // The overview shows it at once: one active chapter, the other planned.
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     await expect(statusControl(page, "active")).toHaveCount(1);
     await expect(statusControl(page, "planned")).toHaveCount(1);
   });
 
   test("an untouched status is not written, not even a stale active", async ({ page, api }) => {
     const sent = recordChapterPatches(page);
-    const title = "Chapter 1: Salt Harbour";
+    const title = "Chapter 1: Salt Harbour at dusk";
 
     // The edit mode opens on the active chapter …
     await openEditMode(page, api);
@@ -264,7 +265,7 @@ test.describe("with a second chapter", () => {
     page,
     api,
   }) => {
-    await page.goto("/campaigns/beispiel");
+    await page.goto(`/campaigns/${CAMPAIGN}`);
     // The active chapter is open by default; its edit action leads to its edit mode.
     await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
     await expect(page).toHaveURL(new RegExp(`${CHAPTER_URL}$`));
@@ -303,7 +304,7 @@ test.describe("with a second chapter", () => {
     // A navigation asks the same question: ⌘K works over the edit mode.
     const leaveDialog = page.getByRole("dialog", { name: ui("properties.discard.title") });
     await page.keyboard.press("ControlOrMeta+KeyK");
-    await page.getByRole("combobox").fill("north cove");
+    await page.getByRole("combobox").fill("Reef");
     await page.getByRole("option").filter({ hasText: OTHER_CHAPTER_TITLE }).first().click();
     await expect(leaveDialog).toBeVisible();
     await leaveDialog.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
@@ -312,10 +313,10 @@ test.describe("with a second chapter", () => {
 
     // Discarding goes on to the other chapter, which opens in its reading view.
     await page.keyboard.press("ControlOrMeta+KeyK");
-    await page.getByRole("combobox").fill("north cove");
+    await page.getByRole("combobox").fill("Reef");
     await page.getByRole("option").filter({ hasText: OTHER_CHAPTER_TITLE }).first().click();
     await leaveDialog.getByRole("button", { name: ui("common.discard") }).click();
-    await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/chapters/${OTHER_CHAPTER}$`));
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/chapters/${OTHER_CHAPTER}$`));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(OTHER_CHAPTER_TITLE);
     await expect(titleInput(page)).toHaveCount(0);
     expect(await chapterFields(api)).toEqual(before);

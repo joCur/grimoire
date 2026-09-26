@@ -4,7 +4,8 @@
 //
 // The rules are load-bearing in their WORDING, so the checks compare text:
 // a rule the model meets twice in slightly different company is a rule it
-// can weigh against itself.
+// can weigh against itself. The prompts are German production text, so the
+// wording these checks assert is German too.
 
 import { describe, expect, test } from "bun:test";
 import { ASSET_FILES, buildCorrectionMessage, loadAsset } from "../src/generator";
@@ -163,19 +164,20 @@ describe("the scene's prompts", () => {
 
 describe("shared mechanics", () => {
   test("the correction turn names the schema it wants corrected", () => {
-    const message = buildCorrectionMessage(["scene: id fehlt"], "die Szene enthalten", "scene");
+    // The tail is spliced into the German correction sentence, as the runs pass it.
+    const message = buildCorrectionMessage(["scene: id missing"], "die Szene enthalten", "scene");
     expect(message).toContain("korrigierten JSON-Objekt");
     expect(message).toContain("gleiches Schema (`scene`)");
     expect(message).toContain("kein Text außerhalb des Objekts");
     // Without a schema (a provider that forces nothing) the sentence still
     // reads — it just has no name to point at.
-    const bare = buildCorrectionMessage(["outline: leer"], "alle Szenen");
+    const bare = buildCorrectionMessage(["outline: empty"], "alle Szenen");
     expect(bare).toContain("gleiches Schema,");
   });
 
   test("a prompt without the format heading travels whole", () => {
-    expect(formatContract("# Titel\n\n## Regeln\n\nnichts\n", "## Die Felder der Szene")).toContain(
-      "## Regeln",
+    expect(formatContract("# Title\n\n## Rules\n\nnothing\n", "## The scene's fields")).toContain(
+      "## Rules",
     );
   });
 });

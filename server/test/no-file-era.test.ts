@@ -3,8 +3,8 @@
 //
 // This is a test and not a written convention because a NAME in the tree is an
 // invitation to write a second one like it. `parseMarkdown`, a `frontmatter` in
-// a comment, an `extra` column, a `/file` in an API path, a `Datei` where an
-// entry is meant — each of them says that an entry is a text with properties
+// a comment, an `extra` column, a `/file` in an API path, the German word for
+// a file where an entry is meant — each of them says that an entry is a text with properties
 // parsed out of it, which it is not (decisions/sqlite, decisions/writes,
 // decisions/generator).
 //
@@ -136,7 +136,7 @@ const EXCEPTIONS: readonly Exception[] = [
   {
     phrase: "fixture file",
     rule: "file-word-for-an-entry",
-    reason: "`fixtures/beispiel/<stem>.json` on disk, the input the seed run reads",
+    reason: "`fixtures/<kind>/<id>.json` on disk, the input the seed run reads",
   },
   {
     phrase: "database file",
@@ -238,7 +238,7 @@ const RULES: readonly Rule[] = [
   {
     id: "parse-relations-section",
     pattern: /\bparseRelationsSection\b/,
-    meaning: "an npc's `## Beziehungen` is prose; nothing is derived from body text",
+    meaning: "an npc's `## Relationships` is prose; nothing is derived from body text",
   },
   {
     id: "unknown-files",
@@ -288,12 +288,13 @@ const RULES: readonly Rule[] = [
     commentsOnly: true,
   },
   {
-    // German file vocabulary, on EVERY line: there is no DOM `Datei` and no
-    // markdown `Dokument`, so a hit is always about an entry — including one
-    // in a prompt or a label, which is exactly where it would reach the DM.
+    // German file vocabulary ("Datei", "Dokument"), on EVERY line: neither is
+    // a DOM or markdown term, so a hit is always about an entry — including one
+    // in a prompt or a label of the German catalog, which is exactly where it
+    // would reach the DM.
     id: "entry-is-not-a-file",
     pattern: /[Dd]okument|[Dd]atei/,
-    meaning: "an entry is an Eintrag with Eigenschaften and Text — never a Datei",
+    meaning: "an entry has properties and a text — in German too, it is never called a file",
   },
   {
     // The English word, over the WHOLE repo. Nothing reads or writes an entry

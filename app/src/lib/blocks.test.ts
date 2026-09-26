@@ -33,7 +33,7 @@ import {
   type SceneBlock,
 } from "./blocks";
 
-const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
+const FIXTURES = new URL("../../../fixtures/", import.meta.url);
 
 /** A fixture as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
@@ -141,7 +141,7 @@ describe("structure of the reference scenes", () => {
     const readaloud = blocks[2];
     if (readaloud?.type !== "callout") throw new Error("expected a callout");
     expect(readaloud.kind).toBe("readaloud");
-    expect(readaloud.text.startsWith("Der Turm ragt schwarz")).toBe(true);
+    expect(readaloud.text.startsWith("The tower rises black")).toBe(true);
     // The `>` markers are gone, the hand-wrapped soft breaks are not.
     expect(readaloud.text).not.toContain(">");
     expect(readaloud.text.split("\n")).toHaveLength(4);
@@ -160,19 +160,19 @@ describe("structure of the reference scenes", () => {
 
     const first = blocks[2];
     if (first?.type !== "ifSection") throw new Error("expected an If-section");
-    expect(first.condition).toBe("sie geben zu, für Jorna zu arbeiten");
+    expect(first.condition).toBe("they admit to working for Jorna");
     // The section's own source is the heading LINE — the children keep theirs.
-    expect(first.source).toBe("## If: sie geben zu, für Jorna zu arbeiten");
+    expect(first.source).toBe("## If: they admit to working for Jorna");
 
     // The tight option list stays ONE block, not three.
     const list = first.children[1];
     if (list?.type !== "text") throw new Error("expected a text block");
     expect(list.text.split("\n")).toHaveLength(3);
-    expect(list.text.startsWith("- die morschen Bretter")).toBe(true);
+    expect(list.text.startsWith("- break open the rotten boards")).toBe(true);
 
     const second = blocks[3];
     if (second?.type !== "ifSection") throw new Error("expected an If-section");
-    expect(second.condition).toBe("sie lügen (Schiffbrüchige, verirrte Reisende ...)");
+    expect(second.condition).toBe("they lie (shipwrecked, lost travellers ...)");
   });
 
   test("a heading of depth <= 2 ends an If-section", () => {
@@ -704,12 +704,12 @@ describe("tables are part of a text block, byte-stable", () => {
   test("the reference scene's own table survives a re-serialize", () => {
     const rel = "scenes/lighthouse-arrival.json";
     const body = fixtureBody(rel);
-    expect(body).toContain("| W6 | Was die Brandung anschwemmt |");
+    expect(body).toContain("| d6 | What the surf washes up |");
     const blocks = parseBlocks(body);
     const note = blocks[blocks.length - 1];
     if (note?.type !== "callout") throw new Error("expected the note callout");
     expect(note.kind).toBe("note");
-    expect(note.text).toContain("| 5\u20136 | Eine Laterne, das Glas ru\u00dfgeschw\u00e4rzt |");
+    expect(note.text).toContain("| 5\u20136 | A lantern, its glass blackened with soot |");
     expect(serializeBlocks(blocks)).toBe(body);
   });
 });

@@ -45,8 +45,8 @@ describe("grimoire seed", () => {
   test("loads a given directory into GRIMOIRE_DATA/grimoire.db", async () => {
     const { code, out } = await runCli(["seed", FIXTURES]);
     expect(code).toBe(0);
-    // One line per campaign, with the number of fixtures it brought.
-    expect(out.trim()).toBe("seeded: beispiel (17 fixtures)");
+    // One line for the campaign, with the number of fixtures it brought.
+    expect(out.trim()).toBe("seeded: example (17 fixtures)");
     // The database really landed in GRIMOIRE_DATA.
     expect(await readdir(dataDir)).toContain("grimoire.db");
   });
@@ -54,31 +54,32 @@ describe("grimoire seed", () => {
   test("without a directory it defaults to fixtures/", async () => {
     const { code, out } = await runCli(["seed"]);
     expect(code).toBe(0);
-    expect(out).toContain("seeded: beispiel");
+    expect(out).toContain("seeded: example");
   });
 
   test("a database that holds campaigns is REFUSED, and --force seeds anyway", async () => {
     expect((await runCli(["seed"])).code).toBe(0);
 
-    const second = await runCli(["seed"]);
-    expect(second.code).toBe(0);
-    expect(second.out).toContain("already holds campaigns");
-    expect(second.out).toContain("--force");
+    const refused = await runCli(["seed"]);
+    expect(refused.code).toBe(0);
+    expect(refused.out).toContain("already holds campaigns");
+    expect(refused.out).toContain("--force");
 
     // `--force` is for a scratch database: rows are ADDED, nothing deleted.
-    const extra = path.join(dataDir, "extra");
-    await mkdir(path.join(extra, "zweite", "campaigns"), { recursive: true });
+    // A second campaign is a second call on its own directory.
+    const secondDir = path.join(dataDir, "second");
+    await mkdir(path.join(secondDir, "campaigns"), { recursive: true });
     await writeFile(
-      path.join(extra, "zweite", "campaigns", "zweite.json"),
-      JSON.stringify({ id: "zweite", name: "Zweite", body: "", glossaryIntro: "" }),
+      path.join(secondDir, "campaigns", "second.json"),
+      JSON.stringify({ id: "second", name: "Second", body: "", glossaryIntro: "" }),
     );
-    const forced = await runCli(["seed", "--force", extra]);
+    const forced = await runCli(["seed", "--force", secondDir]);
     expect(forced.code).toBe(0);
-    expect(forced.out.trim()).toBe("seeded: zweite (1 fixture)");
+    expect(forced.out.trim()).toBe("seeded: second (1 fixture)");
   });
 
   test("an unreadable directory exits 1 with a message", async () => {
-    const { code, out } = await runCli(["seed", path.join(dataDir, "gibt-es-nicht")]);
+    const { code, out } = await runCli(["seed", path.join(dataDir, "does-not-exist")]);
     expect(code).toBe(1);
     expect(out).toContain("seed failed");
   });

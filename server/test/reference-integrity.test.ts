@@ -10,7 +10,7 @@
 //     (the scene of a log entry: its own tests);
 //   * an entry is only ever created by a create endpoint or by accepting a
 //     generator proposal;
-//   * a mention in TEXT — a `## Beziehungen` line, `[[slug]]` in prose —
+//   * a mention in TEXT — a `## Relationships` line, `[[slug]]` in prose —
 //     is neither: it stays visible text, with no entry and no error.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -28,8 +28,8 @@ import { dropStore, seedStore } from "./support/store";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_B = "smuggler-captured";
-const SCENES = "/api/campaigns/beispiel/scenes";
-const NPCS = "/api/campaigns/beispiel/npcs";
+const SCENES = "/api/campaigns/example/scenes";
+const NPCS = "/api/campaigns/example/npcs";
 
 /** A scene, read from its own resource (decisions/resources). */
 async function getScene(id: string): Promise<Scene> {
@@ -60,23 +60,23 @@ async function patchSceneRes(id: string, fields: Record<string, unknown>): Promi
 }
 
 /** A proposed scene as a run hands it to the accept — the scene without its guard. */
-function neueSzene(fields: Partial<SceneProposal> = {}): SceneProposal {
+function newScene(fields: Partial<SceneProposal> = {}): SceneProposal {
   return {
-    id: "neue-szene",
-    title: "Neue Szene",
+    id: "new-scene",
+    title: "New Scene",
     type: "planned",
-    chapter: "01-salzhafen",
+    chapter: "01-salt-harbour",
     npcs: [],
     handouts: [],
     tags: [],
     status: "draft",
-    body: "\n## Was passiert\n\nEtwas.\n",
+    body: "\n## What happens\n\nSomething.\n",
     ...fields,
   };
 }
 
 async function post(rel: string, body: unknown): Promise<Response> {
-  return app.request(`/api/campaigns/beispiel${rel}`, {
+  return app.request(`/api/campaigns/example${rel}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -123,7 +123,7 @@ function holm(body: string, fields: Partial<NpcProposal> = {}): NpcProposal {
 }
 
 async function tree(): Promise<CampaignTree> {
-  const res = await app.request("/api/campaigns/beispiel/tree");
+  const res = await app.request("/api/campaigns/example/tree");
   expect(res.status).toBe(200);
   return (await res.json()) as CampaignTree;
 }
@@ -149,53 +149,53 @@ describe("a reference that names nothing is refused", () => {
   });
 
   test("a NAME where an id belongs is the same refusal", async () => {
-    // „Alte Fischerin" is no npc id, so it names nothing — one rule, one
+    // "Old Fisherwoman" is no npc id, so it names nothing — one rule, one
     // sentence, instead of a second error about the shape of the value.
-    const res = await patchSceneRes(SCENE, { npcs: ["jorna", "Alte Fischerin"] });
+    const res = await patchSceneRes(SCENE, { npcs: ["jorna", "Old Fisherwoman"] });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: "npc_unknown", value: "Alte Fischerin" });
+    expect(await res.json()).toMatchObject({ code: "npc_unknown", value: "Old Fisherwoman" });
   });
 
   test("a scene's location: 400 location_unknown, and no entry appears", async () => {
     const before = await getScene(SCENE);
-    const res = await patchSceneRes(SCENE, { location: "alte-mole" });
+    const res = await patchSceneRes(SCENE, { location: "old-pier" });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ code: "location_unknown", value: "alte-mole" });
+    expect(await res.json()).toMatchObject({ code: "location_unknown", value: "old-pier" });
     expect((await getScene(SCENE)).location).toBe(before.location);
-    expect((await app.request("/api/campaigns/beispiel/locations/alte-mole")).status).toBe(404);
+    expect((await app.request("/api/campaigns/example/locations/old-pier")).status).toBe(404);
   });
 
   test("free text in location stays the 400 that names the id to use", async () => {
     const before = await getScene(SCENE);
-    const res = await patchSceneRes(SCENE, { location: "Der alte Hafen" });
+    const res = await patchSceneRes(SCENE, { location: "The Old Harbour" });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       code: "location_not_an_id",
-      value: "Der alte Hafen",
-      suggestion: "der-alte-hafen",
+      value: "The Old Harbour",
+      suggestion: "the-old-harbour",
     });
     expect((await getScene(SCENE)).location).toBe(before.location);
-    expect((await tree()).locations.some((l) => l.id === "der-alte-hafen")).toBe(false);
+    expect((await tree()).locations.some((l) => l.id === "the-old-harbour")).toBe(false);
   });
 
   test("an unknown chapter: 400 chapter_unknown for a scene and an npc", async () => {
     // (A location refuses it the same way on its own resource:
     // test/locations.test.ts.)
     const scene = await getScene(SCENE);
-    const sceneRes = await patchSceneRes(SCENE, { chapter: "99-nirgendwo" });
+    const sceneRes = await patchSceneRes(SCENE, { chapter: "99-nowhere" });
     const npc = await getNpc("fenn");
-    const npcRes = await patchNpcRes("fenn", { chapter: "99-nirgendwo" });
+    const npcRes = await patchNpcRes("fenn", { chapter: "99-nowhere" });
     for (const res of [sceneRes, npcRes]) {
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         code: "chapter_unknown",
-        value: "99-nirgendwo",
+        value: "99-nowhere",
       });
     }
     expect((await getScene(SCENE)).chapter).toBe(scene.chapter);
     expect((await getNpc("fenn")).chapter).toBe(npc.chapter);
     // An existing chapter is stored as before.
-    expect((await patchNpc("fenn", { chapter: "01-salzhafen" })).chapter).toBe("01-salzhafen");
+    expect((await patchNpc("fenn", { chapter: "01-salt-harbour" })).chapter).toBe("01-salt-harbour");
   });
 
   test("a scene's chapter cannot be removed at all — 400 chapter_required", async () => {
@@ -206,7 +206,7 @@ describe("a reference that names nothing is refused", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "chapter_required" });
     // …and the scene still hangs where it did.
-    expect((await getScene(SCENE)).chapter).toBe("01-salzhafen");
+    expect((await getScene(SCENE)).chapter).toBe("01-salt-harbour");
   });
 });
 
@@ -218,15 +218,15 @@ describe("a reference that names an entry is stored", () => {
   });
 
   test("changing location changes the meta line, and the scene keeps its place", async () => {
-    expect((await post("/locations", { name: "Alte Räucherkammer" })).status).toBe(201);
-    expect((await getScene(SCENE_B)).location).toBe("bucht");
+    expect((await post("/locations", { name: "Old Smokehouse" })).status).toBe(201);
+    expect((await getScene(SCENE_B)).location).toBe("cove");
 
-    const moved = await patchScene(SCENE_B, { location: "alte-raeucherkammer" });
-    expect(moved.location).toBe("alte-raeucherkammer");
-    const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
+    const moved = await patchScene(SCENE_B, { location: "old-smokehouse" });
+    expect(moved.location).toBe("old-smokehouse");
+    const chapter = (await tree()).chapters.find((c) => c.id === "01-salt-harbour");
     const scene = chapter?.scenes.find((s) => s.id === "smuggler-captured");
-    expect(scene?.location).toBe("alte-raeucherkammer");
-    expect(scene?.locationName).toBe("Alte Räucherkammer");
+    expect(scene?.location).toBe("old-smokehouse");
+    expect(scene?.locationName).toBe("Old Smokehouse");
     // Only the location changed, so the scene keeps its place in the chapter.
     expect(chapter?.scenes.map((s) => s.id)).toEqual([
       "lighthouse-arrival",
@@ -237,7 +237,7 @@ describe("a reference that names an entry is stored", () => {
   test("clearing location leaves the scene without one", async () => {
     const cleared = await patchScene(SCENE_B, { location: null });
     expect(Object.hasOwn(cleared, "location")).toBe(false);
-    const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
+    const chapter = (await tree()).chapters.find((c) => c.id === "01-salt-harbour");
     const scene = chapter?.scenes.find((s) => s.id === "smuggler-captured");
     expect(scene?.location).toBeUndefined();
     expect(scene?.locationName).toBeUndefined();
@@ -252,25 +252,25 @@ describe("a reference that names an entry is stored", () => {
 });
 
 describe("a mention in text is not a reference", () => {
-  test("a `## Beziehungen` line names an unknown npc: no entry, no error", async () => {
+  test("a `## Relationships` line names an unknown npc: no entry, no error", async () => {
     const npc = await getNpc("fenn");
-    const seeded = "- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus";
+    const seeded = "- [[jorna]]: old acquaintance; he avoids her eyes";
     expect(npc.body).toContain(seeded);
     const written = await patchNpc("fenn", {
-      body: npc.body.replace(seeded, `${seeded}\n- holm: schuldet ihm Geld`),
+      body: npc.body.replace(seeded, `${seeded}\n- holm: owes him money`),
     });
     // The line is prose and comes back exactly as written.
-    expect(written.body).toContain("- holm: schuldet ihm Geld");
-    expect((await getNpc("fenn")).body).toContain("- holm: schuldet ihm Geld");
+    expect(written.body).toContain("- holm: owes him money");
+    expect((await getNpc("fenn")).body).toContain("- holm: owes him money");
     expect(await npcStatus("holm")).toBe(404);
   });
 
   test("an unknown `[[slug]]` in prose stays visible text", async () => {
     const scene = await getScene(SCENE);
-    const written = await patchScene(SCENE, { body: `${scene.body}\nWer ist [[niemand]]?\n` });
-    expect(written.body).toContain("Wer ist [[niemand]]?");
-    expect(await npcStatus("niemand")).toBe(404);
-    expect((await tree()).npcs.some((n) => n.id === "niemand")).toBe(false);
+    const written = await patchScene(SCENE, { body: `${scene.body}\nWho is [[nobody]]?\n` });
+    expect(written.body).toContain("Who is [[nobody]]?");
+    expect(await npcStatus("nobody")).toBe(404);
+    expect((await tree()).npcs.some((n) => n.id === "nobody")).toBe(false);
   });
 });
 
@@ -278,45 +278,45 @@ describe("the generator's apply step", () => {
   test("a proposed scene and the npc it needs land in one batch", async () => {
     // The batch is inserted in REFERENCE order, not in the order the review
     // lists it: the npc and the location the scene names go in first.
-    await writeGenerated("beispiel", {
-      scenes: [neueSzene({ npcs: ["holm"], location: "alte-mole" })],
-      npcs: [holm("\nSeine Netze zurück.\n")],
+    await writeGenerated("example", {
+      scenes: [newScene({ npcs: ["holm"], location: "old-pier" })],
+      npcs: [holm("\nWants his nets back.\n")],
       locations: [
-        { id: "alte-mole", name: "Alte Mole", body: "\n## Beim ersten Betreten\n\nMorsch.\n" },
+        { id: "old-pier", name: "Old Pier", body: "\n## On first entering\n\nRotten.\n" },
       ],
     });
     const npc = await getNpc("holm");
     expect(npc.name).toBe("Holm");
     expect(npc.status).toBe("alive");
-    const res = await app.request("/api/campaigns/beispiel/locations/alte-mole");
-    expect(((await res.json()) as Location).name).toBe("Alte Mole");
-    const scene = await getScene("neue-szene");
+    const res = await app.request("/api/campaigns/example/locations/old-pier");
+    expect(((await res.json()) as Location).name).toBe("Old Pier");
+    const scene = await getScene("new-scene");
     expect(scene.npcs).toEqual(["holm"]);
-    expect(scene.location).toBe("alte-mole");
+    expect(scene.location).toBe("old-pier");
   });
 
   test("a scene that names an npc the batch does not bring is refused", async () => {
     await expect(
-      writeGenerated("beispiel", { scenes: [neueSzene({ npcs: ["holm"] })] }),
+      writeGenerated("example", { scenes: [newScene({ npcs: ["holm"] })] }),
     ).rejects.toThrow(/unknown npc/);
     // Nothing of the batch was written.
-    expect(await sceneStatus("neue-szene")).toBe(404);
+    expect(await sceneStatus("new-scene")).toBe(404);
     expect(await npcStatus("holm")).toBe(404);
   });
 
   test("an EMPTY npc is filled by the proposal for its id", async () => {
     await createEmptyNpc("holm");
-    await writeGenerated("beispiel", { npcs: [holm("\nSeine Netze zurück.\n")] });
+    await writeGenerated("example", { npcs: [holm("\nWants his nets back.\n")] });
     const npc = await getNpc("holm");
     expect(npc.name).toBe("Holm");
-    expect(npc.body).toContain("Seine Netze zurück.");
+    expect(npc.body).toContain("Wants his nets back.");
   });
 
   test("an npc that holds CONTENT is still a 409 conflict, named by its id", async () => {
     const before = await getNpc("fenn");
     await expect(
-      writeGenerated("beispiel", {
-        npcs: [{ id: "fenn", name: "Anders", status: "alive", body: "\nAnderes.\n" }],
+      writeGenerated("example", {
+        npcs: [{ id: "fenn", name: "Other", status: "alive", body: "\nSomething else.\n" }],
       }),
     ).rejects.toMatchObject({ status: 409, extra: { npcs: ["fenn"] } });
     expect(await getNpc("fenn")).toEqual(before);
@@ -329,7 +329,7 @@ describe("the generator's apply step", () => {
     await patchNpc("holm", { status: "dead" });
 
     await expect(
-      writeGenerated("beispiel", { npcs: [holm("\nEtwas.\n")] }),
+      writeGenerated("example", { npcs: [holm("\nSomething.\n")] }),
     ).rejects.toThrow(/already exist/);
     const untouched = await getNpc("holm");
     expect(untouched.status).toBe("dead");
@@ -338,29 +338,29 @@ describe("the generator's apply step", () => {
 
   test("a scene that already exists is the documented 409, named by its id", async () => {
     await expect(
-      writeGenerated("beispiel", {
-        scenes: [neueSzene({ id: "lighthouse-arrival", title: "Noch eine Ankunft" })],
+      writeGenerated("example", {
+        scenes: [newScene({ id: "lighthouse-arrival", title: "Another Arrival" })],
       }),
     ).rejects.toMatchObject({ status: 409, extra: { scenes: ["lighthouse-arrival"] } });
     // The scene that was already there is untouched.
-    expect((await getScene(SCENE)).title).toBe("Ankunft am Leuchtturm");
+    expect((await getScene(SCENE)).title).toBe("Arrival at the Lighthouse");
   });
 
   test("TWO proposals for one target are a 409, not last-write-win", async () => {
     let conflicts: unknown;
     try {
-      await writeGenerated("beispiel", {
-        scenes: [neueSzene(), neueSzene({ title: "Neue Szene anders" })],
-        npcs: [holm("\nDas erste.\n"), holm("\nDas zweite.\n", { name: "Holm anders" })],
+      await writeGenerated("example", {
+        scenes: [newScene(), newScene({ title: "New Scene, different" })],
+        npcs: [holm("\nThe first.\n"), holm("\nThe second.\n", { name: "Holm, different" })],
       });
       throw new Error("expected a conflict");
     } catch (error) {
       expect((error as Error).message).toMatch(/same target/);
       conflicts = (error as { extra?: unknown }).extra;
     }
-    expect(conflicts).toMatchObject({ scenes: ["neue-szene"], npcs: ["holm"] });
+    expect(conflicts).toMatchObject({ scenes: ["new-scene"], npcs: ["holm"] });
     // Nothing was written: the transaction rolled back.
-    expect(await sceneStatus("neue-szene")).toBe(404);
+    expect(await sceneStatus("new-scene")).toBe(404);
     expect(await npcStatus("holm")).toBe(404);
   });
 });

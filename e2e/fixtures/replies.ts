@@ -482,7 +482,7 @@ export function invalidNpcReply(id: string = NPC_DEFAULT_ID): Record<string, unk
     id,
     name: NPC_DEFAULT_NAME,
     role: null,
-    chapter: "01-salzhafen",
+    chapter: "01-salt-harbour",
     statblock: null,
     quickstats: [{ key: "insight", value: 1 }],
     voice: null,

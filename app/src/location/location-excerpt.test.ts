@@ -10,7 +10,7 @@ import type { Location } from "@grimoire/shared/location";
 
 import { locationExcerpt } from "./location-excerpt";
 
-const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures/beispiel");
+const FIXTURES = path.resolve(import.meta.dirname, "../../../fixtures");
 
 /** A location fixture — the location as its resource answers it (decisions/resources). */
 function locationFixture(id: string): Location {
@@ -30,9 +30,9 @@ const nameOf = (slug: string): string | undefined => NAMES[slug];
 
 describe("locationExcerpt", () => {
   test("the `atmosphere` field and the Roll20 page", () => {
-    expect(locationExcerpt(locationFixture("bucht"), nameOf)).toEqual({
-      mood: "Arbeit, keine Romantik: Kisten unter Planen, ausgetretene Pfade, niemand redet laut.",
-      page: "Nordbucht",
+    expect(locationExcerpt(locationFixture("cove"), nameOf)).toEqual({
+      mood: "Work, not romance: crates under tarps, trodden paths, nobody talks loudly.",
+      page: "North Cove",
     });
   });
 

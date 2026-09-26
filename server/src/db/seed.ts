@@ -1,7 +1,8 @@
 // Seeding a campaign from JSON fixtures.
 //
-// One object per fixture file, in the shape the API speaks. Every entity has
-// a directory of its own, read with that entity's own schema: the campaign is
+// One campaign directory, one object per fixture file, in the shape the API
+// speaks. Every entity has a folder of its own directly in that directory,
+// read with that entity's own schema: the campaign is
 // `campaigns/<id>.json`, a chapter `chapters/<id>.json`, a scene
 // `scenes/<id>.json`, an npc `npcs/<id>.json`, a location
 // `locations/<id>.json`, a thread `threads/<id>.json`, an idea
@@ -230,22 +231,14 @@ function fixtureCount(fixture: CampaignFixture): number {
 }
 
 /**
- * Seed every SUBDIRECTORY of `root` as one campaign, in name order. That is
- * the whole layout: a directory is a campaign. Reports each campaign's id
- * and how many fixtures it held.
+ * Seed the campaign in `dir`: the directory is one campaign, its entity
+ * folders sit directly in it. Reports the campaign's id and how many
+ * fixtures it held.
  */
 export async function seedFixtures(
   db: GrimoireDb,
-  root: string,
-): Promise<Array<{ campaignId: string; fixtures: number }>> {
-  const dirs = (await readdir(root, { withFileTypes: true }))
-    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-    .map((e) => e.name)
-    .sort((a, b) => a.localeCompare(b, "en"));
-  const out: Array<{ campaignId: string; fixtures: number }> = [];
-  for (const name of dirs) {
-    const fixture = await readFixtureCampaign(path.join(root, name));
-    out.push({ campaignId: seedCampaign(db, fixture), fixtures: fixtureCount(fixture) });
-  }
-  return out;
+  dir: string,
+): Promise<{ campaignId: string; fixtures: number }> {
+  const fixture = await readFixtureCampaign(dir);
+  return { campaignId: seedCampaign(db, fixture), fixtures: fixtureCount(fixture) };
 }

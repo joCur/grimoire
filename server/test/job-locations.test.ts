@@ -20,8 +20,8 @@ import {
   type Selection,
 } from "./support/generator-jobs";
 
-const SCENE_AT_MOLE = "an-der-mole";
-const SCENE_AT_TOWER = "am-turm";
+const SCENE_AT_MOLE = "at-the-mole";
+const SCENE_AT_TOWER = "at-the-tower";
 
 function scene(id: string, title: string, location: string) {
   return {
@@ -29,29 +29,29 @@ function scene(id: string, title: string, location: string) {
       id,
       title,
       type: "planned",
-      chapter: "01-salzhafen",
+      chapter: "01-salt-harbour",
       location,
       npcs: ["fenn"],
       status: "draft",
     },
-    body: "## Flow\n\nFenn wartet.\n",
+    body: "## Flow\n\nFenn waits.\n",
   };
 }
 
 const MOLE = {
-  id: "alte-mole",
-  name: "Die alte Mole",
-  chapter: "01-salzhafen",
-  atmosphere: "Morsches Holz, Möwen.",
+  id: "old-mole",
+  name: "The Old Mole",
+  chapter: "01-salt-harbour",
+  atmosphere: "Rotten wood, gulls.",
 };
 
 const REPLY = JSON.stringify({
   scenes: [
-    { content: scene("an-der-mole", "An der Mole", "alte-mole") },
-    { content: scene("am-turm", "Am Turm", "leuchtturm") },
+    { content: scene("at-the-mole", "At the Mole", "old-mole") },
+    { content: scene("at-the-tower", "At the Tower", "lighthouse") },
   ],
   entries: [
-    { kind: "location", content: { properties: MOLE, body: "## Beim ersten Betreten\n\nNebel.\n" } },
+    { kind: "location", content: { properties: MOLE, body: "## On first entering\n\nFog.\n" } },
   ],
   warnings: [],
 });
@@ -64,12 +64,12 @@ async function send(method: string, url: string, body?: unknown): Promise<Respon
   });
 }
 
-const fetchJob = (): Promise<GeneratorJob | null> => readJob("beispiel");
+const fetchJob = (): Promise<GeneratorJob | null> => readJob("example");
 
 async function runJob(): Promise<GeneratorJob> {
-  const res = await send("POST", jobsUrl("beispiel"), {
+  const res = await send("POST", jobsUrl("example"), {
     kind: "scene",
-    chapter: "01-salzhafen",
+    chapter: "01-salt-harbour",
     sourceText: "Fenn waits at the old mole.",
   });
   expect(res.status).toBe(202);
@@ -83,17 +83,17 @@ async function runJob(): Promise<GeneratorJob> {
 }
 
 async function readLocation(id: string): Promise<Location | undefined> {
-  const res = await app.request(`/api/campaigns/beispiel/locations/${id}`);
+  const res = await app.request(`/api/campaigns/example/locations/${id}`);
   return res.status === 200 ? ((await res.json()) as Location) : undefined;
 }
 
 /** PATCH the job's review decisions with the rev the caller read. */
 const patchReview = (job: GeneratorJob, review: Record<string, unknown>): Promise<Response> =>
-  send("PATCH", jobUrl("beispiel", job.id), { rev: job.rev, review });
+  send("PATCH", jobUrl("example", job.id), { rev: job.rev, review });
 
 /** Accept a selection — or, without one, everything "accept all" names. */
 const accept = (job: GeneratorJob, selection: Selection = openSelection(job)): Promise<Response> =>
-  send("PATCH", jobUrl("beispiel", job.id), acceptBody(job, selection));
+  send("PATCH", jobUrl("example", job.id), acceptBody(job, selection));
 
 beforeEach(async () => {
   await seedStore();
@@ -110,7 +110,7 @@ test("a proposed location is a location of its own list — no kind, no path", a
   const job = await runJob();
   expect(job.result?.npcs).toEqual([]);
   expect(job.result?.locations).toEqual([
-    { ...MOLE, body: "## Beim ersten Betreten\n\nNebel.\n" },
+    { ...MOLE, body: "## On first entering\n\nFog.\n" },
   ]);
   // The reply said `roll20Page: null` ("not given"); the proposal is the
   // location without its guard, where an optional field is absent instead.
@@ -125,42 +125,42 @@ test("a proposed location is a location of its own list — no kind, no path", a
 
 test("the decision is stored by id; an id the run did not propose is a 400", async () => {
   const job = await runJob();
-  const decided = await patchReview(job, { locations: { "alte-mole": "rejected" } });
+  const decided = await patchReview(job, { locations: { "old-mole": "rejected" } });
   expect(decided.status).toBe(200);
   const after = (await decided.json()) as GeneratorJob;
-  expect(after.review?.locations).toEqual({ "alte-mole": "rejected" });
-  const undone = (await (await patchReview(after, { locations: { "alte-mole": null } })).json()) as GeneratorJob;
+  expect(after.review?.locations).toEqual({ "old-mole": "rejected" });
+  const undone = (await (await patchReview(after, { locations: { "old-mole": null } })).json()) as GeneratorJob;
   expect(undone.review?.locations).toEqual({});
-  expect((await patchReview(undone, { locations: { "gibt-es-nicht": "accepted" } })).status).toBe(400);
+  expect((await patchReview(undone, { locations: { "does-not-exist": "accepted" } })).status).toBe(400);
 });
 
 test("accepting one location by id writes it to the location resource", async () => {
   const job = await runJob();
-  const res = await accept(job, { locations: ["alte-mole"] });
+  const res = await accept(job, { locations: ["old-mole"] });
   expect(res.status).toBe(200);
   expect(writtenBy(job, (await res.json()) as GeneratorJob)).toEqual({
     scenes: [],
     npcs: [],
-    locations: ["alte-mole"],
+    locations: ["old-mole"],
   });
-  const written = await readLocation("alte-mole");
-  expect(written).toMatchObject({ ...MOLE, body: "## Beim ersten Betreten\n\nNebel.\n" });
+  const written = await readLocation("old-mole");
+  expect(written).toMatchObject({ ...MOLE, body: "## On first entering\n\nFog.\n" });
   const after = (await fetchJob())!;
-  expect(after.review?.writtenLocations).toEqual(["alte-mole"]);
+  expect(after.review?.writtenLocations).toEqual(["old-mole"]);
   // Accepted twice is nothing to do, not an error — and the job stays.
-  const again = await accept(after, { locations: ["alte-mole"] });
+  const again = await accept(after, { locations: ["old-mole"] });
   expect(again.status).toBe(200);
   const unchanged = (await again.json()) as GeneratorJob;
   expect(writtenBy(after, unchanged)).toEqual({ scenes: [], npcs: [], locations: [] });
   expect(await fetchJob()).not.toBeNull();
-  expect((await accept(unchanged, { locations: ["gibt-es-nicht"] })).status).toBe(400);
+  expect((await accept(unchanged, { locations: ["does-not-exist"] })).status).toBe(400);
 });
 
 test("a scene carries the location it is set at; the other scene does not", async () => {
   const job = await runJob();
   const tower = await accept(job, { scenes: [SCENE_AT_TOWER] });
   expect(writtenBy(job, (await tower.json()) as GeneratorJob).locations).toEqual([]);
-  expect(await readLocation("alte-mole")).toBeUndefined();
+  expect(await readLocation("old-mole")).toBeUndefined();
 
   const before = (await fetchJob())!;
   const mole = await accept(before, { scenes: [SCENE_AT_MOLE] });
@@ -168,11 +168,11 @@ test("a scene carries the location it is set at; the other scene does not", asyn
   expect(writtenBy(before, (await mole.json()) as GeneratorJob)).toEqual({
     scenes: [SCENE_AT_MOLE],
     npcs: [],
-    locations: ["alte-mole"],
+    locations: ["old-mole"],
   });
   // Everything is written now, so the job is gone.
   expect(await fetchJob()).toBeNull();
-  expect(await readLocation("alte-mole")).toBeDefined();
+  expect(await readLocation("old-mole")).toBeDefined();
 });
 
 test("accepting all that is open names an ACCEPTED location, never an undecided one", async () => {
@@ -180,32 +180,32 @@ test("accepting all that is open names an ACCEPTED location, never an undecided 
   const scenesOnly = (await (await patchReview(undecided, { droppedScenes: [SCENE_AT_MOLE] })).json()) as GeneratorJob;
   const all = await accept(scenesOnly);
   expect(writtenBy(scenesOnly, (await all.json()) as GeneratorJob).locations).toEqual([]);
-  expect(await readLocation("alte-mole")).toBeUndefined();
+  expect(await readLocation("old-mole")).toBeUndefined();
 
   const open = (await fetchJob())!;
-  const accepted = (await (await patchReview(open, { locations: { "alte-mole": "accepted" } })).json()) as GeneratorJob;
+  const accepted = (await (await patchReview(open, { locations: { "old-mole": "accepted" } })).json()) as GeneratorJob;
   const second = await accept(accepted);
-  expect(writtenBy(accepted, (await second.json()) as GeneratorJob).locations).toEqual(["alte-mole"]);
+  expect(writtenBy(accepted, (await second.json()) as GeneratorJob).locations).toEqual(["old-mole"]);
   expect(await fetchJob()).toBeNull();
-  expect(await readLocation("alte-mole")).toBeDefined();
+  expect(await readLocation("old-mole")).toBeDefined();
 });
 
 test("a location that already holds content is a conflict, reported by id", async () => {
   const job = await runJob();
-  const created = await send("POST", "/api/campaigns/beispiel/locations", {
-    name: "Die alte Mole",
-    id: "alte-mole",
+  const created = await send("POST", "/api/campaigns/example/locations", {
+    name: "The Old Mole",
+    id: "old-mole",
   });
   expect(created.status).toBe(201);
   const location = (await created.json()) as Location;
-  const filled = await send("PATCH", "/api/campaigns/beispiel/locations/alte-mole", {
+  const filled = await send("PATCH", "/api/campaigns/example/locations/old-mole", {
     rev: location.rev,
-    body: "Schon beschrieben.\n",
+    body: "Already described.\n",
   });
   expect(filled.status).toBe(200);
 
-  const res = await accept(job, { locations: ["alte-mole"] });
+  const res = await accept(job, { locations: ["old-mole"] });
   expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ chapters: [], scenes: [], locations: ["alte-mole"] });
-  expect((await readLocation("alte-mole"))?.body).toBe("Schon beschrieben.\n");
+  expect(await res.json()).toMatchObject({ chapters: [], scenes: [], locations: ["old-mole"] });
+  expect((await readLocation("old-mole"))?.body).toBe("Already described.\n");
 });
