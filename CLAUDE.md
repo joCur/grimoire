@@ -41,8 +41,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `fixtures/beispiel/threads/<id>.json`, eine Idee unter
   `fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
   `fixtures/beispiel/glossary-terms/<id>.json`, Kampagnenwissen unter
-  `fixtures/beispiel/knowledge-items/<id>.json`, eine Session samt Pausen,
-  Log-Zeilen und gespielten Szenen unter
+  `fixtures/beispiel/knowledge-items/<id>.json`, eine Session samt Pausen
+  und Log-Zeilen unter
   `fixtures/beispiel/sessions/<id>.json`, jede als das Objekt, das ihre
   Ressource liefert, ohne `rev`. Sie ist
   der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
@@ -66,7 +66,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   — `campaigns`, `chapters` (mit der Szenenreihenfolge), `scenes`, `npcs`,
   `locations`, `threads`, `ideas`, `sessions` (mit `session-rows`, der
   Session-Zeile, die ihre Kinder nachschlagen), `pauses`, `log-entries`,
-  `played-scenes`, `glossary-terms`,
+  `glossary-terms`,
   `knowledge-items` (mit ihrer Reihenfolge),
   `generated` (das Übernehmen eines Generator-Laufs) — und
   jedes trägt die
@@ -76,18 +76,19 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Slice `app/src/<entität>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
   `session/`, `generator-job/`) mit allem, was die App über sie weiß
-  (ADR #31); **Slices importieren einander nicht.** Pause, Log-Zeile und
-  gespielte Szene gehören zum Slice `session/`: die App liest sie nur
-  eingebettet in ihrer Session, und jeder ihrer Schreibzugriffe landet im
-  Cache der Session; ihre Ressourcen haben dort je ein eigenes Modul
-  (`pause-api.ts`, `log-entry-api.ts`, `played-scene-api.ts`). Gemeinsam sind nur
+  (ADR #31); **Slices importieren einander nicht.** Pause und Log-Zeile
+  gehören zum Slice `session/`: die App liest sie nur eingebettet in ihrer
+  Session, und jeder ihrer Schreibzugriffe landet im Cache der Session; ihre
+  Ressourcen haben dort je ein eigenes Modul (`pause-api.ts`,
+  `log-entry-api.ts`). Gemeinsam sind nur
   UI-Bausteine ohne Wissen über Entitäten (`app/src/components/`, etwa
   `components/fields/`); gemischte Stellen (Suche, `[[id]]`-Auflösung,
   Kampagnenbaum) sind reine Verteiler. Eine Seite, die mehrere Entitäten
   zeigt, setzt sich wie `App.tsx` aus den Slices zusammen und reicht fremde
   Teile als Slot hinein (die Kapitelübersicht reicht dem Kapitel seine Fäden
   und seine Szenenliste, die Szene bekommt ihre NPC-Karten, die Leseseite
-  einer Session den Link einer Szene; Szene, NPC und Ort bekommen ihre
+  einer Session den Link einer Szene, der Schritt „Nächste Szene" der
+  Live-Ansicht das Setzen des Szenen-Status; Szene, NPC und Ort bekommen ihre
   Ergänzen-Aktion aus dem Generator-Job). Was zwei Slices verbindet, liegt bei
   der Seite, die sie zusammensetzt (die Erinnerungen der Live-Ansicht aus
   Log-Zeilen und Ideen in `routes/PcReminders.tsx`, die Ergänzen-Aktionen
@@ -122,14 +123,14 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
 - Kampagne, Kapitel, Szene, NPC, Ort, Faden, Idee, Glossar-Begriff,
-  Kampagnenwissen und Session samt Pause, Log-Zeile und gespielter Szene sind
-  jeweils ihre eigene Ressource (ADR #31):
+  Kampagnenwissen und Session samt Pause und Log-Zeile sind jeweils ihre
+  eigene Ressource (ADR #31):
   `/campaigns/<id>` antwortet mit `Campaign`, `…/chapters/<id>` mit
   `Chapter`, `…/scenes/<id>` mit `Scene`, `…/npcs/<id>` mit `Npc`,
   `…/locations/<id>` mit `Location`, `…/threads/<id>` mit `Thread`,
   `…/ideas/<id>` mit `Idea`, `…/glossary-terms/<id>` mit `GlossaryTerm`,
   `…/knowledge-items/<id>` mit `KnowledgeItem`, `…/sessions/<id>` mit
-  `Session` (Pausen, Log-Zeilen und gespielte Szenen eingebettet), alle
+  `Session` (Pausen und Log-Zeilen eingebettet), alle
   Felder nebeneinander,
   `body` eingeschlossen, wo die Entität einen hat, ohne `kind` und `path`;
   jede Zeile trägt ihr eigenes `rev`. Die App-Routen sind
@@ -146,8 +147,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `POST …/sessions/<id>/pauses` beginnt eine Pause, `PATCH
   …/pauses/<pause-id> { rev, toMs }` beendet sie; `POST …/sessions/<id>/log`
   legt eine Log-Zeile an, `PATCH …/log/<log-id> { rev, reviewed }` sichtet
-  sie; `POST …/sessions/<id>/played-scenes { sceneId }` legt eine gespielte
-  Szene an.
+  sie. Gespielt ist eine Szene allein über ihren `status` (`played`); eine
+  Session hält keine gespielten Szenen.
   Die laufende Session liefert `GET …/sessions?running=true` (eine oder
   keine), die Liste steht neueste zuerst. `POST …/sessions` startet,
   `PATCH …/sessions/<id> { rev, endedMs }` beendet, `DELETE` verwirft eine
@@ -303,20 +304,25 @@ Die Pfade:
 4. Session-Zyklus: starten (offen ist die erste Szene der Reihenfolge, die
    weder `played` noch `dropped` ist, sonst die erste; die laufende Session
    liefert `GET …/sessions?running=true`) → Schnellnotiz → Log-**Zeile** mit
-   `sceneId` (`POST …/sessions/<id>/log`), die Notiz legt **keine**
-   gespielte Szene an → „Nächste Szene" führt zur folgenden der Reihenfolge;
-   hat die Session eine Log-Zeile mit der `sceneId` der verlassenen Szene,
-   legt es für **die verlassene Szene** eine gespielte Szene an (`POST
-   …/sessions/<id>/played-scenes`, einmal je Session), ohne Notiz legt es
-   nichts an → Pause (`POST …/pauses`, ein Intervall, keine Log-Zeile;
-   beendet mit `PATCH …/pauses/<id> { rev, toMs }`) → beenden (`PATCH
-   …/sessions/<id> { rev, endedMs }`; die gerade offene Szene wird dabei
-   **nicht** als gespielt angelegt) → Nachbereitung. Jedes Kind trägt sein
-   eigenes `rev`, keines bewegt das der Session; an einer beendeten Session
+   `sceneId` (`POST …/sessions/<id>/log`), die Notiz ändert **keinen**
+   Szenen-`status` → „Nächste Szene" führt zur folgenden der Reihenfolge;
+   links daneben steht das Kästchen „gespielt", angehakt, wenn die Session
+   eine Log-Zeile mit der `sceneId` der offenen Szene hat, und vom DM
+   umstellbar. Angehakt setzt der Klick **die verlassene Szene** auf
+   gespielt (`PATCH …/scenes/<id> { rev, status: "played" }`, nichts, wenn
+   sie es schon ist; sie steht danach in der Gruppe „Gespielt" und in der
+   Kapitelübersicht als „Gespielt"), nicht angehakt schreibt er nichts; ist
+   die Szene anderswo geändert (409), öffnet die nächste nicht, der Schritt
+   sagt das in einem ganzen Satz, und der zweite Klick schreibt gegen den
+   neu geladenen `rev` → Pause (`POST …/pauses`, ein Intervall, keine
+   Log-Zeile; beendet mit `PATCH …/pauses/<id> { rev, toMs }`) → beenden
+   (`PATCH …/sessions/<id> { rev, endedMs }`; das ändert keinen
+   Szenen-`status`) → Nachbereitung. Jedes Kind trägt sein eigenes `rev`, keines bewegt das der Session; an einer beendeten Session
    ist jedes neue Kind 409 `session_ended`, und die Live-Ansicht sagt das in
-   einem ganzen Satz. Die alten Adressen `…/session`, `…/session/start` und
-   `…/log` antworten 404. Dazu die Leseseite einer vergangenen Session
-   (`/campaigns/:id/sessions/<session-id>`)
+   einem ganzen Satz. Die alten Adressen `…/session`, `…/session/start`,
+   `…/log` und `…/sessions/<id>/played-scenes` antworten 404. Dazu die
+   Leseseite einer vergangenen Session (`/campaigns/:id/sessions/<session-id>`)
+   mit den Szenen ihrer Log-Zeilen, jede einmal, als Links
 5. Nachbereitung: Handlungsstrang übernehmen → ein Faden des aktiven
    Kapitels (`POST …/threads { chapter, text }`, ohne `rev`; Kapiteltext und
    Kapitel-`rev` bleiben unberührt); Idee abhaken → `PATCH …/ideas/<id>

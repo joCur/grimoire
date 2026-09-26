@@ -23,8 +23,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   `threads/<id>.json`, `ideas/<id>.json`, `glossary-terms/<id>.json`,
   `knowledge-items/<id>.json` bzw. `sessions/<id>.json`: die Entität selbst,
   alle Felder flach, ohne `kind` und ohne `rev`. Eine Session bettet ihre
-  Kinder ein — `pauses`, `log` und `playedScenes`, jede Zeile mit ihrer
-  eigenen `id`.
+  Kinder ein — `pauses` und `log`, jede Zeile mit ihrer eigenen `id`.
 - **Ein Test überschreibt die Beispielkampagne je Entität**, in seiner
   eigenen Kopie des Verzeichnisses:
   `test.use({ seed: { scenes: [{ id: "loot-check", … }], without: { sessions: ["2026-01-15"] } } })`.
@@ -229,10 +228,10 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   antwortet dafür eine leere Liste), `getLastStartedSession(api)` (die erste
   der Liste), `getSession(api, id)`, `sessionExists(api, id)`,
   `listSessions(api)` und die Pfade `sessionPath(api, id?)`,
-  `pausePath(api, session, id?)`, `logEntryPath(api, session, id?)` und
-  `playedScenesPath(api, session)` für rohe Aufrufe (`support/session.ts`).
-  Jede Behauptung über eine Session, eine Idee oder einen Faden liest ein
-  **Feld** — `log`, `pauses`, `playedScenes`, `done` —, nie einen
+  `pausePath(api, session, id?)` und `logEntryPath(api, session, id?)` für
+  rohe Aufrufe (`support/session.ts`). Jede Behauptung über eine Session,
+  eine Idee oder einen Faden liest ein **Feld** — `log`, `pauses`, `done`,
+  der `status` einer Szene —, nie einen
   gerenderten Text. Eine Session-id, die die App vergibt, ist ein opaker Zufallsstring:
   kein Spec schreibt eine hin, sie kommt immer vom Server.
   `todaySessionId()` ist die datumsförmige id einer Session, die ein Spec
@@ -406,10 +405,15 @@ Die Pfade 3, 4, 5 und 8 lesen Zeilen statt Texte:
   erwartet keinen Treffer.
 - **Pfad 4** (`session-cycle.e2e.ts`): die Schnellnotiz wird eine Log-**Zeile**
   mit `id`, `at`, `sceneId`, dem Text, wie der DM ihn getippt hat, und ihrem
-  `rev` — und legt keine gespielte Szene an. „Nächste Szene" legt die
-  **verlassene** Szene als gespielt an, wenn die Session eine Notiz in ihr
-  hat, einmal je Session; ohne Notiz legt es nichts an, und das Beenden legt
-  die offene Szene nicht an. Eine **Pause ist ein Intervall** in `pauses`
+  `rev` — und ändert keinen Szenen-`status`. Das Kästchen „gespielt" neben
+  „Nächste Szene" ist nach einer Notiz in der offenen Szene angehakt; so
+  setzt der Klick den `status` der **verlassenen** Szene auf `played` (per
+  API geprüft, und die Szene steht in der Gruppe „Gespielt" der Navigation
+  und mit „Gespielt" in der Kapitelübersicht). Vom DM abgehakt schreibt der
+  Klick nichts; ohne Notiz, aber angehakt, setzt er `played`. Ändert ein
+  Zweitschreiber die Szene im selben `page.evaluate` wie der Klick, zeigt
+  der Schritt den Satz dazu und öffnet die nächste Szene nicht; der zweite
+  Klick gelingt. Das Beenden ändert keinen Status. Eine **Pause ist ein Intervall** in `pauses`
   und schreibt keine Log-Zeile — der Beweis ist die unveränderte Länge des
   Logs plus der Chip-Zustand `paused`. Ein eigener Test prüft die
   Ressourcen selbst: `?running=true` als Liste von einer oder keiner, die
@@ -417,13 +421,14 @@ Die Pfade 3, 4, 5 und 8 lesen Zeilen statt Texte:
   Schreibzugriffe ihr `rev` nicht bewegen, 409 bei altem `rev` einer Pause
   und der Session, 409 `session_ended` für jedes neue Kind einer beendeten
   Session, `session_not_empty` beim Verwerfen, und 404 auf `…/session`,
-  `…/session/start` und `…/log`. Eine Notiz in eine anderswo beendete
-  Session zeigt den Satz dazu und lässt den Text im Feld; der fremde
+  `…/session/start`, `…/log` und `…/sessions/<id>/played-scenes`. Eine
+  Notiz in eine anderswo beendete Session zeigt den Satz dazu und lässt den Text im Feld; der fremde
   Schreibzugriff und das Enter laufen im selben `page.evaluate`, damit der
   Poll nicht dazwischenkommt. Dazu die Leseseite einer vergangenen
   Session (`/campaigns/beispiel/sessions/2026-01-15`): Log-Zeilen mit
   Szenen-Links auf `/campaigns/beispiel/scenes/<id>`, die geschlossene Pause
-  mit ihrer Dauer, die gespielten Szenen — und die alte Eintrags-Adresse
+  mit ihrer Dauer, die Szenen mit Notizen (jede einmal, in der Reihenfolge
+  ihrer ersten Notiz) — und die alte Eintrags-Adresse
   derselben Session als 404. Die Leseansicht einer Szene bietet wie jede
   Leseansicht „Session starten".
 - **Pfad 5** (`review.e2e.ts`, `threads.e2e.ts`): die Review sichtet eine

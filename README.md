@@ -5,8 +5,8 @@ Grimoire speichert eine Kampagne in einer SQLite-Datenbank
 **Szene**, **NPC**, **Ort**, **Faden** (ein Handlungsstrang, den ein Kapitel
 trägt), **Idee**, **Glossar-Begriff**, **Kampagnenwissen** (jede
 Namenskonvention, jeder Fakt, jede Stilregel für sich) und die **Session**
-mit ihren **Pausen**, **Log-Zeilen** und **gespielten Szenen** — ist eine
-Zeile ihrer eigenen Tabelle und ihre eigene Ressource mit ihren eigenen
+mit ihren **Pausen** und **Log-Zeilen** — ist eine Zeile ihrer eigenen
+Tabelle und ihre eigene Ressource mit ihren eigenen
 Feldern (ADR #31). Kampagne, Kapitel, Szene, NPC und Ort haben unter ihren
 Feldern einen `body`: ihren **Text** in Markdown.
 
@@ -40,7 +40,6 @@ nebeneinander, `body` eingeschlossen, ohne `kind`, ohne `path`:
 | Session | `GET/PATCH/DELETE /api/campaigns/<kampagne>/sessions/<id>` | `GET/POST /api/campaigns/<kampagne>/sessions` | `/campaigns/<kampagne>/sessions/<id>`, live `/campaigns/<kampagne>/live` |
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in der Session |
 | Log-Zeile | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in der Session und der Nachbereitung |
-| Gespielte Szene | — | `POST …/sessions/<session>/played-scenes` | in der Session |
 
 Die Kapitelübersicht bleibt `/campaigns/<kampagne>`; die Liste der Kampagnen
 (`GET /api/campaigns`) antwortet mit ihrer eigenen Form, dem Namen neben der
@@ -211,7 +210,7 @@ nebeneinander:
 
 | Feld | Bedeutung |
 | ---- | --------- |
-| `id` | stabil, wird referenziert (`sceneId` einer Log-Zeile und einer gespielten Szene, `[[id]]`) |
+| `id` | stabil, wird referenziert (`sceneId` einer Log-Zeile, `[[id]]`) |
 | `title` | Anzeigename, frei änderbar; ohne eigenen Titel zeigt die Szene ihre id |
 | `type` | `planned` oder `contingency` (Eventualszene) |
 | `trigger` | nur bei `contingency`: wann feuert sie? Freitext; optional |
@@ -220,7 +219,7 @@ nebeneinander:
 | `npcs` | Liste von NPC-ids in ihrer Reihenfolge; jede muss existieren |
 | `handouts` | Namen der Roll20-Handouts, nur Verweis |
 | `tags` | frei; empfohlen: `combat`, `social`, `stealth`, `travel` |
-| `status` | `draft`, `ready`, `played` oder `dropped`; immer gesetzt |
+| `status` | `draft`, `ready`, `played` oder `dropped`; immer gesetzt. Ob eine Szene gespielt ist, sagt allein `played` (siehe Session) |
 | `body` | Markdown der Szene |
 | `rev` | Zeilenversion, der Wächter jedes Schreibzugriffs |
 
@@ -548,7 +547,6 @@ Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
   "body": "\n## Threads\n\n…",
   "pauses": [{ "id": "abendessen", "from": "2026-01-15T20:30:00", "fromMs": 1768505400000, "to": "2026-01-15T21:10:00", "toMs": 1768507800000, "rev": 1 }],
   "log": [{ "id": "spuren-gefunden", "at": "19:52", "sceneId": "lighthouse-arrival", "text": "Spuren gefunden, …", "reviewed": false, "rev": 1 }],
-  "playedScenes": [{ "id": "ankunft", "sceneId": "lighthouse-arrival", "rev": 1 }],
   "rev": 1
 }
 ```
@@ -561,7 +559,6 @@ Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
 | `body` | freier Markdown-Text der Session |
 | `pauses` | ihre Pausen (siehe Pause) |
 | `log` | ihre Log-Zeilen (siehe Log-Zeile) |
-| `playedScenes` | ihre gespielten Szenen (siehe Gespielte Szene) |
 | `rev` | Zeilenversion der Session; jedes Kind trägt sein eigenes |
 
 - **Zeit:** Nur der Server weiß, zu welcher Uhr die zonenlosen Zeitstempel
@@ -590,12 +587,26 @@ Kinder eingebettet — jedes mit eigener `id` und eigenem `rev`:
   Session-`PATCH` nicht; ein Feld, das er nicht nimmt, ist eine 400, die es
   nennt, ein veralteter `rev` 409 mit der aktuellen Session unter `session`.
 - `DELETE …/sessions/<id> { rev }` verwirft eine **leere** Session (204) —
-  das Rückgängig eines versehentlichen Starts. Hat sie eine Log-Zeile, eine
-  gespielte Szene oder Text, ist das 409 `session_not_empty`: sie wird
-  beendet, nicht gelöscht.
-- Eine beendete Session nimmt keine neue Pause, Log-Zeile oder gespielte
-  Szene an (409 `session_ended`); ihre Pausen korrigieren und ihre
-  Log-Zeilen sichten geht weiter.
+  das Rückgängig eines versehentlichen Starts. Hat sie eine Log-Zeile oder
+  Text, ist das 409 `session_not_empty`: sie wird beendet, nicht gelöscht.
+- Eine beendete Session nimmt keine neue Pause oder Log-Zeile an (409
+  `session_ended`); ihre Pausen korrigieren und ihre Log-Zeilen sichten geht
+  weiter.
+- **Gespielt** ist eine Szene allein über ihren `status` (`played`); eine
+  Session hält keine eigene Liste gespielter Szenen, und
+  `POST …/sessions/<session>/played-scenes` antwortet 404. In der
+  Live-Ansicht steht links neben „Nächste Szene“ ein Kästchen „gespielt“:
+  angehakt setzt „Nächste Szene“ die **verlassene** Szene mit `PATCH
+  …/scenes/<id> { rev, status: "played" }` auf gespielt, bevor die nächste
+  öffnet; nicht angehakt öffnet es nur die nächste. Das Kästchen ist
+  angehakt, wenn die Session eine Log-Zeile mit der `sceneId` der offenen
+  Szene hat, und der DM kann es umstellen; geschrieben wird erst beim Klick.
+  Ist die Szene inzwischen anderswo geändert (409), öffnet die nächste nicht,
+  die Szene wird neu geladen, und der nächste Klick schreibt gegen ihren
+  frischen `rev`. Eine Notiz allein und das Beenden der Session ändern keinen
+  Status.
+- Die Leseseite einer Session zeigt die Szenen, in denen ihre Log-Zeilen
+  notiert wurden — jede einmal, in der Reihenfolge ihrer ersten Notiz.
 
 ### Pause
 
@@ -631,31 +642,11 @@ Eine Log-Zeile ist eine Schnellnotiz des DM und ihre eigene Ressource
   die Zeile. Jedes andere Feld, `text` eingeschlossen, ist eine 400; ein
   veralteter `rev` ist 409 mit der aktuellen Zeile unter `logEntry`.
 
-### Gespielte Szene
-
-Eine gespielte Szene ist ein Schritt des Abends durch die Szenen und ihre
-eigene Ressource (`PlayedScene`, aus `shared/src/played-scene.ts`) unter
-ihrer Session: `{ id, sceneId, rev }`. Die gespielten Szenen sind eine
-Folge in Spielreihenfolge; eine Szene, zu der die Gruppe zurückkehrt, steht
-darin zweimal.
-
-- `POST …/sessions/<session>/played-scenes { sceneId }` legt eine gespielte
-  Szene an: die Szene steht danach am Ende (201). Sie muss existieren (400
-  `played_scene_unknown` sonst).
-- Als gespielt gilt eine Szene, wenn der DM sie in der Live-Ansicht mit
-  „Nächste Szene“ **verlässt** und die Session mindestens eine Log-Zeile mit
-  ihrer `sceneId` hat; dann legt die App sie an, einmal je Session. Ohne
-  Notiz legt sie nichts an, und der DM markiert die Szene später selbst.
-- Eine Log-Zeile spielt keine Szene, und das Beenden der Session legt die
-  gerade offene Szene nicht an: die gespielten Szenen wachsen nur über ihre
-  eigene Ressource.
-
 ## Referenzen zeigen auf vorhandene Zeilen
 
 Eine Referenz nennt eine Zeile, die es gibt. Wer in `npcs:` einer Szene,
-in `location:`, in `chapter:`, in einer Log-Zeile oder in einer gespielten
-Szene eine id einträgt, zu der es keinen NPC, keinen Ort, kein Kapitel oder
-keine Szene gibt, bekommt 400 mit dem Hinweis, sie zuerst anzulegen — es
+in `location:`, in `chapter:` oder in einer Log-Zeile eine id einträgt, zu
+der es keinen NPC, keinen Ort, kein Kapitel oder keine Szene gibt, bekommt 400 mit dem Hinweis, sie zuerst anzulegen — es
 entsteht nichts nebenbei. Kapitel, Szenen, NPCs und Orte entstehen über
 „Neu anlegen" und über das Übernehmen eines Generator-Vorschlags, sonst
 nirgends.
@@ -877,8 +868,8 @@ das ihre Ressource liefert, ohne `rev` (ADR #31): die Kampagne unter
 `fixtures/beispiel/ideas/<id>.json`, ein Glossar-Begriff unter
 `fixtures/beispiel/glossary-terms/<id>.json`, ein Stück Kampagnenwissen
 unter `fixtures/beispiel/knowledge-items/<id>.json` und eine Session unter
-`fixtures/beispiel/sessions/<id>.json`, ihre Pausen, Log-Zeilen und
-gespielten Szenen eingebettet, ohne `rev` und ohne die Epochen-Lesungen —
+`fixtures/beispiel/sessions/<id>.json`, ihre Pausen und Log-Zeilen
+eingebettet, ohne `rev` und ohne die Epochen-Lesungen —
 die sind die Lesung des Servers in seiner Zeitzone. Sie ist die Referenz für Callouts und die einzige
 Quelle für Tests und E2E; die Bodies werden deshalb nie umformatiert.
 
