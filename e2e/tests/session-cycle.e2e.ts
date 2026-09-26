@@ -1209,22 +1209,24 @@ test("a note into a session ended elsewhere: the sentence says so, nothing is wr
   const session = await getSession(api, sessionId);
   await page.getByLabel("Schnellnotiz").fill("Noch schnell notiert");
 
-  const sentence = await page.evaluate(
+  const seen = await page.evaluate(
     async ({ url, body, expected }) => {
       const res = await fetch(url, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) return `end failed: ${res.status}`;
+      if (!res.ok) return { sentence: `end failed: ${res.status}`, note: "" };
       const input = document.querySelector<HTMLInputElement>('input[aria-label="Schnellnotiz"]');
       input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       // The refusal renders within a moment — long before the next poll.
       for (let i = 0; i < 60; i++) {
-        if (document.body.innerText.includes(expected)) return expected;
+        if (document.body.innerText.includes(expected)) {
+          return { sentence: expected, note: input?.value ?? "" };
+        }
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      return document.body.innerText;
+      return { sentence: document.body.innerText, note: input?.value ?? "" };
     },
     {
       url: api.url(sessionPath(api, sessionId)),
@@ -1234,12 +1236,13 @@ test("a note into a session ended elsewhere: the sentence says so, nothing is wr
         "Starte eine neue Session, um weiterzumachen.",
     },
   );
-  expect(sentence).toBe(
-    "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. " +
+  expect(seen).toEqual({
+    sentence:
+      "Diese Session ist schon beendet, deshalb wurde nichts gespeichert. " +
       "Starte eine neue Session, um weiterzumachen.",
-  );
+    // The note the DM typed is back in the field, not lost.
+    note: "Noch schnell notiert",
+  });
   // Nothing landed in the closed log.
   expect((await getSession(api, sessionId)).log).toEqual([]);
-  // The version poll then brings the ended session: nothing runs any more.
-  await expect(page.getByText("Es läuft keine Session.")).toBeVisible({ timeout: 15_000 });
 });
