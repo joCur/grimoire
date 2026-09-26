@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.9.0](https://github.com/joCur/grimoire/compare/v0.8.0...v0.9.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* `Session` no longer carries `playedScenes`, and `POST …/sessions/<id>/played-scenes` answers 404.
+* **server:** Upgrades von Installationen vor v0.7 werden nicht mehr unterstützt.
+
+### Features
+
+* **app:** Hover-Vorschau für Verweise im Text ([#162](https://github.com/joCur/grimoire/issues/162)) ([#175](https://github.com/joCur/grimoire/issues/175)) ([455c95d](https://github.com/joCur/grimoire/commit/455c95dd6f45cd80ec4318c7bb86244a41647a5c))
+* **app:** not-found view for unknown addresses ([#182](https://github.com/joCur/grimoire/issues/182)) ([#204](https://github.com/joCur/grimoire/issues/204)) ([62678a2](https://github.com/joCur/grimoire/commit/62678a27812a0034c791d331fe27ddf6e3987dfd))
+* **app:** scene edit mode replaces the fields dialog ([#176](https://github.com/joCur/grimoire/issues/176)) ([#209](https://github.com/joCur/grimoire/issues/209)) ([1d6de13](https://github.com/joCur/grimoire/commit/1d6de13d99018d2c4bda71c9e7b6a1c39eb36730))
+* Generator-Prüfungen und NPC-Stub ohne Überschriften ([#171](https://github.com/joCur/grimoire/issues/171)) ([#180](https://github.com/joCur/grimoire/issues/180)) ([30ec32a](https://github.com/joCur/grimoire/commit/30ec32a879b4e850762409f42967756a392c5e9e))
+* Kapitel und Kampagne zeigen ihren ganzen Text ([#171](https://github.com/joCur/grimoire/issues/171), [#163](https://github.com/joCur/grimoire/issues/163)) ([#183](https://github.com/joCur/grimoire/issues/183)) ([c2a5776](https://github.com/joCur/grimoire/commit/c2a5776e3a5dcaea4e17f062ea6b33da47bc6c0b))
+* mark the scene left as played from the next-scene step ([#196](https://github.com/joCur/grimoire/issues/196)) ([#206](https://github.com/joCur/grimoire/issues/206)) ([3effa7e](https://github.com/joCur/grimoire/commit/3effa7e5e64cdac77800597672ad15aa238a3c97))
+* Motivation und Atmosphäre als Eigenschaften ([#171](https://github.com/joCur/grimoire/issues/171)) ([#178](https://github.com/joCur/grimoire/issues/178)) ([c9d7037](https://github.com/joCur/grimoire/commit/c9d70375850a71ffc5010ad44e9b52737d6ff3d3))
+* Offene Fäden als Liste am Kapitel ([#171](https://github.com/joCur/grimoire/issues/171)) ([#179](https://github.com/joCur/grimoire/issues/179)) ([f94b241](https://github.com/joCur/grimoire/commit/f94b241d350aac60b47f8ae8d5900b8374a75047))
+* **server:** Szenen eines Laufs behalten die Gliederungsreihenfolge ([#168](https://github.com/joCur/grimoire/issues/168)) ([#177](https://github.com/joCur/grimoire/issues/177)) ([cde625a](https://github.com/joCur/grimoire/commit/cde625aeb301d430c4d3222de7da0a6ba1324dc5))
+
+
+### Bug Fixes
+
+* **app:** UI texts name the entity instead of „Eintrag" ([#176](https://github.com/joCur/grimoire/issues/176)) ([#205](https://github.com/joCur/grimoire/issues/205)) ([663a3e7](https://github.com/joCur/grimoire/commit/663a3e7d11a124cf2a62442a9c2f7caa852f9ba5))
+
+
+### Code Refactoring
+
+* **server:** v0.7 als Baseline — Preflight-Code entfernt, Migrationen zusammengefasst ([#158](https://github.com/joCur/grimoire/issues/158)) ([#172](https://github.com/joCur/grimoire/issues/172)) ([bae74d1](https://github.com/joCur/grimoire/commit/bae74d1d7b6dde9725e4b3ee144a105264d0a185))
+
 ## [0.8.0](https://github.com/joCur/grimoire/compare/v0.7.0...v0.8.0) (2026-09-20)
 
 
