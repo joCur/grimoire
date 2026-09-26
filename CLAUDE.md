@@ -151,6 +151,15 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `PATCH …/sessions/<id> { rev, endedMs }` beendet, `DELETE` verwirft eine
   leere. Einen Zeitpunkt schreibt der Client als Epochen-Wert (`…Ms`); die
   zonenlose Lokalzeit daraus bildet der Server.
+- Der Generator-Job ist seine eigene Ressource, höchstens einer je Kampagne:
+  `POST …/generator-jobs { kind, … }` startet einen Szenen- oder NPC-Lauf
+  (ein Ergänzen-Lauf startet auf seiner Entität), `GET …/generator-jobs`
+  liefert ihn (einen oder keinen). `PATCH …/generator-jobs/<id> { rev, … }`
+  prüft und übernimmt: Übernehmen heißt, Vorschläge in
+  `review.writtenScenes`/`writtenNpcs`/`writtenLocations` zu nennen; ist
+  nichts mehr offen, ist der Job erledigt und die Antwort sein letzter Stand.
+  `PATCH …/parts/<key> { status: "running" }` wiederholt einen Teil,
+  `DELETE { rev }` verwirft den Job.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
@@ -320,7 +329,10 @@ Die Pfade:
    die Szene ohne `rev` (`result.scenes`, ADR #31): „Bearbeiten" öffnet ihre
    Felder und ihren Text, gespeichert werden die geänderten Felder je Szene
    (`sceneEdits`), und „Übernehmen" schreibt sie über dem Vorschlag des
-   Modells; geprüft, verworfen und übernommen wird je `id`. Dazu
+   Modells; geprüft, verworfen und übernommen wird je `id`, alles über
+   `PATCH …/generator-jobs/<id>` (ein alter `rev` ist 409 mit dem aktuellen
+   Job), und die alten Adressen `…/generate/apply` und `…/generate/job`
+   antworten 404. Dazu
    Kampagnenwissen und Glossar auf ihren eigenen Seiten
    (`/campaigns/:id/knowledge`, `/campaigns/:id/glossary`) pflegen — anlegen,
    bearbeiten, löschen, jede Zeile mit ihrem eigenen `rev`

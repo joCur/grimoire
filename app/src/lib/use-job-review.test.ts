@@ -86,7 +86,10 @@ describe("flush", () => {
     queue.decide({ droppedScenes: ["c"] });
     await queue.flush();
     expect(h.sent).toEqual([
-      { sceneEdits: { a: { body: "one" }, b: { body: "two" } }, droppedScenes: ["c"] },
+      {
+        sceneEdits: { a: { body: "one" }, b: { body: "two" } },
+        review: { droppedScenes: ["c"] },
+      },
     ]);
   });
 });
@@ -150,7 +153,7 @@ describe("a failed patch", () => {
     expect(last(h.statuses)).toBe("saved");
     // …and the retried edit went along with it.
     expect(h.sent).toEqual([
-      { sceneEdits: { kai: { body: "im Regen" } }, npcs: { grella: "accepted" } },
+      { sceneEdits: { kai: { body: "im Regen" } }, review: { npcs: { grella: "accepted" } } },
     ]);
   });
 

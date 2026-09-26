@@ -13,12 +13,13 @@
 //      the process — so the boot fails it with an error code the app has a
 //      sentence for, instead of leaving a `running` row the app polls forever;
 //   2. a FINISHED run comes back whole — result, warnings and the review edits
-//      — and is still applyable afterwards. That is the loss this guards
-//      against: a deploy between „fertig" and „Übernehmen" used to throw a good
-//      generation away.
+//      — and is still acceptable afterwards. That is the loss this guards
+//      against: a deploy between „fertig" and „Übernehmen" must not throw a
+//      good generation away.
 
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   LOCATION_STUB_ID,
@@ -29,42 +30,22 @@ import {
 } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
 import { expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
-import { apiFor, type Api } from "../support/api";
+import { apiFor } from "../support/api";
+import {
+  generatorJobPath,
+  patchGeneratorJob,
+  readGeneratorJob,
+  startGeneratorJob,
+  waitForGeneratorJob,
+} from "../support/generator-job";
 import { getNpc } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
-
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn.`;
 
 /** A title no reply fixture spells, so only the DM's edit can produce it. */
 const EDITED_TITLE = "Nachtwache am Kai, nach dem Neustart";
-
-/** One proposed scene on the wire: the scene without its guard (ADR #31). */
-type SceneProposal = Record<string, unknown> & { id: string; body: string };
-
-/** One stored change of a proposed scene: the fields the DM set. */
-type SceneEdit = Record<string, unknown>;
-
-/** GET …/generate/job — null on the 404 "there is none". */
-async function job(api: Api): Promise<Record<string, unknown> | null> {
-  const res = await api.fetch("campaigns/beispiel/generate/job");
-  if (res.status === 404) return null;
-  expect(res.status).toBe(200);
-  return (await res.json()) as Record<string, unknown>;
-}
-
-/** Poll until the job leaves `running` (the stub answers in well under 30s). */
-async function waitForFinish(api: Api): Promise<Record<string, unknown>> {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const current = await job(api);
-    if (current === null) throw new Error("the job disappeared while waiting");
-    if (current.status !== "running") return current;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error("the job never finished");
-}
 
 /** A run directory of this test's own, plus its cleanup. */
 async function ownDataDir(testId: string, workerIndex: number): Promise<string> {
@@ -85,12 +66,15 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
   let jobId: string;
   try {
     const api = apiFor(first.handle.url);
-    const started = await api.send<{ jobId: string }>("POST", "campaigns/beispiel/generate", {
+    // The start answers with the job itself.
+    const started = await startGeneratorJob(api, {
+      kind: "scene",
       chapter: "01-salzhafen",
       sourceText: `${SOURCE}\n\n${TRIGGER.slow}`,
     });
-    jobId = started.jobId;
-    const running = await job(api);
+    jobId = started.id;
+    expect(started).toMatchObject({ status: "running", kind: "scene" });
+    const running = await readGeneratorJob(api);
     expect(running).toMatchObject({ id: jobId, status: "running", kind: "scene" });
   } finally {
     // The restart. Everything about that provider call goes with it.
@@ -101,9 +85,8 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
   const second = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
   try {
     const api = apiFor(second.handle.url);
-    const failed = await job(api);
-    // The job is still THERE — a restart used to answer 404 here — and it
-    // says what happened.
+    const failed = await readGeneratorJob(api);
+    // The job is still THERE, and it says what happened.
     expect(failed).toMatchObject({ id: jobId, status: "failed" });
     expect(failed!.finishedAt).toEqual(expect.any(String));
     const error = failed!.error as {
@@ -121,7 +104,23 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
     );
     // Nothing was written, and a new run may start right away (no stuck gate).
     expect(await sceneExists(api, SCENE_ID)).toBe(false);
-    expect((await api.fetch("campaigns/beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
+    const discarded = await api.fetch(generatorJobPath(api, jobId), {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rev: failed!.rev }),
+    });
+    expect(discarded.status).toBe(200);
+    expect(await readGeneratorJob(api)).toBeNull();
+
+    // The job is its own resource (ADR #31): the generator's former
+    // addresses answer 404.
+    expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+    const oldApply = await api.fetch("campaigns/beispiel/generate/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scenes: [], jobId }),
+    });
+    expect(oldApply.status).toBe(404);
   } finally {
     await second.proc.stop();
   }
@@ -135,25 +134,22 @@ test("a finished job survives a restart whole and is still applyable", async ({}
 
   // --- boot 1: run to completion, then edit a draft in the review ----------
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
-  let before: Record<string, unknown>;
+  let before: GeneratorJob;
   try {
     const api = apiFor(first.handle.url);
-    await api.send("POST", "campaigns/beispiel/generate", {
-      chapter: "01-salzhafen",
-      sourceText: SOURCE,
-    });
-    before = await waitForFinish(api);
-    expect(before.status).toBe("done");
+    await startGeneratorJob(api, { kind: "scene", chapter: "01-salzhafen", sourceText: SOURCE });
+    const finished = await waitForGeneratorJob(api);
+    expect(finished.status).toBe("done");
 
-    const result = before.result as { scenes: SceneProposal[] };
-    expect(result.scenes.map((s) => s.id)).toEqual([SCENE_ID]);
-    // The review PATCH is the one way an edit reaches the job, and it carries
+    const scenes = finished.result!.scenes;
+    expect(scenes.map((s) => s.id)).toEqual([SCENE_ID]);
+    // The job's PATCH is the one way an edit reaches the job, and it carries
     // the scene's change by its id — here a field and the text, so the
     // restart has something of each to bring back.
-    await api.send("PATCH", `campaigns/beispiel/generate/job/${before.id as string}/review`, {
-      rev: (before.rev as number | undefined) ?? 0,
+    before = await patchGeneratorJob(api, finished.id, {
+      rev: finished.rev,
       sceneEdits: {
-        [SCENE_ID]: { title: EDITED_TITLE, body: `${result.scenes[0]!.body}${edited}` },
+        [SCENE_ID]: { title: EDITED_TITLE, body: `${scenes[0]!.body}${edited}` },
       },
     });
     // Still nothing written — the review has not been applied.
@@ -166,8 +162,9 @@ test("a finished job survives a restart whole and is still applyable", async ({}
   const second = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
   try {
     const api = apiFor(second.handle.url);
-    const after = (await job(api))!;
+    const after = (await readGeneratorJob(api))!;
     expect(after.id).toBe(before.id);
+    expect(after.rev).toBe(before.rev);
     expect(after.status).toBe("done");
     expect(after.kind).toBe("scene");
     expect(after.chapter).toBe("01-salzhafen");
@@ -175,41 +172,35 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(after.finishedAt).toBe(before.finishedAt);
     expect(after.result).toEqual(before.result);
     // The DM's own change came back with it, field by field.
-    const edit = (after.sceneEdits as Record<string, SceneEdit>)[SCENE_ID]!;
+    const edit = after.sceneEdits[SCENE_ID]!;
     expect(edit).toMatchObject({ title: EDITED_TITLE });
     expect(edit.body).toContain(edited.trim());
 
-    // The scene AND the npc and location it references: a proposal is
-    // applied as one batch, because a scene cannot name anything that does
-    // not exist (ADR #19). The payload is the run's scenes with the stored
-    // change laid on top, plus the run's proposed npcs and locations as they
-    // stand.
-    const result = after.result as {
-      scenes: SceneProposal[];
-      npcs: unknown[];
-      locations: unknown[];
-    };
-    const written = await api.send<{ scenes: string[]; npcs: string[]; locations: string[] }>(
-      "POST",
-      "campaigns/beispiel/generate/apply",
-      {
-        scenes: result.scenes.map((scene) => ({ ...scene, ...edit })),
-        npcs: result.npcs,
-        locations: result.locations,
-        jobId: after.id,
+    // The accept names the scene AND the npc and location it references: a
+    // scene cannot name anything that does not exist (ADR #19). The server
+    // lays the stored change on top of the run's scene — the accept carries
+    // ids, not proposals.
+    const accepted = await patchGeneratorJob(api, after.id, {
+      rev: after.rev,
+      review: {
+        writtenScenes: [SCENE_ID],
+        writtenNpcs: [NPC_STUB_ID],
+        writtenLocations: [LOCATION_STUB_ID],
       },
-    );
-    expect(written.scenes).toEqual([SCENE_ID]);
-    expect(written.npcs).toEqual([NPC_STUB_ID]);
-    expect(written.locations).toEqual([LOCATION_STUB_ID]);
+    });
+    // Nothing is left open, so the answer is the job as it ended.
+    expect(accepted.review.writtenScenes).toEqual([SCENE_ID]);
+    expect(accepted.review.writtenNpcs).toEqual([NPC_STUB_ID]);
+    expect(accepted.review.writtenLocations).toEqual([LOCATION_STUB_ID]);
     expect((await getNpc(api, NPC_STUB_ID)).name).toBe(NPC_STUB_NAME);
     const stored = await getScene(api, SCENE_ID);
     // The field and the text as the DM left them before the restart.
     expect(stored.title).toBe(EDITED_TITLE);
     expect(stored.body).toContain(edited.trim());
     expect(stored.status).toBe("draft");
-    // Applied means done: the job is discarded, as after any successful apply.
-    expect(await job(api)).toBeNull();
+    // Accepted means done: the job is gone, as after any accept that leaves
+    // nothing open.
+    expect(await readGeneratorJob(api)).toBeNull();
   } finally {
     await second.proc.stop();
   }

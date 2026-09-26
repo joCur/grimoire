@@ -774,7 +774,7 @@ export const knowledgeItems = sqliteTable(
  * The generate job of a campaign (ADR #10 addendum), at most one per
  * campaign and persisted so it survives a restart. The
  * result/error/edit payloads stay JSON: they are the API's own shapes
- * (`GenerateResult`, `GenerateJobError`, `sceneEdits`) and nothing queries
+ * (`GenerateResult`, `GeneratorJobError`, `sceneEdits`) and nothing queries
  * inside them.
  *
  * "At most one per campaign" is a CONSTRAINT, not a convention: the unique
@@ -836,18 +836,18 @@ export const generateJobs = sqliteTable(
     error: text("error"),
     /**
      * The DM's changes to the proposed scenes — JSON, one `SceneChange` per
-     * scene id (`GenerateJob.sceneEdits`), applied on top of the proposal
+     * scene id (`GeneratorJob.sceneEdits`), applied on top of the proposal
      * when it is accepted.
      */
     sceneEdits: text("scene_edits").notNull().default("{}"),
     /**
      * The DM's changes to the proposed npcs — JSON, one `NpcChange` per npc
-     * id (`GenerateJob.npcEdits`), applied on top of the proposal when it is
+     * id (`GeneratorJob.npcEdits`), applied on top of the proposal when it is
      * accepted.
      */
     npcEdits: text("npc_edits").notNull().default("{}"),
     /**
-     * The DM's REVIEW STATE — JSON, see `GenerateJobReview`:
+     * The DM's REVIEW STATE — JSON, see `GeneratorJobReview`:
      * the decision per proposed npc and location, the dropped scenes, the per
      * field/block decisions of an augment run and the parts a partial
      * accept already wrote. JSON for the same reason as the payloads above:
@@ -856,7 +856,7 @@ export const generateJobs = sqliteTable(
     review: text("review").notNull().default("{}"),
     /**
      * Optimistic-concurrency token of that review state. Two tabs on the
-     * same review are the case it exists for: the second `PATCH …/review`
+     * same review are the case it exists for: the second `PATCH …/generator-jobs/:id`
      * carries a stale rev and gets a 409 instead of overwriting the first.
      */
     rev: integer("rev").notNull().default(0),

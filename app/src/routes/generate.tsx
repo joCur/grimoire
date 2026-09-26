@@ -16,14 +16,15 @@
 // the input form: scenes (scene drafts for a chapter) and npc (one npc from
 // source material). Both run through the same four states, the same
 // background job (there is one generator job per campaign, whatever its kind)
-// and the same accept endpoint — the NPC mode only asks for less (source text
+// and the same accept — the NPC mode only asks for less (source text
 // plus an optional id) and reviews exactly one card; its form and its review
 // live in the npc's slice (npc/NpcRun.tsx), and this route only picks the
 // mode. The mode is not local trivia: a restored job decides it (job.kind),
 // so a reload during an NPC run comes back in NPC mode.
 //
 // The run is a background JOB on the server and this route
-// is only its window: on mount it asks GET …/generate/job and restores
+// is only its window: on mount it reads the campaign's job
+// (GET …/generator-jobs) and restores
 // whatever it finds (running -> working with ~3s polling, done -> review
 // incl. the edits kept in the job, failed -> the error block). So a
 // browser-back gesture, a reload or a closed tab does not destroy minutes of
@@ -41,15 +42,18 @@
 // job (review.npcs, review.locations).
 
 import type {
-  GenerateJob,
-  GenerateJobPart,
-  GenerateResult,
   LocationProposal,
-  NamingHint,
   NpcProposal,
   SceneChange,
   SceneProposal,
 } from "@grimoire/shared/types";
+import {
+  isGeneratorJobSettled,
+  type GeneratorJob,
+  type GeneratorJobPart,
+  type GenerateResult,
+  type NamingHint,
+} from "@grimoire/shared/generator-job";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, RotateCcw, Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -58,7 +62,6 @@ import { Link, useNavigate, useParams } from "react-router";
 import {
   ApiError,
   acceptJobParts,
-  deleteGenerateJob,
   fetchTree,
   retryJobPart,
   startGenerateJob,
@@ -88,6 +91,7 @@ import {
   openLocations,
   openNpcs,
   openScenes,
+  openSelection,
   partsStillRunning,
   pipelineCostLabel,
   pipelineProgress,
@@ -97,9 +101,15 @@ import {
   stringField,
   stringList,
   usageLabel,
+  writtenBy,
+  type AcceptSelection,
   type GenerateMode,
 } from "@/lib/generate";
-import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
+import {
+  discardGeneratorJob,
+  generateJobKey,
+  useGenerateJob,
+} from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
 import { LocationProposalRow } from "@/location/LocationProposalRow";
@@ -188,9 +198,9 @@ export function GenerateRoute() {
   const creatingChapter = target.kind === "new" && !newIdExists;
   const chapterId =
     target.kind === "new" ? (newIdError === undefined ? newIdInput : undefined) : target.id;
-  // A chapter that does not exist yet needs its display name — the server
-  // rejects an empty chapterTitle on apply, so the run may not start without
-  // one either. Only said once the id itself is usable: two complaints about
+  // A chapter that does not exist yet needs its display name — the first
+  // accept creates the chapter under the title the run started with, so the
+  // run may not start without one. Only said once the id itself is usable: two complaints about
   // one half-filled form are noise.
   const titleMissing = creatingChapter && chapterId !== undefined && newTitle.trim() === "";
   // An empty field is the untouched state (no title yet, nothing typed) —
@@ -323,7 +333,7 @@ export function GenerateRoute() {
       // not read off `start.data`, which outlives it: a second run over a
       // failed one would otherwise recognise the OLD run's job as its own.
       setAwaitingJob((waiting) =>
-        waiting === undefined ? waiting : { ...waiting, startedJobId: started.jobId },
+        waiting === undefined ? waiting : { ...waiting, startedJobId: started.id },
       );
       setLostJob(false);
       setWritten(undefined);
@@ -336,15 +346,15 @@ export function GenerateRoute() {
   });
 
   /**
-   * Accepting. ONE endpoint for both buttons and both modes:
-   * without a selection it writes everything that is still open (the
+   * Accepting. ONE write for both buttons and both modes, the job's PATCH:
+   * without a selection it names everything that is still open (the
    * accepted npcs and locations included, an undecided one not); with one
-   * selection it writes exactly that part and
-   * leaves the rest reviewable. The server answers which job is gone,
-   * which is what ends the review.
+   * it names exactly that part and leaves the rest reviewable. The answer is
+   * the job the write leaves — settled once nothing is open, which is what
+   * ends the review.
    */
   const apply = useMutation({
-    mutationFn: async (selection?: { scenes?: string[]; npcs?: string[]; locations?: string[] }) => {
+    mutationFn: async (selection?: AcceptSelection) => {
       // Text the DM is still typing must be part of what gets written — and
       // AWAITED, not merely started: the server reads `sceneEdits` and
       // `npcEdits` when the accept arrives, so a patch still in flight would
@@ -352,26 +362,18 @@ export function GenerateRoute() {
       await review.flush();
       // The flush moved the rev; the guard has to carry the one that is
       // current now, not the one this render closed over.
-      const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
-      return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
-        ...(selection?.scenes === undefined ? {} : { scenes: selection.scenes }),
-        ...(selection?.npcs === undefined ? {} : { npcs: selection.npcs }),
-        ...(selection?.locations === undefined ? {} : { locations: selection.locations }),
-        // The new chapter is created in the same batch — but the JOB
-        // decides it, and this pair is only the compatibility override. It
-        // therefore travels ONLY when the form on screen is still the form
-        // that STARTED this run: the review state is persistent, so the DM
-        // can pick another chapter in the form while a finished run waits —
-        // and sending that other id here would create a chapter the run has
-        // nothing to do with. When the two disagree, the job is right and
-        // nothing is sent.
-        ...(creatingChapter && chapterId !== undefined && job?.chapter === chapterId
-          ? { chapter: chapterId, chapterTitle: newTitle.trim() }
-          : {}),
-      });
+      const before =
+        queryClient.getQueryData<GeneratorJob | null>(generateJobKey(campaign)) ?? job;
+      const after = await acceptJobParts(
+        campaign,
+        before?.id ?? "",
+        before?.rev ?? 0,
+        selection ?? openSelection(before),
+      );
+      return { before, after };
     },
     onError: (error) => {
-      // The accept carries the review rev: a
+      // The accept carries the job's rev: a
       // 409 `rev_conflict` means another tab decided in between and NOTHING
       // was written, so the job is re-read and the quiet conflict line says
       // so — the same protocol the review patch follows.
@@ -380,26 +382,24 @@ export function GenerateRoute() {
         return;
       }
       // Any OTHER 409 says the run moved on: a part that is not open any
-      // more, a run that has produced nothing yet (an accept while it is
-      // still running is allowed, so "nothing finished yet" is a real answer).
-      // Nothing was written — re-read and say so in one line.
+      // more. Nothing was written — re-read and say so in one line.
       if (error instanceof ApiError && error.status === 409) {
         void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       }
     },
-    onSuccess: (data) => {
-      const labels = [
-        ...data.scenes.map(sceneLabel),
-        ...data.npcs.map(npcLabel),
-        ...data.locations.map(locationLabel),
-      ];
-      // ONLY the answer decides: a bulk accept whose rest did not settle the
-      // run leaves the job there, and marking it dropped up front turned a
-      // job that is still open into one that had vanished.
-      if (data.jobDeleted) {
+    onSuccess: ({ before, after }) => {
+      const wrote = writtenBy(before, after);
+      // ONLY the answer decides: an accept whose rest did not settle the run
+      // leaves the job there, still open.
+      if (isGeneratorJobSettled(after)) {
         droppedRef.current = true;
-        setWritten((prev) => [...(prev ?? []), ...labels]);
-        if (data.npcs[0] !== undefined) setWrittenNpc(data.npcs[0]);
+        setWritten((prev) => [
+          ...(prev ?? []),
+          ...wrote.scenes.map(sceneLabel),
+          ...wrote.npcs.map(npcLabel),
+          ...wrote.locations.map(locationLabel),
+        ]);
+        if (wrote.npcs[0] !== undefined) setWrittenNpc(wrote.npcs[0]);
       }
       // The scenes, npcs and locations exist now — the chapter overview and
       // the lists have to show them.
@@ -412,8 +412,12 @@ export function GenerateRoute() {
 
   // Discarding: drops the server's job and with it the OPEN REST only —
   // parts a partial accept already wrote are in the campaign now, not a job.
+  // A pending review patch lands first, so the guard is current.
   const discard = useMutation({
-    mutationFn: () => deleteGenerateJob(campaign),
+    mutationFn: async () => {
+      await review.flush();
+      await discardGeneratorJob(queryClient, campaign);
+    },
     onMutate: () => {
       droppedRef.current = true;
     },
@@ -518,10 +522,10 @@ export function GenerateRoute() {
   const runProgress = pipelineProgress(job, t);
   const runCost = pipelineCostLabel(job, t);
   /** The proposed scene of a finished scene part, by its id. */
-  const sceneOfPart = (part: GenerateJobPart) => scenes.find((scene) => scene.id === part.id);
-  const npcOfPart = (part: GenerateJobPart) =>
+  const sceneOfPart = (part: GeneratorJobPart) => scenes.find((scene) => scene.id === part.id);
+  const npcOfPart = (part: GeneratorJobPart) =>
     part.kind === "npc" ? proposedNpcs.find((npc) => npc.id === part.id) : undefined;
-  const locationOfPart = (part: GenerateJobPart) =>
+  const locationOfPart = (part: GeneratorJobPart) =>
     part.kind === "location"
       ? proposedLocations.find((location) => location.id === part.id)
       : undefined;
@@ -1376,7 +1380,7 @@ function PartCard({
   cardRef,
   onRetry,
 }: {
-  part: GenerateJobPart;
+  part: GeneratorJobPart;
   busy: boolean;
   /** This part's own retry error, already translated (never a global one). */
   error?: string;

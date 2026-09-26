@@ -12,14 +12,14 @@
 import type {
   CampaignSummary,
   CampaignTree,
-  GenerateJob,
-  GenerateJobStarted,
   InstanceSettings,
-  NpcChange,
-  SceneChange,
   SceneOrderResponse,
   SearchResponse,
 } from "@grimoire/shared/types";
+import type {
+  GeneratorJob,
+  GeneratorJobPatch,
+} from "@grimoire/shared/generator-job";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -184,24 +184,28 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
 
 /**
  * Start a generator run — a BACKGROUND job: the server answers 202 with the
- * job id and the result is fetched via fetchGenerateJob. A 409 carrying a
- * jobId is NOT an error: a job for this campaign is already running, and its
- * id is the answer to "start a run" — the caller adopts it. Everything else
- * throws as usual.
+ * job, still running, and its result is read via fetchGeneratorJob. A 409
+ * carrying a `generatorJob` is NOT an error: a job for this campaign is
+ * already running, and it is the answer to "start a run" — the caller adopts
+ * it. Everything else throws as usual.
  */
-export async function startJob(path: string, body: unknown): Promise<GenerateJobStarted> {
+export async function startJob(path: string, body: unknown): Promise<GeneratorJob> {
   try {
-    return await postJson<GenerateJobStarted>(path, body);
+    return await postJson<GeneratorJob>(path, body);
   } catch (error) {
-    if (
-      error instanceof ApiError &&
-      error.status === 409 &&
-      typeof error.details.jobId === "string"
-    ) {
-      return { jobId: error.details.jobId };
-    }
+    const running = error instanceof ApiError ? error.details.generatorJob : undefined;
+    if (error instanceof ApiError && error.status === 409 && isJob(running)) return running;
     throw error;
   }
+}
+
+/** Is this an error body's `generatorJob` — a job with its id? */
+function isJob(value: unknown): value is GeneratorJob {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "string"
+  );
 }
 
 /** The part of a run request both of its optional texts share: only what carries text. */
@@ -223,12 +227,22 @@ export function campaignPath(campaign: string): string {
 
 // --- generator ---------------------------------------------------------------
 
+/** `…/generator-jobs` of a campaign — the generator job's resource (ADR #31). */
+export function generatorJobsPath(campaign: string): string {
+  return `${campaignPath(campaign)}/generator-jobs`;
+}
+
+/** `…/generator-jobs/:id`. */
+function generatorJobPath(campaign: string, id: string): string {
+  return `${generatorJobsPath(campaign)}/${encodeURIComponent(id)}`;
+}
+
 /**
- * Start a generator run for one chapter (`startJob`: 202 with the job id, a
- * running job's 409 adopted). Nothing is written (generator/README.md);
- * `newChapter` allows a chapter that does not exist yet (the accept creates
- * it). Worth handling are 503 (no provider configured — no API key), 404
- * (unknown chapter) and 400.
+ * Start a scene run for one chapter (`startJob`: 202 with the job, a running
+ * job's 409 adopted). Nothing is written (generator/README.md); `newChapter`
+ * allows a chapter that does not exist yet (the first accept creates it).
+ * Worth handling are 503 (no provider configured — no API key), 404 (unknown
+ * chapter) and 400.
  *
  * The run's own failure (the 422 with `rawReply`, `usage`
  * and possibly `validationErrors`) never comes back from THIS call — it
@@ -242,8 +256,9 @@ export function campaignPath(campaign: string): string {
 export function startGenerateJob(
   campaign: string,
   input: { chapter: string; sourceText: string; newChapter?: boolean; chapterTitle?: string },
-): Promise<GenerateJobStarted> {
-  return startJob(`${campaignPath(campaign)}/generate`, {
+): Promise<GeneratorJob> {
+  return startJob(generatorJobsPath(campaign), {
+    kind: "scene",
     chapter: input.chapter,
     sourceText: input.sourceText,
     ...(input.newChapter === true ? { newChapter: true } : {}),
@@ -254,120 +269,104 @@ export function startGenerateJob(
 }
 
 /**
- * The campaign's generate job, or null when there is none (the server's 404
- * is the normal "nothing running, nothing to restore" answer — never an
- * error state in the UI). A `null` after a job WAS there means it is gone:
- * applied or discarded. A server restart does NOT lose it any more:
- * a finished job comes back, and one that was still running comes back
- * as `failed` with a message saying so.
+ * The campaign's generator job, or null when there is none — the list holds
+ * one or none, and none is the normal "nothing running, nothing to restore"
+ * answer, never an error state in the UI. A `null` after a job WAS there
+ * means it is gone: accepted to the end or discarded. A server restart does
+ * NOT lose it: a finished job comes back, and one that was still running
+ * comes back as `failed` with a message saying so.
  */
-export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | null> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job`;
-  const response = await fetch(`/api${path}`);
-  if (response.status === 404) return null;
-  if (!response.ok) throw await failure(`GET /api${path}`, response);
-  return (await response.json()) as GenerateJob;
+export async function fetchGeneratorJob(campaign: string): Promise<GeneratorJob | null> {
+  const jobs = await getJson<GeneratorJob[]>(generatorJobsPath(campaign));
+  return jobs[0] ?? null;
 }
 
-/** Discard the campaign's generate job. A missing job is fine. */
-export async function deleteGenerateJob(campaign: string): Promise<void> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job`;
-  const response = await fetch(`/api${path}`, { method: "DELETE" });
+/**
+ * Discard a generator job, with the `rev` it was read with. A job that is
+ * already gone is fine; a 409 means another tab decided in between.
+ */
+export async function deleteGeneratorJob(
+  campaign: string,
+  job: Pick<GeneratorJob, "id" | "rev">,
+): Promise<void> {
+  const path = generatorJobPath(campaign, job.id);
+  const response = await fetch(`/api${path}`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: job.rev }),
+  });
   if (!response.ok && response.status !== 404) {
     throw await failure(`DELETE /api${path}`, response);
   }
 }
 
-
 /**
- * Store part of the REVIEW STATE on the job. Everything merges,
- * so this sends only what changed: the fields of the proposed scene or npc
- * being typed in (debounced by the caller), the decision that was just made,
- * the drops.
+ * Write part of the job's review. Everything merges, so this sends only
+ * what changed: the fields of the proposed scene or npc being typed in
+ * (debounced by the caller), the decision that was just made, the drops.
+ * An accept is a patch too — see acceptJobParts.
  *
- * `rev` is the job's review rev as the caller read it — a 409
- * `rev_conflict` (with the current rev in `ApiError.details`) means a second
- * tab decided first and nothing was written; the caller reloads the job.
+ * `rev` is the job's rev as the caller read it — a 409 `rev_conflict` (with
+ * the current rev in `ApiError.details`) means a second tab decided first and
+ * nothing was written; the caller reloads the job.
  */
-export async function patchJobReview(
+export async function patchGeneratorJob(
   campaign: string,
   jobId: string,
-  rev: number,
-  patch: {
-    sceneEdits?: Record<string, SceneChange>;
-    npcEdits?: Record<string, NpcChange>;
-    npcs?: Record<string, "accepted" | "rejected" | null>;
-    locations?: Record<string, "accepted" | "rejected" | null>;
-    droppedScenes?: string[];
-    fields?: Record<string, boolean | null>;
-    blocks?: Record<string, boolean | null>;
-  },
-): Promise<GenerateJob> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/review`;
+  patch: GeneratorJobPatch,
+): Promise<GeneratorJob> {
+  const path = generatorJobPath(campaign, jobId);
   const response = await fetch(`/api${path}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev, ...patch }),
+    body: JSON.stringify(patch),
   });
   if (!response.ok) throw await failure(`PATCH /api${path}`, response);
-  return (await response.json()) as GenerateJob;
+  return (await response.json()) as GeneratorJob;
 }
 
 /**
- * Accept PART of a finished run: one proposed scene (`scenes`), npc (`npcs` —
- * the NPC run's one npc among them) or location (`locations`), each by id, or
- * all of them when nothing is selected. Answers the ids it wrote, per entity,
- * and whether the job is gone because nothing is open any more. `rev` is the
- * review rev as the caller read it: a 409 `rev_conflict` means another tab
- * decided in between and nothing was written. A 409 with
+ * Accept proposals of a run: the proposed scenes (`scenes`), npcs (`npcs` —
+ * the NPC run's one npc among them) and locations (`locations`) it names, by
+ * id. Answers the job as the write leaves it — as it ended, once nothing is
+ * open. `rev` is the job's rev as the caller read it: a 409 `rev_conflict`
+ * means another tab decided in between and nothing was written. A 409 with
  * `details.chapters`/`scenes`/`npcs`/`locations` is the ordinary write
  * conflict — the rows that already exist, per entity.
  */
-export interface AcceptedParts {
-  scenes: string[];
-  npcs: string[];
-  locations: string[];
-  jobDeleted: boolean;
-}
-
 export function acceptJobParts(
   campaign: string,
   jobId: string,
   rev: number,
-  input: {
-    scenes?: string[];
-    npcs?: string[];
-    locations?: string[];
-    chapter?: string;
-    chapterTitle?: string;
-  } = {},
-): Promise<AcceptedParts> {
-  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
-  return postJson<AcceptedParts>(path, {
+  selection: { scenes?: string[]; npcs?: string[]; locations?: string[] },
+): Promise<GeneratorJob> {
+  return patchGeneratorJob(campaign, jobId, {
     rev,
-    ...(input.scenes === undefined ? {} : { scenes: input.scenes }),
-    ...(input.npcs === undefined ? {} : { npcs: input.npcs }),
-    ...(input.locations === undefined ? {} : { locations: input.locations }),
-    ...(input.chapter === undefined || input.chapterTitle === undefined
-      ? {}
-      : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
+    review: {
+      ...(selection.scenes === undefined ? {} : { writtenScenes: selection.scenes }),
+      ...(selection.npcs === undefined ? {} : { writtenNpcs: selection.npcs }),
+      ...(selection.locations === undefined ? {} : { writtenLocations: selection.locations }),
+    },
   });
 }
 
 /**
- * The retry action for ONE part of a pipelined scene run.
- * Restarts that part only — the outline stays, the finished parts stay
- * reviewable — and answers the job with the part back in `running`, so the
- * view can seed its cache without an extra read.
+ * Run ONE failed part of a scene run again. Restarts that part only — the
+ * outline stays, the finished parts stay reviewable — and answers the job
+ * with the part back in `running`, so the view can seed its cache without an
+ * extra read.
  */
-export function retryJobPart(
+export async function retryJobPart(
   campaign: string,
   jobId: string,
   key: string,
-): Promise<GenerateJob> {
-  const path =
-    `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}` +
-    `/parts/${encodeURIComponent(key)}/retry`;
-  return postJson<GenerateJob>(path, {});
+): Promise<GeneratorJob> {
+  const path = `${generatorJobPath(campaign, jobId)}/parts/${encodeURIComponent(key)}`;
+  const response = await fetch(`/api${path}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "running" }),
+  });
+  if (!response.ok) throw await failure(`PATCH /api${path}`, response);
+  return (await response.json()) as GeneratorJob;
 }
-

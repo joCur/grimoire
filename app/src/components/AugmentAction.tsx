@@ -32,12 +32,11 @@
 // searching and inbox surface (UI-BRIEF), and a block-by-block diff review is
 // not that. The reading view itself is untouched by this at every width.
 
-import type { GenerateJob, GenerateJobStarted, NamingHint } from "@grimoire/shared/types";
+import type { GeneratorJob, NamingHint } from "@grimoire/shared/generator-job";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { deleteGenerateJob } from "@/api";
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
@@ -57,7 +56,7 @@ import {
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
 import { reviewOf, runJobArrived } from "@/lib/generate";
-import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
+import { discardGeneratorJob, generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview, type JobReviewSync } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
 
@@ -163,10 +162,10 @@ export function AugmentDialog({
   /** What the dialog calls the row — its name, never its address. */
   name: string;
   /** Is this job the augment run of THIS row? */
-  isMine: (job: GenerateJob) => boolean;
-  start: (input: { sourceText: string; instruction: string }) => Promise<GenerateJobStarted>;
+  isMine: (job: GeneratorJob) => boolean;
+  start: (input: { sourceText: string; instruction: string }) => Promise<GeneratorJob>;
   /** The review of a finished run of this row, or undefined while there is no proposal. */
-  review: (job: GenerateJob) => ReactNode | undefined;
+  review: (job: GeneratorJob) => ReactNode | undefined;
   onClose: () => void;
 }) {
   const t = useT();
@@ -217,7 +216,7 @@ export function AugmentDialog({
       // outlives it: a second run over a failed one would otherwise
       // recognise the OLD run's job as its own.
       setAwaitingJob((waiting) =>
-        waiting === undefined ? waiting : { ...waiting, startedJobId: started.jobId },
+        waiting === undefined ? waiting : { ...waiting, startedJobId: started.id },
       );
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
@@ -229,7 +228,7 @@ export function AugmentDialog({
   });
 
   const discard = useMutation({
-    mutationFn: () => deleteGenerateJob(campaign),
+    mutationFn: () => discardGeneratorJob(queryClient, campaign),
     onSuccess: () => {
       setAwaitingJob(undefined);
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
@@ -417,7 +416,7 @@ export interface AugmentReviewState {
 
 export function useAugmentReviewState(
   campaign: string,
-  job: GenerateJob,
+  job: GeneratorJob,
   proposal: ProposalView,
 ): AugmentReviewState {
   // The per-field and per-block decisions are SERVER state: a closed dialog,
@@ -504,7 +503,10 @@ export function AugmentReview({
   const canApply = bodyChanged || Object.keys(patch).length > 0;
 
   const reject = useMutation({
-    mutationFn: () => deleteGenerateJob(campaign),
+    mutationFn: async () => {
+      await review.flush();
+      await discardGeneratorJob(queryClient, campaign);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       onDone();

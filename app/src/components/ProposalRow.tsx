@@ -2,7 +2,7 @@
 // reason, and the decision — take, reject, write it on its own, or undo.
 // What the row proposes is the caller's; the row knows only its state.
 
-import type { GenerateReviewDecision } from "@grimoire/shared/types";
+import type { GenerateReviewDecision } from "@grimoire/shared/generator-job";
 import { Check, type LucideIcon } from "lucide-react";
 import { Link } from "react-router";
 

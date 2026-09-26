@@ -4,7 +4,8 @@
 // write.
 
 import { npcChangeSchema } from "@grimoire/shared/npc";
-import type { GenerateJob, Npc } from "@grimoire/shared/types";
+import type { Npc } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   AugmentDialog,
@@ -69,7 +70,7 @@ function NpcAugmentReview({
 }: {
   campaign: string;
   npc: Npc;
-  job: GenerateJob;
+  job: GeneratorJob;
   proposal: ProposalView;
   onDone: () => void;
 }) {

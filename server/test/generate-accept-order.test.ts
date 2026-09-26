@@ -18,9 +18,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import type { CampaignTree, ChapterNode, GenerateJob, Scene } from "@grimoire/shared";
+import type { CampaignTree, ChapterNode, GeneratorJob, Scene } from "@grimoire/shared";
 import { app } from "../src/server";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests } from "../src/generator-jobs";
 import { setProviderForTests } from "../src/generator";
 import type { CompletionResult, CorrectionTurn, GenerateRequest } from "../src/llm-provider";
 import { generateJobs, scenes } from "../src/db/schema";
@@ -28,6 +28,14 @@ import { readFixtureCampaign, seedCampaign } from "../src/db/seed";
 import { closeStore, getDb, initStore } from "../src/store/handle";
 import { dropStore, FIXTURES, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
+import {
+  acceptBody,
+  jobsUrl,
+  jobUrl,
+  openSelection,
+  readJob,
+  type Selection,
+} from "./support/generator-jobs";
 
 const CAMPAIGN = "beispiel";
 /** The chapter the example campaign brings, with its two fixture scenes. */
@@ -75,17 +83,13 @@ async function send(method: string, url: string, body?: unknown): Promise<Respon
   });
 }
 
-async function fetchJob(): Promise<GenerateJob | null> {
-  const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`);
-  if (res.status === 404) return null;
-  expect(res.status).toBe(200);
-  return (await res.json()) as GenerateJob;
-}
+const fetchJob = (): Promise<GeneratorJob | null> => readJob(CAMPAIGN);
 
 /** Start a run on `chapter` and wait until its job is finished. */
-async function runJob(chapter: string, newChapter = false): Promise<GenerateJob> {
+async function runJob(chapter: string, newChapter = false): Promise<GeneratorJob> {
   setProviderForTests(new PipelineFake([reply(chapter)]));
-  const res = await send("POST", `/api/campaigns/${CAMPAIGN}/generate`, {
+  const res = await send("POST", jobsUrl(CAMPAIGN), {
+    kind: "scene",
     chapter,
     sourceText: "Fenn waits at the docks.",
     ...(newChapter ? { newChapter: true, chapterTitle: "Tiefwasser" } : {}),
@@ -100,11 +104,9 @@ async function runJob(chapter: string, newChapter = false): Promise<GenerateJob>
   throw new Error("job never finished");
 }
 
-const accept = (job: GenerateJob, body: Record<string, unknown> = {}): Promise<Response> =>
-  send("POST", `/api/campaigns/${CAMPAIGN}/generate/job/${job.id}/accept`, {
-    rev: job.rev ?? 0,
-    ...body,
-  });
+/** Accept a selection — or, without one, everything "accept all" names. */
+const accept = (job: GeneratorJob, selection: Selection = openSelection(job)): Promise<Response> =>
+  send("PATCH", jobUrl(CAMPAIGN, job.id), acceptBody(job, selection));
 
 /** The chapter node of the tree: its scenes in order and the order's guard. */
 async function chapterNode(chapter: string): Promise<ChapterNode> {
@@ -240,9 +242,9 @@ test("a new chapter's run starts at 0 and keeps its order across calls", async (
 
 test("a dropped scene keeps its number and leaves a gap", async () => {
   const job = await runJob(EXISTING_CHAPTER);
-  const dropped = await send("PATCH", `/api/campaigns/${CAMPAIGN}/generate/job/${job.id}/review`, {
-    rev: job.rev ?? 0,
-    droppedScenes: ["zweite-szene"],
+  const dropped = await send("PATCH", jobUrl(CAMPAIGN, job.id), {
+    rev: job.rev,
+    review: { droppedScenes: ["zweite-szene"] },
   });
   expect(dropped.status).toBe(200);
   await acceptOneByOne(EXISTING_CHAPTER, ["dritte-szene", "erste-szene"]);
@@ -336,7 +338,8 @@ test("the start outlasts the run's own writes while a part is still running", as
     }
   }
   setProviderForTests(new HoldingFake([reply(EXISTING_CHAPTER)]));
-  const res = await send("POST", `/api/campaigns/${CAMPAIGN}/generate`, {
+  const res = await send("POST", jobsUrl(CAMPAIGN), {
+    kind: "scene",
     chapter: EXISTING_CHAPTER,
     sourceText: "Fenn waits at the docks.",
   });

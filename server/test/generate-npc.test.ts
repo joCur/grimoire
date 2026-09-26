@@ -1,6 +1,6 @@
 // NPC generator tests. Same harness as the scene pipeline tests
 // (generator.test.ts): a database seeded from the example campaign — once for
-// this file, because cases build on what an earlier one applied — and a
+// this file, because cases build on what an earlier one accepted — and a
 // FakeProvider with scripted raw replies instead of a real LLM. An accepted
 // npc is a ROW, so "was it written?" is asked through the npc's own resource.
 //
@@ -11,10 +11,11 @@
 // own validation rules.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { GenerateJob, GenerateNpcResult, GenerateUsage, Npc } from "@grimoire/shared";
+import type { GeneratorJob, GenerateNpcResult, GenerateUsage, Npc } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setKnowledge } from "./support/knowledge-items";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests } from "../src/generator-jobs";
+import { acceptBody, jobsUrl, jobUrl, readJob } from "./support/generator-jobs";
 import { setProviderForTests } from "../src/generator";
 import { entryReply, type ScriptedEntry } from "./support/pipeline-fake";
 import { dropStore, seedStore } from "./support/store";
@@ -181,28 +182,37 @@ function replyFor(id: string, over: Parameters<typeof npcDraft>[0] = {}): string
   return npcReply({ content: npcDraft({ id, ...over }) });
 }
 
-async function postJson(url: string, body?: unknown): Promise<Response> {
+async function send(method: string, url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json" },
     body: body === undefined ? "{}" : JSON.stringify(body),
   });
 }
 
+const postJson = (url: string, body?: unknown): Promise<Response> => send("POST", url, body);
+
 const npcBody = {
+  kind: "npc",
   sourceText: "Grella runs her own route through the north cove; she owes Jorna a favour.",
 };
 
 // --- job helpers ----------------------------------------------------------------
 
-async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
-  const res = await app.request(`/api/campaigns/${campaign}/generate/job`);
-  if (res.status === 404) return null;
-  expect(res.status).toBe(200);
-  return (await res.json()) as GenerateJob;
-}
+const fetchJob = (campaign = "beispiel"): Promise<GeneratorJob | null> => readJob(campaign);
 
-async function waitForJob(campaign = "beispiel"): Promise<GenerateJob> {
+/** PATCH the campaign's job with the rev the caller read. */
+const patchJob = (job: GeneratorJob, body: Record<string, unknown>): Promise<Response> =>
+  send("PATCH", jobUrl("beispiel", job.id), { rev: job.rev, ...body });
+
+/** The body of a scene run — the other kind of job a campaign has. */
+const sceneBody = {
+  kind: "scene",
+  chapter: "01-salzhafen",
+  sourceText: "Fenn waits at the docks.",
+};
+
+async function waitForJob(campaign = "beispiel"): Promise<GeneratorJob> {
   for (let i = 0; i < 2000; i++) {
     const job = await fetchJob(campaign);
     if (job === null) throw new Error("job disappeared while waiting");
@@ -219,9 +229,9 @@ interface GenerateOutcome {
 
 /** Start an NPC run and wait for it — the synchronous view of the job flow. */
 async function generateNpc(body?: unknown, campaign = "beispiel"): Promise<GenerateOutcome> {
-  const res = await postJson(`/api/campaigns/${campaign}/generate/npc`, body);
+  const res = await postJson(jobsUrl(campaign), body);
   if (res.status !== 202) return { status: res.status, json: () => res.json() };
-  expect(await res.json()).toEqual({ jobId: expect.any(String) });
+  expect(await res.json()).toMatchObject({ id: expect.any(String), kind: "npc", status: "running" });
   const job = await waitForJob(campaign);
   if (job.status === "done") return { status: 200, json: async () => job.npcResult };
   return { status: job.error?.status ?? 500, json: async () => job.error?.body };
@@ -238,9 +248,9 @@ async function firstValidationError(replies: ScriptedReply[]): Promise<string> {
   return body.validationErrors.join("\n");
 }
 
-// --- POST /api/campaigns/:campaign/generate/npc -------------------------------------------
+// --- POST /api/campaigns/:campaign/generator-jobs { kind: "npc" } --------------------------
 
-describe("POST /api/campaigns/:campaign/generate/npc", () => {
+describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
   test("happy path: GenerateNpcResult from one call, nothing written", async () => {
     const fake = useFake([npcReply()]);
     const res = await generateNpc(npcBody);
@@ -629,11 +639,15 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     const fake = useFake([npcReply()]);
     for (const body of [
       {},
-      { sourceText: "" },
-      { sourceText: "   " },
-      { sourceText: 42 },
-      { sourceText: "ok", id: 7 },
-      { sourceText: "ok", extra: true },
+      { kind: "npc" },
+      { kind: "npc", sourceText: "" },
+      { kind: "npc", sourceText: "   " },
+      { kind: "npc", sourceText: 42 },
+      { kind: "npc", sourceText: "ok", id: 7 },
+      { kind: "npc", sourceText: "ok", extra: true },
+      // a key only a scene run takes
+      { kind: "npc", sourceText: "ok", chapter: "01-salzhafen" },
+      { sourceText: "ok" }, // no kind
     ]) {
       expect((await generateNpc(body)).status).toBe(400);
     }
@@ -658,7 +672,7 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.LLM_PROVIDER;
     try {
-      const res = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
+      const res = await postJson(jobsUrl("beispiel"), npcBody);
       expect(res.status).toBe(503);
       expect(await res.json()).toEqual({ error: "ANTHROPIC_API_KEY fehlt" });
       expect(await fetchJob()).toBeNull();
@@ -675,12 +689,13 @@ describe("npc generate jobs", () => {
     const open = gate();
     useFake([replyFor("job-kind")], undefined, open.promise);
 
-    const res = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
+    const res = await postJson(jobsUrl("beispiel"), npcBody);
     expect(res.status).toBe(202);
-    const { jobId } = (await res.json()) as { jobId: string };
+    const started = (await res.json()) as GeneratorJob;
+    expect(started).toMatchObject({ kind: "npc", status: "running" });
 
     const running = await fetchJob();
-    expect(running).toMatchObject({ id: jobId, campaign: "beispiel", kind: "npc", status: "running" });
+    expect(running).toEqual(started);
     expect(running!.chapter).toBeUndefined();
 
     open.open();
@@ -694,25 +709,23 @@ describe("npc generate jobs", () => {
   });
 
   test("ONE generator job per campaign — a scene run blocks an npc start and back", async () => {
-    // scene job running -> npc start is a 409 carrying the running job's id.
+    // scene job running -> npc start is a 409 carrying the running job.
     // The scene reply itself is junk (this test is about the gate, not the
     // pipeline) — one reply per allowed attempt, so nothing runs dry.
     const open = gate();
     process.env.LLM_CORRECTION_TURNS = "0";
     useFake(["{}"], undefined, open.promise);
-    const scene = await postJson("/api/campaigns/beispiel/generate", {
-      chapter: "01-salzhafen",
-      sourceText: "Fenn waits at the docks.",
-    });
+    const scene = await postJson(jobsUrl("beispiel"), sceneBody);
     expect(scene.status).toBe(202);
-    const { jobId } = (await scene.json()) as { jobId: string };
+    const sceneJob = (await scene.json()) as GeneratorJob;
 
-    const npc = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
+    const npc = await postJson(jobsUrl("beispiel"), npcBody);
     expect(npc.status).toBe(409);
     expect(await npc.json()).toEqual({
-      error: "a generate job is already running for this campaign",
-      jobId,
+      error: "a generator job is already running for this campaign",
+      generatorJob: await fetchJob(),
     });
+    expect((await fetchJob())!.id).toBe(sceneJob.id);
     open.open();
     await waitForJob();
     await clearJobsForTests();
@@ -720,13 +733,14 @@ describe("npc generate jobs", () => {
     // …and the other way round: npc job running -> scene start is a 409
     const open2 = gate();
     useFake([replyFor("job-block")], undefined, open2.promise);
-    const started = await postJson("/api/campaigns/beispiel/generate/npc", npcBody);
+    const started = await postJson(jobsUrl("beispiel"), npcBody);
     expect(started.status).toBe(202);
-    const second = await postJson("/api/campaigns/beispiel/generate", {
-      chapter: "01-salzhafen",
-      sourceText: "Fenn waits at the docks.",
-    });
+    const npcJob = (await started.json()) as GeneratorJob;
+    const second = await postJson(jobsUrl("beispiel"), sceneBody);
     expect(second.status).toBe(409);
+    expect(((await second.json()) as { generatorJob: GeneratorJob }).generatorJob.id).toBe(
+      npcJob.id,
+    );
     open2.open();
     await waitForJob();
   });
@@ -739,10 +753,7 @@ describe("npc generate jobs", () => {
       replyFor("job-replace"),
     ]);
     process.env.LLM_CORRECTION_TURNS = "0";
-    await postJson("/api/campaigns/beispiel/generate", {
-      chapter: "01-salzhafen",
-      sourceText: "Fenn waits at the docks.",
-    });
+    await postJson(jobsUrl("beispiel"), sceneBody);
     const failed = await waitForJob();
     expect(failed.kind).toBe("scene");
     expect(failed.status).toBe("failed");
@@ -759,14 +770,8 @@ describe("npc generate jobs", () => {
     await generateNpc(npcBody);
     const edited = `${npcDraft({ id: "job-drafts" }).body}\nHandgeschriebene Ergänzung.\n`;
 
-    const edit = async (id: string) => {
-      const current = await fetchJob();
-      return app.request(`/api/campaigns/beispiel/generate/job/${current!.id}/review`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rev: current!.rev ?? 0, npcEdits: { [id]: { body: edited } } }),
-      });
-    };
+    const edit = async (id: string) =>
+      patchJob((await fetchJob())!, { npcEdits: { [id]: { body: edited } } });
 
     expect((await edit("fremd")).status).toBe(400);
     const res = await edit("job-drafts");
@@ -783,29 +788,33 @@ describe("npc generate jobs", () => {
 // --- accepting the npc of an NPC run -----------------------------------------------
 
 describe("accept the npc of an NPC run", () => {
-  /** Run + apply: the npc of a finished job is written. */
-  async function runAndApply(id: string, over: { jobId?: string } = {}): Promise<Response> {
+  /** Run an NPC run for `id` and answer its finished job. */
+  async function runFor(id: string): Promise<GeneratorJob> {
     useFake([replyFor(id)]);
     expect((await generateNpc(npcBody)).status).toBe(200);
-    const job = await fetchJob();
-    return postJson("/api/campaigns/beispiel/generate/apply", {
-      npcs: [job!.npcResult!.npc],
-      jobId: over.jobId ?? job!.id,
-    });
+    return (await fetchJob())!;
   }
 
-  test("the whole-run apply writes the npc and discards the job", async () => {
-    const res = await runAndApply("apply-happy");
+  /** Accept the one npc of an NPC run. */
+  const acceptNpc = (job: GeneratorJob, id: string): Promise<Response> =>
+    send("PATCH", jobUrl("beispiel", job.id), acceptBody(job, { npcs: [id] }));
+
+  test("accepting the npc writes it, and the settled job is gone", async () => {
+    const job = await runFor("accept-happy");
+    const res = await acceptNpc(job, "accept-happy");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ scenes: [], npcs: ["apply-happy"], locations: [] });
+    // The answer is the job as it ended: the npc is written, nothing is open.
+    const ended = (await res.json()) as GeneratorJob;
+    expect(ended.id).toBe(job.id);
+    expect(ended.review.writtenNpcs).toEqual(["accept-happy"]);
     // the npc is stored — nothing left to restore
     expect(await fetchJob()).toBeNull();
 
     // …and it is a real npc for the rest of the API: every reviewed field
     // came through, the quoted quickstats included, and the body is stored
     // as the reply carried it
-    const written = await read("apply-happy");
-    expect(written.id).toBe("apply-happy");
+    const written = await read("accept-happy");
+    expect(written.id).toBe("accept-happy");
     expect(written.name).toBe("Grella");
     expect(written.status).toBe("alive");
     expect(written.quickstats).toEqual({ insight: "+3", deception: "+5" });
@@ -818,93 +827,76 @@ describe("accept the npc of an NPC run", () => {
     expect(written.body).toContain("- [[jorna]]: schuldet ihr einen Gefallen");
   });
 
-  test("a stale jobId leaves the job alone", async () => {
-    const res = await runAndApply("apply-stale", {
-      jobId: "00000000-0000-0000-0000-000000000000",
-    });
-    expect(res.status).toBe(200);
-    expect((await fetchJob())!.kind).toBe("npc");
-  });
-
-  test("the partial accept writes the npc by its id, with the DM's change on top", async () => {
-    useFake([replyFor("accept-edit")]);
-    expect((await generateNpc(npcBody)).status).toBe(200);
-    let job = (await fetchJob())!;
-    const patched = await app.request(`/api/campaigns/beispiel/generate/job/${job.id}/review`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rev: job.rev ?? 0, npcEdits: { "accept-edit": { name: "Grella die Ältere" } } }),
-    });
+  test("the accept writes the npc by its id, with the DM's change on top", async () => {
+    let job = await runFor("accept-edit");
+    const patched = await patchJob(job, { npcEdits: { "accept-edit": { name: "Grella die Ältere" } } });
     expect(patched.status).toBe(200);
-    job = (await patched.json()) as GenerateJob;
-    // accept-all of an NPC run is its one npc.
-    const res = await postJson(`/api/campaigns/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
+    job = (await patched.json()) as GeneratorJob;
+    const res = await acceptNpc(job, "accept-edit");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      scenes: [],
-      npcs: ["accept-edit"],
-      locations: [],
-      jobDeleted: true,
-    });
+    expect(((await res.json()) as GeneratorJob).review.writtenNpcs).toEqual(["accept-edit"]);
+    // The run's one npc was all there was to decide.
+    expect(await fetchJob()).toBeNull();
     const written = await read("accept-edit");
     expect(written.name).toBe("Grella die Ältere");
     expect(written.role).toBe("Schmugglerin mit eigenen Plänen");
   });
 
-  test("409 when the npc holds content — nothing overwritten", async () => {
-    // apply-happy was written by the test above
-    useFake([replyFor("apply-happy")]);
-    // the reply's id collides with an existing npc, so the RUN already fails
+  test("409 when the npc holds content by the accept — nothing overwritten", async () => {
+    // accept-happy was written by the first test: the reply's id collides with
+    // an existing npc, so the RUN already fails
+    useFake([replyFor("accept-happy")]);
     process.env.LLM_CORRECTION_TURNS = "0";
     expect((await generateNpc(npcBody)).status).toBe(422);
 
-    // …and a client that posts the npc anyway gets a 409 naming its id
-    const before = await read("apply-happy");
-    const { properties, body } = npcDraft({ id: "apply-happy" });
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", {
-      npcs: [{ ...properties, body }],
+    // …and an npc that gets content between the run and its accept is a 409
+    // naming its id
+    const job = await runFor("race-npc");
+    const created = await postJson("/api/campaigns/beispiel/npcs", {
+      id: "race-npc",
+      name: "Die andere Grella",
+      body: "## Will\n\nSchon da.\n",
     });
+    expect(created.status).toBe(201);
+    const before = await read("race-npc");
+    const res = await acceptNpc(job, "race-npc");
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: "target rows already exist",
       chapters: [],
       scenes: [],
-      npcs: ["apply-happy"],
+      npcs: ["race-npc"],
       locations: [],
     });
-    expect(await read("apply-happy")).toEqual(before); // the row's rev never moved
+    expect(await read("race-npc")).toEqual(before); // the row's rev never moved
+    // The job keeps its proposal — the review stays restorable.
+    expect((await fetchJob())!.review.writtenNpcs).toEqual([]);
   });
 
-  test("400 re-validation: every npc is checked against the npc's schema — nothing written", async () => {
-    const npc = (over: Record<string, unknown> = {}) => {
-      const { properties, body } = npcDraft({ id: "anders" });
-      return { ...properties, body, ...over };
-    };
+  test("400 re-validation: the npc the accept writes is checked against the npc's schema — nothing written", async () => {
+    const job = await runFor("anders");
     const cases: Array<[string, unknown]> = [
-      ["uppercase id", npc({ id: "Anders" })],
-      ["id with a slash", npc({ id: "npcs/anders" })],
-      ["invalid status", npc({ status: "draft" })],
-      ["missing status", npc({ status: undefined })],
-      ["the earlier properties pair", { properties: npc(), body: "" }],
-      ["body of the wrong shape", npc({ body: 7 })],
-      ["unknown key", npc({ extra: 1 })],
-      ["a kind", npc({ kind: "npc" })],
+      ["an id", { id: "Anders" }],
+      ["invalid status", { status: "draft" }],
+      ["missing status", { status: null }],
+      ["the earlier properties pair", { properties: { name: "Anders" } }],
+      ["body of the wrong shape", { body: 7 }],
+      ["unknown key", { extra: 1 }],
+      ["a kind", { kind: "npc" }],
       ["not an object", "anders"],
     ];
-    for (const [what, item] of cases) {
-      const res = await postJson("/api/campaigns/beispiel/generate/apply", { npcs: [item] });
+    for (const [what, change] of cases) {
+      const res = await send("PATCH", jobUrl("beispiel", job.id), {
+        ...acceptBody(job, { npcs: ["anders"] }),
+        npcEdits: { anders: change },
+      });
       expect(res.status, what).toBe(400);
     }
     expect(await exists("anders")).toBe(false);
-    expect(
-      (await postJson("/api/campaigns/beispiel/generate/apply", { npc: npc() })).status,
-    ).toBe(400);
-  });
-
-  test("an empty body is still 'nothing to apply'", async () => {
-    const res = await postJson("/api/campaigns/beispiel/generate/apply", { npcs: [] });
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("nothing to apply");
+    // Nothing of it reached the job either.
+    const after = (await fetchJob())!;
+    expect(after.rev).toBe(job.rev);
+    expect(after.npcEdits).toEqual({});
   });
 });
 
@@ -927,7 +919,7 @@ describe("campaign knowledge", () => {
       { kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" },
     ]);
     const fake = useFake([replyFor("kennel-hand")]);
-    expect((await generateNpc({ sourceText: "A kennel hand.", id: "kennel-hand" })).status).toBe(
+    expect((await generateNpc({ kind: "npc", sourceText: "A kennel hand.", id: "kennel-hand" })).status).toBe(
       200,
     );
     const req = fake.calls[0]!.req;
@@ -947,7 +939,7 @@ describe("campaign knowledge", () => {
     ]);
     useFake([replyFor("wharf-hand")]);
     const result = (await (
-      await generateNpc({ sourceText: "A wharf hand.", id: "wharf-hand" })
+      await generateNpc({ kind: "npc", sourceText: "A wharf hand.", id: "wharf-hand" })
     ).json()) as GenerateNpcResult;
     // The fixture's `role` is „Schmugglerin mit eigenen Plänen“.
     const hint = (result.namingHints ?? []).find((h) => h.field === "role");
@@ -963,7 +955,7 @@ describe("campaign knowledge", () => {
   test("without naming conventions the field stays absent", async () => {
     useFake([replyFor("net-mender")]);
     const result = (await (
-      await generateNpc({ sourceText: "A net mender.", id: "net-mender" })
+      await generateNpc({ kind: "npc", sourceText: "A net mender.", id: "net-mender" })
     ).json()) as GenerateNpcResult;
     expect(result.namingHints).toBeUndefined();
   });

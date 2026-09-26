@@ -24,11 +24,18 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "@playwright/test";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import { FAILING_SCENE_ID, THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
 import { expect, seedCampaigns, startGrimoireServer, test } from "../support/test";
-import { apiFor, type Api } from "../support/api";
+import { apiFor } from "../support/api";
+import {
+  generatorJobPartPath,
+  getGeneratorJob,
+  readGeneratorJob,
+  startGeneratorJob,
+} from "../support/generator-job";
 import { getScene, sceneExists } from "../support/scene";
 
 const CHAPTER = "01-salzhafen";
@@ -94,7 +101,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   );
   expect(await sceneExists(api, firstId)).toBe(true);
   // The job is still there — the failed part is not settled.
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(200);
+  expect(await readGeneratorJob(api)).not.toBeNull();
 
   // --- (3) „Erneut versuchen“ restarts THAT part only ---------------------
   await failedCard.getByRole("button", { name: "Erneut versuchen" }).click();
@@ -126,7 +133,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
     expect(stored.title).toBe(scene.title);
     expect(stored.status).toBe("draft");
   }
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
 });
 
 /**
@@ -174,7 +181,7 @@ test("scenes accepted one by one in reverse stand in outline order", async ({ pa
       await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
     }
   }
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
 
   // Stored: the chapter's own scenes, then the run in outline order.
   const runIds = THREE_SCENES.map((scene) => scene.id);
@@ -214,9 +221,7 @@ test("a finished part is acceptable while the run is still running", async ({
   await expect(page.getByText("Der Lauf ist noch nicht fertig", { exact: false })).toBeVisible();
 
   const firstId = THREE_SCENES[0].id;
-  const before = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
-    status: string;
-  };
+  const before = await getGeneratorJob(api);
   expect(before.status).toBe("running");
 
   expect(await sceneExists(api, firstId)).toBe(false);
@@ -231,10 +236,7 @@ test("a finished part is acceptable while the run is still running", async ({
 
   // …and the run is STILL running: accepting a part does not end it, and the
   // open rest keeps the job alive.
-  const after = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
-    status: string;
-    pipeline?: { parts: Array<{ status: string }> };
-  };
+  const after = await getGeneratorJob(api);
   expect(after.status).toBe("running");
   expect(after.pipeline!.parts.at(-1)!.status).toBe("running");
 
@@ -260,9 +262,7 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   // The spinner first — with nothing to review, that is the honest state.
   await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
   // …and the run is genuinely `running` while it stands there.
-  const during = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
-    status: string;
-  };
+  const during = await getGeneratorJob(api);
   expect(during.status).toBe("running");
 
   // No reload, no goto: the poll alone has to carry the view into the review.
@@ -274,9 +274,7 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeHidden();
   // And the run is STILL going while the review stands there: the switch was
   // made by a poll of a `running` job, not by its end.
-  const shown = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
-    status: string;
-  };
+  const shown = await getGeneratorJob(api);
   expect(shown.status).toBe("running");
 
   // Cleanup — nothing of this run needs to be written.
@@ -310,13 +308,9 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   // The pin of the claim: at this moment NO part has produced a draft yet —
   // the review is on the screen because a part FAILED, not because one
   // succeeded. (Waiting for the late parts first would pass either way.)
-  const early = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
-    status: string;
-    result?: { scenes: unknown[] };
-    pipeline: { parts: Array<{ status: string }> };
-  };
+  const early = await getGeneratorJob(api);
   expect(early.status).toBe("running");
-  expect(early.pipeline.parts.map((part) => part.status)).not.toContain("done");
+  expect(early.pipeline!.parts.map((part) => part.status)).not.toContain("done");
   expect(early.result?.scenes ?? []).toEqual([]);
   // …and the two late parts arrive afterwards, into the same review: their
   // PROPOSED SCENES, named by their label — the part's own title is on its
@@ -350,7 +344,7 @@ test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, t
 
   await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
-  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
+  expect(await readGeneratorJob(api)).toBeNull();
   // Nothing of the abandoned run lands afterwards.
   for (const scene of THREE_SCENES) {
     expect(await sceneExists(api, scene.id)).toBe(false);
@@ -359,23 +353,9 @@ test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, t
 
 // --- the restart, one level deeper than generator-restart.e2e.ts -------------
 
-/** GET …/generate/job — null on the 404 "there is none". */
-async function job(api: Api): Promise<Record<string, unknown> | null> {
-  const res = await api.fetch("campaigns/beispiel/generate/job");
-  if (res.status === 404) return null;
-  expect(res.status).toBe(200);
-  return (await res.json()) as Record<string, unknown>;
-}
-
-interface JobPart {
-  key: string;
-  status: string;
-  error?: string;
-}
-
-function parts(payload: Record<string, unknown> | null): JobPart[] {
-  const pipeline = payload?.pipeline as { parts?: JobPart[] } | undefined;
-  return pipeline?.parts ?? [];
+/** The parts of a scene run — none while there is no job. */
+function parts(job: GeneratorJob | null): NonNullable<GeneratorJob["pipeline"]>["parts"] {
+  return job?.pipeline?.parts ?? [];
 }
 
 /** A run directory of this test's own, plus its cleanup. */
@@ -395,17 +375,18 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
   let jobId: string;
   try {
     const api = apiFor(first.handle.url);
-    const started = await api.send<{ jobId: string }>("POST", "campaigns/beispiel/generate", {
+    const started = await startGeneratorJob(api, {
+      kind: "scene",
       chapter: CHAPTER,
       // No failure trigger here: every part is well-formed, and only the LAST
       // one's reply is held — the shape a restart has to survive.
       sourceText: [SOURCE, TRIGGER.threeScenes, TRIGGER.slowPart].join("\n\n"),
     });
-    jobId = started.jobId;
+    jobId = started.id;
     // Wait until the two answering parts have landed.
     const deadline = Date.now() + 30_000;
     for (;;) {
-      const current = await job(api);
+      const current = await readGeneratorJob(api);
       const done = parts(current).filter((part) => part.status === "done");
       if (done.length === 2) break;
       if (Date.now() > deadline) throw new Error("the first two parts never finished");
@@ -420,7 +401,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
   const second = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
   try {
     const api = apiFor(second.handle.url);
-    const after = (await job(api))!;
+    const after = (await readGeneratorJob(api))!;
     expect(after.id).toBe(jobId);
     // Two parts survived, so the run is finished rather than failed — and the
     // one that was in flight says why it is not there.
@@ -429,8 +410,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     expect(parts(after)[2]!.error).toBe(
       "the server was restarted while the job was running — start the job again",
     );
-    const result = after.result as { scenes: Array<{ id: string }> };
-    expect(result.scenes.map((s) => s.id)).toEqual([
+    expect(after.result!.scenes.map((s) => s.id)).toEqual([
       THREE_SCENES[0].id,
       THREE_SCENES[1].id,
     ]);
@@ -440,10 +420,10 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     // then answers is the stub's business: this run's source text still holds
     // the last part's reply, which is exactly why the restart could interrupt
     // it in the first place.)
-    const retried = await api.send<Record<string, unknown>>(
-      "POST",
-      `campaigns/beispiel/generate/job/${jobId}/parts/${parts(after)[2]!.key}/retry`,
-      {},
+    const retried = await api.send<GeneratorJob>(
+      "PATCH",
+      generatorJobPartPath(api, jobId, parts(after)[2]!.key),
+      { status: "running" },
     );
     expect(retried.status).toBe("running");
     expect(parts(retried).map((part) => part.status)).toEqual(["done", "done", "running"]);

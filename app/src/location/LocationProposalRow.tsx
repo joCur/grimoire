@@ -2,7 +2,8 @@
 // shared proposal row (components/ProposalRow.tsx) with the location's marker,
 // its label, and — once written — the link to its reading view.
 
-import type { GenerateReviewDecision, LocationProposal } from "@grimoire/shared/types";
+import type { LocationProposal } from "@grimoire/shared/types";
+import type { GenerateReviewDecision } from "@grimoire/shared/generator-job";
 import { MapPin } from "lucide-react";
 
 import { ProposalRow } from "@/components/ProposalRow";

@@ -238,7 +238,7 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 
 Was das dem DM bringt: ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar und übernehmbar, und ein defekter Teil lässt sich
-einzeln wiederholen (`POST …/generate/job/:id/parts/:key/retry`). Das
+einzeln wiederholen (`PATCH …/generator-jobs/:id/parts/:key { status: "running" }`). Das
 Job-Modell dazu steht in `docs/DECISIONS.md` (ADR #10).
 
 **Prompt-Caching:** Der konstante Teil des Prompts — System-Prompt,
@@ -383,14 +383,14 @@ Trennzeile ist Text — Degradation statt Fehler.
 
 ## NPC-Generator
 
-Gleiche Pipeline, eigener Endpoint (`POST /api/campaigns/:campaign/generate/npc`)
-und eigene Prompt-Assets (`npc-system-prompt.md` und `npc-example-output.json`
+Gleiche Pipeline, eigene Art von Lauf (`POST
+/api/campaigns/:campaign/generator-jobs { kind: "npc", sourceText, id? }`) und eigene Prompt-Assets (`npc-system-prompt.md` und `npc-example-output.json`
 als Few-Shot-Ziel). Zielformat: der NPC aus README.md, ohne `rev`; `[[id]]`
 nur auf NPCs, Orte und Szenen der Kampagne oder den NPC selbst, Quickstats
 als Strings (das Plus überlebt), `status: alive` als Normalfall, `chapter`
 leer. Ein Generator-Job pro Kampagne, egal ob Szenen oder NPC. Das Ergebnis
 steht unter `npcResult.npc` und wird wie jeder vorgeschlagene NPC über seine
-`id` übernommen.
+`id` übernommen (`PATCH …/generator-jobs/:id` mit `review.writtenNpcs`).
 
 Ein bestehender NPC wird an seiner Ressource ergänzt (`POST
 …/npcs/<id>/augment`, übernommen mit `POST …/npcs/<id>/augment/apply`):
@@ -415,8 +415,8 @@ Abstraktion in `server/src/llm-provider.ts`, Auswahl per Env-Var
 Die drei OpenAI-kompatiblen Fälle teilen eine Klasse
 (`OpenAICompatProvider`); sie unterscheiden sich nur in Base-URL, Modell und
 Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
-`LLM_PROVIDER`-Wert werden nicht verschluckt: `POST /api/campaigns/:campaign/generate`
-antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
+`LLM_PROVIDER`-Wert werden nicht verschluckt: der Start eines Laufs
+(`POST /api/campaigns/:campaign/generator-jobs`) antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
 docs/DEPLOYMENT.md Abschnitt 2.
 
 ## Szenen ergänzen

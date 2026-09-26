@@ -4,7 +4,8 @@
 // accepting write.
 
 import { sceneChangeSchema } from "@grimoire/shared/scene";
-import type { GenerateJob, Scene } from "@grimoire/shared/types";
+import type { Scene } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   AugmentDialog,
@@ -74,7 +75,7 @@ function SceneAugmentReview({
 }: {
   campaign: string;
   scene: Scene;
-  job: GenerateJob;
+  job: GeneratorJob;
   proposal: ProposalView;
   onDone: () => void;
 }) {

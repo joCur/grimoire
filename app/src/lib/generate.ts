@@ -13,13 +13,12 @@
 //     and the error body of a failed job.
 
 import type {
-  GenerateJob,
-  GenerateJobPart,
-  GenerateJobReview,
+  GeneratorJob,
+  GeneratorJobPart,
+  GeneratorJobPatch,
+  GeneratorJobReview,
   GenerateReviewDecision,
-  NpcChange,
-  SceneChange,
-} from "@grimoire/shared/types";
+} from "@grimoire/shared/generator-job";
 
 import type { Translate } from "@/i18n";
 
@@ -139,7 +138,7 @@ export function generatePhase(input: {
   /** The job lookup answered at least once (data or error). */
   jobChecked: boolean;
   /** Status of the campaign's job; undefined when there is none. */
-  jobStatus?: GenerateJob["status"];
+  jobStatus?: GeneratorJob["status"];
   /**
    * A RUNNING run already has something to review: at least one part is
    * done, or one has failed and offers its retry action. Both are
@@ -169,7 +168,7 @@ export type GenerateMode = "scene" | "npc";
  * scene run — `kind` is an additive field, so a payload without it (an older
  * server, a job from before the field existed) must not land in NPC mode.
  */
-export function jobMode(job: GenerateJob | null | undefined): GenerateMode {
+export function jobMode(job: GeneratorJob | null | undefined): GenerateMode {
   return job?.kind === "npc" ? "npc" : "scene";
 }
 
@@ -180,7 +179,7 @@ export function jobMode(job: GenerateJob | null | undefined): GenerateMode {
  * asymmetry is the point: applying or discarding an NPC run must not throw
  * the view back to scenes while the DM is still writing NPCs.
  */
-export function restoredMode(current: GenerateMode, job: GenerateJob | null | undefined): GenerateMode {
+export function restoredMode(current: GenerateMode, job: GeneratorJob | null | undefined): GenerateMode {
   return job === null || job === undefined ? current : jobMode(job);
 }
 
@@ -191,7 +190,7 @@ export function restoredMode(current: GenerateMode, job: GenerateJob | null | un
  * job without a body to show.
  */
 export function jobErrorBody(
-  job: GenerateJob | null | undefined,
+  job: GeneratorJob | null | undefined,
 ): Record<string, unknown> | undefined {
   if (job === null || job === undefined || job.status !== "failed") return undefined;
   const body = job.error?.body;
@@ -228,7 +227,7 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 // still open. No fetching; the hook (lib/use-job-review.ts) does that.
 
 /** A review state with nothing decided — also the fallback for an older payload. */
-export function emptyReview(): GenerateJobReview {
+export function emptyReview(): GeneratorJobReview {
   return {
     droppedScenes: [],
     fields: {},
@@ -242,7 +241,7 @@ export function emptyReview(): GenerateJobReview {
 }
 
 /** The job's review state, degrading to "nothing decided" when it has none. */
-export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview {
+export function reviewOf(job: GeneratorJob | null | undefined): GeneratorJobReview {
   const review = job?.review;
   if (review === undefined) return emptyReview();
   return {
@@ -257,21 +256,11 @@ export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview
   };
 }
 
-/** What one `PATCH …/review` changes — the same merge the server does. */
-export interface ReviewPatch {
-  /** The DM's change to a proposed scene, by its id — merged field by field. */
-  sceneEdits?: Record<string, SceneChange>;
-  /** The DM's change to a proposed npc, by its id — merged field by field. */
-  npcEdits?: Record<string, NpcChange>;
-  /** The decision per proposed npc, by its id. */
-  npcs?: Record<string, GenerateReviewDecision | null>;
-  /** The decision per proposed location, by its id. */
-  locations?: Record<string, GenerateReviewDecision | null>;
-  /** The ids of the dropped scenes — the whole set. */
-  droppedScenes?: string[];
-  fields?: Record<string, boolean | null>;
-  blocks?: Record<string, boolean | null>;
-}
+/**
+ * What one review patch of the job changes — its PATCH without the guard,
+ * which the sender adds when it goes out.
+ */
+export type ReviewPatch = Omit<GeneratorJobPatch, "rev" | "id">;
 
 /**
  * Merge the changes of the proposals PER ID and field by field: a text edit
@@ -319,28 +308,29 @@ function mergeDecisions(
 /**
  * The job as it will look once a patch lands — the OPTIMISTIC copy the UI
  * shows while the request is in flight. It must merge exactly the way the
- * server does (generate-jobs.ts `applyReviewPatch`), including the one
+ * server does (generator-jobs.ts `applyReviewPatch`), including the one
  * asymmetry: `droppedScenes` is a set sent whole, everything else merges per key,
  * and a `null` decision — in `npcs`, `locations`, `fields` and `blocks`
  * alike — means that the decision is open again, which deletes the key.
  */
-export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): GenerateJob {
+export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): GeneratorJob {
   const review = reviewOf(job);
+  const decided = patch.review ?? {};
   return {
     ...job,
     sceneEdits: mergeEdits(job.sceneEdits ?? {}, patch.sceneEdits),
     npcEdits: mergeEdits(job.npcEdits ?? {}, patch.npcEdits),
     review: {
       droppedScenes:
-        patch.droppedScenes === undefined
+        decided.droppedScenes === undefined
           ? review.droppedScenes
-          : [...new Set(patch.droppedScenes)],
-      fields: mergeFlags(review.fields, patch.fields),
-      blocks: mergeFlags(review.blocks, patch.blocks),
+          : [...new Set(decided.droppedScenes)],
+      fields: mergeFlags(review.fields, decided.fields),
+      blocks: mergeFlags(review.blocks, decided.blocks),
       writtenScenes: review.writtenScenes,
-      npcs: mergeDecisions(review.npcs, patch.npcs),
+      npcs: mergeDecisions(review.npcs, decided.npcs),
       writtenNpcs: review.writtenNpcs,
-      locations: mergeDecisions(review.locations, patch.locations),
+      locations: mergeDecisions(review.locations, decided.locations),
       writtenLocations: review.writtenLocations,
     },
   };
@@ -354,7 +344,7 @@ export type PartState = "open" | "written" | "dropped" | "rejected";
  * read-only and links to what it became; a dropped one is out of every
  * accept.
  */
-export function sceneState(job: GenerateJob | null | undefined, id: string): PartState {
+export function sceneState(job: GeneratorJob | null | undefined, id: string): PartState {
   const review = reviewOf(job);
   if (review.writtenScenes.includes(id)) return "written";
   if (review.droppedScenes.includes(id)) return "dropped";
@@ -365,7 +355,7 @@ export function sceneState(job: GenerateJob | null | undefined, id: string): Par
  * The state of one proposed npc, by its id — read off the npc's own
  * decisions and written list (ADR #31).
  */
-export function npcState(job: GenerateJob | null | undefined, id: string): PartState {
+export function npcState(job: GeneratorJob | null | undefined, id: string): PartState {
   const review = reviewOf(job);
   if (review.writtenNpcs.includes(id)) return "written";
   if (review.npcs[id] === "rejected") return "rejected";
@@ -376,7 +366,7 @@ export function npcState(job: GenerateJob | null | undefined, id: string): PartS
  * The state of one proposed location, by its id — the same states, read
  * off the location's own decisions and written list.
  */
-export function locationState(job: GenerateJob | null | undefined, id: string): PartState {
+export function locationState(job: GeneratorJob | null | undefined, id: string): PartState {
   const review = reviewOf(job);
   if (review.writtenLocations.includes(id)) return "written";
   if (review.locations[id] === "rejected") return "rejected";
@@ -384,12 +374,12 @@ export function locationState(job: GenerateJob | null | undefined, id: string): 
 }
 
 /** The ids of the scenes a run proposes. */
-export function jobScenes(job: GenerateJob | null | undefined): string[] {
+export function jobScenes(job: GeneratorJob | null | undefined): string[] {
   return (job?.result?.scenes ?? []).map((scene) => scene.id);
 }
 
 /** The ids of the npcs a run proposes — a scene run's list, or the NPC run's one npc. */
-export function jobNpcs(job: GenerateJob | null | undefined): string[] {
+export function jobNpcs(job: GeneratorJob | null | undefined): string[] {
   const ids = (job?.result?.npcs ?? []).map((npc) => npc.id);
   const npc = job?.npcResult?.npc.id;
   if (npc !== undefined) ids.push(npc);
@@ -397,7 +387,7 @@ export function jobNpcs(job: GenerateJob | null | undefined): string[] {
 }
 
 /** The ids of the locations a run proposes. */
-export function jobLocations(job: GenerateJob | null | undefined): string[] {
+export function jobLocations(job: GeneratorJob | null | undefined): string[] {
   return (job?.result?.locations ?? []).map((location) => location.id);
 }
 
@@ -407,7 +397,7 @@ export function jobLocations(job: GenerateJob | null | undefined): string[] {
  * `written` the ones already accepted; a run nobody has accepted anything of
  * reports 0 and shows no progress at all.
  */
-export function jobProgress(job: GenerateJob | null | undefined): {
+export function jobProgress(job: GeneratorJob | null | undefined): {
   written: number;
   total: number;
 } {
@@ -439,7 +429,7 @@ export function jobProgress(job: GenerateJob | null | undefined): {
  * review without being a part of the outline, and a count above its own
  * total would be worse than the confusion this fixes.
  */
-export function acceptProgress(job: GenerateJob | null | undefined): {
+export function acceptProgress(job: GeneratorJob | null | undefined): {
   written: number;
   total: number;
 } {
@@ -450,18 +440,57 @@ export function acceptProgress(job: GenerateJob | null | undefined): {
 }
 
 /** The proposed scenes still open, by id. */
-export function openScenes(job: GenerateJob | null | undefined): string[] {
+export function openScenes(job: GeneratorJob | null | undefined): string[] {
   return jobScenes(job).filter((id) => sceneState(job, id) === "open");
 }
 
 /** The proposed npcs still open, by id. */
-export function openNpcs(job: GenerateJob | null | undefined): string[] {
+export function openNpcs(job: GeneratorJob | null | undefined): string[] {
   return jobNpcs(job).filter((id) => npcState(job, id) === "open");
 }
 
 /** The proposed locations still open, by id. */
-export function openLocations(job: GenerateJob | null | undefined): string[] {
+export function openLocations(job: GeneratorJob | null | undefined): string[] {
   return jobLocations(job).filter((id) => locationState(job, id) === "open");
+}
+
+/** The proposals an accept names, by entity. */
+export interface AcceptSelection {
+  scenes?: string[];
+  npcs?: string[];
+  locations?: string[];
+}
+
+/**
+ * What accepting the whole run names: every open scene, every open npc and
+ * location the DM accepted — an undecided one stays out — and the NPC run's
+ * one npc unless it was rejected, because it is the whole run.
+ */
+export function openSelection(job: GeneratorJob | null | undefined): AcceptSelection {
+  const review = reviewOf(job);
+  const npcRun = job?.npcResult?.npc.id;
+  return {
+    scenes: openScenes(job),
+    npcs: openNpcs(job).filter((id) => id === npcRun || review.npcs[id] === "accepted"),
+    locations: openLocations(job).filter((id) => review.locations[id] === "accepted"),
+  };
+}
+
+/**
+ * What an accept wrote: the ids the answer lists as written that the job it
+ * was sent against did not.
+ */
+export function writtenBy(
+  before: GeneratorJob | null | undefined,
+  after: GeneratorJob,
+): { scenes: string[]; npcs: string[]; locations: string[] } {
+  const was = reviewOf(before);
+  const added = (previous: string[], now: string[]) => now.filter((id) => !previous.includes(id));
+  return {
+    scenes: added(was.writtenScenes, after.review.writtenScenes),
+    npcs: added(was.writtenNpcs, after.review.writtenNpcs),
+    locations: added(was.writtenLocations, after.review.writtenLocations),
+  };
 }
 
 // --- the pipeline of a scene run -------------------------------------------
@@ -472,17 +501,17 @@ export function openLocations(job: GenerateJob | null | undefined): string[] {
 // not send it, because it is an internal step and the DM never edits it.
 
 /** The parts of a run, in outline order; empty for a single-call run. */
-export function jobPipelineParts(job: GenerateJob | null | undefined): GenerateJobPart[] {
+export function jobPipelineParts(job: GeneratorJob | null | undefined): GeneratorJobPart[] {
   return job?.pipeline?.parts ?? [];
 }
 
 /** Is there anything in this run the DM can already look at or act on? */
-export function hasReviewableParts(job: GenerateJob | null | undefined): boolean {
+export function hasReviewableParts(job: GeneratorJob | null | undefined): boolean {
   return jobPipelineParts(job).some((part) => part.status === "done" || part.status === "failed");
 }
 
 /** Is any part of the run still waiting or in flight? */
-export function partsStillRunning(job: GenerateJob | null | undefined): boolean {
+export function partsStillRunning(job: GeneratorJob | null | undefined): boolean {
   return jobPipelineParts(job).some(
     (part) => part.status === "pending" || part.status === "running",
   );
@@ -503,7 +532,7 @@ export function partsStillRunning(job: GenerateJob | null | undefined): boolean 
  * part is a scene, parts as soon as suggested entries are among them.
  */
 export function pipelineProgress(
-  job: GenerateJob | null | undefined,
+  job: GeneratorJob | null | undefined,
   t: Translate,
 ): string | undefined {
   const parts = jobPipelineParts(job);
@@ -522,7 +551,7 @@ export function pipelineProgress(
  * no tokens still shows the call count, because that number is always true.
  */
 export function pipelineCostLabel(
-  job: GenerateJob | null | undefined,
+  job: GeneratorJob | null | undefined,
   t: Translate,
 ): string | undefined {
   const totals = job?.pipeline?.totals;

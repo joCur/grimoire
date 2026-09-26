@@ -2,12 +2,8 @@
 // its write conflict, and the augment run on it. Built from the shared HTTP
 // helpers (../api.ts).
 
-import type {
-  GenerateJobStarted,
-  Scene,
-  SceneCreate,
-  ScenePatch,
-} from "@grimoire/shared/types";
+import type { Scene, SceneCreate, ScenePatch } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import {
   ApiError,
@@ -88,14 +84,14 @@ export function createScene(campaign: string, input: SceneCreate): Promise<Scene
 
 /**
  * Start an augment run on a scene, on the scene's own resource — the same
- * job model as every other run (`startJob`); the proposal is fetched via
- * fetchGenerateJob (`kind: "scene-augment"`, `sceneAugmentResult`).
+ * job model as every other run (`startJob`); the proposal is read
+ * on the job (`kind: "scene-augment"`, `sceneAugmentResult`).
  */
 export function startSceneAugmentJob(
   campaign: string,
   id: string,
   input: { sourceText?: string; instruction?: string },
-): Promise<GenerateJobStarted> {
+): Promise<GeneratorJob> {
   return startJob(`${scenesUrl(campaign, id)}/augment`, runTexts(input));
 }
 

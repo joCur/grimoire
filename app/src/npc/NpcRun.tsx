@@ -10,13 +10,8 @@
 //            so no proposal rows and no count in the apply button.
 //   done     the action that opens the npc the accept wrote.
 
-import type {
-  CampaignTree,
-  GenerateJob,
-  GenerateJobStarted,
-  GenerateNpcResult,
-  NpcChange,
-} from "@grimoire/shared/types";
+import type { CampaignTree, NpcChange } from "@grimoire/shared/types";
+import type { GeneratorJob, GenerateNpcResult } from "@grimoire/shared/generator-job";
 import { useQueryClient } from "@tanstack/react-query";
 import { StickyNote } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -49,7 +44,7 @@ export interface NpcRunForm {
   idError: string | undefined;
   /** Source text there and the id usable. */
   ready: boolean;
-  start: (campaign: string) => Promise<GenerateJobStarted>;
+  start: (campaign: string) => Promise<GeneratorJob>;
 }
 
 export function useNpcRunForm(tree: CampaignTree | undefined): NpcRunForm {
@@ -149,7 +144,7 @@ export function NpcRunReview({
   onApply,
   onDiscard,
 }: {
-  job: GenerateJob;
+  job: GeneratorJob;
   result: GenerateNpcResult;
   tree: CampaignTree | undefined;
   review: JobReviewSync;

@@ -2,7 +2,8 @@
 // proposal row (components/ProposalRow.tsx) with the npc's marker, its label,
 // and — once written — the link to its reading view.
 
-import type { GenerateReviewDecision, NpcProposal } from "@grimoire/shared/types";
+import type { NpcProposal } from "@grimoire/shared/types";
+import type { GenerateReviewDecision } from "@grimoire/shared/generator-job";
 import { User } from "lucide-react";
 
 import { ProposalRow } from "@/components/ProposalRow";

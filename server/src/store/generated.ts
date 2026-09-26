@@ -4,14 +4,12 @@
 // (ADR #31): the chapter a new-chapter run creates is a
 // `ChapterProposal`, a proposed scene a `SceneProposal`, a proposed npc an
 // `NpcProposal` and a proposed location a `LocationProposal`. This is the
-// write behind `POST /generate/apply` and the accept: one transaction for
-// the whole batch, the documented `409 { chapters, scenes, npcs, locations }`
-// decided INSIDE it, and the job row discarded in the same commit. A partial
-// accept records what it wrote instead. Nothing here is a second write path
-// — a row that already holds content is a conflict, not something to
-// overwrite.
+// write behind the accept of a generator job: one transaction for the whole
+// batch, the documented `409 { chapters, scenes, npcs, locations }` decided
+// INSIDE it, and the job's own record of what it wrote in the same commit.
+// Nothing here is a second write path — a row that already holds content is
+// a conflict, not something to overwrite.
 
-import { and, eq } from "drizzle-orm";
 import type {
   ChapterProposal,
   LocationProposal,
@@ -20,7 +18,6 @@ import type {
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
-import { generateJobs } from "../db/schema";
 import { mutate } from "./campaigns";
 import { chapterTaken, ensureChapterRow, insertChapterProposal } from "./chapters";
 import { insertLocationProposal, locationTaken } from "./locations";
@@ -47,15 +44,6 @@ export type ScenePlacement = (tx: GrimoireDb, scene: SceneProposal) => number | 
  * translated back to the documented answer instead of escaping as a 500 —
  * either way the transaction rolls back, so a partial apply is impossible.
  *
- * `jobId` discards the generate job the batch came from IN THE
- * SAME COMMIT, never as a second statement after the write: a crash in
- * between would leave a `done` job whose proposals were already stored, so
- * the next start would offer a review that could only ever answer 409 — and a
- * failing delete would turn a successful write into a 500. The job row
- * disappears exactly when the proposals appear, or neither does. A stale id
- * (a newer run started meanwhile) matches nothing and is ignored, which is
- * the documented behaviour.
- *
  * A chapter or a scene that already exists is a conflict (reported by id
  * under `chapters` or `scenes`); an npc or a location that already holds
  * content is one too (under `npcs` or `locations`), while an empty one is
@@ -69,7 +57,6 @@ export async function writeGenerated(
     scenes?: SceneProposal[];
     npcs?: NpcProposal[];
     locations?: LocationProposal[];
-    jobId?: string;
     /**
      * The chapters the run decided on (ADR #18): each is written here if it
      * is not there yet — the net under a new-chapter run, whose chapter
@@ -77,11 +64,10 @@ export async function writeGenerated(
      */
     runChapters?: readonly string[];
     /**
-     * A PARTIAL accept does not discard the job — it records what
-     * it wrote on it and deletes the row only when nothing is left open. That
-     * bookkeeping belongs in THIS transaction for the same reason the discard
-     * does: after a crash the job and the rows it produced must not
-     * disagree. When it is given it replaces the `jobId` discard entirely.
+     * The job's bookkeeping — what it wrote, and the job row deleted once
+     * nothing is left open. It belongs in THIS transaction: after a crash the
+     * job and the rows it produced must not disagree, or the next accept
+     * would offer proposals that could only ever answer 409.
      */
     onWritten?: (tx: GrimoireDb) => void;
     /** Where the scenes go; absent, every one goes to its chapter's end. */
@@ -93,7 +79,6 @@ export async function writeGenerated(
     scenes = [],
     npcs = [],
     locations = [],
-    jobId,
     runChapters = [],
     onWritten,
     placeScene,
@@ -154,13 +139,7 @@ export async function writeGenerated(
       for (const scene of scenes) {
         insertSceneProposal(tx, campaign, scene, placeScene?.(tx, scene));
       }
-      if (onWritten !== undefined) {
-        onWritten(tx);
-      } else if (jobId !== undefined) {
-        tx.delete(generateJobs)
-          .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
-          .run();
-      }
+      onWritten?.(tx);
     });
   } catch (error) {
     if (error instanceof ApiError) throw error;

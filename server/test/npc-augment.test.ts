@@ -6,13 +6,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import {
   npcProposalSchema,
   npcToReply,
-  type GenerateJob,
+  type GeneratorJob,
   type Npc,
   type NpcProposal,
 } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setKnowledge } from "./support/knowledge-items";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests } from "../src/generator-jobs";
 import {
   ASSET_FILES,
   campaignRefIds,
@@ -32,6 +32,7 @@ import {
   type LLMProvider,
 } from "../src/llm-provider";
 import { dropStore, seedStore } from "./support/store";
+import { readJob } from "./support/generator-jobs";
 
 const CAMPAIGN = "beispiel";
 const JORNA = `/api/campaigns/${CAMPAIGN}/npcs/jorna`;
@@ -82,11 +83,16 @@ async function post(url: string, body: Record<string, unknown>): Promise<Respons
 }
 
 /** Start a run on the npc and wait for the job to leave `running`. */
-async function runJob(body: Record<string, unknown>): Promise<GenerateJob> {
+async function runJob(body: Record<string, unknown>): Promise<GeneratorJob> {
   const res = await post(`${JORNA}/augment`, body);
   expect(res.status).toBe(202);
+  // The answer is the job itself, naming the npc from the moment it starts.
+  const started = (await res.json()) as GeneratorJob;
+  expect(started.kind).toBe("npc-augment");
+  expect(started.npc).toBe("jorna");
   for (let i = 0; i < 200; i += 1) {
-    const job = (await (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    const job = (await readJob(CAMPAIGN))!;
+    expect(job.id).toBe(started.id);
     if (job.status !== "running") return job;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -201,7 +207,7 @@ describe("the run", () => {
     const stored = await read();
     useFake([reply(stored, { role: "Hafenmeisterin mit Geheimnissen" })]);
     const started = await runJob({ instruction: "x" });
-    const job = (await (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    const job = (await readJob(CAMPAIGN))!;
     expect(job.id).toBe(started.id);
     expect(job.npcAugmentResult).toEqual(started.npcAugmentResult!);
     expect(job.npcAugmentResult?.proposed.role).toBe("Hafenmeisterin mit Geheimnissen");
@@ -215,7 +221,7 @@ describe("the run", () => {
       instruction: "x",
     });
     expect(unknown.status).toBe(404);
-    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
+    expect(await readJob(CAMPAIGN)).toBeNull();
   });
 
   test("a changed id, an unknown callout or an added unknown [[id]] goes back to the model", async () => {
@@ -300,7 +306,7 @@ describe("accepting", () => {
     expect(written.quickstats).toEqual(before.quickstats);
     expect(written.rev).toBe(before.rev + 1);
     expect(await read()).toEqual(written);
-    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
+    expect(await readJob(CAMPAIGN)).toBeNull();
   });
 
   test("a stale rev is 409 with the current npc, and nothing is written", async () => {

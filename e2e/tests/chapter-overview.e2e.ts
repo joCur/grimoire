@@ -26,6 +26,7 @@ import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getCampaign, patchCampaign } from "../support/campaign";
 import { chapterPath, getChapter, patchChapter } from "../support/chapter";
+import { getGeneratorJob, patchGeneratorJob, startGeneratorJob } from "../support/generator-job";
 import { getScene, patchScene } from "../support/scene";
 import { todaySessionId } from "../support/session";
 
@@ -563,7 +564,8 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
 }) => {
   // A run with three scenes whose LAST reply is held: two parts land, the
   // third keeps the run `running` for as long as this test needs it.
-  const started = await api.send<{ jobId: string }>("POST", "campaigns/beispiel/generate", {
+  const started = await startGeneratorJob(api, {
+    kind: "scene",
     chapter: "01-salzhafen",
     sourceText: [
       "The party watches the quay at low tide.",
@@ -571,13 +573,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
       TRIGGER.slowPart,
     ].join("\n\n"),
   });
-  interface JobShape {
-    rev: number;
-    status: string;
-    pipeline?: { parts: Array<{ status: string }> };
-  }
-  const job = async (): Promise<JobShape> =>
-    (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as JobShape;
+  const job = () => getGeneratorJob(api);
   const deadline = Date.now() + 30_000;
   for (;;) {
     const current = await job();
@@ -589,9 +585,9 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
   // `review.writtenScenes` — the endpoint half of accepting during a run.
   const current = await job();
   expect(current.status).toBe("running");
-  await api.send("POST", `campaigns/beispiel/generate/job/${started.jobId}/accept`, {
+  await patchGeneratorJob(api, started.id, {
     rev: current.rev,
-    scenes: [THREE_SCENES[0].id],
+    review: { writtenScenes: [THREE_SCENES[0].id] },
   });
 
   for (const width of TOPBAR_WIDTHS) {
@@ -602,6 +598,9 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     if (width >= 768) {
       const chip = page.getByRole("link", { name: /Generator/ });
       await expect(chip).toBeVisible();
+      // The chip stands before the job is read; its name carries the
+      // progress once it is.
+      await expect(chip).toHaveAccessibleName(/1 von 3 übernommen/);
       // The number is on the chip exactly ONCE, whatever the width does with
       // it: above 2xl it is spelled out, below it stands
       // in the accessible name only — never both, which would read as the

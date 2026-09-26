@@ -195,7 +195,7 @@ export const TRIGGER = {
    * at once — the only shape in which the browser sees a run that is
    * `running` with NOTHING to review yet, and therefore the only one that
    * exercises the switch from the spinner to the review on a POLLED update.
-   * Without it the parts are finished before the first `GET …/generate/job`
+   * Without it the parts are finished before the first `GET …/generator-jobs`
    * answers, and the review is simply the first thing ever rendered.
    */
   latePart: "E2E_LATE_PARTS",

@@ -7,7 +7,7 @@
 import { Hono } from "hono";
 import { npcCreateSchema } from "@grimoire/shared";
 import { ApiError } from "../api-error";
-import { startJob } from "../generate-jobs";
+import { serializeJob, startJob } from "../generator-jobs";
 import { obtainProvider } from "../generator";
 import { applyNpcAugment } from "../npc-augment";
 import { createNpc, listNpcs, patchNpc, readNpc } from "../store/npcs";
@@ -72,10 +72,10 @@ npcRoutes.patch("/campaigns/:campaign/npcs/:id", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/npcs/:id/augment { sourceText?, instruction? }
-// -> 202 { jobId } — the AI augment run of one npc, on the npc's own
+// -> 202 GeneratorJob — the AI augment run of one npc, on the npc's own
 // resource: the same background job model as every other run
 // (`kind: "npc-augment"`, the job's `npc` the id), ONE generator job per
-// campaign, so a start while ANY run is going answers 409 { jobId }. Writes
+// campaign, so a start while ANY run is going answers 409 { generatorJob }. Writes
 // NOTHING; the proposal waits in the job as `npcAugmentResult` — the npc as
 // the run read it (`current`) beside the npc as the model proposes it
 // (`proposed`), both without their guard.
@@ -102,7 +102,7 @@ npcRoutes.post("/campaigns/:campaign/npcs/:id/augment", async (c) => {
     instruction,
     provider,
   });
-  return c.json({ jobId: job.id }, 202);
+  return c.json(serializeJob(job), 202);
 });
 
 // POST /api/campaigns/:campaign/npcs/:id/augment/apply

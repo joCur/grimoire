@@ -4,16 +4,20 @@
 
 import { describe, expect, test } from "bun:test";
 
-import type { GenerateJob, SceneProposal } from "@grimoire/shared/types";
+import type { SceneProposal } from "@grimoire/shared/types";
+import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import { translator } from "@/i18n/format";
 import {
-  GENERATE_JOB_POLL_MS,
+  GENERATOR_JOB_POLL_MS,
   generateJobPollMs,
   generateJobQueryOptions,
 } from "@/lib/use-generate-job";
 import {
   applySummary,
+  emptyReview,
+  openSelection,
+  writtenBy,
   contextHint,
   jobNpcs,
   jobScenes,
@@ -64,9 +68,8 @@ describe("mergeEdits", () => {
 });
 
 describe("labels", () => {
-  // What countLabel used to prove — a count and its noun agree — is an ICU
-  // plural inside the catalog keys now, so it is asserted through the two
-  // functions that consume them.
+  // A count and its noun agree through an ICU plural inside the catalog
+  // keys, so it is asserted through the two functions that consume them.
   test("applySummary reads like the prototype's button", () => {
     expect(applySummary(1, 1, t)).toBe("1 Szene · 1 vorgeschlagener Eintrag");
     expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 vorgeschlagene Einträge");
@@ -215,7 +218,7 @@ describe("runJobArrived", () => {
  * the end of it, and the poll loop has to be alive for every step before.
  */
 describe("start pending -> 404/null -> done", () => {
-  const phaseOf = (jobId: string | null, status?: GenerateJob["status"]) => {
+  const phaseOf = (jobId: string | null, status?: GeneratorJob["status"]) => {
     const arrived = runJobArrived({ jobId, staleJobId: null });
     return generatePhase({
       applied: false,
@@ -228,16 +231,16 @@ describe("start pending -> 404/null -> done", () => {
   test("the spinner stands until the run's job answers — and not one step longer", () => {
     // 1. the click: no job yet, the POST is on its way.
     expect(phaseOf(null)).toBe("working");
-    expect(generateJobPollMs(null, true)).toBe(GENERATE_JOB_POLL_MS);
+    expect(generateJobPollMs(null, true)).toBe(GENERATOR_JOB_POLL_MS);
     // 2. the GET that overtook the row: still no job, still polling.
     expect(phaseOf(null)).toBe("working");
     // 3. the first poll that answers already carries the FINISHED run. The
     //    202 of the same run has not arrived yet — and it must not matter:
     //    the job is the truth about the run, the request that started it is
-    //    not. This is the step that used to keep the spinner up.
+    //    not.
     expect(phaseOf("job-of-the-new-run", "done")).toBe("review");
     // 4. …and with the run's job on the table, nothing has to be polled.
-    expect(generateJobPollMs({ status: "done" } as GenerateJob)).toBe(false);
+    expect(generateJobPollMs({ status: "done" } as GeneratorJob)).toBe(false);
   });
 });
 
@@ -271,12 +274,14 @@ describe("jobErrorBody", () => {
     expect(
       jobErrorBody({
         id: "j2",
-        campaign: "beispiel",
+        kind: "scene",
         chapter: "01-salzhafen",
         status: "running",
         startedAt: "2026-08-20T10:00:00.000Z",
         sceneEdits: {},
         npcEdits: {},
+        review: emptyReview(),
+        rev: 0,
       }),
     ).toBeUndefined();
   });
@@ -350,10 +355,9 @@ function proposed(id: string): SceneProposal {
 }
 
 describe("review state mapping", () => {
-  const job = (over: Partial<GenerateJob> = {}): GenerateJob =>
+  const job = (over: Partial<GeneratorJob> = {}): GeneratorJob =>
     ({
       id: "j1",
-      campaign: "beispiel",
       kind: "scene",
       status: "done",
       startedAt: "2026-01-01T00:00:00.000Z",
@@ -367,7 +371,7 @@ describe("review state mapping", () => {
         warnings: [],
       },
       ...over,
-    }) as GenerateJob;
+    }) as GeneratorJob;
 
   test("a payload without a review degrades to „nothing decided yet“", () => {
     expect(reviewOf(job())).toEqual({
@@ -384,12 +388,12 @@ describe("review state mapping", () => {
   });
 
   test("a patch merges per key — and `null` puts a decision back to open", () => {
-    let next = mergeReviewPatch(job(), { npcs: { grella: "accepted" } });
+    let next = mergeReviewPatch(job(), { review: { npcs: { grella: "accepted" } } });
     next = mergeReviewPatch(next, { sceneEdits: { a: { body: "typed" } } });
     expect(next.review?.npcs).toEqual({ grella: "accepted" });
     expect(next.sceneEdits.a).toEqual({ body: "typed" });
 
-    next = mergeReviewPatch(next, { npcs: { grella: null } });
+    next = mergeReviewPatch(next, { review: { npcs: { grella: null } } });
     expect(next.review?.npcs).toEqual({});
     // The unrelated change is untouched — that is what merging has to mean.
     expect(next.sceneEdits.a).toEqual({ body: "typed" });
@@ -398,14 +402,14 @@ describe("review state mapping", () => {
   test("`null` clears a field or block decision, mirroring the server", () => {
     // What an augment 409 needs: the re-alignment renames the block ids, so
     // the decisions cut against the old ones have to be deletable.
-    let next = mergeReviewPatch(job(), { fields: { role: true }, blocks: { aug1: false } });
+    let next = mergeReviewPatch(job(), { review: { fields: { role: true }, blocks: { aug1: false } } });
     expect(next.review?.blocks).toEqual({ aug1: false });
 
-    next = mergeReviewPatch(next, { blocks: { aug1: null } });
+    next = mergeReviewPatch(next, { review: { blocks: { aug1: null } } });
     expect(next.review?.blocks).toEqual({});
     expect(next.review?.fields).toEqual({ role: true });
 
-    next = mergeReviewPatch(next, { fields: { role: null } });
+    next = mergeReviewPatch(next, { review: { fields: { role: null } } });
     expect(next.review?.fields).toEqual({});
   });
 
@@ -420,10 +424,25 @@ describe("review state mapping", () => {
 
   test("`droppedScenes` is a set sent whole, not a merge", () => {
     const next = mergeReviewPatch(
-      mergeReviewPatch(job(), { droppedScenes: ["a"] }),
-      { droppedScenes: ["b"] },
+      mergeReviewPatch(job(), { review: { droppedScenes: ["a"] } }),
+      { review: { droppedScenes: ["b"] } },
     );
     expect(next.review?.droppedScenes).toEqual(["b"]);
+  });
+
+  test("accepting the whole run names what is open and, of npcs and locations, only the accepted", () => {
+    const decided = mergeReviewPatch(job(), { review: { droppedScenes: ["b"] } });
+    expect(openSelection(decided)).toEqual({ scenes: ["a"], npcs: [], locations: [] });
+    const accepted = mergeReviewPatch(decided, { review: { npcs: { grella: "accepted" } } });
+    expect(openSelection(accepted).npcs).toEqual(["grella"]);
+  });
+
+  test("what an accept wrote is what the answer lists as written and the job before did not", () => {
+    const before = job({ review: { ...emptyReview(), writtenScenes: ["a"] } });
+    const after = job({
+      review: { ...emptyReview(), writtenScenes: ["a", "b"], writtenNpcs: ["grella"] },
+    });
+    expect(writtenBy(before, after)).toEqual({ scenes: ["b"], npcs: ["grella"], locations: [] });
   });
 
   test("a scene is open, written or dropped; a proposed npc open, written or rejected", () => {
@@ -490,10 +509,10 @@ describe("review state mapping", () => {
     expect(locationState(withLocation, "alte-mole")).toBe("open");
     expect(openLocations(withLocation)).toEqual(["alte-mole"]);
     expect(jobProgress(withLocation)).toEqual({ written: 0, total: 2 });
-    const rejected = mergeReviewPatch(withLocation, { locations: { "alte-mole": "rejected" } });
+    const rejected = mergeReviewPatch(withLocation, { review: { locations: { "alte-mole": "rejected" } } });
     expect(locationState(rejected, "alte-mole")).toBe("rejected");
     expect(openLocations(rejected)).toEqual([]);
-    const reopened = mergeReviewPatch(rejected, { locations: { "alte-mole": null } });
+    const reopened = mergeReviewPatch(rejected, { review: { locations: { "alte-mole": null } } });
     expect(reopened.review?.locations).toEqual({});
     const written = job({
       ...withLocation,
@@ -527,17 +546,18 @@ describe("the run's parts", () => {
   /** A scene job with three scene parts in outline order. */
   function job(
     statuses: Array<"pending" | "running" | "done" | "failed">,
-    over: Partial<GenerateJob> = {},
-  ): GenerateJob {
+    over: Partial<GeneratorJob> = {},
+  ): GeneratorJob {
     return {
       id: "j1",
-      campaign: "beispiel",
       kind: "scene",
       chapter: "01-salzhafen",
       status: "running",
       startedAt: "2026-09-15T10:00:00.000Z",
       sceneEdits: {},
       npcEdits: {},
+      review: emptyReview(),
+      rev: 0,
       pipeline: {
         parts: statuses.map((status, i) => ({
           key: `scene:s${i}`,
@@ -568,17 +588,17 @@ describe("the run's parts", () => {
     // overtake the new row and answer 404 → `null`. A
     // `null` is not a running job, so the interval went off and nothing ever
     // switched it back on — the view sat on the spinner until a reload.
-    expect(generateJobPollMs(job(["running"]))).toBe(GENERATE_JOB_POLL_MS);
+    expect(generateJobPollMs(job(["running"]))).toBe(GENERATOR_JOB_POLL_MS);
     expect(generateJobPollMs(null)).toBe(false);
     expect(generateJobPollMs(undefined)).toBe(false);
-    expect(generateJobPollMs(null, true)).toBe(GENERATE_JOB_POLL_MS);
-    expect(generateJobPollMs(undefined, true)).toBe(GENERATE_JOB_POLL_MS);
+    expect(generateJobPollMs(null, true)).toBe(GENERATOR_JOB_POLL_MS);
+    expect(generateJobPollMs(undefined, true)).toBe(GENERATOR_JOB_POLL_MS);
     // …and a caller that is waiting for a run's OWN job keeps polling even
     // though something settled sits in the cache: that is either the previous
     // run's job or a `null`. Switching the loop off there is how
     // the spinner became terminal.
     expect(generateJobPollMs({ ...job(["done"]), status: "done" }, true)).toBe(
-      GENERATE_JOB_POLL_MS,
+      GENERATOR_JOB_POLL_MS,
     );
     // Nobody waiting: a settled job needs no poll.
     expect(generateJobPollMs({ ...job(["done"]), status: "done" })).toBe(false);
@@ -599,7 +619,7 @@ describe("the run's parts", () => {
       }),
     ).toBe(false);
     expect(options.refetchInterval({ state: { data: null } })).toBe(
-      GENERATE_JOB_POLL_MS,
+      GENERATOR_JOB_POLL_MS,
     );
     // An empty campaign has nothing to ask about.
     expect(generateJobQueryOptions("").enabled).toBe(false);
