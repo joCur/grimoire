@@ -137,7 +137,6 @@ export const de = {
 
   // --- the id line of every create surface (components/IdField.tsx) ---------
   "idField.label": "Kennung",
-  "idField.prefix": "Kennung: ",
   "idField.edit": "Kennung selbst setzen",
   "idField.invalid":
     "Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",

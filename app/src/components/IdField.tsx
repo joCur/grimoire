@@ -5,10 +5,8 @@
 // because an id is the permanent reference key. ADR #21 names the create
 // dialog as the ONE place where it may be personalised, so the line carries a
 // pencil: pressing it turns the line into a field prefilled with the id that
-// is on screen anyway.
-//
-// The label in front of the id ("ID: ") is context, not something to type
-// over, so it sits outside the input.
+// is on screen anyway. The line shows the id alone; the field is named for
+// assistive technology by its aria-label.
 //
 // The state machine behind this (who owns the id, and how it goes back to
 // following the name) is lib/id-field.ts; this file only renders it and owns
@@ -35,7 +33,6 @@ interface IdFieldProps {
 
 export function IdField({ id, editing, invalid, onToggle, onChange }: IdFieldProps) {
   const t = useT();
-  const prefix = t("idField.prefix");
   const ruleId = useId();
   const input = useRef<HTMLInputElement>(null);
 
@@ -57,7 +54,6 @@ export function IdField({ id, editing, invalid, onToggle, onChange }: IdFieldPro
       <span className="flex min-h-[16px] flex-wrap items-center gap-1">
         {editing ? (
           <>
-            <span className="font-mono text-[11.5px] text-muted-foreground">{prefix}</span>
             <input
               ref={input}
               value={id}
@@ -71,7 +67,7 @@ export function IdField({ id, editing, invalid, onToggle, onChange }: IdFieldPro
             />
           </>
         ) : (
-          <span className="font-mono text-[11.5px] text-muted-foreground">{`${prefix}${id}`}</span>
+          <span className="font-mono text-[11.5px] text-muted-foreground">{id}</span>
         )}
         <button
           type="button"

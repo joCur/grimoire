@@ -30,9 +30,9 @@ function render(props: Partial<Props> = {}): string {
 }
 
 describe("the quiet line", () => {
-  test("shows the label and the id as ONE run of text, plus the pencil", () => {
+  test("shows the id alone, plus the pencil", () => {
     const html = render();
-    expect(html).toContain("Kennung: alte-fischerin");
+    expect(html).toContain(">alte-fischerin<");
     // No field yet: the id is text, not something to type over by accident.
     expect(html).not.toContain("<input");
     expect(html).toContain('aria-label="Kennung selbst setzen"');
@@ -48,13 +48,10 @@ describe("the quiet line", () => {
 });
 
 describe("the editable field", () => {
-  test("carries the id, is named, and the label stays outside it", () => {
+  test("carries the id and is named", () => {
     const html = render({ editing: true });
     expect(html).toContain('value="alte-fischerin"');
     expect(html).toContain('aria-label="Kennung"');
-    // The label is context, not part of what can be typed.
-    expect(html).toContain(">Kennung: <");
-    expect(html).not.toContain('value="Kennung: alte-fischerin"');
   });
 
   test("the pencil reports itself as the pressed toggle", () => {

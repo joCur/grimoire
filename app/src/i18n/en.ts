@@ -121,7 +121,6 @@ export const en: Messages = {
 
   // --- the id line of every create surface (components/IdField.tsx) ---------
   "idField.label": "ID",
-  "idField.prefix": "ID: ",
   "idField.edit": "Set the ID yourself",
   "idField.invalid": "An ID needs lowercase letters, digits and single hyphens.",
 

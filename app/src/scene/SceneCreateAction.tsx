@@ -1,4 +1,4 @@
-// "Szene anlegen" inside a chapter's accordion — the chapter is prefilled BY
+// The create-scene action inside a chapter's accordion — the chapter is prefilled BY
 // POSITION, so the dialog needs no chapter picker at all. The dialog asks for
 // a title (and, behind the pencil, the id); a created scene opens straight in
 // its editor (`?edit=1`): a scene with a title and nothing else is an

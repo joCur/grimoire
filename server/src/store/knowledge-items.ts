@@ -393,7 +393,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
  *
  * REF-EXPANDED like the prompt lines: a rule written as
  * „[[fenn]]“ → „Fennwyn“ reaches the model as „Fenn“ → „Fennwyn“, so the
- * check has to search the drafts for „Fenn“ too — searching for the literal
+ * check has to search the proposals for „Fenn“ too — searching for the literal
  * „[[fenn]]“ would silently never match and make the rule look obeyed. Both
  * sides are expanded, because `to` is what the check uses to recognise the
  * already-correct spelling (naming-check.ts findRuleHits).
