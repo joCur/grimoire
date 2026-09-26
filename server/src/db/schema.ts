@@ -50,6 +50,13 @@
 //      A degrading READER (README) and a closed COLUMN are not in conflict —
 //      the renderer still shows whatever it is handed, and there simply is
 //      no way to get a foreign value into the column.
+//   8. THE TRASH IS A COLUMN (decisions/trash). `deleted_at` on chapters,
+//      scenes, npcs, locations and ideas is NULL for a live row and, for a
+//      row in the trash, the moment it went there — a zone-less wall-clock
+//      string like rule 6. A thread carries it too, because it goes to the
+//      trash with its chapter and comes back with it. A row in the trash
+//      keeps its id and its references; every read of live content leaves
+//      it out, and the purge deletes it for good once its time is up.
 //
 // The JSON columns (`quickstats`, `handouts`) are plain TEXT holding JSON;
 // pack/unpack helpers live at the bottom of this file. Deliberately not
@@ -171,6 +178,8 @@ export const chapters = sqliteTable(
      * only its own writes, and `rev` counts only the chapter's.
      */
     sceneOrderRev: integer("scene_order_rev").notNull().default(1),
+    /** When the chapter went to the trash; NULL while live (rule 8). */
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -191,9 +200,9 @@ export const chapters = sqliteTable(
  *
  * `chapter_id` is the chapter that carries it: NOT NULL and a foreign key
  * (rule 3). It may change, and the thread's URL does not, because a thread
- * lies flat under its campaign. A chapter's removal would take its threads
- * with it (`ON DELETE CASCADE`) — there is no delete path for chapters, the
- * rule only says whose rows these are.
+ * lies flat under its campaign. A chapter's removal takes its threads with
+ * it (`ON DELETE CASCADE`): a chapter is removed for good only by the purge of
+ * the trash, and its threads went to the trash with it (rule 8).
  *
  * `pos` is the order of creation — a new thread gets one past the highest of
  * the campaign, a sort key with gaps allowed — and nothing reorders it. `rev`
@@ -212,6 +221,8 @@ export const threads = sqliteTable(
     done: integer("done").notNull().default(0),
     pos: integer("pos").notNull(),
     rev: revColumn(),
+    /** When the thread went to the trash with its chapter; NULL while live (rule 8). */
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -280,6 +291,12 @@ export const scenes = sqliteTable(
      */
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
+    /**
+     * When the scene went to the trash; NULL while live (rule 8). A scene in
+     * the trash keeps its `pos`: one that goes with its chapter comes back
+     * with it at the same place.
+     */
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -389,6 +406,8 @@ export const npcs = sqliteTable(
     motivation: text("motivation"),
     body: text("body").notNull().default(""),
     rev: revColumn(),
+    /** When the npc went to the trash; NULL while live (rule 8). */
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -440,6 +459,8 @@ export const locations = sqliteTable(
     atmosphere: text("atmosphere"),
     body: text("body").notNull().default(""),
     rev: revColumn(),
+    /** When the location went to the trash; NULL while live (rule 8). */
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),
@@ -624,6 +645,8 @@ export const ideas = sqliteTable(
     done: integer("done").notNull().default(0),
     pos: integer("pos").notNull(),
     rev: revColumn(),
+    /** When the idea went to the trash; NULL while live (rule 8). */
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     primaryKey({ columns: [t.campaignId, t.id] }),

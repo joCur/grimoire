@@ -73,7 +73,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   session row its children look up), `pauses`, `log-entries`,
   `glossary-terms`,
   `knowledge-items` (with their order),
-  `generated` (accepting a generator run) — and
+  `generated` (accepting a generator run),
+  `trash` (the purge of rows past the trash's retention, decisions/trash) — and
   each carries the **read AND write access** of its kind. No catch-all
   module and no barrel: every caller imports from the domain it needs.
 - `app/` — the frontend. Every entity with its own resource has its slice

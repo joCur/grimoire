@@ -30,6 +30,8 @@ export interface ChapterRow {
   rev: number;
   /** Guard token of the chapter's scene ORDER, separate from `rev`. */
   sceneOrderRev: number;
+  /** When the chapter went to the trash; null while live (decisions/trash). */
+  deletedAt: string | null;
 }
 
 export interface SceneRow {
@@ -46,6 +48,8 @@ export interface SceneRow {
   body: string;
   pos: number;
   rev: number;
+  /** When the scene went to the trash; null while live (decisions/trash). */
+  deletedAt: string | null;
 }
 
 export interface NpcRow {
@@ -62,6 +66,8 @@ export interface NpcRow {
   motivation: string | null;
   body: string;
   rev: number;
+  /** When the npc went to the trash; null while live (decisions/trash). */
+  deletedAt: string | null;
 }
 
 export interface LocationRow {
@@ -73,4 +79,6 @@ export interface LocationRow {
   atmosphere: string | null;
   body: string;
   rev: number;
+  /** When the location went to the trash; null while live (decisions/trash). */
+  deletedAt: string | null;
 }

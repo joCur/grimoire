@@ -51,6 +51,9 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   status_not_allowed: "server.status_not_allowed",
   scene_type_not_allowed: "server.scene_type_not_allowed",
   timestamp_not_allowed: "server.timestamp_not_allowed",
+  trash_blocked: "server.trash_blocked",
+  chapter_in_trash: "server.chapter_in_trash",
+  restore_blocked: "server.restore_blocked",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -180,6 +183,9 @@ function paramsFor(
     case "llm_invalid":
     case "nothing_to_write":
     case "body_not_editable":
+    case "trash_blocked":
+    case "chapter_in_trash":
+    case "restore_blocked":
       return {};
   }
 }

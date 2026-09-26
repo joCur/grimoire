@@ -189,12 +189,21 @@ export async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Pr
   return db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
     const result = fn(tx);
-    tx.update(campaigns)
-      .set({ version: sql`${campaigns.version} + 1` })
-      .where(eq(campaigns.id, campaign))
-      .run();
+    bumpCampaignVersion(tx, campaign);
     return result;
   }) as T;
+}
+
+/**
+ * Move a campaign's version counter, INSIDE the caller's transaction — every
+ * write does, through `mutate`, and so does the purge of the trash for each
+ * campaign it removed rows of (./trash.ts).
+ */
+export function bumpCampaignVersion(tx: GrimoireDb, campaign: string): void {
+  tx.update(campaigns)
+    .set({ version: sql`${campaigns.version} + 1` })
+    .where(eq(campaigns.id, campaign))
+    .run();
 }
 
 // --- the search index row of a campaign --------------------------------------

@@ -52,6 +52,8 @@ deviation requires a changed or new file.
   entity; URLs, keys, nesting, app slices.
 - [writes.md](writes.md) — app-first, one guard per row, one write path per
   entity, conflicts carry the current state.
+- [trash.md](trash.md) — deleting content goes to a trash with a fixed
+  retention; a row there is absent but keeps its id; nothing live names it.
 - [data-shape.md](data-shape.md) — data is fields and rows, never text
   sections; fixtures in the shape of the API.
 - [scene-order.md](scene-order.md) — one active chapter, one source for the

@@ -13,7 +13,7 @@
 //     fields as message parameters.
 //   * `error` stays, in ENGLISH, as the technical fallback: it is what curl,
 //     a log line and a future client see, and it is what the app shows for a
-//     code it does not know (CLAUDE.md, "Format degradiert" — an unknown code
+//     code it does not know (CLAUDE.md: the format degrades — an unknown code
 //     degrades to a readable sentence, never to a blank toast).
 //
 // Codes are append-only: an old one keeps its meaning and its parameters.
@@ -159,6 +159,31 @@ export const ERROR_CODES = [
    * one that is ended. Nothing is written. `{ id }`
    */
   "session_ended",
+  /**
+   * 409, a DELETE that would put a scene, a chapter, an npc or a location in
+   * the trash while other rows still hang on it (decisions/trash): a log
+   * entry names the scene (or a scene of the chapter), a live scene names the
+   * npc or the location, a live npc or location names the chapter. Nothing is
+   * written. `{ kind, id, blockers }` — `kind` and `id` the row that stays,
+   * `blockers` the rows in the way, each `{ kind, id, name }` (`kind` one of
+   * `scene`, `npc`, `location`, `log-entry`; a log entry names its `session`
+   * too and its text as `name`).
+   */
+  "trash_blocked",
+  /**
+   * 409, restoring a scene whose chapter is in the trash: the scene belongs
+   * to a chapter that is not there. Nothing is written. `{ kind, id,
+   * blockers }` in the shape of `trash_blocked`, the one blocker the chapter.
+   */
+  "chapter_in_trash",
+  /**
+   * 409, restoring a row that references a row in the trash — a scene its
+   * location or one of its npcs, an npc or a location its chapter, a chapter
+   * a location or npc of one of the scenes that would come back with it.
+   * Nothing is written. `{ kind, id, blockers }` in the shape of
+   * `trash_blocked`.
+   */
+  "restore_blocked",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -18,8 +18,9 @@ import { z } from "zod";
  * location that has none), `chapter` the chapter it belongs to, `roll20Page`
  * the Roll20 page it refers to (never a copy of the map), `atmosphere` what
  * the place gives away about itself — shown on the location card and in the
- * reference preview —, `body` its markdown, and `rev` the row version a PATCH
- * sends back as its guard.
+ * reference preview —, `body` its markdown, `deletedMs` when it went to the
+ * trash — absent while it is live (decisions/trash) —, and `rev` the row
+ * version a PATCH sends back as its guard.
  */
 export const locationSchema = z.strictObject({
   id: z.string(),
@@ -28,29 +29,32 @@ export const locationSchema = z.strictObject({
   roll20Page: z.string().optional(),
   atmosphere: z.string().optional(),
   body: z.string(),
+  deletedMs: z.number().optional(),
   rev: z.number(),
 });
 
 export type Location = z.infer<typeof locationSchema>;
 
-/** The fields of a location by name, its guard aside. */
-export type LocationFields = Omit<Location, "rev">;
+/** The fields of a location by name, its guard and its trash moment aside. */
+export type LocationFields = Omit<Location, "rev" | "deletedMs">;
 
 /**
- * A location without its guard: what a fixture holds
- * (`fixtures/<campaign>/locations/<id>.json`), what a generator run proposes
- * and what accepting that proposal writes.
+ * A location without its guard and without a trash moment: what a fixture
+ * holds (`fixtures/<campaign>/locations/<id>.json`), what a generator run
+ * proposes and what accepting that proposal writes — each of them a live
+ * location.
  */
-export const locationProposalSchema = locationSchema.omit({ rev: true });
+export const locationProposalSchema = locationSchema.omit({ rev: true, deletedMs: true });
 
 export type LocationProposal = z.infer<typeof locationProposalSchema>;
 
 /**
  * The body of `PATCH /api/campaigns/:c/locations/:id`: the guard, the
  * optional `force`, and any subset of the fields — `body` is one of them, and
- * `null` clears an optional one. The id may be echoed, never changed. Strict
- * like the schema it comes from: a key that is none of these is a 400 naming
- * it.
+ * `null` clears an optional one. The id may be echoed, never changed.
+ * `deletedMs: null` takes the location out of the trash; putting it there is
+ * its DELETE, so no other value is taken. Strict like the schema it comes
+ * from: a key that is none of these is a 400 naming it.
  */
 export const locationPatchSchema = locationProposalSchema
   .extend({
@@ -59,12 +63,24 @@ export const locationPatchSchema = locationProposalSchema
     atmosphere: z.string().nullable(),
   })
   .partial()
-  .extend({ rev: z.number(), force: z.boolean().optional() });
+  .extend({ rev: z.number(), force: z.boolean().optional(), deletedMs: z.null().optional() });
 
 export type LocationPatch = z.infer<typeof locationPatchSchema>;
 
-/** The fields of one location write, guard and `force` aside — what an editing surface builds. */
-export const locationChangeSchema = locationPatchSchema.omit({ rev: true, force: true });
+/** The fields of one location write, guard, `force` and the trash aside — what an editing surface builds. */
+export const locationChangeSchema = locationPatchSchema.omit({
+  rev: true,
+  force: true,
+  deletedMs: true,
+});
+
+/**
+ * The body of `DELETE /api/campaigns/:c/locations/:id`, which puts the
+ * location in the trash: the guard the location was read with.
+ */
+export const locationDeleteSchema = locationSchema.pick({ rev: true });
+
+export type LocationDelete = z.infer<typeof locationDeleteSchema>;
 
 export type LocationChange = z.infer<typeof locationChangeSchema>;
 

@@ -7,10 +7,15 @@
 // its chapter is a field that may change but never be cleared. Where a scene
 // stands in its chapter is the chapter's scene order (./chapters.ts), which
 // has its own write and its own guard (decisions/scene-order): creating a scene appends it
-// to its chapter, moving it to another chapter appends it there, and nothing
-// else here touches `pos`.
+// to its chapter, moving it to another chapter appends it there, restoring
+// it from the trash appends it again, and nothing else here touches `pos`.
+//
+// A scene in the trash (decisions/trash) is there for nothing but its
+// restore: every read here asks for live scenes (`sceneRowOf`), and only the
+// trash's own paths and the id checks of a create see the rest
+// (`storedSceneRowOf`).
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import {
   ENTITY_SLUG,
   freeSlug,
@@ -21,6 +26,7 @@ import {
   type ScenePatch,
   type SceneProposal,
   type SceneStatus,
+  type SceneDelete,
   type SceneType,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
@@ -35,10 +41,11 @@ import {
   unpackStringArray,
 } from "../db/schema";
 import { mutate, requireCampaign } from "./campaigns";
-import { assertChapterRef, nextScenePos } from "./chapters";
-import { indexEntity } from "./fts";
-import { assertLocationRef } from "./locations";
-import { assertNpcRefs } from "./npcs";
+import { assertChapterRef, chapterBlocker, nextScenePos, storedChapterRowOf } from "./chapters";
+import { dropEntity, indexEntity } from "./fts";
+import { assertLocationRef, trashedLocationBlockers } from "./locations";
+import { logEntriesNamingScenes } from "./log-entries";
+import { assertNpcRefs, trashedNpcBlockers } from "./npcs";
 import { getDb } from "./handle";
 import { expandCampaignBodyRefs } from "./refs";
 import type { SceneRow } from "./render";
@@ -46,13 +53,20 @@ import { reindexReferrers } from "./search-index";
 import {
   assertSafeChapterId,
   assertSceneClosedFields,
+  chapterInTrash,
+  isRestore,
   normalizeBody,
   parseRequest,
   resolveNewId,
+  restoreBlocked,
   revConflict,
   slugTaken,
+  trashBlocked,
+  trashMoment,
   unknownRef,
+  type TrashBlocker,
 } from "./shared";
+import { deletedField } from "./time";
 
 // --- rendering a row ----------------------------------------------------------
 
@@ -79,6 +93,7 @@ export function renderScene(row: SceneRow, npcs: string[], tags: string[]): Scen
     tags,
     status: row.status as SceneStatus,
     body: row.body,
+    ...deletedField(row.deletedAt),
     rev: row.rev,
   };
 }
@@ -104,13 +119,16 @@ export async function readScene(campaign: string, id: string): Promise<Scene> {
 }
 
 /**
- * GET /api/campaigns/:campaign/scenes — every scene of the campaign, chapter
- * by chapter in the chapters' order, and inside a chapter in the order the DM
- * set (`pos`, the id as the tie-break).
+ * GET /api/campaigns/:campaign/scenes[?deleted=true] — every live scene of
+ * the campaign, chapter by chapter in the chapters' order, and inside a
+ * chapter in the order the DM set (`pos`, the id as the tie-break). `deleted`
+ * lists the scenes in the trash instead, the latest to go there first and the
+ * scenes that went together in their order.
  */
-export async function listScenes(campaign: string): Promise<Scene[]> {
+export async function listScenes(campaign: string, deleted = false): Promise<Scene[]> {
   await requireCampaign(campaign);
   const db = await getDb();
+  const order = [asc(chapters.pos), asc(chapters.id), asc(scenes.pos), asc(scenes.id)];
   const rows = db
     .select({ scene: scenes })
     .from(scenes)
@@ -118,8 +136,13 @@ export async function listScenes(campaign: string): Promise<Scene[]> {
       chapters,
       and(eq(chapters.campaignId, scenes.campaignId), eq(chapters.id, scenes.chapterId)),
     )
-    .where(eq(scenes.campaignId, campaign))
-    .orderBy(asc(chapters.pos), asc(chapters.id), asc(scenes.pos), asc(scenes.id))
+    .where(
+      and(
+        eq(scenes.campaignId, campaign),
+        deleted ? isNotNull(scenes.deletedAt) : isNull(scenes.deletedAt),
+      ),
+    )
+    .orderBy(...(deleted ? [desc(scenes.deletedAt), ...order] : order))
     .all()
     .map((joined) => joined.scene as SceneRow);
   return rows.map((row) => renderRow(db, campaign, row));
@@ -244,6 +267,10 @@ export async function patchScene(
  * echo it, never alter it. A patch that names no field is a 400
  * `nothing_to_write`.
  *
+ * A scene in the trash takes exactly one patch, `deletedMs: null`, which
+ * restores it (`restoreSceneIn`); any other is a 404, as if it were not there.
+ * On a live scene `deletedMs: null` changes nothing.
+ *
  * A scene that CHANGES chapter lands at the end of the new one: its old
  * position counted among other siblings and means nothing there, and the
  * target chapter's order is the DM's — a scene arriving in the middle of it
@@ -257,14 +284,20 @@ export function patchSceneIn(
   id: string,
   patch: ScenePatch,
 ): Scene {
-  const { rev, force, id: patchedId, ...fields } = patch;
+  const { rev, force, id: patchedId, deletedMs, ...fields } = patch;
+  const row = storedSceneRowOf(tx, campaign, id);
+  if (row?.deletedAt != null) {
+    if (!isRestore(deletedMs, fields) || (patchedId !== undefined && patchedId !== id)) {
+      throw new ApiError(404, "scene not found");
+    }
+    return restoreSceneIn(tx, campaign, row, force === true ? row.rev : rev);
+  }
   const named = Object.values(fields).some((value) => value !== undefined);
   if (!named && patchedId === undefined) {
     throw new ApiError(400, "nothing to write — send at least one field", {
       code: "nothing_to_write",
     });
   }
-  const row = sceneRowOf(tx, campaign, id);
   if (row === undefined) throw new ApiError(404, "scene not found");
   const guard = force === true ? row.rev : rev;
   if (row.rev !== guard) {
@@ -315,6 +348,234 @@ export function patchSceneIn(
   return renderRow(tx, campaign, next);
 }
 
+// --- the trash ----------------------------------------------------------------
+
+/** A scene as the trash's refusals name it. */
+function sceneBlocker(row: { id: string; title: string }): TrashBlocker {
+  return { kind: "scene", id: row.id, name: row.title === "" ? row.id : row.title };
+}
+
+/**
+ * The scene leaves the search index, and so does its name from the indexed
+ * text of every row that mentions it: an `[[id]]` of a scene in the trash
+ * reads like one that names nothing.
+ */
+function unindexScene(tx: GrimoireDb, campaign: string, id: string): void {
+  dropEntity(tx, campaign, "scene", id);
+  reindexReferrers(tx, campaign, id);
+}
+
+/**
+ * DELETE /api/campaigns/:campaign/scenes/:id `{ rev }` — the scene goes to
+ * the trash (decisions/trash): it keeps its id, its fields and its place, and
+ * its `rev` moves. A scene a log entry names stays where it is: 409
+ * `trash_blocked` with those log entries, and nothing is written. A stale
+ * `rev` is 409 with the current scene; a scene that is not there, or already
+ * in the trash, is 404.
+ */
+export async function trashScene(campaign: string, id: string, request: SceneDelete): Promise<Scene> {
+  return mutate(campaign, (tx) => {
+    const row = sceneRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(404, "scene not found");
+    if (row.rev !== request.rev) {
+      throw revConflict(row.rev, "scene changed", { scene: renderRow(tx, campaign, row) });
+    }
+    const blockers = logEntriesNamingScenes(tx, campaign, [row.id]);
+    if (blockers.length > 0) throw trashBlocked("scene", row.id, blockers);
+    const next: SceneRow = { ...row, deletedAt: trashMoment(), rev: row.rev + 1 };
+    tx.update(scenes)
+      .set({ deletedAt: next.deletedAt, rev: next.rev })
+      .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
+      .run();
+    unindexScene(tx, campaign, row.id);
+    return renderRow(tx, campaign, next);
+  });
+}
+
+/**
+ * The restore of one scene, INSIDE the caller's transaction, against `guard`.
+ *
+ * A scene belongs to a chapter, so one whose chapter is in the trash stays
+ * there (409 `chapter_in_trash`: restoring the chapter is the way), and a
+ * scene whose location or one of whose npcs is in the trash would name a row
+ * that is not there (409 `restore_blocked` with those rows). A restored scene
+ * lands at the END of its chapter: its old place counted among siblings that
+ * the DM may have rearranged since (decisions/scene-order).
+ */
+function restoreSceneIn(tx: GrimoireDb, campaign: string, row: SceneRow, guard: number): Scene {
+  if (row.rev !== guard) {
+    throw revConflict(row.rev, "scene changed", { scene: renderRow(tx, campaign, row) });
+  }
+  const chapter = storedChapterRowOf(tx, campaign, row.chapterId);
+  if (chapter !== undefined && chapter.deletedAt !== null) {
+    throw chapterInTrash(row.id, chapterBlocker(chapter));
+  }
+  const blockers = trashedReferencesOf(tx, campaign, [row]);
+  if (blockers.length > 0) throw restoreBlocked("scene", row.id, blockers);
+  const next: SceneRow = {
+    ...row,
+    deletedAt: null,
+    pos: nextScenePos(tx, campaign, row.chapterId),
+    rev: row.rev + 1,
+  };
+  tx.update(scenes)
+    .set({ deletedAt: null, pos: next.pos, rev: next.rev })
+    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
+    .run();
+  indexScene(tx, campaign, next, refTags(tx, campaign, row.id));
+  return renderRow(tx, campaign, next);
+}
+
+/** The location and the npcs of these scenes that are in the trash, each once. */
+function trashedReferencesOf(
+  tx: GrimoireDb,
+  campaign: string,
+  rows: readonly SceneRow[],
+): TrashBlocker[] {
+  const locationIds = rows.flatMap((row) => (row.location === null ? [] : [row.location]));
+  const npcIds = rows.flatMap((row) => refNpcs(tx, campaign, row.id));
+  return [
+    ...trashedLocationBlockers(tx, campaign, [...new Set(locationIds)]),
+    ...trashedNpcBlockers(tx, campaign, [...new Set(npcIds)]),
+  ];
+}
+
+/** The ids of a chapter's live scenes — what goes to the trash with it. */
+export function liveSceneIdsOf(tx: GrimoireDb, campaign: string, chapter: string): string[] {
+  return tx
+    .select({ id: scenes.id })
+    .from(scenes)
+    .where(
+      and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter), isNull(scenes.deletedAt)),
+    )
+    .all()
+    .map((row) => row.id);
+}
+
+/**
+ * Put a chapter's live scenes in the trash with it, INSIDE the caller's
+ * transaction, at the chapter's moment `at`: each keeps its place and moves
+ * its `rev`, and each leaves the search index.
+ */
+export function trashScenesOfChapter(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  at: string,
+): void {
+  for (const id of liveSceneIdsOf(tx, campaign, chapter)) {
+    const row = sceneRowOf(tx, campaign, id);
+    if (row === undefined) continue;
+    tx.update(scenes)
+      .set({ deletedAt: at, rev: row.rev + 1 })
+      .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
+      .run();
+    unindexScene(tx, campaign, id);
+  }
+}
+
+/** The scenes that went to the trash with a chapter at its moment `at`. */
+function scenesTrashedWith(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  at: string,
+): SceneRow[] {
+  return tx
+    .select()
+    .from(scenes)
+    .where(
+      and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, chapter), eq(scenes.deletedAt, at)),
+    )
+    .all() as SceneRow[];
+}
+
+/**
+ * The locations and npcs in the trash that the scenes of a chapter's restore
+ * name — each would come back naming a row that is not there.
+ */
+export function trashedReferencesOfChapterScenes(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  at: string,
+): TrashBlocker[] {
+  return trashedReferencesOf(tx, campaign, scenesTrashedWith(tx, campaign, chapter, at));
+}
+
+/**
+ * Restore the scenes that went to the trash with a chapter, INSIDE the
+ * caller's transaction: exactly those of its moment `at`, each at the place
+ * it had, each with its `rev` moved and back in the search index.
+ */
+export function restoreScenesOfChapter(
+  tx: GrimoireDb,
+  campaign: string,
+  chapter: string,
+  at: string,
+): void {
+  for (const row of scenesTrashedWith(tx, campaign, chapter, at)) {
+    const next: SceneRow = { ...row, deletedAt: null, rev: row.rev + 1 };
+    tx.update(scenes)
+      .set({ deletedAt: null, rev: next.rev })
+      .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
+      .run();
+    indexScene(tx, campaign, next, refTags(tx, campaign, row.id));
+  }
+}
+
+/** The live scenes that name this npc — what keeps it out of the trash. */
+export function liveScenesNamingNpc(tx: GrimoireDb, campaign: string, npc: string): TrashBlocker[] {
+  return tx
+    .select({ id: scenes.id, title: scenes.title })
+    .from(sceneNpcs)
+    .innerJoin(
+      scenes,
+      and(eq(scenes.campaignId, sceneNpcs.campaignId), eq(scenes.id, sceneNpcs.sceneId)),
+    )
+    .where(
+      and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, npc), isNull(scenes.deletedAt)),
+    )
+    .orderBy(asc(scenes.id))
+    .all()
+    .map(sceneBlocker);
+}
+
+/** The live scenes at this location — what keeps it out of the trash. */
+export function liveScenesAtLocation(
+  tx: GrimoireDb,
+  campaign: string,
+  location: string,
+): TrashBlocker[] {
+  return tx
+    .select({ id: scenes.id, title: scenes.title })
+    .from(scenes)
+    .where(
+      and(eq(scenes.campaignId, campaign), eq(scenes.location, location), isNull(scenes.deletedAt)),
+    )
+    .orderBy(asc(scenes.id))
+    .all()
+    .map(sceneBlocker);
+}
+
+/**
+ * Remove for good every scene that went to the trash before `cutoff`, across
+ * all campaigns — the first step of the purge (./trash.ts): a scene names
+ * npcs, locations and a chapter, so it goes before them. Its tag and npc rows
+ * go with it. Returns the campaign of each removed scene.
+ */
+export function purgeScenes(tx: GrimoireDb, cutoff: string): string[] {
+  const expired = and(isNotNull(scenes.deletedAt), lt(scenes.deletedAt, cutoff));
+  const campaigns = tx
+    .select({ campaignId: scenes.campaignId })
+    .from(scenes)
+    .where(expired)
+    .all()
+    .map((row) => row.campaignId);
+  tx.delete(scenes).where(expired).run();
+  return campaigns;
+}
+
 // --- taking over a proposal ---------------------------------------------------
 
 /**
@@ -326,9 +587,12 @@ export function readSceneProposal(raw: unknown, what: string): SceneProposal {
   return parseRequest(sceneProposalSchema, raw, what);
 }
 
-/** True when a proposal would land on a scene that already exists. */
+/**
+ * True when a proposal would land on a scene that already exists — in the
+ * trash too: its id stays taken until the purge (decisions/trash).
+ */
 export function sceneTaken(tx: GrimoireDb, campaign: string, id: string): boolean {
-  return sceneRowOf(tx, campaign, id) !== undefined;
+  return storedSceneRowOf(tx, campaign, id) !== undefined;
 }
 
 /**
@@ -380,7 +644,8 @@ export function insertSceneProposal(
  * to a chapter, and a mention creates nothing (decisions/constraints). The scene holds its
  * title and nothing else, and it is appended to the END of its chapter
  * (`nextScenePos`): a new scene has no place of its own yet, and the DM moves
- * it where it belongs.
+ * it where it belongs. A scene in the trash holds its id as much as a live
+ * one does.
  */
 export async function createScene(
   campaign: string,
@@ -392,8 +657,11 @@ export async function createScene(
   assertSafeChapterId(chapter);
   return mutate(campaign, (tx) => {
     assertChapterRef(tx, campaign, chapter);
-    if (sceneRowOf(tx, campaign, id) !== undefined) {
-      const suggestion = freeSlug(id, (candidate) => sceneRowOf(tx, campaign, candidate) !== undefined);
+    if (storedSceneRowOf(tx, campaign, id) !== undefined) {
+      const suggestion = freeSlug(
+        id,
+        (candidate) => storedSceneRowOf(tx, campaign, candidate) !== undefined,
+      );
       throw slugTaken("scene", id, suggestion);
     }
     tx.insert(scenes)
@@ -414,8 +682,24 @@ export async function createScene(
 
 // --- loading and checking a scene row ------------------------------------------
 
-/** One scene row by id, read through `tx` (the database or a transaction). */
+/**
+ * One LIVE scene row by id, read through `tx` (the database or a
+ * transaction) — a scene in the trash is not there for any read of content.
+ */
 export function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | undefined {
+  return tx
+    .select()
+    .from(scenes)
+    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id), isNull(scenes.deletedAt)))
+    .all()[0] as SceneRow | undefined;
+}
+
+/** One scene row by id, live or in the trash — for the trash and for id checks. */
+export function storedSceneRowOf(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+): SceneRow | undefined {
   return tx
     .select()
     .from(scenes)
