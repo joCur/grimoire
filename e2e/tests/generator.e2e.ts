@@ -34,7 +34,9 @@ import {
   NPC_STUB_ID,
   NPC_STUB_MOTIVATION,
   NPC_STUB_NAME,
+  OLD_NAME,
   OUTLINE_WARNING,
+  partNote,
   SCENE_ID,
   SCENE_TITLE,
   SECOND_SCENE,
@@ -44,6 +46,7 @@ import {
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getChapter } from "../support/chapter";
+import { createKnowledgeItem } from "../support/knowledge-item";
 import { generatorJobPath, getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import {
   acceptProposal,
@@ -995,4 +998,106 @@ test("a scene naming a rejected npc offers to accept it after all, and to drop t
   expect(await sceneExists(api, SCENE_ID)).toBe(false);
   expect(await sceneExists(api, SECOND_SCENE.id)).toBe(true);
   expect(await locationExists(api, LOCATION_STUB_ID)).toBe(false);
+});
+
+// --- the notes of a run ---------------------------------------------------------
+//
+// Each part's model notes and naming hints stand on its own card and leave
+// with it once it is written, rejected or dropped; the run's own notes stand
+// above the stages until the job is done (decisions/generator).
+
+test("each part's notes and naming hints stand on its card and leave with it; the run's note stays", async ({
+  page,
+  api,
+}) => {
+  // A naming convention the stub's drafts break, so the naming check has
+  // something to find.
+  await createKnowledgeItem(api, { kind: "naming", from: OLD_NAME, to: "Brinemarsh" });
+  await page.goto("/campaigns/example/generate");
+  await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.partNotes}`);
+  await expectStage(page, "locations");
+
+  // The wire: a part carries its own notes (a scene part also the server's
+  // note on its source excerpt), the result only the run's.
+  const job = await getGeneratorJob(api);
+  expect(job.result?.warnings).toContain(OUTLINE_WARNING);
+  expect(job.result?.warnings).not.toContain(partNote(LOCATION_STUB_ID));
+  const partWarnings = Object.fromEntries(
+    (job.pipeline?.parts ?? []).map((part) => [part.key, part.warnings]),
+  );
+  expect(partWarnings).toEqual({
+    [`scene:${SCENE_ID}`]: expect.arrayContaining([partNote(SCENE_ID)]),
+    [`scene:${SECOND_SCENE.id}`]: expect.arrayContaining([partNote(SECOND_SCENE.id)]),
+    [`npc:${NPC_STUB_ID}`]: [partNote(NPC_STUB_ID)],
+    [`location:${LOCATION_STUB_ID}`]: [partNote(LOCATION_STUB_ID)],
+  });
+
+  // --- the run's note above the stages, the location's on its row ----------
+  const runNotes = page.getByTestId("run-notes");
+  await expect(runNotes).toContainText(OUTLINE_WARNING);
+  await expect(runNotes).not.toContainText(partNote(LOCATION_STUB_ID));
+  const location = locationProposal(page, LOCATION_STUB_ID);
+  await expect(location.getByTestId("part-notes")).toContainText(partNote(LOCATION_STUB_ID));
+  await acceptProposal(location);
+  await expect(location.getByTestId("part-notes")).toHaveCount(0);
+  await expect(runNotes).toContainText(OUTLINE_WARNING);
+  await nextStage(page);
+  await expectStage(page, "npcs");
+
+  // --- the npc's note and its naming hint on its row, gone on reject ---------
+  const npc = npcProposal(page, NPC_STUB_ID);
+  await expect(npc.getByTestId("part-notes")).toContainText(partNote(NPC_STUB_ID));
+  const npcHint = npc.getByTestId("naming-hint");
+  await expect(npcHint).toHaveCount(1);
+  await expect(npcHint).toHaveAttribute("data-field", "role");
+  await expect(npcHint).toContainText(OLD_NAME);
+  await rejectProposal(npc);
+  await expect(npc.getByTestId("part-notes")).toHaveCount(0);
+  await expect(npc.getByTestId("naming-hint")).toHaveCount(0);
+  await expect(runNotes).toContainText(OUTLINE_WARNING);
+  await nextStage(page);
+  await expectStage(page, "scenes");
+
+  // --- a scene's notes on its card, gone when it is dropped ------------------
+  const rich = sceneProposal(page, SCENE_ID);
+  await expect(rich.getByTestId("part-notes")).toContainText(partNote(SCENE_ID));
+  await expect(rich.getByTestId("naming-hint")).toHaveCount(0);
+  await rich.getByRole("button", { name: ui("generate.review.drop"), exact: true }).click();
+  await expect(rich).toHaveAttribute("data-state", "dropped");
+  await expect(rich.getByTestId("part-notes")).toHaveCount(0);
+
+  // --- the hints stand at the field and at the block they name ---------------
+  const second = sceneProposal(page, SECOND_SCENE.id);
+  await expect(second.getByTestId("part-notes")).toContainText(partNote(SECOND_SCENE.id));
+  const titleHint = second.locator('[data-testid="naming-hint"][data-field="title"]');
+  await expect(titleHint).toHaveCount(1);
+  const titleHintId = await titleHint.getAttribute("id");
+  await expect(
+    second.getByRole("heading", { level: 2, name: `${SECOND_SCENE.title} of ${OLD_NAME}` }),
+  ).toHaveAttribute("aria-describedby", titleHintId!);
+  const block = second.getByTestId("noted-block");
+  await expect(block).toHaveCount(1);
+  await expect(block).toContainText(`The lights of ${OLD_NAME}`);
+  const bodyHint = block.locator('[data-testid="naming-hint"][data-field="body"]');
+  await expect(bodyHint).toHaveCount(1);
+  await expect(block).toHaveAttribute("aria-describedby", (await bodyHint.getAttribute("id"))!);
+
+  // The same hints in the scene's edit mode: the title at its field.
+  await second.getByRole("button", { name: ui("common.edit") }).click();
+  const titleInput = titleField(second);
+  await expect(titleInput).toHaveAttribute(
+    "aria-describedby",
+    new RegExp(`naming-hint-scene-${SECOND_SCENE.id}-`),
+  );
+  await expect(second.locator('[data-testid="naming-hint"][data-field="title"]')).toHaveCount(1);
+  await expect(second.locator('[data-testid="naming-hint"][data-field="body"]')).toHaveCount(1);
+
+  // The run's note stays until the job is done.
+  await expect(runNotes).toContainText(OUTLINE_WARNING);
+  await second.getByRole("button", { name: ui("generate.review.acceptOne") }).click();
+  await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
+  expect(await readGeneratorJob(api)).toBeNull();
+  await expect(page.getByTestId("run-notes")).toHaveCount(0);
+  await expect(page.getByTestId("part-notes")).toHaveCount(0);
+  await expect(page.getByTestId("naming-hint")).toHaveCount(0);
 });

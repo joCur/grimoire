@@ -4,7 +4,9 @@
 // its fields and its text — and below, what can be done with it: write it on
 // its own, drop it, or, once written, open the scene it became. What keeps it
 // from being written is the caller's to say, in the notice slot above those
-// actions.
+// actions. What the page has to say about the scene stands in the notes slot
+// under the header, and what it says about one of its fields or one block of
+// its text stands right there (components/place-notes.tsx).
 //
 // Title and chips read the scene the card is given, so a field the DM changes
 // shows up in the header as well. What the editor changes is reported as the
@@ -20,12 +22,18 @@ import { Link } from "react-router";
 
 import { ProposalBodySection, ProposalFieldsSection } from "@/components/ProposalEditor";
 import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
+import { NotedMarkdown } from "@/components/NotedMarkdown";
+import {
+  describedBy,
+  FieldNotesExcept,
+  PlaceNoteList,
+  useFieldNotes,
+} from "@/components/place-notes";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 import type { PartState } from "@/components/ProposalRow";
 import { cn } from "@/lib/utils";
-import { Markdown } from "@/markdown/Markdown";
 
 import { SceneFields } from "./SceneFields";
 import {
@@ -47,6 +55,7 @@ export function SceneProposalCard({
   busy,
   editing,
   cardRef,
+  notes,
   notice,
   acceptBlocked = false,
   onToggleEditing,
@@ -69,6 +78,8 @@ export function SceneProposalCard({
    * card.
    */
   cardRef?: (el: HTMLElement | null) => void;
+  /** What the page notes about the scene as a whole, under the header. */
+  notes?: ReactNode;
   /** What stands between the scene and its accept, above the actions. */
   notice?: ReactNode;
   /** The scene cannot be written as it is — its accept action is off. */
@@ -86,6 +97,10 @@ export function SceneProposalCard({
   const isContingency = scene.type === "contingency";
   const location = locationName(tree, scene.location);
   const written = state === "written";
+  const inEditor = editing && !written;
+  // The title's notes stand under the header while the card reads; the
+  // editor's title field shows them itself.
+  const titleNotes = useFieldNotes("title");
 
   return (
     <div
@@ -100,7 +115,10 @@ export function SceneProposalCard({
       )}
     >
       <div className="mb-1 flex flex-wrap items-center gap-2.5">
-        <h2 className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground">
+        <h2
+          aria-describedby={inEditor ? undefined : describedBy(titleNotes)}
+          className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground"
+        >
           {scene.title === "" ? scene.id : scene.title}
         </h2>
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
@@ -115,6 +133,8 @@ export function SceneProposalCard({
         )}
       </div>
       <p className="mb-3.5 font-mono text-[11.5px] text-faint">{label}</p>
+      {!inEditor && <PlaceNoteList notes={titleNotes} className="-mt-2 mb-3" />}
+      {notes}
       <div className="mb-2 flex flex-wrap gap-2 border-b border-border pb-4">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-soft">
           {isContingency ? (
@@ -140,10 +160,14 @@ export function SceneProposalCard({
           </span>
         ))}
       </div>
-      {editing && !written ? (
+      {inEditor ? (
         <SceneProposalEditor scene={scene} tree={tree} onChange={onChange} onFlush={onFlush} />
       ) : (
-        <Markdown>{scene.body}</Markdown>
+        <>
+          {/* The fields the card does not show (a trigger) have their notes here. */}
+          <FieldNotesExcept shown={["title"]} className="mb-3" />
+          <NotedMarkdown body={scene.body} />
+        </>
       )}
       {!written && notice}
       {written ? (

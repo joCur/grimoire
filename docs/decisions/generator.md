@@ -37,6 +37,11 @@
   is part of the review state on the job. The scene stage opens only when
   every location and NPC of the run is decided, and going back stays
   possible.
+- **Notes belong to what they are about.** What the model notes about one
+  proposal, and what the naming check finds in it, is stored and shown with
+  that proposal, at the place it names, and goes with it once it is decided.
+  Only what concerns the run as a whole belongs to the run, and it stays
+  until the job is done.
 - **Applying writes exactly what is named.** Accepting a proposal writes that
   proposal, in one transaction under the same rules as creating its entity,
   and nothing else. A scene is applied only once every location and NPC of
@@ -64,6 +69,8 @@
   scene references before the scene itself makes every write the DM's own
   choice: nothing enters the campaign because something else was accepted,
   and no scene points at a row that was never written.
+- A note in a pooled list above the review has to be matched to its proposal
+  by the DM, and it keeps standing after that proposal is decided.
 
 ## Consequences
 

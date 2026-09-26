@@ -4,6 +4,7 @@
 
 import type { LocationProposal } from "@grimoire/shared/location";
 import { MapPin } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { ProposalRow } from "@/components/ProposalRow";
 import type { PartState } from "@/components/ProposalRow";
@@ -23,6 +24,8 @@ export function LocationProposalRow({
   busy: boolean;
   cardRef?: (el: HTMLElement | null) => void;
   testId?: string;
+  /** What the page notes about the proposal, under its name. */
+  notes?: ReactNode;
   onReject: () => void;
   onAccept: () => void;
 }) {

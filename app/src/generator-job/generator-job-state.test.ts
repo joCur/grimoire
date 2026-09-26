@@ -56,6 +56,9 @@ import {
   rejectedReferences,
   reviewStages,
   sceneWritable,
+  hintRef,
+  proposalNotes,
+  runNotes,
 } from "./generator-job-state";
 import { AUGMENT_OPEN_PARAM, generatorHref, jobHref } from "./job-links";
 
@@ -631,6 +634,7 @@ describe("the run's parts", () => {
           id: `s${i}`,
           title: `Scene ${i}`,
           status,
+          warnings: [],
         })),
         totals: { inputTokens: 11_000, outputTokens: 1_400, calls: 5 },
       },
@@ -888,6 +892,7 @@ describe("the stages of a scene run's review", () => {
     id,
     title: id,
     status,
+    warnings: [],
   });
   const run = (over: Partial<GeneratorJob> = {}): GeneratorJob =>
     ({
@@ -982,5 +987,79 @@ describe("the stages of a scene run's review", () => {
     const npcs = reviewStages(decided).find((stage) => stage.stage === "npcs");
     expect(npcs).toMatchObject({ total: 1, decided: 0, complete: false });
     expect(currentStage(decided)).toBe("npcs");
+  });
+
+  test("a proposal's notes come from its own part, and leave with it", () => {
+    const hints: NonNullable<GeneratorJob["result"]>["namingHints"] = [
+      { scene: "a", from: "Salzhafen", to: "Salt Harbour", field: "body", line: 3, excerpt: "x" },
+      { npc: "grella", from: "Salzhafen", to: "Salt Harbour", field: "role", excerpt: "y" },
+      { location: "old-mole", from: "Salzhafen", to: "Salt Harbour", field: "name", excerpt: "z" },
+    ];
+    const noted = run({
+      result: {
+        scenes: [proposed("a"), proposed("b")],
+        npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
+        locations: [{ id: "old-mole", name: "Old Mole", body: "m" }],
+        warnings: ["The source names no weather."],
+        namingHints: hints,
+      },
+      pipeline: {
+        parts: [
+          { ...part("scene", "a"), warnings: ["About a."] },
+          part("scene", "b"),
+          { ...part("npc", "grella"), warnings: ["About Grella."] },
+          { ...part("location", "old-mole"), warnings: ["About the mole."] },
+        ],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    expect(proposalNotes(noted, { kind: "scene", id: "a" })).toEqual({
+      warnings: ["About a."],
+      hints: [hints[0]!],
+    });
+    expect(proposalNotes(noted, { kind: "scene", id: "b" })).toEqual({ warnings: [], hints: [] });
+    expect(proposalNotes(noted, { kind: "npc", id: "grella" })).toEqual({
+      warnings: ["About Grella."],
+      hints: [hints[1]!],
+    });
+    expect(proposalNotes(noted, { kind: "location", id: "old-mole" }).hints).toEqual([hints[2]!]);
+    expect(hints.map((hint) => hintRef(hint).kind)).toEqual(["scene", "npc", "location"]);
+
+    // Written, rejected or dropped: its notes and hints are gone.
+    const decided = decide(noted, {
+      writtenLocations: ["old-mole"],
+      npcs: { grella: "rejected" },
+      droppedScenes: ["a"],
+    });
+    for (const proposal of [
+      { kind: "scene", id: "a" },
+      { kind: "npc", id: "grella" },
+      { kind: "location", id: "old-mole" },
+    ] as const) {
+      expect(proposalNotes(decided, proposal)).toEqual({ warnings: [], hints: [] });
+    }
+    // The run's own notes stay while the job is there.
+    expect(runNotes(decided)).toEqual(["The source names no weather."]);
+    expect(runNotes(null)).toEqual([]);
+  });
+
+  test("an npc run's notes stand on its one proposal", () => {
+    const hint = { npc: "grella", from: "Salzhafen", to: "Salt Harbour", field: "body", line: 1, excerpt: "x" };
+    const npcRun = {
+      ...run({ kind: "npc", result: undefined, pipeline: undefined }),
+      npcResult: {
+        npc: { id: "grella", name: "Grella", status: "unknown", body: "s" },
+        warnings: ["No voice given."],
+        namingHints: [hint],
+      },
+    } as GeneratorJob;
+    expect(proposalNotes(npcRun, { kind: "npc", id: "grella" })).toEqual({
+      warnings: ["No voice given."],
+      hints: [hint],
+    });
+    expect(proposalNotes(npcRun, { kind: "npc", id: "other" })).toEqual({ warnings: [], hints: [] });
+    expect(
+      proposalNotes(decide(npcRun, { writtenNpcs: ["grella"] }), { kind: "npc", id: "grella" }),
+    ).toEqual({ warnings: [], hints: [] });
   });
 });

@@ -58,11 +58,10 @@ import {
   type GeneratorJobPart,
   type GeneratorReviewStage,
   type GenerateResult,
-  type NamingHint,
 } from "@grimoire/shared/generator-job";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Sparkles, SpellCheck, StickyNote } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { ApiError, fetchTree } from "@/api";
@@ -72,6 +71,7 @@ import { glossaryTermsQuery } from "@/glossary-term/glossary-term-query";
 import { promptKnowledgeCount } from "@/knowledge-item/knowledge-item-draft";
 import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { AllPlaceNotes, PlaceNotesProvider } from "@/components/place-notes";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -106,10 +106,12 @@ import {
   partsStillRunning,
   pipelineCostLabel,
   pipelineProgress,
+  proposalNotes,
   rejectedReferences,
   restoredMode,
   reviewOf,
   reviewStages,
+  runNotes,
   sceneState,
   sceneWritable,
   stringField,
@@ -119,6 +121,7 @@ import {
   type AcceptSelection,
   type GenerateMode,
   type GeneratePhase,
+  type ProposalRef,
 } from "@/generator-job/generator-job-state";
 import {
   acceptJobParts,
@@ -134,6 +137,7 @@ import {
 import { GeneratorJobPartCard } from "@/generator-job/GeneratorJobPartCard";
 import { GeneratorJobWorking } from "@/generator-job/GeneratorJobWorking";
 import { jobHref } from "@/generator-job/job-links";
+import { hintPlaceNotes, ModelNotes, RunNotes } from "@/generator-job/PartNotes";
 import { ReviewStageNav, ReviewStageSteps } from "@/generator-job/ReviewStages";
 import { SceneReferenceNotice } from "@/generator-job/SceneReferenceNotice";
 import { useJobReview } from "@/generator-job/use-job-review";
@@ -566,47 +570,78 @@ export function GenerateRoute() {
     part.kind === "location"
       ? proposedLocations.find((location) => location.id === part.id)
       : undefined;
-  /** Npcs and locations in the result that no PART accounts for (see the lists below). */
-  const unclaimedNpcs = proposedNpcs.filter(
-    (npc) => !npcParts.some((part) => part.id === npc.id),
-  );
-  const unclaimedLocations = proposedLocations.filter(
-    (location) => !locationParts.some((part) => part.id === location.id),
-  );
+  /**
+   * A proposal's card with what is noted about it: the model's notes in the
+   * card's notes slot, the naming hints at their places. Both go with the
+   * proposal once it is written, rejected or dropped (`proposalNotes`). A row
+   * shows neither its fields nor its text, so it lists its hints.
+   */
+  const withNotes = (
+    proposal: ProposalRef,
+    card: (notes: ReactNode) => ReactNode,
+    listed = false,
+  ) => {
+    const noted = proposalNotes(job, proposal);
+    const warnings = <ModelNotes warnings={noted.warnings} />;
+    return (
+      <PlaceNotesProvider
+        key={`${proposal.kind}:${proposal.id}`}
+        notes={hintPlaceNotes(noted.hints, listed)}
+      >
+        {card(
+          listed ? (
+            <>
+              {warnings}
+              <AllPlaceNotes />
+            </>
+          ) : (
+            warnings
+          ),
+        )}
+      </PlaceNotesProvider>
+    );
+  };
 
   /** One proposed npc of the run, accepted — written — or rejected by its id (decisions/resources). */
-  const npcRow = (npc: NpcProposal, cardRef?: (el: HTMLElement | null) => void) => (
-    <NpcProposalRow
-      key={`npc:${npc.id}`}
-      campaign={campaign}
-      npc={npc}
-      {...(cardRef === undefined ? {} : { cardRef })}
-      testId={`npc-proposal:${npc.id}`}
-      reason={proposalReason(scenes, t)}
-      state={npcState(job, npc.id)}
-      busy={apply.isPending}
-      onReject={() => review.decide({ npcs: { [npc.id]: "rejected" } })}
-      onAccept={() => apply.mutate({ npcs: [npc.id] })}
-    />
-  );
+  const npcRow = (npc: NpcProposal, cardRef: (el: HTMLElement | null) => void) =>
+    withNotes(
+      { kind: "npc", id: npc.id },
+      (notes) => (
+        <NpcProposalRow
+          campaign={campaign}
+          npc={npc}
+          cardRef={cardRef}
+          testId={`npc-proposal:${npc.id}`}
+          reason={proposalReason(scenes, t)}
+          state={npcState(job, npc.id)}
+          busy={apply.isPending}
+          notes={notes}
+          onReject={() => review.decide({ npcs: { [npc.id]: "rejected" } })}
+          onAccept={() => apply.mutate({ npcs: [npc.id] })}
+        />
+      ),
+      true,
+    );
   /** One proposed location of the run, accepted — written — or rejected by its id (decisions/resources). */
-  const locationRow = (
-    location: LocationProposal,
-    cardRef?: (el: HTMLElement | null) => void,
-  ) => (
-    <LocationProposalRow
-      key={`location:${location.id}`}
-      campaign={campaign}
-      location={location}
-      {...(cardRef === undefined ? {} : { cardRef })}
-      testId={`location-proposal:${location.id}`}
-      reason={proposalReason(scenes, t)}
-      state={locationState(job, location.id)}
-      busy={apply.isPending}
-      onReject={() => review.decide({ locations: { [location.id]: "rejected" } })}
-      onAccept={() => apply.mutate({ locations: [location.id] })}
-    />
-  );
+  const locationRow = (location: LocationProposal, cardRef: (el: HTMLElement | null) => void) =>
+    withNotes(
+      { kind: "location", id: location.id },
+      (notes) => (
+        <LocationProposalRow
+          campaign={campaign}
+          location={location}
+          cardRef={cardRef}
+          testId={`location-proposal:${location.id}`}
+          reason={proposalReason(scenes, t)}
+          state={locationState(job, location.id)}
+          busy={apply.isPending}
+          notes={notes}
+          onReject={() => review.decide({ locations: { [location.id]: "rejected" } })}
+          onAccept={() => apply.mutate({ locations: [location.id] })}
+        />
+      ),
+      true,
+    );
   /** The status card of a part that has no proposal to show yet. */
   const partCard = (part: GeneratorJobPart, cardRef: (el: HTMLElement | null) => void) => (
     <GeneratorJobPartCard
@@ -648,20 +683,20 @@ export function GenerateRoute() {
    * the run it names is written; one that names a rejected proposal says so
    * on its card.
    */
-  const sceneCard = (proposed: SceneProposal, cardRef?: (el: HTMLElement | null) => void) => {
+  const sceneCard = (proposed: SceneProposal, cardRef: (el: HTMLElement | null) => void) => {
     const shown = sceneFor(proposed);
     const open = sceneState(job, proposed.id) === "open";
     const missing = rejectedReferences(job, shown);
-    return (
+    return withNotes({ kind: "scene", id: proposed.id }, (notes) => (
       <SceneProposalCard
-        key={proposed.id}
         campaign={campaign}
         scene={shown}
         tree={tree.data}
         state={sceneState(job, proposed.id)}
         busy={apply.isPending}
         editing={editing[proposed.id] === true}
-        {...(cardRef === undefined ? {} : { cardRef })}
+        cardRef={cardRef}
+        notes={notes}
         acceptBlocked={!sceneWritable(job, shown)}
         notice={
           open && job !== null ? (
@@ -686,7 +721,7 @@ export function GenerateRoute() {
         onAccept={() => apply.mutate({ scenes: [proposed.id] })}
         onDrop={() => toggleDrop(proposed.id)}
       />
-    );
+    ));
   };
 
   const applied = written !== undefined;
@@ -1129,17 +1164,10 @@ export function GenerateRoute() {
 
             <ChapterDescription description={job?.pipeline?.chapterDescription} t={t} />
 
-            {(result?.warnings ?? []).map((warning) => (
-              <div
-                key={warning}
-                className="mb-2 flex items-start gap-2.5 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
-              >
-                <StickyNote aria-hidden size={15} className="mt-px flex-none text-primary" />
-                <p className="text-[13px] leading-[1.55] text-soft">{warning}</p>
-              </div>
-            ))}
-
-            <NamingHints hints={result?.namingHints} t={t} />
+            {/* What the model noted about the whole run. What it noted about
+                one proposal, and the naming hints, stand on that proposal's
+                card. */}
+            <RunNotes warnings={runNotes(job)} />
 
             <ReviewStageSteps stages={stages} current={stage} onGo={goToStage} />
 
@@ -1158,41 +1186,26 @@ export function GenerateRoute() {
               {/* Each stage in OUTLINE order: a finished part is its
                   proposal, an open one a status card, a failed one its error
                   plus its retry action. */}
-              {stage === "locations" && (
-                <>
-                  {locationParts.map((part) => {
-                    const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
-                    const location = part.status === "done" ? locationOfPart(part) : undefined;
-                    return location === undefined ? partCard(part, cardRef) : locationRow(location, cardRef);
-                  })}
-                  {/* Locations no part claims: a run whose outline proposed
-                      none but whose scene replies carried them, and one whose
-                      part id drifted. */}
-                  {unclaimedLocations.map((location) => locationRow(location))}
-                </>
-              )}
+              {stage === "locations" &&
+                locationParts.map((part) => {
+                  const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                  const location = part.status === "done" ? locationOfPart(part) : undefined;
+                  return location === undefined ? partCard(part, cardRef) : locationRow(location, cardRef);
+                })}
 
-              {stage === "npcs" && (
-                <>
-                  {npcParts.map((part) => {
-                    const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
-                    const npc = part.status === "done" ? npcOfPart(part) : undefined;
-                    return npc === undefined ? partCard(part, cardRef) : npcRow(npc, cardRef);
-                  })}
-                  {unclaimedNpcs.map((npc) => npcRow(npc))}
-                </>
-              )}
+              {stage === "npcs" &&
+                npcParts.map((part) => {
+                  const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                  const npc = part.status === "done" ? npcOfPart(part) : undefined;
+                  return npc === undefined ? partCard(part, cardRef) : npcRow(npc, cardRef);
+                })}
 
-              {stage === "scenes" && (
-                <>
-                  {sceneParts.map((part) => {
-                    const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
-                    const scene = part.status === "done" ? sceneOfPart(part) : undefined;
-                    return scene === undefined ? partCard(part, cardRef) : sceneCard(scene, cardRef);
-                  })}
-                  {sceneParts.length === 0 && scenes.map((scene) => sceneCard(scene))}
-                </>
-              )}
+              {stage === "scenes" &&
+                sceneParts.map((part) => {
+                  const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                  const scene = part.status === "done" ? sceneOfPart(part) : undefined;
+                  return scene === undefined ? partCard(part, cardRef) : sceneCard(scene, cardRef);
+                })}
 
               <ReviewStageNav stages={stages} current={stage} onGo={goToStage} />
             </section>
@@ -1264,30 +1277,33 @@ export function GenerateRoute() {
 
         {/* The NPC run's review lives in the npc's slice; mounted per job,
             so a new run starts with a clean typing buffer. */}
-        {phase === "review" && npcResult !== undefined && job !== null && (
-          <NpcRunReview
-            key={job.id}
-            job={job}
-            result={npcResult}
-            tree={tree.data}
-            review={review}
-            usage={resultUsage}
-            hints={<NamingHints hints={npcResult.namingHints} t={t} />}
-            conflicts={conflicts}
-            applyProblem={
-              apply.isError && conflicts.length === 0
-                ? apply.error instanceof ApiError && apply.error.status === 409
-                  ? "stale"
-                  : "failed"
-                : undefined
-            }
-            discardFailed={discard.isError}
-            applying={apply.isPending}
-            discarding={discard.isPending}
-            onApply={() => apply.mutate(undefined)}
-            onDiscard={() => discard.mutate()}
-          />
-        )}
+        {phase === "review" &&
+          npcResult !== undefined &&
+          job !== null &&
+          withNotes({ kind: "npc", id: npcResult.npc.id }, (notes) => (
+            <NpcRunReview
+              key={job.id}
+              job={job}
+              result={npcResult}
+              tree={tree.data}
+              review={review}
+              usage={resultUsage}
+              notes={notes}
+              conflicts={conflicts}
+              applyProblem={
+                apply.isError && conflicts.length === 0
+                  ? apply.error instanceof ApiError && apply.error.status === 409
+                    ? "stale"
+                    : "failed"
+                  : undefined
+              }
+              discardFailed={discard.isError}
+              applying={apply.isPending}
+              discarding={discard.isPending}
+              onApply={() => apply.mutate(undefined)}
+              onDiscard={() => discard.mutate()}
+            />
+          ))}
 
         {phase === "done" && written !== undefined && (
           <div className="flex flex-col items-start gap-3.5 py-14 md:py-20">
@@ -1355,19 +1371,6 @@ function proposalReason(scenes: GenerateResult["scenes"], t: Translate): string 
 }
 
 /**
- * The naming check's findings — the ONE block on this page
- * that is not the model's voice but the server's.
- *
- * It is deliberately QUIETER than the warnings above it: a hairline box, no
- * accent border, one small heading that calls the findings non-blocking. The
- * check is a plain text search (server/src/naming-check.ts) and can be wrong
- * about whether a hit is the thing the rule meant, so it may not look like a
- * verdict — and it must never compete with the draft the DM is reading.
- *
- * Nothing renders when there is nothing to say: a box announcing zero hints
- * would be noise on every single run of every campaign without conventions.
- */
-/**
  * The description of the chapter a new-chapter run creates — the text
  * that chapter starts with once the run is accepted. It comes from the
  * outline, so it stands above the drafts, rendered like the chapter overview
@@ -1389,53 +1392,6 @@ function ChapterDescription({
       <div className="md-compact">
         <Markdown>{description}</Markdown>
       </div>
-    </section>
-  );
-}
-
-function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Translate }) {
-  if (hints === undefined || hints.length === 0) return null;
-  return (
-    <section className="mb-[22px] rounded-md border border-border bg-card px-3.5 py-3">
-      <div className="mb-2 flex items-center gap-2 text-[12px] text-muted-foreground">
-        <SpellCheck aria-hidden size={14} className="flex-none" />
-        <h2 className="font-medium">
-          {t("generate.review.namingHeading", { count: hints.length })}
-        </h2>
-      </div>
-      <ul className="flex flex-col gap-2">
-        {hints.map((hint, index) => {
-          // WHAT the hit sits in: a proposed scene, npc or location by its
-          // resource segment and id (decisions/resources).
-          const where =
-            hint.scene !== undefined
-              ? sceneLabel(hint.scene)
-              : hint.npc !== undefined
-                ? npcLabel(hint.npc)
-                : locationLabel(hint.location ?? "");
-          // The key needs every coordinate: one rule can hit the same draft
-          // twice (a field and a body line), and two rules can hit the same
-          // line. The index closes the remaining tie.
-          return (
-            <li key={`${where}:${hint.field}:${hint.line ?? 0}:${hint.from}:${index}`}>
-              <p className="text-[13px] leading-[1.5] text-soft">
-                {t("generate.review.namingHint", { from: hint.from, to: hint.to })}
-              </p>
-              <p className="mt-0.5 font-mono text-[11.5px] text-faint">
-                {hint.line === undefined
-                  ? t("generate.review.namingWhereField", { path: where, field: hint.field })
-                  : t("generate.review.namingWhereBody", { path: where, line: hint.line })}
-              </p>
-              {/* The line itself, so the DM can judge the hit without opening
-                  the draft — the check's whole claim is that the draft says
-                  this. */}
-              <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
-                {hint.excerpt}
-              </p>
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }

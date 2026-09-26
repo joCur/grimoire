@@ -4,6 +4,7 @@
 
 import type { NpcProposal } from "@grimoire/shared/npc";
 import { User } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { ProposalRow } from "@/components/ProposalRow";
 import type { PartState } from "@/components/ProposalRow";
@@ -23,6 +24,8 @@ export function NpcProposalRow({
   busy: boolean;
   cardRef?: (el: HTMLElement | null) => void;
   testId?: string;
+  /** What the page notes about the proposal, under its name. */
+  notes?: ReactNode;
   onReject: () => void;
   onAccept: () => void;
 }) {

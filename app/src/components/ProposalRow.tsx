@@ -1,9 +1,11 @@
 // One proposal row of a generator review: marker, name, mono label, italic
 // reason, and the decision — accept (which writes it), reject, or accept a
 // rejected one after all. What the row proposes is the caller's; the row
-// knows only its state.
+// knows only its state, and shows what the caller notes about it under its
+// name.
 
 import { Check, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,7 @@ export function ProposalRow({
   busy,
   cardRef,
   testId,
+  notes,
   onAccept,
   onReject,
 }: {
@@ -45,6 +48,8 @@ export function ProposalRow({
   /** The retry's focus follows the part here too. */
   cardRef?: (el: HTMLElement | null) => void;
   testId?: string;
+  /** What the caller notes about the proposal, under its name. */
+  notes?: ReactNode;
   /** Write the proposal — a rejected one after all. */
   onAccept: () => void;
   onReject: () => void;
@@ -68,6 +73,7 @@ export function ProposalRow({
           <span className="font-mono text-[11px] text-faint">{label}</span>
         </div>
         <p className="mt-0.5 text-[12.5px] text-muted-foreground italic">{reason}</p>
+        {notes !== undefined && <div className="mt-2.5">{notes}</div>}
       </div>
       {state === "written" ? (
         <p className="flex flex-none items-center gap-2 text-[12.5px] text-muted-foreground">

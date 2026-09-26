@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import {
   alignBlocks,
   assembleBody,
+  changeAtLines,
   defaultAccepted,
   formatFieldValue,
   lineDiff,
@@ -215,6 +216,24 @@ describe("assembleBody", () => {
     const removed = changes.find((c) => c.kind === "removed")!;
     expect(assembleBody(changes, new Set())).toContain("[!readaloud]");
     expect(assembleBody(changes, new Set([removed.id]))).not.toContain("[!readaloud]");
+  });
+});
+
+describe("changeAtLines", () => {
+  test("a line of the proposed body names the change that shows its block", () => {
+    const current = "Kept.\n\nDropped.\n";
+    const proposed = "Kept.\n\nNew one.\n\nNew two.\n";
+    const changes = alignBlocks(current, proposed);
+    const at = changeAtLines(changes, proposed, [1, 3, 5, 4]);
+    const shows = (line: number) => {
+      const change = changes.find((candidate) => candidate.id === at.get(line));
+      return change?.after === undefined ? undefined : blockMarkdown(change.after);
+    };
+    expect(shows(1)).toBe("Kept.");
+    expect(shows(3)).toBe("New one.");
+    expect(shows(5)).toBe("New two.");
+    // A blank line is in no block.
+    expect(at.has(4)).toBe(false);
   });
 });
 

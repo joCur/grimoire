@@ -13,7 +13,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { translator } from "@/i18n/format";
 
 import {
+  blockAtLine,
   blockLabel,
+  blockLines,
   blockMarkdown,
   blockText,
   calloutLabel,
@@ -27,6 +29,7 @@ import {
   parseBlocks,
   removeBlock,
   serializeBlocks,
+  splitAtLines,
   withBlockText,
   withChildren,
   withIfCondition,
@@ -711,5 +714,60 @@ describe("tables are part of a text block, byte-stable", () => {
     expect(note.kind).toBe("note");
     expect(note.text).toContain("| 5\u20136 | A lantern, its glass blackened with soot |");
     expect(serializeBlocks(blocks)).toBe(body);
+  });
+});
+
+describe("the lines a block spans", () => {
+  test("every top-level block knows its lines, a section with what it holds", () => {
+    const body = [
+      "", // 1 \u2014 the body opens with a blank line
+      "Opening paragraph", // 2
+      "that runs on.", // 3
+      "", // 4
+      "> [!readaloud] The wind.", // 5
+      "", // 6
+      "", // 7
+      "## If: they stay", // 8
+      "", // 9
+      "They freeze.", // 10
+      "", // 11
+      "## Next", // 12
+      "",
+    ].join("\n");
+    const blocks = parseBlocks(body);
+    expect(shape(blocks)).toEqual(["text", "callout:readaloud", "ifSection(text)", "heading"]);
+    const lines = blockLines(blocks);
+    expect(lines).toEqual([
+      { first: 2, last: 3 },
+      { first: 5, last: 5 },
+      { first: 8, last: 10 },
+      { first: 12, last: 12 },
+    ]);
+    expect(blockAtLine(lines, 3)).toBe(0);
+    expect(blockAtLine(lines, 10)).toBe(2);
+    // A blank line between two blocks belongs to neither.
+    expect(blockAtLine(lines, 6)).toBeUndefined();
+  });
+
+  test("a body is cut at the blocks that hold the asked lines, the rest stays together", () => {
+    const body = "One.\n\nTwo.\n\nThree.\n\nFour.\n";
+    expect(splitAtLines(body, [3])).toEqual([
+      { markdown: "One.\n\n", lines: [] },
+      { markdown: "Two.\n\n", lines: [3] },
+      { markdown: "Three.\n\nFour.\n", lines: [] },
+    ]);
+    expect(splitAtLines(body, [])).toEqual([{ markdown: body, lines: [] }]);
+    // A line no block holds is not lost: it gets a last, empty piece.
+    expect(splitAtLines(body, [2]).at(-1)).toEqual({ markdown: "", lines: [2] });
+  });
+
+  test("the lines of every fixture body end where the body ends", () => {
+    for (const name of fixtureFiles()) {
+      const body = fixtureBody(name);
+      const lines = blockLines(parseBlocks(body));
+      const last = lines.at(-1);
+      if (last === undefined) continue;
+      expect(last.last).toBe(body.replace(/\n+$/, "").split("\n").length);
+    }
   });
 });

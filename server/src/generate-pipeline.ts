@@ -156,9 +156,9 @@ export interface RunOutline {
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
 
 /**
- * The run warning a REPAIRED outline earns. German,
- * like the excerpt-fallback warning next to it: it rides along in the run's
- * `warnings` and the review shows those verbatim.
+ * The run warning a REPAIRED outline earns. German, like the excerpt-fallback
+ * warning of a scene part: it rides along in the run's own `warnings` and the
+ * review shows those verbatim.
  *
  * Why it is a warning at all: the repair is silent otherwise, and "the model
  * answered something JSON.parse could not read" is exactly the kind of thing
@@ -622,11 +622,15 @@ export function validateLocationPartReply(
 
 // --- the run ------------------------------------------------------------------
 
-/** What one finished part contributes to the job's result. */
+/**
+ * What one finished part produced: its proposal for the job's result, and the
+ * model's notes and the naming check's findings about it.
+ */
 export interface PartOutcome {
   scene?: SceneProposal;
   npc?: NpcProposal;
   location?: LocationProposal;
+  /** The model's notes on this part — they stay on the part (`GeneratorJobPart.warnings`). */
   warnings: string[];
   namingHints: NamingHint[];
   /** The excerpt could not be matched, so the part got the WHOLE source. */
@@ -687,6 +691,7 @@ export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
         id: scene.id,
         title: scene.title,
         status: "pending",
+        warnings: [],
       }),
     ),
     ...outline.npcs.map(
@@ -696,6 +701,7 @@ export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
         id: npc.id,
         title: npc.name,
         status: "pending",
+        warnings: [],
       }),
     ),
     ...outline.locations.map(
@@ -705,6 +711,7 @@ export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
         id: location.id,
         title: location.name,
         status: "pending",
+        warnings: [],
       }),
     ),
   ];

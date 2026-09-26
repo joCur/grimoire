@@ -846,10 +846,9 @@ export const generateJobs = sqliteTable(
     rev: integer("rev").notNull().default(0),
     /**
      * The PIPELINE state of a scene run — JSON: the internal
-     * outline, the parts with their per-part status/error/usage, and the
-     * run's token and call totals. `{}` for the single-call runs (npc,
-     * augment) and for a row written before this deploy, which is what makes
-     * the column additive: a job without parts renders exactly as it did.
+     * outline, the parts with their per-part status/error/usage and model
+     * notes, and the run's token and call totals. `{}` for the single-call
+     * runs (npc, augment).
      */
     pipeline: text("pipeline").notNull().default("{}"),
     /**
@@ -866,8 +865,8 @@ export const generateJobs = sqliteTable(
      * copy of the start form is not, so a title taken from that copy would be
      * missing after a navigation or a reload — and the chapter with it. It is
      * therefore stored when the run STARTS.
-     * NULL for every other run and for a job written before this column
-     * existed; the accept then falls back to the chapter id.
+     * NULL for every other run and for a new-chapter run started without
+     * one; the accept then falls back to the chapter id.
      */
     newChapterTitle: text("new_chapter_title"),
   },

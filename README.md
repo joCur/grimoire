@@ -910,8 +910,16 @@ locations, then the new NPCs, then the scenes — and the stage is part of the
 review on the job. Accepting a proposal writes exactly that proposal; a
 scene whose `npcs` or `location` names a proposal of the run that is not
 written is refused (409 `proposal_not_written`) and nothing is written
-([decisions/generator](docs/decisions/generator.md)). Details in
-`generator/README.md`.
+([decisions/generator](docs/decisions/generator.md)). The notes of a scene
+run belong to what they are about: what the model noted about one scene,
+NPC or location stands on its part (`pipeline.parts[].warnings`), what it
+noted about the run as a whole (the outline's notes, a repaired outline reply) under
+`result.warnings`. The naming check's findings (`result.namingHints`) name
+their scene, NPC or location by id, the field and, in the text, the line.
+The review shows a part's notes and hints on its card, a hint at the field
+or the block of the text it names, until the part is written, rejected or
+dropped; the run's notes stand above the stages until the job is done.
+Details in `generator/README.md`.
 
 The mechanical check reads the fields and the text, but no heading
 ([decisions/data-shape](docs/decisions/data-shape.md)): the sections of a proposal are the prompts' recommendation.

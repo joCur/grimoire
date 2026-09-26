@@ -175,6 +175,13 @@ export const TRIGGER = {
    */
   twoScenes: "E2E_TWO_SCENES",
   /**
+   * The two-scene run with a NOTE on every part (partNote) and the
+   * spelling OLD_NAME in the npc's role and in the second scene's title and
+   * text — so a spec can watch each part's notes and naming hints stand on
+   * its own card and leave with it.
+   */
+  partNotes: "E2E_PART_NOTES",
+  /**
    * The outline describes the chapter even though the run goes into an
    * EXISTING one — a model that ignores the prompt's rule. The server has to
    * drop it, so that chapter's text stays the DM's.
@@ -844,14 +851,40 @@ export function invalidRunOutline(source: string): unknown {
   };
 }
 
+/** The note a TRIGGER.partNotes run's part carries about the proposal with this id. */
+export function partNote(id: string): string {
+  return `The source text says little about ${id}.`;
+}
+
 /** One finished scene draft, as the per-scene call answers it. */
 export function scenePartReply(
   chapter: string,
   sceneId: string,
   oldName = false,
   asciiQuotes = false,
+  notes = false,
 ): SceneReply {
-  if (sceneId === SCENE_ID) return sceneDraft(chapter, oldName, asciiQuotes);
+  if (sceneId === SCENE_ID) {
+    const draft = sceneDraft(chapter, oldName, asciiQuotes);
+    return notes ? { ...draft, warnings: [partNote(sceneId)] } : draft;
+  }
+  if (notes && sceneId === SECOND_SCENE.id) {
+    return {
+      ...sceneReply({
+        id: sceneId,
+        title: `${SECOND_SCENE.title} of ${OLD_NAME}`,
+        chapter,
+        npcs: ["fenn"],
+        body: `## Flow
+
+[[fenn]] waits at the end of the mole.
+
+> [!readaloud] The lights of ${OLD_NAME} flicker behind you.
+`,
+      }),
+      warnings: [partNote(sceneId)],
+    };
+  }
   const scene = [...THREE_SCENES, SECOND_SCENE].find((s) => s.id === sceneId);
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
@@ -897,6 +930,11 @@ function plainSceneDraft(chapter: string, id: string, title: string): SceneReply
 }
 
 /** One proposed npc or location — each in its own reply form. */
-export function proposalPartReply(kind: "npc" | "location"): NpcReply | LocationReply {
-  return kind === "location" ? locationStub : npcStub;
+export function proposalPartReply(
+  kind: "npc" | "location",
+  notes = false,
+): NpcReply | LocationReply {
+  if (!notes) return kind === "location" ? locationStub : npcStub;
+  if (kind === "location") return { ...locationStub, warnings: [partNote(LOCATION_STUB_ID)] };
+  return { ...npcStub, role: `Smuggler from ${OLD_NAME}`, warnings: [partNote(NPC_STUB_ID)] };
 }
