@@ -35,7 +35,7 @@ import { EditLineInput, EditModeHeader, EditTitleInput } from "@/components/Edit
 import { ChipAction, FieldChipRow, type FieldChip } from "@/components/FieldChips";
 import { ChipsField } from "@/components/fields/ChipsField";
 import { fieldId } from "@/components/fields/FieldRow";
-import { useFieldsForm } from "@/components/fields/FieldsDialog";
+import { useFieldsForm } from "@/components/fields/use-fields-form";
 import { PickList } from "@/components/fields/PickList";
 import type { FieldOption } from "@/components/fields/SelectField";
 import { useUnsavedChanges } from "@/components/UnsavedChangesGuard";

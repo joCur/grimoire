@@ -1,5 +1,5 @@
-// The fields of a scene as form controls — the ones its dialog and the editor
-// of a proposed scene show. Plain rendering over the form's values
+// The fields of a scene as form controls — the ones the editor of a proposed
+// scene shows. Plain rendering over the form's values
 // (./scene-form.ts), each row built from the field building blocks
 // (components/fields/).
 //

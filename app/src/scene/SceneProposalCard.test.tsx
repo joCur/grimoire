@@ -1,7 +1,7 @@
 // Render test of the editor of a proposed scene (react-dom/server — no DOM).
 //
 // What must hold is that a proposed scene is edited as a written one is: the
-// fields of its dialog with their labels, its label as a read-only id, and
+// fields of its form with their labels, its label as a read-only id, and
 // the text on the body editor's surfaces.
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";

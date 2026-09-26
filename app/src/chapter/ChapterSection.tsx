@@ -1,6 +1,6 @@
 // One chapter of the chapter overview: an accordion whose heading row carries
 // the title, the scene count and the status control, and whose content
-// carries the chapter's own actions and text — read lazily on first expand —
+// carries the chapter's own edit action and text — read lazily on first expand —
 // followed by what the chapter holds.
 //
 // What it holds is not this slice's to draw: the open threads and the scene
@@ -38,8 +38,8 @@ export function ChapterSection({
 }) {
   const t = useT();
   const [open, setOpen] = useState(defaultOpen);
-  // The chapter's text and rev — read lazily on first expand; a chapter that
-  // cannot be read simply shows no text and no actions.
+  // The chapter's text — read lazily on first expand; a chapter that cannot
+  // be read simply shows no text.
   const read = useQuery({
     ...chapterQuery(campaign, chapter.id),
     enabled: open,
@@ -80,7 +80,7 @@ export function ChapterSection({
           {/* The chapter's own actions. They sit INSIDE the accordion and not
               in the heading row: that row is already as wide as it gets, and
               the actions are for the chapter the DM has opened. */}
-          <ChapterOverviewActions campaign={campaign} chapter={read.data} />
+          <ChapterOverviewActions campaign={campaign} id={chapter.id} />
           {/* The whole text of the chapter, whatever it says and however it
               is structured — a few lines of it until the DM opens it. */}
           <ClampedText className="mb-3">{read.data?.body ?? ""}</ClampedText>

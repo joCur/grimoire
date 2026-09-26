@@ -361,13 +361,9 @@ The paths:
    chapter in outline order, even when they are accepted one by one and in
    reverse order — start value at the first acceptance plus the number in
    the outline (decisions/scene-order)
-7. Fields dialog (labeled "properties" in the UI) / edit modes of scene,
-   NPC and location / status control including the 409 conflict: the dialog
-   over the fields of a chapter — the only entity that still has one — shows
-   the conflict line with its two actions — the reload action fetches the
-   current values, the save-anyway action writes only the dialog's fields
-   (a concurrent text change survives that). A scene, an NPC and a location
-   have no fields dialog: the scene's edit mode on
+7. Edit modes of scene, NPC, location and chapter / status control
+   including the 409 conflict. No entity has a fields dialog: every field is
+   edited in the edit mode of its reading view. The scene's edit mode on
    `/campaigns/:id/scenes/<id>` edits title, trigger (contingency scenes
    only), status, the field chips (type, location, NPCs, tags, handouts,
    chapter) and `body` together; the NPC's edit mode on
@@ -376,19 +372,22 @@ The paths:
    appearance, motivation — one line while collapsed) and `body` together;
    the location's edit mode on `/campaigns/:id/locations/<id>` edits name,
    the field chips (chapter, Roll20 page), the collapsible atmosphere and
-   `body` together. A chip opens only its field — a popover on desktop, a
-   bottom sheet on a phone; at 390px the chips wrap, the first three stand
-   and a sheet lists the rest, the save actions sit at the bottom, no
-   horizontal scroll. Saving is ONE `PATCH …/scenes/<id>`,
-   `PATCH …/npcs/<id>` or `PATCH …/locations/<id>` carrying only the
-   changed fields plus `rev`. A 409 shows the same conflict line
-   above the title or name: the reload action takes the stored row, the
-   save-anyway action writes only the changed fields. Leaving with unsaved
+   `body` together; the chapter's edit mode on
+   `/campaigns/:id/chapters/<id>` — opened by its edit action there or in
+   the chapter overview — edits title, status and `body` together. A chip
+   opens only its field — a popover on desktop, a bottom sheet on a phone;
+   at 390px the chips wrap, the first three stand and a sheet lists the
+   rest, the save actions sit at the bottom, no horizontal scroll. Saving is
+   ONE `PATCH …/scenes/<id>`, `PATCH …/npcs/<id>`, `PATCH
+   …/locations/<id>` or `PATCH …/chapters/<id>` carrying only the changed
+   fields plus `rev`. A 409 shows the same conflict line above the title or
+   name: the reload action takes the stored row, the save-anyway action
+   writes only the changed fields. Leaving with unsaved
    changes asks first. The status control of a reading view has no conflict
    actions: it reports the stale state, and the DM reloads.
-   The control activates a chapter with `PATCH …/chapters/<id> { rev,
-   status: "active" }`; the previously active one is then `planned`, and
-   exactly one chapter is active.
+   The control and the chapter's edit mode activate a chapter with `PATCH
+   …/chapters/<id> { rev, status: "active" }`; the previously active one is
+   then `planned`, and exactly one chapter is active.
 8. Mobile start surface + idea drop at 390px: the idea becomes an idea
    (`POST …/ideas`, responds with `Idea`), at the end, nothing ticked off;
    if a session is running (`GET …/sessions?running=true`), the start
@@ -404,14 +403,13 @@ The paths:
    status write by a second writer is a conflict too — nothing next to the
    open edit mode is silently taken over. Since decisions/sqlite there
    is no external file change any more; the guard is the row version `rev`.
-   The text of a chapter is editable on its reading view
-   (`/campaigns/:id/chapters/<id>`) through the text editor with its own
-   conflict line. The
+   The text of a chapter is edited in its edit mode on its reading view
+   (`/campaigns/:id/chapters/<id>`), with the same conflict line. The
    campaign is written like every entity via its resource
    (`PATCH /campaigns/:id`); its route is the chapter overview. The header of
    the chapter overview stays untouched: its single edit action opens the
    edit-campaign dialog over name, description and `body` — the text as
-   Markdown like in a chapter's text dialog —, with the same conflict line,
+   Markdown —, with the same conflict line,
    whose save-anyway action writes only the changed fields.
 10. Cold start: empty instance without seed — since decisions/sqlite the
     normal case of a fresh installation → create a campaign → chapter →

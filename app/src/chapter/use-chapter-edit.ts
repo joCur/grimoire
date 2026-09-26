@@ -17,7 +17,7 @@ import type { Chapter, ChapterChange, ChapterPatch } from "@grimoire/shared/chap
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { useT, type MessageKey } from "@/i18n";
+import { useT } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { WRITE_FAILED_MESSAGE } from "@/lib/write-with-rev";
 
@@ -41,14 +41,12 @@ export interface ChapterEdit {
 }
 
 export interface ChapterEditOptions {
-  /** Runs after a SUCCESSFUL write — where a dialog closes or edit mode ends. */
+  /** Runs after a SUCCESSFUL write — where edit mode ends. */
   onSaved: () => void;
   /** Runs when the DM adopted the stored chapter, so the surface can reseed. */
   onReload?: (chapter: Chapter) => void;
   /** Invalidated after a SUCCESSFUL write only, in order. */
   invalidateOnSuccess?: readonly QueryKey[];
-  /** Catalog key of the fallback message for a failed write. */
-  errorMessage?: MessageKey;
 }
 
 /** Does a change name any field? A request that names none is the server's 400. */
@@ -63,12 +61,7 @@ export function hasChapterChange(change: ChapterChange): boolean {
 export function useChapterEdit(
   campaign: string,
   chapter: Chapter,
-  {
-    onSaved,
-    onReload,
-    invalidateOnSuccess = [],
-    errorMessage = WRITE_FAILED_MESSAGE,
-  }: ChapterEditOptions,
+  { onSaved, onReload, invalidateOnSuccess = [] }: ChapterEditOptions,
 ): ChapterEdit {
   const t = useT();
   const queryClient = useQueryClient();
@@ -108,7 +101,7 @@ export function useChapterEdit(
         setRefused({ change: variables.change, conflict });
         return;
       }
-      setMessage(serverErrorMessage(error, t, errorMessage));
+      setMessage(serverErrorMessage(error, t, WRITE_FAILED_MESSAGE));
     },
   });
 

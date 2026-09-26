@@ -9,7 +9,7 @@ import type { Page } from "@playwright/test";
 
 import type { SceneStatus } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
-import { getScene, patchScene } from "../support/scene";
+import { getScene, patchScene, scenePath } from "../support/scene";
 import { ui, uiPattern } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
@@ -100,4 +100,30 @@ test("a second writer: the status pick reports the conflict inline", async ({
   await expect(trigger).toHaveAccessibleName(triggerName("played"));
   await expect(message).toHaveCount(0);
   await expect.poll(() => getScene(api, SCENE)).toHaveProperty("status", "played");
+});
+
+test("a status outside the closed list is refused and writes nothing", async ({ api }) => {
+  // The four status columns and the scene type are CHECK constraints of their
+  // columns (decisions/constraints), so the scene's write refuses a foreign
+  // value with a 400 and its own code instead of letting SQLite fail. The
+  // edit mode can only ever offer the allowed positions — this asserts the
+  // rule on the endpoint, which is what protects the column against the
+  // generator and a direct write as well.
+  const current = await getScene(api, SCENE);
+  const response = await api.fetch(scenePath(api, SCENE), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev: current.rev, status: "half-done" }),
+  });
+  expect(response.status).toBe(400);
+  // The body carries what the sentence in the app needs: which column, the
+  // value that was written, and the positions in column order.
+  expect(await response.json()).toMatchObject({
+    code: "status_not_allowed",
+    kind: "scene",
+    value: "half-done",
+    allowed: ["draft", "ready", "played", "dropped"],
+  });
+  // A refusal writes nothing — no field moved, and the guard token stands.
+  expect(await getScene(api, SCENE)).toEqual(current);
 });

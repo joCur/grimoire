@@ -111,10 +111,8 @@ test("fields, status and text change together and are ONE patch of exactly those
   const added = "A brass whistle lies in the sand at the foot of the stairs.";
 
   await openEditMode(page);
-  // The reading view's heading gave way to the editable title, and the scene
-  // offers no dialog over its fields any more.
+  // The reading view's heading gave way to the editable title.
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: ui("properties.action") })).toHaveCount(0);
   // Nothing changed yet, so there is nothing to save and nothing to count.
   await expect(saveButton(page)).toBeDisabled();
   await expect(page.getByText(ui("editMode.changes", { count: 1 }))).toHaveCount(0);

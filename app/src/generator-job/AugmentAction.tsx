@@ -1,6 +1,6 @@
-// The augment action — the third quiet action in a reading view's header,
-// next to the edit and the dialog action. Same vocabulary, same size, no
-// new chrome: the topbar does not grow, and the reading view gains one word.
+// The augment action — the second quiet action in a reading view's header,
+// next to the edit action. Same vocabulary, same size, no new chrome: the
+// topbar does not grow, and the reading view gains one word.
 //
 // Every reading view builds its trigger from the parts exported here, over
 // the run that starts on its own resource (decisions/resources). Everything below the
@@ -115,7 +115,7 @@ export interface ApplySession {
 // --- the triggers -------------------------------------------------------------------
 
 /**
- * The trigger and its open state. Open-BY-ROW, like the fields dialog: the
+ * The trigger and its open state. Open-BY-ROW, like an edit mode: the
  * reading route stays mounted across a navigation, and a dialog holding row A
  * while the route already shows B would send A's decisions to B.
  */

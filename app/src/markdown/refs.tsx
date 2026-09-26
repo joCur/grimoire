@@ -170,7 +170,7 @@ export function useRefs(): RefContextValue {
 
 /**
  * What a reference points at, for the accessible name — the SAME kind labels
- * the ⌘K rows and the properties dialog use (`kind.*`, i18n/de.ts), so a
+ * the ⌘K rows and the create dialogs use (`kind.*`, i18n/de.ts), so a
  * screen reader hears one vocabulary and it follows the UI language.
  */
 const KIND_KEY: Record<RefKind, MessageKey> = {

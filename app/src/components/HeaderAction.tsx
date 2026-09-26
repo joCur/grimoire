@@ -1,8 +1,7 @@
-// The quiet trigger next to an entity/campaign header (issue #38): one shape
-// for „Bearbeiten" (body editor, #15), „Eigenschaften" (#42) and „Bearbeiten"
-// of the campaign metadata (#34). They sit next to each other in the same
-// header, so they must be one component — copies of the class list is how they
-// drift apart.
+// The quiet trigger next to an entity or campaign header: one shape for the
+// edit action of a reading view, the augment run and the edit action of the
+// campaign. They sit next to each other in the same header, so they must be
+// one component — copies of the class list is how they drift apart.
 //
 // Deliberately plain: no variants, no size prop. It is the header vocabulary
 // of the reading view, not a general button (that is components/ui/button).
@@ -19,13 +18,13 @@ export function HeaderAction({
 }: {
   /** Lucide glyph, rendered decorative — the label carries the meaning. */
   icon: LucideIcon;
-  /** German, as it stands in the header („Bearbeiten", „Eigenschaften"). */
+  /** The label as it stands in the header, from the catalog. */
   label: string;
   onClick: () => void;
   /**
-   * The ONE thing a caller may vary: WHERE the action appears. „Mit KI
-   * ergänzen" (#36) is desktop-only — mobile is the reading surface, not a
-   * diff review — and that is a placement rule, not a new variant.
+   * The ONE thing a caller may vary: WHERE the action appears. The augment
+   * action is desktop-only — mobile is the reading surface, not a diff
+   * review — and that is a placement rule, not a new variant.
    */
   className?: string;
 }) {

@@ -137,13 +137,10 @@ test("name, chip, profile, status and text change together and are ONE patch of 
 
   await page.goto(NPC_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_NAME);
-  // The npc offers no dialog over its fields: its fields are its edit mode.
-  await expect(page.getByRole("button", { name: ui("properties.action") })).toHaveCount(0);
   await editAction(page).click();
 
   // The heading gave way to the editable name; nothing to save yet.
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: ui("properties.action") })).toHaveCount(0);
   await expect(saveButton(page)).toBeDisabled();
 
   await nameInput(page).fill(name);

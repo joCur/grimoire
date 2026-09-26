@@ -67,12 +67,6 @@ const chapterStatusName = (status: "planned" | "active" | "done") =>
 /** The accessible name of a scene's status control showing `ready`. */
 const READY_STATUS_NAME = ui("status.change.aria", { current: ui("status.scene.ready") });
 
-/** The dialog of a chapter's properties. */
-const CHAPTER_PROPERTIES_TITLE = ui("properties.title", { kind: ui("kind.chapter") });
-
-/** The label of a chapter's title field — the form marks it required. */
-const CHAPTER_TITLE_LABEL = `${ui("properties.chapter.title.label")}${ui("properties.field.required")}`;
-
 /** The topbar's section nav, in its order. */
 const NAV_KEYS = ["topbar.nav.chapters", "topbar.nav.npcs", "topbar.nav.locations"] as const;
 
@@ -919,88 +913,46 @@ test("the campaign's text stands under its description, clamped the same way", a
   await expect(showMore(page)).toHaveCount(0);
 });
 
-// Critical path 1: a chapter is editable where it is read.
+// Critical path 1: a chapter is editable from where it is listed.
 //
 // Creating a chapter is not the only moment its title and text can be
-// said: a chapter created without a description gets its text here, and a
-// chapter a generator run created under its slug is renamed here — otherwise
-// the overview would list a heading nobody can correct. Both go through the
-// chapter's own resource with its rev guard: the title in the chapter's
-// dialog, the text in the text dialog.
+// said: a chapter created without a description gets its text later, and a
+// chapter a generator run created under its slug is renamed later — otherwise
+// the overview would list a heading nobody can correct. The overview's edit
+// action opens the chapter's edit mode on its reading view
+// (tests/chapter-edit-mode.e2e.ts covers it), and the overview shows what was
+// saved there.
 test("a chapter's title and text are editable from the chapter overview", async ({
   page,
   api,
 }) => {
   await page.goto("/campaigns/beispiel");
-  // The active chapter is open by default, so its actions are on screen.
-  const properties = page.getByRole("button", { name: ui("chapterOverview.chapter.properties") });
-  await expect(properties).toBeVisible();
+  // The active chapter is open by default, so its action is on screen.
+  await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/chapters\/01-salzhafen$/);
 
-  // --- the title, through the chapter's dialog ---
-  await properties.click();
-  let dialog = page.getByRole("dialog", { name: CHAPTER_PROPERTIES_TITLE });
-  // The form marks a required field in its label, so the accessible name is
-  // that whole string.
-  const title = dialog.getByRole("textbox", { name: CHAPTER_TITLE_LABEL });
+  const title = page.getByRole("textbox", { name: ui("chapterEdit.title.aria") });
   await expect(title).toHaveValue(CHAPTER_TITLE);
   await title.fill("Chapter 1: Salzhafen");
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  // The overview heading follows — it reads the tree, which the save
-  // invalidated.
-  await expect(page.getByRole("heading", { level: 2, name: "Chapter 1: Salzhafen" })).toBeVisible();
-
-  // --- the text, through the edit dialog ---
-  await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
-  dialog = page.getByRole("dialog", {
-    name: ui("chapterBody.title", { title: "Chapter 1: Salzhafen" }),
+  await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
+  const body = page.getByRole("textbox", {
+    name: ui("bodyEditor.markdown.aria", { path: CHAPTER_TITLE }),
   });
-  await expect(dialog).toContainText(ui("chapterBody.description"));
-  const body = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
   await expect(body).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
-  await body.fill("");
-  await expect(body).toHaveAttribute("placeholder", ui("chapterBody.field.body.placeholder"));
-  // A heading is text like any other now: it is shown, and so is what follows.
-  await body.fill("## What it is about\n\nLight the lighthouse again.");
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // A heading is text like any other: it is shown, and so is what follows.
+  await body.fill("## What it is about\n\nLight the lighthouse again.\n");
+  await page.getByRole("button", { name: uiExact("common.save") }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Chapter 1: Salzhafen");
 
-  // The overview shows the whole text, rendered.
+  // The overview heading and the text follow — the save invalidated the tree
+  // and the chapter.
+  await page.goto("/campaigns/beispiel");
+  await expect(page.getByRole("heading", { level: 2, name: "Chapter 1: Salzhafen" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "What it is about" })).toBeVisible();
   await expect(page.getByText("Light the lighthouse again.", { exact: true })).toBeVisible();
   const stored = await getChapter(api, "01-salzhafen");
   expect(stored.title).toBe("Chapter 1: Salzhafen");
   expect(stored.body).toContain("Light the lighthouse again.");
-});
-
-test("the chapter edit dialog shows the 409 instead of overwriting a second writer", async ({
-  page,
-  api,
-}) => {
-  await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
-  const dialog = page.getByRole("dialog");
-  const body = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
-  await expect(body).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
-
-  // A SECOND WRITER while the dialog stands (there is no "external edit" any
-  // more — e2e/README.md): the API writes with a fresh token.
-  await patchChapter(api, "01-salzhafen", { body: "From the API.\n" });
-
-  await body.fill("From the dialog.");
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-
-  // Nothing was written, the dialog says so, and the typed text is still
-  // there.
-  await expect(dialog.getByText(ui("editConflict.line"), { exact: false })).toBeVisible();
-  await expect(body).toHaveValue("From the dialog.");
-  expect((await getChapter(api, "01-salzhafen")).body).toContain("From the API.");
-
-  // Forcing writes the same field on top of the row as it stands.
-  await dialog.getByRole("button", { name: ui("editConflict.force") }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByText("From the dialog.", { exact: true })).toBeVisible();
 });
 
 // The chapter status control (critical paths 1 and 7). The overview decides
@@ -1178,95 +1130,6 @@ test("picking done writes that chapter and leaves the active one alone", async (
   await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("done");
   // The evening's chapter is untouched.
   expect((await getChapter(api, "01-salzhafen")).status).toBe("active");
-});
-
-// The dialog is a FORM over the same value, and a form sends what CHANGED: a
-// status field the DM never touched must not be written, no matter what the
-// cache behind the dialog happened to hold when it opened. The app's copy of
-// a chapter goes stale the moment another writer activates a different one
-// (up to one version poll), and an untouched active value in the form would
-// put it back — from a dialog that was only opened to fix a title.
-test("an untouched status field is not written, not even a stale active", async ({ page, api }) => {
-  const patches: string[] = [];
-  page.on("request", (request) => {
-    if (request.method() === "PATCH") patches.push(request.postData() ?? "");
-  });
-
-  await page.goto("/campaigns/beispiel");
-  // The active chapter is open by default: it is in the app's cache now, with
-  // `status: active`.
-  const properties = page.getByRole("button", { name: ui("chapterOverview.chapter.properties") });
-  await expect(properties).toBeVisible();
-
-  // Another writer activates a second chapter. The app does not know yet —
-  // the version poll is what tells it, and the dialog opens before that.
-  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: SECOND_CHAPTER,
-    id: "02",
-  });
-  await patchChapter(api, "02", { status: "active" });
-  expect((await getChapter(api, "01-salzhafen")).status).toBe("planned");
-
-  await properties.click();
-  const dialog = page.getByRole("dialog");
-  // The scenario, spelled out: the form opened on the STALE value.
-  await expect(dialog.getByLabel(ui("properties.chapter.status.label"))).toHaveValue("active");
-
-  // Only the title is touched.
-  await dialog.getByLabel(ui("properties.chapter.title.label")).fill("Chapter 1: Salzhafen");
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-  // The other writer moved the chapter, so the frozen rev is stale: the first
-  // attempt is the 409 of decisions/writes, nothing written. The typed title stays and
-  // the next attempt writes on top of what is stored — with the status STILL
-  // untouched, which is the point of this test.
-  await expect(dialog).toContainText(ui("editConflict.line"));
-  await dialog.getByRole("button", { name: ui("editConflict.force") }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  // The title is written, the status is not even mentioned — and the chapter
-  // the other writer activated keeps it.
-  const stored = await getChapter(api, "01-salzhafen");
-  expect(stored.title).toBe("Chapter 1: Salzhafen");
-  expect(stored.status).toBe("planned");
-  expect((await getChapter(api, created.id)).status).toBe("active");
-  // Both attempts sent the title and nothing else — the status field never
-  // appears on the wire, so no stale active value can ride along.
-  expect(patches).toHaveLength(2);
-  for (const body of patches) {
-    expect(body).toContain("Chapter 1: Salzhafen");
-    expect(body).not.toContain("status");
-  }
-});
-
-// The chapter's dialog is the second door onto the same value — and it must
-// not be a way past the one-active rule.
-test("the chapter's dialog offers the enum and its active value makes the chapter the active one", async ({
-  page,
-  api,
-}) => {
-  const created = await api.send<{ id: string }>("POST", chapterPath(api), {
-    title: SECOND_CHAPTER,
-  });
-
-  await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: new RegExp(escapeStringRegexp(SECOND_CHAPTER)) }).click();
-  // Two chapters are open now, so the actions are named per chapter — the
-  // second one belongs to the second chapter.
-  await page.getByRole("button", { name: ui("chapterOverview.chapter.properties") }).nth(1).click();
-  const dialog = page.getByRole("dialog", { name: CHAPTER_PROPERTIES_TITLE });
-
-  // A select over the enum, not a free text field.
-  const status = dialog.getByLabel(ui("properties.chapter.status.label"));
-  await expect(status).toBeVisible();
-  await status.selectOption({ label: chapterStatus("active") });
-  await dialog.getByRole("button", { name: ui("common.save") }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  // The server kept the rule: exactly one active chapter, and it is this one.
-  await expect.poll(async () => (await getChapter(api, created.id)).status).toBe("active");
-  await expect.poll(async () => (await getChapter(api, "01-salzhafen")).status).toBe("planned");
-  expect(await activeChapters(api)).toEqual([created.id]);
-  await expect(page.getByRole("button", { name: chapterStatusName("active") })).toHaveCount(1);
 });
 
 // --- the scene order: one list, up/down, one guard of its own (decisions/scene-order) -----
@@ -1495,15 +1358,17 @@ test.describe("the scene order of a chapter", () => {
     // touch either — same promise, other half of the chapter.
     await page.goto("/campaigns/beispiel");
     await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
-    const dialog = page.getByRole("dialog");
-    const chapterText = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
+    await page.getByRole("button", { name: ui("composer.mode.markdown"), exact: true }).click();
+    const chapterText = page.getByRole("textbox", {
+      name: ui("bodyEditor.markdown.aria", { path: CHAPTER_TITLE }),
+    });
     await expect(chapterText).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
     await chapterText.fill("Light the lighthouse again.");
     const second = await orderNode(api);
     const again = ["order-steg", "order-keller", "lighthouse-arrival", "smuggler-captured"];
     await api.send("PUT", ORDER_PATH, { scenes: again, rev: second.sceneOrderRev });
-    await dialog.getByRole("button", { name: ui("common.save") }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("button", { name: uiExact("common.save") }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
     await expect
       .poll(async () => (await getChapter(api, CHAPTER)).body)
       .toContain("Light the lighthouse again.");

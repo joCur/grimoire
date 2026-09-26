@@ -414,8 +414,8 @@ export const npcs = sqliteTable(
 // a counterpart a DM wants to link is a `[[id]]` like any other mention.
 // Storage is never derived from body text: a relation list parsed out of a
 // section would be a second, silent source of truth for something the DM
-// wrote as a sentence. Relations as DATA would be properties, filled in the
-// properties dialog and by the generator — not a parsed section.
+// wrote as a sentence. Relations as DATA would be fields, filled in the edit
+// mode and by the generator — not a parsed section.
 
 // --- locations --------------------------------------------------------------
 
