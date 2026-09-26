@@ -29,12 +29,16 @@ export function LocationAugmentAction({
   location: Location;
 }) {
   return (
-    <AugmentTrigger openKey={`${campaign}/location/${location.id}`}>
+    <AugmentTrigger
+      campaign={campaign}
+      target={{ kind: "location", id: location.id }}
+      openKey={`${campaign}/location/${location.id}`}
+    >
       {(onClose) => (
         <AugmentDialog
           campaign={campaign}
           name={location.name}
-          isMine={(job) => job.kind === "location-augment" && job.location === location.id}
+          target={{ kind: "location", id: location.id }}
           start={(input) => startLocationAugmentJob(campaign, location.id, input)}
           review={(job) => {
             const result = job.locationAugmentResult;

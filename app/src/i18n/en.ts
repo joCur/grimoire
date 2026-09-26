@@ -40,7 +40,15 @@ export const en: Messages = {
   "topbar.nav.locations": "Locations",
   "topbar.search": "Search …",
   "topbar.generator": "Generator",
-  "topbar.generator.running": "Generating …",
+  "generatorJob.scene.running": "The AI is writing scenes.",
+  "generatorJob.scene.ready": "The proposed scenes are waiting for your review.",
+  "generatorJob.scene.failed": "The run for new scenes failed.",
+  "generatorJob.npc.running": "The AI is writing an NPC.",
+  "generatorJob.npc.ready": "The proposed NPC is waiting for your review.",
+  "generatorJob.npc.failed": "The run for a new NPC failed.",
+  "generatorJob.augment.running": "The AI is augmenting {name}.",
+  "generatorJob.augment.ready": "The proposal for {name} is waiting for your review.",
+  "generatorJob.augment.failed": "Augmenting {name} failed.",
   "topbar.generator.progress": "{written} of {total} applied",
   "topbar.review.pending": "Session review · {count} open",
   "topbar.review.pendingShort": "{count} open",
@@ -647,6 +655,11 @@ export const en: Messages = {
 
   // --- generator: working state (routes/generate.tsx) ----------------------
   "generate.working.title": "Generating drafts …",
+  "generate.augment.title": "An augment run is open",
+  "generate.augment.lead":
+    "An augment run is reviewed where the augmented row lives. While it is open, no new run "
+    + "starts here.",
+  "generate.augment.open": "Go to the augment run",
   "generate.working.correction":
     "The server validates the reply mechanically; format errors go back to the model as a correction.",
   "generate.working.background":
@@ -883,6 +896,9 @@ export const en: Messages = {
 
   // --- "Augment with AI" (generator-job/AugmentAction.tsx) -----------------
   "augment.action": "Augment with AI",
+  "augment.action.running": "AI is augmenting …",
+  "augment.action.ready": "Review the proposal",
+  "augment.action.failed": "Augmenting failed",
   "augment.title": "Augment with AI",
   "augment.description":
     "Source text and/or an instruction — the AI augments {name}. Nothing is overwritten "
@@ -899,11 +915,14 @@ export const en: Messages = {
   "augment.start": "Augment",
   "augment.starting": "Starting …",
   "augment.start.failed": "Run not started — check the server.",
-  "augment.running": "Running on the server. You can close the tab — the result stays.",
-  "augment.busy": "Another generator run is going. Wait for it, or discard it there.",
+  "augment.running":
+    "Running on the server. You can close this dialog and keep working: the bar at the top "
+    + "shows when the proposal is ready and brings you back here with one click.",
+  "augment.busy": "Another AI run is going. Wait for it, or discard it there.",
   "augment.busy.review":
-    "Another generator run is still waiting for a check. Accept or discard it in the "
-    + "generator first — a new run would delete it.",
+    "Another AI run is still waiting for your review. Accept or discard it first, "
+    + "because a new run would delete it.",
+  "augment.busy.open": "Go to the other run",
   "augment.discard": "Discard run",
   "augment.discard.failed": "Could not discard the run — check the server.",
 

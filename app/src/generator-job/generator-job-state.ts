@@ -11,7 +11,10 @@
 //     whatever the server sent — a successful run and a 422 both carry it.
 //   - which of the view's states the server's job puts us in,
 //     and the error body of a failed job.
+//   - what the campaign's job is about and where it stands, as the topbar,
+//     the augment action and the generator page say it.
 
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type {
   GeneratorJob,
   GeneratorJobPart,
@@ -561,4 +564,115 @@ export function pipelineCostLabel(
     tokens: groupedNumber(tokens, t("generate.usage.group")),
     calls,
   });
+}
+
+// --- what the job is about -------------------------------------------------
+
+/** The row an augment run works on: its kind and its id. */
+export interface AugmentTarget {
+  kind: "scene" | "npc" | "location";
+  id: string;
+}
+
+/**
+ * What an augment run works on — undefined for a scene or an npc run, whose
+ * place is the generator page.
+ */
+export function augmentTarget(job: GeneratorJob | null | undefined): AugmentTarget | undefined {
+  if (job === null || job === undefined) return undefined;
+  switch (job.kind) {
+    case "scene-augment":
+      return job.scene === undefined ? undefined : { kind: "scene", id: job.scene };
+    case "npc-augment":
+      return job.npc === undefined ? undefined : { kind: "npc", id: job.npc };
+    case "location-augment":
+      return job.location === undefined ? undefined : { kind: "location", id: job.location };
+    default:
+      return undefined;
+  }
+}
+
+/** Is this job the augment run of exactly this row? */
+export function isAugmentOf(
+  job: GeneratorJob | null | undefined,
+  target: AugmentTarget,
+): boolean {
+  const own = augmentTarget(job);
+  return own !== undefined && own.kind === target.kind && own.id === target.id;
+}
+
+/**
+ * How the DM knows the row an augment run works on: a scene by its title, an
+ * npc or a location by its name, the id where the tree has none (yet).
+ */
+export function augmentTargetName(
+  tree: CampaignTree | undefined,
+  target: AugmentTarget,
+): string {
+  const named = (() => {
+    switch (target.kind) {
+      case "scene":
+        return tree?.chapters
+          .flatMap((chapter) => chapter.scenes)
+          .find((scene) => scene.id === target.id)?.title;
+      case "npc":
+        return tree?.npcs.find((npc) => npc.id === target.id)?.name;
+      case "location":
+        return tree?.locations.find((location) => location.id === target.id)?.name;
+    }
+  })();
+  return named === undefined || named === "" ? target.id : named;
+}
+
+/**
+ * Where the job stands for the DM: still `running`, `ready` to be reviewed,
+ * or `failed`. A pipelined run whose first parts are reviewable is still
+ * running — its progress says how far it got.
+ */
+export type JobState = "running" | "ready" | "failed";
+
+export function jobState(job: GeneratorJob | null | undefined): JobState | undefined {
+  if (job === null || job === undefined) return undefined;
+  if (job.status === "failed") return "failed";
+  if (job.status === "done") return "ready";
+  return "running";
+}
+
+/**
+ * The job in one sentence: what the run is about and where it stands. An
+ * augment run names its row by `name` (augmentTargetName).
+ */
+export function jobSentence(
+  job: GeneratorJob | null | undefined,
+  name: string,
+  t: Translate,
+): string | undefined {
+  const state = jobState(job);
+  if (state === undefined) return undefined;
+  if (augmentTarget(job) !== undefined) {
+    return t(
+      state === "running"
+        ? "generatorJob.augment.running"
+        : state === "ready"
+          ? "generatorJob.augment.ready"
+          : "generatorJob.augment.failed",
+      { name },
+    );
+  }
+  if (jobMode(job) === "npc") {
+    return t(
+      state === "running"
+        ? "generatorJob.npc.running"
+        : state === "ready"
+          ? "generatorJob.npc.ready"
+          : "generatorJob.npc.failed",
+    );
+  }
+  return t(
+    state === "running"
+      ? "generatorJob.scene.running"
+      : state === "ready"
+        ? "generatorJob.scene.ready"
+        : "generatorJob.scene.failed",
+  );
 }

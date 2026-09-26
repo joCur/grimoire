@@ -49,6 +49,23 @@ export function startGeneratorJob(
 }
 
 /**
+ * Start an augment run on its own resource — `POST …/scenes/:id/augment`,
+ * `…/npcs/:id/augment` or `…/locations/:id/augment` — answered 202 with the
+ * job itself.
+ */
+export function startAugmentJob(
+  api: Api,
+  target: { kind: "scene" | "npc" | "location"; id: string },
+  body: { sourceText?: string; instruction?: string },
+): Promise<GeneratorJob> {
+  return api.send<GeneratorJob>(
+    "POST",
+    underCampaign(api, `${target.kind}s`, target.id, "augment"),
+    body,
+  );
+}
+
+/**
  * `PATCH …/generator-jobs/:id` — the review, and with `review.written…` the
  * accept. Answers the job as the write leaves it.
  */

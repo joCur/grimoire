@@ -23,12 +23,16 @@ import { useNpcEdit } from "@/npc/use-npc-edit";
 
 export function NpcAugmentAction({ campaign, npc }: { campaign: string; npc: Npc }) {
   return (
-    <AugmentTrigger openKey={`${campaign}/npc/${npc.id}`}>
+    <AugmentTrigger
+      campaign={campaign}
+      target={{ kind: "npc", id: npc.id }}
+      openKey={`${campaign}/npc/${npc.id}`}
+    >
       {(onClose) => (
         <AugmentDialog
           campaign={campaign}
           name={npc.name}
-          isMine={(job) => job.kind === "npc-augment" && job.npc === npc.id}
+          target={{ kind: "npc", id: npc.id }}
           start={(input) => startNpcAugmentJob(campaign, npc.id, input)}
           review={(job) => {
             const result = job.npcAugmentResult;

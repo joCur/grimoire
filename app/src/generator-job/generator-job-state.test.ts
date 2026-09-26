@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { SceneProposal } from "@grimoire/shared/scene";
+import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { GeneratorJob } from "@grimoire/shared/generator-job";
 
 import { translator } from "@/i18n/format";
@@ -45,7 +46,13 @@ import {
   pipelineCostLabel,
   pipelineProgress,
   usageLabel,
+  augmentTarget,
+  augmentTargetName,
+  isAugmentOf,
+  jobSentence,
+  jobState,
 } from "./generator-job-state";
+import { AUGMENT_OPEN_PARAM, generatorHref, jobHref } from "./job-links";
 
 // The copy comes from the catalog and the translator is passed in — so a
 // test says which language it formats in, and the expectations are catalog
@@ -730,5 +737,97 @@ describe("the run's parts", () => {
     quiet.pipeline!.totals = { inputTokens: 0, outputTokens: 0, calls: 0 };
     expect(pipelineCostLabel(quiet, t)).toBeUndefined();
     expect(pipelineCostLabel(null, t)).toBeUndefined();
+  });
+});
+
+describe("the campaign's job, wherever it is shown", () => {
+  function run(over: Partial<GeneratorJob>): GeneratorJob {
+    return {
+      id: "j1",
+      kind: "scene",
+      status: "running",
+      startedAt: "2026-09-15T10:00:00.000Z",
+      sceneEdits: {},
+      npcEdits: {},
+      review: emptyReview(),
+      rev: 0,
+      ...over,
+    };
+  }
+  const tree: CampaignTree = {
+    campaign: "example",
+    chapters: [
+      {
+        id: "01-salt-harbour",
+        title: "Salt Harbour",
+        scenes: [{ id: "arrival", title: "The Arrival", tags: [] }],
+      },
+    ],
+    npcs: [{ id: "vess", name: "Captain Vess" }],
+    locations: [{ id: "lighthouse", name: "" }],
+    sessions: [],
+  } as unknown as CampaignTree;
+
+  test("an augment run names its row; a scene or npc run names none", () => {
+    expect(augmentTarget(run({ kind: "scene-augment", scene: "arrival" }))).toEqual({
+      kind: "scene",
+      id: "arrival",
+    });
+    expect(augmentTarget(run({ kind: "npc-augment", npc: "vess" }))).toEqual({
+      kind: "npc",
+      id: "vess",
+    });
+    expect(augmentTarget(run({ kind: "location-augment", location: "lighthouse" }))).toEqual({
+      kind: "location",
+      id: "lighthouse",
+    });
+    expect(augmentTarget(run({ kind: "scene" }))).toBeUndefined();
+    expect(augmentTarget(run({ kind: "npc" }))).toBeUndefined();
+    expect(augmentTarget(null)).toBeUndefined();
+  });
+
+  test("a run belongs to its own row only — same id, same kind", () => {
+    const job = run({ kind: "npc-augment", npc: "vess" });
+    expect(isAugmentOf(job, { kind: "npc", id: "vess" })).toBe(true);
+    expect(isAugmentOf(job, { kind: "npc", id: "fenn" })).toBe(false);
+    expect(isAugmentOf(job, { kind: "location", id: "vess" })).toBe(false);
+    expect(isAugmentOf(null, { kind: "npc", id: "vess" })).toBe(false);
+  });
+
+  test("the row is named as the DM knows it, the id where it has no name", () => {
+    expect(augmentTargetName(tree, { kind: "scene", id: "arrival" })).toBe("The Arrival");
+    expect(augmentTargetName(tree, { kind: "npc", id: "vess" })).toBe("Captain Vess");
+    expect(augmentTargetName(tree, { kind: "location", id: "lighthouse" })).toBe("lighthouse");
+    expect(augmentTargetName(undefined, { kind: "npc", id: "vess" })).toBe("vess");
+  });
+
+  test("where the job stands: running, ready or failed", () => {
+    expect(jobState(run({ status: "running" }))).toBe("running");
+    expect(jobState(run({ status: "done" }))).toBe("ready");
+    expect(jobState(run({ status: "failed" }))).toBe("failed");
+    expect(jobState(null)).toBeUndefined();
+  });
+
+  test("one sentence per kind and state, the augmented row by name", () => {
+    const augment = run({ kind: "npc-augment", npc: "vess", status: "done" });
+    expect(jobSentence(augment, "Captain Vess", t)).toBe(
+      t("generatorJob.augment.ready", { name: "Captain Vess" }),
+    );
+    expect(jobSentence(run({ kind: "npc", status: "failed" }), "", t)).toBe(
+      t("generatorJob.npc.failed"),
+    );
+    expect(jobSentence(run({ kind: "scene" }), "", tEn)).toBe(tEn("generatorJob.scene.running"));
+    expect(jobSentence(null, "", t)).toBeUndefined();
+  });
+
+  test("an augment run is reviewed at its row, with the review open", () => {
+    expect(jobHref("example", run({ kind: "scene-augment", scene: "arrival" }))).toBe(
+      `/campaigns/example/scenes/arrival?${AUGMENT_OPEN_PARAM}=review`,
+    );
+    expect(jobHref("example", run({ kind: "location-augment", location: "lighthouse" }))).toBe(
+      `/campaigns/example/locations/lighthouse?${AUGMENT_OPEN_PARAM}=review`,
+    );
+    expect(jobHref("example", run({ kind: "scene" }))).toBe(generatorHref("example"));
+    expect(jobHref("example", run({ kind: "npc" }))).toBe(generatorHref("example"));
   });
 });
