@@ -20,6 +20,7 @@
 // one has to work on a phone, and the TOPBAR SWITCHER, where the SECOND
 // campaign is created — it is the UI's only entry point for one.
 
+import escapeStringRegexp from "escape-string-regexp";
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
@@ -30,11 +31,7 @@ import { getLocation } from "../support/location";
 import { getNpc, npcExists, npcPath } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { getSession, runningSessionId } from "../support/session";
-import { ui } from "../support/ui";
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+import { ui, uiPattern } from "../support/ui";
 
 /**
  * The chapter overview's scene rows in DOM order, by the title they show.
@@ -43,16 +40,11 @@ function escapeRegExp(text: string): string {
  * name, and a row has no other handle that says where in the order it stands.
  */
 async function shownSceneOrder(page: Page): Promise<string[]> {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui("chapterOverview.scene.moveDown.aria", {
-    title: marker,
-  }).split(marker);
+  const moveDown = uiPattern("chapterOverview.scene.moveDown.aria", { title: /(.*)/ }, { exact: true });
   const labels = await page
-    .getByRole("button", { name: new RegExp(`${escapeRegExp(after)}$`) })
+    .getByRole("button", { name: moveDown })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels
-    .filter((label) => label.startsWith(before) && label.endsWith(after))
-    .map((label) => label.slice(before.length, label.length - after.length));
+  return labels.flatMap((label) => moveDown.exec(label)?.[1] ?? []);
 }
 
 /** The sentence a create dialog shows when the id it would write is taken. */
@@ -145,7 +137,7 @@ test("cold start: empty instance → campaign → chapter → scene → usable i
 
   // The chapter overview lists it, with the text the dialog wrote: the
   // description as typed, no heading around it.
-  const chapter = page.getByRole("button", { name: new RegExp(escapeRegExp(CHAPTER_TITLE)) });
+  const chapter = page.getByRole("button", { name: new RegExp(escapeStringRegexp(CHAPTER_TITLE)) });
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText(ui("chapterOverview.sceneCount", { count: 0 }));
   // The chapter is its own resource: the description became its text, and it
@@ -405,11 +397,9 @@ test("the second campaign is created in the top bar's switcher", async ({ page, 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // --- the switcher ---------------------------------------------------------
-  const marker = "\u0000";
-  const [switcherPrefix = ""] = ui("campaign.switcher.current", { name: marker }).split(marker);
   const switcher = page
     .getByRole("banner")
-    .getByRole("button", { name: new RegExp(`^${escapeRegExp(switcherPrefix)}`) });
+    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: /.*/ }, { exact: true }) });
   await switcher.click();
   const menu = page.getByRole("menu");
   // No developer jargon and no replacement for it: the menu holds the

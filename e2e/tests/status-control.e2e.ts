@@ -10,13 +10,10 @@ import type { Page } from "@playwright/test";
 import type { SceneStatus } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
 import { getScene, patchScene } from "../support/scene";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 
 const SCENE = "lighthouse-arrival";
 const SCENE_URL = `/campaigns/beispiel/scenes/${SCENE}`;
-
-/** A catalog text as a regex fragment, special characters escaped. */
-const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The label of a scene status in the UI. */
 const statusLabel = (status: SceneStatus) => ui(`status.scene.${status}`);
@@ -28,7 +25,7 @@ const triggerName = (status: SceneStatus) =>
 /** The status control, whatever status it currently shows — the pill IS the control. */
 const statusTrigger = (page: Page) =>
   page.getByRole("button", {
-    name: new RegExp(`^${escapeRe(ui("status.change.aria", { current: "" }))}`),
+    name: uiPattern("status.change.aria", { current: /.*/ }, { exact: true }),
   });
 
 /** One option of the open status menu. */

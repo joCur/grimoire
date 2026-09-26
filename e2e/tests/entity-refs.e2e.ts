@@ -22,6 +22,7 @@
 // The scene is SEEDED as an extra scene: it references two npcs, a location,
 // a scene and a slug nothing owns.
 
+import escapeStringRegexp from "escape-string-regexp";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -45,10 +46,6 @@ const SCENE_TITLE = "References at the Quay";
 const JORNA = "Hafenmeisterin Jorna";
 const LIGHTHOUSE = "Der Leuchtturm von Salzhafen";
 const CAPTURED = "Von den Schmugglern erwischt";
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /** The accessible name of a resolved `[[slug]]`: its kind, then its current name. */
 function refName(kind: "npc" | "location" | "scene", name: string): string {
@@ -230,11 +227,11 @@ test("reading view: hovering a reference previews its target, per kind", async (
   await expect(tooltip).toContainText(CAPTURED);
   await expect(tooltip).toContainText(
     new RegExp(
-      `${escapeRegExp(ui("sceneArticle.trigger.label"))}\\s*Charaktere werden beim Auskundschaften der Bucht entdeckt`,
+      `${escapeStringRegexp(ui("sceneArticle.trigger.label"))}\\s*Charaktere werden beim Auskundschaften der Bucht entdeckt`,
     ),
   );
   await expect(tooltip).toContainText(
-    new RegExp(`${escapeRegExp(ui("refPreview.scene.location"))}\\s*Die Nordbucht`),
+    new RegExp(`${escapeStringRegexp(ui("refPreview.scene.location"))}\\s*Die Nordbucht`),
   );
 
   // Leaving reference and card closes it.

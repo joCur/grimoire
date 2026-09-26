@@ -59,7 +59,7 @@ import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation } from "../support/location";
 import { createNpc, getNpc, patchNpc } from "../support/npc";
 import { getScene, patchScene } from "../support/scene";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 import type { MessageKey } from "../../app/src/i18n/messages";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
@@ -83,23 +83,9 @@ const LOCATION_URL = `/campaigns/beispiel/locations/${LOCATION}`;
 /** What a second writer puts into the scene while the review is open. */
 const OTHER_WRITER_TEXT = "Someone else rewrote the scene.";
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * The accessible name of a per-unit decision toggle, whatever unit it names:
- * the catalog's wording up to the unit.
- */
-function unitToggle(key: "augment.decision.takeUnit" | "augment.decision.keepUnit"): RegExp {
-  const marker = "\u0000";
-  const [before = ""] = ui(key, { label: marker }).split(marker);
-  return new RegExp(`^${escapeRegExp(before)}`);
-}
-
-/** Any unit's take and keep toggle. */
-const TAKE_UNIT = unitToggle("augment.decision.takeUnit");
-const KEEP_UNIT = unitToggle("augment.decision.keepUnit");
+/** Any unit's take and keep toggle, whatever unit it names. */
+const TAKE_UNIT = uiPattern("augment.decision.takeUnit", { label: /.*/ }, { exact: true });
+const KEEP_UNIT = uiPattern("augment.decision.keepUnit", { label: /.*/ }, { exact: true });
 
 /** The accessible name of a `[[ref]]` to an npc. */
 function npcRefName(name: string): string {

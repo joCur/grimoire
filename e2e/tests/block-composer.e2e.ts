@@ -35,7 +35,7 @@ import type { MessageKey } from "../../app/src/i18n/messages";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getScene, patchScene } from "../support/scene";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 
 /** The block types of the composer, each with the catalog key of its label. */
 const BLOCK_LABEL = {
@@ -70,18 +70,12 @@ function contentField(page: Page, type: BlockType): Locator {
   });
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
  * A catalog text with ONE parameter left open, as the source of an anchored
  * pattern whose single group captures that parameter.
  */
 function template(key: MessageKey, param: string): string {
-  const hole = "\u0000";
-  const [before = "", after = ""] = ui(key, { [param]: hole }).split(hole);
-  return `^${escapeRegExp(before)}(.+)${escapeRegExp(after)}$`;
+  return uiPattern(key, { [param]: /(.+)/ }, { exact: true }).source;
 }
 
 /** The edit and the collapse action of a card — exactly one of them is present. */

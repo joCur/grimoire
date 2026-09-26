@@ -29,12 +29,8 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 import { npcExists } from "../support/npc";
-import { uiIn } from "../support/ui";
+import { uiIn, uiPattern } from "../support/ui";
 import type { Locale } from "../../app/src/i18n/messages";
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /**
  * The switch, wherever it is: native radios in a group. Clicked, never
@@ -63,13 +59,14 @@ function switcherPrefix(shownIn: Locale): string {
   return uiIn(shownIn, "campaign.switcher.current", { name: marker }).split(marker)[0]!;
 }
 
+/** The accessible name of the campaign switcher, whichever campaign it names. */
 function switcherName(shownIn: Locale): RegExp {
-  return new RegExp(`^${escapeRegExp(switcherPrefix(shownIn))}`);
+  return uiPattern("campaign.switcher.current", { name: /.*/ }, { exact: true, locale: shownIn });
 }
 
 /** The session chip's running label, in whatever form the chip wraps it. */
 function sessionRunning(shownIn: Locale): RegExp {
-  return new RegExp(escapeRegExp(uiIn(shownIn, "session.state.running")));
+  return uiPattern("session.state.running", {}, { locale: shownIn });
 }
 
 /**

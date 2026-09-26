@@ -4,6 +4,7 @@
 // Mobile is search, reading view and ideas (UI-BRIEF) — exactly that, checked
 // at 390×844 (iPhone size), including what the server stored.
 
+import escapeStringRegexp from "escape-string-regexp";
 import type { SessionSeed } from "@grimoire/shared/session";
 
 import type { Page } from "@playwright/test";
@@ -13,7 +14,7 @@ import { getCampaign } from "../support/campaign";
 import { getIdeas } from "../support/idea";
 import { getNpc } from "../support/npc";
 import { getScene } from "../support/scene";
-import { ui } from "../support/ui";
+import { ui, uiPattern } from "../support/ui";
 
 /** A session that started YESTERDAY and was never ended. */
 const OPEN_SESSION: SessionSeed = (() => {
@@ -26,9 +27,6 @@ const OPEN_SESSION: SessionSeed = (() => {
 test.use({ viewport: { width: 390, height: 844 } });
 
 const IDEA = "A night market at the harbour as a hook #thread";
-
-/** A catalog text as a regex fragment, special characters escaped. */
-const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The idea capture field of the start surface. */
 const ideaCapture = (page: Page) => page.getByLabel(ui("mobileStart.inbox.label"));
@@ -63,7 +61,7 @@ test("mobile start surface: search, idea capture, lookup lists", async ({ page, 
 
   const lookup = page.getByRole("navigation", { name: ui("lookup.heading") });
   const lookupRow = (key: "browse.title.scenes" | "browse.title.npcs" | "browse.title.locations") =>
-    lookup.getByRole("link", { name: new RegExp(`^${escapeRe(ui(key))}`) });
+    lookup.getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui(key))}`) });
   await expect(lookupRow("browse.title.scenes")).toContainText(
     ui("mobileStart.count.scenes", { count: sceneCount }),
   );
@@ -123,7 +121,7 @@ test.describe("with a session open since yesterday", () => {
     // The same chip the desktop topbar carries — in link mode, in the mobile
     // row: one tap back into the session.
     const row = page.getByRole("link", {
-      name: new RegExp(escapeRe(ui("session.state.running"))),
+      name: uiPattern("session.state.running"),
     });
     await expect(row).toBeVisible();
     // The runtime is computed from the SERVER's reading of `started`, so it is
@@ -141,17 +139,17 @@ test("mobile: the reference scene's reading view stays readable", async ({ page,
   // then the scene list — onto the scene's own route (decisions/resources).
   await page.goto("/campaigns/beispiel");
   await page
-    .getByRole("link", { name: new RegExp(`^${escapeRe(ui("browse.title.scenes"))}`) })
+    .getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui("browse.title.scenes"))}`) })
     .click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes$/);
-  await page.getByRole("link", { name: new RegExp(escapeRe(scene.title)) }).click();
+  await page.getByRole("link", { name: new RegExp(escapeStringRegexp(scene.title)) }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(scene.title);
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
   // The NPC cards stack below the body instead of sitting in a sticky aside.
   await expect(
-    page.getByRole("link", { name: new RegExp(escapeRe(jorna.name)) }).first(),
+    page.getByRole("link", { name: new RegExp(escapeStringRegexp(jorna.name)) }).first(),
   ).toBeVisible();
 
   // Nothing may scroll the page sideways at 390px.

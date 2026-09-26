@@ -39,11 +39,12 @@
 // A PAUSE is an interval and nothing else: pausing writes no log row, so the
 // evidence for it is `pauses` plus the chip's paused state.
 
+import escapeStringRegexp from "escape-string-regexp";
 import type { Locator, Page } from "@playwright/test";
 
 import type { SceneProposal } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
-import { ui, uiExact } from "../support/ui";
+import { ui, uiExact, uiPattern } from "../support/ui";
 import type { Api } from "../support/api";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import {
@@ -58,15 +59,11 @@ import {
 const NOTE_TEXT = "The party negotiates with Jorna at the foot of the stairs";
 const NOTE = `${NOTE_TEXT} #thread`;
 
-/** A catalog text as a regex fragment, special characters escaped. */
-const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /**
  * The next-scene step for any target: the catalog sentence with its title
  * parameter left open — for the checks that no step is offered at all.
  */
-const anyNextStep = () =>
-  new RegExp(`^${escapeRe(ui("live.next", { title: "TITLE" })).replace("TITLE", ".+")}$`);
+const anyNextStep = () => uiPattern("live.next", { title: /.+/ }, { exact: true });
 
 /** The next-scene step towards the scene of the given title. */
 const nextStep = (page: Page, title: string) =>
@@ -74,7 +71,7 @@ const nextStep = (page: Page, title: string) =>
 
 /** The trigger of the collapsed played group — its name opens with the group's heading. */
 const playedTrigger = (nav: Locator) =>
-  nav.getByRole("button", { name: new RegExp(`^${escapeRe(ui("live.nav.played"))}`) });
+  nav.getByRole("button", { name: new RegExp(`^${escapeStringRegexp(ui("live.nav.played"))}`) });
 
 /** The expanded played group itself. */
 const playedGroup = (nav: Locator) =>
@@ -945,7 +942,7 @@ test.describe("the session view follows the chapter's order", () => {
   const CELLAR = "The cellar beneath the tower";
   const CONTINGENCY = "Von den Schmugglern erwischt";
   /** The played group's trigger, as the first word of a nav button's text. */
-  const playedHeading = new RegExp(`^${escapeRe(ui("live.nav.played"))}`);
+  const playedHeading = new RegExp(`^${escapeStringRegexp(ui("live.nav.played"))}`);
 
   test.use({
     seed: {

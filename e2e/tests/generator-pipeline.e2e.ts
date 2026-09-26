@@ -21,6 +21,7 @@
 // only decides WHICH canned reply comes back for which part
 // (e2e/fixtures/stub-llm.ts).
 
+import escapeStringRegexp from "escape-string-regexp";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "@playwright/test";
@@ -37,9 +38,7 @@ import {
   startGeneratorJob,
 } from "../support/generator-job";
 import { getScene, sceneExists } from "../support/scene";
-import { ui } from "../support/ui";
-import type { MessageKey } from "../../app/src/i18n/messages";
-import type { MessageParams } from "../../app/src/i18n/format";
+import { ui, uiPattern } from "../support/ui";
 
 const CHAPTER = "01-salzhafen";
 
@@ -50,32 +49,9 @@ away through the mudflats.`;
 /** How the review names one proposed scene — its resource segment and id. */
 const sceneLabel = (id: string) => `scenes/${id}`;
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * A catalog text whose numbers vary: every parameter in `open` matches its
- * pattern, everything else is the catalog's own wording. The open parameters
- * are rendered with small sentinel numbers, so a plural picks its "other"
- * form, and the sentinels are then swapped for the patterns.
- */
-function catalogPattern(
-  key: MessageKey,
-  params: MessageParams,
-  open: Record<string, string>,
-): RegExp {
-  const sentinels = Object.keys(open).map((name, index) => [name, 941 + index * 2] as const);
-  let pattern = escapeRegExp(ui(key, { ...params, ...Object.fromEntries(sentinels) }));
-  for (const [name, sentinel] of sentinels) {
-    pattern = pattern.replace(String(sentinel), open[name]!);
-  }
-  return new RegExp(pattern);
-}
-
 /** The discard action of a run's review: the whole run, or its open rest. */
 const DISCARD = new RegExp(
-  `^(${escapeRegExp(ui("common.discard"))}|${escapeRegExp(ui("generate.review.discardRest"))})$`,
+  `^(${escapeStringRegexp(ui("common.discard"))}|${escapeStringRegexp(ui("generate.review.discardRest"))})$`,
 );
 
 /** Fill the scene run's source text and start it. */
@@ -139,7 +115,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   // The cost of the whole run is one quiet line, counting CALLS.
   await expect(
     page.getByText(
-      catalogPattern("generate.pipeline.cost", {}, { tokens: "[\\d.]+", calls: "\\d+" }),
+      uiPattern("generate.pipeline.cost", { tokens: /[\d.]+/, calls: /\d+/ }),
     ),
   ).toBeVisible();
 
@@ -180,7 +156,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
 
   // --- (4) accepting the rest writes what is left and the job is gone -----
   await page
-    .getByRole("button", { name: catalogPattern("generate.review.applyRest", {}, { count: ".+" }) })
+    .getByRole("button", { name: uiPattern("generate.review.applyRest", { count: /.+/ }) })
     .click();
   await expect(page.getByText(ui("generate.written.title.scene"))).toBeVisible();
   for (const scene of THREE_SCENES) {
@@ -196,16 +172,11 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
  * read off the move controls, which carry the row's title in their name.
  */
 async function shownOrder(page: Page): Promise<string[]> {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui("chapterOverview.scene.moveDown.aria", {
-    title: marker,
-  }).split(marker);
+  const moveDown = uiPattern("chapterOverview.scene.moveDown.aria", { title: /(.*)/ }, { exact: true });
   const labels = await page
-    .getByRole("button", { name: new RegExp(`${escapeRegExp(after)}$`) })
+    .getByRole("button", { name: moveDown })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels
-    .filter((label) => label.startsWith(before) && label.endsWith(after))
-    .map((label) => label.slice(before.length, label.length - after.length));
+  return labels.flatMap((label) => moveDown.exec(label)?.[1] ?? []);
 }
 
 test("scenes accepted one by one in reverse stand in outline order", async ({ page, api }) => {
@@ -383,7 +354,7 @@ test("discarding during a run stops the open parts", async ({ page, api }, testI
   });
   // The run says how far it got — and that what is here can already be taken.
   await expect(
-    page.getByText(catalogPattern("generate.pipeline.progress", { total: 3 }, { done: "\\d+" })),
+    page.getByText(uiPattern("generate.pipeline.progress", { total: 3, done: /\d+/ })),
   ).toBeVisible();
   await expect(page.getByText(ui("generate.pipeline.stillRunning"))).toBeVisible();
 

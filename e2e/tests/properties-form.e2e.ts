@@ -25,6 +25,7 @@
 // means a SECOND WRITER through the same API, which is what bumps the row's
 // guard token.
 
+import escapeStringRegexp from "escape-string-regexp";
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
@@ -47,10 +48,6 @@ const SCENE_TITLE = "Ankunft am Leuchtturm";
 const NPC_NAME = "Hafenmeisterin Jorna";
 const LIGHTHOUSE = "Der Leuchtturm von Salzhafen";
 const CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /** The title of an entity's properties dialog. */
 function propertiesTitle(kind: "scene" | "npc" | "location" | "chapter"): string {
@@ -75,7 +72,7 @@ async function sceneSplit(api: Api) {
 function referenceHint(dialog: Locator, name: string) {
   return dialog
     .getByRole("paragraph")
-    .filter({ hasText: new RegExp(`^${escapeRegExp(name)}$`) });
+    .filter({ hasText: new RegExp(`^${escapeStringRegexp(name)}$`) });
 }
 
 /** Open the header's properties action and hand back the dialog. */
@@ -107,7 +104,7 @@ test("scene properties: chips, reference and status land in the scene — nothin
     .getByRole("button")
     .filter({
       hasText: new RegExp(
-        `^(${escapeRegExp(ui("common.edit"))}|${escapeRegExp(ui("properties.action"))})$`,
+        `^(${escapeStringRegexp(ui("common.edit"))}|${escapeStringRegexp(ui("properties.action"))})$`,
       ),
     });
   await expect(headerActions).toHaveText([ui("common.edit"), ui("properties.action")]);
@@ -194,7 +191,7 @@ test("scene properties: chips, reference and status land in the scene — nothin
   // order and names the new location — with the NAME of the location entry,
   // never its id.
   await page.goto("/campaigns/beispiel");
-  const row = page.getByRole("link", { name: new RegExp(escapeRegExp(SCENE_TITLE)) });
+  const row = page.getByRole("link", { name: new RegExp(escapeStringRegexp(SCENE_TITLE)) });
   await expect(row).toContainText("North Cove");
   await expect(row).not.toContainText(LIGHTHOUSE);
   await expect(page.getByText("north-cove", { exact: true })).toHaveCount(0);
@@ -274,7 +271,7 @@ test("the location field reads a name as its id — a missing location is refuse
 
   // …and the chapter overview's row names it, with the location's name.
   await page.goto("/campaigns/beispiel");
-  await expect(page.getByRole("link", { name: new RegExp(escapeRegExp(SCENE_TITLE)) })).toContainText(
+  await expect(page.getByRole("link", { name: new RegExp(escapeStringRegexp(SCENE_TITLE)) })).toContainText(
     "The Old Harbour",
   );
 });
@@ -742,7 +739,7 @@ test("navigating away closes the dialog — no diff of scene A lands in npc B", 
   await expect(npcDialog.getByLabel(ui("properties.scene.title.label"))).toHaveCount(0);
   // Anchored: the quickstat rows carry a suffixed name label as well.
   await expect(
-    npcDialog.getByLabel(new RegExp(`^${escapeRegExp(ui("properties.npc.name.label"))}`)),
+    npcDialog.getByLabel(new RegExp(`^${escapeStringRegexp(ui("properties.npc.name.label"))}`)),
   ).toHaveValue(NPC_NAME);
   await expect(npcDialog.getByRole("button", { name: ui("common.save") })).toBeDisabled();
 

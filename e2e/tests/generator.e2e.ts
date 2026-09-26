@@ -46,9 +46,7 @@ import { getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import { getLocation, locationExists } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
-import { ui, uiExact } from "../support/ui";
-import type { MessageKey } from "../../app/src/i18n/messages";
-import type { MessageParams } from "../../app/src/i18n/format";
+import { ui, uiExact, uiPattern } from "../support/ui";
 
 /** How the review names the proposed scene: its resource segment and id. */
 const SCENE_LABEL = `scenes/${SCENE_ID}`;
@@ -87,19 +85,8 @@ const ACTIVE_CHAPTER_TITLE = "Kapitel 1: Der Leuchtturm von Salzhafen";
 /** The seeded name of the npc `fenn` (fixtures/beispiel/npcs). */
 const FENN = "Fenn";
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * A catalog text whose token count varies: the `tokens` parameter matches any
- * grouped number, everything else is the catalog's own wording.
- */
-function usagePattern(key: MessageKey, params: MessageParams): RegExp {
-  const marker = "\u0000";
-  const [before = "", after = ""] = ui(key, { ...params, tokens: marker }).split(marker);
-  return new RegExp(`${escapeRegExp(before)}[\\d.]+${escapeRegExp(after)}`);
-}
+/** A token count in a usage line: any grouped number. */
+const TOKENS = /[\d.]+/;
 
 /** The pending line of a scene run's review: its summary, nothing written yet. */
 function pendingSummary(scenes: number, stubs: number): string {
@@ -116,11 +103,7 @@ function applyAllName(scenes: number, stubs: number): RegExp {
 }
 
 /** The bulk accept button, whatever it counts. */
-const APPLY_ANY = (() => {
-  const marker = "\u0000";
-  const [before = ""] = ui("generate.review.apply", { count: marker }).split(marker);
-  return new RegExp(`^${escapeRegExp(before)}`);
-})();
+const APPLY_ANY = uiPattern("generate.review.apply", { count: /.*/ }, { exact: true });
 
 /** The accessible name of a `[[ref]]` to an npc. */
 function npcRefName(name: string): string {
@@ -192,7 +175,7 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   // Not one correction among them: the scene and the location name
   // `[[grella]]`, an npc only this run proposes, and a reference to a
   // proposal is valid.
-  await expect(page.getByText(usagePattern("generate.pipeline.cost", { calls: 4 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.pipeline.cost", { calls: 4, tokens: TOKENS }))).toBeVisible();
   // The model's warning is shown, not swallowed (the stub's warning text).
   await expect(page.getByText(OUTLINE_WARNING)).toBeVisible();
 
@@ -383,7 +366,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   // One scene, nothing else proposed — and, the point of the case, exactly TWO
   // calls: the outline and the one scene. A correction turn would be a third.
   await expect(page.getByText(pendingSummary(1, 0))).toBeVisible();
-  await expect(page.getByText(usagePattern("generate.pipeline.cost", { calls: 2 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.pipeline.cost", { calls: 2, tokens: TOKENS }))).toBeVisible();
   // Nothing failed, so no error block and no retry action.
   await expect(page.getByRole("button", { name: ui("generate.pipeline.retry") })).toHaveCount(0);
 
@@ -507,7 +490,7 @@ test("npc run: an unknown [[id]] costs one correction turn, the corrected draft 
     { timeout: 30_000 },
   );
   // Two calls: the reply with the dangling reference and its correction.
-  await expect(page.getByText(usagePattern("generate.usage", { attempts: 2 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.usage", { attempts: 2, tokens: TOKENS }))).toBeVisible();
   const card = page.locator("div").filter({ hasText: `npcs/${NPC_DEFAULT_ID}` }).last();
   await expect(card).not.toContainText(UNKNOWN_REF_ID);
   // The relation to an npc the campaign has stayed, as a link (the stub's
@@ -549,7 +532,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   // Three calls: the outline, then the scene part's initial call plus its
   // correction turn. The failure block still reports the attempt count,
   // because it reads the run's usage out of the error body.
-  await expect(page.getByText(usagePattern("generate.usage", { attempts: 3 }))).toBeVisible();
+  await expect(page.getByText(uiPattern("generate.usage", { attempts: 3, tokens: TOKENS }))).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
   await page.getByText(ui("generate.error.rawReply")).click();

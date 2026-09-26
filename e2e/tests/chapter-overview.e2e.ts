@@ -16,12 +16,12 @@
 // navigation, and the campaign's name, description and text are editable from
 // the header — the campaign's route IS the chapter overview (decisions/resources).
 
+import escapeStringRegexp from "escape-string-regexp";
 import type { Locator, Page } from "@playwright/test";
 
 import type { CampaignSeed } from "@grimoire/shared/campaign";
 import type { SceneProposal } from "@grimoire/shared/scene";
 import type { SessionSeed } from "@grimoire/shared/session";
-import type { MessageKey } from "../../app/src/i18n/messages";
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
@@ -30,7 +30,7 @@ import { chapterPath, getChapter, patchChapter } from "../support/chapter";
 import { getGeneratorJob, patchGeneratorJob, startGeneratorJob } from "../support/generator-job";
 import { getScene, patchScene } from "../support/scene";
 import { todaySessionId } from "../support/session";
-import { ui, uiExact } from "../support/ui";
+import { ui, uiExact, uiPattern } from "../support/ui";
 
 // Seeded content of the example campaign (fixtures/beispiel) the overview
 // shows — data the spec checks for, not UI text.
@@ -55,21 +55,6 @@ const CAPTURED_TRIGGER = "Charaktere werden beim Auskundschaften der Bucht entde
 /** The names of the npcs `fenn` and `jorna`. */
 const FENN = "Fenn";
 const JORNA = "Hafenmeisterin Jorna";
-
-/** A catalog text as a regex fragment, special characters escaped. */
-const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** A catalog text as a pattern whose parameters match anything. */
-function uiPattern(key: MessageKey, params: Record<string, string>): RegExp {
-  const placeholders = Object.fromEntries(
-    Object.keys(params).map((name) => [name, `\u0000${name}\u0000`]),
-  );
-  let source = escapeRe(ui(key, placeholders));
-  for (const [name, pattern] of Object.entries(params)) {
-    source = source.replace(`\u0000${name}\u0000`, pattern);
-  }
-  return new RegExp(source);
-}
 
 /** The label of a chapter status in the UI. */
 const chapterStatus = (status: "planned" | "active" | "done") =>
@@ -145,7 +130,7 @@ async function widenGlyphs(page: Page, spacing: string) {
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /** The session chip while a session runs — its name opens with the state, the clock follows. */
-const RUNNING_CHIP = new RegExp(escapeRe(ui("session.state.running")));
+const RUNNING_CHIP = uiPattern("session.state.running");
 
 /**
  * A scene that names NO location — its row simply has no location part
@@ -212,7 +197,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   // The chapter accordion: title, scene count, its text — and the status
   // control BESIDE the trigger (a menu trigger cannot sit inside the
   // accordion button).
-  const chapter = page.getByRole("button", { name: new RegExp(escapeRe(CHAPTER_TITLE)) });
+  const chapter = page.getByRole("button", { name: new RegExp(escapeStringRegexp(CHAPTER_TITLE)) });
   await expect(chapter).toBeVisible();
   // The chapter is a HEADING inside that trigger, so the outline does not
   // jump from the chapter overview's h1 straight to the contingency block.
@@ -237,7 +222,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
     page.getByRole("heading", { level: 3, name: LIGHTHOUSE }),
   ).toHaveCount(0);
   await expect(page.getByText("leuchtturm", { exact: true })).toHaveCount(0);
-  const planned = page.getByRole("link", { name: new RegExp(escapeRe(ARRIVAL)) });
+  const planned = page.getByRole("link", { name: new RegExp(escapeStringRegexp(ARRIVAL)) });
   await expect(planned).toBeVisible();
   await expect(planned).toContainText(`${LIGHTHOUSE} · #social #travel`);
   await expect(page.getByRole("button", { name: READY_STATUS_NAME }).first()).toBeVisible();
@@ -247,7 +232,7 @@ test('"/" redirects into the campaign and the chapter overview shows chapter and
   await expect(
     page.getByRole("heading", { level: 3, name: ui("scene.contingencies.heading") }),
   ).toBeVisible();
-  const contingency = page.getByRole("link", { name: new RegExp(escapeRe(CAPTURED)) });
+  const contingency = page.getByRole("link", { name: new RegExp(escapeStringRegexp(CAPTURED)) });
   await expect(contingency).toBeVisible();
   await expect(contingency).toContainText(
     ui("chapterOverview.scene.trigger", { trigger: CAPTURED_TRIGGER }),
@@ -274,13 +259,13 @@ test.describe("a scene without a location", () => {
     await expect(page.getByRole("heading", { level: 3 })).toHaveText([
       ui("scene.contingencies.heading"),
     ]);
-    const scene = page.getByRole("link", { name: new RegExp(escapeRe(SCENE_WITHOUT_LOCATION.title)) });
+    const scene = page.getByRole("link", { name: new RegExp(escapeStringRegexp(SCENE_WITHOUT_LOCATION.title)) });
     await expect(scene).toBeVisible();
     // The meta line is the tags alone — no placeholder, no dangling separator,
     // while the scene one row above still names its location.
     await expect(scene).toContainText("#travel");
     await expect(scene).not.toContainText("·");
-    await expect(page.getByRole("link", { name: new RegExp(escapeRe(ARRIVAL)) })).toContainText(
+    await expect(page.getByRole("link", { name: new RegExp(escapeStringRegexp(ARRIVAL)) })).toContainText(
       `${LIGHTHOUSE} · #social #travel`,
     );
     // …and it opens on its own route like every scene.
@@ -299,7 +284,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // The campaign context: the switcher trigger, prefix included.
   const label = page
     .getByRole("banner")
-    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: ".*" }) });
+    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: /.*/ }) });
   /** aria-current marks the one of the three that IS the current view. */
   const current = nav.locator("[aria-current='page']");
 
@@ -357,7 +342,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // the location's own name, where the other one only mentions it as its
   // chapter.
   await expect(
-    page.getByRole("main").getByRole("link", { name: new RegExp(`^${escapeRe(LIGHTHOUSE)}`) }),
+    page.getByRole("main").getByRole("link", { name: new RegExp(`^${escapeStringRegexp(LIGHTHOUSE)}`) }),
   ).toBeVisible();
   await expect(current).toHaveText(ui("topbar.nav.locations"));
   await assertChromeIsStable(onChapterOverview);
@@ -415,7 +400,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // The switcher still switches, from a list as well.
   await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
   await label.click();
-  await page.getByRole("menuitem", { name: new RegExp(escapeRe(CAMPAIGN_NAME)) }).click();
+  await page.getByRole("menuitem", { name: new RegExp(escapeStringRegexp(CAMPAIGN_NAME)) }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 });
 
@@ -439,7 +424,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
     const banner = page.getByRole("banner");
     const nav = banner.getByRole("navigation", { name: ui("topbar.nav.aria") });
     const label = banner.getByRole("button", {
-      name: uiPattern("campaign.switcher.current", { name: ".*" }),
+      name: uiPattern("campaign.switcher.current", { name: /.*/ }),
     });
     const gear = banner.getByRole("link", { name: ui("settings.title") });
     const chip = banner.locator("[data-session-chip]");
@@ -461,7 +446,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
         NAV_KEYS.map((key) => nav.getByRole("link", { name: ui(key) }).boundingBox()),
       ),
       searchBox: await banner
-        .getByRole("button", { name: new RegExp(escapeRe(ui("topbar.search"))) })
+        .getByRole("button", { name: uiPattern("topbar.search") })
         .boundingBox(),
       session: await chip.getAttribute("data-session-chip"),
       sessionBox: await chip.boundingBox(),
@@ -574,7 +559,7 @@ test("the topbar does not overflow at medium widths with no session running", as
       // The review link is part of THIS row on purpose — it is the widest
       // optional element, and the one that runs the row over.
       await expect(
-        page.getByRole("link", { name: uiPattern("topbar.review.pending", { count: "\\d+" }) }),
+        page.getByRole("link", { name: uiPattern("topbar.review.pending", { count: /\d+/ }) }),
       ).toBeVisible();
     }
     expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
@@ -639,11 +624,11 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     // Below md the topbar is hidden (the mobile start surface is the chrome
     // there), so the chip is only on the row from 768 up.
     if (width >= 768) {
-      const chip = page.getByRole("link", { name: new RegExp(escapeRe(ui("topbar.generator"))) });
+      const chip = page.getByRole("link", { name: uiPattern("topbar.generator") });
       await expect(chip).toBeVisible();
       // The chip stands before the job is read; its name carries the
       // progress once it is.
-      await expect(chip).toHaveAccessibleName(new RegExp(escapeRe(progress)));
+      await expect(chip).toHaveAccessibleName(new RegExp(escapeStringRegexp(progress)));
       // The number is on the chip exactly ONCE, whatever the width does with
       // it: above 2xl it is spelled out, below it stands
       // in the accessible name only — never both, which would read as the
@@ -898,14 +883,14 @@ test("a long chapter text is clamped, opens and closes; a link in the cut-off pa
   await expect(box).not.toHaveAttribute("data-clamped", "");
   expect((await box.boundingBox())!.height).toBeGreaterThan(clampedHeight);
   // The reference at the very end is a live link to its entry.
-  await expect(box.getByRole("link", { name: new RegExp(escapeRe(JORNA)) })).toBeVisible();
+  await expect(box.getByRole("link", { name: new RegExp(escapeStringRegexp(JORNA)) })).toBeVisible();
 
   await less.click();
   await expect(box).toHaveAttribute("data-clamped", "");
   await expect(showMore(page)).toBeFocused();
 
   // The keyboard reaches the reference in the hidden part — and the text opens.
-  await box.getByRole("link", { name: new RegExp(escapeRe(JORNA)) }).focus();
+  await box.getByRole("link", { name: new RegExp(escapeStringRegexp(JORNA)) }).focus();
   await expect(box).not.toHaveAttribute("data-clamped", "");
   await expect(showLess(page)).toBeVisible();
 });
@@ -973,7 +958,7 @@ test("a chapter's title and text are editable from the chapter overview", async 
   });
   await expect(dialog).toContainText(ui("chapterBody.description"));
   const body = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
-  await expect(body).toHaveValue(new RegExp(escapeRe(CHAPTER_BODY)));
+  await expect(body).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
   await body.fill("");
   await expect(body).toHaveAttribute("placeholder", ui("chapterBody.field.body.placeholder"));
   // A heading is text like any other now: it is shown, and so is what follows.
@@ -997,7 +982,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
   const dialog = page.getByRole("dialog");
   const body = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
-  await expect(body).toHaveValue(new RegExp(escapeRe(CHAPTER_BODY)));
+  await expect(body).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
 
   // A SECOND WRITER while the dialog stands (there is no "external edit" any
   // more — e2e/README.md): the API writes with a fresh token.
@@ -1080,7 +1065,7 @@ test("the chapter status control shows the localized labels and makes another ch
 
   // --- activating B, from B's own control ---
   const writes = chapterPatches(page);
-  const second = page.getByRole("button", { name: new RegExp(escapeRe(SECOND_CHAPTER)) });
+  const second = page.getByRole("button", { name: new RegExp(escapeStringRegexp(SECOND_CHAPTER)) });
   await expect(second).toBeVisible();
   await page.getByRole("button", { name: chapterStatusName("planned") }).click();
   await page.getByRole("menuitemradio", { name: chapterStatus("active") }).click();
@@ -1264,7 +1249,7 @@ test("the chapter's dialog offers the enum and its active value makes the chapte
   });
 
   await page.goto("/campaigns/beispiel");
-  await page.getByRole("button", { name: new RegExp(escapeRe(SECOND_CHAPTER)) }).click();
+  await page.getByRole("button", { name: new RegExp(escapeStringRegexp(SECOND_CHAPTER)) }).click();
   // Two chapters are open now, so the actions are named per chapter — the
   // second one belongs to the second chapter.
   await page.getByRole("button", { name: ui("chapterOverview.chapter.properties") }).nth(1).click();
@@ -1311,10 +1296,8 @@ const TITLES: Record<string, string> = {
   "smuggler-captured": CAPTURED,
 };
 
-/** The move-down name of a row, split around its title. */
-const [MOVE_DOWN_BEFORE, MOVE_DOWN_AFTER] = ui("chapterOverview.scene.moveDown.aria", {
-  title: "\u0000",
-}).split("\u0000") as [string, string];
+/** The move-down name of any row, its title captured. */
+const MOVE_DOWN = uiPattern("chapterOverview.scene.moveDown.aria", { title: /(.*)/ }, { exact: true });
 
 /** One planned scene for the order fixtures, with a location so the row has a meta line. */
 function plannedScene(id: string, location: string): SceneProposal {
@@ -1369,11 +1352,9 @@ async function storedOrder(api: Api): Promise<string[]> {
  */
 async function shownOrder(page: Page): Promise<string[]> {
   const labels = await page
-    .getByRole("button", { name: new RegExp(`${escapeRe(MOVE_DOWN_AFTER)}$`) })
+    .getByRole("button", { name: MOVE_DOWN })
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label") ?? ""));
-  return labels.map((label) =>
-    label.slice(MOVE_DOWN_BEFORE.length, label.length - MOVE_DOWN_AFTER.length),
-  );
+  return labels.flatMap((label) => MOVE_DOWN.exec(label)?.[1] ?? []);
 }
 
 /** The titles of an order given by id — what `shownOrder` has to answer. */
@@ -1486,7 +1467,7 @@ test.describe("the scene order of a chapter", () => {
     await page.getByRole("button", { name: ui("common.edit") }).click();
     await page.getByRole("button", { name: uiExact("composer.mode.markdown") }).click();
     const textarea = page.getByRole("textbox", {
-      name: uiPattern("bodyEditor.markdown.aria", { path: ".+" }),
+      name: uiPattern("bodyEditor.markdown.aria", { path: /.+/ }),
     });
     await expect(textarea).toHaveValue(sceneBefore.body);
     await textarea.fill(`${sceneBefore.body}\n${addition}\n`);
@@ -1516,7 +1497,7 @@ test.describe("the scene order of a chapter", () => {
     await page.getByRole("button", { name: ui("chapterOverview.chapter.edit") }).click();
     const dialog = page.getByRole("dialog");
     const chapterText = dialog.getByRole("textbox", { name: ui("chapterBody.field.body") });
-    await expect(chapterText).toHaveValue(new RegExp(escapeRe(CHAPTER_BODY)));
+    await expect(chapterText).toHaveValue(new RegExp(escapeStringRegexp(CHAPTER_BODY)));
     await chapterText.fill("Light the lighthouse again.");
     const second = await orderNode(api);
     const again = ["order-steg", "order-keller", "lighthouse-arrival", "smuggler-captured"];
