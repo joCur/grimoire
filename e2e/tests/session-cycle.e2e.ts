@@ -1,6 +1,6 @@
 // Critical path 4: the session cycle; see CLAUDE.md.
 //
-// start → quick note → log row (and no played scene) → NPC/location drawer → back
+// start → quick note → log row (and no status change) → NPC/location drawer → back
 // into the session via the global live indicator → pause (the clock stops) →
 // resume (it ticks again) → end → review → and the restart: ending is FINAL,
 // so starting a session again on the same day opens a SECOND, separate
@@ -23,11 +23,13 @@
 // Every claim is checked twice: once in the UI and once in the stored session
 // (the server is the truth, the app keeps no state of its own).
 //
-// A session is its own resource (decisions/resources), and so is each of its children,
-// hanging under it: a log entry per note, a pause per interval, a played scene
-// per scene the DM LEFT with the next-scene step after taking a note in it. The
+// A session is its own resource (decisions/resources), and so is each of its
+// children, hanging under it: a log entry per note, a pause per interval. The
 // session embeds them when it is read, so every claim about storage here reads
-// a field, never a rendered text.
+// a field, never a rendered text. Whether a scene was played is the scene's
+// STATUS alone: the next-scene step sets it on the scene being left when the
+// played box beside it is ticked — which it starts as when the session holds
+// a note taken in that scene.
 //
 // A session id is an OPAQUE random string, so this spec never spells one out:
 // it always comes from the server (`runningSessionId(api)`). That is also the
@@ -43,12 +45,11 @@ import type { SceneProposal } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
 import { ui, uiExact } from "../support/ui";
 import type { Api } from "../support/api";
-import { patchScene } from "../support/scene";
+import { getScene, patchScene, scenePath } from "../support/scene";
 import {
   getSession,
   logEntryPath,
   pausePath,
-  playedScenesPath,
   runningSessionId,
   sessionExists,
   sessionPath,
@@ -260,8 +261,6 @@ test("session start, quick note, pause, end — log and session row follow", asy
   // Fresh session: the log is empty and says where entries come from.
   await expect(page.getByText(ui("live.log.empty"))).toBeVisible();
 
-  await expect.poll(async () => (await getSession(api, sessionId)).playedScenes).toEqual([]);
-
   // …and while it is empty, the session menu offers to discard it.
   await expect(await sessionMenuItem(page, "session.menu.discard")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -289,10 +288,10 @@ test("session start, quick note, pause, end — log and session row follow", asy
       rev: expect.any(Number),
     },
   ]);
-  // A note plays nothing: the scene is recorded as played when the DM LEAVES
-  // it with the next-scene step (the order block below), and the checkmark
-  // reads the played scenes — never faked client-side.
-  expect((await getSession(api, sessionId)).playedScenes).toEqual([]);
+  // A note sets no status: the scene is marked played when the DM LEAVES it
+  // with the next-scene step and the box ticked (the order block below), and
+  // the checkmark reads the scene's status — never faked client-side.
+  expect((await getScene(api, "lighthouse-arrival")).status).toBe("ready");
   await expect(nav.getByText(ui("status.scene.played"))).toHaveCount(0);
 
   // The session has content now — discarding it is no longer on offer; the
@@ -421,9 +420,9 @@ test("session start, quick note, pause, end — log and session row follow", asy
   await expect
     .poll(async () => (await getSession(api, sessionId)).ended)
     .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
-  // Ending records nothing as played: the scene open at the end, a note in it
+  // Ending marks nothing as played: the scene open at the end, a note in it
   // or not, may carry on next time.
-  expect((await getSession(api, sessionId)).playedScenes).toEqual([]);
+  expect((await getScene(api, "lighthouse-arrival")).status).toBe("ready");
 
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText(NOTE_TEXT)).toBeVisible();
@@ -458,7 +457,6 @@ test("session start, quick note, pause, end — log and session row follow", asy
   expect(second.ended).toBeUndefined();
   expect(second.pauses).toEqual([]);
   expect(second.log).toEqual([]);
-  expect(second.playedScenes).toEqual([]);
   // … and the first session is untouched: still ended, log and pauses intact.
   const first = await getSession(api, sessionId);
   expect(first.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
@@ -843,32 +841,13 @@ test.describe("played/dropped scenes in the live nav", () => {
     await page.reload();
     await expect(playedGroup(nav)).toHaveCount(0);
 
-    // The SESSION checkmark is a different thing and still works on top
-    // of the grouping — leaving the grouped scene after a note in it marks it.
-    // The step out of it needs a planned scene behind it, so the DM puts the
-    // arrival there for this part, and back afterwards.
-    await setSceneOrder(api, ["harbor-office-talk", "lighthouse-arrival", "smuggler-captured"]);
-    await page.reload();
+    // The checkmark reads the same status: the grouped scene carries it.
     await playedTrigger(nav).click();
-    await playedGroup(nav)
-      .getByRole("button", { name: /Talk at the harbor office/ })
-      .click();
-    const quickNote = quickNoteField(page);
-    await quickNote.fill("The office clerk hands over the ledgers #thread");
-    await quickNote.press("Enter");
-    const sessionId = (await runningSessionId(api)) ?? "";
-    await expect
-      .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.sceneId))
-      .toEqual(["harbor-office-talk"]);
-    await nextStep(page, "Ankunft am Leuchtturm").click();
-    await expect(heading).toHaveText("Ankunft am Leuchtturm");
-    await expect
-      .poll(async () =>
-        (await getSession(api, sessionId)).playedScenes.map((row) => row.sceneId),
-      )
-      .toEqual(["harbor-office-talk"]);
-    await expect(playedGroup(nav).getByText(ui("status.scene.played"))).toBeAttached();
-    await setSceneOrder(api, ["lighthouse-arrival", "harbor-office-talk", "smuggler-captured"]);
+    await expect(
+      playedGroup(nav)
+        .getByRole("button", { name: /Talk at the harbor office/ })
+        .getByText(ui("status.scene.played")),
+    ).toBeAttached();
 
     // Degrade: with EVERY scene played the view stays usable — the planned
     // list says so, the group holds both, and the center column still renders
@@ -892,8 +871,8 @@ test("the session page shows a past evening's rows; the old address is gone", as
   page,
   api,
 }) => {
-  // The fixture session of the example campaign: three log rows, one closed
-  // pause, one played scene.
+  // The fixture session of the example campaign: three log rows, two of them
+  // in the same scene, and one closed pause.
   await page.goto("/campaigns/beispiel/sessions/2026-01-15");
 
   // The heading is the DATE, derived from `started` — the id is opaque and is
@@ -921,8 +900,10 @@ test("the session page shows a past evening's rows; the old address is gone", as
   const pauses = page.getByRole("region", { name: ui("session.page.pauses") });
   await expect(pauses).toContainText("0:40:00");
 
-  // The PLAYED SCENES, as links onto their own routes; one opens its scene.
+  // The SCENES THE NOTES WERE TAKEN IN, each once, as links onto their own
+  // routes; one opens its scene.
   const scenes = page.getByRole("region", { name: ui("session.page.scenes") });
+  await expect(scenes.getByRole("link")).toHaveText(["Ankunft am Leuchtturm"]);
   await scenes.getByRole("link", { name: "Ankunft am Leuchtturm" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/scenes\/lighthouse-arrival$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -1032,60 +1013,141 @@ test.describe("the session view follows the chapter's order", () => {
     await expect(nextStep(page, DINNER)).toBeVisible();
   });
 
-  test("the next-scene step records the scene left — after a note in it, and only then", async ({
+  test("the next-scene step marks the scene left as played when its box is ticked", async ({
     page,
     api,
   }) => {
-    await setSceneOrder(api, ["lighthouse-arrival", "smuggler-captured", "dinner", "cellar"]);
-    await patchScene(api, ARRIVAL, { status: "played" });
+    await setSceneOrder(api, ["lighthouse-arrival", "dinner", "cellar", "smuggler-captured"]);
     await startSession(page);
     const nav = liveNav(page);
     const heading = page.getByRole("article").getByRole("heading", { level: 1 });
+    const box = page.getByRole("checkbox", { name: ui("live.next.played") });
+    const quickNote = quickNoteField(page);
     const sessionId = (await runningSessionId(api)) ?? "";
-    const played = async () =>
-      (await getSession(api, sessionId)).playedScenes.map((row) => row.sceneId);
-    await expect(heading).toHaveText(DINNER);
+    const noteScenes = async () =>
+      (await getSession(api, sessionId)).log.map((row) => row.sceneId);
+    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+
+    // No note in the open scene yet: the box starts unticked.
+    await expect(box).not.toBeChecked();
 
     // A note in the open scene is a log entry with its scene — and nothing
-    // else: the scene is not played yet.
-    const quickNote = quickNoteField(page);
-    await quickNote.fill("Jorna tells of the cellar #thread");
+    // else: the scene's status stays. The box ticks itself.
+    await quickNote.fill("Jorna waits at the jetty #thread");
     await quickNote.press("Enter");
-    await expect
-      .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.sceneId))
-      .toEqual(["dinner"]);
-    expect(await played()).toEqual([]);
+    await expect.poll(noteScenes).toEqual([ARRIVAL]);
+    expect((await getScene(api, ARRIVAL)).status).toBe("ready");
+    await expect(box).toBeChecked();
 
-    // Leaving it with the step records the scene LEFT, then opens the next.
-    await nextStep(page, CELLAR).click();
-    await expect(heading).toHaveText(CELLAR);
-    await expect.poll(played).toEqual(["dinner"]);
-    await expect(
-      nav.getByRole("button", { name: new RegExp(DINNER) }).getByText(ui("status.scene.played")),
-    ).toBeAttached();
-
-    // Without a note there is no sign the scene was played: leaving the
-    // contingency with the step records nothing, and the DM marks it later.
-    await nav.getByRole("button", { name: new RegExp(CONTINGENCY) }).click();
-    await expect(heading).toHaveText(CONTINGENCY);
+    // Leaving it with the box ticked sets the status of the scene LEFT, then
+    // opens the next: the scene moves into the collapsed played group.
     await nextStep(page, DINNER).click();
     await expect(heading).toHaveText(DINNER);
-    // …and a scene already recorded in this session is not recorded twice.
+    expect((await getScene(api, ARRIVAL)).status).toBe("played");
+    await expect(playedTrigger(nav)).toHaveAccessibleName(
+      ui("live.nav.playedGroup", { count: "(1)" }),
+    );
+    await playedTrigger(nav).click();
+    await expect(
+      playedGroup(nav).getByRole("button", { name: /Ankunft am Leuchtturm/ }),
+    ).toBeVisible();
+
+    // The box starts over in the next scene. A note ticks it; the DM unticks
+    // it — and leaving the scene then writes nothing.
+    await expect(box).not.toBeChecked();
+    await quickNote.fill("Jorna tells of the cellar #thread");
+    await quickNote.press("Enter");
+    await expect.poll(noteScenes).toEqual([ARRIVAL, "dinner"]);
+    await expect(box).toBeChecked();
+    await box.click();
+    await expect(box).not.toBeChecked();
+    const dinnerBefore = await getScene(api, "dinner");
     await nextStep(page, CELLAR).click();
     await expect(heading).toHaveText(CELLAR);
-    expect(await played()).toEqual(["dinner"]);
+    expect(await getScene(api, "dinner")).toEqual(dinnerBefore);
 
-    // Ending the session records nothing either, even with a note in the
-    // scene that is open: it may carry on next time.
+    // Without a note the DM can still tick the box: leaving the contingency
+    // marks it played, and the step picks up the plan at its first scene
+    // still to come.
+    await nav.getByRole("button", { name: new RegExp(CONTINGENCY) }).click();
+    await expect(heading).toHaveText(CONTINGENCY);
+    await expect(box).not.toBeChecked();
+    await box.click();
+    await nextStep(page, DINNER).click();
+    await expect(heading).toHaveText(DINNER);
+    expect((await getScene(api, "smuggler-captured")).status).toBe("played");
+
+    // The scene changed elsewhere in the meantime: the write is refused, the
+    // step says so in a whole sentence, and the next scene does NOT open. The
+    // other writer and the click happen in the SAME turn, so the version poll
+    // cannot bring the changed scene into the page in between.
+    await expect(box).toBeChecked();
+    const changed = ui("live.next.changedElsewhere");
+    const dinner = await getScene(api, "dinner");
+    const seen = await page.evaluate(
+      async ({ url, body, step, expected }) => {
+        const res = await fetch(url, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return `patch failed: ${res.status}`;
+        const button = [...document.querySelectorAll("button")].find(
+          (b) => b.textContent === step,
+        );
+        button?.click();
+        for (let i = 0; i < 60; i++) {
+          if (document.body.innerText.includes(expected)) return expected;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return document.body.innerText;
+      },
+      {
+        url: api.url(scenePath(api, "dinner")),
+        body: { rev: dinner.rev, status: "ready" },
+        step: ui("live.next", { title: CELLAR }),
+        expected: changed,
+      },
+    );
+    expect(seen).toBe(changed);
+    await expect(heading).toHaveText(DINNER);
+    expect((await getScene(api, "dinner")).status).toBe("ready");
+
+    // The scene was reloaded: the second click writes against its fresh
+    // version, and the next scene opens.
+    await nextStep(page, CELLAR).click();
+    await expect(heading).toHaveText(CELLAR);
+    await expect(page.getByText(changed)).toHaveCount(0);
+    expect((await getScene(api, "dinner")).status).toBe("played");
+
+    // Ending the session changes nothing, even with a note in the scene that
+    // is open: it may carry on next time.
     await quickNote.fill("The cellar door sticks");
     await quickNote.press("Enter");
-    await expect
-      .poll(async () => (await getSession(api, sessionId)).log.map((row) => row.sceneId))
-      .toEqual(["dinner", "cellar"]);
+    await expect.poll(noteScenes).toEqual([ARRIVAL, "dinner", "cellar"]);
     await (await sessionMenuItem(page, "session.menu.end")).click();
     await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
     await expect.poll(async () => (await getSession(api, sessionId)).ended).toBeDefined();
-    expect(await played()).toEqual(["dinner"]);
+    expect((await getScene(api, "cellar")).status).toBe("draft");
+
+    // The chapter overview reads the same status (critical path 1).
+    await page.goto("/campaigns/beispiel");
+    const dinnerRow = page
+      .locator("div")
+      .filter({ has: page.getByRole("link", { name: new RegExp(DINNER) }) })
+      .last();
+    await expect(
+      dinnerRow.getByRole("button", {
+        name: ui("status.change.aria", { current: ui("status.scene.played") }),
+      }),
+    ).toBeVisible();
+
+    // The reading page of the evening lists the scenes its notes were taken
+    // in, each once, in the order of their first note.
+    await page.goto(`/campaigns/beispiel/sessions/${sessionId}`);
+    await expect(
+      page.getByRole("region", { name: ui("session.page.scenes") }).getByRole("link"),
+    ).toHaveText(["Ankunft am Leuchtturm", DINNER, CELLAR]);
   });
 
   test("a rearranged order moves the entry point with it", async ({ page, api }) => {
@@ -1166,9 +1228,6 @@ test("the session resources: flat reads, the running filter, a guard per row, no
   const note = await (
     await post(logEntryPath(api, session.id), { text: "Note", sceneId: "lighthouse-arrival" })
   ).json();
-  const played = await (
-    await post(playedScenesPath(api, session.id), { sceneId: "lighthouse-arrival" })
-  ).json();
   // The session reads them embedded — flat, no kind, no path, no properties
   // map — and none of those writes moved the session's own guard.
   const read = await api.get<Record<string, unknown>>(sessionPath(api, session.id));
@@ -1177,9 +1236,8 @@ test("the session resources: flat reads, the running filter, a guard per row, no
     rev: session.rev,
     pauses: [pause],
     log: [note],
-    playedScenes: [played],
   });
-  for (const key of ["kind", "path", "properties", "scenesPlayed"]) {
+  for (const key of ["kind", "path", "properties", "scenesPlayed", "playedScenes"]) {
     expect(Object.keys(read)).not.toContain(key);
   }
 
@@ -1220,7 +1278,6 @@ test("the session resources: flat reads, the running filter, a guard per row, no
   for (const [path, body] of [
     [pausePath(api, session.id), {}],
     [logEntryPath(api, session.id), { text: "too late" }],
-    [playedScenesPath(api, session.id), { sceneId: "lighthouse-arrival" }],
   ] as const) {
     const late = await post(path, body);
     expect(late.status).toBe(409);
@@ -1229,7 +1286,6 @@ test("the session resources: flat reads, the running filter, a guard per row, no
   const after = await getSession(api, session.id);
   expect(after.log).toHaveLength(1);
   expect(after.pauses).toHaveLength(1);
-  expect(after.playedScenes).toHaveLength(1);
 
   // The action endpoints of before are gone. Assembled from their segments:
   // a literal address here would read like one the app still uses.
@@ -1237,6 +1293,12 @@ test("the session resources: flat reads, the running filter, a guard per row, no
   expect((await api.fetch(old("session"))).status).toBe(404);
   expect((await post(old("session", "start"))).status).toBe(404);
   expect((await post(old("log"), { text: "Note" })).status).toBe(404);
+  // A session records no played scenes: whether a scene was played is its
+  // status.
+  expect(
+    (await post(`${sessionPath(api, session.id)}/played-scenes`, { sceneId: "lighthouse-arrival" }))
+      .status,
+  ).toBe(404);
 });
 
 // A note typed into a session that was ended elsewhere is refused, and the

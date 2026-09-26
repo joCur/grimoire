@@ -30,6 +30,13 @@ export const de = {
   "common.serverDown":
     "Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.",
 
+  // --- not-found view (components/NotFound.tsx) -----------------------------
+  "notFound.title": "Diese Seite gibt es nicht",
+  "notFound.body":
+    "Unter dieser Adresse liegt nichts. Vielleicht ist der Link vertippt, oder das Verlinkte wurde gelöscht.",
+  "notFound.toCampaign": "Zur Kapitelübersicht",
+  "notFound.toStart": "Zum Anfang",
+
   // --- language switch (campaign switcher menu) -----------------------------
   "language.heading": "Sprache",
   "language.de": "Deutsch",
@@ -96,8 +103,8 @@ export const de = {
   "session.page.log.empty": "In dieser Session wurde nichts notiert.",
   "session.page.pauses": "Pausen",
   "session.page.pauseRow": "{from} – {to} ({duration})",
-  "session.page.scenes": "Gespielte Szenen",
-  "session.page.scenes.empty": "Keine Szene als gespielt vermerkt.",
+  "session.page.scenes": "Szenen mit Notizen",
+  "session.page.scenes.empty": "In dieser Session wurde in keiner Szene notiert.",
 
   // --- create dialogs -------------------------------------------------------
   "create.failed": "Nicht angelegt — Server prüfen.",
@@ -473,9 +480,13 @@ export const de = {
   "live.nav.played": "Gespielt",
   "live.nav.playedGroup": "Gespielt {count}",
 
-  // The one step of the evening, under the open scene.
+  // The one step of the evening, under the open scene, and the box beside it
+  // that marks the scene being left as played.
   "live.next": "Nächste Szene: {title}",
-  "live.next.failed": "Die nächste Szene ließ sich nicht öffnen, weil die gespielte Szene nicht gespeichert wurde — Server prüfen.",
+  "live.next.played": "gespielt",
+  "live.next.changedElsewhere":
+    "Diese Szene wurde inzwischen anderswo geändert und ist neu geladen. Klicke noch einmal auf „Nächste Szene“, um sie als gespielt zu markieren.",
+  "live.next.failed": "Die nächste Szene ließ sich nicht öffnen, weil die Szene nicht als gespielt gespeichert wurde — Server prüfen.",
 
   "live.scene.none":
     "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",

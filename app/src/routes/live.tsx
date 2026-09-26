@@ -2,17 +2,18 @@
 // prototype: left the planned scenes and contingencies of the ACTIVE
 // chapter, center the selected scene through the same article pipeline as
 // the reading view, right the location and NPC cards plus the log panel and
-// the Schnellnotiz.
+// the quick note.
 //
 // The scenes stand in the order the DM arranged in the chapter overview
 // (decisions/scene-order) — this view moderates that order and never reorders it. Which
 // scene it opens on, and where the "next scene" step under the open one
 // leads, are both read out of that order (lib/scene-order.ts).
 //
-// The session on the server is the truth: every write answers the row it
-// wrote, and the "played" checkmark comes from the session's played scenes —
-// never faked client-side. A scene is recorded as played when the DM leaves
-// it with "Nächste Szene" after taking a note in it (session/NextSceneStep).
+// The server is the truth: every write answers the row it wrote, and whether
+// a scene was played is its STATUS — the checkmark and the played group
+// read it from the tree, never from client state. The DM marks the scene
+// being left as played with the box beside the next-scene step
+// (session/NextSceneStep); the status write is the scene's, handed in here.
 // WHICH session is running is the server's answer too (`?running=true`) — a
 // session that runs past midnight keeps running.
 //
@@ -23,7 +24,7 @@
 // Client state is exactly two things: the selected scene and which entity the
 // detail drawer shows. Aside cards therefore do NOT navigate here
 // — a click would leave the live route and take the selected scene and the
-// half-typed Schnellnotiz with it.
+// half-typed quick note with it.
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
@@ -48,8 +49,8 @@ import { SceneArticle } from "@/scene/SceneArticle";
 import { sceneHref } from "@/scene/scene-links";
 import { sceneQuery } from "@/scene/scene-query";
 import { isSceneDone } from "@/scene/scene-status";
+import { useMarkScenePlayed } from "@/scene/use-scene-status";
 import { NextSceneStep } from "@/session/NextSceneStep";
-import { playedSceneIds } from "@/session/played-scene-rule";
 import { SessionLog } from "@/session/SessionLog";
 import { SessionStart } from "@/session/SessionStart";
 import { useRunningSession } from "@/session/use-session";
@@ -118,8 +119,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // view moderates that order, it does not make one of its own (decisions/scene-order).
   const scenes = chapter?.scenes ?? [];
   // The scene STATUS splits the plan: `played`/`dropped` scenes
-  // drop out of "Geplant" into the collapsed "Gespielt" group below. The
-  // session checkmark is a different thing and stays on top of both.
+  // drop out of the planned group into the collapsed played group below.
   const nonContingency = scenes.filter((s) => s.type !== "contingency");
   const planned = nonContingency.filter((s) => !isSceneDone(s.status));
   const done = nonContingency.filter((s) => isSceneDone(s.status));
@@ -139,7 +139,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // untouched while the drawer opens and closes.
   const [drawerTarget, setDrawerTarget] = useState<OpenTarget>();
 
-  const playedIds = session.data === undefined || session.data === null ? [] : playedSceneIds(session.data);
+  const markPlayed = useMarkScenePlayed(campaign);
 
   // Only the tree decides whether a scene's `location` is an entity: the
   // format allows a free string there, and that must stay plain text instead
@@ -178,7 +178,6 @@ function LiveDesktop({ campaign }: { campaign: string }) {
               key={scene.id}
               scene={scene}
               active={scene.id === selected?.id}
-              played={playedIds.includes(scene.id)}
               onPick={() => setSelectedId(scene.id)}
             />
           ))}
@@ -199,7 +198,6 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                   key={scene.id}
                   scene={scene}
                   active={scene.id === selected?.id}
-                  played={playedIds.includes(scene.id)}
                   onPick={() => setSelectedId(scene.id)}
                 />
               ))}
@@ -210,7 +208,6 @@ function LiveDesktop({ campaign }: { campaign: string }) {
           <PlayedGroup
             scenes={done}
             selectedId={selected?.id}
-            playedIds={playedIds}
             onPick={setSelectedId}
           />
         )}
@@ -224,7 +221,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             // A `[[slug]]` in the scene text behaves like the aside cards
             // here: the click opens the DRAWER instead of navigating away
             // — the selected scene and the half-typed
-            // Schnellnotiz survive it.
+            // quick note survive it.
             <>
               <RefDrawerTarget onOpen={setDrawerTarget}>
                 {/* Keyed by the scene: a switch REMOUNTS the column instead of
@@ -235,11 +232,14 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                 <LiveScene key={selected.id} campaign={campaign} id={selected.id} />
               </RefDrawerTarget>
               {next !== undefined && (
+                // Keyed by the scene it leaves: the played box starts
+                // over in every scene.
                 <NextSceneStep
-                  campaign={campaign}
+                  key={selected.id}
                   session={session.data}
                   left={selected.id}
                   next={next}
+                  markPlayed={markPlayed}
                   onNext={setSelectedId}
                 />
               )}
@@ -305,12 +305,10 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 function PlayedGroup({
   scenes,
   selectedId,
-  playedIds,
   onPick,
 }: {
   scenes: SceneSummary[];
   selectedId: string | undefined;
-  playedIds: string[];
   onPick: (id: string) => void;
 }) {
   const { t, tNode } = useI18n();
@@ -341,7 +339,6 @@ function PlayedGroup({
               key={scene.id}
               scene={scene}
               active={scene.id === selectedId}
-              played={playedIds.includes(scene.id)}
               dimmed
               onPick={() => onPick(scene.id)}
             />
@@ -353,18 +350,16 @@ function PlayedGroup({
 }
 
 /** Left-nav row per the prototype: icon, brass left edge + darker bg when
- * active, played checkmark from the session's played scenes. `dimmed` is the "Gespielt"
- * group's quieter treatment — an active row stays readable. */
+ * active, a checkmark when the scene's status is `played`. `dimmed` is the
+ * played group's quieter treatment — an active row stays readable. */
 function SceneNavRow({
   scene,
   active,
-  played,
   dimmed = false,
   onPick,
 }: {
   scene: SceneSummary;
   active: boolean;
-  played: boolean;
   dimmed?: boolean;
   onPick: () => void;
 }) {
@@ -390,7 +385,7 @@ function SceneNavRow({
         className={cn("flex-none", active ? "text-primary" : "text-muted-foreground")}
       />
       <span className="min-w-0 flex-1 truncate">{scene.title}</span>
-      {played && (
+      {scene.status === "played" && (
         <>
           <Check aria-hidden size={13} className="flex-none text-success-text" />
           <span className="sr-only">{t("status.scene.played")}</span>

@@ -76,7 +76,6 @@ function reviewedSession(id: string): SessionSeed {
       // No scene: the source chip of this row stays bare.
       { id: "lights", at: "22:40", text: `${THREAD_TEXT} #thread`, reviewed: false },
     ],
-    playedScenes: [{ id: "arrival", sceneId: "lighthouse-arrival" }],
   };
 }
 
@@ -113,7 +112,6 @@ const PAST_MIDNIGHT = (() => {
     body: "",
     pauses: [],
     log: [{ id: "lights", at: "22:40", text: `${THREAD_TEXT} #thread`, reviewed: false }],
-    playedScenes: [{ id: "arrival", sceneId: "lighthouse-arrival" }],
   };
   return { id: yesterday, session };
 })();

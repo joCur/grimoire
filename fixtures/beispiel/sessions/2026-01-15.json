@@ -31,11 +31,5 @@
       "text": "Cliffhanger: Lichter in der Bucht gesichtet #thread",
       "reviewed": false
     }
-  ],
-  "playedScenes": [
-    {
-      "id": "ankunft",
-      "sceneId": "lighthouse-arrival"
-    }
   ]
 }

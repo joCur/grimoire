@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { LogEntry } from "@grimoire/shared/log-entry";
 import type { Session } from "@grimoire/shared/session";
+import { app } from "../src/server";
 import { dropStore, seedStore } from "./support/store";
 import {
   FIXTURE_SESSION,
@@ -75,9 +76,11 @@ describe("taking a note — POST …/sessions/:id/log", () => {
     ]);
   });
 
-  test("a note plays no scene: the played scenes have their own resource", async () => {
+  test("a note leaves its scene as it was: whether it was played is the scene's status", async () => {
+    const sceneUrl = "/api/campaigns/beispiel/scenes/lighthouse-arrival";
+    const before = await (await app.request(sceneUrl)).json();
     await note({ text: "Ankunft", sceneId: "lighthouse-arrival" }, new Date(2026, 7, 19, 21, 12));
-    expect((await readSession(session.id)).playedScenes).toEqual([]);
+    expect(await (await app.request(sceneUrl)).json()).toEqual(before);
   });
 
   test("a multi-line note becomes one line; an empty one is a 400", async () => {

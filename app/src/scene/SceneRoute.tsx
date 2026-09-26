@@ -29,9 +29,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { fetchTree } from "@/api";
+import { fetchTree, isNotFound } from "@/api";
 import { BodyEditAction } from "@/components/BodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
 
@@ -55,7 +56,7 @@ export function SceneRoute({
   const [editingId, setEditingId] = useState<string>();
   const [searchParams, setSearchParams] = useSearchParams();
   const wantsEdit = searchParams.get("edit") === "1";
-  const { data, isPending } = useQuery({
+  const { data, isPending, error } = useQuery({
     ...sceneQuery(campaign, id),
     enabled: campaign !== "" && id !== "",
   });
@@ -100,6 +101,7 @@ export function SceneRoute({
   // line then would unmount an open editor and take the DM's unsaved text
   // with it.
   if (data === undefined) {
+    if (isNotFound(error)) return <NotFound campaign={campaign} />;
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
         {t("reading.notLoadable")}

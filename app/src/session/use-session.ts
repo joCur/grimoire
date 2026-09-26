@@ -22,8 +22,6 @@ import { ApiError } from "@/api";
 
 import { createLogEntry } from "./log-entry-api";
 import { beginPause, endPause } from "./pause-api";
-import { leavesScenePlayed } from "./played-scene-rule";
-import { createPlayedScene } from "./played-scene-api";
 import { deleteSession, endSession, fetchSession, startSession } from "./session-api";
 import {
   putSession,
@@ -36,7 +34,6 @@ import {
   updateSession,
   withLogEntry,
   withPause,
-  withPlayedScene,
 } from "./session-query";
 import { openPause } from "./session-time";
 
@@ -213,30 +210,5 @@ export function useLogEntryCreate(campaign: string, sessionId: string) {
       createLogEntry(campaign, sessionId, note),
     onSuccess: (entry) =>
       updateSession(queryClient, campaign, sessionId, (session) => withLogEntry(session, entry)),
-  });
-}
-
-/**
- * "Nächste Szene": the DM leaves `left` for the next scene of the order. The
- * scene left counts as PLAYED when the session holds a note taken in it —
- * without one there is no sign it was played — and it is recorded only once
- * per session (./played-scene-rule.ts). The next scene opens once the write,
- * if there is one, has landed.
- */
-export function useNextScene(campaign: string, onNext: (next: string) => void) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ session, left }: { session: Session; left: string; next: string }) => {
-      if (!leavesScenePlayed(session, left)) return undefined;
-      return createPlayedScene(campaign, session.id, left);
-    },
-    onSuccess: (played, { session, next }) => {
-      if (played !== undefined) {
-        updateSession(queryClient, campaign, session.id, (current) =>
-          withPlayedScene(current, played),
-        );
-      }
-      onNext(next);
-    },
   });
 }

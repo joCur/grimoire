@@ -1,7 +1,7 @@
 // The session row: how it is found, which one runs, and the order of two.
 //
 // The session's own module (./sessions.ts) and the modules of its children
-// (./pauses.ts, ./log-entries.ts, ./played-scenes.ts) all look up the session
+// (./pauses.ts, ./log-entries.ts) all look up the session
 // a request names, and the campaign list (./campaigns.ts) orders the sessions
 // of a campaign the way the session list does — so these statements stand
 // here once, and nothing here renders or writes.
@@ -33,8 +33,8 @@ export function requireSessionRow(db: GrimoireDb, campaign: string, id: string):
 }
 
 /**
- * The session with this id, which has to be RUNNING: a log entry, a pause or
- * a played scene belongs to the evening that is still going on. 404 when the
+ * The session with this id, which has to be RUNNING: a log entry or a pause
+ * belongs to the evening that is still going on. 404 when the
  * campaign has no such session, 409 `session_ended` when it is ended — the
  * session exists, it just takes nothing new.
  */

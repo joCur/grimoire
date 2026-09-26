@@ -61,7 +61,11 @@ export const ERROR_CODES = [
   "chapter_required",
   /** The scene of a quick note (a session's log entry) names no scene. */
   "log_scene_unknown",
-  /** The scene of a played scene — the session's next step — names no scene. */
+  /**
+   * NO LONGER SENT. It was the 400 for a session's played scene that named no
+   * scene; whether a scene was played is its `status` alone, and a session
+   * records no played scenes. The string stays because codes are APPEND-ONLY.
+   */
   "played_scene_unknown",
   /**
    * NOT SENT: the 400 for a whole-glossary write that names one term twice.
@@ -151,8 +155,8 @@ export const ERROR_CODES = [
    */
   "glossary_term_taken",
   /**
-   * 409, a write that needs a running session — a log entry, a pause, a
-   * played scene — on one that is ended. Nothing is written. `{ id }`
+   * 409, a write that needs a running session — a log entry or a pause — on
+   * one that is ended. Nothing is written. `{ id }`
    */
   "session_ended",
 ] as const;

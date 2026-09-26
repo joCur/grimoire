@@ -77,7 +77,6 @@ describe("GET /api/campaigns", () => {
           body: "",
           pauses: [],
           log: [],
-          playedScenes: [],
         })),
       };
     }
@@ -171,8 +170,8 @@ describe("GET /api/campaigns/:campaign/tree", () => {
     expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
     // The tree's item for a session is when it ran, and nothing of its
-    // children: the pauses, the log and the played scenes come with the
-    // session itself (GET /sessions/:id) — the tree is a navigation index.
+    // children: the pauses and the log come with the session itself
+    // (GET /sessions/:id) — the tree is a navigation index.
     expect(t.sessions[0]).toEqual({
       id: "2026-01-15",
       started: "2026-01-15T19:30:00",

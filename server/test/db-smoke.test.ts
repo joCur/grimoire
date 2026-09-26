@@ -75,7 +75,6 @@ test("migrations create every table of the schema plus the FTS index", async () 
       "sessions",
       "pauses",
       "log_entries",
-      "played_scenes",
       "ideas",
       "threads",
       "glossary_terms",
