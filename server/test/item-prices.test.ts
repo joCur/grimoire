@@ -4,7 +4,8 @@
 //
 // Watched hardest:
 //
-//   * a fresh instance has the guide's prices without a seed;
+//   * a fresh instance has the prices without a seed: the guide's, and the
+//     SRD's rarity value for the items the guide has no price for;
 //   * an item price answers every field flat;
 //   * every campaign's search finds an item, and names it as an item price.
 
@@ -25,14 +26,15 @@ afterEach(() => {
 });
 
 describe("reading item prices", () => {
-  test("an empty instance has every price of the guide, sorted by name", async () => {
+  test("an empty instance has every price of both sources, sorted by name", async () => {
     await emptyStore();
     const prices = await json<ItemPrice[]>("/api/item-prices");
-    expect(prices.length).toBe(307);
+    expect(prices.filter((price) => price.source === "saidoro").length).toBe(307);
+    expect(prices.filter((price) => price.source === "srd").length).toBe(41);
     const names = prices.map((price) => price.name);
     expect(names).toEqual([...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
     expect(new Set(prices.map((price) => price.list))).toEqual(
-      new Set(["consumable", "combat", "noncombat", "summoning", "gamechanging"]),
+      new Set(["consumable", "combat", "noncombat", "summoning", "gamechanging", null]),
     );
   });
 
@@ -42,7 +44,9 @@ describe("reading item prices", () => {
       id: "potion-of-healing",
       name: "Potion of Healing",
       priceGp: 50,
+      source: "saidoro",
       list: "consumable",
+      rarity: null,
       note: "",
       rev: 1,
     });
@@ -50,6 +54,25 @@ describe("reading item prices", () => {
       name: "Arrow of Slaying",
       priceGp: 600,
       note: "each",
+    });
+  });
+
+  test("an item the guide has no price for carries the SRD value of its rarity", async () => {
+    await emptyStore();
+    expect(await json<ItemPrice>("/api/item-prices/staff-of-the-magi")).toEqual({
+      id: "staff-of-the-magi",
+      name: "Staff of the Magi",
+      priceGp: 200000,
+      source: "srd",
+      list: null,
+      rarity: "legendary",
+      note: "",
+      rev: 1,
+    });
+    // A consumable is worth half its rarity's value.
+    expect(await json<ItemPrice>("/api/item-prices/potion-of-giant-strength-hill")).toMatchObject({
+      priceGp: 200,
+      rarity: "uncommon",
     });
   });
 

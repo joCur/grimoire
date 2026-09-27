@@ -1,17 +1,23 @@
 // "/campaigns/:campaign/item-prices" — what a magic item costs, from
-// Saidoro's "Sane Magic Item Prices".
+// Saidoro's "Sane Magic Item Prices" and, for the items it has no price for,
+// the SRD 5.2's value for the item's rarity.
 //
 // A REFERENCE the DM looks up at the table while the group haggles: a search
 // field, the guide's five lists as a filter, name or price as the order, and
 // one line per item with its price. Nothing here writes — item prices are
 // reference data of the instance (decisions/reference-data), the same on the
-// page of every campaign. The guide is named as the source on the page and
-// under every item.
+// page of every campaign. Both sources are named on the page, with the SRD's
+// license statement, and every item names the one its price comes from.
 //
 // `?item=<id>` is where a ⌘K hit leads: that item stands marked and scrolled
 // into view.
 
-import { ITEM_PRICE_LISTS, ITEM_PRICE_SOURCE, type ItemPrice } from "@grimoire/shared/item-price";
+import {
+  ITEM_PRICE_LISTS,
+  ITEM_PRICE_SOURCE,
+  type ItemPrice,
+  type ItemRarity,
+} from "@grimoire/shared/item-price";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Ref } from "react";
@@ -36,7 +42,19 @@ const LIST_LABELS: Record<ItemPriceListFilter, MessageKey> = {
   noncombat: "itemPrices.list.noncombat",
   summoning: "itemPrices.list.summoning",
   gamechanging: "itemPrices.list.gamechanging",
+  rarity: "itemPrices.list.rarity",
 };
+
+const RARITY_LABELS: Record<ItemRarity, MessageKey> = {
+  common: "itemPrices.rarity.common",
+  uncommon: "itemPrices.rarity.uncommon",
+  rare: "itemPrices.rarity.rare",
+  "very-rare": "itemPrices.rarity.veryRare",
+  legendary: "itemPrices.rarity.legendary",
+};
+
+const SOURCE_LINK =
+  "rounded text-foreground underline underline-offset-2 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 
 const SORT_LABELS: Record<ItemPriceSort, MessageKey> = {
   name: "itemPrices.sort.name",
@@ -79,16 +97,27 @@ export function ItemPricesRoute() {
         </p>
         <p className="mb-5 text-[13px] leading-[1.6] text-body-secondary" data-testid="item-prices-source">
           {tNode("itemPrices.source", {
-            author: ITEM_PRICE_SOURCE.author,
+            author: ITEM_PRICE_SOURCE.saidoro.author,
             title: (
               <a
-                key="source"
-                href={ITEM_PRICE_SOURCE.url}
+                key="saidoro"
+                href={ITEM_PRICE_SOURCE.saidoro.url}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded text-foreground underline underline-offset-2 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className={SOURCE_LINK}
               >
-                {ITEM_PRICE_SOURCE.title}
+                {ITEM_PRICE_SOURCE.saidoro.title}
+              </a>
+            ),
+            srd: (
+              <a
+                key="srd"
+                href={ITEM_PRICE_SOURCE.srd.url}
+                target="_blank"
+                rel="noreferrer"
+                className={SOURCE_LINK}
+              >
+                {ITEM_PRICE_SOURCE.srd.title}
               </a>
             ),
           })}
@@ -115,7 +144,7 @@ export function ItemPricesRoute() {
           <ToggleGroup
             label={t("itemPrices.list.aria")}
             testId="item-prices-lists"
-            options={["all", ...ITEM_PRICE_LISTS] as const}
+            options={["all", ...ITEM_PRICE_LISTS, "rarity"] as const}
             value={list}
             onChange={setList}
             labelOf={(option) => t(LIST_LABELS[option])}
@@ -145,12 +174,16 @@ export function ItemPricesRoute() {
             ))}
           </ul>
         )}
+        {/* The statement the SRD's license asks for, in its own words. */}
+        <p className="mt-8 max-w-[62ch] text-[11.5px] leading-[1.6] text-muted-foreground" lang="en">
+          {ITEM_PRICE_SOURCE.srd.attribution}
+        </p>
       </div>
     </>
   );
 }
 
-/** One item: its name and note, its list and the source, and its price. */
+/** One item: its name and note, where its price comes from, and the price. */
 function ItemPriceRow({
   item,
   marked,
@@ -181,10 +214,15 @@ function ItemPriceRow({
           )}
         </p>
         <p className="text-[12px] leading-[1.5] text-muted-foreground">
-          {t("itemPrices.rowSource", {
-            list: t(LIST_LABELS[item.list]),
-            author: ITEM_PRICE_SOURCE.author,
-          })}
+          {item.list !== null
+            ? t("itemPrices.rowSource", {
+                list: t(LIST_LABELS[item.list]),
+                author: ITEM_PRICE_SOURCE.saidoro.author,
+              })
+            : t("itemPrices.rowRarity", {
+                rarity: t(RARITY_LABELS[item.rarity ?? "common"]),
+                title: ITEM_PRICE_SOURCE.srd.title,
+              })}
         </p>
       </div>
       <p

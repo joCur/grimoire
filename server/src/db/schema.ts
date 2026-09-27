@@ -77,7 +77,7 @@ import {
 import { NPC_STATUSES } from "@grimoire/shared/npc";
 import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
 import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
-import { ITEM_PRICE_LISTS } from "@grimoire/shared/item-price";
+import { ITEM_PRICE_LISTS, ITEM_PRICE_SOURCES, ITEM_RARITIES } from "@grimoire/shared/item-price";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -883,11 +883,14 @@ export const generateJobs = sqliteTable(
 // --- item prices --------------------------------------------------------------
 
 /**
- * One ITEM PRICE (decisions/resources): what a magic item costs in Saidoro's
- * "Sane Magic Item Prices". Reference data of the INSTANCE, so no campaign
+ * One ITEM PRICE (decisions/resources): what a magic item costs — Saidoro's
+ * "Sane Magic Item Prices" where it prices the item, otherwise the SRD 5.2's
+ * value for the item's rarity. Reference data of the INSTANCE, so no campaign
  * column (decisions/reference-data): the rows are written by the migration
  * that ships them and read by every campaign. `id` is the kebab slug of the
- * name; `note` is empty where the guide gives none.
+ * name; `list` is the guide's list and NULL for an SRD row, `rarity` the
+ * rarity an SRD row is priced by and NULL for a guide row; `note` is empty
+ * where the source gives none.
  */
 export const itemPrices = sqliteTable(
   "item_prices",
@@ -895,11 +898,25 @@ export const itemPrices = sqliteTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     priceGp: integer("price_gp").notNull(),
-    list: text("list").notNull(),
+    list: text("list"),
+    rarity: text("rarity"),
+    source: text("source").notNull(),
     note: text("note").notNull().default(""),
     rev: revColumn(),
   },
-  (t) => [check("item_prices_list_check", oneOf("list", ITEM_PRICE_LISTS))],
+  () => [
+    check("item_prices_list_check", oneOf("list", ITEM_PRICE_LISTS, true)),
+    check("item_prices_rarity_check", oneOf("rarity", ITEM_RARITIES, true)),
+    check("item_prices_source_check", oneOf("source", ITEM_PRICE_SOURCES)),
+    // A guide row stands in a list, an SRD row is priced by its rarity.
+    check(
+      "item_prices_source_fields_check",
+      sql.raw(
+        "(`source` = 'saidoro' and `list` is not null and `rarity` is null) or " +
+          "(`source` = 'srd' and `rarity` is not null and `list` is null)",
+      ),
+    ),
+  ],
 );
 
 // --- bookkeeping ------------------------------------------------------------

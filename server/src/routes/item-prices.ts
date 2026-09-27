@@ -2,10 +2,11 @@
 //
 // AN ITEM PRICE IS ITS OWN RESOURCE (decisions/resources): `/item-prices` and
 // `/item-prices/:id`, answering the `ItemPrice` type —
-// `{ id, name, priceGp, list, note, rev }`. Item prices are reference data of
-// the instance (decisions/reference-data), so they hang under no campaign and
-// have no write: the list is Saidoro's "Sane Magic Item Prices", shipped with
-// the app.
+// `{ id, name, priceGp, source, list, rarity, note, rev }`. Item prices are
+// reference data of the instance (decisions/reference-data), so they hang
+// under no campaign and have no write: Saidoro's "Sane Magic Item Prices" and,
+// for the items it has no price for, the SRD 5.2's value for the rarity,
+// shipped with the app.
 
 import { Hono } from "hono";
 import { listItemPrices, readItemPrice } from "../store/item-prices";
@@ -13,7 +14,7 @@ import { listItemPrices, readItemPrice } from "../store/item-prices";
 export const itemPriceRoutes = new Hono();
 
 // GET /api/item-prices -> ItemPrice[]
-// Every item price of the guide, sorted by name. The page searches, filters
+// Every item price, sorted by name. The page searches, filters
 // and sorts them itself.
 itemPriceRoutes.get("/item-prices", async (c) => c.json(await listItemPrices()));
 

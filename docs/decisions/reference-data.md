@@ -18,6 +18,10 @@ magic item costs.
   additions are campaign content and belong in the campaign.
 - **It names its source.** Every page and every row of reference data says
   where it comes from, with a link, as the source asks to be credited.
+- **One row per thing, whatever the number of sources.** Where several
+  sources cover the same thing, the most specific one gives the value and a
+  coarser one only fills the gaps; the row names the source its value comes
+  from, so the DM can tell a precise value from a rough one.
 - **The search finds it from every campaign.** Its index rows carry no
   campaign, and a hit names its entity like every other (`kind` and `id`).
 - **Only sources shared for use.** A source goes in only if its author shares

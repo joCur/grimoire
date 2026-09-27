@@ -342,7 +342,8 @@ export const en: Messages = {
   "itemPrices.title": "Magic item prices",
   "itemPrices.lead":
     "What a magic item costs when the group wants to buy or sell one. The names stay as the source writes them.",
-  "itemPrices.source": "Source: {author}, {title}",
+  "itemPrices.source":
+    "The prices come from {title} by {author}. Where {author} has no price for an item, it shows the value of its rarity from the {srd}.",
   "itemPrices.search": "Search an item",
   "itemPrices.list.aria": "List",
   "itemPrices.list.all": "All",
@@ -351,12 +352,19 @@ export const en: Messages = {
   "itemPrices.list.noncombat": "Noncombat",
   "itemPrices.list.summoning": "Summoning",
   "itemPrices.list.gamechanging": "Gamechanging",
+  "itemPrices.list.rarity": "Value by rarity",
   "itemPrices.sort.aria": "Order",
   "itemPrices.sort.name": "By name",
   "itemPrices.sort.price": "By price",
   "itemPrices.loading": "Loading prices …",
   "itemPrices.noMatch": "No item matches the search.",
   "itemPrices.rowSource": "{list} · priced by {author}",
+  "itemPrices.rowRarity": "Value for {rarity} · {title}",
+  "itemPrices.rarity.common": "common",
+  "itemPrices.rarity.uncommon": "uncommon",
+  "itemPrices.rarity.rare": "rare",
+  "itemPrices.rarity.veryRare": "very rare",
+  "itemPrices.rarity.legendary": "legendary",
   "itemPrices.price": "{price, number} gp",
 
 

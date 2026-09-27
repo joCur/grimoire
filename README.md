@@ -508,20 +508,25 @@ schema in `shared/src/glossary-term.ts`, [decisions/resources](docs/decisions/re
 
 ### Item price
 
-An item price is what one magic item costs in Saidoro's "Sane Magic Item
-Prices" ([the guide](https://www.giantitp.com/forums/showthread.php?424243)),
-its own resource with its own type (`ItemPrice`, from the zod schema in
-`shared/src/item-price.ts`). It is reference data of the instance, not of a
-campaign ([decisions/reference-data](docs/decisions/reference-data.md)): the
-app ships the guide's items, a migration writes them, and nothing changes
-them. `GET /api/item-prices/<id>` responds with it:
+An item price is what one magic item costs, its own resource with its own
+type (`ItemPrice`, from the zod schema in `shared/src/item-price.ts`). Two
+sources price the items: Saidoro's "Sane Magic Item Prices"
+([the guide](https://www.giantitp.com/forums/showthread.php?424243)) prices
+each item on its own, and every magic item of the
+[SRD 5.2](https://www.dndbeyond.com/srd) (CC BY 4.0) the guide has no price
+for gets the SRD's value for its rarity, halved for a consumable. It is
+reference data of the instance, not of a campaign
+([decisions/reference-data](docs/decisions/reference-data.md)): the app ships
+the items, a migration writes them, and nothing changes them. `GET /api/item-prices/<id>` responds with it:
 
 ```json
 {
   "id": "arrow-of-slaying",
   "name": "Arrow of Slaying",
   "priceGp": 600,
+  "source": "saidoro",
   "list": "consumable",
+  "rarity": null,
   "note": "each",
   "rev": 1
 }
@@ -530,15 +535,18 @@ them. `GET /api/item-prices/<id>` responds with it:
 | Field | Meaning |
 | ----- | ------- |
 | `id` | stable, the slug of the name |
-| `name` | the item as the guide names it, in English |
+| `name` | the item as its source names it, in English |
 | `priceGp` | the price in gold pieces |
-| `list` | the guide's list: `consumable`, `combat`, `noncombat`, `summoning` or `gamechanging` |
-| `note` | what the price counts where the guide says so (`each`, `per dose`); otherwise empty |
+| `source` | `saidoro` (the guide's price) or `srd` (the SRD's value for the rarity) |
+| `list` | the guide's list: `consumable`, `combat`, `noncombat`, `summoning` or `gamechanging`; `null` for an SRD price |
+| `rarity` | the rarity an SRD price stands for: `common`, `uncommon`, `rare`, `very-rare` or `legendary`; `null` for a guide price |
+| `note` | what the price counts where the source says so (`each`, `per dose`, `without the base item`); otherwise empty |
 | `rev` | row version |
 
 - `GET /api/item-prices` responds with every item, sorted by name. The
-  price page searches, filters by list and sorts by name or price, and names
-  the guide as the source.
+  price page searches, filters by list (or by the items priced by their
+  rarity) and sorts by name or price; it names both sources, with the SRD's
+  license statement, and every item names the one its price comes from.
 - The search of every campaign finds an item by name; the hit names itself
   with `kind: "item-price"` and its `id` and opens the price page at that
   item.

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "934898e9-5d18-41d3-9715-212030c76c17",
+  "id": "996e731b-e03a-41c3-a3f2-45a3470cc2c2",
   "prevId": "c68b751a-2770-4335-9844-58a755c3267a",
   "tables": {
     "campaigns": {
@@ -579,6 +579,20 @@
           "name": "list",
           "type": "text",
           "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rarity": {
+          "name": "rarity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -606,7 +620,19 @@
       "checkConstraints": {
         "item_prices_list_check": {
           "name": "item_prices_list_check",
-          "value": "`list` in ('consumable', 'combat', 'noncombat', 'summoning', 'gamechanging')"
+          "value": "`list` is null or `list` in ('consumable', 'combat', 'noncombat', 'summoning', 'gamechanging')"
+        },
+        "item_prices_rarity_check": {
+          "name": "item_prices_rarity_check",
+          "value": "`rarity` is null or `rarity` in ('common', 'uncommon', 'rare', 'very-rare', 'legendary')"
+        },
+        "item_prices_source_check": {
+          "name": "item_prices_source_check",
+          "value": "`source` in ('saidoro', 'srd')"
+        },
+        "item_prices_source_fields_check": {
+          "name": "item_prices_source_fields_check",
+          "value": "(`source` = 'saidoro' and `list` is not null and `rarity` is null) or (`source` = 'srd' and `rarity` is not null and `list` is null)"
         }
       }
     },

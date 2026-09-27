@@ -15,13 +15,15 @@ import { getDb } from "./handle";
 /** One stored item-price row. */
 type ItemPriceRow = typeof itemPrices.$inferSelect;
 
-/** The item price of a row: every field flat, the list checked against the schema. */
+/** The item price of a row: every field flat, the closed values checked against the schema. */
 function renderItemPrice(row: ItemPriceRow): ItemPrice {
   return itemPriceSchema.parse({
     id: row.id,
     name: row.name,
     priceGp: row.priceGp,
+    source: row.source,
     list: row.list,
+    rarity: row.rarity,
     note: row.note,
     rev: row.rev,
   });

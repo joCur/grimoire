@@ -391,7 +391,8 @@ export const de = {
   "itemPrices.title": "Preise magischer Gegenstände",
   "itemPrices.lead":
     "Was ein magischer Gegenstand kostet, wenn die Gruppe kaufen oder verkaufen will. Die Namen stehen auf Englisch wie in der Quelle.",
-  "itemPrices.source": "Quelle: {author}, {title}",
+  "itemPrices.source":
+    "Die Preise stammen aus {title} von {author}. Hat {author} für einen Gegenstand keinen Preis, steht dort der Richtwert seiner Seltenheit aus dem {srd}.",
   "itemPrices.search": "Gegenstand suchen",
   "itemPrices.list.aria": "Liste",
   "itemPrices.list.all": "Alle",
@@ -400,12 +401,19 @@ export const de = {
   "itemPrices.list.noncombat": "Abseits des Kampfes",
   "itemPrices.list.summoning": "Beschwörung",
   "itemPrices.list.gamechanging": "Weltverändernd",
+  "itemPrices.list.rarity": "Richtwert nach Seltenheit",
   "itemPrices.sort.aria": "Sortierung",
   "itemPrices.sort.name": "Nach Name",
   "itemPrices.sort.price": "Nach Preis",
   "itemPrices.loading": "Lade Preise …",
   "itemPrices.noMatch": "Kein Gegenstand passt zur Suche.",
   "itemPrices.rowSource": "{list} · Preis nach {author}",
+  "itemPrices.rowRarity": "Richtwert für {rarity} · {title}",
+  "itemPrices.rarity.common": "gewöhnlich",
+  "itemPrices.rarity.uncommon": "ungewöhnlich",
+  "itemPrices.rarity.rare": "selten",
+  "itemPrices.rarity.veryRare": "sehr selten",
+  "itemPrices.rarity.legendary": "legendär",
   "itemPrices.price": "{price, number} gp",
 
 

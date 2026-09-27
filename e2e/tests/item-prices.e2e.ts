@@ -3,7 +3,9 @@
 //
 // Item prices are reference data of the instance (decisions/reference-data):
 // the migration writes them, so the example campaign seeds none and the page
-// has them all the same. The page names its source, and every item does.
+// has them all the same. The page names both sources — Saidoro's guide and,
+// for the items it has no price for, the SRD 5.2's rarity value — and every
+// item names the one its price comes from.
 
 import type { Page } from "@playwright/test";
 
@@ -39,10 +41,11 @@ test("the campaign menu opens the prices, which search, filter by list and sort 
   );
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("itemPrices.title"));
 
-  // The whole guide, sorted by name; the source is named with its link.
-  await expect(rows(page)).toHaveCount(307);
-  const source = page.getByTestId("item-prices-source").getByRole("link");
-  await expect(source).toHaveAttribute("href", /giantitp\.com/);
+  // Both sources, sorted by name; each source is named with its link.
+  await expect(rows(page)).toHaveCount(348);
+  const sources = page.getByTestId("item-prices-source").getByRole("link");
+  await expect(sources.first()).toHaveAttribute("href", /giantitp\.com/);
+  await expect(sources.last()).toHaveAttribute("href", /dndbeyond\.com\/srd/);
   await expect(rows(page).first()).toContainText("Saidoro");
 
   // Search: every word of the name, in any order.
@@ -70,6 +73,12 @@ test("the campaign menu opens the prices, which search, filter by list and sort 
   await page.getByTestId("item-prices-search").fill("potion");
   await expect(rows(page)).toHaveCount(0);
   await expect(page.getByText(ui("itemPrices.noMatch"))).toBeVisible();
+
+  // The items priced by their rarity: those the guide leaves out, from the SRD.
+  await page.getByTestId("item-prices-search").fill("staff magi");
+  await toggle(page, "item-prices-lists", "rarity").click();
+  await expect.poll(() => rowIds(page)).toEqual(["staff-of-the-magi"]);
+  await expect(rows(page).first()).toContainText(ui("itemPrices.rarity.legendary"));
 });
 
 test.describe("on the phone", () => {

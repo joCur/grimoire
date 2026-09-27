@@ -477,10 +477,11 @@ The paths:
     390px
 12. Item prices (decisions/reference-data): the campaign menu opens
     `/campaigns/:id/item-prices`, which lists every price of Saidoro's "Sane
-    Magic Item Prices" (`GET /api/item-prices`, written by the migration, no
-    seed) and names the guide as its source with a link; searching an item,
-    filtering by list and sorting by price narrow and order the list. The
-    page fits 390px
+    Magic Item Prices" and, for the items it has none for, the SRD 5.2's
+    value for the rarity (`GET /api/item-prices`, written by the migration,
+    no seed), and names both sources with a link; searching an item,
+    filtering by list or by rarity value and sorting by price narrow and
+    order the list. The page fits 390px
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same
