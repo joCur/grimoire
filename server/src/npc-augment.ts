@@ -49,7 +49,7 @@ import { patchNpc, readNpc } from "./store/npcs";
 const CORRECTION_TAIL = "den vollständigen ergänzten NPC enthalten";
 
 /** The section of the npc prompt that describes the npc's fields. */
-const NPC_FORMAT_HEADING = "## Die Felder des NPC";
+export const NPC_FORMAT_HEADING = "## Die Felder des NPC";
 
 /** An npc without its guard — what the prompt shows and the proposal compares. */
 function withoutGuard(npc: Npc): NpcProposal {

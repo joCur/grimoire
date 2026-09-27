@@ -11,6 +11,7 @@
 // not compile.
 
 import { z } from "zod";
+import { patchReplySchema } from "./patch-reply";
 
 /**
  * A location, exactly as `GET /api/campaigns/:c/locations/:id` answers it:
@@ -100,6 +101,17 @@ export const locationReplySchema = locationProposalSchema.extend({
 
 export type LocationReplyObject = z.infer<typeof locationReplySchema>;
 
+/** The location in its reply form, `warnings` aside — how a prompt shows it. */
+export type LocationReplyFields = Omit<LocationReplyObject, "warnings">;
+
+/**
+ * The reply of a PATCH call on a proposed location (./patch-reply.ts): a
+ * `set` takes any field of the location's reply but the id and `body`.
+ */
+export const locationPatchReplySchema = patchReplySchema(
+  locationReplySchema.omit({ id: true, body: true, warnings: true }),
+);
+
 /**
  * A location reply as the proposal it stands for, the one conversion every
  * run uses: the location without its guard — an optional field the model
@@ -120,4 +132,39 @@ export function locationFromReply(reply: LocationReplyObject): {
     },
     warnings,
   };
+}
+
+/**
+ * A location in the reply form, `warnings` aside — the reverse of
+ * `locationFromReply`: an absent optional field is `null`. A prompt shows the
+ * location this way, so the model reads it in the very shape it answers in.
+ */
+export function locationToReply(location: LocationProposal): LocationReplyFields {
+  return {
+    id: location.id,
+    name: location.name,
+    chapter: location.chapter ?? null,
+    roll20Page: location.roll20Page ?? null,
+    atmosphere: location.atmosphere ?? null,
+    body: location.body,
+  };
+}
+
+/**
+ * A change applied to a location proposal: a named field replaces the value,
+ * `null` clears an optional one, and a field the change leaves out keeps the
+ * proposal's value. What a review edit does to a proposed location before it
+ * is written.
+ */
+export function withLocationChange(
+  location: LocationProposal,
+  change: LocationChange,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...location };
+  for (const [key, value] of Object.entries(change)) {
+    if (value === undefined) continue;
+    if (value === null) delete next[key];
+    else next[key] = value;
+  }
+  return next;
 }

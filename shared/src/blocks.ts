@@ -1,6 +1,8 @@
-// The block model of the Block-Composer (phase 1): parse a markdown BODY (the
-// same string the API answers as `body`) into a flat-ish list of editable
-// blocks and serialize it back.
+// The block model of a markdown BODY (the same string the API answers as
+// `body`): parse it into a flat-ish list of blocks and serialize it back. The
+// app's Block-Composer edits with it, the augment review compares with it, and
+// the server patches a generator proposal with it (./body-patch.ts) — one
+// reading of a body for all of them.
 //
 // THE invariant, enforced by blocks.test.ts against every fixture body:
 //
@@ -23,20 +25,11 @@
 //
 // No react, no query, no API imports — pure library, unit-testable.
 
-import type { CalloutKind } from "@grimoire/shared/callouts";
-
-import type { Translate } from "@/i18n";
-
-// The format's own vocabulary and predicates — shared with the renderer so the
-// composer can never model a text differently than the reading view shows
-// it (app/src/markdown/grammar.ts).
-import {
-  CALLOUT_LABEL_KEYS,
-  CALLOUT_MARKER,
-  endsIfSection,
-  ifSectionCondition,
-  isCalloutKind,
-} from "@/markdown/grammar";
+import type { CalloutKind } from "./callouts";
+// The format's own vocabulary and predicates — shared with the renderer so
+// the block model can never read a text differently than the reading view
+// shows it.
+import { CALLOUT_MARKER, endsIfSection, ifSectionCondition, isCalloutKind } from "./grammar";
 
 // --- the model ---------------------------------------------------------------
 
@@ -101,7 +94,7 @@ export interface CalloutBlock extends BlockCommon {
 
 /**
  * A `## If: <condition>` section: the heading plus everything up to the next
- * heading that ends it (grammar.ts, endsIfSection) or the end of the body —
+ * heading that ends it (./grammar.ts, endsIfSection) or the end of the body —
  * exactly the grouping the renderer collapses into one `<details>`
  * (remark-grimoire, transformIfSections).
  * Sections never nest: a second `## If:` ends the first one.
@@ -230,7 +223,7 @@ function headingOf(text: string): HeadingInfo | null {
 
 /**
  * The condition of a `## If: …` heading, or null for any other heading — the
- * renderer's own predicate (grammar.ts), so a heading that collapses into a
+ * renderer's own predicate (./grammar.ts), so a heading that collapses into a
  * `<details>` in the reading view becomes a section card here as well.
  */
 function ifConditionOf(heading: HeadingInfo): string | null {
@@ -241,7 +234,7 @@ function ifConditionOf(heading: HeadingInfo): string | null {
  * Does this markdown contain a line the parser would read as a heading that
  * ENDS an `## If:` section? The question the composer has to ask about every
  * child of a section: a `##` typed into a child pulls that child — and
- * everything under it — out of the branch on the next parse (lib/composer.ts,
+ * everything under it — out of the branch on the next parse (app/src/lib/composer.ts,
  * composerIssues).
  *
  * Uses the parser's own reading, which is what makes it trustworthy: a `##`
@@ -368,7 +361,7 @@ export function parseBlocks(body: string): SceneBlock[] {
 /**
  * Scan blocks from `from`. Inside an `## If:` section the scan returns as soon
  * as a heading ENDS the section — literally the renderer's own predicate
- * (grammar.ts, endsIfSection; remark-grimoire uses it for the same boundary).
+ * (./grammar.ts, endsIfSection; remark-grimoire uses it for the same boundary).
  */
 function scan(lines: Line[], from: number, inIfSection: boolean): [SceneBlock[], number] {
   const blocks: SceneBlock[] = [];
@@ -522,8 +515,7 @@ interface Unit {
  * trailing newline, because every body in the data set ends with exactly one.
  *
  * Two rules about EMPTINESS, both of them saying that the body gets what
- * the DM meant,
- * the composer keeps what the DM is working on":
+ * the DM meant while the composer keeps what the DM is working on:
  *
  *   * An edited or constructed block that renders to NOTHING contributes
  *     nothing at all — not even its separator. The card stays on screen (it is
@@ -631,7 +623,7 @@ function dominantEol(units: Unit[]): string {
  * The markdown one block stands for: its verbatim `source` while it is
  * untouched, otherwise what its fields render to. The serializer's own reading
  * of a block, exported because the composer's validation has to ask the same
- * question (lib/composer.ts, composerIssues).
+ * question (app/src/lib/composer.ts, composerIssues).
  */
 export function blockMarkdown(block: SceneBlock): string {
   return block.source ?? renderBlock(block);
@@ -851,8 +843,8 @@ export function withChildren(block: IfSectionBlock, children: SceneBlock[]): IfS
 // where it is. Moving the first block must not drag the leading blank line
 // along, deleting the last block must not leave its trailing blank line behind,
 // and a block appended after a `\n`-only gap must get its blank line — which is
-// exactly what these three do. Phase 2 should use them instead of splicing
-// arrays by hand.
+// exactly what these three do. Every structural edit goes through them
+// instead of splicing arrays by hand.
 
 interface Scaffold {
   /** Blocks stripped of lead/gap, in list order. */
@@ -926,32 +918,4 @@ export function moveBlock(blocks: SceneBlock[], from: number, to: number): Scene
     terminator,
     lead,
   });
-}
-
-// --- labels ------------------------------------------------------------------
-
-// The UI labels of the block types. The six callout names are the format's own
-// (grammar.ts, CALLOUT_LABEL_KEYS — the words the reading view shows); only the
-// composer's four structural names are added here. The words live in the
-// catalog and the translator is PASSED IN: this module must not
-// decide which language the UI is in (CLAUDE.md/i18n/index.ts).
-
-/** Label of one callout kind — for a "new block" picker, where there is no block yet. */
-export function calloutLabel(kind: CalloutKind, t: Translate): string {
-  return t(CALLOUT_LABEL_KEYS[kind]);
-}
-
-export function blockLabel(block: SceneBlock, t: Translate): string {
-  switch (block.type) {
-    case "callout":
-      return t(CALLOUT_LABEL_KEYS[block.kind]);
-    case "ifSection":
-      return t("composer.blockType.ifSection");
-    case "heading":
-      return t("composer.blockType.heading");
-    case "text":
-      return t("composer.blockType.text");
-    default:
-      return t("composer.blockType.markdown");
-  }
 }

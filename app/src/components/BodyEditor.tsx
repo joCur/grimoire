@@ -14,7 +14,7 @@
 //
 // Switching between them is lossless by construction: the draft is the
 // discriminated union of lib/composer.ts, and the switch runs the body through
-// serializeBlocks/parseBlocks, which lib/blocks.test.ts proves byte-identical
+// serializeBlocks/parseBlocks, which shared/test/blocks.test.ts proves byte-identical
 // over every fixture body. Saving works from either face — the edit mode only
 // ever sees `draftBody(draft)`.
 //

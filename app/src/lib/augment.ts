@@ -4,7 +4,7 @@
 //
 //   DECISION UNIT = the BLOCK. The proposal arrives as two whole bodies
 //   (current + proposed) and is cut here into the block composer's own blocks
-//   (lib/blocks.ts) — paragraph, callout, `## If:` section, heading, raw. The
+//   (@grimoire/shared/blocks) — paragraph, callout, `## If:` section, heading, raw. The
 //   DM accepts or keeps each one; nothing else is a choice.
 //
 //   VISIBILITY = the WORD. Inside a CHANGED block only the words that
@@ -22,7 +22,7 @@
 //
 // Pure library: no react, no query, no API. The serialization back into a
 // body goes through `serializeBlocks`, so an accepted-nothing review produces
-// the byte-identical original (blocks.ts' round-trip invariant).
+// the byte-identical original (the block model's round-trip invariant).
 
 import {
   blockAtLine,
@@ -31,7 +31,7 @@ import {
   parseBlocks,
   serializeBlocks,
   type SceneBlock,
-} from "@/lib/blocks";
+} from "@grimoire/shared/blocks";
 
 // --- word diff ----------------------------------------------------------------
 

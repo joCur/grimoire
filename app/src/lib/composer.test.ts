@@ -21,7 +21,7 @@ import {
   serializeBlocks,
   type IfSectionBlock,
   type SceneBlock,
-} from "./blocks";
+} from "@grimoire/shared/blocks";
 import {
   composerDraft,
   composerDraftIn,

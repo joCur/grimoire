@@ -48,7 +48,7 @@ import { patchScene, readScene } from "./store/scenes";
 const CORRECTION_TAIL = "die vollständige ergänzte Szene enthalten";
 
 /** The section of the scene prompt that describes the scene's fields. */
-const SCENE_FORMAT_HEADING = "## Die Felder der Szene";
+export const SCENE_FORMAT_HEADING = "## Die Felder der Szene";
 
 /** A scene without its guard — what the prompt shows and the proposal compares. */
 function withoutGuard(scene: Scene): SceneProposal {

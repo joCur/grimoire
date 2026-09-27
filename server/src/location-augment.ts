@@ -49,7 +49,7 @@ import { patchLocation, readLocation } from "./store/locations";
 const CORRECTION_TAIL = "den vollständigen ergänzten Ort enthalten";
 
 /** The section of the location prompt that describes the location's fields. */
-const LOCATION_FORMAT_HEADING = "## Die Felder des Orts";
+export const LOCATION_FORMAT_HEADING = "## Die Felder des Orts";
 
 /** A location without its guard — what the prompt shows and the proposal compares. */
 function withoutGuard(location: Location): LocationProposal {

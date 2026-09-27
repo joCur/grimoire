@@ -6,7 +6,7 @@
 // helpers here know nothing about any entity.
 //
 // WHY A PROPOSAL CARRIES WHOLE BODIES and not a block list: the block model
-// is the Block-Composer's (app/src/lib/blocks.ts), and the review's decision
+// is the Block-Composer's (@grimoire/shared/blocks), and the review's decision
 // unit has to be the unit the DM already edits. Cutting the diff in the app
 // against that very model is the only way those two can never drift; the
 // server stays the authority for what is WRITTEN, not for how it is shown.

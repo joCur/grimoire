@@ -14,9 +14,9 @@
 //   - a finished job KEEPS its result until every proposal is accepted,
 //     dropped or rejected, until it is discarded or until the next run
 //     replaces it, so navigation/reload/restart of the tab costs nothing.
-//   - review edits live in the job too — `sceneEdits` for the proposed
-//     scenes and `npcEdits` for the proposed npcs, one change per id — so an
-//     edited proposal survives the same way.
+//   - review edits live in the job too — `sceneEdits`, `npcEdits` and
+//     `locationEdits` for the proposed scenes, npcs and locations, one change
+//     per id — so an edited proposal survives the same way.
 //
 // THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
 // With the database as the single truth (decisions/sqlite) the row is the obvious
@@ -44,14 +44,18 @@
 
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import {
   GENERATOR_JOB_KINDS,
   GENERATOR_REVIEW_STAGES,
   isGeneratorJobSettled,
+  locationEditSchema,
   npcEditSchema,
   openLocationIds,
   openNpcIds,
   openSceneIds,
+  partRoundSchema,
+  patchFindingSchema,
   proposedNpcIds,
   sceneEditSchema,
 } from "@grimoire/shared";
@@ -66,8 +70,13 @@ import type {
   GenerateNpcResult,
   GenerateResult,
   LocationAugmentResult,
+  LocationChange,
   NpcAugmentResult,
   NpcChange,
+  PartAnswer,
+  PartChange,
+  PartRound,
+  PatchFinding,
   SceneAugmentResult,
   SceneChange,
 } from "@grimoire/shared";
@@ -119,6 +128,8 @@ export interface Job {
   sceneEdits: Record<string, SceneChange>;
   /** The DM's changes to the proposed npcs, by npc id. */
   npcEdits: Record<string, NpcChange>;
+  /** The DM's changes to the proposed locations, by location id. */
+  locationEdits: Record<string, LocationChange>;
   /** The DM's review state — decisions, drops, written parts. */
   review: GeneratorJobReview;
   /** Optimistic-concurrency token of that review state. */
@@ -198,6 +209,8 @@ function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
         : { validationErrors: part.validationErrors }),
       ...(part.rawReply === undefined ? {} : { rawReply: part.rawReply }),
       warnings: part.warnings,
+      ...(part.round === undefined ? {} : { round: part.round }),
+      ...(part.findings === undefined ? {} : { findings: part.findings }),
     })),
     totals: pipeline.totals,
   };
@@ -245,6 +258,7 @@ export function serializeJob(job: Job): GeneratorJob {
     ...(job.error === undefined ? {} : { error: job.error }),
     sceneEdits: job.sceneEdits,
     npcEdits: job.npcEdits,
+    locationEdits: job.locationEdits,
     review: job.review,
     rev: job.rev,
     ...(job.pipeline === undefined ? {} : { pipeline: serializePipeline(job.pipeline) }),
@@ -276,34 +290,20 @@ function unpackPayload<T>(value: string | null): T | undefined {
 }
 
 /**
- * Parse the scene-edits column: one `SceneChange` per scene id, each checked
- * against the scene's schema. Like every other payload here it DEGRADES — a
- * value that is not a change is dropped rather than making the job
- * unreachable.
+ * Parse one of the edits columns — `scene_edits`, `npc_edits` or
+ * `location_edits`: one change per proposal id, each checked against its
+ * entity's schema. Like every other payload here it DEGRADES — a value that is
+ * not a change is dropped rather than making the job unreachable.
  */
-function unpackSceneEdits(value: string): Record<string, SceneChange> {
-  const edits: Record<string, SceneChange> = {};
+function unpackEdits<T>(
+  value: string,
+  schema: { safeParse(raw: unknown): { success: true; data: T } | { success: false } },
+): Record<string, T> {
+  const edits: Record<string, T> = {};
   const parsed = unpackPayload<Record<string, unknown>>(value);
   if (parsed === undefined || parsed === null || typeof parsed !== "object") return edits;
   for (const [id, raw] of Object.entries(parsed)) {
-    const change = sceneEditSchema.safeParse(raw);
-    if (change.success) edits[id] = change.data;
-  }
-  return edits;
-}
-
-/**
- * Parse the npc-edits column: one `NpcChange` per npc id, each checked
- * against the npc's schema. Like every other payload here it DEGRADES — a
- * value that is not a change is dropped rather than making the job
- * unreachable.
- */
-function unpackNpcEdits(value: string): Record<string, NpcChange> {
-  const edits: Record<string, NpcChange> = {};
-  const parsed = unpackPayload<Record<string, unknown>>(value);
-  if (parsed === undefined || parsed === null || typeof parsed !== "object") return edits;
-  for (const [id, raw] of Object.entries(parsed)) {
-    const change = npcEditSchema.safeParse(raw);
+    const change = schema.safeParse(raw);
     if (change.success) edits[id] = change.data;
   }
   return edits;
@@ -428,8 +428,9 @@ function toJob(row: JobRow): Job {
     ...(npcAugmentResult === undefined ? {} : { npcAugmentResult }),
     ...(locationAugmentResult === undefined ? {} : { locationAugmentResult }),
     ...(error === undefined ? {} : { error }),
-    sceneEdits: unpackSceneEdits(row.sceneEdits),
-    npcEdits: unpackNpcEdits(row.npcEdits),
+    sceneEdits: unpackEdits<SceneChange>(row.sceneEdits, sceneEditSchema),
+    npcEdits: unpackEdits<NpcChange>(row.npcEdits, npcEditSchema),
+    locationEdits: unpackEdits<LocationChange>(row.locationEdits, locationEditSchema),
     review: unpackReview(row.review),
     rev: row.rev,
     ...(pipeline === undefined ? {} : { pipeline }),
@@ -455,6 +456,10 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
     const kind = part.kind;
     if (kind !== "scene" && kind !== "npc" && kind !== "location") continue;
     const status = part.status;
+    // A round that cannot be read degrades to none: the notes it answered are
+    // still on the part, and the DM can answer them again.
+    const round = partRoundSchema.safeParse(part.round);
+    const findings = z.array(patchFindingSchema).safeParse(part.findings);
     parts.push({
       key: part.key,
       kind,
@@ -471,6 +476,8 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
         : {}),
       ...(typeof part.rawReply === "string" ? { rawReply: part.rawReply } : {}),
       warnings: stringList(part.warnings),
+      ...(round.success ? { round: round.data } : {}),
+      ...(findings.success ? { findings: findings.data } : {}),
     });
   }
   const totals = (parsed.totals ?? {}) as Record<string, unknown>;
@@ -568,6 +575,7 @@ export async function startJob(input: JobInput): Promise<Job> {
     startedAt: timestamp(),
     sceneEdits: {},
     npcEdits: {},
+    locationEdits: {},
     review: emptyReview(),
     rev: 0,
     ...(input.kind === "scene"
@@ -604,6 +612,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         startedAt: job.startedAt,
         sceneEdits: "{}",
         npcEdits: "{}",
+        locationEdits: "{}",
         review: "{}",
         rev: 0,
         pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
@@ -829,9 +838,14 @@ function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): Gene
   };
 }
 
-/** The run is over when no part is waiting or in flight any more. */
+/**
+ * The run is over when no part is waiting or in flight any more — neither a
+ * part's own call nor the patch round on a finished one.
+ */
 export function partsSettled(pipeline: PipelineRecord): boolean {
-  return !pipeline.parts.some((p) => p.status === "pending" || p.status === "running");
+  return !pipeline.parts.some(
+    (p) => p.status === "pending" || p.status === "running" || p.round?.status === "running",
+  );
 }
 
 /**
@@ -1125,6 +1139,235 @@ function assertRetryable(job: Job, key: string): StoredPart {
   return part;
 }
 
+// --- the patch round on a part -------------------------------------------------
+//
+// The store half of a patch round (decisions/generator): opening it, writing
+// its outcome, and the DM's decisions on its changes. The call itself and what
+// a change does to a proposal are ./generator-patch.ts.
+
+/** The proposal of a part is still open — neither written nor dropped or rejected. */
+function partProposalOpen(job: Job, part: StoredPart): boolean {
+  if (part.kind === "scene") return openSceneIds(job).has(part.id);
+  if (part.kind === "npc") return openNpcIds(job).has(part.id);
+  return openLocationIds(job).has(part.id);
+}
+
+/**
+ * May the DM answer the notes of this part now? Answers with the part, throws
+ * the endpoint's 404/409 otherwise. Like `assertRetryable` it runs once before
+ * the context read and once, binding, inside the transaction that opens the
+ * round.
+ */
+export function assertAnswerable(job: Job, key: string, rev: number, notes: readonly string[]): StoredPart {
+  const pipeline = job.pipeline;
+  if (pipeline === undefined || pipeline.outline === undefined) {
+    throw new ApiError(409, "this job has no pipeline parts to answer");
+  }
+  const part = findPart(pipeline, key);
+  if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
+  if (job.rev !== rev) throw jobConflict(job);
+  if (part.status !== "done") throw new ApiError(409, "this part is not finished");
+  if (!partProposalOpen(job, part)) {
+    throw new ApiError(409, "the proposal of this part is written, dropped or rejected");
+  }
+  if (part.round?.status === "running") {
+    throw new ApiError(409, "a patch round is already running on this part");
+  }
+  if (part.round?.status === "done") {
+    throw new ApiError(409, "this part still has changes to decide");
+  }
+  // A note that is not on the part any more was answered or replaced in
+  // another tab: the job moved on, and the answer is its current state.
+  if (notes.some((note) => !part.warnings.includes(note))) throw jobConflict(job);
+  if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
+  return part;
+}
+
+/** Rewrite one part of the stored pipeline column; everything else stays as stored. */
+function withStoredPart(
+  value: string,
+  key: string,
+  change: (part: Record<string, unknown>) => void,
+): string {
+  const pipeline = unpackPayload<Record<string, unknown>>(value) ?? {};
+  const parts = Array.isArray(pipeline.parts) ? (pipeline.parts as Record<string, unknown>[]) : [];
+  return JSON.stringify({
+    ...pipeline,
+    parts: parts.map((part) => {
+      if (part === null || typeof part !== "object" || part.key !== key) return part;
+      const next = { ...part };
+      change(next);
+      return next;
+    }),
+  });
+}
+
+/**
+ * Open a patch round on a part: the answers are stored on it, the round is
+ * `running`, and so is the job — the app polls it until the round is back.
+ * A review act like every other: it takes the job's guard and moves it.
+ * Answers the job as it stands with the round open.
+ */
+export async function openPartRound(
+  campaign: string,
+  jobId: string,
+  key: string,
+  rev: number,
+  answers: readonly PartAnswer[],
+): Promise<Job> {
+  const db = await getDb();
+  db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) throw noJob();
+    assertAnswerable(
+      toJob(row),
+      key,
+      rev,
+      answers.map((entry) => entry.note),
+    );
+    const round: PartRound = { status: "running", answers: [...answers], changes: [] };
+    tx.update(generateJobs)
+      .set({
+        status: "running",
+        pipeline: withStoredPart(row.pipeline, key, (part) => {
+          part.round = round;
+          // What the last round could not apply is about that round.
+          delete part.findings;
+        }),
+        error: null,
+        finishedAt: null,
+        rev: row.rev + 1,
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+  });
+  return requireJob(campaign, jobId);
+}
+
+/**
+ * What a patch round brought: its changes, the model's own notes and what the
+ * server could not apply — or the reason it brought nothing — and what its
+ * call cost.
+ */
+export type RoundOutcome =
+  | {
+      status: "done";
+      changes: PartChange[];
+      notes: string[];
+      findings: PatchFinding[];
+      usage: PartUsage;
+    }
+  | { status: "failed"; error: string; usage: PartUsage };
+
+/**
+ * Write the outcome of a patch round onto its part — only while the round is
+ * still the one running there, on the job's own row (the rule every pipeline
+ * write follows, `updatePipeline`).
+ *
+ * Done: the answered notes are done and leave the part, the model's new notes
+ * join it, what the server could not apply stands as the part's findings, and
+ * the changes wait for the DM — a round without any is over at once. Failed: the round says why, and the notes stay. Either way
+ * the call joins the run's totals.
+ */
+export async function settlePartRound(
+  campaign: string,
+  jobId: string,
+  key: string,
+  outcome: RoundOutcome,
+): Promise<void> {
+  await updatePipeline(campaign, jobId, (pipeline) => {
+    const part = findPart(pipeline, key);
+    const round = part?.round;
+    if (part === undefined || round === undefined || round.status !== "running") return {};
+    addUsage(pipeline, outcome.usage);
+    if (outcome.status === "failed") {
+      part.round = { ...round, status: "failed", error: outcome.error };
+      return {};
+    }
+    const answered = new Set(round.answers.map((entry) => entry.note));
+    const kept = part.warnings.filter((warning) => !answered.has(warning));
+    part.warnings = [...kept, ...outcome.notes.filter((note) => !kept.includes(note))];
+    if (outcome.findings.length === 0) delete part.findings;
+    else part.findings = outcome.findings;
+    if (outcome.changes.length === 0) delete part.round;
+    else part.round = { status: "done", answers: round.answers, changes: outcome.changes };
+    return {};
+  });
+}
+
+/**
+ * The DM's decisions on changes of a part's patch round, by change id:
+ * `take(job, part, change)` writes a taken change into the job's edits and
+ * answers false when it cannot — the block it is about is gone from the text,
+ * which is 409 `patch_anchor_missing` with the job as it stands, and nothing
+ * is written. A kept change is simply dropped. The round is over once no
+ * change is left. A review act: guarded by `rev` and moving it. Answers the
+ * job as the write leaves it.
+ */
+export async function decidePartRound(
+  campaign: string,
+  jobId: string,
+  key: string,
+  rev: number,
+  decisions: Record<string, "taken" | "kept">,
+  take: (job: Job, part: StoredPart, change: PartChange) => boolean,
+): Promise<Job> {
+  const db = await getDb();
+  return db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) throw noJob();
+    const job = toJob(row);
+    const part = job.pipeline === undefined ? undefined : findPart(job.pipeline, key);
+    if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
+    if (row.rev !== rev) throw jobConflict(job);
+    const round = part.round;
+    if (round?.status !== "done") throw new ApiError(409, "this part has no changes to decide");
+    if (!partProposalOpen(job, part)) {
+      throw new ApiError(409, "the proposal of this part is written, dropped or rejected");
+    }
+    const ids = Object.keys(decisions);
+    if (ids.length === 0) {
+      throw new ApiError(400, "the patch names nothing to write", { code: "nothing_to_write" });
+    }
+    for (const id of ids) {
+      if (!round.changes.some((change) => change.id === id)) {
+        throw new ApiError(400, `unknown change: ${id}`);
+      }
+    }
+    for (const change of round.changes) {
+      if (decisions[change.id] !== "taken" || take(job, part, change)) continue;
+      throw new ApiError(409, "the block this change is about is no longer in the text", {
+        code: "patch_anchor_missing",
+        generatorJob: serializeJob(toJob(row)),
+      });
+    }
+    const left = round.changes.filter((change) => decisions[change.id] === undefined);
+    const next: Job = { ...job, rev: row.rev + 1 };
+    tx.update(generateJobs)
+      .set({
+        sceneEdits: JSON.stringify(job.sceneEdits),
+        npcEdits: JSON.stringify(job.npcEdits),
+        locationEdits: JSON.stringify(job.locationEdits),
+        pipeline: withStoredPart(row.pipeline, key, (stored) => {
+          if (left.length === 0) delete stored.round;
+          else stored.round = { ...round, changes: left };
+        }),
+        rev: row.rev + 1,
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+    // The answer carries the round as stored, not as it was read.
+    const parts = next.pipeline?.parts.map((candidate) => {
+      if (candidate.key !== key) return candidate;
+      const { round: _round, ...rest } = candidate;
+      return left.length === 0 ? rest : { ...rest, round: { ...round, changes: left } };
+    });
+    return parts === undefined ? next : { ...next, pipeline: { ...next.pipeline!, parts } };
+  }) as Job;
+}
+
 // --- one job by its id --------------------------------------------------------
 
 /** The 404 of a job that is not there. */
@@ -1207,6 +1450,7 @@ export async function patchJobReview(
       .set({
         sceneEdits: JSON.stringify(job.sceneEdits),
         npcEdits: JSON.stringify(job.npcEdits),
+        locationEdits: JSON.stringify(job.locationEdits),
         review: JSON.stringify(job.review),
         rev: row.rev + 1,
       })
@@ -1239,7 +1483,11 @@ function assertKnownProposals(job: Job, patch: GeneratorJobPatch): void {
     if (!npcIds.has(id)) throw new ApiError(400, `unknown npc: ${id}`);
   }
   const locationIds = new Set((job.result?.locations ?? []).map((location) => location.id));
-  for (const id of [...Object.keys(review.locations ?? {}), ...(review.writtenLocations ?? [])]) {
+  for (const id of [
+    ...Object.keys(patch.locationEdits ?? {}),
+    ...Object.keys(review.locations ?? {}),
+    ...(review.writtenLocations ?? []),
+  ]) {
     if (!locationIds.has(id)) throw new ApiError(400, `unknown location: ${id}`);
   }
 }
@@ -1258,6 +1506,9 @@ export function applyReviewPatch(job: Job, patch: GeneratorJobPatch): void {
   }
   for (const [id, change] of Object.entries(patch.npcEdits ?? {})) {
     job.npcEdits[id] = { ...job.npcEdits[id], ...change };
+  }
+  for (const [id, change] of Object.entries(patch.locationEdits ?? {})) {
+    job.locationEdits[id] = { ...job.locationEdits[id], ...change };
   }
   const review = patch.review ?? {};
   if (review.stage !== undefined) job.review.stage = review.stage;
@@ -1339,6 +1590,7 @@ export function markWrittenInTx(
     .set({
       sceneEdits: JSON.stringify(job.sceneEdits),
       npcEdits: JSON.stringify(job.npcEdits),
+      locationEdits: JSON.stringify(job.locationEdits),
       review: JSON.stringify(job.review),
       rev: row.rev + 1,
       // Merged onto the stored column rather than re-serialized from the

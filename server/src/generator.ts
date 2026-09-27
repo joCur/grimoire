@@ -152,7 +152,7 @@ export interface PromptAssets {
 }
 
 /**
- * The asset pairs: scenes, npcs, locations and the outline have their own
+ * The asset pairs: scenes, npcs, locations, the outline and the patch call have their own
  * prompt and their own few-shot target, cached per kind after the first
  * read; the augment runs and the single-scene mode carry a prompt alone.
  */
@@ -192,6 +192,10 @@ export const ASSET_FILES = {
   // per-scene call sends the scene example asset — so, like the augment
   // rules, this carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
+  // The PATCH call on a finished part of a scene run: its own rule and its
+  // own few-shot (a list of operations); the fields come from the part's
+  // entity prompt above.
+  patch: { systemPrompt: "patch-system-prompt.md", fewShotTarget: "patch-example-output.json" },
 } as const;
 
 const promptAssets = new Map<string, PromptAssets>();

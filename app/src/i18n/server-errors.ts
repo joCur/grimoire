@@ -56,6 +56,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   chapter_in_trash: "server.chapter_in_trash",
   restore_blocked: "server.restore_blocked",
   proposal_not_written: "server.proposal_not_written",
+  patch_anchor_missing: "server.patch_anchor_missing",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -230,6 +231,7 @@ function paramsFor(
     case "nothing_to_write":
     case "body_not_editable":
     case "proposal_not_written":
+    case "patch_anchor_missing":
       return {};
   }
 }

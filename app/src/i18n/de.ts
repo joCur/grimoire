@@ -69,6 +69,46 @@ export const de = {
     "{count, plural, one {# Hinweis des Modells} other {# Hinweise des Modells}} zu diesem Vorschlag",
   "generatorJob.runNotes.summary":
     "{count, plural, one {# Hinweis des Modells zum ganzen Lauf} other {# Hinweise des Modells zum ganzen Lauf}}",
+  // The patch round of one proposal (generator-job/PartRound.tsx): the DM
+  // answers the model's notes, the model changes the proposal, and the DM
+  // takes or keeps each change.
+  "generatorJob.round.answer": "Deine Antwort auf diesen Hinweis",
+  "generatorJob.round.answerPlaceholder": "Antworte, wenn der Hinweis etwas am Vorschlag ändern soll",
+  "generatorJob.round.send": "Antworten senden",
+  "generatorJob.round.sending": "Wird gesendet …",
+  "generatorJob.round.running": "Das Modell arbeitet deine Antworten gerade in diesen Vorschlag ein.",
+  "generatorJob.round.failed":
+    "Das Modell konnte deine Antworten nicht einarbeiten, der Vorschlag ist unverändert. Sende die Antworten noch einmal.",
+  "generatorJob.round.changes":
+    "{count, plural, one {Eine Änderung aus deinen Antworten wartet auf deine Entscheidung.} other {# Änderungen aus deinen Antworten warten auf deine Entscheidung.}}",
+  "generatorJob.round.conflict":
+    "Der Lauf wurde inzwischen anderswo geändert. Er ist neu geladen — sieh ihn dir an und entscheide noch einmal.",
+  "generatorJob.round.sendFailed": "Die Antworten konnten nicht gesendet werden. Versuche es noch einmal.",
+  "generatorJob.round.decideFailed": "Die Entscheidung konnte nicht gespeichert werden. Versuche es noch einmal.",
+  // What the server could not apply of a patch round, one whole sentence per
+  // finding; {anchor} is the block the change named, on one line.
+  "generatorJob.finding.unreadable":
+    "Eine Änderung des Modells ließ sich nicht lesen und wurde nicht übernommen.",
+  "generatorJob.finding.anchor_missing":
+    "Eine Änderung wurde nicht übernommen, weil dieser Block nicht im Text steht: „{anchor}“",
+  "generatorJob.finding.anchor_ambiguous":
+    "Eine Änderung wurde nicht übernommen, weil dieser Block mehrmals im Text steht: „{anchor}“",
+  "generatorJob.finding.text_empty":
+    "Eine Änderung am Block „{anchor}“ wurde nicht übernommen, weil sie keinen Text mitbrachte.",
+  "generatorJob.finding.callouts_unknown":
+    "Eine Änderung am Block „{anchor}“ wurde nicht übernommen, weil sie Callouts nennt, die es nicht gibt: {callouts}.",
+  "generatorJob.finding.refs_unknown":
+    "Eine Änderung am Block „{anchor}“ wurde nicht übernommen, weil sie auf etwas verweist, das es weder in der Kampagne noch in diesem Lauf gibt: {ids}.",
+  "generatorJob.finding.field_unknown":
+    "Eine Änderung wurde nicht übernommen, weil der Vorschlag kein Feld „{field}“ hat.",
+  "generatorJob.finding.field_empty":
+    "Der neue Wert für {field} wurde nicht übernommen, weil das Feld nicht leer sein darf.",
+  "generatorJob.finding.field_invalid":
+    "Der neue Wert für {field} wurde nicht übernommen, weil er nicht in dieses Feld passt.",
+  "generatorJob.finding.chapter_outside":
+    "Eine Änderung wurde nicht übernommen, weil die Szene im Kapitel „{chapter}“ dieses Laufs bleibt.",
+  "generatorJob.finding.ids_unknown":
+    "Der neue Wert für {field} wurde nicht übernommen, weil er etwas nennt, das es weder in der Kampagne noch in diesem Lauf gibt: {ids}.",
   // A naming hint where it sits: at the field it names, at the block its line
   // is in, or — where the card shows neither — in the card, naming the text.
   // Never a blocker: the check is a plain text search, the DM decides. The
@@ -392,6 +432,10 @@ export const de = {
   // of the run it names exists. Nothing was written.
   "server.proposal_not_written":
     "Nicht geschrieben — diese Szene nennt einen NPC oder Ort des Laufs, der nicht angenommen ist. Nimm ihn zuerst an oder entferne ihn aus der Szene.",
+  // A change of a patch round is about a block that is no longer in the
+  // proposal's text as it was. Nothing was written.
+  "server.patch_anchor_missing":
+    "Nicht übernommen — der Block, den diese Änderung betrifft, steht nicht mehr so im Text. Behalte die Änderung und bearbeite den Text selbst.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": 'das Kapitel „{name}“',
@@ -947,9 +991,9 @@ export const de = {
   "generate.written.openNpc": "NPC ansehen",
   "generate.written.toChapters": "Zu den Kapiteln",
 
-  // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
+  // --- the markdown format's own vocabulary (markdown/callout-labels.ts holds the KEY
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show
-  //     them; lib/blocks.ts names the same blocks in the composer) -----------
+  //     them; lib/block-labels.ts names the same blocks in the composer) -----------
   "markdown.callout.readaloud": "Vorlesetext",
   "markdown.callout.check": "Probe",
   "markdown.callout.secret": "Geheim",
@@ -967,7 +1011,7 @@ export const de = {
   // scrolls, the page never does — and a scrollable box needs a name.
   "markdown.table.aria": "Tabelle",
 
-  // --- the Block-Composer (components/BlockComposer.tsx, lib/blocks.ts,
+  // --- the Block-Composer (components/BlockComposer.tsx, @grimoire/shared/blocks,
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Editiermodus",
   "composer.mode.blocks": "Blöcke",

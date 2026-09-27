@@ -284,6 +284,53 @@ such a scene says which rejected proposal it names and offers three ways
 out: accept the proposal after all, remove the reference (a change in
 `sceneEdits`; `null` clears the location), or drop the scene.
 
+## Answering a part's notes
+
+Answering a note patches the proposal instead of generating it again
+(decisions/generator). Every model note on a finished scene, NPC or location
+part of a scene run gets an answer field on its card; one action sends every
+answer of the part (`PATCH …/generator-jobs/:id/parts/:key { rev, round:
+{ answers } }`, 202) — one call per part and round, run on the server while
+the app polls. The run's own notes and the NPC run's single card are not
+answered.
+
+The patch call is one provider call. Its system prompt is
+`patch-system-prompt.md` followed by the format section of the entity's own
+prompt; its few-shot is `patch-example-output.json`. The prompt carries the
+campaign knowledge, the glossary, the context lists and the run's outline
+as every part does, then the proposal with the DM's edits in its reply form
+(`## Vorschlag, den du änderst`) and the notes with their answers (`## Hinweise
+und Antworten des DM`). The reply is a list of operations, enforced by a
+schema derived from the entity's reply schema:
+
+* `set` — one field (any but `id` and `body`) to a new value;
+* `replace`, `insertAfter`, `remove` — one block of `body`, named by an
+  anchor that quotes the block as it stands;
+* `note` — what the model could not do.
+
+The server applies the operations deterministically to the proposal the
+model saw. An anchor is compared whitespace-normalized with each block; one
+that matches no block or several is not applied. Neither is a field value
+that fails the field's schema or names an id outside the run or the
+campaign, nor a block text with an unknown callout or reference. Each of
+them becomes a finding on the part (`pipeline.parts[].findings`): data that
+names its kind and what it is about (the anchor, the field, the ids), which
+the app says as a whole sentence in the DM's language; the server writes no
+sentence of its own. Nothing else of the proposal moves: an applied block
+operation changes exactly that block.
+
+What the round brings stands on the card as a comparison, field by field
+and block by block, and the DM takes or keeps each change (`PATCH
+…/parts/:key { rev, round: { changes: { <id>: "taken" | "kept" } } }`). A
+taken change is written into `sceneEdits`, `npcEdits` or `locationEdits`
+under the job's guard (a stale `rev` is 409 with the current job); a block
+change that no longer finds its block in the edited proposal is 409
+`patch_anchor_missing` and writes nothing. The answered notes are gone from
+the part once the round returns, and the model's new notes join them; the
+findings stand until the next round opens or the part is decided. A
+failed round keeps the notes and can be sent again; a restart reports a
+round in flight as failed. The token count of the run adds the patch calls.
+
 ## Flow per call
 
 Applies to every SINGLE provider call — the outline call, every scene call,

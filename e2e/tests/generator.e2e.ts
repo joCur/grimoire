@@ -37,6 +37,11 @@ import {
   OLD_NAME,
   OUTLINE_WARNING,
   partNote,
+  PATCH_CHECK_ANCHOR,
+  PATCH_CHECK_TEXT,
+  PATCH_LOCATION_ATMOSPHERE,
+  PATCH_MISSING_ANCHOR,
+  PATCH_SCENE_TITLE,
   SCENE_ID,
   SCENE_TITLE,
   SECOND_SCENE,
@@ -1100,4 +1105,103 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   await expect(page.getByTestId("run-notes")).toHaveCount(0);
   await expect(page.getByTestId("part-notes")).toHaveCount(0);
   await expect(page.getByTestId("naming-hint")).toHaveCount(0);
+});
+
+// --- answering a part's notes ---------------------------------------------------
+//
+// An answer to a model note patches the proposal instead of writing it again
+// (decisions/generator): the stub answers with operations, the server applies
+// what it can, and the DM takes each change into the job's edits.
+
+/** The answer field of one note on a card. */
+function noteAnswer(card: Locator, note: string): Locator {
+  return card.getByRole("listitem").filter({ hasText: note }).getByTestId("part-note-answer");
+}
+
+test("answering a part's notes patches the proposal, and a taken change lands in the edits", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/campaigns/example/generate");
+  await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.partNotes}`);
+  await expectStage(page, "locations");
+
+  // --- the location: one field set, taken into the location edits ----------
+  const location = locationProposal(page, LOCATION_STUB_ID);
+  await noteAnswer(location, partNote(LOCATION_STUB_ID)).fill("Make it colder and lonelier.");
+  await location.getByTestId("part-round-send").click();
+  const locationRound = location.getByTestId("part-round");
+  await expect(locationRound).toHaveAttribute("data-round", "done");
+  const locationChange = location.getByTestId("part-change");
+  await expect(locationChange).toHaveCount(1);
+  await expect(locationChange).toContainText(PATCH_LOCATION_ATMOSPHERE);
+  await locationChange.getByTestId("decision-take").click();
+  await expect(locationRound).toHaveCount(0);
+  await expect(location.getByTestId("part-notes")).toHaveCount(0);
+  const afterLocation = await getGeneratorJob(api);
+  expect(afterLocation.locationEdits[LOCATION_STUB_ID]).toEqual({
+    atmosphere: PATCH_LOCATION_ATMOSPHERE,
+  });
+  const locationPart = afterLocation.pipeline?.parts.find(
+    (part) => part.key === `location:${LOCATION_STUB_ID}`,
+  );
+  expect(locationPart?.warnings).toEqual([]);
+  expect(locationPart?.round).toBeUndefined();
+  await acceptProposal(location);
+  expect((await getLocation(api, LOCATION_STUB_ID)).atmosphere).toBe(PATCH_LOCATION_ATMOSPHERE);
+  await nextStage(page);
+  await expectStage(page, "npcs");
+  await acceptProposal(npcProposal(page, NPC_STUB_ID));
+  await nextStage(page);
+  await expectStage(page, "scenes");
+
+  // --- the scene: a block replace, a field set and an anchor that misses ----
+  const proposed = (await getGeneratorJob(api)).result?.scenes.find(
+    (scene) => scene.id === SCENE_ID,
+  );
+  expect(proposed?.body).toContain(PATCH_CHECK_ANCHOR);
+  const rich = sceneProposal(page, SCENE_ID);
+  await noteAnswer(rich, partNote(SCENE_ID)).fill("Make the check harder and name the fog.");
+  await rich.getByTestId("part-round-send").click();
+  const round = rich.getByTestId("part-round");
+  await expect(round).toHaveAttribute("data-round", "done");
+  const changes = rich.getByTestId("part-change");
+  await expect(changes).toHaveCount(2);
+  await expect(changes.and(rich.locator('[data-change-op="replace"]'))).toHaveCount(1);
+  await expect(changes.and(rich.locator('[data-change-op="set"]'))).toContainText(
+    PATCH_SCENE_TITLE,
+  );
+  // The operation the server could not apply is a finding quoting its
+  // anchor; the answered note is done and gone.
+  const finding = rich.getByTestId("part-finding");
+  await expect(finding).toHaveCount(1);
+  await expect(finding).toHaveAttribute("data-finding-kind", "anchor_missing");
+  await expect(finding).toContainText(PATCH_MISSING_ANCHOR);
+  await expect(rich.getByTestId("part-notes")).not.toContainText(partNote(SCENE_ID));
+
+  for (const op of ["replace", "set"]) {
+    const change = rich.locator(`[data-testid="part-change"][data-change-op="${op}"]`);
+    await change.getByTestId("decision-take").click();
+    await expect(change).toHaveCount(0);
+  }
+  await expect(round).toHaveCount(0);
+  await expect(rich.getByRole("heading", { level: 2, name: PATCH_SCENE_TITLE })).toBeVisible();
+  await expect(rich).toContainText("DC 15");
+
+  // The edits carry exactly the applied changes; every other byte of the
+  // body is the model's.
+  const job = await getGeneratorJob(api);
+  expect(job.sceneEdits[SCENE_ID]).toEqual({
+    title: PATCH_SCENE_TITLE,
+    body: proposed!.body.replace(PATCH_CHECK_ANCHOR, PATCH_CHECK_TEXT),
+  });
+  const scenePart = job.pipeline?.parts.find((part) => part.key === `scene:${SCENE_ID}`);
+  expect(scenePart?.warnings).not.toContain(partNote(SCENE_ID));
+  expect(scenePart?.findings).toEqual([{ kind: "anchor_missing", anchor: PATCH_MISSING_ANCHOR }]);
+
+  await rich.getByRole("button", { name: ui("generate.review.acceptOne") }).click();
+  await expect.poll(() => sceneExists(api, SCENE_ID)).toBe(true);
+  const written = await getScene(api, SCENE_ID);
+  expect(written.title).toBe(PATCH_SCENE_TITLE);
+  expect(written.body).toContain(PATCH_CHECK_TEXT);
 });

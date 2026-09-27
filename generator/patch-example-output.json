@@ -1,0 +1,18 @@
+{
+  "operations": [
+    {
+      "op": "replace",
+      "anchor": "> [!check] Wisdom (Perception) DC 13: frische Stiefelabdrücke im Sand,\n> die NICHT aus dem Dorf kommen, sondern aus der Bucht im Norden.",
+      "text": "> [!check] Wisdom (Perception) DC 15: frische Stiefelabdrücke im Sand,\n> die NICHT aus dem Dorf kommen, sondern aus der Bucht im Norden."
+    },
+    {
+      "op": "insertAfter",
+      "anchor": "> [!secret] Der Leuchtturmwärter ist nicht verschwunden — er wird in\n> der Bucht festgehalten, damit das Leuchtfeuer dunkel bleibt.",
+      "text": "> [!loot] Im Wachraum liegt ein Messingschlüssel mit dem Wappen der\n> Hafenmeisterei."
+    },
+    {
+      "op": "note",
+      "text": "Der Name des Wärters steht im Quelltext nicht — die Szene nennt ihn weiter nur „der Wärter“."
+    }
+  ]
+}

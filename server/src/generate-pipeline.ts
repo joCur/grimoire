@@ -723,7 +723,7 @@ export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
  * endpoint reports no usage at all, and the displayed call count must be
  * true anyway.
  */
-function usageOf(value: unknown, calls: number): PartUsage {
+export function usageOf(value: unknown, calls: number): PartUsage {
   const usage = (value ?? {}) as Partial<GenerateUsage>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   return {
@@ -754,7 +754,7 @@ export function callCounter(): CallCounter {
 }
 
 /** The message and the error list the DM reads next to the retry action. */
-function failureOf(
+export function failureOf(
   err: unknown,
   calls: number,
 ): {

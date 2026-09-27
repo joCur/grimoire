@@ -1,37 +1,32 @@
-// State and rules of the Block-Composer UI (issue #43, phase 2) — the layer
-// between the block model (lib/blocks.ts, phase 1) and the React components.
+// State and rules of the Block-Composer UI — the layer between the block
+// model (@grimoire/shared/blocks) and the React components.
 //
 // Three jobs, all pure and therefore unit-testable without a DOM:
 //
-//   1. THE DRAFT. Edit mode has two surfaces — the block list („Blöcke", the
-//      default) and the markdown textarea („Markdown", issue #39) — and
+//   1. THE DRAFT. Edit mode has two surfaces — the block list (the default)
+//      and the markdown textarea — and
 //      exactly ONE state behind them: this module's ComposerDraft is a
 //      discriminated union, so at any moment either the blocks or the text are
 //      authoritative and there is nothing to diverge. Switching modes goes
-//      through serializeBlocks / parseBlocks, which phase 1 guarantees to be
+//      through serializeBlocks / parseBlocks, which the block model guarantees to be
 //      lossless (`serializeBlocks(parseBlocks(body)) === body`).
 //   2. TREE EDITS. The composer shows two levels: the body and the children
 //      of an `## If:` section. Every operation here addresses a block by id,
-//      finds the list that OWNS it and routes the change through the phase-1
-//      helpers — withBlockText/withIfCondition (which drop the block's `source`,
+//      finds the list that OWNS it and routes the change through the block
+//      model's helpers — withBlockText/withIfCondition (which drop the block's `source`,
 //      the dirty flag) and insertBlock/removeBlock/moveBlock (which keep the
 //      whitespace scaffolding in place). Nothing in the composer builds a block
 //      by hand, so no edit can be swallowed by a stale `source`.
 //   3. VALIDATION. composerIssues names, per block, what a save would silently
-//      break — the seam the properties form already uses (issue #42): the
-//      card says it, „Speichern" waits, and nothing the DM typed is rewritten.
+//      break — the seam the properties form already uses: the card says it,
+//      the save action waits, and nothing the DM typed is rewritten.
 //
 // Deliberately NOT here: cross-section moves (a block cannot be dragged out of
-// its If-section in this slice) and nested sections (blocks.ts does not model
+// its If-section) and nested sections (the block model does not model
 // them — a second `## If:` ends the first).
-
-import { CALLOUT_KINDS } from "@grimoire/shared/callouts";
-
-import type { Translate } from "@/i18n";
 
 import {
   blockMarkdown,
-  calloutLabel,
   endsIfSectionText,
   insertBlock,
   makeCallout,
@@ -48,12 +43,16 @@ import {
   type HeadingBlock,
   type IfSectionBlock,
   type SceneBlock,
-} from "@/lib/blocks";
-import { endsIfSection } from "@/markdown/grammar";
+} from "@grimoire/shared/blocks";
+import { CALLOUT_KINDS } from "@grimoire/shared/callouts";
+import { endsIfSection } from "@grimoire/shared/grammar";
+
+import type { Translate } from "@/i18n";
+import { calloutLabel } from "@/lib/block-labels";
 
 // --- the draft ---------------------------------------------------------------
 
-/** „Blöcke" (the block list) or „Markdown" (the markdown textarea). */
+/** The block list or the markdown textarea. */
 export type ComposerMode = "blocks" | "markdown";
 
 /**
@@ -80,7 +79,7 @@ export function composerDraftIn(body: string, mode: ComposerMode): ComposerDraft
   return mode === "markdown" ? { mode: "markdown", text: body } : composerDraft(body);
 }
 
-/** The markdown body the draft stands for — what „Speichern" writes. */
+/** The markdown body the draft stands for — what the save action writes. */
 export function draftBody(draft: ComposerDraft): string {
   return draft.mode === "markdown" ? draft.text : serializeBlocks(draft.blocks);
 }
@@ -122,9 +121,10 @@ export function sameInsertAt(a: InsertAt | undefined, b: InsertAt): boolean {
 /**
  * Apply `change` to the list that CONTAINS `id` — the body's own list, or
  * the children of the one section holding it. Section children go back through
- * withChildren, so the section keeps its heading `source` (phase-1 rule 2).
+ * withChildren, so the section keeps its heading `source` — the block model
+ * keeps a section heading's source apart from its children.
  *
- * A `change` that returns its own argument means „nothing happened" and hands
+ * A `change` that returns its own argument means "nothing happened" and hands
  * back the caller's array unchanged, identity included: a move at the end of a
  * list must not re-render the block list for nothing.
  */
@@ -161,7 +161,7 @@ function mapBlock(
 
 /**
  * The text of a block's one text field — for a section that is its condition.
- * Both paths go through a phase-1 helper, so `source` is dropped and the block
+ * Both paths go through a block-model helper, so `source` is dropped and the block
  * is rendered from its fields from here on.
  */
 export function setBlockText(blocks: SceneBlock[], id: string, text: string): SceneBlock[] {
@@ -228,7 +228,7 @@ export function removeAt(blocks: SceneBlock[], id: string): SceneBlock[] {
 /**
  * Move a block one slot up (-1) or down (+1) WITHIN its list. At the ends
  * nothing happens: leaving the list would mean leaving (or entering) an
- * If-section, which is not part of this slice — the UI disables the button
+ * If-section, which the composer does not do — the UI disables the button
  * there, this is the guard behind it.
  */
 export function moveBy(blocks: SceneBlock[], id: string, delta: number): SceneBlock[] {
@@ -244,8 +244,8 @@ export function moveBy(blocks: SceneBlock[], id: string, delta: number): SceneBl
 
 /**
  * What is WRONG in the block list right now, per block id — the line the card
- * shows under itself and the reason „Speichern" stays disabled. Same seam as
- * the properties form's propertiesFormIssues (issue #42): the state is
+ * shows under itself and the reason the save action stays disabled. Same seam
+ * as the properties form's propertiesFormIssues: the state is
  * allowed to exist while the DM is typing, it just cannot be written.
  *
  * One rule, and it is the one the composer cannot survive silently: a child of
@@ -263,7 +263,7 @@ export function composerIssues(blocks: SceneBlock[], t: Translate): Record<strin
     for (const child of block.children) {
       // Deliberately a HINT with two ways out, not a correction: `##` may be
       // exactly what the DM meant to type, and this module never rewrites
-      // their text. The sentence comes from the catalog (issue #69).
+      // their text. The sentence comes from the catalog.
       if (endsIfSectionText(blockMarkdown(child)))
         issues[child.id] = t("composer.issue.sectionEscape");
     }
@@ -273,7 +273,7 @@ export function composerIssues(blocks: SceneBlock[], t: Translate): Record<strin
 
 // --- new blocks --------------------------------------------------------------
 
-/** Which list the „+" belongs to — the body, or one If-section's children. */
+/** Which list the add action belongs to — the body, or one If-section's children. */
 export type BlockScope = "body" | "section";
 
 /** One entry of the type picker. */
@@ -281,7 +281,7 @@ export interface NewBlockOption {
   /** Stable key for React and for tests. */
   key: string;
   label: string;
-  /** Builds the block — always a phase-1 constructor, never a literal. */
+  /** Builds the block — always a block-model constructor, never a literal. */
   create: () => SceneBlock;
 }
 
@@ -292,7 +292,7 @@ export interface NewBlockOption {
  *
  * Two entries differ inside a section, both for the same reason — the next
  * parse must find the same structure again:
- *   * no „Falls-Abschnitt": sections do not nest (a second `## If:` ends the
+ *   * no If-section: sections do not nest (a second `## If:` ends the
  *     first one), so a nested one would silently become a sibling.
  *   * a new heading starts at level 3: a `##` inside a section ENDS it, and the
  *     blocks below it would leave the section with it.
@@ -323,8 +323,8 @@ const ALL_DEPTHS: readonly HeadingBlock["depth"][] = [1, 2, 3, 4, 5, 6];
 
 /**
  * The levels a heading may take here — see newBlockOptions for the `##` rule.
- * Inside a section the list is the format's own boundary (grammar.ts,
- * endsIfSection), not a second hard-coded „3".
+ * Inside a section the list is the format's own boundary (@grimoire/shared/grammar,
+ * endsIfSection), not a second hard-coded 3.
  */
 export function headingDepths(scope: BlockScope): HeadingBlock["depth"][] {
   if (scope === "body") return [...ALL_DEPTHS];

@@ -311,6 +311,7 @@ describe("jobErrorBody", () => {
         startedAt: "2026-08-20T10:00:00.000Z",
         sceneEdits: {},
         npcEdits: {},
+        locationEdits: {},
         review: emptyReview(),
         rev: 0,
       }),
@@ -394,6 +395,7 @@ describe("review state mapping", () => {
       startedAt: "2026-01-01T00:00:00.000Z",
       sceneEdits: {},
       npcEdits: {},
+      locationEdits: {},
       rev: 0,
       result: {
         scenes: [proposed("a"), proposed("b")],
@@ -625,6 +627,7 @@ describe("the run's parts", () => {
       startedAt: "2026-09-15T10:00:00.000Z",
       sceneEdits: {},
       npcEdits: {},
+      locationEdits: {},
       review: emptyReview(),
       rev: 0,
       pipeline: {
@@ -798,6 +801,7 @@ describe("the campaign's job, wherever it is shown", () => {
       startedAt: "2026-09-15T10:00:00.000Z",
       sceneEdits: {},
       npcEdits: {},
+      locationEdits: {},
       review: emptyReview(),
       rev: 0,
       ...over,
@@ -902,6 +906,7 @@ describe("the stages of a scene run's review", () => {
       startedAt: "2026-01-01T00:00:00.000Z",
       sceneEdits: {},
       npcEdits: {},
+      locationEdits: {},
       rev: 0,
       review: emptyReview(),
       result: {

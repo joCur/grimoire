@@ -831,6 +831,12 @@ export const generateJobs = sqliteTable(
      */
     npcEdits: text("npc_edits").notNull().default("{}"),
     /**
+     * The DM's changes to the proposed locations — JSON, one `LocationChange`
+     * per location id (`GeneratorJob.locationEdits`), applied on top of the
+     * proposal when it is accepted.
+     */
+    locationEdits: text("location_edits").notNull().default("{}"),
+    /**
      * The DM's REVIEW STATE — JSON, see `GeneratorJobReview`:
      * the decision per proposed npc and location, the dropped scenes, the per
      * field/block decisions of an augment run and the parts a partial

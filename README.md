@@ -902,8 +902,8 @@ model needs to know about their fields is in their prompt
 `generator/location-system-prompt.md`). A job lists the proposed scenes
 under `result.scenes`, the NPCs under `result.npcs` and the locations under
 `result.locations`; an NPC run carries its one NPC under `npcResult.npc`.
-The DM's changes to a proposal are kept per scene under `sceneEdits` and per
-NPC under `npcEdits`. The job is its own resource (`…/generator-jobs/<id>`,
+The DM's changes to a proposal are kept per scene under `sceneEdits`, per
+NPC under `npcEdits` and per location under `locationEdits`. The job is its own resource (`…/generator-jobs/<id>`,
 at most one per campaign): it is reviewed and accepted with `PATCH` on it,
 discarded with `DELETE`. The review of a scene run walks in stages — the new
 locations, then the new NPCs, then the scenes — and the stage is part of the
@@ -919,6 +919,13 @@ their scene, NPC or location by id, the field and, in the text, the line.
 The review shows a part's notes and hints on its card, a hint at the field
 or the block of the text it names, until the part is written, rejected or
 dropped; the run's notes stand above the stages until the job is done.
+The DM answers a part's notes, and the answer patches the proposal instead
+of generating it again: the model returns operations (a field set; a block
+replaced, inserted after or removed by a literal anchor; a note), the
+server applies what it can and reports the rest as findings — data the app
+says in a sentence (`pipeline.parts[].findings`) — and the round
+waits on the part (`pipeline.parts[].round`) until the DM has taken or kept
+each change — a taken one lands in the edits of the proposal.
 Details in `generator/README.md`.
 
 The mechanical check reads the fields and the text, but no heading

@@ -3,7 +3,7 @@
 //
 // `generatorJobSchema` is the job as `GET /api/campaigns/:c/generator-jobs/:id`
 // answers it. The TypeScript type, the POST that starts a run, the PATCH that
-// reviews and accepts it, the PATCH that retries one of its parts and the
+// reviews and accepts it, the PATCH that retries or patches one of its parts and the
 // DELETE that discards it are each derived from it below with zod's own API.
 //
 // A campaign has at most ONE job, whatever its kind: a start while a run is
@@ -18,7 +18,8 @@
 // campaign until it is accepted.
 
 import { z } from "zod";
-import { locationProposalSchema } from "./location";
+import { blockInsertSchema, blockRemoveSchema, blockReplaceSchema } from "./body-patch";
+import { locationChangeSchema, locationProposalSchema } from "./location";
 import { npcChangeSchema, npcProposalSchema } from "./npc";
 import { sceneChangeSchema, sceneProposalSchema } from "./scene";
 
@@ -189,6 +190,101 @@ export type LocationAugmentResult = z.infer<typeof locationAugmentResultSchema>;
 export const GENERATOR_JOB_PART_STATUSES = ["pending", "running", "done", "failed"] as const;
 export type GeneratorJobPartStatus = (typeof GENERATOR_JOB_PART_STATUSES)[number];
 
+/** The DM's answer to one model note on a part — `note` is the note, verbatim. */
+export const partAnswerSchema = z.strictObject({
+  note: z.string(),
+  answer: z.string(),
+});
+
+export type PartAnswer = z.infer<typeof partAnswerSchema>;
+
+/**
+ * One change a patch round proposes for its part's proposal, as the server
+ * applied it to the proposal the model saw — `id` is its key within the round:
+ *
+ *   set          `field` gets `value`, in the proposal's own form — `null`
+ *                clears an optional field;
+ *   replace,     one block of `body`, named by `anchor`; `block` is that block
+ *   insertAfter, as the body holds it, and `text` what replaces it or follows
+ *   remove       it.
+ */
+export const partChangeSchema = z.union([
+  z.strictObject({
+    id: z.string(),
+    op: z.enum(["set"]),
+    field: z.string(),
+    value: z.unknown(),
+  }),
+  blockReplaceSchema.extend({ id: z.string(), block: z.string() }),
+  blockInsertSchema.extend({ id: z.string(), block: z.string() }),
+  blockRemoveSchema.extend({ id: z.string(), block: z.string() }),
+]);
+
+export type PartChange = z.infer<typeof partChangeSchema>;
+
+export const PART_ROUND_STATUSES = ["running", "done", "failed"] as const;
+
+/**
+ * A patch ROUND on a finished part: the DM answered the model's notes on it,
+ * and the model patches the proposal instead of writing it again
+ * (decisions/generator).
+ *
+ *   - `answers` what the DM sent — every answered note, verbatim;
+ *   - `status` `running` while the call is out, `done` once its changes are
+ *     here, `failed` with `error` when the call brought none — the notes then
+ *     stay, and the DM sends the answers again;
+ *   - `changes` what the DM still decides on, one by one. Taking one writes it
+ *     into the part's edits, keeping one drops it; the round is over when
+ *     nothing is left.
+ */
+export const partRoundSchema = z.strictObject({
+  status: z.enum(PART_ROUND_STATUSES),
+  answers: z.array(partAnswerSchema),
+  changes: z.array(partChangeSchema),
+  error: z.string().optional(),
+});
+
+export type PartRound = z.infer<typeof partRoundSchema>;
+
+/**
+ * What the server found when it applied a patch round's operations and could
+ * not apply one — data, not a sentence: the app says it in the DM's language.
+ * Every kind names what it is about:
+ *
+ *   unreadable        an operation that does not read as one of the entity's;
+ *   anchor_missing,   a block operation whose `anchor` names no block of the
+ *   anchor_ambiguous  proposal, or several;
+ *   text_empty        a replace or insert that brings no text;
+ *   callouts_unknown, a replace or insert whose text carries callouts or
+ *   refs_unknown      `[[id]]` references nobody knows — `anchor` is the
+ *                     block it was about;
+ *   field_unknown     a `set` on a field the entity does not have;
+ *   field_empty       a `set` that empties a field that must hold a value;
+ *   field_invalid     a `set` whose value the field's schema refuses;
+ *   chapter_outside   a scene moved out of the run's `chapter`;
+ *   ids_unknown       a scene's `location` or `npcs` naming `ids` neither the
+ *                     campaign nor the run has.
+ */
+export const patchFindingSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("unreadable") }),
+  z.strictObject({ kind: z.literal("anchor_missing"), anchor: z.string() }),
+  z.strictObject({ kind: z.literal("anchor_ambiguous"), anchor: z.string() }),
+  z.strictObject({ kind: z.literal("text_empty"), anchor: z.string() }),
+  z.strictObject({
+    kind: z.literal("callouts_unknown"),
+    anchor: z.string(),
+    callouts: z.array(z.string()),
+  }),
+  z.strictObject({ kind: z.literal("refs_unknown"), anchor: z.string(), ids: z.array(z.string()) }),
+  z.strictObject({ kind: z.literal("field_unknown"), field: z.string() }),
+  z.strictObject({ kind: z.literal("field_empty"), field: z.string() }),
+  z.strictObject({ kind: z.literal("field_invalid"), field: z.string() }),
+  z.strictObject({ kind: z.literal("chapter_outside"), chapter: z.string() }),
+  z.strictObject({ kind: z.literal("ids_unknown"), field: z.string(), ids: z.array(z.string()) }),
+]);
+
+export type PatchFinding = z.infer<typeof patchFindingSchema>;
+
 /**
  * ONE part of a scene run. An OUTLINE call decides which scenes exist, and
  * then every scene, every proposed npc and every proposed location is a call
@@ -217,9 +313,18 @@ export const generatorJobPartSchema = z.strictObject({
   rawReply: z.string().optional(),
   /**
    * The model's own review notes on what this part proposes (a gap in the
-   * source text, a value it had to set) — empty until the part is done.
+   * source text, a value it had to set) — empty until the part is done. A
+   * note the DM answered is done once the patch round on it is back and
+   * leaves the list; what the patch call noted joins it.
    */
   warnings: z.array(z.string()),
+  /** The patch round on this part, while there is one. */
+  round: partRoundSchema.optional(),
+  /**
+   * What the last patch round could not apply, until the next round opens or
+   * the part is decided; absent when it applied everything.
+   */
+  findings: z.array(patchFindingSchema).optional(),
 });
 
 export type GeneratorJobPart = z.infer<typeof generatorJobPartSchema>;
@@ -354,6 +459,9 @@ export const sceneEditSchema = sceneChangeSchema.omit({ id: true });
 /** What the DM may change about a proposed npc — see `sceneEditSchema`. */
 export const npcEditSchema = npcChangeSchema.omit({ id: true });
 
+/** What the DM may change about a proposed location — see `sceneEditSchema`. */
+export const locationEditSchema = locationChangeSchema.omit({ id: true });
+
 /**
  * A job, exactly as the resource answers it:
  *
@@ -368,9 +476,10 @@ export const npcEditSchema = npcChangeSchema.omit({ id: true });
  *     `npcResult` for an npc run, `sceneAugmentResult`, `npcAugmentResult`
  *     or `locationAugmentResult` for an augment run — and `error` for a run
  *     that failed;
- *   - `sceneEdits` and `npcEdits`, the DM's changes to a proposed scene or
- *     npc by its id: a change names the fields it sets, `null` clears an
- *     optional one, and every other field keeps the model's value;
+ *   - `sceneEdits`, `npcEdits` and `locationEdits`, the DM's changes to a
+ *     proposed scene, npc or location by its id: a change names the fields it
+ *     sets, `null` clears an optional one, and every other field keeps the
+ *     model's value;
  *   - `review`, the DM's decisions and what is already accepted;
  *   - `pipeline`, the parts of a scene run;
  *   - `rev` the row version a PATCH or a DELETE sends back as its guard. It
@@ -398,6 +507,7 @@ export const generatorJobSchema = z.strictObject({
   error: generatorJobErrorSchema.optional(),
   sceneEdits: z.record(z.string(), sceneEditSchema),
   npcEdits: z.record(z.string(), npcEditSchema),
+  locationEdits: z.record(z.string(), locationEditSchema),
   review: generatorJobReviewSchema,
   pipeline: generatorJobPipelineSchema.optional(),
   rev: z.number(),
@@ -464,14 +574,14 @@ export type GeneratorJobReviewPatch = z.infer<typeof generatorJobReviewPatchSche
 
 /**
  * The body of `PATCH /api/campaigns/:c/generator-jobs/:id`: the guard and the
- * review's own fields — the DM's changes to a proposed scene or npc, merged
- * field by field onto the stored change of that proposal, and the review
+ * review's own fields — the DM's changes to a proposed scene, npc or
+ * location, merged field by field onto the stored change of that proposal, and the review
  * (see `generatorJobReviewPatchSchema`). The run's own fields are the
  * server's. Strict like the schema it comes from: any other key is a 400
  * naming it.
  */
 export const generatorJobPatchSchema = generatorJobSchema
-  .pick({ id: true, sceneEdits: true, npcEdits: true })
+  .pick({ id: true, sceneEdits: true, npcEdits: true, locationEdits: true })
   .partial()
   .extend({
     review: generatorJobReviewPatchSchema.optional(),
@@ -481,12 +591,30 @@ export const generatorJobPatchSchema = generatorJobSchema
 export type GeneratorJobPatch = z.infer<typeof generatorJobPatchSchema>;
 
 /**
- * The body of `PATCH /api/campaigns/:c/generator-jobs/:id/parts/:key`: a
- * failed part is set `running` again — it runs once more.
+ * The body of `PATCH /api/campaigns/:c/generator-jobs/:id/parts/:key`, one of
+ * three:
+ *
+ *   - `{ status: "running" }` — a failed part runs once more;
+ *   - `{ rev, round: { answers } }` — the DM's answers to the model's notes on
+ *     a finished part start a patch round on it;
+ *   - `{ rev, round: { changes } }` — the DM takes or keeps changes of the
+ *     round, by their id.
+ *
+ * The two round bodies carry the job's guard, like every review write.
  */
-export const generatorJobPartPatchSchema = z.strictObject({
-  status: generatorJobPartSchema.shape.status.extract(["running"]),
-});
+export const generatorJobPartPatchSchema = z.union([
+  z.strictObject({
+    status: generatorJobPartSchema.shape.status.extract(["running"]),
+  }),
+  z.strictObject({
+    rev: z.number(),
+    round: z.strictObject({ answers: z.array(partAnswerSchema) }),
+  }),
+  z.strictObject({
+    rev: z.number(),
+    round: z.strictObject({ changes: z.record(z.string(), z.enum(["taken", "kept"])) }),
+  }),
+]);
 
 export type GeneratorJobPartPatch = z.infer<typeof generatorJobPartPatchSchema>;
 

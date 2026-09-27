@@ -3,10 +3,10 @@
 // line sits in. The block and its notes form one group the notes describe.
 // Without notes it is exactly the plain rendering.
 
+import { splitAtLines } from "@grimoire/shared/blocks";
 import { useMemo } from "react";
 
 import { describedBy, PlaceNoteList, usePlaceNotes } from "@/components/place-notes";
-import { splitAtLines } from "@/lib/blocks";
 import { Markdown } from "@/markdown/Markdown";
 
 export function NotedMarkdown({ body }: { body: string }) {

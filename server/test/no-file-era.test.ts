@@ -119,7 +119,7 @@ const EXCEPTIONS: readonly Exception[] = [
     reason: "the browser timing an init script runs at, spelled the way the browser does",
   },
   {
-    path: "app/src/lib/blocks.test.ts",
+    path: "shared/test/blocks.test.ts",
     rule: "file-word-for-an-entry",
     reason: "the roundtrip case reads the fixture JSON from disk and names it by file",
   },

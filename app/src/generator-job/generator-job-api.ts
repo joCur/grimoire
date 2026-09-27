@@ -1,10 +1,14 @@
 // The API client of the generator job (decisions/resources): its resource — start a
-// run, read, review and accept, retry a part, discard. Built from the shared
-// HTTP helpers (../api.ts). There is one job per campaign, whatever its kind;
-// an augment run starts on the resource of its scene, npc or location and is
-// read here like every other run.
+// run, read, review and accept, retry or patch a part, discard. Built from the
+// shared HTTP helpers (../api.ts). There is one job per campaign, whatever its
+// kind; an augment run starts on the resource of its scene, npc or location
+// and is read here like every other run.
 
-import type { GeneratorJob, GeneratorJobPatch } from "@grimoire/shared/generator-job";
+import type {
+  GeneratorJob,
+  GeneratorJobPatch,
+  PartAnswer,
+} from "@grimoire/shared/generator-job";
 
 import { ApiError, campaignPath, deleteJson, getJson, sendJson, startJob } from "@/api";
 
@@ -161,9 +165,49 @@ export function retryJobPart(
   jobId: string,
   key: string,
 ): Promise<GeneratorJob> {
-  return sendJson<GeneratorJob>(
-    "PATCH",
-    `${generatorJobPath(campaign, jobId)}/parts/${encodeURIComponent(key)}`,
-    { status: "running" },
-  );
+  return sendJson<GeneratorJob>("PATCH", partPath(campaign, jobId, key), { status: "running" });
+}
+
+/** `…/generator-jobs/:id/parts/:key` — one part of a scene run. */
+function partPath(campaign: string, jobId: string, key: string): string {
+  return `${generatorJobPath(campaign, jobId)}/parts/${encodeURIComponent(key)}`;
+}
+
+/**
+ * Answer the model's notes on a finished part: one patch round, run on the
+ * server — the answer is the job with the round `running`, and the job query
+ * polls until it is back. `rev` is the job's guard; a 409 `rev_conflict`
+ * means the job moved on (another tab, a note already answered) and nothing
+ * started.
+ */
+export function answerPartNotes(
+  campaign: string,
+  jobId: string,
+  key: string,
+  rev: number,
+  answers: PartAnswer[],
+): Promise<GeneratorJob> {
+  return sendJson<GeneratorJob>("PATCH", partPath(campaign, jobId, key), {
+    rev,
+    round: { answers },
+  });
+}
+
+/**
+ * Take or keep changes of a part's patch round, by their id. A taken change
+ * lands in the job's edits of the proposal; the answer is the job as the
+ * decision leaves it. A 409 `patch_anchor_missing` means the block the change
+ * is about is no longer in the text, and nothing was written.
+ */
+export function decidePartChanges(
+  campaign: string,
+  jobId: string,
+  key: string,
+  rev: number,
+  changes: Record<string, "taken" | "kept">,
+): Promise<GeneratorJob> {
+  return sendJson<GeneratorJob>("PATCH", partPath(campaign, jobId, key), {
+    rev,
+    round: { changes },
+  });
 }

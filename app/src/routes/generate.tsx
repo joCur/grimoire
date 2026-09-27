@@ -49,8 +49,8 @@
 // stage the review is in live on the job (review.npcs, review.locations,
 // review.stage).
 
-import type { LocationProposal } from "@grimoire/shared/location";
-import type { NpcProposal } from "@grimoire/shared/npc";
+import { withLocationChange, type LocationProposal } from "@grimoire/shared/location";
+import { withNpcChange, type NpcProposal } from "@grimoire/shared/npc";
 import type { SceneChange, SceneProposal } from "@grimoire/shared/scene";
 import {
   isGeneratorJobSettled,
@@ -107,6 +107,7 @@ import {
   pipelineCostLabel,
   pipelineProgress,
   proposalNotes,
+  proposalState,
   rejectedReferences,
   restoredMode,
   reviewOf,
@@ -138,6 +139,7 @@ import { GeneratorJobPartCard } from "@/generator-job/GeneratorJobPartCard";
 import { GeneratorJobWorking } from "@/generator-job/GeneratorJobWorking";
 import { jobHref } from "@/generator-job/job-links";
 import { hintPlaceNotes, ModelNotes, RunNotes } from "@/generator-job/PartNotes";
+import { PartRound } from "@/generator-job/PartRound";
 import { ReviewStageNav, ReviewStageSteps } from "@/generator-job/ReviewStages";
 import { SceneReferenceNotice } from "@/generator-job/SceneReferenceNotice";
 import { useJobReview } from "@/generator-job/use-job-review";
@@ -575,14 +577,31 @@ export function GenerateRoute() {
    * card's notes slot, the naming hints at their places. Both go with the
    * proposal once it is written, rejected or dropped (`proposalNotes`). A row
    * shows neither its fields nor its text, so it lists its hints.
+   *
+   * The notes of a finished part of a scene run are ANSWERED there: its
+   * patch round (PartRound) compares its changes with `current`, the
+   * proposal as the review shows it.
    */
   const withNotes = (
     proposal: ProposalRef,
     card: (notes: ReactNode) => ReactNode,
     listed = false,
+    current?: Readonly<Record<string, unknown>>,
   ) => {
     const noted = proposalNotes(job, proposal);
-    const warnings = <ModelNotes warnings={noted.warnings} />;
+    const part = parts.find(
+      (candidate) => candidate.kind === proposal.kind && candidate.id === proposal.id,
+    );
+    const answerable =
+      job !== null &&
+      current !== undefined &&
+      part?.status === "done" &&
+      proposalState(job, proposal) === "open";
+    const warnings = answerable ? (
+      <PartRound campaign={campaign} job={job} part={part} current={current} />
+    ) : (
+      <ModelNotes warnings={noted.warnings} />
+    );
     return (
       <PlaceNotesProvider
         key={`${proposal.kind}:${proposal.id}`}
@@ -603,8 +622,12 @@ export function GenerateRoute() {
   };
 
   /** One proposed npc of the run, accepted — written — or rejected by its id (decisions/resources). */
-  const npcRow = (npc: NpcProposal, cardRef: (el: HTMLElement | null) => void) =>
-    withNotes(
+  const npcRow = (proposed: NpcProposal, cardRef: (el: HTMLElement | null) => void) => {
+    // The npc as the review shows it: the model's, with the DM's changes.
+    const change = job?.npcEdits[proposed.id];
+    const npc =
+      change === undefined ? proposed : (withNpcChange(proposed, change) as NpcProposal);
+    return withNotes(
       { kind: "npc", id: npc.id },
       (notes) => (
         <NpcProposalRow
@@ -621,10 +644,18 @@ export function GenerateRoute() {
         />
       ),
       true,
+      npc,
     );
+  };
   /** One proposed location of the run, accepted — written — or rejected by its id (decisions/resources). */
-  const locationRow = (location: LocationProposal, cardRef: (el: HTMLElement | null) => void) =>
-    withNotes(
+  const locationRow = (proposed: LocationProposal, cardRef: (el: HTMLElement | null) => void) => {
+    // The location as the review shows it: the model's, with the DM's changes.
+    const change = job?.locationEdits[proposed.id];
+    const location =
+      change === undefined
+        ? proposed
+        : (withLocationChange(proposed, change) as LocationProposal);
+    return withNotes(
       { kind: "location", id: location.id },
       (notes) => (
         <LocationProposalRow
@@ -641,7 +672,9 @@ export function GenerateRoute() {
         />
       ),
       true,
+      location,
     );
+  };
   /** The status card of a part that has no proposal to show yet. */
   const partCard = (part: GeneratorJobPart, cardRef: (el: HTMLElement | null) => void) => (
     <GeneratorJobPartCard
@@ -721,7 +754,7 @@ export function GenerateRoute() {
         onAccept={() => apply.mutate({ scenes: [proposed.id] })}
         onDrop={() => toggleDrop(proposed.id)}
       />
-    ));
+    ), false, shown);
   };
 
   const applied = written !== undefined;

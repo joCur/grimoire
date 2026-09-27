@@ -54,6 +54,41 @@ export const en: Messages = {
     "{count, plural, one {# note from the model} other {# notes from the model}} on this proposal",
   "generatorJob.runNotes.summary":
     "{count, plural, one {# note from the model on the whole run} other {# notes from the model on the whole run}}",
+  "generatorJob.round.answer": "Your answer to this note",
+  "generatorJob.round.answerPlaceholder": "Answer if the note should change something in the proposal",
+  "generatorJob.round.send": "Send answers",
+  "generatorJob.round.sending": "Sending …",
+  "generatorJob.round.running": "The model is working your answers into this proposal.",
+  "generatorJob.round.failed":
+    "The model could not work your answers in, and the proposal is unchanged. Send the answers again.",
+  "generatorJob.round.changes":
+    "{count, plural, one {One change from your answers is waiting for your decision.} other {# changes from your answers are waiting for your decision.}}",
+  "generatorJob.round.conflict":
+    "The run was changed elsewhere in the meantime. It has been reloaded — look it over and decide again.",
+  "generatorJob.round.sendFailed": "The answers could not be sent. Try again.",
+  "generatorJob.round.decideFailed": "The decision could not be saved. Try again.",
+  "generatorJob.finding.unreadable":
+    "One of the model's changes could not be read and was not applied.",
+  "generatorJob.finding.anchor_missing":
+    "A change was not applied because this block is not in the text: “{anchor}”",
+  "generatorJob.finding.anchor_ambiguous":
+    "A change was not applied because this block appears more than once in the text: “{anchor}”",
+  "generatorJob.finding.text_empty":
+    "A change to the block “{anchor}” was not applied because it brought no text.",
+  "generatorJob.finding.callouts_unknown":
+    "A change to the block “{anchor}” was not applied because it names callouts that do not exist: {callouts}.",
+  "generatorJob.finding.refs_unknown":
+    "A change to the block “{anchor}” was not applied because it refers to something neither the campaign nor this run has: {ids}.",
+  "generatorJob.finding.field_unknown":
+    "A change was not applied because the proposal has no field “{field}”.",
+  "generatorJob.finding.field_empty":
+    "The new value for {field} was not applied because the field must not be empty.",
+  "generatorJob.finding.field_invalid":
+    "The new value for {field} was not applied because it does not fit the field.",
+  "generatorJob.finding.chapter_outside":
+    "A change was not applied because the scene stays in this run's chapter “{chapter}”.",
+  "generatorJob.finding.ids_unknown":
+    "The new value for {field} was not applied because it names something neither the campaign nor this run has: {ids}.",
   "generatorJob.hint.field":
     "The field “{field}” still says “{from}” — the naming convention says “{to}”.",
   "generatorJob.hint.block":
@@ -350,6 +385,8 @@ export const en: Messages = {
     "This cannot be restored while {blockers} {count, plural, one {is} other {are}} in the trash. Restore {count, plural, one {it} other {them}} first.",
   "server.proposal_not_written":
     "Not written — this scene names an NPC or a location of the run that has not been accepted. Accept it first or remove it from the scene.",
+  "server.patch_anchor_missing":
+    "Not applied — the block this change is about is no longer in the text as it was. Keep the change and edit the text yourself.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": "the chapter “{name}”",
@@ -842,9 +879,9 @@ export const en: Messages = {
   "generate.written.toChapters": "To the chapters",
 
 
-  // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
+  // --- the markdown format's own vocabulary (markdown/callout-labels.ts holds the KEY
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show
-  //     them; lib/blocks.ts names the same blocks in the composer) -----------
+  //     them; lib/block-labels.ts names the same blocks in the composer) -----------
   "markdown.callout.readaloud": "Read-aloud",
   "markdown.callout.check": "Check",
   "markdown.callout.secret": "Secret",
@@ -858,7 +895,7 @@ export const en: Messages = {
   "markdown.readaloud.copied.aria": "Read-aloud text copied",
   "markdown.table.aria": "Table",
 
-  // --- the Block-Composer (components/BlockComposer.tsx, lib/blocks.ts,
+  // --- the Block-Composer (components/BlockComposer.tsx, @grimoire/shared/blocks,
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Edit mode",
   "composer.mode.blocks": "Blocks",

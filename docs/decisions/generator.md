@@ -42,6 +42,15 @@
   that proposal, at the place it names, and goes with it once it is decided.
   Only what concerns the run as a whole belongs to the run, and it stays
   until the job is done.
+- **Answering a note patches the proposal instead of generating it again.**
+  The DM answers the model's notes on one proposal; the model then returns
+  operations on that proposal — a field set, a block replaced, inserted
+  after or removed by a literal anchor, or a note — never the proposal
+  again. The server applies them deterministically and turns every
+  operation it cannot apply unambiguously into a finding that names why —
+  data, which the app says in the DM's language. The DM
+  takes or keeps each applied change on its own, and a taken change is one
+  of the DM's edits of the proposal.
 - **Applying writes exactly what is named.** Accepting a proposal writes that
   proposal, in one transaction under the same rules as creating its entity,
   and nothing else. A scene is applied only once every location and NPC of
@@ -71,6 +80,11 @@
   and no scene points at a row that was never written.
 - A note in a pooled list above the review has to be matched to its proposal
   by the DM, and it keeps standing after that proposal is decided.
+- A proposal written again from the answers can change anything, including
+  what the DM already edited or checked; the DM would have to review it
+  whole a second time. Operations touch only what they name, cost a
+  fraction of the tokens, and can be shown and decided one change at a
+  time.
 
 ## Consequences
 
@@ -82,6 +96,10 @@
 - Where applied scenes stand in their chapter follows `decisions/scene-order`.
 - A failed part of a location or NPC keeps its stage open until it is retried
   or the job is discarded.
+- An operation whose anchor does not name exactly one block changes nothing;
+  the DM reads the finding and answers again or edits by hand. A change that no
+  longer applies to the proposal as the DM has edited it since is refused
+  instead of guessed.
 - A scene that names a rejected proposal cannot be applied as it stands:
   the DM accepts the proposal after all, removes the reference, or drops the
   scene.

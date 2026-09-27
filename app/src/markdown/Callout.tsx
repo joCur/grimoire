@@ -10,16 +10,17 @@
 // only surfaces on hover/focus.
 
 import type { CalloutKind } from "@grimoire/shared/callouts";
+import { isCalloutKind } from "@grimoire/shared/grammar";
 import { Check, Copy, CornerDownRight, Dice3, Eye, Gem, PenLine } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { CALLOUT_LABEL_KEYS, isCalloutKind } from "@/markdown/grammar";
+import { CALLOUT_LABEL_KEYS } from "@/markdown/callout-labels";
 
-// The labels are the format's vocabulary and live with it (grammar.ts holds
-// the catalog KEY per kind) — the composer's cards name the
+// The labels are the format's vocabulary and live with it (callout-labels.ts
+// holds the catalog KEY per kind) — the composer's cards name the
 // same six blocks and must not invent second names.
 // Markers are the closest lucide glyphs (Dice3/Eye/CornerDownRight/Gem/PenLine
 // match the prototype's own stroke SVGs closely enough — decisions/stack: lucide

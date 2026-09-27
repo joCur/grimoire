@@ -4,7 +4,9 @@
 //   model notes   what the model noted about ONE proposal stand under its
 //                 card's header; what it noted about the whole run stands
 //                 above the stages as one compact block. From three on a list
-//                 starts folded, and its summary counts.
+//                 starts folded, and its summary counts. On a finished
+//                 part whose proposal is still open, the notes stand with
+//                 their answer fields instead (PartRound.tsx).
 //   naming hints  the naming check's findings stand at the field they name or
 //                 at the block of the body their line sits in, handed to the
 //                 card as place notes (components/place-notes.tsx) and bound
@@ -88,22 +90,37 @@ export function RunNotes({ warnings }: { warnings: readonly string[] }) {
 /** Where a naming hint stands, which is what its sentence says about the place. */
 type HintPlace = "field" | "block" | "text";
 
-/** The label of each field a naming hint can name, per kind of proposal. */
-const FIELD_LABEL: Record<ProposalRef["kind"], Readonly<Record<string, MessageKey>>> = {
+/**
+ * The label of each field of a proposal but its id and its text, per kind —
+ * where a naming hint or a change of a patch round names a field.
+ */
+export const FIELD_LABEL: Record<ProposalRef["kind"], Readonly<Record<string, MessageKey>>> = {
   scene: {
     title: "properties.scene.title.label",
+    type: "properties.scene.type.label",
     trigger: "properties.scene.trigger.label",
+    chapter: "properties.scene.chapter.label",
+    location: "properties.scene.location.label",
+    npcs: "properties.scene.npcs.label",
+    handouts: "properties.scene.handouts.label",
+    tags: "properties.scene.tags.label",
+    status: "properties.scene.status.label",
   },
   npc: {
     name: "properties.npc.name.label",
     role: "properties.npc.role.label",
+    chapter: "properties.npc.chapter.label",
+    status: "properties.npc.status.label",
+    statblock: "properties.npc.statblock.label",
+    quickstats: "properties.npc.quickstats.label",
     voice: "properties.npc.voice.label",
     appearance: "properties.npc.appearance.label",
     motivation: "properties.npc.motivation.label",
-    statblock: "properties.npc.statblock.label",
   },
   location: {
     name: "properties.location.name.label",
+    chapter: "properties.location.chapter.label",
+    roll20Page: "properties.location.roll20.label",
     atmosphere: "properties.location.atmosphere.label",
   },
 };
