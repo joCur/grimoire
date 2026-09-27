@@ -32,6 +32,7 @@ import {
   ASSET_FILES,
   campaignRefIds,
   collectContext,
+  composePrompt,
   loadAsset,
   obtainProvider,
   runPipeline,
@@ -39,7 +40,7 @@ import {
   unknownRefErrors,
   withNamingHints,
 } from "./generator";
-import { formatContract, sameValue } from "./generator-augment";
+import { sameValue } from "./generator-augment";
 import { locationReplyRequest, parseLocationReply } from "./location-reply";
 import type { LLMProvider } from "./llm-provider";
 import { parseRequest } from "./store/shared";
@@ -48,8 +49,6 @@ import { patchLocation, readLocation } from "./store/locations";
 /** The correction turn's tail — what a corrected reply must still contain. */
 const CORRECTION_TAIL = "den vollständigen ergänzten Ort enthalten";
 
-/** The section of the location prompt that describes the location's fields. */
-export const LOCATION_FORMAT_HEADING = "## Die Felder des Orts";
 
 /** A location without its guard — what the prompt shows and the proposal compares. */
 function withoutGuard(location: Location): LocationProposal {
@@ -59,15 +58,11 @@ function withoutGuard(location: Location): LocationProposal {
 
 /**
  * The system prompt of a location augment run: the augmentation rule for a
- * location, followed by the field section of the location prompt — the
- * fields are described exactly once.
+ * location, followed by the location's fields
+ * (`ASSET_FILES.location.fields`) — the one place they are described.
  */
 export async function locationAugmentSystemPrompt(): Promise<string> {
-  const [rule, format] = await Promise.all([
-    loadAsset(ASSET_FILES.locationAugment.systemPrompt),
-    loadAsset(ASSET_FILES.location.systemPrompt),
-  ]);
-  return `${rule.trimEnd()}\n\n${formatContract(format, LOCATION_FORMAT_HEADING)}`;
+  return composePrompt([ASSET_FILES.locationAugment.systemPrompt, ASSET_FILES.location.fields]);
 }
 
 /**

@@ -32,6 +32,7 @@ import {
   ASSET_FILES,
   campaignRefIds,
   collectContext,
+  composePrompt,
   loadAsset,
   obtainProvider,
   runPipeline,
@@ -39,7 +40,7 @@ import {
   unknownRefErrors,
   withNamingHints,
 } from "./generator";
-import { formatContract, sameValue } from "./generator-augment";
+import { sameValue } from "./generator-augment";
 import type { LLMProvider } from "./llm-provider";
 import { npcReplyRequest, parseNpcReply } from "./npc-reply";
 import { parseRequest } from "./store/shared";
@@ -48,8 +49,6 @@ import { patchNpc, readNpc } from "./store/npcs";
 /** The correction turn's tail — what a corrected reply must still contain. */
 const CORRECTION_TAIL = "den vollständigen ergänzten NPC enthalten";
 
-/** The section of the npc prompt that describes the npc's fields. */
-export const NPC_FORMAT_HEADING = "## Die Felder des NPC";
 
 /** An npc without its guard — what the prompt shows and the proposal compares. */
 function withoutGuard(npc: Npc): NpcProposal {
@@ -59,15 +58,11 @@ function withoutGuard(npc: Npc): NpcProposal {
 
 /**
  * The system prompt of an npc augment run: the augmentation rule for an npc,
- * followed by the field section of the npc prompt — the fields are described
- * exactly once.
+ * followed by the npc's fields (`ASSET_FILES.npc.fields`) — the one place
+ * they are described.
  */
 export async function npcAugmentSystemPrompt(): Promise<string> {
-  const [rule, format] = await Promise.all([
-    loadAsset(ASSET_FILES.npcAugment.systemPrompt),
-    loadAsset(ASSET_FILES.npc.systemPrompt),
-  ]);
-  return `${rule.trimEnd()}\n\n${formatContract(format, NPC_FORMAT_HEADING)}`;
+  return composePrompt([ASSET_FILES.npcAugment.systemPrompt, ASSET_FILES.npc.fields]);
 }
 
 /**

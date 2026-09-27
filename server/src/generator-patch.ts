@@ -75,8 +75,8 @@ import {
   type RunPlan,
 } from "./generate-pipeline";
 import { bodyRefSlugs } from "@grimoire/shared/refs";
-import { ASSET_FILES, loadAsset, runPipeline, unknownCallouts } from "./generator";
-import { formatContract, sameValue } from "./generator-augment";
+import { ASSET_FILES, composePrompt, loadAsset, runPipeline, unknownCallouts } from "./generator";
+import { sameValue } from "./generator-augment";
 import {
   assertAnswerable,
   decidePartRound,
@@ -88,9 +88,6 @@ import {
 } from "./generator-jobs";
 import { parseJsonReply } from "./json-reply";
 import type { LLMProvider, ReplySchema } from "./llm-provider";
-import { LOCATION_FORMAT_HEADING } from "./location-augment";
-import { NPC_FORMAT_HEADING } from "./npc-augment";
-import { SCENE_FORMAT_HEADING } from "./scene-augment";
 
 type PartKind = StoredPart["kind"];
 
@@ -104,26 +101,27 @@ const ENTITY: Record<
     reply: PatchReplySchema;
     replyName: string;
     change: z.ZodObject;
-    format: { asset: string; heading: string };
+    /** The prompt file that describes the entity's fields. */
+    fields: string;
   }
 > = {
   scene: {
     reply: scenePatchReplySchema,
     replyName: "scene_patch",
     change: sceneChangeSchema,
-    format: { asset: ASSET_FILES.scene.systemPrompt, heading: SCENE_FORMAT_HEADING },
+    fields: ASSET_FILES.scene.fields,
   },
   npc: {
     reply: npcPatchReplySchema,
     replyName: "npc_patch",
     change: npcChangeSchema,
-    format: { asset: ASSET_FILES.npc.systemPrompt, heading: NPC_FORMAT_HEADING },
+    fields: ASSET_FILES.npc.fields,
   },
   location: {
     reply: locationPatchReplySchema,
     replyName: "location_patch",
     change: locationChangeSchema,
-    format: { asset: ASSET_FILES.location.systemPrompt, heading: LOCATION_FORMAT_HEADING },
+    fields: ASSET_FILES.location.fields,
   },
 };
 
@@ -416,12 +414,8 @@ function dedupe(answers: PartAnswer[]): PartAnswer[] {
 }
 
 /** The system prompt of a patch call: the patch rule, then the fields of the part's entity. */
-async function patchSystemPrompt(kind: PartKind): Promise<string> {
-  const [rule, format] = await Promise.all([
-    loadAsset(ASSET_FILES.patch.systemPrompt),
-    loadAsset(ENTITY[kind].format.asset),
-  ]);
-  return `${rule.trimEnd()}\n\n${formatContract(format, ENTITY[kind].format.heading)}`;
+function patchSystemPrompt(kind: PartKind): Promise<string> {
+  return composePrompt([ASSET_FILES.patch.systemPrompt, ENTITY[kind].fields]);
 }
 
 /**

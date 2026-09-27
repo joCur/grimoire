@@ -31,6 +31,7 @@ import {
   ASSET_FILES,
   campaignRefIds,
   collectContext,
+  composePrompt,
   loadAsset,
   obtainProvider,
   runPipeline,
@@ -38,7 +39,7 @@ import {
   unknownRefErrors,
   withNamingHints,
 } from "./generator";
-import { formatContract, sameValue } from "./generator-augment";
+import { sameValue } from "./generator-augment";
 import type { LLMProvider } from "./llm-provider";
 import { parseSceneReply, sceneReplyRequest } from "./scene-reply";
 import { parseRequest } from "./store/shared";
@@ -47,8 +48,6 @@ import { patchScene, readScene } from "./store/scenes";
 /** The correction turn's tail — what a corrected reply must still contain. */
 const CORRECTION_TAIL = "die vollständige ergänzte Szene enthalten";
 
-/** The section of the scene prompt that describes the scene's fields. */
-export const SCENE_FORMAT_HEADING = "## Die Felder der Szene";
 
 /** A scene without its guard — what the prompt shows and the proposal compares. */
 function withoutGuard(scene: Scene): SceneProposal {
@@ -58,15 +57,11 @@ function withoutGuard(scene: Scene): SceneProposal {
 
 /**
  * The system prompt of a scene augment run: the augmentation rule for a
- * scene, followed by the field section of the scene prompt — the fields are
- * described exactly once.
+ * scene, followed by the scene's fields (`ASSET_FILES.scene.fields`) — the
+ * one place they are described.
  */
 export async function sceneAugmentSystemPrompt(): Promise<string> {
-  const [rule, format] = await Promise.all([
-    loadAsset(ASSET_FILES.sceneAugment.systemPrompt),
-    loadAsset(ASSET_FILES.scene.systemPrompt),
-  ]);
-  return `${rule.trimEnd()}\n\n${formatContract(format, SCENE_FORMAT_HEADING)}`;
+  return composePrompt([ASSET_FILES.sceneAugment.systemPrompt, ASSET_FILES.scene.fields]);
 }
 
 /**

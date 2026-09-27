@@ -8,8 +8,12 @@
 // wording these checks assert is German too.
 
 import { describe, expect, test } from "bun:test";
-import { ASSET_FILES, buildCorrectionMessage, loadAsset } from "../src/generator";
-import { formatContract } from "../src/generator-augment";
+import {
+  ASSET_FILES,
+  buildCorrectionMessage,
+  loadAsset,
+  loadPromptAssets,
+} from "../src/generator";
 import { sceneSystemPrompt } from "../src/generate-pipeline";
 import { locationAugmentSystemPrompt } from "../src/location-augment";
 import { npcAugmentSystemPrompt } from "../src/npc-augment";
@@ -29,13 +33,17 @@ function ruleParagraph(doc: string, label: string): string {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-/** Every prompt of the scene: create, one scene of an outline, augment. */
+/** Every prompt of the scene: one scene of an outline, augment. */
 async function scenePrompts(): Promise<Array<[string, string]>> {
   return [
-    ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
-    ["scene/single", await sceneSystemPrompt()],
+    ["scene", await sceneSystemPrompt()],
     ["scene/augment", await sceneAugmentSystemPrompt()],
   ];
+}
+
+/** The composed create prompt of an npc or a location. */
+async function createPrompt(kind: "npc" | "location"): Promise<string> {
+  return (await loadPromptAssets(kind)).systemPrompt;
 }
 
 describe("the orthography rule", () => {
@@ -45,9 +53,9 @@ describe("the orthography rule", () => {
     const assembled: Array<[string, string]> = [
       ...(await scenePrompts()),
       ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
-      ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
+      ["npc", await createPrompt("npc")],
       ["npc/augment", await npcAugmentSystemPrompt()],
-      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
+      ["location", await createPrompt("location")],
       ["location/augment", await locationAugmentSystemPrompt()],
     ];
     for (const [kind, prompt] of assembled) {
@@ -59,7 +67,7 @@ describe("the orthography rule", () => {
 
   test("the scene's prompts share ONE sentence", async () => {
     // An npc's, a location's and the outline's prompts name their own fields
-    // in it; the three prompts of the scene name the scene's.
+    // in it; the prompts of the scene name the scene's.
     const wordings = new Set(
       (await scenePrompts()).map(([, doc]) => ruleParagraph(doc, ORTHOGRAPHY_RULE)),
     );
@@ -73,8 +81,8 @@ describe("the table rule", () => {
   test("every prompt that writes a scene, an npc or a location carries it once", async () => {
     const assembled: Array<[string, string]> = [
       ...(await scenePrompts()),
-      ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
-      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
+      ["npc", await createPrompt("npc")],
+      ["location", await createPrompt("location")],
       ["npc/augment", await npcAugmentSystemPrompt()],
       ["location/augment", await locationAugmentSystemPrompt()],
     ];
@@ -115,8 +123,7 @@ describe("the scene's prompts", () => {
       expect(prompt, kind).not.toContain("Adresse");
     }
     // The outline prompt describes its OWN object, so it must not carry this
-    // one: two output schemas in one prompt is the contradiction the augment
-    // run's `formatContract` exists to avoid.
+    // one: two output schemas in one prompt would contradict each other.
     const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
     expect(outline).not.toContain(OBJECT_RULE);
   });
@@ -175,9 +182,34 @@ describe("shared mechanics", () => {
     expect(bare).toContain("gleiches Schema,");
   });
 
-  test("a prompt without the format heading travels whole", () => {
-    expect(formatContract("# Title\n\n## Rules\n\nnothing\n", "## The scene's fields")).toContain(
-      "## Rules",
-    );
+});
+
+describe("the fields of an entity", () => {
+  test("stand once in its create prompt and once in its augment prompt, from its own prompt file", async () => {
+    const prompts: Array<[string, string, string]> = [
+      ["scene", ASSET_FILES.scene.fields, await sceneSystemPrompt()],
+      ["scene/augment", ASSET_FILES.scene.fields, await sceneAugmentSystemPrompt()],
+      ["npc", ASSET_FILES.npc.fields, await createPrompt("npc")],
+      ["npc/augment", ASSET_FILES.npc.fields, await npcAugmentSystemPrompt()],
+      ["location", ASSET_FILES.location.fields, await createPrompt("location")],
+      ["location/augment", ASSET_FILES.location.fields, await locationAugmentSystemPrompt()],
+    ];
+    for (const [kind, asset, prompt] of prompts) {
+      const fields = (await loadAsset(asset)).trimEnd();
+      expect(prompt.split(fields).length - 1, kind).toBe(1);
+    }
+  });
+
+  test("stand between the create prompt's output section and its rules", async () => {
+    for (const kind of ["npc", "location"] as const) {
+      const prompt = await createPrompt(kind);
+      const assets = ASSET_FILES[kind];
+      const order = [assets.systemPrompt, assets.fields, assets.rules];
+      const positions = await Promise.all(
+        order.map(async (asset) => prompt.indexOf((await loadAsset(asset)).trimEnd())),
+      );
+      expect(positions.every((position) => position >= 0), kind).toBe(true);
+      expect([...positions].sort((a, b) => a - b), kind).toEqual(positions);
+    }
   });
 });

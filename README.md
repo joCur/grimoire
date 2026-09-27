@@ -897,9 +897,10 @@ as well as augmenting) returns the scene, the NPC or the location without
 a new scene is always `draft`, and an NPC's `quickstats` travel as a list of
 pairs `{ key, value }`. Scene, NPC and location derive their schema
 themselves from their zod schema (`z.toJSONSchema`, [decisions/resources](docs/decisions/resources.md)), and what the
-model needs to know about their fields is in their prompt
-(`generator/system-prompt.md`, `generator/npc-system-prompt.md`,
-`generator/location-system-prompt.md`). A job lists the proposed scenes
+model needs to know about their fields is in their fields file
+(`generator/scene-fields.md`, `generator/npc-fields.md`,
+`generator/location-fields.md`), which their create, augment and patch
+prompts all load. A job lists the proposed scenes
 under `result.scenes`, the NPCs under `result.npcs` and the locations under
 `result.locations`; an NPC run carries its one NPC under `npcResult.npc`.
 The DM's changes to a proposal are kept per scene under `sceneEdits`, per

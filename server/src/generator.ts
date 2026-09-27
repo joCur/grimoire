@@ -152,34 +152,53 @@ export interface PromptAssets {
 }
 
 /**
- * The asset pairs: scenes, npcs, locations, the outline and the patch call have their own
- * prompt and their own few-shot target, cached per kind after the first
- * read; the augment runs and the single-scene mode carry a prompt alone.
+ * The prompt assets in `generator/`. Scenes, npcs, locations, the outline and
+ * the patch call have their own prompt and their own few-shot target; the
+ * augment runs and the single-scene mode carry a prompt alone.
+ *
+ * Each entity describes its fields in a prompt file of its own (`fields`),
+ * the one place they are described: its create prompt, its augment prompt
+ * and the patch prompt all load it. An entity's create prompt is composed of
+ * three prompt files in this order — `systemPrompt` (who the model is and
+ * what it answers with), `fields`, then `rules` (the rules and the worked
+ * example).
  */
 export const ASSET_FILES = {
-  // A scene run writes every scene of its outline with this pair, and the
-  // scene augment run takes the field section of the prompt and the
-  // few-shot from here.
-  scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
-  // The scene augment run's own augmentation rule; the scene pair above
-  // brings the fields and the few-shot.
+  // A scene run writes every scene of its outline with these; the scene's
+  // output section is the single-scene one (`sceneSingle`), and the scene
+  // augment run takes the fields and the few-shot from here.
+  scene: {
+    systemPrompt: "system-prompt.md",
+    fields: "scene-fields.md",
+    rules: "scene-rules.md",
+    fewShotTarget: "example-output.json",
+  },
+  // The scene augment run's own augmentation rule; the scene assets above
+  // bring the fields and the few-shot.
   sceneAugment: { systemPrompt: "scene-augment-system-prompt.md" },
   // An npc has a single-call run of its own (the NPC run), and a scene run
-  // loads this pair for every npc its outline proposes; the npc augment run
-  // takes the field section of the prompt and the few-shot from here.
-  npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
-  // The npc augment run's own augmentation rule; the npc pair above brings
+  // loads these for every npc its outline proposes; the npc augment run
+  // takes the fields and the few-shot from here.
+  npc: {
+    systemPrompt: "npc-system-prompt.md",
+    fields: "npc-fields.md",
+    rules: "npc-rules.md",
+    fewShotTarget: "npc-example-output.json",
+  },
+  // The npc augment run's own augmentation rule; the npc assets above bring
   // the fields and the few-shot.
   npcAugment: { systemPrompt: "npc-augment-system-prompt.md" },
-  // Locations have no single-call run of their own: a scene run loads this
-  // pair for every location its outline proposes, and the location augment
-  // run takes the field section of the prompt and the few-shot from here.
+  // Locations have no single-call run of their own: a scene run loads these
+  // for every location its outline proposes, and the location augment run
+  // takes the fields and the few-shot from here.
   location: {
     systemPrompt: "location-system-prompt.md",
+    fields: "location-fields.md",
+    rules: "location-rules.md",
     fewShotTarget: "location-example-output.json",
   },
-  // The location augment run's own augmentation rule; the location pair
-  // above brings the fields and the few-shot.
+  // The location augment run's own augmentation rule; the location assets
+  // above bring the fields and the few-shot.
   locationAugment: { systemPrompt: "location-augment-system-prompt.md" },
   // The OUTLINE step of a pipelined scene run: its own prompt
   // and its own few-shot (a worked example outline, not a target draft).
@@ -187,43 +206,56 @@ export const ASSET_FILES = {
     systemPrompt: "outline-system-prompt.md",
     fewShotTarget: "outline-example-output.json",
   },
-  // The output-schema section that turns the scene prompt into
-  // single-scene-from-outline mode. No few-shot of its own — the
-  // per-scene call sends the scene example asset — so, like the augment
-  // rules, this carries a system prompt alone.
+  // The output section of the scene prompt: a scene is written as exactly
+  // one scene of its outline. No few-shot of its own — the per-scene call
+  // sends the scene example asset — so, like the augment rules, this
+  // carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
   // The PATCH call on a finished part of a scene run: its own rule and its
   // own few-shot (a list of operations); the fields come from the part's
-  // entity prompt above.
+  // entity above.
   patch: { systemPrompt: "patch-system-prompt.md", fewShotTarget: "patch-example-output.json" },
 } as const;
 
 const promptAssets = new Map<string, PromptAssets>();
 
 /**
- * The kinds that have a prompt PAIR. `sceneAugment`, `npcAugment`,
- * `locationAugment` and `sceneSingle` do not: the augment runs send the
- * entity's example asset, and `sceneSingle` is only an output schema spliced
- * into the scene prompt.
+ * The kinds whose system prompt and few-shot are loaded as a PAIR. The
+ * augment runs and `sceneSingle` carry a prompt alone, the scene prompt is
+ * composed around its single-scene output section
+ * (generate-pipeline `sceneSystemPrompt`), and the patch prompt around the
+ * part's entity (generator-patch).
  */
-type PromptPairKind = Exclude<
-  keyof typeof ASSET_FILES,
-  "sceneAugment" | "npcAugment" | "locationAugment" | "sceneSingle"
->;
+type PromptPairKind = "npc" | "location" | "outline";
 
+/** The prompt files of a kind's system prompt, in the order they are composed. */
+function systemPromptFiles(kind: PromptPairKind): string[] {
+  const names = ASSET_FILES[kind];
+  return "fields" in names ? [names.systemPrompt, names.fields, names.rules] : [names.systemPrompt];
+}
+
+/** Cached per kind after the first read. */
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
   if (cached !== undefined) return cached;
-  const names = ASSET_FILES[kind];
   const assets: PromptAssets = {
-    systemPrompt: await readFile(path.join(GENERATOR_DIR, names.systemPrompt), "utf8"),
-    fewShotTarget: await readFile(path.join(GENERATOR_DIR, names.fewShotTarget), "utf8"),
+    systemPrompt: await composePrompt(systemPromptFiles(kind)),
+    fewShotTarget: await loadAsset(ASSET_FILES[kind].fewShotTarget),
   };
   promptAssets.set(kind, assets);
   return assets;
 }
 
-/** One prompt asset by its name in `generator/`, cached — the augment run mixes two pairs. */
+/**
+ * Prompt files of `generator/` joined in the given order, one blank line
+ * between two of them — the spacing between two sections of a prompt.
+ */
+export async function composePrompt(names: readonly string[]): Promise<string> {
+  const texts = await Promise.all(names.map((name) => loadAsset(name)));
+  return `${texts.map((text) => text.trimEnd()).join("\n\n")}\n`;
+}
+
+/** One prompt file by its name in `generator/`, cached — a composed prompt reads several. */
 const assetCache = new Map<string, string>();
 
 export async function loadAsset(name: string): Promise<string> {

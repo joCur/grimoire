@@ -8,7 +8,14 @@ import type { GeneratorJob, Location, LocationProposal } from "@grimoire/shared"
 import { locationProposalSchema } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generator-jobs";
-import { ASSET_FILES, campaignRefIds, collectContext, loadAsset, setProviderForTests } from "../src/generator";
+import {
+  ASSET_FILES,
+  campaignRefIds,
+  collectContext,
+  loadAsset,
+  loadPromptAssets,
+  setProviderForTests,
+} from "../src/generator";
 import {
   locationAugmentSystemPrompt,
   validateLocationAugmentReply,
@@ -108,7 +115,7 @@ describe("the prompt", () => {
   });
 
   test("the location prompts speak of the location and its fields", async () => {
-    const create = await loadAsset(ASSET_FILES.location.systemPrompt);
+    const create = (await loadPromptAssets("location")).systemPrompt;
     const augment = await locationAugmentSystemPrompt();
     for (const prompt of [create, augment]) {
       expect(prompt).not.toContain("Eigenschaft");
