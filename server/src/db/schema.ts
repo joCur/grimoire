@@ -77,6 +77,7 @@ import {
 import { NPC_STATUSES } from "@grimoire/shared/npc";
 import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
 import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
+import { ITEM_PRICE_LISTS } from "@grimoire/shared/item-price";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -877,6 +878,28 @@ export const generateJobs = sqliteTable(
     newChapterTitle: text("new_chapter_title"),
   },
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
+);
+
+// --- item prices --------------------------------------------------------------
+
+/**
+ * One ITEM PRICE (decisions/resources): what a magic item costs in Saidoro's
+ * "Sane Magic Item Prices". Reference data of the INSTANCE, so no campaign
+ * column (decisions/reference-data): the rows are written by the migration
+ * that ships them and read by every campaign. `id` is the kebab slug of the
+ * name; `note` is empty where the guide gives none.
+ */
+export const itemPrices = sqliteTable(
+  "item_prices",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    priceGp: integer("price_gp").notNull(),
+    list: text("list").notNull(),
+    note: text("note").notNull().default(""),
+    rev: revColumn(),
+  },
+  (t) => [check("item_prices_list_check", oneOf("list", ITEM_PRICE_LISTS))],
 );
 
 // --- bookkeeping ------------------------------------------------------------

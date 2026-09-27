@@ -11,7 +11,8 @@ no two-way sync.
   instead of validating: unknown constructs render as plain text, never as an
   error.
 - **A fresh instance starts empty.** The server reads no campaign files; a
-  real campaign is created in the UI. A seed tool that writes the fixtures
+  real campaign is created in the UI. Reference data is not campaign content
+  and comes with the app (`decisions/reference-data`). A seed tool that writes the fixtures
   through the store layer exists for dev, tests and E2E only
   (`decisions/data-shape`).
 - **Backing up the database file is the stack owner's job**

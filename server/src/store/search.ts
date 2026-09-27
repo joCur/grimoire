@@ -21,6 +21,9 @@
 //
 // Ranking is bm25 with the column weights of the migration
 // (title 10, ref 6, tags 4, body 1).
+//
+// Reference data of the instance (decisions/reference-data) is indexed with
+// no campaign, so every campaign's search finds it next to its own rows.
 
 import { sql } from "drizzle-orm";
 import type { SearchKind, SearchResult } from "@grimoire/shared";
@@ -88,7 +91,7 @@ interface FtsRow {
 }
 
 /**
- * Search one campaign. Campaign existence/safety is checked first (400 unsafe
+ * Search one campaign, together with the instance's reference data. Campaign existence/safety is checked first (400 unsafe
  * id, 404 unknown campaign), exactly as the Fuse version did through
  * `collectCampaignFiles`.
  */
@@ -101,7 +104,7 @@ export async function searchCampaign(campaign: string, query: string): Promise<S
     select kind, entity_id, title, body,
            bm25(search_fts, 10, 6, 4, 1) as rank
     from search_fts
-    where campaign_id = ${campaign} and search_fts match ${match}
+    where (campaign_id = ${campaign} or campaign_id is null) and search_fts match ${match}
     order by rank
     limit ${MAX_RESULTS}
   `);

@@ -4,8 +4,8 @@ Grimoire stores a campaign in an SQLite database
 (`GRIMOIRE_DATA/grimoire.db`). Every entity — **campaign**, **chapter**,
 **scene**, **NPC**, **location**, **thread** (a plot thread a chapter
 carries), **idea**, **glossary term**, **campaign knowledge** (every naming
-convention, every fact, every style rule on its own) and the **session**
-with its **pauses** and **log lines** — is a row of its own table and its own
+convention, every fact, every style rule on its own), the **session**
+with its **pauses** and **log lines** and the **item price** — is a row of its own table and its own
 resource with its own
 fields ([decisions/resources](docs/decisions/resources.md)). Campaign, chapter, scene, NPC and location have among their
 fields a `body`: their **text** in Markdown.
@@ -40,6 +40,7 @@ included, without `kind`, without `path`:
 | Session | `GET/PATCH/DELETE /api/campaigns/<campaign>/sessions/<id>` | `GET/POST /api/campaigns/<campaign>/sessions` | `/campaigns/<campaign>/sessions/<id>`, live `/campaigns/<campaign>/live` |
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
+| Item price | `GET /api/item-prices/<id>` | `GET /api/item-prices` | on the price page `/campaigns/<campaign>/item-prices` |
 
 `DELETE` on a chapter, a scene, an NPC, a location or an idea puts it in the
 **trash** (see trash below); the other `DELETE`s remove their row. The trash
@@ -71,7 +72,9 @@ are maintained on their own pages.
 
 Everything that depends on a campaign hangs under the campaign — in the API
 `/api/campaigns/<campaign>/…`, in the app `/campaigns/<campaign>/…` ([decisions/resources](docs/decisions/resources.md)).
-Without a campaign stay `/api/campaigns`, `/api/settings` and `/settings`.
+Without a campaign stay `/api/campaigns`, `/api/settings`, `/settings` and
+the instance's reference data, `/api/item-prices`
+([decisions/reference-data](docs/decisions/reference-data.md)).
 
 ## Fields
 
@@ -502,6 +505,43 @@ schema in `shared/src/glossary-term.ts`, [decisions/resources](docs/decisions/re
 - The search finds every term; the hit names itself with `kind:
   "glossary-term"` and its `id` and opens the glossary page. The text above
   the terms is not a term but the campaign's `glossaryIntro` field.
+
+### Item price
+
+An item price is what one magic item costs in Saidoro's "Sane Magic Item
+Prices" ([the guide](https://www.giantitp.com/forums/showthread.php?424243)),
+its own resource with its own type (`ItemPrice`, from the zod schema in
+`shared/src/item-price.ts`). It is reference data of the instance, not of a
+campaign ([decisions/reference-data](docs/decisions/reference-data.md)): the
+app ships the guide's items, a migration writes them, and nothing changes
+them. `GET /api/item-prices/<id>` responds with it:
+
+```json
+{
+  "id": "arrow-of-slaying",
+  "name": "Arrow of Slaying",
+  "priceGp": 600,
+  "list": "consumable",
+  "note": "each",
+  "rev": 1
+}
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, the slug of the name |
+| `name` | the item as the guide names it, in English |
+| `priceGp` | the price in gold pieces |
+| `list` | the guide's list: `consumable`, `combat`, `noncombat`, `summoning` or `gamechanging` |
+| `note` | what the price counts where the guide says so (`each`, `per dose`); otherwise empty |
+| `rev` | row version |
+
+- `GET /api/item-prices` responds with every item, sorted by name. The
+  price page searches, filters by list and sorts by name or price, and names
+  the guide as the source.
+- The search of every campaign finds an item by name; the hit names itself
+  with `kind: "item-price"` and its `id` and opens the price page at that
+  item.
 
 ### Campaign knowledge
 
@@ -969,4 +1009,4 @@ campaign directory, by default `fixtures/`. It reads the folders
 `ideas/`, `glossary-terms/`, `knowledge-items/` and `sessions/` in it — the
 campaign folder holds exactly one campaign — and writes the rows into a
 database through the store layer. The server itself seeds nothing — a fresh
-instance starts empty.
+instance starts without campaigns; only the item prices come with it.

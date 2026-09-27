@@ -6,7 +6,9 @@
 // mapping into SQL where nothing can test it — and would make the Node smoke
 // job depend on trigger parity between the two SQLite backends.
 //
-// The contract is one row per (campaign_id, kind, entity_id). Every writer
+// The contract is one row per (campaign_id, kind, entity_id). Reference data
+// of the instance (decisions/reference-data) has a NULL campaign_id and is
+// written by the migration that ships it, not through these helpers. Every writer
 // calls `indexEntity` after changing content; `dropEntity` removes it. Both
 // are idempotent: the delete-then-insert shape means a double call cannot
 // leave two rows behind.
