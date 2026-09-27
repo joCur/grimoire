@@ -974,22 +974,29 @@ export const PATCH_NPC_VOICE = "hoarse, whispers even when nobody listens";
  * The reply of a patch call — a list of operations on the proposal, never the
  * proposal again. A scene gets a block replace, a field set and the removal
  * of a block that is not there (the server reports that as a finding
- * carrying the anchor); a location and an npc get one field each.
+ * carrying the anchor); a location and an npc get one field each. The
+ * campaign knowledge the call was sent comes back as a `note` operation
+ * (`contextEchoWarnings`), which the part then shows among its notes.
  */
-export function patchReply(proposal: Record<string, unknown>): { operations: unknown[] } {
+export function patchReply(
+  proposal: Record<string, unknown>,
+  knowledge: string,
+): { operations: unknown[] } {
+  const echo = contextEchoWarnings(knowledge).map((text) => ({ op: "note", text }));
   if ("title" in proposal) {
     return {
       operations: [
         { op: "replace", anchor: PATCH_CHECK_ANCHOR, text: PATCH_CHECK_TEXT },
         { op: "set", field: "title", value: PATCH_SCENE_TITLE },
         { op: "remove", anchor: PATCH_MISSING_ANCHOR },
+        ...echo,
       ],
     };
   }
   if ("atmosphere" in proposal) {
     return {
-      operations: [{ op: "set", field: "atmosphere", value: PATCH_LOCATION_ATMOSPHERE }],
+      operations: [{ op: "set", field: "atmosphere", value: PATCH_LOCATION_ATMOSPHERE }, ...echo],
     };
   }
-  return { operations: [{ op: "set", field: "voice", value: PATCH_NPC_VOICE }] };
+  return { operations: [{ op: "set", field: "voice", value: PATCH_NPC_VOICE }, ...echo] };
 }

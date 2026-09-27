@@ -199,6 +199,20 @@ export const partAnswerSchema = z.strictObject({
 export type PartAnswer = z.infer<typeof partAnswerSchema>;
 
 /**
+ * An answer as the DM sends it in a patch round: the answer, and
+ * `asKnowledge` when the DM keeps it as campaign knowledge too — the server
+ * then creates a `fact` item with the answer as its text in the same write
+ * that opens the round, so this round's call and every later one has it in
+ * its context. The round stores the answer without the flag: a round sent
+ * again after a failure creates no second item.
+ */
+export const partAnswerRequestSchema = partAnswerSchema.extend({
+  asKnowledge: z.boolean().optional(),
+});
+
+export type PartAnswerRequest = z.infer<typeof partAnswerRequestSchema>;
+
+/**
  * One change a patch round proposes for its part's proposal, as the server
  * applied it to the proposal the model saw — `id` is its key within the round:
  *
@@ -596,7 +610,8 @@ export type GeneratorJobPatch = z.infer<typeof generatorJobPatchSchema>;
  *
  *   - `{ status: "running" }` — a failed part runs once more;
  *   - `{ rev, round: { answers } }` — the DM's answers to the model's notes on
- *     a finished part start a patch round on it;
+ *     a finished part start a patch round on it; an answer marked
+ *     `asKnowledge` becomes a campaign knowledge item as well;
  *   - `{ rev, round: { changes } }` — the DM takes or keeps changes of the
  *     round, by their id.
  *
@@ -608,7 +623,7 @@ export const generatorJobPartPatchSchema = z.union([
   }),
   z.strictObject({
     rev: z.number(),
-    round: z.strictObject({ answers: z.array(partAnswerSchema) }),
+    round: z.strictObject({ answers: z.array(partAnswerRequestSchema) }),
   }),
   z.strictObject({
     rev: z.number(),

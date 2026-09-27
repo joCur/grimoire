@@ -56,6 +56,7 @@ export const en: Messages = {
     "{count, plural, one {# note from the model on the whole run} other {# notes from the model on the whole run}}",
   "generatorJob.round.answer": "Your answer to this note",
   "generatorJob.round.answerPlaceholder": "Answer if the note should change something in the proposal",
+  "generatorJob.round.keepAsKnowledge": "Keep this answer as campaign knowledge so that every later run knows it too.",
   "generatorJob.round.send": "Send answers",
   "generatorJob.round.sending": "Sending …",
   "generatorJob.round.running": "The model is working your answers into this proposal.",

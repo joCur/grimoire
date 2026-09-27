@@ -535,7 +535,9 @@ it:
   order — the order in the prompt.
 - `POST …/knowledge-items { kind, from?, to?, text? }` creates a piece at the
   end and responds with it (201), without `rev`; an omitted field is empty.
-  A half naming convention is stored; the prompt skips it.
+  A half naming convention is stored; the prompt skips it. An answer to a
+  generator note that the DM keeps as knowledge is created the same way, as
+  a `fact`, when its patch round opens.
 - It is changed with `PATCH …/knowledge-items/<id> { rev, force?, …subset of
   the fields }`, deleted with `DELETE …/knowledge-items/<id> { rev }` (204).
   Every text field is one line (400 otherwise). A stale `rev` is 409 with the
@@ -926,7 +928,9 @@ replaced, inserted after or removed by a literal anchor; a note), the
 server applies what it can and reports the rest as findings — data the app
 says in a sentence (`pipeline.parts[].findings`) — and the round
 waits on the part (`pipeline.parts[].round`) until the DM has taken or kept
-each change — a taken one lands in the edits of the proposal.
+each change — a taken one lands in the edits of the proposal. An answer the
+DM keeps as campaign knowledge becomes a `fact` item as the round opens, so
+this round's call and every later one has it in its context.
 Details in `generator/README.md`.
 
 The mechanical check reads the fields and the text, but no heading

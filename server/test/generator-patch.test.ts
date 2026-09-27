@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import type { GeneratorJob, SceneProposal } from "@grimoire/shared";
+import type { GeneratorJob, KnowledgeItem, PartAnswerRequest, SceneProposal } from "@grimoire/shared";
 import { applyBodyOperation } from "@grimoire/shared/body-patch";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generator-jobs";
@@ -281,7 +281,7 @@ async function runJob(provider: RoundProvider): Promise<GeneratorJob> {
 
 const part = (job: GeneratorJob, key: string) => job.pipeline!.parts.find((p) => p.key === key)!;
 
-function answer(job: GeneratorJob, key: string, answers: Array<{ note: string; answer: string }>) {
+function answer(job: GeneratorJob, key: string, answers: PartAnswerRequest[]) {
   return send("PATCH", partUrl("example", job.id, key), { rev: job.rev, round: { answers } });
 }
 
@@ -382,6 +382,61 @@ describe("a patch round", () => {
     ).json()) as { atmosphere?: string; body: string };
     expect(location.atmosphere).toBe("Tar and wet paper.");
     expect(location.body).toBe("A narrow room above the quay.\n");
+  });
+
+  test("an answer kept as campaign knowledge is a fact in this round's prompt and every later one", async () => {
+    const provider = new RoundProvider({ quay: [], "harbour-office": [] });
+    const job = await runJob(provider);
+    const itemsUrl = "/api/campaigns/example/knowledge-items";
+    const before = (await (await app.request(itemsUrl)).json()) as KnowledgeItem[];
+
+    // A refused round creates no item.
+    const stale = await send("PATCH", partUrl("example", job.id, "scene:quay"), {
+      rev: job.rev + 5,
+      round: { answers: [{ note: SCENE_NOTE, answer: "Make it 14.", asKnowledge: true }] },
+    });
+    expect(stale.status).toBe(409);
+    expect(((await (await app.request(itemsUrl)).json()) as KnowledgeItem[]).length).toBe(before.length);
+
+    const started = await answer(job, "scene:quay", [
+      { note: SCENE_NOTE, answer: "The harbour watch\nnever checks the quay at night.", asKnowledge: true },
+      { note: "Fenn's boat has no name.", answer: "The Gull." },
+    ]);
+    expect(started.status).toBe(202);
+    // The round keeps the answers as sent, without the flag.
+    expect(part((await started.json()) as GeneratorJob, "scene:quay").round!.answers).toEqual([
+      { note: SCENE_NOTE, answer: "The harbour watch\nnever checks the quay at night." },
+      { note: "Fenn's boat has no name.", answer: "The Gull." },
+    ]);
+
+    // Exactly one item, as the knowledge-item POST creates it: a fact on one
+    // line at the end of the order; the unticked answer created nothing.
+    const after = (await (await app.request(itemsUrl)).json()) as KnowledgeItem[];
+    expect(after.length).toBe(before.length + 1);
+    const kept = after.at(-1)!;
+    expect(kept).toMatchObject({
+      kind: "fact",
+      from: "",
+      to: "",
+      text: "The harbour watch never checks the quay at night.",
+    });
+    const order = (await (
+      await app.request("/api/campaigns/example/knowledge-item-order")
+    ).json()) as { items: string[] };
+    expect(order.items.at(-1)).toBe(kept.id);
+
+    // This round's call already had it in its knowledge block, the answer
+    // without the flag did not become knowledge.
+    await until(roundBack("scene:quay"));
+    const fact = "- Fakt: The harbour watch never checks the quay at night.";
+    expect(provider.patchCalls[0]!.knowledge).toContain(fact);
+    expect(provider.patchCalls[0]!.knowledge).not.toContain("The Gull.");
+
+    // And so does every later call.
+    const back = (await readJob("example"))!;
+    await answer(back, "location:harbour-office", [{ note: LOCATION_NOTE, answer: "Tar." }]);
+    await until(roundBack("location:harbour-office"));
+    expect(provider.patchCalls[1]!.knowledge).toContain(fact);
   });
 
   test("a stale guard, an unknown note and a blank answer write nothing", async () => {

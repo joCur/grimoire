@@ -48,7 +48,7 @@ type KnowledgeItemRow = typeof knowledgeItems.$inferSelect;
 /**
  * The item of a row: every field flat. `kind` is whatever the column holds,
  * so a value no build writes degrades to `fact` on the way OUT instead of
- * making the read fail (CLAUDE.md, "Format degradiert").
+ * making the read fail (the format degrades, CLAUDE.md).
  */
 function renderKnowledgeItem(row: KnowledgeItemRow): KnowledgeItem {
   return {
@@ -130,22 +130,32 @@ export async function createKnowledgeItem(
   campaign: string,
   request: KnowledgeItemCreate,
 ): Promise<KnowledgeItem> {
-  return mutate(campaign, (tx) => {
-    const id = randomUUID();
-    tx.insert(knowledgeItems)
-      .values({
-        campaignId: campaign,
-        id,
-        kind: request.kind,
-        fromText: request.from ?? "",
-        toText: request.to ?? "",
-        text: request.text ?? "",
-        pos: nextKnowledgeItemPos(tx, campaign),
-      })
-      .run();
-    bumpKnowledgeItemOrder(tx, campaign);
-    return renderKnowledgeItem(requireKnowledgeItemRow(tx, campaign, id));
-  });
+  return mutate(campaign, (tx) =>
+    renderKnowledgeItem(requireKnowledgeItemRow(tx, campaign, insertKnowledgeItem(tx, campaign, request))),
+  );
+}
+
+/**
+ * Create one item INSIDE the caller's transaction, exactly as the POST does:
+ * an id the server hands out, empty fields for those left out, the end of the
+ * order, and the order's guard moved. Answers the new id. The caller moves
+ * the campaign's version counter, as every write does.
+ */
+export function insertKnowledgeItem(tx: GrimoireDb, campaign: string, request: KnowledgeItemCreate): string {
+  const id = randomUUID();
+  tx.insert(knowledgeItems)
+    .values({
+      campaignId: campaign,
+      id,
+      kind: request.kind,
+      fromText: request.from ?? "",
+      toText: request.to ?? "",
+      text: request.text ?? "",
+      pos: nextKnowledgeItemPos(tx, campaign),
+    })
+    .run();
+  bumpKnowledgeItemOrder(tx, campaign);
+  return id;
 }
 
 /**
@@ -360,8 +370,8 @@ export function insertKnowledgeItemSeed(tx: GrimoireDb, campaign: string, seed: 
  * belong in the app's catalog.
  *
  * `[[slug]]` references are RESOLVED here with the same expansion the
- * search index uses (store/refs.ts): a fact written as „[[fenn]] lügt immer“
- * must reach the model as „Fenn lügt immer“ — the model has never seen a
+ * search index uses (store/refs.ts): a fact written as “[[fenn]] always lies”
+ * must reach the model as “Fenn always lies” — the model has never seen a
  * slug table and would otherwise copy the brackets into the prose.
  *
  * `undefined` when the campaign has no knowledge at all, so the prompt keeps

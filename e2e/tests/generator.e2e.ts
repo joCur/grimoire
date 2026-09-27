@@ -22,6 +22,7 @@ import type { Locator, Page } from "@playwright/test";
 import {
   ASCII_QUOTE_LINE,
   CHAPTER_DESCRIPTION,
+  CONTEXT_ECHO,
   LOCATION_STUB_ATMOSPHERE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
@@ -51,7 +52,7 @@ import {
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getChapter } from "../support/chapter";
-import { createKnowledgeItem } from "../support/knowledge-item";
+import { createKnowledgeItem, getKnowledgeItems } from "../support/knowledge-item";
 import { generatorJobPath, getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import {
   acceptProposal,
@@ -1113,12 +1114,15 @@ test("each part's notes and naming hints stand on its card and leave with it; th
 // (decisions/generator): the stub answers with operations, the server applies
 // what it can, and the DM takes each change into the job's edits.
 
+/** The answer to the scene's note that the DM keeps as campaign knowledge. */
+const KEPT_ANSWER = "The fog over the quay lifts at midnight.";
+
 /** The answer field of one note on a card. */
 function noteAnswer(card: Locator, note: string): Locator {
   return card.getByRole("listitem").filter({ hasText: note }).getByTestId("part-note-answer");
 }
 
-test("answering a part's notes patches the proposal, and a taken change lands in the edits", async ({
+test("answering a part's notes patches the proposal, a taken change lands in the edits, and a kept answer is campaign knowledge", async ({
   page,
   api,
 }) => {
@@ -1161,10 +1165,26 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   );
   expect(proposed?.body).toContain(PATCH_CHECK_ANCHOR);
   const rich = sceneProposal(page, SCENE_ID);
-  await noteAnswer(rich, partNote(SCENE_ID)).fill("Make the check harder and name the fog.");
+  // This answer is kept as campaign knowledge as well.
+  await noteAnswer(rich, partNote(SCENE_ID)).fill(KEPT_ANSWER);
+  const keep = rich
+    .getByRole("listitem")
+    .filter({ hasText: partNote(SCENE_ID) })
+    .getByTestId("part-note-knowledge");
+  await keep.check();
+  await expect(keep).toBeChecked();
   await rich.getByTestId("part-round-send").click();
   const round = rich.getByTestId("part-round");
   await expect(round).toHaveAttribute("data-round", "done");
+  // The answer is a fact of the campaign knowledge, and the round's own call
+  // already had it in its context: the stub echoes the knowledge block back
+  // as a note of the part. The location's answer, sent without the box,
+  // created none.
+  const knowledge = await getKnowledgeItems(api);
+  expect(knowledge).toHaveLength(1);
+  expect(knowledge[0]).toMatchObject({ kind: "fact", from: "", to: "", text: KEPT_ANSWER });
+  const echo = `${CONTEXT_ECHO} - Fakt: ${KEPT_ANSWER}`;
+  await expect(rich.getByTestId("part-notes")).toContainText(echo);
   const changes = rich.getByTestId("part-change");
   await expect(changes).toHaveCount(2);
   await expect(changes.and(rich.locator('[data-change-op="replace"]'))).toHaveCount(1);
@@ -1197,6 +1217,7 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   });
   const scenePart = job.pipeline?.parts.find((part) => part.key === `scene:${SCENE_ID}`);
   expect(scenePart?.warnings).not.toContain(partNote(SCENE_ID));
+  expect(scenePart?.warnings).toContain(echo);
   expect(scenePart?.findings).toEqual([{ kind: "anchor_missing", anchor: PATCH_MISSING_ANCHOR }]);
 
   await rich.getByRole("button", { name: ui("generate.review.acceptOne") }).click();
@@ -1204,4 +1225,9 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   const written = await getScene(api, SCENE_ID);
   expect(written.title).toBe(PATCH_SCENE_TITLE);
   expect(written.body).toContain(PATCH_CHECK_TEXT);
+
+  // The kept answer stands on the knowledge page like any other fact.
+  await page.goto("/campaigns/example/knowledge");
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("listitem")).toContainText(KEPT_ANSWER);
 });

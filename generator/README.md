@@ -315,6 +315,15 @@ answer of the part (`PATCH …/generator-jobs/:id/parts/:key { rev, round:
 the app polls. The run's own notes and the NPC run's single card are not
 answered.
 
+An answer can be kept as campaign knowledge too: a box under each answer
+field sends it with `asKnowledge: true`. Opening the round then creates a
+`fact` item whose text is the answer on one line — the row `POST
+…/knowledge-items` would create, at the end of the order — in the same
+transaction, and the round's call reads its context after that, so the fact
+is in the knowledge block of this call and of every later one. A refused
+round creates nothing; the round stores the answer without the flag, so a
+failed round sent again creates no second item.
+
 The patch call is one provider call. Its system prompt is
 `patch-system-prompt.md` followed by the entity's fields file; its few-shot is `patch-example-output.json`. The prompt carries the
 campaign knowledge, the glossary, the context lists and the run's outline

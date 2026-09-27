@@ -70,10 +70,12 @@ export const de = {
   "generatorJob.runNotes.summary":
     "{count, plural, one {# Hinweis des Modells zum ganzen Lauf} other {# Hinweise des Modells zum ganzen Lauf}}",
   // The patch round of one proposal (generator-job/PartRound.tsx): the DM
-  // answers the model's notes, the model changes the proposal, and the DM
-  // takes or keeps each change.
+  // answers the model's notes (and may keep an answer as campaign knowledge),
+  // the model changes the proposal, and the DM takes or keeps each change.
   "generatorJob.round.answer": "Deine Antwort auf diesen Hinweis",
   "generatorJob.round.answerPlaceholder": "Antworte, wenn der Hinweis etwas am Vorschlag ändern soll",
+  "generatorJob.round.keepAsKnowledge":
+    "Diese Antwort als Kampagnenwissen behalten, damit auch jeder weitere Lauf sie kennt.",
   "generatorJob.round.send": "Antworten senden",
   "generatorJob.round.sending": "Wird gesendet …",
   "generatorJob.round.running": "Das Modell arbeitet deine Antworten gerade in diesen Vorschlag ein.",
