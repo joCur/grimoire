@@ -15,6 +15,7 @@ export * from "./thread";
 export * from "./idea";
 export * from "./glossary-term";
 export * from "./item-price";
+export * from "./item-price-import";
 export * from "./knowledge-item";
 export * from "./session";
 export * from "./log-entry";

@@ -1,13 +1,15 @@
 // An ITEM PRICE — what one magic item costs — its one zod schema
 // (decisions/resources).
 //
-// Two sources price the items: Saidoro's "Sane Magic Item Prices", which
-// prices each item on its own, and, for the items the guide has no price for,
-// the SRD 5.2's value for the item's rarity. Item prices are reference data of
-// the instance, not of a campaign (decisions/reference-data): the same list
-// serves every campaign, the migration that ships them is their only writer,
-// and the DM looks them up without editing them. So there is no create, patch
-// or delete form here.
+// Two shipped sources price the items: Saidoro's "Sane Magic Item Prices",
+// which prices each item on its own, and, for the items the guide has no price
+// for, the SRD 5.2's value for the item's rarity. Beside them stand the items
+// of the DM's own item lists (./item-price-import.ts), priced by the list's own
+// price or by the SRD's value for their rarity. Item prices are reference data
+// of the instance, not of a campaign (decisions/reference-data): the same list
+// serves every campaign, and the DM looks them up without editing them. The
+// migration writes the shipped rows and an import writes its own, so there is
+// no create, patch or delete form here.
 
 import { z } from "zod";
 
@@ -36,8 +38,29 @@ export const itemRaritySchema = z.enum(ITEM_RARITIES);
 
 export type ItemRarity = z.infer<typeof itemRaritySchema>;
 
-/** Where a price comes from: Saidoro's guide, or the SRD's rarity value. */
-export const ITEM_PRICE_SOURCES = ["saidoro", "srd"] as const;
+/**
+ * What an item's rarity is worth by the SRD 5.2, in gold pieces. A consumable
+ * is worth half of it.
+ */
+export const ITEM_RARITY_VALUE_GP: Record<ItemRarity, number> = {
+  common: 100,
+  uncommon: 400,
+  rare: 4000,
+  "very-rare": 40000,
+  legendary: 200000,
+};
+
+/** The SRD's value of an item of `rarity`: half of it for a consumable. */
+export function rarityValueGp(rarity: ItemRarity, consumable: boolean): number {
+  const value = ITEM_RARITY_VALUE_GP[rarity];
+  return consumable ? value / 2 : value;
+}
+
+/**
+ * Where a price comes from: Saidoro's guide, the SRD's rarity value, or the
+ * price the DM's own item list gives.
+ */
+export const ITEM_PRICE_SOURCES = ["saidoro", "srd", "import"] as const;
 
 export const itemPriceSourceSchema = z.enum(ITEM_PRICE_SOURCES);
 
@@ -45,12 +68,13 @@ export type ItemPriceSource = z.infer<typeof itemPriceSourceSchema>;
 
 /**
  * An item price, exactly as `GET /api/item-prices/:id` answers it: `id` its
- * stable key, `name` the item as its source names it (English), `priceGp` the
- * price in gold pieces, `source` where the price comes from, `list` the
- * guide's list for a guide price and null otherwise, `rarity` the rarity an
- * SRD price stands for and null otherwise, `note` what the price counts where
- * the source says so ("each", "without the base item") and otherwise empty,
- * and `rev` the row version.
+ * stable key, `name` the item as its source names it, `priceGp` the price in
+ * gold pieces, `source` where the price comes from, `list` the guide's list
+ * for a guide price and null otherwise, `rarity` the item's rarity where its
+ * source names one (every SRD and every imported item) and null for a guide
+ * price, `note` what the price counts where the source says so ("each",
+ * "without the base item") and otherwise empty, `importId` the DM's item list
+ * the item comes from and null for a shipped item, and `rev` the row version.
  */
 export const itemPriceSchema = z.strictObject({
   id: z.string(),
@@ -60,6 +84,7 @@ export const itemPriceSchema = z.strictObject({
   list: itemPriceListSchema.nullable(),
   rarity: itemRaritySchema.nullable(),
   note: z.string(),
+  importId: z.string().nullable(),
   rev: z.number(),
 });
 
