@@ -9,7 +9,6 @@
 import { readFile } from "node:fs/promises";
 
 import type { Page } from "@playwright/test";
-import type { Idea } from "@grimoire/shared/idea";
 import type { RandomTable, RandomTableSource } from "@grimoire/shared/random-table";
 import type { Session } from "@grimoire/shared/session";
 
@@ -100,7 +99,7 @@ test("import a 5etools file, roll a table and keep the result as an idea", async
   await take.click();
   await expect(card.getByTestId("random-table-taken")).toHaveText(ui("randomTables.take.ideaDone"));
   const ideas = await getIdeas(api);
-  expect(ideas.at(-1)).toMatchObject<Partial<Idea>>({
+  expect(ideas.at(-1)).toMatchObject({
     text: `Harbour Weather: ${STORM}`,
     done: false,
   });
