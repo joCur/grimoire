@@ -28,7 +28,7 @@
 //      accept, the chapter a new-chapter run decided on. Nowhere else.
 //      A `[[slug]]` in prose is not a
 //      reference in this sense: it is body text, it stays visible text, and
-//      it constrains nothing — which is also why an npc's `## Beziehungen`
+//      it constrains nothing — which is also why an npc's `## Relationships`
 //      is prose and has no table: nothing in the storage is derived from
 //      body text.
 //      The one UNCONSTRAINED reference is `generate_jobs.chapter`: a run
@@ -430,7 +430,7 @@ export const npcs = sqliteTable(
   ],
 );
 
-// An npc's `## Beziehungen` has NO TABLE. It is prose in the npc's body, and
+// An npc's `## Relationships` has NO TABLE. It is prose in the npc's body, and
 // a counterpart a DM wants to link is a `[[id]]` like any other mention.
 // Storage is never derived from body text: a relation list parsed out of a
 // section would be a second, silent source of truth for something the DM

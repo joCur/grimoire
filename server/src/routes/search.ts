@@ -12,8 +12,8 @@ export const searchRoutes = new Hono();
 // chapters, the campaign, the glossary terms and the instance's item prices,
 // ranked by bm25 with the
 // index's own column weights. Every token is a prefix term, so a half-typed
-// palette query still matches, and the tokenizer folds diacritics ("leucht"
-// finds "Leuchtturm").
+// palette query still matches, and the tokenizer folds diacritics ("muller"
+// finds "Müller").
 searchRoutes.get("/campaigns/:campaign/search", async (c) => {
   const q = c.req.query("q")?.trim();
   if (q === undefined || q === "") throw new ApiError(400, "missing q query parameter");

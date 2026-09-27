@@ -11,13 +11,10 @@
 // The two properties the reference queries depend on:
 //
 //   * DIACRITIC FOLDING — the tokenizer is `unicode61 remove_diacritics 2`
-//     (see the FTS migration), so "leucht" finds "Leuchtturm" and "muller"
-//     finds "Müller".
+//     (see the FTS migration), so "muller" finds "Müller".
 //   * PREFIX SEARCH — every token is turned into a prefix term, so a
-//     half-typed palette query ("jorna", "leucht") matches while the DM is
-//     still typing. That is what replaces Fuse's fuzziness; genuine typo
-//     tolerance would need a trigram tokenizer and is a documented later
-//     option (planning section 8).
+//     half-typed palette query ("jorna", "lighth") matches while the DM is
+//     still typing. Genuine typo tolerance would need a trigram tokenizer.
 //
 // Ranking is bm25 with the column weights of the migration
 // (title 10, ref 6, tags 4, body 1).

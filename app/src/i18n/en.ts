@@ -119,6 +119,7 @@ export const en: Messages = {
   "area.npcs": "NPCs",
   "area.locations": "Locations",
   "area.glossary": "Glossary",
+  "area.itemPrices": "Item prices",
   "area.knowledge": "Campaign knowledge",
   "area.review": "Session review",
   "area.trash": "Trash",
@@ -337,6 +338,26 @@ export const en: Messages = {
   "glossary.term": "Term",
   "glossary.explanation": "Explanation",
   "glossary.noExplanation": "No explanation",
+
+  "itemPrices.title": "Magic item prices",
+  "itemPrices.lead":
+    "What a magic item costs when the group wants to buy or sell one. The names stay as the source writes them.",
+  "itemPrices.source": "Source: {author}, {title}",
+  "itemPrices.search": "Search an item",
+  "itemPrices.list.aria": "List",
+  "itemPrices.list.all": "All",
+  "itemPrices.list.consumable": "Consumables",
+  "itemPrices.list.combat": "Combat",
+  "itemPrices.list.noncombat": "Noncombat",
+  "itemPrices.list.summoning": "Summoning",
+  "itemPrices.list.gamechanging": "Gamechanging",
+  "itemPrices.sort.aria": "Order",
+  "itemPrices.sort.name": "By name",
+  "itemPrices.sort.price": "By price",
+  "itemPrices.loading": "Loading prices …",
+  "itemPrices.noMatch": "No item matches the search.",
+  "itemPrices.rowSource": "{list} · priced by {author}",
+  "itemPrices.price": "{price, number} gp",
 
 
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
@@ -694,6 +715,7 @@ export const en: Messages = {
   "kind.campaign": "Campaign",
   "kind.session": "Session",
   "kind.glossary": "Glossary",
+  "kind.itemPrice": "Item price",
   "markdown.ref.aria": "{kind}: {name}",
 
 

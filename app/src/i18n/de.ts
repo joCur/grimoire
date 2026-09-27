@@ -149,6 +149,7 @@ export const de = {
   "area.locations": "Orte",
   "area.glossary": "Glossar",
   "area.knowledge": "Kampagnenwissen",
+  "area.itemPrices": "Gegenstandspreise",
   "area.review": "Nachbereitung",
   "area.trash": "Papierkorb",
 
@@ -384,6 +385,28 @@ export const de = {
   "glossary.term": "Begriff",
   "glossary.explanation": "Erklärung",
   "glossary.noExplanation": "Ohne Erklärung",
+
+  // --- item prices (item-price/ItemPricesRoute.tsx) --------------------------
+  // The item names stay English, as in the guide; only the page speaks German.
+  "itemPrices.title": "Preise magischer Gegenstände",
+  "itemPrices.lead":
+    "Was ein magischer Gegenstand kostet, wenn die Gruppe kaufen oder verkaufen will. Die Namen stehen auf Englisch wie in der Quelle.",
+  "itemPrices.source": "Quelle: {author}, {title}",
+  "itemPrices.search": "Gegenstand suchen",
+  "itemPrices.list.aria": "Liste",
+  "itemPrices.list.all": "Alle",
+  "itemPrices.list.consumable": "Verbrauchbar",
+  "itemPrices.list.combat": "Kampf",
+  "itemPrices.list.noncombat": "Abseits des Kampfes",
+  "itemPrices.list.summoning": "Beschwörung",
+  "itemPrices.list.gamechanging": "Weltverändernd",
+  "itemPrices.sort.aria": "Sortierung",
+  "itemPrices.sort.name": "Nach Name",
+  "itemPrices.sort.price": "Nach Preis",
+  "itemPrices.loading": "Lade Preise …",
+  "itemPrices.noMatch": "Kein Gegenstand passt zur Suche.",
+  "itemPrices.rowSource": "{list} · Preis nach {author}",
+  "itemPrices.price": "{price, number} GM",
 
 
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
@@ -770,6 +793,7 @@ export const de = {
   "kind.campaign": "Kampagne",
   "kind.session": "Session",
   "kind.glossary": "Glossar",
+  "kind.itemPrice": "Gegenstandspreis",
   // The accessible name of a `[[ref]]` in a body (markdown/refs.tsx):
   // what it points at, then its current name.
   "markdown.ref.aria": "{kind}: {name}",

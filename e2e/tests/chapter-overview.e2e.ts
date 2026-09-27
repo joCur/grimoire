@@ -307,7 +307,7 @@ test("the campaign menu leads into every area and names the current one", async 
   ).toHaveText([ui("area.chapters"), ui("area.scenes"), ui("area.npcs"), ui("area.locations")]);
   await expect(
     menu.getByRole("group", { name: ui("campaignMenu.group.lookUp") }).getByRole("menuitem"),
-  ).toHaveText([ui("area.glossary"), ui("area.knowledge")]);
+  ).toHaveText([ui("area.glossary"), ui("area.knowledge"), ui("area.itemPrices")]);
   await expect(
     menu.getByRole("group", { name: ui("campaignMenu.group.tidyUp") }).getByRole("menuitem"),
   ).toHaveText([new RegExp(`^${escapeStringRegexp(ui("area.review"))}`), ui("area.trash")]);

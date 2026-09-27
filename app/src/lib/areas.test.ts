@@ -20,6 +20,7 @@ describe("currentArea", () => {
   test("the reference pages, the session review and the trash are areas of their own", () => {
     expect(currentArea("/campaigns/example/glossary")?.id).toBe("glossary");
     expect(currentArea("/campaigns/example/knowledge")?.id).toBe("knowledge");
+    expect(currentArea("/campaigns/example/item-prices")?.id).toBe("itemPrices");
     expect(currentArea("/campaigns/example/review")?.id).toBe("review");
     expect(currentArea("/campaigns/example/trash")?.id).toBe("trash");
   });

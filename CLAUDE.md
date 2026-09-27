@@ -70,6 +70,7 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   session row its children look up), `pauses`, `log-entries`,
   `glossary-terms`,
   `knowledge-items` (with their order),
+  `item-prices` (read only, decisions/reference-data),
   `generated` (accepting a generator run),
   `trash` (the purge of rows past the trash's retention, decisions/trash) — and
   each carries the **read AND write access** of its kind. No catch-all
@@ -77,7 +78,7 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 - `app/` — the frontend. Every entity with its own resource has its slice
   `app/src/<entity>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
-  `session/`, `generator-job/`) with everything the app knows about it
+  `item-price/`, `session/`, `generator-job/`) with everything the app knows about it
   (decisions/resources); **slices do not import each other.** Pause and log
   line belong to the `session/` slice: the app reads them only embedded in
   their session, and every one of their writes lands in the session's cache;
@@ -131,6 +132,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `Chapter`, `…/scenes/<id>` with `Scene`, `…/npcs/<id>` with `Npc`,
   `…/locations/<id>` with `Location`, `…/threads/<id>` with `Thread`,
   `…/ideas/<id>` with `Idea`, `…/glossary-terms/<id>` with `GlossaryTerm`,
+  `/api/item-prices/<id>` with `ItemPrice` (reference data of the instance,
+  decisions/reference-data, read only),
   `…/knowledge-items/<id>` with `KnowledgeItem`, `…/sessions/<id>` with
   `Session` (pauses and log lines embedded), all fields side
   by side,
@@ -295,20 +298,22 @@ The paths:
    current thread); chapter text and chapter `rev` stay untouched. The
    campaign menu in the topbar is the one entry point into every area
    (chapters, scenes, NPCs, locations, glossary, campaign knowledge,
-   debrief, trash): closed it names the campaign and the current area,
-   opened it marks that area and works with the keyboard; no other link
-   leads into an area
+   item prices, debrief, trash): closed it names the campaign and the
+   current area, opened it marks that area and works with the keyboard; no
+   other link leads into an area
 2. Read a scene: opened from that list (`/campaigns/:id/scenes/<id>`, read
    via `GET …/scenes/<id>`) — callouts, if sections, NPC cards of the
    reference scenes
 3. ⌘K search finds and opens: indexed are campaign, chapters, scenes,
-   NPCs, locations and the glossary terms. Every hit names itself with
-   `kind` + `id` without an address: a campaign hit opens
+   NPCs, locations, the glossary terms and the instance's item prices.
+   Every hit names itself with `kind` + `id` without an address: a campaign hit opens
    `/campaigns/:id`, a chapter hit `/campaigns/:id/chapters/<id>`, a
    scene hit `/campaigns/:id/scenes/<id>`, an
    NPC hit `/campaigns/:id/npcs/<id>`, a location hit
-   `/campaigns/:id/locations/<id>` and a glossary hit
-   (`kind: "glossary-term"`, the term's `id`) `/campaigns/:id/glossary`;
+   `/campaigns/:id/locations/<id>`, a glossary hit
+   (`kind: "glossary-term"`, the term's `id`) `/campaigns/:id/glossary`
+   and an item hit (`kind: "item-price"`) `/campaigns/:id/item-prices?item=<id>`
+   with that item marked and its price shown;
    sessions and ideas are not indexed; typing an area's name offers that
    area, from the same list the campaign menu reads
 4. Session cycle: start (open is the first scene of the order that is
@@ -470,6 +475,12 @@ The paths:
     (`trash_blocked`, e.g. an NPC a live scene names) names what is in the
     way in the dialog and writes nothing. The delete action is reachable at
     390px
+12. Item prices (decisions/reference-data): the campaign menu opens
+    `/campaigns/:id/item-prices`, which lists every price of Saidoro's "Sane
+    Magic Item Prices" (`GET /api/item-prices`, written by the migration, no
+    seed) and names the guide as its source with a link; searching an item,
+    filtering by list and sorting by price narrow and order the list. The
+    page fits 390px
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same

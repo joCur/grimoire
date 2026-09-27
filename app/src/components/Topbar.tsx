@@ -105,11 +105,12 @@ export function Topbar() {
   const scenesMatch = matchPath("/campaigns/:campaign/scenes/*", pathname);
   const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
   const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
-  // The two campaign-content pages and the trash: the bar above them is this
-  // campaign's bar too. Without them the topbar goes blank on those pages: no
-  // campaign menu, no ⌘K, no gear.
+  // The two campaign-content pages, the price page and the trash: the bar
+  // above them is this campaign's bar too. Without them the topbar goes blank
+  // on those pages: no campaign menu, no ⌘K, no gear.
   const knowledgeMatch = matchPath("/campaigns/:campaign/knowledge", pathname);
   const glossaryMatch = matchPath("/campaigns/:campaign/glossary", pathname);
+  const itemPricesMatch = matchPath("/campaigns/:campaign/item-prices", pathname);
   const trashMatch = matchPath("/campaigns/:campaign/trash", pathname);
   const chapterOverviewMatch = matchPath("/campaigns/:campaign", pathname);
   const isSettings = matchPath("/settings", pathname) !== null;
@@ -124,6 +125,7 @@ export function Topbar() {
     campaignOf(locationsMatch) ??
     campaignOf(knowledgeMatch) ??
     campaignOf(glossaryMatch) ??
+    campaignOf(itemPricesMatch) ??
     campaignOf(trashMatch) ??
     campaignOf(chapterOverviewMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??

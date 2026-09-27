@@ -8,11 +8,12 @@
 // there is no watcher to wait for.
 //
 // And what the index HOLDS: campaign, chapters, scenes, npcs, locations and the
-// glossary terms. The campaign, a chapter, a scene, an npc and a location are
+// glossary terms, and next to them the instance's item prices. The campaign, a chapter, a scene, an npc and a location are
 // each their own resource (decisions/resources) and a glossary term a row of a list
 // (decisions/resources), so every hit carries `kind` and `id` and no address — the palette
 // opens the campaign's route (the chapter overview), the chapter's, the
-// scene's, the npc's and the location's route and the glossary page.
+// scene's, the npc's and the location's route and the glossary page, and the
+// price page at the item.
 // Sessions and ideas are not indexed at all, so no query can produce one.
 //
 // Search queries and the titles hits are filtered by are words of the example
@@ -289,6 +290,33 @@ test("a glossary hit opens the glossary page — no address, and none needed", a
   await expect(page.getByText(TERM)).toBeVisible();
 });
 
+test("an item hit opens the price page at that item, showing its price", async ({ page, api }) => {
+  const ITEM = "Potion of Healing";
+
+  // On the wire: the item price is found from the campaign's search, named by
+  // `kind` and `id` like every other hit.
+  const { results } = await api.get<{ results: { kind: string; id: string; title: string }[] }>(
+    `campaigns/${CAMPAIGN}/search?q=${encodeURIComponent("potion of heal")}`,
+  );
+  expect(results.filter((hit) => hit.kind === "item-price")[0]).toMatchObject({
+    id: "potion-of-healing",
+    title: ITEM,
+  });
+
+  await page.goto(`/campaigns/${CAMPAIGN}`);
+  await (await openPalette(page)).fill("potion of heal");
+  const hit = page.getByRole("option").filter({ hasText: ITEM });
+  await expect(hit).toHaveCount(1);
+  await expect(hit).toContainText(ui("kind.itemPrice"));
+  await hit.click();
+
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/item-prices\\?item=potion-of-healing$`));
+  const marked = page.locator("[data-testid='item-price-row'][aria-current='true']");
+  await expect(marked).toHaveAttribute("data-id", "potion-of-healing");
+  await expect(marked).toBeInViewport();
+  await expect(marked.getByTestId("item-price-value")).toHaveText(ui("itemPrices.price", { price: 50 }));
+});
+
 test("sessions and ideas are not in the index, so they never turn up", async ({ api }) => {
   // Words that appear ONLY in the example campaign's session log and in its
   // one idea. Indexing those lists would be its own feature; until then a
@@ -298,7 +326,7 @@ test("sessions and ideas are not in the index, so they never turn up", async ({ 
       `campaigns/${CAMPAIGN}/search?q=${encodeURIComponent(query)}`,
     );
     // Every hit is one of the indexed entities — none is a session or an idea.
-    const indexed = ["campaign", "chapter", "scene", "npc", "location", "glossary-term"];
+    const indexed = ["campaign", "chapter", "scene", "npc", "location", "glossary-term", "item-price"];
     expect(results.filter((hit) => !indexed.includes(hit.kind))).toEqual([]);
   }
 });
