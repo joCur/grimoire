@@ -376,6 +376,16 @@
     line-height: 1.6;
     color: var(--text-secondary);
   }
+  /* Headings stay headings, but every level stands below the title the text
+     sits under: an H1 is a serif line just above the text's size, the H2
+     overline and the H3/H4 keep their reading-body look, and the gaps around
+     them shrink to the compact rhythm. */
+  .md-compact .md-body h1 {
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--soft);
+  }
+  .md-compact .md-body :is(h1, h2, h3, h4) { margin: 16px 0 6px; }
   .md-compact .md-body > :first-child { margin-top: 0; }
   .md-compact .md-body > :last-child { margin-bottom: 0; }
   /* Clamped: cut at the box height and faded over the last line, the cue that
