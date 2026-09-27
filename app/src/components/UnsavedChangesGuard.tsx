@@ -2,9 +2,8 @@
 //
 // The campaign-content pages (components/EditableList.tsx) edit a row inline
 // and save it with a button, which means there is a window in which the DM's
-// work lives only in the page. Leaving it — the back row, the campaign
-// switcher, the browser's back button, a reload — would throw that work away
-// without a word. That is the same silent loss decisions/writes forbids on the write
+// work lives only in the page. Leaving it — the campaign menu, the browser's
+// back button, a reload — would throw that work away without a word. That is the same silent loss decisions/writes forbids on the write
 // path, just on the way out instead of on the way in, and the app already has
 // the answer for it: the edit modes' discard confirmation
 // (components/DiscardChangesDialog.tsx). This is that confirmation, for

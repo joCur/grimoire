@@ -43,6 +43,7 @@ import {
 } from "../support/knowledge-item";
 import { getScene } from "../support/scene";
 import { expect, test } from "../support/test";
+import { openArea } from "../support/campaign-menu";
 import { ui, uiPattern } from "../support/ui";
 
 const SOURCE = "The party watches the quay at low tide.";
@@ -64,23 +65,17 @@ function removeRow(name: string): string {
   return ui("editableList.remove", { name });
 }
 
-/** The knowledge page, reached from the chapter overview's lookup line. */
+/** The knowledge page, reached from the campaign menu. */
 async function openKnowledge(page: Page): Promise<void> {
   await page.goto("/campaigns/example");
-  await page
-    .getByRole("navigation", { name: ui("lookup.heading") })
-    .getByRole("link", { name: ui("knowledge.title") })
-    .click();
+  await openArea(page, "area.knowledge");
   await expect(page).toHaveURL(/\/campaigns\/example\/knowledge$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("knowledge.title"));
 }
 
 async function openGlossary(page: Page): Promise<void> {
   await page.goto("/campaigns/example");
-  await page
-    .getByRole("navigation", { name: ui("lookup.heading") })
-    .getByRole("link", { name: ui("glossary.title") })
-    .click();
+  await openArea(page, "area.glossary");
   await expect(page).toHaveURL(/\/campaigns\/example\/glossary$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("glossary.title"));
 }
@@ -403,8 +398,9 @@ test("a competing write is a conflict, not a silent overwrite — for an item an
 });
 
 test("leaving with an unsaved entry asks first — and only then", async ({ page }) => {
-  // At 390px the way out is the back row to the chapter overview — a plain router link, which is
-  // exactly the exit that would otherwise drop the open entry without a word.
+  // At 390px the way out is the campaign menu's sheet — a plain router link,
+  // which is exactly the exit that would otherwise drop the open entry
+  // without a word.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/campaigns/example/knowledge");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("knowledge.title"));
@@ -412,7 +408,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   // An entry that has been typed into blocks the way out.
   await page.getByRole("button", { name: ui("knowledge.add") }).click();
   await page.getByLabel(ui("knowledge.from")).fill("Do not lose this");
-  await page.getByRole("link", { name: ui("mobileBack.chapterOverview") }).first().click();
+  await openArea(page, "area.chapters");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toHaveAccessibleName(ui("properties.discard.title"));
   await dialog.getByRole("button", { name: ui("properties.discard.keepEditing") }).click();
@@ -422,7 +418,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   // A SAVED entry does not ask — the guard is about unsaved work only.
   await page.getByLabel(ui("knowledge.to")).fill("Neu");
   await saveEntry(page);
-  await page.getByRole("link", { name: ui("mobileBack.chapterOverview") }).first().click();
+  await openArea(page, "area.chapters");
   await expect(page).toHaveURL(/\/campaigns\/example$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -458,51 +454,39 @@ test("switching the kind carries the text into the new form", async ({ page, api
 
 // --- how the pages are REACHED ------------------------------------------------
 
-test("four ways in: the chapter overview line, the phone, ⌘K and the generator", async ({ page }) => {
-  // (a) The chapter overview's quiet lookup line — and the topbar carries neither page
-  //     (the two pages are deliberately not up there).
+test("two ways in: the campaign menu and ⌘K; the generator only names them", async ({ page }) => {
+  // (a) The campaign menu — the one entry point of every area.
   await page.goto("/campaigns/example");
-  const lookup = page.getByRole("navigation", { name: ui("lookup.heading") });
-  await expect(lookup).toBeVisible();
-  await expect(lookup.getByRole("link", { name: ui("browse.title.npcs") })).toBeVisible();
-  await expect(lookup.getByRole("link", { name: ui("browse.title.locations") })).toBeVisible();
-  await lookup.getByRole("link", { name: ui("knowledge.title") }).click();
+  await openArea(page, "area.knowledge");
   await expect(page).toHaveURL(/\/campaigns\/example\/knowledge$/);
-  const topbar = page.getByRole("navigation", { name: ui("topbar.nav.aria") });
-  await expect(topbar.getByRole("link", { name: ui("glossary.title") })).toHaveCount(0);
-  await expect(topbar.getByRole("link", { name: ui("knowledge.title") })).toHaveCount(0);
+  // The chapter overview carries no line of its own into them.
+  await page.goto("/campaigns/example");
+  await expect(page.locator('a[href="/campaigns/example/knowledge"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/campaigns/example/glossary"]')).toHaveCount(0);
 
-  // (c) ⌘K reaches both as navigation targets — the server's index holds
-  //     entries, not pages, so nothing but the palette itself can offer them.
+  // (b) ⌘K reaches both as areas — the server's index holds entries, not
+  //     areas, so nothing but the palette itself can offer them.
   await page.keyboard.press("ControlOrMeta+KeyK");
-  await page.getByRole("combobox").fill(ui("glossary.title"));
-  const option = page.getByRole("option").filter({ hasText: ui("glossary.title") });
+  await page.getByRole("combobox").fill(ui("area.glossary"));
+  const option = page.getByRole("option").filter({ hasText: ui("area.glossary") });
   await expect(option.first()).toBeVisible();
-  await expect(option.first()).toContainText(ui("palette.kind.page"));
+  await expect(option.first()).toContainText(ui("palette.kind.area"));
   await option.first().click();
   await expect(page).toHaveURL(/\/campaigns\/example\/glossary$/);
 
-  // (d) The generator's context line links to both — this is where the DM
-  //     notices a rule is missing, and the fix is one click away.
+  // (c) The generator's context line names both as text, not as links.
   await page.goto("/campaigns/example/generate");
-  // The example campaign has no knowledge, so the link counts none.
-  await expect(
-    page.getByRole("link", { name: ui("generate.input.knowledgeCount", { count: 0 }) }),
-  ).toHaveAttribute(
-    "href",
-    "/campaigns/example/knowledge",
-  );
-  await page.getByRole("link", { name: ui("generate.input.glossary"), exact: true }).click();
-  await expect(page).toHaveURL(/\/campaigns\/example\/glossary$/);
+  // The example campaign has no knowledge, so the line counts none.
+  await expect(page.getByText(ui("generate.input.knowledgeCount", { count: 0 }))).toBeVisible();
+  await expect(page.getByText(ui("generate.input.glossary"), { exact: true })).toBeVisible();
+  await expect(page.locator('a[href="/campaigns/example/knowledge"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/campaigns/example/glossary"]')).toHaveCount(0);
 });
 
-test("(b) the phone: the two rows in the lookup section, and the pages at 390px", async ({
-  page,
-}) => {
+test("the phone: the campaign menu's sheet, and the pages at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/campaigns/example");
-  const browse = page.getByRole("navigation", { name: ui("lookup.heading") });
-  await browse.getByRole("link", { name: ui("knowledge.title") }).click();
+  await openArea(page, "area.knowledge");
   await expect(page).toHaveURL(/\/campaigns\/example\/knowledge$/);
 
   // The page works at the mobile floor: a new entry, typed and saved.
@@ -521,9 +505,8 @@ test("(b) the phone: the two rows in the lookup section, and the pages at 390px"
   );
   expect(noOverflow).toBe(true);
 
-  // The back row to the chapter overview is the way out, as on every other
-  // campaign view below md.
-  await page.getByRole("link", { name: ui("mobileBack.chapterOverview") }).first().click();
+  // The campaign menu is the way out, as on every other campaign view below md.
+  await openArea(page, "area.chapters");
   await expect(page).toHaveURL(/\/campaigns\/example$/);
 });
 
@@ -546,7 +529,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
 
   // --- the generator names the COUNT in the sent-context summary -----------
   await page.goto("/campaigns/example/generate");
-  await expect(page.getByRole("link", { name: ui("generate.input.knowledgeCount", { count: 2 }) })).toBeVisible();
+  await expect(page.getByText(ui("generate.input.knowledgeCount", { count: 2 }))).toBeVisible();
 
   // --- the run: the stub answers in the forbidden spelling ------------------
   await page.getByLabel(ui("generate.input.sourceLabel")).fill(`${SOURCE}\n\n${TRIGGER.oldName}`);
@@ -596,7 +579,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   // campaign that never uses the feature sees: the glossary's behaviour in the
   // prompt is the same as always.
   await page.goto("/campaigns/example/generate");
-  await expect(page.getByRole("link", { name: ui("generate.input.knowledgeCount", { count: 0 }) })).toBeVisible();
+  await expect(page.getByText(ui("generate.input.knowledgeCount", { count: 0 }))).toBeVisible();
 
   await page.getByLabel(ui("generate.input.sourceLabel")).fill(SOURCE);
   await page.getByRole("button", { name: ui("generate.input.submit.scene") }).click();

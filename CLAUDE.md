@@ -292,7 +292,12 @@ The paths:
    (`GET …/threads?chapter=<id>`, in order of creation) and they are
    maintained there: create, tick off, reword, delete — each thread with its
    own `rev` (`PATCH`/`DELETE …/threads/<id>`, a stale state is 409 with the
-   current thread); chapter text and chapter `rev` stay untouched
+   current thread); chapter text and chapter `rev` stay untouched. The
+   campaign menu in the topbar is the one entry point into every area
+   (chapters, scenes, NPCs, locations, glossary, campaign knowledge,
+   debrief, trash): closed it names the campaign and the current area,
+   opened it marks that area and works with the keyboard; no other link
+   leads into an area
 2. Read a scene: opened from that list (`/campaigns/:id/scenes/<id>`, read
    via `GET …/scenes/<id>`) — callouts, if sections, NPC cards of the
    reference scenes
@@ -304,7 +309,8 @@ The paths:
    NPC hit `/campaigns/:id/npcs/<id>`, a location hit
    `/campaigns/:id/locations/<id>` and a glossary hit
    (`kind: "glossary-term"`, the term's `id`) `/campaigns/:id/glossary`;
-   sessions and ideas are not indexed
+   sessions and ideas are not indexed; typing an area's name offers that
+   area, from the same list the campaign menu reads
 4. Session cycle: start (open is the first scene of the order that is
    neither `played` nor `dropped`, otherwise the first; the running session
    is returned by `GET …/sessions?running=true`) → quick note → log **line**
@@ -327,7 +333,8 @@ The paths:
    `…/sessions/<id>/played-scenes` respond 404. Plus the reading page of a
    past session (`/campaigns/:id/sessions/<session-id>`) with the scenes of
    its log lines, each once, as links
-5. Debrief: accept a plot thread → a thread of the active chapter
+5. Debrief (reached from the campaign menu, whose debrief entry names the
+   open count): accept a plot thread → a thread of the active chapter
    (`POST …/threads { chapter, text }`, without `rev`; chapter text and
    chapter `rev` stay untouched); tick off an idea → `PATCH …/ideas/<id>
    { rev, done }`, a stale `rev` is 409 with the current idea. The debrief
@@ -408,7 +415,9 @@ The paths:
    The control and the chapter's edit mode activate a chapter with `PATCH
    …/chapters/<id> { rev, status: "active" }`; the previously active one is
    then `planned`, and exactly one chapter is active.
-8. Mobile start surface + idea drop at 390px: the idea becomes an idea
+8. Mobile start surface + idea drop at 390px: search and idea drop above
+   the chapter overview; the campaign menu opens as a bottom sheet with
+   every area; the idea becomes an idea
    (`POST …/ideas`, responds with `Idea`), at the end, nothing ticked off;
    if a session is running (`GET …/sessions?running=true`), the start
    surface shows its chip as the way back
@@ -444,8 +453,8 @@ The paths:
     …/ideas/<id> { rev }`, no confirmation) → a notice with an undo action
     restores it (`PATCH …/ideas/<id> { rev, deletedMs: null }` with the `rev`
     the deletion answered with); delete it again → the trash page
-    (`/campaigns/:id/trash`, reached from the chapter overview's lookup line,
-    ⌘K and the mobile start surface; not from the topbar) lists it with the
+    (`/campaigns/:id/trash`, reached from the campaign menu, on the desktop
+    and on the phone, and ⌘K) lists it with the
     days it has left and restores it. A chapter deleted with its scenes is ONE
     row of the page, naming how many scenes come back with it, and its restore
     brings them back in their order; a restore that something in the trash

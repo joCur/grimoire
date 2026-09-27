@@ -2,8 +2,8 @@
 // resource with its own type (decisions/resources): the scene article per the design
 // reference (type overline, Literata title, trigger row, chip row, markdown
 // body — shared with the session view through SceneArticle) plus a sticky
-// right aside with the cards of the scene's npcs. Below md: a back row to the
-// chapter overview on top and the npc cards stacked below the body (the
+// right aside with the cards of the scene's npcs. Below md: the campaign menu's row
+// on top and the npc cards stacked below the body (the
 // column layout already stacks under lg).
 //
 // Above the article sits the context line: the topbar carries no breadcrumb,
@@ -31,7 +31,7 @@ import { useParams, useSearchParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
 import { BodyEditAction } from "@/components/BodyEditor";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
 import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
@@ -126,7 +126,7 @@ function ScenePage({
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div
         className={cn(
           "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",

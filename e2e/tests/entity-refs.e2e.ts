@@ -40,7 +40,8 @@ import { expect, test } from "../support/test";
 import { getLocation, patchLocation } from "../support/location";
 import { getNpc, patchNpc } from "../support/npc";
 import { getScene } from "../support/scene";
-import { ui } from "../support/ui";
+import { campaignMenu } from "../support/campaign-menu";
+import { ui, uiPattern } from "../support/ui";
 
 /** The scene with the `[[…]]` references, as its fixture holds it. */
 const SCENE: SceneProposal = JSON.parse(
@@ -97,12 +98,10 @@ test("reading view: references render as the current name, unknown ones stay tex
   await ref.click();
   await expect(page).toHaveURL(/\/campaigns\/example\/npcs\/jorna$/);
   await expect(page.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
-  // Its context line points at the npc list, on its own route too.
-  await expect(
-    page
-      .getByRole("navigation", { name: ui("context.aria") })
-      .getByRole("link", { name: ui("browse.title.npcs") }),
-  ).toHaveAttribute("href", "/campaigns/example/npcs");
+  // The campaign menu names the NPCs as the area it belongs to.
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    uiPattern("campaignMenu.triggerInArea", { name: /.*/, area: ui("area.npcs") }),
+  );
 });
 
 test("code stays code, and an `## If:` summary toggles instead of navigating", async ({

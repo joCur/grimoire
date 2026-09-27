@@ -25,7 +25,7 @@ import { useParams } from "react-router";
 import { ApiError, isNotFound } from "@/api";
 import { restoreChapter } from "@/chapter/chapter-api";
 import { chapterTrashKey, chapterTrashQuery } from "@/chapter/chapter-query";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { Button } from "@/components/ui/button";
 import { useT, type MessageKey, type Translate } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
@@ -114,7 +114,7 @@ export function TrashRoute() {
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div className="mx-auto max-w-[760px] px-5 pt-5 pb-16 md:px-7 md:pt-10">
         <h1
           ref={heading}

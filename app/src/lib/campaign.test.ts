@@ -168,7 +168,7 @@ describe("settingsCampaign", () => {
     expect(settingsCampaign("renamed-away", list)).toBe("zeta");
   });
 
-  test("no campaign at all stays undefined — a fresh instance has no back row", () => {
+  test("no campaign at all stays undefined — a fresh instance has no campaign menu", () => {
     expect(settingsCampaign("alpha", [])).toBeUndefined();
   });
 });

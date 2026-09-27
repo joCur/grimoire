@@ -44,6 +44,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import type { SceneProposal } from "@grimoire/shared/scene";
 import { expect, test } from "../support/test";
+import { campaignMenu } from "../support/campaign-menu";
 import { ui, uiExact, uiPattern } from "../support/ui";
 import type { Api } from "../support/api";
 import { getScene, patchScene, scenePath } from "../support/scene";
@@ -175,12 +176,11 @@ test("a scene's reading view offers the session start, like every reading view",
   page,
 }) => {
   // The scene's own route is a reading view: the chip in the topbar offers
-  // the start there too, and the chapter trio marks the chapters entry.
+  // the start there too, and the campaign menu names the scenes as its area.
   await page.goto(`/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arrival at the Lighthouse");
-  await expect(page.getByRole("link", { name: uiExact("topbar.nav.chapters") })).toHaveAttribute(
-    "aria-current",
-    "page",
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    uiPattern("campaignMenu.triggerInArea", { name: /.*/, area: ui("area.scenes") }),
   );
   await startChip(page).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/live$`));

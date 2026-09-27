@@ -31,6 +31,7 @@ import { getLocation } from "../support/location";
 import { getNpc, npcExists, npcPath } from "../support/npc";
 import { getScene, patchScene, scenePath } from "../support/scene";
 import { getSession, runningSessionId } from "../support/session";
+import { openArea } from "../support/campaign-menu";
 import { ui, uiPattern } from "../support/ui";
 
 /**
@@ -47,11 +48,11 @@ async function shownSceneOrder(page: Page): Promise<string[]> {
   return labels.map((label) => moveDown.exec(label)?.[1] ?? label);
 }
 
-/** The top bar's campaign switcher, whatever campaign it currently shows. */
+/** The top bar's campaign menu, whatever campaign it currently shows. */
 function campaignSwitcher(page: Page) {
   return page
     .getByRole("banner")
-    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: /.*/ }, { exact: true }) });
+    .getByRole("button", { name: uiPattern("campaignMenu.trigger", { name: /.*/ }) });
 }
 
 /** The error line of a create whose id is taken. */
@@ -387,7 +388,7 @@ test("npc and location are created from their lists; a collision writes nothing"
   );
 });
 
-test("the second campaign is created in the top bar's switcher", async ({ page, server }) => {
+test("the second campaign is created in the top bar's campaign menu", async ({ page, server }) => {
   const SECOND_NAME = "The Moor of Greywatch";
   const SECOND_ID = "the-moor-of-greywatch";
   const SECOND_DESCRIPTION = "Fog, peat and a missing man.";
@@ -400,7 +401,7 @@ test("the second campaign is created in the top bar's switcher", async ({ page, 
   await page.getByRole("button", { name: ui("create.campaign.title") }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
-  // --- the switcher ---------------------------------------------------------
+  // --- the campaign menu ----------------------------------------------------
   const switcher = campaignSwitcher(page);
   await switcher.click();
   const menu = page.getByRole("menu");
@@ -425,7 +426,9 @@ test("the second campaign is created in the top bar's switcher", async ({ page, 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/campaigns/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);
-  await expect(switcher).toHaveAccessibleName(ui("campaign.switcher.current", { name: SECOND_NAME }));
+  await expect(switcher).toHaveAccessibleName(
+    ui("campaignMenu.triggerInArea", { name: SECOND_NAME, area: ui("area.chapters") }),
+  );
   expect((await getCampaign(second)).name).toBe(SECOND_NAME);
 
   // Both campaigns are in the menu now, and the first one is untouched.
@@ -566,12 +569,9 @@ test("cold start and creating an npc work at 390px", async ({ page, server }) =>
   await submit.click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
-  // The mobile start surface reaches the lists through its lookup section,
-  // and the list is where an NPC is created.
-  await page
-    .getByRole("navigation", { name: ui("lookup.heading") })
-    .getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui("browse.title.npcs"))}`) })
-    .click();
+  // The phone reaches the lists through the campaign menu's sheet, and the
+  // list is where an NPC is created.
+  await openArea(page, "area.npcs");
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/npcs$`));
   await page.getByRole("button", { name: ui("create.npc.title") }).click();
   await page.getByLabel(ui("create.npc.nameLabel")).fill("Old Fisherwoman");

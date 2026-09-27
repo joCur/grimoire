@@ -122,7 +122,7 @@ export function pickLastCampaign(campaigns: CampaignSummary[]): string | undefin
  * `/settings` is campaign-independent — the gear has to work on a fresh
  * instance — so the campaign the DM CAME FROM travels in `?from=`. It is
  * checked against the list rather than trusted: a stale bookmark or a renamed
- * campaign must not produce a back row into nothing. Only with no usable
+ * campaign must not produce a campaign menu for nothing. Only with no usable
  * origin does the "/" heuristic stand in, which is a GUESS and therefore the
  * fallback, never the answer when the origin is known.
  */

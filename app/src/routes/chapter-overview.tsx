@@ -9,13 +9,13 @@
 // accordion with its status control and actions, and the threads and the
 // scene list handed into that accordion — no slice reaches into another.
 //
-// Below md the SAME route shows the mobile start surface instead — a
-// responsive swap, no separate URL: the desktop chapter overview is
-// `hidden md:block`, the mobile start `md:hidden`. Both share the tree query
-// cache, so nothing fetches twice.
+// Below md the SAME route is the phone's start of the campaign: search and
+// the idea capture above the chapter overview, the language switch below it
+// (routes/mobile-start.tsx). The overview itself is one tree for every width,
+// laid out for 390px as much as for the desktop column.
 
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
 import { CampaignEditAction } from "@/campaign/CampaignEditAction";
@@ -25,9 +25,8 @@ import { ChapterSection } from "@/chapter/ChapterSection";
 import { ClampedText } from "@/components/ClampedText";
 import { NotFound } from "@/components/NotFound";
 import { useT } from "@/i18n";
-import { CHAPTER_OVERVIEW_LOOKUP_TARGETS } from "@/lib/lookup";
 import { useCampaignMeta } from "@/lib/use-campaign";
-import { MobileStart } from "@/routes/mobile-start";
+import { MobileStartBottom, MobileStartTop } from "@/routes/mobile-start";
 import { SceneOrderList } from "@/scene/SceneOrderList";
 import { ThreadList } from "@/thread/ThreadList";
 
@@ -62,10 +61,8 @@ export function ChapterOverviewRoute() {
 
   return (
     <>
-      <div className="md:hidden">
-        <MobileStart campaign={campaign} />
-      </div>
-      <div className="mx-auto hidden max-w-[760px] px-7 pt-10 pb-20 md:block">
+      <MobileStartTop campaign={campaign} />
+      <div className="mx-auto max-w-[760px] px-5 pt-8 pb-12 md:px-7 md:pt-10 md:pb-20">
         {isPending && <p className="text-muted-foreground">{t("chapterOverview.loading")}</p>}
         {isError && <p className="text-muted-foreground">{t("common.serverDown")}</p>}
         {data && (
@@ -85,9 +82,8 @@ export function ChapterOverviewRoute() {
                   part of this header that is pure decoration, and dropping it
                   a line costs nothing, where truncating the campaign's name
                   or moving its actions costs the thing the header is FOR.
-                  Below md the chapter overview is not on screen at all (the mobile start
-                  surface is), but the column stays the fallback so a narrow
-                  viewport stacks LEFT-aligned instead of overflowing. */}
+                  Below md the row becomes a column, so the phone stacks the
+                  header LEFT-aligned instead of overflowing. */}
               <div className="flex flex-col items-start gap-1.5 md:flex-row md:flex-nowrap md:items-baseline md:gap-3">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                   <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
@@ -117,7 +113,6 @@ export function ChapterOverviewRoute() {
               <ClampedText className="mt-2.5 max-w-[62ch]">
                 {campaignRead.data?.body ?? ""}
               </ClampedText>
-              <LookupLine campaign={campaign} />
             </div>
             {/* The empty chapter overview is the second half of the cold start: it used
                 to point at the generator, which needs an API key
@@ -146,48 +141,7 @@ export function ChapterOverviewRoute() {
           </>
         )}
       </div>
+      <MobileStartBottom />
     </>
-  );
-}
-
-/**
- * The chapter overview's quiet lookup line into the campaign's reference
- * pages (NPCs, locations, glossary, campaign knowledge) and, last, the trash.
- *
- * The mobile start surface carries these as tap rows; the desktop has nowhere
- * else for the glossary and the knowledge page to be reached from. The TOPBAR
- * is deliberately not it — it keeps the three campaign-wide entries and does
- * not grow (a fourth and fifth link there would crowd the one bar that has to
- * survive every width, and neither the glossary nor the trash is something
- * the DM reaches for mid-session). So the chapter overview's own header gets the line, one row
- * under the campaign description: the same list as on the phone, in the
- * compact shape a desktop header can afford.
- *
- * The scene list is left out: the chapter overview IS the scene list (lib/lookup.ts).
- */
-function LookupLine({ campaign }: { campaign: string }) {
-  const t = useT();
-  return (
-    <nav
-      aria-label={t("lookup.heading")}
-      className="mt-2.5 flex flex-wrap items-center gap-1 text-[12.5px] text-faint"
-    >
-      <span className="mr-0.5">{t("lookup.heading")}</span>
-      {CHAPTER_OVERVIEW_LOOKUP_TARGETS.map((target, index) => (
-        <span key={target.id} className="flex items-center gap-1">
-          {index > 0 && (
-            <span aria-hidden className="mr-0.5">
-              ·
-            </span>
-          )}
-          <Link
-            to={target.href(campaign)}
-            className="rounded px-0.5 text-body-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            {t(target.label)}
-          </Link>
-        </span>
-      ))}
-    </nav>
   );
 }

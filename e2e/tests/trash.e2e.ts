@@ -3,8 +3,7 @@
 // Deleting an idea in the session review puts it in the trash
 // (`DELETE …/ideas/:id { rev }`), and the notice beside it takes it back out
 // (`PATCH …/ideas/:id { rev, deletedMs: null }`). The trash page — reached
-// from the chapter overview's lookup line, ⌘K and the mobile start surface —
-// lists what is in the trash with the days it has left and restores it. A
+// from the campaign menu, on the desktop and on the phone, and ⌘K — lists what is in the trash with the days it has left and restores it. A
 // chapter that went there with its scenes is ONE row and brings its scenes
 // back in their order; a restore that something in the trash stands in the
 // way of says what, and writes nothing.
@@ -25,6 +24,7 @@ import { chapterExists, getTrashedChapters, trashChapter } from "../support/chap
 import { getIdeas, getTrashedIdeas } from "../support/idea";
 import { getTrashedLocations, locationExists, trashLocation } from "../support/location";
 import { getTrashedScenes, sceneExists, trashScene } from "../support/scene";
+import { campaignMenu, openArea } from "../support/campaign-menu";
 import { ui, uiExact, uiPattern } from "../support/ui";
 
 /** The seeded idea of the example campaign, as its review card shows it (hashtag stripped). */
@@ -112,12 +112,9 @@ test("deleting an idea puts it in the trash, the notice undoes it, the trash pag
     IDEA_ID,
   ]);
 
-  // The trash is reached from the chapter overview's lookup line.
+  // The trash is reached from the campaign menu.
   await page.goto("/campaigns/example");
-  await page
-    .getByRole("navigation", { name: ui("lookup.heading") })
-    .getByRole("link", { name: uiExact("trash.title") })
-    .click();
+  await openArea(page, "area.trash");
   await expect(page).toHaveURL(/\/campaigns\/example\/trash$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("trash.title"));
   // The topbar is still this campaign's: its search is there.
@@ -233,13 +230,10 @@ test("⌘K names the trash as a page of the campaign", async ({ page }) => {
 test.describe("on the phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, seed: { chapters: [COVE], scenes: [LANDING] } });
 
-  test("the start surface leads to the trash, which fits the width", async ({ page, api }) => {
+  test("the campaign menu leads to the trash, which fits the width", async ({ page, api }) => {
     await trashChapter(api, COVE.id);
     await page.goto("/campaigns/example");
-    await page
-      .getByRole("navigation", { name: ui("lookup.heading") })
-      .getByRole("link", { name: new RegExp(`^${ui("trash.title")}`) })
-      .click();
+    await openArea(page, "area.trash");
     await expect(page).toHaveURL(/\/campaigns\/example\/trash$/);
     await expect(restoreAction(page, COVE.title)).toBeVisible();
     // No horizontal scroll at 390px.
@@ -249,7 +243,9 @@ test.describe("on the phone", () => {
       ),
     );
     expect(overflow).toEqual([0, 0]);
-    // The way back to the start surface.
-    await expect(page.getByRole("link", { name: ui("mobileBack.chapterOverview") })).toBeVisible();
+    // The campaign menu is still on screen, naming the trash as its area.
+    await expect(campaignMenu(page)).toHaveAccessibleName(
+      uiPattern("campaignMenu.triggerInArea", { name: /.*/, area: ui("area.trash") }),
+    );
   });
 });

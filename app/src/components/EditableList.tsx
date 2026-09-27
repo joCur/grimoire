@@ -33,7 +33,7 @@ import { ArrowDown, ArrowUp, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/api";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { UnsavedChangesGuard, useUnsavedChanges } from "@/components/UnsavedChangesGuard";
 import { AutoGrowTextarea } from "@/components/ui/autogrow-textarea";
 import { Button } from "@/components/ui/button";
@@ -297,9 +297,9 @@ function EditableListBody<T extends EditableRow, V>({
 
   return (
     <>
-      {/* Below md the topbar is not the chrome — the same back row to the
-          chapter overview every other campaign view carries is the way back. */}
-      <MobileBackRow campaign={campaign} />
+      {/* Below md the topbar is not the chrome — the campaign menu's row every
+          other campaign view carries takes its place. */}
+      <MobileMenuRow campaign={campaign} />
       <div className="mx-auto max-w-[760px] px-5 pt-5 pb-16 md:px-7 md:pt-10">
         <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
           <h1 className="font-serif text-[24px] leading-[1.25] font-semibold text-foreground">

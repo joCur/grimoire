@@ -29,13 +29,13 @@
 // name.
 //
 // `?from=` is checked against the campaign LIST rather than trusted: a stale
-// bookmark or a campaign that is gone must not produce a back row into
-// nothing. Only with no origin at all (the gear from "/" on a fresh instance,
+// bookmark or a campaign that is gone must not produce a campaign menu
+// for nothing. Only with no origin at all (the gear from "/" on a fresh instance,
 // or a hand-typed `/settings`) does the heuristic stand in —
 // `pickLastCampaign` (lib/campaign.ts), the same one "/" uses. No
 // localStorage (quality floor). It is still needed with no campaign section
-// on the page: the topbar above and the mobile back row both have to lead
-// back where the DM came from.
+// on the page: the topbar above and the phone's campaign menu row both have
+// to lead back where the DM came from.
 
 import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
@@ -43,7 +43,7 @@ import { useSearchParams } from "react-router";
 
 import { fetchCampaigns } from "@/api";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { useT } from "@/i18n";
 import { settingsCampaign } from "@/lib/campaign";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
@@ -70,7 +70,7 @@ export function SettingsRoute() {
           same "‹ Kapitel" row every other campaign view carries is the way back.
           Only with a campaign: on a fresh instance there is no chapter overview to go
           back to. */}
-      {campaign !== undefined && <MobileBackRow campaign={campaign} />}
+      {campaign !== undefined && <MobileMenuRow campaign={campaign} />}
       <div className="mx-auto max-w-[640px] px-5 pt-8 pb-24 md:px-7 md:pt-10">
         <h1 className="mb-1.5 font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
           {t("settings.title")}

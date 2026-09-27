@@ -106,16 +106,15 @@ export function App() {
               overview above. A chapter, a scene, an npc and a location are
               each their own resource as well (decisions/resources): their reading views
               live at their own routes, and so do the npc and location lists,
-              reached from the topbar's quiet npc and location links and the
-              mobile lookup rows. The scene's reading view is handed the npc
+              reached from the campaign menu (lib/areas.ts). The scene's reading view is handed the npc
               cards of its aside — the npc draws them, the scene only says
               where — and each reading view its augment action, the generator
               job's dialog joined with the entity's own write. The chapter's
               reading view is handed the query of its threads, which its
               delete dialog counts. */}
           <Route path="chapters/:id" element={<ChapterRoute threadsQuery={threadsQuery} />} />
-          {/* The scene list — reached from the mobile start surface's
-              lookup rows. Each list page draws the rows of its own slice. */}
+          {/* The scene list — reached from the campaign menu. Each list page
+              draws the rows of its own slice. */}
           <Route
             path="scenes"
             element={
@@ -176,9 +175,7 @@ export function App() {
           />
           {/* Campaign knowledge and glossary — campaign CONTENT, so they are
               list pages next to the npc/location ones and not sections of
-              /settings. Reached from the chapter overview's lookup line, the
-              mobile start surface, ⌘K and the generator's context line —
-              deliberately not from the topbar. */}
+              /settings. Reached from the campaign menu and ⌘K. */}
           <Route path="knowledge" element={<KnowledgeRoute />} />
           <Route path="glossary" element={<GlossaryRoute />} />
           {/* The trash — what was deleted, until it is removed for good
