@@ -406,7 +406,7 @@ export const de = {
   "itemPrices.loading": "Lade Preise …",
   "itemPrices.noMatch": "Kein Gegenstand passt zur Suche.",
   "itemPrices.rowSource": "{list} · Preis nach {author}",
-  "itemPrices.price": "{price, number} GM",
+  "itemPrices.price": "{price, number} gp",
 
 
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
