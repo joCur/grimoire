@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.0](https://github.com/joCur/grimoire/compare/v0.9.0...v0.10.0) (2026-09-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* every stored generator job is deleted by the migration, and the job's wire shape changed: each pipeline part carries `warnings`, and `result.warnings` no longer repeats the parts' notes.
+* accepting a scene no longer writes the npcs and locations it names, the review decision "accepted" is gone, and stored generator jobs are deleted by the migration.
+
+### Features
+
+* a scene run also extends existing NPCs and locations ([#214](https://github.com/joCur/grimoire/issues/214)) ([#239](https://github.com/joCur/grimoire/issues/239)) ([6be2655](https://github.com/joCur/grimoire/commit/6be2655f0f74e37aa3ec453fe0392495219e07d6))
+* an answer to a generator note can be kept as campaign knowledge ([#109](https://github.com/joCur/grimoire/issues/109)) ([#229](https://github.com/joCur/grimoire/issues/229)) ([eab882e](https://github.com/joCur/grimoire/commit/eab882efcc3610b4411a58ef3237764edbd31432))
+* answer the model's notes with a patch round ([#109](https://github.com/joCur/grimoire/issues/109)) ([#228](https://github.com/joCur/grimoire/issues/228)) ([a168489](https://github.com/joCur/grimoire/commit/a168489e57bc86e2e098bdd3257bbf79c2473ce9))
+* **app:** one campaign menu holds every area of a campaign ([#226](https://github.com/joCur/grimoire/issues/226)) ([#240](https://github.com/joCur/grimoire/issues/240)) ([4058d72](https://github.com/joCur/grimoire/commit/4058d7207cce6187165af4f9ed3981cb55063094))
+* generator notes and naming hints sit on their part ([#140](https://github.com/joCur/grimoire/issues/140)) ([#227](https://github.com/joCur/grimoire/issues/227)) ([b7b5660](https://github.com/joCur/grimoire/commit/b7b566074f0a59dd5acdaded357ef7daa7776f08))
+* the generator review walks in reference order; a scene writes only itself ([#140](https://github.com/joCur/grimoire/issues/140)) ([#221](https://github.com/joCur/grimoire/issues/221)) ([da2b7c8](https://github.com/joCur/grimoire/commit/da2b7c890befbacc0d808b65de05ae13d3b01a6a))
+
+
+### Bug Fixes
+
+* **app:** headings in the chapter overview's texts stand below the title ([#184](https://github.com/joCur/grimoire/issues/184)) ([#238](https://github.com/joCur/grimoire/issues/238)) ([45e0afb](https://github.com/joCur/grimoire/commit/45e0afbb2f42a020ec9976812a74fd3aded9d947))
+
 ## [0.9.0](https://github.com/joCur/grimoire/compare/v0.8.0...v0.9.0) (2026-09-26)
 
 
