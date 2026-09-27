@@ -11,6 +11,7 @@
 //     whatever the server sent — a successful run and a 422 both carry it.
 //   - which of the view's states the server's job puts us in,
 //     and the error body of a failed job.
+//   - which notes stand on a proposal's card, and which above the stages.
 //   - what the campaign's job is about and where it stands, as the topbar,
 //     the augment action and the generator page say it.
 
@@ -24,6 +25,7 @@ import {
   type GeneratorJobReview,
   type GeneratorReviewStage,
   type GenerateReviewDecision,
+  type NamingHint,
 } from "@grimoire/shared/generator-job";
 import { withSceneChange, type SceneProposal } from "@grimoire/shared/scene";
 
@@ -172,9 +174,8 @@ export function generatePhase(input: {
 export type GenerateMode = "scene" | "npc";
 
 /**
- * The mode a job belongs to. Anything that is not explicitly an NPC run is a
- * scene run — `kind` is an additive field, so a payload without it (an older
- * server, a job from before the field existed) must not land in NPC mode.
+ * The mode a job belongs to: an NPC run is the NPC mode, and every other run —
+ * a scene run, and an augment run the page only leads to — the scene mode.
  */
 export function jobMode(job: GeneratorJob | null | undefined): GenerateMode {
   return job?.kind === "npc" ? "npc" : "scene";
@@ -234,7 +235,7 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
 // halves of that: what the state IS, what a patch does to it, and what is
 // still open. No fetching; the hook (./use-job-review.ts) does that.
 
-/** A review state with nothing decided — also the fallback for an older payload. */
+/** A review state with nothing decided — what there is without a job. */
 export function emptyReview(): GeneratorJobReview {
   return {
     stage: GENERATOR_REVIEW_STAGES[0],
@@ -249,21 +250,9 @@ export function emptyReview(): GeneratorJobReview {
   };
 }
 
-/** The job's review state, degrading to "nothing decided" when it has none. */
+/** The job's review state; nothing decided when there is no job. */
 export function reviewOf(job: GeneratorJob | null | undefined): GeneratorJobReview {
-  const review = job?.review;
-  if (review === undefined) return emptyReview();
-  return {
-    stage: review.stage ?? GENERATOR_REVIEW_STAGES[0],
-    droppedScenes: review.droppedScenes ?? [],
-    fields: review.fields ?? {},
-    blocks: review.blocks ?? {},
-    writtenScenes: review.writtenScenes ?? [],
-    npcs: review.npcs ?? {},
-    writtenNpcs: review.writtenNpcs ?? [],
-    locations: review.locations ?? {},
-    writtenLocations: review.writtenLocations ?? [],
-  };
+  return job?.review ?? emptyReview();
 }
 
 /**
@@ -328,8 +317,8 @@ export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): Generat
   const decided = patch.review ?? {};
   return {
     ...job,
-    sceneEdits: mergeEdits(job.sceneEdits ?? {}, patch.sceneEdits),
-    npcEdits: mergeEdits(job.npcEdits ?? {}, patch.npcEdits),
+    sceneEdits: mergeEdits(job.sceneEdits, patch.sceneEdits),
+    npcEdits: mergeEdits(job.npcEdits, patch.npcEdits),
     review: {
       stage: decided.stage ?? review.stage,
       droppedScenes:
@@ -474,7 +463,7 @@ export interface AcceptSelection {
  * model's scene — what an accept of it writes.
  */
 export function editedScene(job: GeneratorJob, scene: SceneProposal): SceneProposal {
-  const change = job.sceneEdits?.[scene.id];
+  const change = job.sceneEdits[scene.id];
   return change === undefined ? scene : (withSceneChange(scene, change) as SceneProposal);
 }
 
@@ -718,6 +707,86 @@ export function pipelineCostLabel(
     tokens: groupedNumber(tokens, t("generate.usage.group")),
     calls,
   });
+}
+
+// --- the notes of a run -----------------------------------------------------
+//
+// The model notes something about each proposal it writes, and the naming
+// check finds spellings a convention replaces in it. Both belong to their
+// proposal and stand on its card while it is open; once it is written,
+// rejected or dropped they go with it. What the model noted about the RUN
+// stands above the stages until the job is done.
+
+/** Which proposal a note is about. */
+export interface ProposalRef {
+  kind: "scene" | "npc" | "location";
+  id: string;
+}
+
+/** What stands on one proposal's card: the model's notes and the naming hints. */
+export interface ProposalNotes {
+  warnings: string[];
+  hints: NamingHint[];
+}
+
+const NO_NOTES: ProposalNotes = { warnings: [], hints: [] };
+
+/** The proposal a naming hint names. */
+export function hintRef(hint: NamingHint): ProposalRef {
+  if (hint.scene !== undefined) return { kind: "scene", id: hint.scene };
+  if (hint.npc !== undefined) return { kind: "npc", id: hint.npc };
+  return { kind: "location", id: hint.location };
+}
+
+/** Does this naming hint name that proposal? */
+export function hintNames(hint: NamingHint, proposal: ProposalRef): boolean {
+  const named = hintRef(hint);
+  return named.kind === proposal.kind && named.id === proposal.id;
+}
+
+/** The state of one proposal of the job, whatever its kind. */
+export function proposalState(job: GeneratorJob | null | undefined, proposal: ProposalRef): PartState {
+  switch (proposal.kind) {
+    case "scene":
+      return sceneState(job, proposal.id);
+    case "npc":
+      return npcState(job, proposal.id);
+    case "location":
+      return locationState(job, proposal.id);
+  }
+}
+
+/**
+ * The notes on one proposal while it is open — a scene run's from the part
+ * that wrote it, an NPC run's from its one result. Nothing once the proposal
+ * is written, rejected or dropped.
+ */
+export function proposalNotes(
+  job: GeneratorJob | null | undefined,
+  proposal: ProposalRef,
+): ProposalNotes {
+  if (job === null || job === undefined || proposalState(job, proposal) !== "open") {
+    return NO_NOTES;
+  }
+  if (job.npcResult !== undefined) {
+    if (proposal.kind !== "npc" || job.npcResult.npc.id !== proposal.id) return NO_NOTES;
+    return {
+      warnings: job.npcResult.warnings,
+      hints: (job.npcResult.namingHints ?? []).filter((hint) => hintNames(hint, proposal)),
+    };
+  }
+  const part = jobPipelineParts(job).find(
+    (candidate) => candidate.kind === proposal.kind && candidate.id === proposal.id,
+  );
+  return {
+    warnings: part?.warnings ?? [],
+    hints: (job.result?.namingHints ?? []).filter((hint) => hintNames(hint, proposal)),
+  };
+}
+
+/** What the model noted about the whole scene run — above the stages until the job is done. */
+export function runNotes(job: GeneratorJob | null | undefined): string[] {
+  return job?.result?.warnings ?? [];
 }
 
 // --- what the job is about -------------------------------------------------

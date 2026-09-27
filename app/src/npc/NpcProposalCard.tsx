@@ -9,17 +9,26 @@
 // Same two views as a proposed scene: the rendered text through the normal
 // markdown pipeline, or the editor over the npc's fields and its text. What
 // the editor changes is reported as the npc's change (`npcEdits`): the form
-// fields together, the text on its own.
+// fields together, the text on its own. What the page has to say about the
+// npc stands in the notes slot under the header, and what it says about one of
+// its fields or one block of its text stands right there
+// (components/place-notes.tsx).
 
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { NpcChange, NpcProposal } from "@grimoire/shared/npc";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { ProposalBodySection, ProposalFieldsSection } from "@/components/ProposalEditor";
 import { MarkdownEditorToggle } from "@/components/MarkdownEditor";
+import { NotedMarkdown } from "@/components/NotedMarkdown";
+import {
+  describedBy,
+  FieldNotesExcept,
+  PlaceNoteList,
+  usePlaceNotes,
+} from "@/components/place-notes";
 import { useT } from "@/i18n";
 import { useRefs } from "@/markdown/refs";
-import { Markdown } from "@/markdown/Markdown";
 
 import { NpcFields, NpcMotivationField } from "./NpcFields";
 import { npcExcerpt } from "./npc-excerpt";
@@ -27,10 +36,14 @@ import { npcFormIssues, npcFormValues, npcProposalChange, type NpcFormValues } f
 import { npcLabel } from "./npc-links";
 import { npcStatusLabel } from "./npc-status";
 
+/** The fields whose line the card shows — their notes stand there. */
+const SHOWN_FIELDS = ["name", "role", "voice", "appearance", "motivation", "statblock"];
+
 export function NpcProposalCard({
   npc,
   tree,
   editing,
+  notes,
   onToggleEditing,
   onChange,
   onFlush,
@@ -38,6 +51,8 @@ export function NpcProposalCard({
   npc: NpcProposal;
   tree: CampaignTree | undefined;
   editing: boolean;
+  /** What the page notes about the npc as a whole, under the header. */
+  notes?: ReactNode;
   onToggleEditing: () => void;
   onChange: (change: NpcChange) => void;
   onFlush: () => void;
@@ -47,11 +62,18 @@ export function NpcProposalCard({
   const { role, voice, will, quickstats } = npcExcerpt(npc, (slug) => resolve(slug)?.name);
   const label = npcLabel(npc.id);
   const editorId = `gen-draft-${label.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  // A field's notes stand under its line while the card reads; in the editor
+  // the field shows them itself.
+  const { fields } = usePlaceNotes();
+  const at = (field: string) => (editing ? [] : (fields[field] ?? []));
 
   return (
     <div className="my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6">
       <div className="mb-1 flex flex-wrap items-center gap-2.5">
-        <h2 className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground">
+        <h2
+          aria-describedby={describedBy(at("name"))}
+          className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground"
+        >
           {npc.name === "" ? npc.id : npc.name}
         </h2>
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
@@ -64,23 +86,45 @@ export function NpcProposalCard({
         />
       </div>
       <p className="mb-3.5 font-mono text-[11.5px] text-faint">{label}</p>
+      <PlaceNoteList notes={at("name")} className="-mt-2 mb-3" />
+      {notes}
       <div className="mb-2 border-b border-border pb-4">
         {role !== undefined && (
-          <p className="text-[13.5px] leading-[1.5] text-muted-foreground">{role}</p>
+          <p
+            aria-describedby={describedBy(at("role"))}
+            className="text-[13.5px] leading-[1.5] text-muted-foreground"
+          >
+            {role}
+          </p>
         )}
+        <PlaceNoteList notes={at("role")} className="mt-1" />
         {voice !== undefined && (
-          <p className="mt-2 text-[14px] leading-[1.6] text-body italic">{voice}</p>
+          <p
+            aria-describedby={describedBy(at("voice"))}
+            className="mt-2 text-[14px] leading-[1.6] text-body italic"
+          >
+            {voice}
+          </p>
         )}
+        <PlaceNoteList notes={at("voice")} className="mt-1" />
         {npc.appearance !== undefined && npc.appearance !== "" && (
-          <p className="mt-1 text-[14px] leading-[1.6] text-body-secondary italic">
+          <p
+            aria-describedby={describedBy(at("appearance"))}
+            className="mt-1 text-[14px] leading-[1.6] text-body-secondary italic"
+          >
             {npc.appearance}
           </p>
         )}
+        <PlaceNoteList notes={at("appearance")} className="mt-1" />
         {will !== undefined && (
-          <p className="mt-3 text-[14px] leading-[1.6] text-body">
+          <p
+            aria-describedby={describedBy(at("motivation"))}
+            className="mt-3 text-[14px] leading-[1.6] text-body"
+          >
             <span className="text-muted-foreground">{t("npcCard.will.inline")}</span> {will}
           </p>
         )}
+        <PlaceNoteList notes={at("motivation")} className="mt-1" />
         {quickstats.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {quickstats.map(([key, value]) => (
@@ -94,15 +138,22 @@ export function NpcProposalCard({
           </div>
         )}
         {npc.statblock !== undefined && npc.statblock !== "" && (
-          <p className="mt-3 text-[12.5px] text-muted-foreground">
+          <p
+            aria-describedby={describedBy(at("statblock"))}
+            className="mt-3 text-[12.5px] text-muted-foreground"
+          >
             {t("generate.review.statblock", { statblock: npc.statblock })}
           </p>
         )}
+        <PlaceNoteList notes={at("statblock")} className="mt-1" />
       </div>
       {editing ? (
         <NpcProposalEditor npc={npc} tree={tree} onChange={onChange} onFlush={onFlush} />
       ) : (
-        <Markdown>{npc.body}</Markdown>
+        <>
+          <FieldNotesExcept shown={SHOWN_FIELDS} className="mb-3" />
+          <NotedMarkdown body={npc.body} />
+        </>
       )}
     </div>
   );

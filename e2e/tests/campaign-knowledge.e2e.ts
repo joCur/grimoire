@@ -64,14 +64,6 @@ function removeRow(name: string): string {
   return ui("editableList.remove", { name });
 }
 
-/** The heading of the naming hints, for any number of them. */
-function anyNamingHeading(): RegExp {
-  const forms = [1, 2].map((count) =>
-    uiPattern("generate.review.namingHeading", { count }).source.replace(String(count), "\\d+"),
-  );
-  return new RegExp(`^(?:${forms.join("|")})$`);
-}
-
 /** The knowledge page, reached from the chapter overview's lookup line. */
 async function openKnowledge(page: Page): Promise<void> {
   await page.goto("/campaigns/example");
@@ -573,27 +565,21 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   await expect(echo).toContainText("Fakt: Fenn leads the smugglers.");
   await expect(echo).not.toContainText("[[fenn]]");
 
-  // 2. THE CHECK: the old spelling is named, with where it sits — and it is
-  //    labelled as what it is, a hint and not a blocker.
-  const hints = page.getByRole("heading", {
-    name: ui("generate.review.namingHeading", { count: 3 }),
-    exact: true,
-  });
-  await expect(hints).toBeVisible();
-  const rows = page.getByText(ui("generate.review.namingHint", { from: OLD_NAME, to: NEW_NAME }));
-  await expect(rows.first()).toBeVisible();
-  // One row per PLACE the spelling stands — the title and the two body lines
-  // of the stub's draft; that is what makes a hint actionable.
-  await expect(rows).toHaveCount(3);
-  const where = `scenes/${SCENE_ID}`;
-  await expect(
-    page.getByText(ui("generate.review.namingWhereField", { path: where, field: "title" })),
-  ).toBeVisible();
-  await expect(
-    page
-      .getByText(uiPattern("generate.review.namingWhereBody", { path: where, line: /.+/ }, { exact: true }))
-      .first(),
-  ).toBeVisible();
+  // 2. THE CHECK: the old spelling is named at each place it stands, on the
+  //    card of the scene it stands in — the title at the title, the two body
+  //    lines of the stub's draft at their block — and it is a hint, not a
+  //    blocker.
+  const card = page.getByTestId(`scene-proposal:${SCENE_ID}`);
+  const hints = card.getByTestId("naming-hint");
+  await expect(hints).toHaveCount(3);
+  const titleHint = card.locator('[data-testid="naming-hint"][data-field="title"]');
+  await expect(titleHint).toContainText(NEW_NAME);
+  await expect(card.getByRole("heading", { level: 2, name: `Night watch in ${OLD_NAME}` })).toHaveAttribute(
+    "aria-describedby",
+    (await titleHint.getAttribute("id"))!,
+  );
+  const bodyHints = card.getByTestId("noted-block").locator('[data-testid="naming-hint"][data-field="body"]');
+  await expect(bodyHints).toHaveCount(2);
 
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   // The stub's one scene, and no proposed npc or location.
@@ -617,9 +603,9 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("generate.review.title"), {
     timeout: 30_000,
   });
-  // No echo (the prompt had no knowledge section at all) and no hint block.
+  // No echo (the prompt had no knowledge section at all) and no hint.
   await expect(page.getByText(CONTEXT_ECHO, { exact: false })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: anyNamingHeading() })).toHaveCount(0);
+  await expect(page.getByTestId("naming-hint")).toHaveCount(0);
 });
 
 // --- what an OPEN row survives ------------------------------------------------

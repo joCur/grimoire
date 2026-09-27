@@ -95,8 +95,10 @@ export type NamingHint = z.infer<typeof namingHintSchema>;
 
 /**
  * What a SCENE run proposes. Mechanically validated (every scene is a draft,
- * references resolve, only known callouts); `warnings` are the model's own
- * review notes for the DM.
+ * references resolve, only known callouts). The model's notes on one scene,
+ * npc or location travel on its part (`GeneratorJobPart.warnings`); `warnings`
+ * here are the notes about the RUN — what the outline found missing in the
+ * source material, and an outline reply that had to be repaired.
  */
 export const generateResultSchema = z.strictObject({
   /**
@@ -108,6 +110,7 @@ export const generateResultSchema = z.strictObject({
   npcs: z.array(npcProposalSchema),
   /** The locations the run proposes, each a location without its guard. */
   locations: z.array(locationProposalSchema),
+  /** The run's own notes for the DM — see above. */
   warnings: z.array(z.string()),
   /**
    * The SERVER's own findings, not the model's: proposals that still carry a
@@ -212,6 +215,11 @@ export const generatorJobPartSchema = z.strictObject({
   validationErrors: z.array(z.string()).optional(),
   /** The raw reply of the failed attempt (capped). */
   rawReply: z.string().optional(),
+  /**
+   * The model's own review notes on what this part proposes (a gap in the
+   * source text, a value it had to set) — empty until the part is done.
+   */
+  warnings: z.array(z.string()),
 });
 
 export type GeneratorJobPart = z.infer<typeof generatorJobPartSchema>;

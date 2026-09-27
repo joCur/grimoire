@@ -183,7 +183,7 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
    sentence of its source section verbatim** (`sourceExcerpt`); the server
    cuts the section out of the source text with them. If it does not find the
    quotes verbatim (whitespace is normalised, nothing else), the scene gets
-   the **whole** source text and the run a warning — more expensive, but
+   the **whole** source text and its part a note — more expensive, but
    never wrong. Validation and correction turns apply to this step alone.
 
    **New chapter:** when the run creates its chapter, the context of the
@@ -259,9 +259,22 @@ written back as it changes.
 Each location and NPC is decided on its own: accepting writes it right away,
 rejecting marks it rejected (a rejected one can still be accepted after
 all). The scene stage opens only when every location and NPC is decided;
-going back stays possible. Scenes are editable, naming hints stand quietly
-next to them (never a blocker), and accepting a scene writes exactly that
-scene.
+going back stays possible. Scenes are editable, and accepting a scene
+writes exactly that scene.
+
+The notes stand where they belong. What the model noted about one scene,
+NPC or location (its `warnings`) travels on that part of the pipeline and
+stands under the header of its card, folded from three notes on. A naming
+hint stands at the field it names, or at the block of the text its line sits
+in — on the card and in its edit mode — and is bound to that place for
+assistive technology; a card that shows neither fields nor text (an NPC or a
+location row) lists its hints, each naming where it sits. A hint is never a
+blocker. A part's notes and hints leave with it once it is written, rejected
+or dropped; a scene written from the whole source text says so among its
+own notes. What the model noted about the run as a whole — the outline's own
+notes, and that the outline reply had to be repaired — stands above the stages as one compact block until the job is done. The NPC
+run shows its notes on its one card; an augment run keeps its notes at the
+top and puts its hints at the field or block of the comparison.
 
 A scene whose `npcs` or `location` names a proposal of the run that is not
 written cannot be written: the server refuses it with a 409
@@ -307,7 +320,9 @@ every NPC and location call and the single-call runs:
 5. The server checks the finished proposal against the **naming
    conventions** of the campaign knowledge (word boundaries, case
    insensitive, no heuristic) and puts matches as `namingHints` into the job
-   result.
+   result, each naming its scene, NPC or location by id. The model's
+   `warnings` about a scene, NPC or location go onto its part of the
+   pipeline; the job result's `warnings` are the run's own.
 6. The app shows the review (see "Review of a scene run"). Only accepting
    writes into the database.
 

@@ -28,6 +28,7 @@
 import { ChevronDown, ChevronUp, PenLine, Plus, Trash2, X } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 
+import { describedBy, PlaceNoteList, type PlaceNote } from "@/components/place-notes";
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
 import { useT } from "@/i18n";
@@ -268,6 +269,9 @@ function textareaRows(text: string): number {
   return Math.min(14, Math.max(3, text.split("\n").length + 1));
 }
 
+/** No notes on any block. */
+const NO_NOTES: Readonly<Record<string, readonly PlaceNote[]>> = {};
+
 /**
  * The composer. `blocks` and `onChange` are the draft: every edit hands back a
  * new list, the caller (BodyEditor) owns it and serializes it for the save.
@@ -278,6 +282,7 @@ export function BlockComposer({
   idPrefix,
   label,
   issues,
+  notes = NO_NOTES,
 }: {
   blocks: SceneBlock[];
   onChange: (blocks: SceneBlock[]) => void;
@@ -291,6 +296,8 @@ export function BlockComposer({
    * for exactly that reason: one truth for the line and for the button.
    */
   issues: Record<string, string>;
+  /** What the page says about a top-level block, per block id — under its card. */
+  notes?: Readonly<Record<string, readonly PlaceNote[]>>;
 }) {
   const t = useT();
   // Exactly one card is expanded: on a phone a screen full of open textareas
@@ -341,6 +348,7 @@ export function BlockComposer({
         openId={openId}
         picker={picker}
         issues={issues}
+        notes={notes}
         handles={handles}
       />
       {blocks.length === 0 && (
@@ -383,6 +391,7 @@ function BlockList({
   openId,
   picker,
   issues,
+  notes = NO_NOTES,
   handles,
 }: {
   blocks: SceneBlock[];
@@ -392,6 +401,8 @@ function BlockList({
   openId: string | undefined;
   picker: InsertAt | undefined;
   issues: Record<string, string>;
+  /** The page's notes per top-level block — a section's children have none of their own. */
+  notes?: Readonly<Record<string, readonly PlaceNote[]>>;
   handles: Handles;
 }) {
   return (
@@ -405,7 +416,11 @@ function BlockList({
             picking={sameInsertAt(picker, { sectionId, index })}
             handles={handles}
           />
-          <div className="rounded-[8px] border border-border bg-card">
+          <div
+            role={notes[block.id] === undefined ? undefined : "group"}
+            aria-describedby={describedBy(notes[block.id] ?? [])}
+            className="rounded-[8px] border border-border bg-card"
+          >
             <BlockCard
               block={block}
               scope={scope}
@@ -415,6 +430,7 @@ function BlockList({
               issue={issues[block.id]}
               handles={handles}
             />
+            <PlaceNoteList notes={notes[block.id] ?? []} className="px-2.5 pb-2 md:px-3" />
             {block.type === "ifSection" && (
               // The children of the section, indented and with their own slots
               // — the one place where the list nests. Moves stay inside this

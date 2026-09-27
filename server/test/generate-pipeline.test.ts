@@ -534,7 +534,7 @@ test("two parts of one run share a byte-identical constant prefix", () => {
 const SCENE_IDS = ["one", "two", "three"] as const;
 
 /** One scene as the REPLY OBJECT — what a part's call answers. */
-function sceneDoc(id: string, over: { status?: string } = {}): string {
+function sceneDoc(id: string, over: { status?: string; warnings?: string[] } = {}): string {
   return JSON.stringify({
     id,
     title: `Scene ${id}`,
@@ -547,7 +547,7 @@ function sceneDoc(id: string, over: { status?: string } = {}): string {
     tags: ["social"],
     status: over.status ?? "draft",
     body: "## Flow\n\nFenn waits on the quay.\n",
-    warnings: [],
+    warnings: over.warnings ?? [],
   });
 }
 
@@ -692,6 +692,32 @@ test("one failed part leaves the other two reviewable", async () => {
   expect(answer.review.writtenLocations).toEqual([]);
   // The job stays: the failed part is not settled.
   expect((await fetchJob())!.id).toBe(job.id);
+});
+
+test("a part's notes stay on its part and the run's notes on the result", async () => {
+  // The outline notes something about the run, and every scene part notes
+  // something about its own scene.
+  class NotingProvider extends ThreeSceneProvider {
+    override async complete(
+      req: GenerateRequest,
+      corrections: CorrectionTurn[] = [],
+    ): Promise<CompletionResult> {
+      const answer = await super.complete(req, corrections);
+      const reply = JSON.parse(answer.text) as Record<string, unknown>;
+      const id = typeof reply.id === "string" ? reply.id : undefined;
+      reply.warnings = id === undefined ? ["The source names no weather."] : [`About ${id}.`];
+      return { ...answer, text: JSON.stringify(reply) };
+    }
+  }
+  setProviderForTests(new NotingProvider());
+  const job = await runJob();
+
+  expect(job.result!.warnings).toEqual(["The source names no weather."]);
+  expect(job.pipeline!.parts.map((part) => [part.key, part.warnings])).toEqual([
+    ["scene:one", ["About one."]],
+    ["scene:two", ["About two."]],
+    ["scene:three", ["About three."]],
+  ]);
 });
 
 test("a done part is acceptable while the run is still RUNNING", async () => {

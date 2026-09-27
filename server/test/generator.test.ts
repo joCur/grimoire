@@ -1935,6 +1935,23 @@ describe("generator jobs", () => {
     expect(await fetchJob()).toBeNull();
   });
 
+  test("a done scene run with an unreadable pipeline is served as FAILED", async () => {
+    useFake([jobReply("job-unreadable-pipeline")]);
+    await generate(generateBody);
+    const before = (await fetchJob())!;
+    expect(before.status).toBe("done");
+
+    // The review of a scene run is laid out by its parts: without them there
+    // is nothing to review, so the DM reads the message and discards.
+    const db = await getDb();
+    db.update(generateJobs).set({ pipeline: "{not json" }).where(eq(generateJobs.id, before.id)).run();
+
+    const job = (await fetchJob())!;
+    expect(job.status).toBe("failed");
+    expect(job.pipeline).toBeUndefined();
+    expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
+  });
+
   test("a failed job with an unreadable error body still carries a message", async () => {
     useFake([jobReply("job-unreadable-error")]);
     await generate(generateBody);

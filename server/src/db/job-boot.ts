@@ -46,9 +46,9 @@ export function failInterruptedJobs(db: GrimoireDb): number {
   for (const row of stale) {
     const parts = recoverParts(row.pipeline);
     if (parts === null) {
-      // A single-call run (npc, augment) or a row without a pipeline: there
-      // is nothing to keep, so the whole job becomes the failed one the app
-      // already renders.
+      // A single-call run (npc, augment) or a scene run without parts yet:
+      // there is nothing to keep, so the whole job becomes the failed one the
+      // app already renders.
       db.update(generateJobs)
         .set({ status: "failed", error: JSON.stringify(RESTART_FAILURE), finishedAt: at })
         .where(eq(generateJobs.id, row.id))
@@ -77,8 +77,8 @@ export function failInterruptedJobs(db: GrimoireDb): number {
 
 /**
  * The pipeline of an interrupted row with every OPEN part failed, or null
- * when the row has no parts (a single-call run, or a row written before the
- * pipeline existed). Degrades like every other payload read: an unreadable
+ * when the row has no parts (a single-call run, or a scene run whose outline
+ * had not come back yet). Degrades like every other payload read: an unreadable
  * column is treated as "no parts", which lands the row on the whole-job
  * failure.
  */

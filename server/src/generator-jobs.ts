@@ -77,7 +77,7 @@ import { generateJobs } from "./db/schema";
 import { runLocationAugment } from "./location-augment";
 import { runNpcAugment } from "./npc-augment";
 import { runSceneAugment } from "./scene-augment";
-import { capRawReply, runGenerateNpc } from "./generator";
+import { runGenerateNpc } from "./generator";
 import {
   replanStoredRun,
   runPart,
@@ -126,7 +126,7 @@ export interface Job {
   /**
    * The pipeline of a scene run: the internal outline, the parts
    * with their status, and the run's totals. `undefined` for the single-call
-   * runs and for a row that carries no pipeline.
+   * runs.
    */
   pipeline?: PipelineRecord;
   /** The run's source material — a per-part retry sends it again. */
@@ -135,8 +135,8 @@ export interface Job {
   /**
    * Title of the chapter a new-chapter run creates — stored when the run
    * STARTS, so the accept step does not depend on the browser still holding
-   * it. Undefined for every other run and for a job that carries no title;
-   * the accept then falls back to the chapter id as the title.
+   * it. Undefined for every other run and for a new-chapter run started
+   * without one; the accept then falls back to the chapter id as the title.
    */
   newChapterTitle?: string;
 }
@@ -164,12 +164,10 @@ export interface PipelineRecord {
 }
 
 /**
- * One part on the row: the wire shape, what it cost, and the raw reply of its
- * last failed attempt. The raw reply IS serialized per part (the shared type
- * declares it and the failed part's card shows it behind the same disclosure
- * the whole-run failure uses) — the job's error body still carries the last
- * failed one, which is where the app has read it, but that is
- * one reply for a run with many parts.
+ * One part on the row: the wire shape — its model notes and the raw reply of
+ * its last failed attempt among them — plus what it cost. The job's error
+ * body carries the last failed reply of a run that produced nothing, which is
+ * one reply for a run with many parts; the failed part's card shows its own.
  */
 export type StoredPart = GeneratorJobPart & { usage?: PartUsage; rawReply?: string };
 
@@ -198,11 +196,8 @@ function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
       ...(part.validationErrors === undefined
         ? {}
         : { validationErrors: part.validationErrors }),
-      // Capped again on the way out: what a provider sent is already capped
-      // by `capRawReply`, but a row written by an older deploy (or a
-      // hand-edited database) must not be able to put a megabyte into every
-      // poll of the job.
-      ...(part.rawReply === undefined ? {} : { rawReply: capRawReply(part.rawReply) }),
+      ...(part.rawReply === undefined ? {} : { rawReply: part.rawReply }),
+      warnings: part.warnings,
     })),
     totals: pipeline.totals,
   };
@@ -268,7 +263,7 @@ type JobRow = typeof generateJobs.$inferSelect;
  *
  * "Can still discard it" is only true because `toJob` turns such a row into a
  * FAILED job (see UNREADABLE_PAYLOAD_MESSAGE): the review blocks and the
- * "Verwerfen" button of a done job hang off result/npcResult, so a done row
+ * discard action of a done job hang off its result, so a done row
  * with no readable payload would render as a dead end with no way out.
  */
 function unpackPayload<T>(value: string | null): T | undefined {
@@ -400,12 +395,13 @@ function toJob(row: JobRow): Job {
   const pipeline = unpackPipeline(row.pipeline);
 
   // A finished job with nothing readable to show is degraded to `failed` with
-  // an error body: `done` without a result would render review blocks that
-  // are gated on it — no proposals, no "Verwerfen", nothing the DM can do — and
-  // `failed` without a body would render an empty failure. As a failed job
-  // with a message the existing block appears, and discarding works.
+  // an error body: `done` without a result — or a scene run without the parts
+  // its review is laid out by — would render a review with no proposals and
+  // nothing the DM can do, and `failed` without a body would render an empty
+  // failure. As a failed job with a message the existing block appears, and
+  // discarding works.
   const nothingToShow =
-    result === undefined &&
+    (result === undefined || (kind === "scene" && pipeline === undefined)) &&
     npcResult === undefined &&
     sceneAugmentResult === undefined &&
     npcAugmentResult === undefined &&
@@ -439,24 +435,20 @@ function toJob(row: JobRow): Job {
     ...(pipeline === undefined ? {} : { pipeline }),
     ...(row.sourceText === null ? {} : { sourceText: row.sourceText }),
     newChapter: row.newChapter === 1,
-    ...(row.newChapterTitle === null || row.newChapterTitle === undefined
-      ? {}
-      : { newChapterTitle: row.newChapterTitle }),
+    ...(row.newChapterTitle === null ? {} : { newChapterTitle: row.newChapterTitle }),
   };
 }
 
 /**
- * Parse the pipeline column. Degrades like every other payload here: a column
- * that cannot be read becomes "this run has no parts", which renders as the
- * earlier review of whatever result is stored instead of making the job
- * unreachable.
+ * Parse the pipeline column: undefined for a single-call run (`{}`) and for a
+ * column that cannot be read — a finished scene run without it degrades to a
+ * failed job (`toJob`) instead of making the job unreachable.
  */
 function unpackPipeline(value: string): PipelineRecord | undefined {
   const parsed = unpackPayload<Record<string, unknown>>(value);
-  if (parsed === undefined) return undefined;
-  const rawParts = Array.isArray(parsed.parts) ? parsed.parts : [];
+  if (parsed === undefined || !Array.isArray(parsed.parts)) return undefined;
   const parts: StoredPart[] = [];
-  for (const item of rawParts) {
+  for (const item of parsed.parts as unknown[]) {
     if (item === null || typeof item !== "object") continue;
     const part = item as Record<string, unknown>;
     if (typeof part.key !== "string" || typeof part.id !== "string") continue;
@@ -478,9 +470,9 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
         ? { validationErrors: part.validationErrors as string[] }
         : {}),
       ...(typeof part.rawReply === "string" ? { rawReply: part.rawReply } : {}),
+      warnings: stringList(part.warnings),
     });
   }
-  if (parts.length === 0 && parsed.outline === undefined) return undefined;
   const totals = (parsed.totals ?? {}) as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const sceneStart = unpackSceneStart(parsed.sceneStart);
@@ -499,8 +491,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
 /**
  * The stored start of a run's scenes, or undefined when there is none or it
  * cannot be read. An unreadable one degrades to "not taken yet": the next
- * accept takes a fresh one at the chapter's end, which is where a scene went
- * before there was a start at all.
+ * accept takes a fresh one at the chapter's end.
  */
 function unpackSceneStart(value: unknown): SceneRunStart | undefined {
   if (value === null || typeof value !== "object") return undefined;
@@ -794,14 +785,14 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
     if (at === -1) locations.push(location);
     else locations[at] = location;
   }
-  const warnings = [...result.warnings];
-  for (const warning of outcome.warnings) if (!warnings.includes(warning)) warnings.push(warning);
+  // The model's notes stay on the part (`partDone`); the naming check's
+  // findings name their proposal by id and join the result's list.
   const namingHints = [...(result.namingHints ?? []), ...outcome.namingHints];
   return {
     scenes,
     npcs,
     locations,
-    warnings,
+    warnings: result.warnings,
     ...(namingHints.length === 0 ? {} : { namingHints }),
   };
 }
@@ -958,10 +949,9 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
         pipeline.parts = parts.map((part) => ({ ...part }));
         addUsage(pipeline, usage);
         // The outline's own warnings are the run's warnings: it is the step
-        // that read the whole source text, so a warning about what the
-        // source material does not contain can only come from here.
-        const warnings = outline.warnings.filter((w) => !result.warnings.includes(w));
-        return { result: { ...result, warnings: [...result.warnings, ...warnings] } };
+        // that read the whole source text, so a note about what the source
+        // material does not contain can only come from here.
+        return { result: { ...result, warnings: outline.warnings } };
       });
     },
     async partRunning(key) {
@@ -988,6 +978,7 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           delete part.error;
           delete part.validationErrors;
           delete part.rawReply;
+          part.warnings = outcome.warnings;
           part.usage = usage;
         }
         addUsage(pipeline, usage);

@@ -21,6 +21,8 @@
 //                                  word diff INSIDE a changed block, plus a
 //                                  raw tab carrying a line/word diff over the
 //                                  whole text.
+//             What the model noted stands at the top; a naming hint stands at
+//             the field or the block of the proposed text it names.
 //
 // DEFAULTS never overwrite silently: what is empty or new is preselected, what
 // is filled is kept. Accepting writes ONE request (fields + text, one
@@ -34,12 +36,13 @@
 
 import type { GeneratorJob, NamingHint } from "@grimoire/shared/generator-job";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
+import { Sparkles, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { EditConflict } from "@/components/EditConflict";
 import { HeaderAction } from "@/components/HeaderAction";
+import { describedBy, PlaceNoteList, type PlaceNote } from "@/components/place-notes";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -47,6 +50,7 @@ import { useT, type Translate } from "@/i18n";
 import {
   alignBlocks,
   assembleBody,
+  changeAtLines,
   defaultAccepted,
   formatFieldValue,
   lineDiff,
@@ -67,6 +71,7 @@ import {
   type AugmentTarget,
 } from "./generator-job-state";
 import { AUGMENT_OPEN_PARAM, jobHref } from "./job-links";
+import { hintPlaceNotes } from "./PartNotes";
 import { useJobReview, type JobReviewSync } from "./use-job-review";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
@@ -543,9 +548,39 @@ export function AugmentReview({
     container.current?.focus();
   }, []);
 
+  // The naming hints at their places: a field's at its row, a body line's at
+  // the block of the proposed text it sits in — an unchanged block with a
+  // hint is shown for it. What has no row or block of its own stands under
+  // the list it belongs to.
+  const hints = useMemo(() => hintPlaceNotes(proposal.namingHints ?? []), [proposal.namingHints]);
+  // Where no block holds a hint, it says that it is about the text.
+  const listed = useMemo(
+    () => hintPlaceNotes(proposal.namingHints ?? [], true),
+    [proposal.namingHints],
+  );
+  const hintedChanges = useMemo(
+    () =>
+      changeAtLines(
+        changes,
+        proposal.proposedBody,
+        hints.lines.map((entry) => entry.line),
+      ),
+    [changes, proposal.proposedBody, hints],
+  );
+  const blockNotes = (id: string): PlaceNote[] =>
+    hints.lines.filter((entry) => hintedChanges.get(entry.line) === id).map((entry) => entry.note);
+  const fieldsWithoutRow = Object.entries(listed.fields)
+    .filter(([key]) => !proposal.fields.some((field) => field.key === key))
+    .flatMap(([, notes]) => notes);
+  const linesWithoutBlock = listed.lines
+    .filter((entry) => !hintedChanges.has(entry.line))
+    .map((entry) => entry.note);
+
   const decisions = changes.filter((change) => change.kind !== "same");
   const hasUnchanged = changes.some((change) => change.kind === "same");
-  const visible = changes.filter((change) => showUnchanged || change.kind !== "same");
+  const visible = changes.filter(
+    (change) => showUnchanged || change.kind !== "same" || blockNotes(change.id).length > 0,
+  );
   const body = assembleBody(changes, acceptedBlocks);
   const patch = Object.fromEntries(
     proposal.fields
@@ -585,28 +620,6 @@ export function AugmentReview({
           <p className="text-[13px] leading-[1.55] text-soft">{warning}</p>
         </div>
       ))}
-      {proposal.namingHints !== undefined && proposal.namingHints.length > 0 && (
-        <section className="mb-3 rounded-md border border-border bg-card px-3.5 py-3">
-          <div className="mb-1.5 flex items-center gap-2 text-[12px] text-muted-foreground">
-            <SpellCheck aria-hidden size={14} className="flex-none" />
-            <h3 className="font-medium">
-              {t("augment.review.namingHeading", { count: proposal.namingHints.length })}
-            </h3>
-          </div>
-          <ul className="flex flex-col gap-1">
-            {proposal.namingHints.map((hint, index) => (
-              <li
-                key={`${hint.field}:${hint.line ?? 0}:${hint.from}:${index}`}
-                className="text-[13px] leading-[1.5] text-soft"
-              >
-                {t("augment.review.namingHint", { from: hint.from, to: hint.to })}
-                <span className="ml-1.5 text-[12px] text-muted-foreground">{hint.excerpt}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {/* --- fields, per field ------------------------------------------ */}
       <h3 className={cn(OVERLINE, "mb-2")}>{t("augment.properties.heading")}</h3>
       {proposal.fields.length === 0 ? (
@@ -618,12 +631,15 @@ export function AugmentReview({
               key={field.key}
               field={field}
               accepted={acceptedFields.has(field.key)}
+              notes={hints.fields[field.key] ?? []}
               onDecide={(take) => review.decide({ fields: { [field.key]: take } })}
               t={t}
             />
           ))}
         </ul>
       )}
+      {/* A field the proposal leaves alone has no row — its hints stand here. */}
+      <PlaceNoteList notes={fieldsWithoutRow} className="-mt-2 mb-5" />
 
       {/* --- the body ----------------------------------------------------- */}
       <div className="mb-2 flex items-center gap-3">
@@ -665,14 +681,15 @@ export function AugmentReview({
                   key={change.id}
                   change={change}
                   accepted={acceptedBlocks.has(change.id)}
+                  notes={blockNotes(change.id)}
                   onDecide={(take) => review.decide({ blocks: { [change.id]: take } })}
                   t={t}
                 />
               ))}
             </ul>
           )}
-          {/* Only offered when there is something behind it — the toggle used
-              to sit there on an all-new body and reveal nothing. */}
+          {/* Only offered when there is something behind it: an all-new body
+              has no unchanged block to reveal. */}
           {hasUnchanged && (
             <button
               type="button"
@@ -682,9 +699,14 @@ export function AugmentReview({
               {t(showUnchanged ? "augment.body.hideUnchanged" : "augment.body.showUnchanged")}
             </button>
           )}
+          <PlaceNoteList notes={linesWithoutBlock} className="mt-2.5" />
         </>
       ) : (
-        <RawDiff before={currentBody} after={proposal.proposedBody} t={t} />
+        <>
+          <RawDiff before={currentBody} after={proposal.proposedBody} t={t} />
+          {/* The raw diff has no blocks: every hint on the text stands under it. */}
+          <PlaceNoteList notes={listed.lines.map((entry) => entry.note)} className="mt-2.5" />
+        </>
       )}
 
       <p aria-live="polite" className="min-h-[17px] pt-3 text-[12px] text-destructive">
@@ -725,21 +747,27 @@ export function AugmentReview({
   );
 }
 
-/** The stored value beside the proposed one, for one field. */
+/** The stored value beside the proposed one, for one field — its hints under them. */
 function PropertyRow({
   field,
   accepted,
+  notes,
   onDecide,
   t,
 }: {
   field: FieldProposal;
   accepted: boolean;
+  notes: readonly PlaceNote[];
   onDecide: (take: boolean) => void;
   t: Translate;
 }) {
   const current = formatFieldValue(field.current);
   return (
-    <li className="rounded-md border border-border bg-card px-3 py-2.5">
+    <li
+      aria-describedby={describedBy(notes)}
+      data-testid={`augment-field:${field.key}`}
+      className="rounded-md border border-border bg-card px-3 py-2.5"
+    >
       <div className="mb-1.5 flex items-center gap-2">
         <span className="font-mono text-[12px] text-soft">{field.key}</span>
         <StateBadge state={field.state} t={t} />
@@ -753,6 +781,7 @@ function PropertyRow({
         <dt className="text-[11.5px] text-muted-foreground">{t("augment.field.proposed")}</dt>
         <dd className="text-foreground">{formatFieldValue(field.proposed)}</dd>
       </dl>
+      <PlaceNoteList notes={notes} className="mt-1.5" />
     </li>
   );
 }
@@ -761,11 +790,14 @@ function PropertyRow({
 function BlockRow({
   change,
   accepted,
+  notes,
   onDecide,
   t,
 }: {
   change: BlockChange;
   accepted: boolean;
+  /** The hints on lines of the proposed block. */
+  notes: readonly PlaceNote[];
   onDecide: (take: boolean) => void;
   t: Translate;
 }) {
@@ -774,6 +806,8 @@ function BlockRow({
   const quiet = change.kind === "same";
   return (
     <li
+      aria-describedby={describedBy(notes)}
+      data-testid="augment-block"
       className={cn(
         "rounded-md border px-3 py-2.5",
         quiet ? "border-border/60 bg-transparent" : "border-border bg-card",
@@ -798,6 +832,7 @@ function BlockRow({
           {blockSource(change)}
         </pre>
       )}
+      <PlaceNoteList notes={notes} className="mt-1.5" />
     </li>
   );
 }

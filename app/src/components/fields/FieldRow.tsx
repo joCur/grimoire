@@ -35,10 +35,13 @@ export function FieldRow({
   issue,
   labelHidden = false,
   labelFor,
+  notes,
   children,
 }: FieldCopy & {
   /** Set when ONE input carries the field; unset for the group controls. */
   labelFor?: string;
+  /** What the page says about this field's value, right under the control. */
+  notes?: ReactNode;
   children: ReactNode;
 }) {
   const t = useT();
@@ -58,6 +61,7 @@ export function FieldRow({
         </label>
       )}
       {children}
+      {notes}
       {hint !== undefined && <p className="text-[11.5px] text-faint">{hint}</p>}
       {issue !== undefined && (
         <p aria-live="polite" className="text-[11.5px] text-destructive">

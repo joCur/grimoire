@@ -25,6 +25,8 @@
 // the byte-identical original (blocks.ts' round-trip invariant).
 
 import {
+  blockAtLine,
+  blockLines,
   blockTreeMarkdown,
   parseBlocks,
   serializeBlocks,
@@ -331,6 +333,28 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
     j = bj + 1;
   }
   flush(current.slice(i), proposed.slice(j));
+  return out;
+}
+
+/**
+ * The block of the PROPOSED body each line sits in, as the change that shows
+ * it: every change with an `after` side carries the proposed body's blocks in
+ * their order, so the n-th such change is the n-th block of that body. A line
+ * no block holds is not in the map.
+ */
+export function changeAtLines(
+  changes: readonly BlockChange[],
+  proposedBody: string,
+  lines: readonly number[],
+): Map<number, string> {
+  const spans = blockLines(parseBlocks(proposedBody));
+  const shown = changes.filter((change) => change.after !== undefined);
+  const out = new Map<number, string>();
+  for (const line of lines) {
+    const index = blockAtLine(spans, line);
+    const change = index === undefined ? undefined : shown[index];
+    if (change !== undefined) out.set(line, change.id);
+  }
   return out;
 }
 

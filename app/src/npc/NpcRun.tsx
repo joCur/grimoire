@@ -5,8 +5,9 @@
 //
 //   input    the source text and the optional id — its own buffers, so
 //            switching modes never eats what the DM pasted.
-//   review   one card, the same warnings/usage/cost lines and the same two
-//            actions as a scene run — there is nothing to decide per item,
+//   review   one card — with what the model and the naming check noted
+//            about the npc on it — the same usage line and the same two
+//            actions as a scene run: there is nothing to decide per item,
 //            so no proposal rows and no count in the apply button.
 //   done     the action that opens the npc the accept wrote.
 
@@ -14,7 +15,6 @@ import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import type { NpcChange } from "@grimoire/shared/npc";
 import type { GeneratorJob, GenerateNpcResult } from "@grimoire/shared/generator-job";
 import { useQueryClient } from "@tanstack/react-query";
-import { StickyNote } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 
@@ -135,7 +135,7 @@ export function NpcRunReview({
   tree,
   review,
   usage,
-  hints,
+  notes,
   conflicts,
   applyProblem,
   discardFailed,
@@ -155,8 +155,12 @@ export function NpcRunReview({
   };
   /** The run's token spend, as one quiet line. */
   usage: string | undefined;
-  /** The naming hints of the run, rendered by the route. */
-  hints: ReactNode;
+  /**
+   * What the model noted about the npc, rendered by the route — on the card.
+   * The naming hints reach the card's fields and text from the route as well
+   * (components/place-notes.tsx).
+   */
+  notes: ReactNode;
   /** What stands in the way of the accept, by label. */
   conflicts: readonly string[];
   /** Why the accept failed when nothing stands in the way. */
@@ -193,22 +197,11 @@ export function NpcRunReview({
       </p>
       {usage !== undefined && <p className="mb-[22px] text-[12px] text-faint">{usage}</p>}
 
-      {result.warnings.map((warning) => (
-        <div
-          key={warning}
-          className="mb-2 flex items-start gap-2.5 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
-        >
-          <StickyNote aria-hidden size={15} className="mt-px flex-none text-primary" />
-          <p className="text-[13px] leading-[1.55] text-soft">{warning}</p>
-        </div>
-      ))}
-
-      {hints}
-
       <NpcProposalCard
-        npc={npcOf(proposed, job.npcEdits?.[proposed.id], typed)}
+        npc={npcOf(proposed, job.npcEdits[proposed.id], typed)}
         tree={tree}
         editing={editing}
+        notes={notes}
         onToggleEditing={() => setEditing((was) => !was)}
         onChange={(change) => {
           setTyped((previous) => ({ ...previous, ...change }));

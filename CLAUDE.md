@@ -342,8 +342,11 @@ The paths:
    stage is stored on the job (`review.stage`). Each location and NPC is
    accepted (written right away) or rejected on its own; the scene stage
    opens only when both are decided, and going back stays possible.
-   Accepting a scene writes only that scene: one whose `npcs` or `location`
-   names an unwritten proposal of the run is 409 `proposal_not_written` and
+   A part's model notes stand on its card and its naming hints at the field
+   or block they name, until the part is written, rejected or dropped; the
+   run's own notes stand above the stages until the job is done. Accepting
+   a scene writes only that scene: one whose `npcs` or `location` names an
+   unwritten proposal of the run is 409 `proposal_not_written` and
    writes nothing (a `[[id]]` in the text never blocks), and its card says
    so in a whole sentence and offers to accept the proposal after all,
    remove the reference, or drop the scene. A proposed scene is
@@ -363,11 +366,11 @@ The paths:
    current order, no row's `rev` moves); the old list addresses
    `…/glossary` and `…/knowledge` respond 404 — and the run after that:
    knowledge in the context sent along (the stub echoes the prompt block
-   back), name hints while reviewing the proposals, accepting still possible,
-   and a server restart (a finished job survives it and stays acceptable, a
-   running one is reported as `failed`). The scenes of a run stand in the
-   chapter in outline order, even when they are accepted one by one and in
-   reverse order — start value at the first acceptance plus the number in
+   back), name hints at their place while reviewing the proposals,
+   accepting still possible, and a server restart (a finished job survives
+   it and stays acceptable, a running one is reported as `failed`). The
+   scenes of a run stand in the chapter in outline order, even when they
+   are accepted one by one and in reverse order — start value at the first acceptance plus the number in
    the outline (decisions/scene-order)
 7. Edit modes of scene, NPC, location and chapter / status control
    including the 409 conflict. No entity has a fields dialog: every field is

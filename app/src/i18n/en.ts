@@ -49,6 +49,19 @@ export const en: Messages = {
   "generatorJob.augment.running": "The AI is augmenting {name}.",
   "generatorJob.augment.ready": "The proposal for {name} is waiting for your review.",
   "generatorJob.augment.failed": "Augmenting {name} failed.",
+  "generatorJob.notes.label": "Notes from the model",
+  "generatorJob.notes.summary":
+    "{count, plural, one {# note from the model} other {# notes from the model}} on this proposal",
+  "generatorJob.runNotes.summary":
+    "{count, plural, one {# note from the model on the whole run} other {# notes from the model on the whole run}}",
+  "generatorJob.hint.field":
+    "The field “{field}” still says “{from}” — the naming convention says “{to}”.",
+  "generatorJob.hint.block":
+    "This block still says “{from}” — the naming convention says “{to}”.",
+  "generatorJob.hint.text":
+    "The text still says “{from}” — the naming convention says “{to}”.",
+  "generatorJob.hint.proposal":
+    "The proposal still says “{from}” — the naming convention says “{to}”.",
   "topbar.generator.progress": "{written} of {total} applied",
   "topbar.review.pending": "Session review · {count} open",
   "topbar.review.pendingShort": "{count} open",
@@ -209,6 +222,7 @@ export const en: Messages = {
   "properties.npc.motivation.hint":
     "What the character wants — the NPC card and the preview show it. [[id]] reads as a name there.",
 
+  "properties.location.name.label": "Name",
   "properties.location.chapter.label": "Chapter",
   "properties.location.roll20.label": "Roll20 page",
   "properties.location.roll20.hint": "A reference to the page, not a copy of the map.",
@@ -726,12 +740,6 @@ export const en: Messages = {
     "The review walks through the run in steps: first the new locations, then the new NPCs, then the scenes. Every proposal is decided on its own, and accepting one writes exactly that one — never overwriting.",
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the NPC — existing NPCs are never overwritten.",
-  // --- naming hints of the post-run check -----------------------------------
-  "generate.review.namingHeading":
-    "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
-  "generate.review.namingHint": '“{from}” is still there — the convention says “{to}”',
-  "generate.review.namingWhereBody": "{path}, line {line}",
-  "generate.review.namingWhereField": "{path}, field {field}",
   "generate.review.conflicts": "These scenes, NPCs or locations already exist — nothing written:",
   "generate.review.conflictsNpc": "This NPC already exists — nothing written:",
   "generate.review.applyFailed": "Not written — check the server.",
@@ -1061,8 +1069,5 @@ export const en: Messages = {
   "augment.review.aria": "Check the proposal",
   "augment.accept": "Accept",
   "augment.reject": "Discard proposal",
-  "augment.review.namingHeading":
-    "{count, plural, one {# naming-convention hint} other {# naming-convention hints}} — not a blocker",
-  "augment.review.namingHint": "\u201c{from}\u201d is still there; the convention says \u201c{to}\u201d.",
 
 };

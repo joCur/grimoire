@@ -61,6 +61,23 @@ export const de = {
   "generatorJob.augment.running": "Die KI ergänzt gerade {name}.",
   "generatorJob.augment.ready": "Der Vorschlag für {name} wartet auf deine Prüfung.",
   "generatorJob.augment.failed": "Die Ergänzung von {name} ist fehlgeschlagen.",
+  // What the model noted about one proposal — under its card's header — and
+  // about the whole run, above the stages (generator-job/PartNotes.tsx).
+  // From three on a list starts folded, and its summary counts.
+  "generatorJob.notes.label": "Hinweise des Modells",
+  "generatorJob.notes.summary":
+    "{count, plural, one {# Hinweis des Modells} other {# Hinweise des Modells}} zu diesem Vorschlag",
+  "generatorJob.runNotes.summary":
+    "{count, plural, one {# Hinweis des Modells zum ganzen Lauf} other {# Hinweise des Modells zum ganzen Lauf}}",
+  // A naming hint where it sits: at the field it names, at the block its line
+  // is in, or — where the card shows neither — in the card, naming the text.
+  // Never a blocker: the check is a plain text search, the DM decides. The
+  // sentence is built here because the server stays language-free.
+  "generatorJob.hint.field": "Im Feld „{field}“ steht noch „{from}“ — die Namenskonvention sagt „{to}“.",
+  "generatorJob.hint.block": "In diesem Block steht noch „{from}“ — die Namenskonvention sagt „{to}“.",
+  "generatorJob.hint.text": "Im Text steht noch „{from}“ — die Namenskonvention sagt „{to}“.",
+  "generatorJob.hint.proposal":
+    "Der Vorschlag schreibt noch „{from}“ — die Namenskonvention sagt „{to}“.",
   "topbar.generator.progress": "{written} von {total} übernommen",
   "topbar.review.pending": "Nachbereitung · {count} offen",
   // The same link below xl, where the row has no width to spare:
@@ -235,6 +252,7 @@ export const de = {
   "properties.npc.motivation.hint":
     "Was die Figur will — die NPC-Karte und die Vorschau zeigen es. [[id]] erscheint dort als Name.",
 
+  "properties.location.name.label": "Name",
   "properties.location.chapter.label": "Kapitel",
   "properties.location.roll20.label": "Roll20-Seite",
   "properties.location.roll20.hint": "Verweis auf die Page, keine Karten-Kopie.",
@@ -802,16 +820,6 @@ export const de = {
     "Die Prüfung geht den Lauf in Schritten durch: erst die neuen Orte, dann die neuen NPCs, dann die Szenen. Jeder Vorschlag wird einzeln entschieden, und Annehmen schreibt genau diesen einen — nie überschreibend.",
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den NPC — bestehende NPCs werden nie überschrieben.",
-  // --- naming hints of the post-run check -----------------------------------
-  // Deliberately NOT a warning: the check is a plain text search and the DM
-  // decides. So the heading counts and the row states the finding plus where
-  // it sits — the sentence is built here because the server stays
-  // language-free.
-  "generate.review.namingHeading":
-    "{count, plural, one {# Namens-Hinweis} other {# Namens-Hinweise}} — kein Blocker",
-  "generate.review.namingHint": '„{from}“ steht noch da — vereinbart ist „{to}“',
-  "generate.review.namingWhereBody": "{path}, Zeile {line}",
-  "generate.review.namingWhereField": "{path}, Feld {field}",
   "generate.review.conflicts": "Diese Szenen, NPCs oder Orte gibt es schon — nichts geschrieben:",
   "generate.review.conflictsNpc": "Diesen NPC gibt es schon — nichts geschrieben:",
   "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",
@@ -1189,8 +1197,5 @@ export const de = {
   "augment.review.aria": "Vorschlag prüfen",
   "augment.accept": "Übernehmen",
   "augment.reject": "Vorschlag verwerfen",
-  "augment.review.namingHeading":
-    "{count, plural, one {# Hinweis zur Namenskonvention} other {# Hinweise zur Namenskonvention}} — kein Blocker",
-  "augment.review.namingHint": "„{from}“ steht noch da, die Konvention sagt „{to}“.",
 
 } as const;

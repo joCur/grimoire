@@ -67,6 +67,8 @@ export interface MarkdownEditorSurfaceProps {
    * the DM somewhere else.
    */
   onBlur?: () => void;
+  /** Ids of what describes the text — `aria-describedby` of the textarea. */
+  describedBy?: string | undefined;
 }
 
 /** Either the mono textarea or the rendered body — never both. */
@@ -77,6 +79,7 @@ export function MarkdownEditorSurface({
   id,
   label,
   onBlur,
+  describedBy,
 }: MarkdownEditorSurfaceProps) {
   return editing ? (
     <textarea
@@ -86,6 +89,7 @@ export function MarkdownEditorSurface({
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
       aria-label={label}
+      aria-describedby={describedBy}
       className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
     />
   ) : (

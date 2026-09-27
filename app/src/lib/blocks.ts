@@ -730,6 +730,88 @@ export function makeText(text: string): TextBlock {
   return { id: nextId(), type: "text", text: normalizeText(text) };
 }
 
+// --- lines -------------------------------------------------------------------
+
+/** The 1-based first and last line a block spans in its body. */
+export interface BlockLines {
+  first: number;
+  last: number;
+}
+
+function newlines(text: string): number {
+  let count = 0;
+  for (const ch of text) if (ch === "\n") count += 1;
+  return count;
+}
+
+/** The whitespace after a block — for a section, after the last thing it holds. */
+function trailingGap(block: SceneBlock): string {
+  const last = block.type === "ifSection" ? block.children.at(-1) : undefined;
+  return last === undefined ? (block.gap ?? "") : trailingGap(last);
+}
+
+/**
+ * The lines each top-level block spans in the body it was parsed from — an
+ * `## If:` section together with everything it holds, the way the reading view
+ * shows it as one thing. Only meaningful for blocks as `parseBlocks` returns
+ * them: an edited block has no verbatim source whose lines could be counted.
+ */
+export function blockLines(blocks: readonly SceneBlock[]): BlockLines[] {
+  let line = 1;
+  return blocks.map((block) => {
+    line += newlines(block.lead ?? "");
+    const first = line;
+    const last = first + newlines(blockTreeMarkdown(block));
+    line = last + newlines(trailingGap(block));
+    return { first, last };
+  });
+}
+
+/** The index of the top-level block that holds `line`, or undefined for none. */
+export function blockAtLine(lines: readonly BlockLines[], line: number): number | undefined {
+  const index = lines.findIndex((span) => line >= span.first && line <= span.last);
+  return index === -1 ? undefined : index;
+}
+
+/** One piece of a body cut at the blocks that hold certain lines. */
+export interface BodyPiece {
+  /** The piece's markdown, verbatim. */
+  markdown: string;
+  /** The lines asked about that this piece holds — empty for a piece between them. */
+  lines: number[];
+}
+
+/**
+ * Cut a body into pieces so that every top-level block holding one of `lines`
+ * is a piece of its own and everything between them stays together — so
+ * something can stand right after the block a line sits in while the rest of
+ * the body renders as one. A line no block holds (a blank line, past the end)
+ * goes to a last, empty piece.
+ */
+export function splitAtLines(body: string, lines: readonly number[]): BodyPiece[] {
+  const blocks = parseBlocks(body);
+  const spans = blockLines(blocks);
+  const pieces: BodyPiece[] = [];
+  let between: SceneBlock[] = [];
+  const flush = (): void => {
+    if (between.length > 0) pieces.push({ markdown: serializeBlocks(between), lines: [] });
+    between = [];
+  };
+  blocks.forEach((block, index) => {
+    const held = lines.filter((line) => blockAtLine(spans, line) === index);
+    if (held.length === 0) {
+      between.push(block);
+      return;
+    }
+    flush();
+    pieces.push({ markdown: serializeBlocks([block]), lines: held });
+  });
+  flush();
+  const unplaced = lines.filter((line) => blockAtLine(spans, line) === undefined);
+  if (unplaced.length > 0) pieces.push({ markdown: "", lines: unplaced });
+  return pieces;
+}
+
 // --- editing -----------------------------------------------------------------
 
 /** The block's editable text; for a section that is its condition. */

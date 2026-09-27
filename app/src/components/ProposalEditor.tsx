@@ -23,13 +23,22 @@ import { useState } from "react";
 
 import { BlockComposer, ComposerModeToggle } from "@/components/BlockComposer";
 import { MarkdownEditorSurface, MarkdownEditorToggle } from "@/components/MarkdownEditor";
+import {
+  describedBy,
+  PlaceNoteList,
+  usePlaceNotes,
+  type PlaceNote,
+  type PlaceNotes,
+} from "@/components/place-notes";
 import { useT } from "@/i18n";
+import { blockAtLine, blockLines, type SceneBlock } from "@/lib/blocks";
 import {
   composerDraft,
   draftBody,
   withDraftBlocks,
   withDraftMode,
   withDraftText,
+  type ComposerDraft,
 } from "@/lib/composer";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
@@ -63,8 +72,37 @@ export function ProposalFieldsSection({ label, children }: { label: string; chil
 }
 
 /**
+ * The page's notes on lines of the body, per top-level block of `blocks` —
+ * read off the blocks as they were parsed from the text, so a note stays with
+ * its block while the DM edits and moves it. A note on a line no block holds
+ * is in `rest`.
+ */
+function notesPerBlock(
+  blocks: readonly SceneBlock[],
+  lines: PlaceNotes["lines"],
+): { byBlock: Record<string, PlaceNote[]>; rest: PlaceNote[] } {
+  const spans = blockLines(blocks);
+  const byBlock: Record<string, PlaceNote[]> = {};
+  const rest: PlaceNote[] = [];
+  for (const { line, note } of lines) {
+    const index = blockAtLine(spans, line);
+    const id = index === undefined ? undefined : blocks[index]?.id;
+    if (id === undefined) rest.push(note);
+    else (byBlock[id] ??= []).push(note);
+  }
+  return { byBlock, rest };
+}
+
+/** The notes per block of a draft on the block surface; nothing for the text surface. */
+function draftNotes(draft: ComposerDraft, lines: PlaceNotes["lines"]) {
+  return draft.mode === "blocks" ? notesPerBlock(draft.blocks, lines) : undefined;
+}
+
+/**
  * The body of a proposal on the two surfaces, and — above them, as on the
- * body editor — the prose fields its caller edits beside the text.
+ * body editor — the prose fields its caller edits beside the text. The page's
+ * notes on lines of the body stand at their block on the block surface, and
+ * under the text on the markdown surface, which has no blocks.
  */
 export function ProposalBodySection({
   label,
@@ -83,11 +121,16 @@ export function ProposalBodySection({
   onFlush: () => void;
 }) {
   const t = useT();
+  const { lines } = usePlaceNotes();
   const [draft, setDraft] = useState(() => composerDraft(body));
+  // Where the notes stand is read ONCE per parse: block ids survive every edit
+  // of the block list, the lines of an edited block do not.
+  const [notes, setNotes] = useState(() => draftNotes(draft, lines));
   // Textarea (true) or rendered preview (false) — the raw surface's own
   // toggle. The block surface needs none: every card shows its content.
   const [editing, setEditing] = useState(true);
   const id = idFor(label);
+  const allNotes = lines.map((entry) => entry.note);
   return (
     <section aria-label={t("generate.review.bodyHeading")}>
       <div className="flex flex-wrap items-center gap-2">
@@ -95,7 +138,11 @@ export function ProposalBodySection({
         <span className="ml-auto flex flex-wrap items-center gap-2">
           <ComposerModeToggle
             mode={draft.mode}
-            onModeChange={(mode) => setDraft(withDraftMode(draft, mode))}
+            onModeChange={(mode) => {
+              const next = withDraftMode(draft, mode);
+              setDraft(next);
+              if (next !== draft) setNotes(draftNotes(next, lines));
+            }}
           />
           {draft.mode === "markdown" && (
             <MarkdownEditorToggle
@@ -108,30 +155,38 @@ export function ProposalBodySection({
       </div>
       {beside !== undefined && <div className="mt-2.5 flex flex-col gap-3.5">{beside}</div>}
       {draft.mode === "blocks" ? (
-        <BlockComposer
-          blocks={draft.blocks}
-          onChange={(blocks) => {
-            const next = withDraftBlocks(blocks);
-            setDraft(next);
-            onBodyChange(draftBody(next));
-          }}
-          idPrefix={id}
-          label={label}
-          issues={NO_BLOCK_NOTES}
-        />
+        <>
+          <BlockComposer
+            blocks={draft.blocks}
+            onChange={(blocks) => {
+              const next = withDraftBlocks(blocks);
+              setDraft(next);
+              onBodyChange(draftBody(next));
+            }}
+            idPrefix={id}
+            label={label}
+            issues={NO_BLOCK_NOTES}
+            {...(notes === undefined ? {} : { notes: notes.byBlock })}
+          />
+          <PlaceNoteList notes={notes?.rest ?? []} className="mt-2" />
+        </>
       ) : (
-        <MarkdownEditorSurface
-          value={draft.text}
-          onChange={(text) => {
-            const next = withDraftText(text);
-            setDraft(next);
-            onBodyChange(draftBody(next));
-          }}
-          editing={editing}
-          id={id}
-          label={t("generate.review.bodyLabel", { path: label })}
-          onBlur={onFlush}
-        />
+        <>
+          <MarkdownEditorSurface
+            value={draft.text}
+            onChange={(text) => {
+              const next = withDraftText(text);
+              setDraft(next);
+              onBodyChange(draftBody(next));
+            }}
+            editing={editing}
+            id={id}
+            label={t("generate.review.bodyLabel", { path: label })}
+            describedBy={describedBy(allNotes)}
+            onBlur={onFlush}
+          />
+          <PlaceNoteList notes={allNotes} className="mt-2" />
+        </>
       )}
     </section>
   );
