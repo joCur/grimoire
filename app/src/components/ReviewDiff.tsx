@@ -1,6 +1,6 @@
 // The pieces a review of a proposed change is built from, whatever the change
 // is about: a word diff of a text, the badge that names what kind of change a
-// row is, and the take ⇄ keep pair that decides it. The augment review and
+// row is, and the take ⇄ discard pair that decides it. The augment review and
 // the patch round of a generator run use them alike; neither knows an entity.
 
 import { Button } from "@/components/ui/button";
@@ -61,10 +61,12 @@ export function StateBadge({
 }
 
 /**
- * Take ⇄ keep — two real buttons with aria-pressed, no select. Without
- * `accepted` neither is pressed: the change is still undecided.
+ * Take the change ⇄ discard it and keep what stands — two real buttons with
+ * aria-pressed, no select. Without `accepted` neither is pressed: the change
+ * is still undecided. Each label says what happens to the change, so the
+ * pair is not mistaken for the accept and reject of a whole proposal.
  *
- * The VISIBLE word stays the screen's vocabulary, but the accessible name
+ * The VISIBLE words stay the screen's vocabulary, but the accessible name
  * carries the unit it decides on: a review of a dozen decisions plus the
  * footer button otherwise offers a dozen identically named controls to a
  * screen reader, and the footer's is the one that writes.
@@ -86,7 +88,7 @@ export function DecisionToggle({
     <div
       role="group"
       aria-label={t("augment.decision.aria")}
-      className="ml-auto flex items-center gap-px rounded-md border border-input p-px"
+      className="ml-auto flex max-w-full items-stretch gap-px rounded-md border border-input p-px"
     >
       {([true, false] as const).map((take) => (
         <Button
@@ -101,7 +103,9 @@ export function DecisionToggle({
           disabled={disabled}
           onClick={() => onDecide(take)}
           className={cn(
-            "h-auto rounded-[5px] px-2 py-[3px] text-[11.5px] font-normal",
+            // On a narrow card the pair keeps to its width: a label wraps
+            // inside its button instead of pushing the pair out of the row.
+            "h-auto min-w-0 shrink rounded-[5px] px-2 py-[3px] text-[11.5px] font-normal whitespace-normal",
             accepted === take
               ? "bg-secondary text-foreground hover:bg-secondary"
               : "text-body-secondary hover:bg-transparent hover:text-foreground",

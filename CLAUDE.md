@@ -356,7 +356,9 @@ The paths:
    hits nothing, the comparison shows exactly the two applied changes plus
    the finding carrying that anchor (`part-finding`), and taking them (`round: { changes }`)
    writes them into `sceneEdits` or `locationEdits` and the answered note is
-   gone. A proposed scene is
+   gone; an answer sent with its knowledge box ticked (`asKnowledge`) is a
+   `fact` knowledge item, the stub's echo shows it in that round's context,
+   and it stands on `/campaigns/:id/knowledge`. A proposed scene is
    the scene without `rev` (`result.scenes`, decisions/resources): the edit
    action opens its fields and its text, the changed fields are saved per
    scene (`sceneEdits`), and the accept action writes them over the model's

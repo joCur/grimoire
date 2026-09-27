@@ -30,6 +30,10 @@
 // (`sceneEdits`, `npcEdits`, `locationEdits`), which the accept applies like
 // any other edit. A taken block change is applied to the proposal's text as it
 // stands at that moment, so a text the DM edited in between keeps that edit.
+//
+// An answer the DM keeps as campaign knowledge becomes a `fact` item when the
+// round opens, in the same transaction; the round's call reads its context
+// after that, so the item is already in this call's knowledge block.
 
 import { z } from "zod";
 import {
@@ -56,6 +60,7 @@ import {
   type NpcReplyFields,
   type NpcReplyObject,
   type PartAnswer,
+  type PartAnswerRequest,
   type PartChange,
   type PatchFinding,
   type SceneProposal,
@@ -72,7 +77,6 @@ import {
   outlineBlock,
   replanStoredRun,
   usageOf,
-  type RunPlan,
 } from "./generate-pipeline";
 import { bodyRefSlugs } from "@grimoire/shared/refs";
 import { ASSET_FILES, composePrompt, loadAsset, runPipeline, unknownCallouts } from "./generator";
@@ -375,40 +379,43 @@ export async function startPartRound(
   jobId: string,
   key: string,
   rev: number,
-  answers: readonly PartAnswer[],
+  answers: readonly PartAnswerRequest[],
   provider: LLMProvider,
 ): Promise<Job> {
-  const given = dedupe(
+  const sent = dedupe(
     answers
-      .map((entry) => ({ note: entry.note, answer: entry.answer.trim() }))
+      .map((entry) => ({ ...entry, answer: entry.answer.trim() }))
       .filter((entry) => entry.answer !== ""),
   );
-  if (given.length === 0) throw new ApiError(400, "a round needs at least one answer");
+  if (sent.length === 0) throw new ApiError(400, "a round needs at least one answer");
+  const given: PartAnswer[] = sent.map(({ note, answer }) => ({ note, answer }));
+  // A knowledge item is one line (routes/knowledge-items.ts), so an answer
+  // kept as knowledge keeps its words and loses its line breaks.
+  const knowledge = sent
+    .filter((entry) => entry.asKnowledge === true)
+    .map((entry) => entry.answer.replace(/\s+/gu, " "));
   const prejob = await requireJob(campaign, jobId);
-  const notes = given.map((entry) => entry.note);
-  // Checked here so a 404/409 costs no context read; binding inside the
-  // transaction that opens the round.
-  assertAnswerable(prejob, key, rev, notes);
+  // Checked here so a 404/409 costs no read; binding inside the transaction
+  // that opens the round.
+  assertAnswerable(
+    prejob,
+    key,
+    rev,
+    given.map((entry) => entry.note),
+  );
   // The guard below makes the proposal read here the one the round opens on:
   // nothing changes a job's edits without moving its `rev`.
   const proposal = partProposal(prejob, storedPart(prejob, key));
   if (proposal === undefined) throw new ApiError(409, "this part has no proposal to patch");
-  const plan = await replanStoredRun({
-    campaign,
-    chapter: prejob.chapter!,
-    sourceText: prejob.sourceText ?? "",
-    newChapter: prejob.newChapter,
-    outline: prejob.pipeline!.outline!,
-  });
-  const job = await openPartRound(campaign, jobId, key, rev, given);
+  const job = await openPartRound(campaign, jobId, key, rev, given, knowledge);
   const part = storedPart(job, key);
-  void runRound({ campaign, jobId, part, proposal, answers: given, plan, provider });
+  void runRound({ job, part, proposal, answers: given, provider });
   return job;
 }
 
 /** One answer per note — the last one the DM gave for it. */
-function dedupe(answers: PartAnswer[]): PartAnswer[] {
-  const byNote = new Map<string, PartAnswer>();
+function dedupe(answers: PartAnswerRequest[]): PartAnswerRequest[] {
+  const byNote = new Map<string, PartAnswerRequest>();
   for (const entry of answers) byNote.set(entry.note, entry);
   return [...byNote.values()];
 }
@@ -419,22 +426,32 @@ function patchSystemPrompt(kind: PartKind): Promise<string> {
 }
 
 /**
- * The call of one round and its outcome on the part. Catches everything: a
- * round that brings nothing fails on its part, and a failure to record even
- * that is logged — the next boot fails the round like every call in flight.
+ * The call of one round and its outcome on the part. The context is read
+ * once the round is open, so it holds what opening it wrote — an answer kept
+ * as campaign knowledge is in this call's knowledge block. Catches
+ * everything: a round that brings nothing fails on its part, and a failure to
+ * record even that is logged — the next boot fails the round like every call
+ * in flight.
  */
 async function runRound(input: {
-  campaign: string;
-  jobId: string;
+  job: Job;
   part: StoredPart;
   proposal: Proposal;
   answers: PartAnswer[];
-  plan: RunPlan;
   provider: LLMProvider;
 }): Promise<void> {
-  const { campaign, jobId, part, proposal, plan } = input;
+  const { job, part, proposal } = input;
+  const campaign = job.campaign;
+  const jobId = job.id;
   const counter = callCounter();
   try {
+    const plan = await replanStoredRun({
+      campaign,
+      chapter: job.chapter!,
+      sourceText: job.sourceText ?? "",
+      newChapter: job.newChapter,
+      outline: job.pipeline!.outline!,
+    });
     const [systemPrompt, fewShotTarget] = await Promise.all([
       patchSystemPrompt(part.kind),
       loadAsset(ASSET_FILES.patch.fewShotTarget),

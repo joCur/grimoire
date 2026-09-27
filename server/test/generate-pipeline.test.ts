@@ -28,7 +28,6 @@ import {
   outlineParts,
   sceneSystemPrompt,
   validateOutlineReply,
-  REPAIRED_REPLY_WARNING,
   type RunOutline,
   type SceneContext,
 } from "../src/generate-pipeline";
@@ -112,12 +111,11 @@ test("an almost-JSON outline is repaired instead of costing a correction turn", 
   expect(outcome.ok).toBe(true);
   if (!outcome.ok) return;
   expect(outcome.result.scenes.map((sc) => sc.id)).toEqual(["night-watch"]);
-  // …and the run says so, so a provider that needs patching every time is
-  // visible to the DM instead of silently tolerated.
-  expect(outcome.result.warnings).toEqual([
-    "The source text names no DC.",
-    REPAIRED_REPLY_WARNING,
-  ]);
+  // …and the run notes it as data beside the model's notes, so a provider
+  // that needs patching every time is visible to the DM instead of silently
+  // tolerated.
+  expect(outcome.result.warnings).toEqual(["The source text names no DC."]);
+  expect(outcome.result.serverNotes).toEqual(["reply_repaired"]);
 });
 
 test("a new-chapter outline keeps its chapter description, trimmed", () => {
@@ -164,7 +162,7 @@ test("prose without an object is NOT repaired — it is a correction turn", () =
   }
   // A well-formed reply reports no repair at all.
   const clean = validateOutlineReply(outlineReply(), CTX);
-  expect(clean.ok && clean.result.warnings).toEqual([]);
+  expect(clean.ok && clean.result.serverNotes).toEqual([]);
 });
 
 test("the schema's nullable optionals read as absent", () => {
@@ -410,6 +408,7 @@ test("an entry's context is the passages that mention it — by name OR by id wo
     ],
     locations: [{ id: "mudflats", name: "The Mudflats", summary: "walkable at low tide" }],
     warnings: [],
+    serverNotes: [],
   };
   const plan = planOf({ campaign: "example", ctx: CTX, outline, sourceText: source });
   // The id and the name share no word — so a source text that never writes
@@ -467,6 +466,7 @@ test("the outline block names every id — and nothing about the assigned part",
     npcs: [{ id: "grella", name: "Grella", summary: "smuggler" }],
     locations: [{ id: "mudflats", name: "The Mudflats", summary: "walkable at low tide" }],
     warnings: [],
+    serverNotes: [],
   };
   const block = outlineBlock(outline);
   expect(block).toContain("night-watch — Night Watch (planned, location: harbour)");
@@ -502,6 +502,7 @@ test("two parts of one run share a byte-identical constant prefix", () => {
     npcs: [],
     locations: [],
     warnings: [],
+    serverNotes: [],
   };
   const base = {
     systemPrompt: "sys",
@@ -717,6 +718,38 @@ test("a part's notes stay on its part and the run's notes on the result", async 
     ["scene:one", ["About one."]],
     ["scene:two", ["About two."]],
     ["scene:three", ["About three."]],
+  ]);
+});
+
+test("the server's own notes are data beside the model's, on the result and on the part", async () => {
+  // The outline has to be repaired, the scene `two` quotes a passage the
+  // source does not have, and the reply for scene `three` has to be repaired.
+  class NotedByServer extends ThreeSceneProvider {
+    override async complete(
+      req: GenerateRequest,
+      corrections: CorrectionTurn[] = [],
+    ): Promise<CompletionResult> {
+      const answer = await super.complete(req, corrections);
+      if (req.outline === undefined) {
+        const outline = JSON.parse(answer.text) as { scenes: Array<Record<string, unknown>> };
+        outline.scenes[1]!.sourceExcerpt = { first: "Nobody said this.", last: "Nor this." };
+        return { ...answer, text: JSON.stringify(outline).replace(/}$/, ",}") };
+      }
+      if (req.assignment !== undefined && /^three /.test(req.assignment)) {
+        return { ...answer, text: answer.text.replace(/}\s*$/, ",}") };
+      }
+      return answer;
+    }
+  }
+  setProviderForTests(new NotedByServer());
+  const job = await runJob();
+
+  expect(job.result!.warnings).toEqual([]);
+  expect(job.result!.serverNotes).toEqual(["reply_repaired"]);
+  expect(job.pipeline!.parts.map((part) => [part.key, part.warnings, part.serverNotes])).toEqual([
+    ["scene:one", [], undefined],
+    ["scene:two", [], ["source_excerpt_unmatched"]],
+    ["scene:three", [], ["reply_repaired"]],
   ]);
 });
 

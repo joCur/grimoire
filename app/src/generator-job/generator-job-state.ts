@@ -26,6 +26,7 @@ import {
   type GeneratorReviewStage,
   type GenerateReviewDecision,
   type NamingHint,
+  type ServerNote,
 } from "@grimoire/shared/generator-job";
 import { withSceneChange, type SceneProposal } from "@grimoire/shared/scene";
 
@@ -712,11 +713,12 @@ export function pipelineCostLabel(
 
 // --- the notes of a run -----------------------------------------------------
 //
-// The model notes something about each proposal it writes, and the naming
-// check finds spellings a convention replaces in it. Both belong to their
-// proposal and stand on its card while it is open; once it is written,
-// rejected or dropped they go with it. What the model noted about the RUN
-// stands above the stages until the job is done.
+// The model notes something about each proposal it writes, the server notes
+// what it had to do about a reply, and the naming check finds spellings a
+// convention replaces in it. All of it belongs to its proposal and stands on
+// its card while it is open; once it is written, rejected or dropped it goes
+// with it. What the model and the server noted about the RUN stands above the
+// stages until the job is done.
 
 /** Which proposal a note is about. */
 export interface ProposalRef {
@@ -724,13 +726,14 @@ export interface ProposalRef {
   id: string;
 }
 
-/** What stands on one proposal's card: the model's notes and the naming hints. */
+/** What stands on one proposal's card: the model's notes, the server's and the naming hints. */
 export interface ProposalNotes {
   warnings: string[];
+  serverNotes: ServerNote[];
   hints: NamingHint[];
 }
 
-const NO_NOTES: ProposalNotes = { warnings: [], hints: [] };
+const NO_NOTES: ProposalNotes = { warnings: [], serverNotes: [], hints: [] };
 
 /** The proposal a naming hint names. */
 export function hintRef(hint: NamingHint): ProposalRef {
@@ -773,6 +776,7 @@ export function proposalNotes(
     if (proposal.kind !== "npc" || job.npcResult.npc.id !== proposal.id) return NO_NOTES;
     return {
       warnings: job.npcResult.warnings,
+      serverNotes: job.npcResult.serverNotes ?? [],
       hints: (job.npcResult.namingHints ?? []).filter((hint) => hintNames(hint, proposal)),
     };
   }
@@ -781,6 +785,7 @@ export function proposalNotes(
   );
   return {
     warnings: part?.warnings ?? [],
+    serverNotes: part?.serverNotes ?? [],
     hints: (job.result?.namingHints ?? []).filter((hint) => hintNames(hint, proposal)),
   };
 }
@@ -788,6 +793,11 @@ export function proposalNotes(
 /** What the model noted about the whole scene run — above the stages until the job is done. */
 export function runNotes(job: GeneratorJob | null | undefined): string[] {
   return job?.result?.warnings ?? [];
+}
+
+/** What the server noted about the whole scene run's outline reply — beside `runNotes`. */
+export function runServerNotes(job: GeneratorJob | null | undefined): ServerNote[] {
+  return job?.result?.serverNotes ?? [];
 }
 
 // --- what the job is about -------------------------------------------------

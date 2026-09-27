@@ -113,6 +113,7 @@ import {
   reviewOf,
   reviewStages,
   runNotes,
+  runServerNotes,
   sceneState,
   sceneWritable,
   stringField,
@@ -573,13 +574,14 @@ export function GenerateRoute() {
       ? proposedLocations.find((location) => location.id === part.id)
       : undefined;
   /**
-   * A proposal's card with what is noted about it: the model's notes in the
-   * card's notes slot, the naming hints at their places. Both go with the
-   * proposal once it is written, rejected or dropped (`proposalNotes`). A row
-   * shows neither its fields nor its text, so it lists its hints.
+   * A proposal's card with what is noted about it: the model's and the
+   * server's notes in the card's notes slot, the naming hints at their
+   * places. All of it goes with the proposal once it is written, rejected or
+   * dropped (`proposalNotes`). A row shows neither its fields nor its text,
+   * so it lists its hints.
    *
-   * The notes of a finished part of a scene run are ANSWERED there: its
-   * patch round (PartRound) compares its changes with `current`, the
+   * The model's notes of a finished part of a scene run are ANSWERED there:
+   * its patch round (PartRound) compares its changes with `current`, the
    * proposal as the review shows it.
    */
   const withNotes = (
@@ -600,7 +602,11 @@ export function GenerateRoute() {
     const warnings = answerable ? (
       <PartRound campaign={campaign} job={job} part={part} current={current} />
     ) : (
-      <ModelNotes warnings={noted.warnings} />
+      <ModelNotes
+        warnings={noted.warnings}
+        serverNotes={noted.serverNotes}
+        title={part?.title ?? ""}
+      />
     );
     return (
       <PlaceNotesProvider
@@ -1197,10 +1203,10 @@ export function GenerateRoute() {
 
             <ChapterDescription description={job?.pipeline?.chapterDescription} t={t} />
 
-            {/* What the model noted about the whole run. What it noted about
-                one proposal, and the naming hints, stand on that proposal's
-                card. */}
-            <RunNotes warnings={runNotes(job)} />
+            {/* What the model and the server noted about the whole run. What
+                they noted about one proposal, and the naming hints, stand on
+                that proposal's card. */}
+            <RunNotes warnings={runNotes(job)} serverNotes={runServerNotes(job)} />
 
             <ReviewStageSteps stages={stages} current={stage} onGo={goToStage} />
 

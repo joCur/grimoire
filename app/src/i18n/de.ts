@@ -61,19 +61,31 @@ export const de = {
   "generatorJob.augment.running": "Die KI ergänzt gerade {name}.",
   "generatorJob.augment.ready": "Der Vorschlag für {name} wartet auf deine Prüfung.",
   "generatorJob.augment.failed": "Die Ergänzung von {name} ist fehlgeschlagen.",
-  // What the model noted about one proposal — under its card's header — and
-  // about the whole run, above the stages (generator-job/PartNotes.tsx).
-  // From three on a list starts folded, and its summary counts.
+  // What the model and Grimoire itself noted about one proposal — under its
+  // card's header — and about the whole run, above the stages
+  // (generator-job/PartNotes.tsx). From three on a list starts folded, and
+  // its summary counts both.
   "generatorJob.notes.label": "Hinweise des Modells",
   "generatorJob.notes.summary":
-    "{count, plural, one {# Hinweis des Modells} other {# Hinweise des Modells}} zu diesem Vorschlag",
+    "{count, plural, one {# Hinweis} other {# Hinweise}} zu diesem Vorschlag",
   "generatorJob.runNotes.summary":
-    "{count, plural, one {# Hinweis des Modells zum ganzen Lauf} other {# Hinweise des Modells zum ganzen Lauf}}",
+    "{count, plural, one {# Hinweis zum ganzen Lauf} other {# Hinweise zum ganzen Lauf}}",
+  // What Grimoire itself noted about a reply — no model note, so nobody
+  // answers it. {title} is the scene's title.
+  "generatorJob.serverNotes.label": "Hinweise von Grimoire",
+  "generatorJob.serverNote.reply_repaired":
+    "Die Antwort des Modells zu diesem Vorschlag war kein gültiges JSON und wurde repariert, bevor sie gelesen wurde.",
+  "generatorJob.serverNote.source_excerpt_unmatched":
+    "Der Quelltext-Ausschnitt für „{title}“ ließ sich nicht wörtlich zuordnen, deshalb wurde diese Szene aus dem ganzen Quelltext geschrieben.",
+  "generatorJob.runServerNote.reply_repaired":
+    "Die Gliederung des Modells war kein gültiges JSON und wurde repariert, bevor sie gelesen wurde.",
   // The patch round of one proposal (generator-job/PartRound.tsx): the DM
-  // answers the model's notes, the model changes the proposal, and the DM
-  // takes or keeps each change.
+  // answers the model's notes (and may keep an answer as campaign knowledge),
+  // the model changes the proposal, and the DM takes or discards each change.
   "generatorJob.round.answer": "Deine Antwort auf diesen Hinweis",
   "generatorJob.round.answerPlaceholder": "Antworte, wenn der Hinweis etwas am Vorschlag ändern soll",
+  "generatorJob.round.keepAsKnowledge":
+    "Diese Antwort als Kampagnenwissen behalten, damit auch jeder weitere Lauf sie kennt.",
   "generatorJob.round.send": "Antworten senden",
   "generatorJob.round.sending": "Wird gesendet …",
   "generatorJob.round.running": "Das Modell arbeitet deine Antworten gerade in diesen Vorschlag ein.",
@@ -435,7 +447,7 @@ export const de = {
   // A change of a patch round is about a block that is no longer in the
   // proposal's text as it was. Nothing was written.
   "server.patch_anchor_missing":
-    "Nicht übernommen — der Block, den diese Änderung betrifft, steht nicht mehr so im Text. Behalte die Änderung und bearbeite den Text selbst.",
+    "Nicht übernommen — der Block, den diese Änderung betrifft, steht nicht mehr so im Text. Verwirf die Änderung und bearbeite den Text selbst.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": 'das Kapitel „{name}“',
@@ -1230,11 +1242,13 @@ export const de = {
   "augment.state.new": "Neu",
   "augment.state.changed": "Geändert",
   "augment.state.removed": "Entfällt",
-  "augment.decision.aria": "Übernehmen oder behalten",
-  "augment.decision.take": "Übernehmen",
-  "augment.decision.keep": "Behalten",
-  "augment.decision.takeUnit": "Übernehmen: {label}",
-  "augment.decision.keepUnit": "Behalten: {label}",
+  // One change — the model's value or block against what stands there: take
+  // it, or discard it and keep what stands.
+  "augment.decision.aria": "Änderung übernehmen oder verwerfen",
+  "augment.decision.take": "Änderung übernehmen",
+  "augment.decision.keep": "Änderung verwerfen",
+  "augment.decision.takeUnit": "Änderung übernehmen: {label}",
+  "augment.decision.keepUnit": "Änderung verwerfen: {label}",
   "augment.diff.added": "hinzugefügt",
   "augment.diff.removed": "entfernt",
   "augment.diff.changed": "geändert",

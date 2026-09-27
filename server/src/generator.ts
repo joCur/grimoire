@@ -599,7 +599,7 @@ export function validateNpcReply(
 ): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
   const read = parseNpcReply(raw);
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `npc: ${e}`) };
-  const { npc, warnings } = read.reply;
+  const { npc, warnings, serverNotes } = read.reply;
   if (!ENTITY_ID_PATTERN.test(npc.id)) {
     return {
       ok: false,
@@ -630,7 +630,10 @@ export function validateNpcReply(
   for (const msg of unknownRefErrors(npc.body, known)) errors.push(`${label}: ${msg}`);
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { npc, warnings } };
+  return {
+    ok: true,
+    result: { npc, warnings, ...(serverNotes.length === 0 ? {} : { serverNotes }) },
+  };
 }
 
 /**

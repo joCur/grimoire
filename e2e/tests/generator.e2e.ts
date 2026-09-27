@@ -22,6 +22,7 @@ import type { Locator, Page } from "@playwright/test";
 import {
   ASCII_QUOTE_LINE,
   CHAPTER_DESCRIPTION,
+  CONTEXT_ECHO,
   LOCATION_STUB_ATMOSPHERE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
@@ -51,7 +52,7 @@ import {
 import { expect, test } from "../support/test";
 import type { Api } from "../support/api";
 import { getChapter } from "../support/chapter";
-import { createKnowledgeItem } from "../support/knowledge-item";
+import { createKnowledgeItem, getKnowledgeItems } from "../support/knowledge-item";
 import { generatorJobPath, getGeneratorJob, readGeneratorJob } from "../support/generator-job";
 import {
   acceptProposal,
@@ -1022,19 +1023,30 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.partNotes}`);
   await expectStage(page, "locations");
 
-  // The wire: a part carries its own notes (a scene part also the server's
-  // note on its source excerpt), the result only the run's.
+  // The wire: a part carries its own notes, the result only the run's. The
+  // second scene's passage was quoted wrongly: the server's note on it is
+  // data beside the model's notes, not one of them.
   const job = await getGeneratorJob(api);
   expect(job.result?.warnings).toContain(OUTLINE_WARNING);
   expect(job.result?.warnings).not.toContain(partNote(LOCATION_STUB_ID));
+  expect(job.result?.serverNotes).toBeUndefined();
   const partWarnings = Object.fromEntries(
     (job.pipeline?.parts ?? []).map((part) => [part.key, part.warnings]),
   );
   expect(partWarnings).toEqual({
-    [`scene:${SCENE_ID}`]: expect.arrayContaining([partNote(SCENE_ID)]),
-    [`scene:${SECOND_SCENE.id}`]: expect.arrayContaining([partNote(SECOND_SCENE.id)]),
+    [`scene:${SCENE_ID}`]: [partNote(SCENE_ID)],
+    [`scene:${SECOND_SCENE.id}`]: [partNote(SECOND_SCENE.id)],
     [`npc:${NPC_STUB_ID}`]: [partNote(NPC_STUB_ID)],
     [`location:${LOCATION_STUB_ID}`]: [partNote(LOCATION_STUB_ID)],
+  });
+  const partServerNotes = Object.fromEntries(
+    (job.pipeline?.parts ?? []).map((part) => [part.key, part.serverNotes]),
+  );
+  expect(partServerNotes).toEqual({
+    [`scene:${SCENE_ID}`]: undefined,
+    [`scene:${SECOND_SCENE.id}`]: ["source_excerpt_unmatched"],
+    [`npc:${NPC_STUB_ID}`]: undefined,
+    [`location:${LOCATION_STUB_ID}`]: undefined,
   });
 
   // --- the run's note above the stages, the location's on its row ----------
@@ -1071,9 +1083,18 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   await expect(rich).toHaveAttribute("data-state", "dropped");
   await expect(rich.getByTestId("part-notes")).toHaveCount(0);
 
-  // --- the hints stand at the field and at the block they name ---------------
+  // --- the server's note stands with the model's, and gets no answer field ---
   const second = sceneProposal(page, SECOND_SCENE.id);
   await expect(second.getByTestId("part-notes")).toContainText(partNote(SECOND_SCENE.id));
+  const serverNote = second.getByTestId("server-note");
+  await expect(serverNote).toHaveCount(1);
+  await expect(serverNote).toHaveAttribute("data-note-kind", "source_excerpt_unmatched");
+  await expect(serverNote).toContainText(SECOND_SCENE.title);
+  await expect(serverNote.getByTestId("part-note-answer")).toHaveCount(0);
+  await expect(second.getByTestId("part-note-answer")).toHaveCount(1);
+  await expect(rich.getByTestId("server-note")).toHaveCount(0);
+
+  // --- the hints stand at the field and at the block they name ---------------
   const titleHint = second.locator('[data-testid="naming-hint"][data-field="title"]');
   await expect(titleHint).toHaveCount(1);
   const titleHintId = await titleHint.getAttribute("id");
@@ -1104,6 +1125,7 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   expect(await readGeneratorJob(api)).toBeNull();
   await expect(page.getByTestId("run-notes")).toHaveCount(0);
   await expect(page.getByTestId("part-notes")).toHaveCount(0);
+  await expect(page.getByTestId("server-note")).toHaveCount(0);
   await expect(page.getByTestId("naming-hint")).toHaveCount(0);
 });
 
@@ -1113,12 +1135,15 @@ test("each part's notes and naming hints stand on its card and leave with it; th
 // (decisions/generator): the stub answers with operations, the server applies
 // what it can, and the DM takes each change into the job's edits.
 
+/** The answer to the scene's note that the DM keeps as campaign knowledge. */
+const KEPT_ANSWER = "The fog over the quay lifts at midnight.";
+
 /** The answer field of one note on a card. */
 function noteAnswer(card: Locator, note: string): Locator {
   return card.getByRole("listitem").filter({ hasText: note }).getByTestId("part-note-answer");
 }
 
-test("answering a part's notes patches the proposal, and a taken change lands in the edits", async ({
+test("answering a part's notes patches the proposal, a taken change lands in the edits, and a kept answer is campaign knowledge", async ({
   page,
   api,
 }) => {
@@ -1135,6 +1160,10 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   const locationChange = location.getByTestId("part-change");
   await expect(locationChange).toHaveCount(1);
   await expect(locationChange).toContainText(PATCH_LOCATION_ATMOSPHERE);
+  // The row's own decision stands below the round, never beside a change's.
+  const roundBox = await locationRound.boundingBox();
+  const decisionBox = await location.getByTestId("proposal-row-decision").boundingBox();
+  expect(decisionBox!.y).toBeGreaterThanOrEqual(roundBox!.y + roundBox!.height);
   await locationChange.getByTestId("decision-take").click();
   await expect(locationRound).toHaveCount(0);
   await expect(location.getByTestId("part-notes")).toHaveCount(0);
@@ -1161,10 +1190,26 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   );
   expect(proposed?.body).toContain(PATCH_CHECK_ANCHOR);
   const rich = sceneProposal(page, SCENE_ID);
-  await noteAnswer(rich, partNote(SCENE_ID)).fill("Make the check harder and name the fog.");
+  // This answer is kept as campaign knowledge as well.
+  await noteAnswer(rich, partNote(SCENE_ID)).fill(KEPT_ANSWER);
+  const keep = rich
+    .getByRole("listitem")
+    .filter({ hasText: partNote(SCENE_ID) })
+    .getByTestId("part-note-knowledge");
+  await keep.check();
+  await expect(keep).toBeChecked();
   await rich.getByTestId("part-round-send").click();
   const round = rich.getByTestId("part-round");
   await expect(round).toHaveAttribute("data-round", "done");
+  // The answer is a fact of the campaign knowledge, and the round's own call
+  // already had it in its context: the stub echoes the knowledge block back
+  // as a note of the part. The location's answer, sent without the box,
+  // created none.
+  const knowledge = await getKnowledgeItems(api);
+  expect(knowledge).toHaveLength(1);
+  expect(knowledge[0]).toMatchObject({ kind: "fact", from: "", to: "", text: KEPT_ANSWER });
+  const echo = `${CONTEXT_ECHO} - Fakt: ${KEPT_ANSWER}`;
+  await expect(rich.getByTestId("part-notes")).toContainText(echo);
   const changes = rich.getByTestId("part-change");
   await expect(changes).toHaveCount(2);
   await expect(changes.and(rich.locator('[data-change-op="replace"]'))).toHaveCount(1);
@@ -1197,6 +1242,7 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   });
   const scenePart = job.pipeline?.parts.find((part) => part.key === `scene:${SCENE_ID}`);
   expect(scenePart?.warnings).not.toContain(partNote(SCENE_ID));
+  expect(scenePart?.warnings).toContain(echo);
   expect(scenePart?.findings).toEqual([{ kind: "anchor_missing", anchor: PATCH_MISSING_ANCHOR }]);
 
   await rich.getByRole("button", { name: ui("generate.review.acceptOne") }).click();
@@ -1204,4 +1250,9 @@ test("answering a part's notes patches the proposal, and a taken change lands in
   const written = await getScene(api, SCENE_ID);
   expect(written.title).toBe(PATCH_SCENE_TITLE);
   expect(written.body).toContain(PATCH_CHECK_TEXT);
+
+  // The kept answer stands on the knowledge page like any other fact.
+  await page.goto("/campaigns/example/knowledge");
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("listitem")).toContainText(KEPT_ANSWER);
 });

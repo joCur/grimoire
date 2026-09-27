@@ -84,7 +84,7 @@ export function validateLocationAugmentReply(
   const label = `location "${stored.id}"`;
   const read = parseLocationReply(raw, "augment");
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
-  const { location, warnings, ignored } = read.reply;
+  const { location, warnings, serverNotes, ignored } = read.reply;
   const errors: string[] = [];
   if (location.id !== stored.id) {
     errors.push(
@@ -112,6 +112,7 @@ export function validateLocationAugmentReply(
       current: withoutGuard(stored),
       proposed: location,
       warnings,
+      ...(serverNotes.length === 0 ? {} : { serverNotes }),
     },
   };
 }

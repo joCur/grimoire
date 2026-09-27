@@ -41,7 +41,10 @@
   proposal, and what the naming check finds in it, is stored and shown with
   that proposal, at the place it names, and goes with it once it is decided.
   Only what concerns the run as a whole belongs to the run, and it stays
-  until the job is done.
+  until the job is done. What the server itself notes about a reply (that it
+  had to be repaired, that a scene lacked its source passage) is data beside
+  the model's notes, which the app says in the DM's language; the server
+  writes no sentence of its own, and only a model note is answered.
 - **Answering a note patches the proposal instead of generating it again.**
   The DM answers the model's notes on one proposal; the model then returns
   operations on that proposal — a field set, a block replaced, inserted
@@ -49,7 +52,7 @@
   again. The server applies them deterministically and turns every
   operation it cannot apply unambiguously into a finding that names why —
   data, which the app says in the DM's language. The DM
-  takes or keeps each applied change on its own, and a taken change is one
+  takes or discards each applied change on its own, and a taken change is one
   of the DM's edits of the proposal.
 - **Applying writes exactly what is named.** Accepting a proposal writes that
   proposal, in one transaction under the same rules as creating its entity,

@@ -16,16 +16,6 @@
 import { jsonrepair } from "jsonrepair";
 
 /**
- * The run warning a REPAIRED reply object earns — the sibling of
- * REPAIRED_REPLY_WARNING (generate-pipeline.ts), and there for the same
- * reason: the repair is silent otherwise, and a provider whose replies need
- * patching every single run is a provider to reconsider.
- */
-export const REPAIRED_OBJECT_WARNING =
-  "Antwort musste repariert werden — das Modell hat seine Antwort nicht als " +
-  "gültiges JSON-Objekt geliefert.";
-
-/**
  * One raw reply as a JSON value — with ONE tolerant repair attempt before a
  * correction turn is spent. Shared by every call: the scene, npc and location
  * replies and the outline (generate-pipeline `parseOutlineJson`).
@@ -34,15 +24,16 @@ export const REPAIRED_OBJECT_WARNING =
  * schema-forced reply is), the content of a ```json fence, and the brace
  * SPANS — from the first `{` to a closing brace, the last one first and then
  * progressively earlier ones. The walk back matters because a reply may carry
- * prose that itself contains a `}` („… wie `{ "a": 1 }` oben"): one span to
+ * prose that itself contains a `}` ("… like `{ "a": 1 }` above"): one span to
  * the very last brace would then never parse and every stage would fail on a
  * reply that is perfectly readable a few characters earlier. A candidate
  * that merely LOOKS like an object is then handed to `jsonrepair` once — a
  * trailing comma or a single-quoted key is mechanical, and much cheaper to fix
  * than to re-ask for.
  *
- * `repaired` says which way in it was, so the run can say so too. The result
- * goes through the unchanged validation either way: the repair loosens the
+ * `repaired` says which way in it was, so the run can say so too — as a
+ * server note (`reply_repaired`), which the app words. The result goes
+ * through the unchanged validation either way: the repair loosens the
  * parsing, never the rules.
  */
 export function parseJsonReply(raw: string): { value: unknown; repaired: boolean } | null {

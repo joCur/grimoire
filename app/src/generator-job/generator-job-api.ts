@@ -7,7 +7,7 @@
 import type {
   GeneratorJob,
   GeneratorJobPatch,
-  PartAnswer,
+  PartAnswerRequest,
 } from "@grimoire/shared/generator-job";
 
 import { ApiError, campaignPath, deleteJson, getJson, sendJson, startJob } from "@/api";
@@ -178,14 +178,16 @@ function partPath(campaign: string, jobId: string, key: string): string {
  * server — the answer is the job with the round `running`, and the job query
  * polls until it is back. `rev` is the job's guard; a 409 `rev_conflict`
  * means the job moved on (another tab, a note already answered) and nothing
- * started.
+ * started. An answer with `asKnowledge` becomes a campaign knowledge item as
+ * the round opens; the campaign's version poll brings it to the knowledge
+ * page.
  */
 export function answerPartNotes(
   campaign: string,
   jobId: string,
   key: string,
   rev: number,
-  answers: PartAnswer[],
+  answers: PartAnswerRequest[],
 ): Promise<GeneratorJob> {
   return sendJson<GeneratorJob>("PATCH", partPath(campaign, jobId, key), {
     rev,

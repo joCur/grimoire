@@ -178,7 +178,9 @@ export const TRIGGER = {
    * The two-scene run with a NOTE on every part (partNote) and the
    * spelling OLD_NAME in the npc's role and in the second scene's title and
    * text — so a spec can watch each part's notes and naming hints stand on
-   * its own card and leave with it.
+   * its own card and leave with it. The second scene's source passage is
+   * quoted wrongly (UNMATCHED_EXCERPT), so its part carries the server's own
+   * note beside the model's.
    */
   partNotes: "E2E_PART_NOTES",
   /**
@@ -700,6 +702,16 @@ export const SECOND_SCENE = { id: "talk-on-the-mole", title: "Talk on the mole" 
 export const FAILING_SCENE_ID = THREE_SCENES[1].id;
 
 /**
+ * A source passage no source text contains — what the outline of a
+ * TRIGGER.partNotes run quotes for SECOND_SCENE, so the server cannot cut it
+ * and notes that the scene was written from the whole source text.
+ */
+const UNMATCHED_EXCERPT = {
+  first: "This sentence is not in the source text.",
+  last: "Neither is this one.",
+} as const;
+
+/**
  * The first and the last sentence of the source text, verbatim — what the
  * outline quotes so the server's excerpt cut actually matches. Every scene
  * gets the same pair here: the fixture is about the PARTS, not about which
@@ -707,7 +719,10 @@ export const FAILING_SCENE_ID = THREE_SCENES[1].id;
  * single spec.
  */
 function wholeSourceExcerpt(source: string): { first: string; last: string } {
+  // The stub hands over the prompt from the source section's heading on
+  // (stub-llm.ts `sourceText`); the heading is the prompt's, not the source's.
   const sentences = source
+    .replace(/^## Quelltext\s*/, "")
     .split(/(?<=[.!?])\s+/)
     .map((part) => part.replace(/\s+/g, " ").trim())
     .filter((part) => part !== "");
@@ -751,6 +766,8 @@ export function outlineReply(input: {
   three?: boolean;
   /** TRIGGER.twoScenes: the default run plus SECOND_SCENE. */
   two?: boolean;
+  /** TRIGGER.partNotes: SECOND_SCENE's passage is quoted wrongly (UNMATCHED_EXCERPT). */
+  partNotes?: boolean;
   /**
    * TRIGGER.oldName: the naming-check case. Its draft references no new npc
    * or location, so the outline must not propose one either — otherwise
@@ -811,7 +828,15 @@ export function outlineReply(input: {
         refs: [],
       },
       ...(input.two === true
-        ? [{ id: SECOND_SCENE.id, title: SECOND_SCENE.title, type: "planned", sourceExcerpt, refs: [] }]
+        ? [
+            {
+              id: SECOND_SCENE.id,
+              title: SECOND_SCENE.title,
+              type: "planned",
+              sourceExcerpt: input.partNotes === true ? UNMATCHED_EXCERPT : sourceExcerpt,
+              refs: [],
+            },
+          ]
         : []),
     ],
     npcs: [{ id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Smuggler at the quay." }],
@@ -974,22 +999,29 @@ export const PATCH_NPC_VOICE = "hoarse, whispers even when nobody listens";
  * The reply of a patch call — a list of operations on the proposal, never the
  * proposal again. A scene gets a block replace, a field set and the removal
  * of a block that is not there (the server reports that as a finding
- * carrying the anchor); a location and an npc get one field each.
+ * carrying the anchor); a location and an npc get one field each. The
+ * campaign knowledge the call was sent comes back as a `note` operation
+ * (`contextEchoWarnings`), which the part then shows among its notes.
  */
-export function patchReply(proposal: Record<string, unknown>): { operations: unknown[] } {
+export function patchReply(
+  proposal: Record<string, unknown>,
+  knowledge: string,
+): { operations: unknown[] } {
+  const echo = contextEchoWarnings(knowledge).map((text) => ({ op: "note", text }));
   if ("title" in proposal) {
     return {
       operations: [
         { op: "replace", anchor: PATCH_CHECK_ANCHOR, text: PATCH_CHECK_TEXT },
         { op: "set", field: "title", value: PATCH_SCENE_TITLE },
         { op: "remove", anchor: PATCH_MISSING_ANCHOR },
+        ...echo,
       ],
     };
   }
   if ("atmosphere" in proposal) {
     return {
-      operations: [{ op: "set", field: "atmosphere", value: PATCH_LOCATION_ATMOSPHERE }],
+      operations: [{ op: "set", field: "atmosphere", value: PATCH_LOCATION_ATMOSPHERE }, ...echo],
     };
   }
-  return { operations: [{ op: "set", field: "voice", value: PATCH_NPC_VOICE }] };
+  return { operations: [{ op: "set", field: "voice", value: PATCH_NPC_VOICE }, ...echo] };
 }

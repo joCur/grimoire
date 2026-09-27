@@ -34,8 +34,9 @@
 //     (the pinned-id line pins the id of the npc)
 //   - a notes-and-answers section (ANSWERS_HEADING)             -> patch call
 //     (the reply is a list of operations on the proposal below
-//     PROPOSAL_HEADING; checked first, because a patch call also carries the
-//     run's outline and the entity prompt's format)
+//     PROPOSAL_HEADING, plus a note echoing the knowledge block; checked
+//     first, because a patch call also carries the run's outline and the
+//     entity prompt's format)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
 //   - TRIGGER.unknownRef in the source text -> an npc or augment run's first
@@ -57,7 +58,8 @@
 //   - TRIGGER.twoScenes    -> the default outline plus a second scene that
 //     names no new npc and no new location
 //   - TRIGGER.partNotes    -> that two-scene run with a note on every part and
-//     OLD_NAME in the npc's role and in the second scene
+//     OLD_NAME in the npc's role and in the second scene, whose source
+//     passage the outline quotes wrongly
 //   - TRIGGER.partFail:<nonce> -> the middle scene fails its whole FIRST
 //     ROUND for that nonce — the initial call AND the correction turn the
 //     server spends on it — and succeeds from the second round on. That is
@@ -335,7 +337,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // carries the outline, so it is told apart first.
   const proposal = patchProposal(prompt);
   if (proposal !== null) {
-    return { kind: "patch", truncated, delayMs, reply: patchReply(proposal) };
+    return { kind: "patch", truncated, delayMs, reply: patchReply(proposal, knowledge) };
   }
 
   // A location augment run carries the location it works on (decisions/resources).
@@ -408,6 +410,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
             knowledge,
             three,
             two,
+            partNotes,
             oldName,
             asciiQuotes,
             // The context's own line, as a model reads it.

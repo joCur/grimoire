@@ -95,11 +95,30 @@ export const namingHintSchema = z.union([
 export type NamingHint = z.infer<typeof namingHintSchema>;
 
 /**
+ * What the SERVER notes about a reply, beside the model's own notes — data,
+ * not a sentence: the app says it in the DM's language, and nobody answers
+ * it, because the model did not write it.
+ *
+ *   reply_repaired            the reply was not valid JSON and was repaired
+ *                             before it was read — a provider whose replies
+ *                             need that every run is one to reconsider;
+ *   source_excerpt_unmatched  (a scene of a scene run) the outline's quotes of
+ *                             the scene's source passage matched nothing, so
+ *                             the scene was written from the whole source
+ *                             text — more expensive, and the one quality
+ *                             difference the pipeline can produce silently.
+ */
+export const SERVER_NOTES = ["reply_repaired", "source_excerpt_unmatched"] as const;
+export const serverNoteSchema = z.enum(SERVER_NOTES);
+
+export type ServerNote = z.infer<typeof serverNoteSchema>;
+
+/**
  * What a SCENE run proposes. Mechanically validated (every scene is a draft,
  * references resolve, only known callouts). The model's notes on one scene,
  * npc or location travel on its part (`GeneratorJobPart.warnings`); `warnings`
- * here are the notes about the RUN — what the outline found missing in the
- * source material, and an outline reply that had to be repaired.
+ * here are the model's notes about the RUN — what the outline found missing
+ * in the source material.
  */
 export const generateResultSchema = z.strictObject({
   /**
@@ -111,8 +130,10 @@ export const generateResultSchema = z.strictObject({
   npcs: z.array(npcProposalSchema),
   /** The locations the run proposes, each a location without its guard. */
   locations: z.array(locationProposalSchema),
-  /** The run's own notes for the DM — see above. */
+  /** The model's notes about the run — see above. */
   warnings: z.array(z.string()),
+  /** What the server notes about the outline reply; absent when nothing. */
+  serverNotes: z.array(serverNoteSchema).optional(),
   /**
    * The SERVER's own findings, not the model's: proposals that still carry a
    * spelling a naming convention replaces. Absent or empty when the campaign
@@ -136,6 +157,8 @@ export const generateNpcResultSchema = z.strictObject({
   npc: npcProposalSchema,
   /** The model's own review notes for the DM (gaps in the source text). */
   warnings: z.array(z.string()),
+  /** What the server notes about the reply; absent when nothing. */
+  serverNotes: z.array(serverNoteSchema).optional(),
   /** The naming check's findings — see `generateResultSchema`. */
   namingHints: z.array(namingHintSchema).optional(),
   /** Token spend of the run; absent when the endpoint reports no usage. */
@@ -163,6 +186,8 @@ function augmentResultSchema<T extends z.ZodType>(proposal: T) {
     proposed: proposal,
     /** The model's own review notes for the DM. */
     warnings: z.array(z.string()),
+    /** What the server notes about the reply; absent when nothing. */
+    serverNotes: z.array(serverNoteSchema).optional(),
     /** The naming check's findings — see `generateResultSchema`. */
     namingHints: z.array(namingHintSchema).optional(),
     /** Token spend of the run; absent when the endpoint reports no usage. */
@@ -197,6 +222,20 @@ export const partAnswerSchema = z.strictObject({
 });
 
 export type PartAnswer = z.infer<typeof partAnswerSchema>;
+
+/**
+ * An answer as the DM sends it in a patch round: the answer, and
+ * `asKnowledge` when the DM keeps it as campaign knowledge too — the server
+ * then creates a `fact` item with the answer as its text in the same write
+ * that opens the round, so this round's call and every later one has it in
+ * its context. The round stores the answer without the flag: a round sent
+ * again after a failure creates no second item.
+ */
+export const partAnswerRequestSchema = partAnswerSchema.extend({
+  asKnowledge: z.boolean().optional(),
+});
+
+export type PartAnswerRequest = z.infer<typeof partAnswerRequestSchema>;
 
 /**
  * One change a patch round proposes for its part's proposal, as the server
@@ -318,6 +357,11 @@ export const generatorJobPartSchema = z.strictObject({
    * leaves the list; what the patch call noted joins it.
    */
   warnings: z.array(z.string()),
+  /**
+   * What the server notes about the part's reply — not a model note, so no
+   * round answers it and none removes it; absent when nothing.
+   */
+  serverNotes: z.array(serverNoteSchema).optional(),
   /** The patch round on this part, while there is one. */
   round: partRoundSchema.optional(),
   /**
@@ -596,7 +640,8 @@ export type GeneratorJobPatch = z.infer<typeof generatorJobPatchSchema>;
  *
  *   - `{ status: "running" }` — a failed part runs once more;
  *   - `{ rev, round: { answers } }` — the DM's answers to the model's notes on
- *     a finished part start a patch round on it;
+ *     a finished part start a patch round on it; an answer marked
+ *     `asKnowledge` becomes a campaign knowledge item as well;
  *   - `{ rev, round: { changes } }` — the DM takes or keeps changes of the
  *     round, by their id.
  *
@@ -608,7 +653,7 @@ export const generatorJobPartPatchSchema = z.union([
   }),
   z.strictObject({
     rev: z.number(),
-    round: z.strictObject({ answers: z.array(partAnswerSchema) }),
+    round: z.strictObject({ answers: z.array(partAnswerRequestSchema) }),
   }),
   z.strictObject({
     rev: z.number(),

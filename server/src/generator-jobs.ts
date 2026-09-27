@@ -58,6 +58,7 @@ import {
   patchFindingSchema,
   proposedNpcIds,
   sceneEditSchema,
+  serverNoteSchema,
 } from "@grimoire/shared";
 import type {
   GeneratorJob,
@@ -97,8 +98,10 @@ import {
   type RunOutline,
 } from "./generate-pipeline";
 import type { LLMProvider } from "./llm-provider";
+import { bumpCampaignVersion } from "./store/campaigns";
 import type { SceneRunStart } from "./store/chapters";
 import { getDb } from "./store/handle";
+import { insertKnowledgeItem } from "./store/knowledge-items";
 import { revConflict } from "./store/shared";
 
 /** Server-side job record: the wire shape plus what only the server keeps. */
@@ -209,6 +212,7 @@ function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
         : { validationErrors: part.validationErrors }),
       ...(part.rawReply === undefined ? {} : { rawReply: part.rawReply }),
       warnings: part.warnings,
+      ...(part.serverNotes === undefined ? {} : { serverNotes: part.serverNotes }),
       ...(part.round === undefined ? {} : { round: part.round }),
       ...(part.findings === undefined ? {} : { findings: part.findings }),
     })),
@@ -460,6 +464,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
     // still on the part, and the DM can answer them again.
     const round = partRoundSchema.safeParse(part.round);
     const findings = z.array(patchFindingSchema).safeParse(part.findings);
+    const serverNotes = z.array(serverNoteSchema).safeParse(part.serverNotes);
     parts.push({
       key: part.key,
       kind,
@@ -476,6 +481,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
         : {}),
       ...(typeof part.rawReply === "string" ? { rawReply: part.rawReply } : {}),
       warnings: stringList(part.warnings),
+      ...(serverNotes.success ? { serverNotes: serverNotes.data } : {}),
       ...(round.success ? { round: round.data } : {}),
       ...(findings.success ? { findings: findings.data } : {}),
     });
@@ -802,6 +808,7 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
     npcs,
     locations,
     warnings: result.warnings,
+    ...(result.serverNotes === undefined ? {} : { serverNotes: result.serverNotes }),
     ...(namingHints.length === 0 ? {} : { namingHints }),
   };
 }
@@ -965,7 +972,13 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
         // The outline's own warnings are the run's warnings: it is the step
         // that read the whole source text, so a note about what the source
         // material does not contain can only come from here.
-        return { result: { ...result, warnings: outline.warnings } };
+        return {
+          result: {
+            ...result,
+            warnings: outline.warnings,
+            ...(outline.serverNotes.length === 0 ? {} : { serverNotes: outline.serverNotes }),
+          },
+        };
       });
     },
     async partRunning(key) {
@@ -993,6 +1006,8 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           delete part.validationErrors;
           delete part.rawReply;
           part.warnings = outcome.warnings;
+          if (outcome.serverNotes.length === 0) delete part.serverNotes;
+          else part.serverNotes = outcome.serverNotes;
           part.usage = usage;
         }
         addUsage(pipeline, usage);
@@ -1207,6 +1222,11 @@ function withStoredPart(
  * `running`, and so is the job — the app polls it until the round is back.
  * A review act like every other: it takes the job's guard and moves it.
  * Answers the job as it stands with the round open.
+ *
+ * `knowledge` are the answers the DM keeps as campaign knowledge: each becomes
+ * a `fact` item at the end of the order, in the same transaction, so the
+ * round's own call reads it with the rest of the context — and nothing is
+ * created when the round is refused.
  */
 export async function openPartRound(
   campaign: string,
@@ -1214,6 +1234,7 @@ export async function openPartRound(
   key: string,
   rev: number,
   answers: readonly PartAnswer[],
+  knowledge: readonly string[],
 ): Promise<Job> {
   const db = await getDb();
   db.transaction((handle) => {
@@ -1241,6 +1262,8 @@ export async function openPartRound(
       })
       .where(eq(generateJobs.id, row.id))
       .run();
+    for (const text of knowledge) insertKnowledgeItem(tx, campaign, { kind: "fact", text });
+    if (knowledge.length > 0) bumpCampaignVersion(tx, campaign);
   });
   return requireJob(campaign, jobId);
 }

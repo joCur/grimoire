@@ -83,7 +83,7 @@ export function validateSceneAugmentReply(
   const label = `scene "${stored.id}"`;
   const read = parseSceneReply(raw, "augment");
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
-  const { scene, warnings } = read.reply;
+  const { scene, warnings, serverNotes } = read.reply;
   const errors: string[] = [];
   if (scene.id !== stored.id) {
     errors.push(
@@ -108,6 +108,7 @@ export function validateSceneAugmentReply(
       current: withoutGuard(stored),
       proposed: scene,
       warnings,
+      ...(serverNotes.length === 0 ? {} : { serverNotes }),
     },
   };
 }

@@ -13,7 +13,6 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sceneToReply, type SceneProposal } from "@grimoire/shared";
-import { REPAIRED_OBJECT_WARNING } from "../src/json-reply";
 import { NOT_A_SCENE_ERROR, parseSceneReply, sceneReplyRequest } from "../src/scene-reply";
 
 /** The mixed spelling: opening U+201E, closed with the ASCII `"`. */
@@ -95,8 +94,8 @@ describe("parseSceneReply", () => {
     );
     const repaired = read(scene().replace(/}$/, ",}"));
     expect(repaired.scene.id).toBe("night-watch-quay");
-    // …and the run says that it had to be repaired.
-    expect(repaired.warnings).toContain(REPAIRED_OBJECT_WARNING);
+    // …and the server notes that it had to be repaired, beside the model's notes.
+    expect(repaired.serverNotes).toEqual(["reply_repaired"]);
   });
 
   test("anything that is not the object is the ONE shape error, naming the fields", () => {

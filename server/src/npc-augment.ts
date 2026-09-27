@@ -94,7 +94,7 @@ export function validateNpcAugmentReply(
   const label = `npc "${stored.id}"`;
   const read = parseNpcReply(raw, "augment");
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
-  const { npc, warnings } = read.reply;
+  const { npc, warnings, serverNotes } = read.reply;
   const errors: string[] = [];
   if (npc.id !== stored.id) {
     errors.push(
@@ -123,6 +123,7 @@ export function validateNpcAugmentReply(
       current,
       proposed: { ...proposedFields, ...(quickstats === undefined ? {} : { quickstats }) },
       warnings,
+      ...(serverNotes.length === 0 ? {} : { serverNotes }),
     },
   };
 }

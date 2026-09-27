@@ -145,9 +145,10 @@ and ignore it (`parseJsonReply` in `server/src/json-reply.ts`, used by every
 reply): the whole text, then a ```json fence, then the span from the first
 `{` to the last `}` — and **one** deterministic repair (`jsonrepair`, pinned
 exactly) for a trailing comma or single quotes. After that it is **validated
-as usual**: the repair loosens parsing, never the rules. A repaired run
-carries a warning that the reply had to be repaired, so that a provider that
-needs patching every time is visible. Prose without an object is *not*
+as usual**: the repair loosens parsing, never the rules. A repaired reply
+earns a server note (`reply_repaired` in `serverNotes`, beside the model's
+`warnings`), which the app says in a sentence, so that a provider that needs
+patching every time is visible. Prose without an object is *not*
 repaired: `jsonrepair` would turn a sentence into a JSON string, and the run
 would then fail with a message about the wrong thing.
 
@@ -291,9 +292,14 @@ in — on the card and in its edit mode — and is bound to that place for
 assistive technology; a card that shows neither fields nor text (an NPC or a
 location row) lists its hints, each naming where it sits. A hint is never a
 blocker. A part's notes and hints leave with it once it is written, rejected
-or dropped; a scene written from the whole source text says so among its
-own notes. What the model noted about the run as a whole — the outline's own
-notes, and that the outline reply had to be repaired — stands above the stages as one compact block until the job is done. The NPC
+or dropped. What the server notes about a part — its reply had to be
+repaired, or a scene was written from the whole source text because its
+passage could not be matched (`serverNotes` on the part) — stands with the
+model's notes as a sentence of the app, and is not answered: the model did
+not write it. What the model noted about the run as a whole — the outline's
+own notes — and that the outline reply had to be repaired (`serverNotes` on
+the result) stand above the stages as one compact block until the job is
+done. The NPC
 run shows its notes on its one card; an augment run keeps its notes at the
 top and puts its hints at the field or block of the comparison.
 
@@ -314,6 +320,15 @@ answer of the part (`PATCH …/generator-jobs/:id/parts/:key { rev, round:
 { answers } }`, 202) — one call per part and round, run on the server while
 the app polls. The run's own notes and the NPC run's single card are not
 answered.
+
+An answer can be kept as campaign knowledge too: a box under each answer
+field sends it with `asKnowledge: true`. Opening the round then creates a
+`fact` item whose text is the answer on one line — the row `POST
+…/knowledge-items` would create, at the end of the order — in the same
+transaction, and the round's call reads its context after that, so the fact
+is in the knowledge block of this call and of every later one. A refused
+round creates nothing; the round stores the answer without the flag, so a
+failed round sent again creates no second item.
 
 The patch call is one provider call. Its system prompt is
 `patch-system-prompt.md` followed by the entity's fields file; its few-shot is `patch-example-output.json`. The prompt carries the
@@ -340,7 +355,7 @@ sentence of its own. Nothing else of the proposal moves: an applied block
 operation changes exactly that block.
 
 What the round brings stands on the card as a comparison, field by field
-and block by block, and the DM takes or keeps each change (`PATCH
+and block by block, and the DM takes or discards each change (`PATCH
 …/parts/:key { rev, round: { changes: { <id>: "taken" | "kept" } } }`). A
 taken change is written into `sceneEdits`, `npcEdits` or `locationEdits`
 under the job's guard (a stale `rev` is 409 with the current job); a block

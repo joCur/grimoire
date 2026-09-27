@@ -191,7 +191,7 @@ generatorJobRoutes.patch("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 
 // PATCH /api/campaigns/:campaign/generator-jobs/:id/parts/:key
 //   { status: "running" } -> 202 GeneratorJob
-//   | { rev, round: { answers: [{ note, answer }] } } -> 202 GeneratorJob
+//   | { rev, round: { answers: [{ note, answer, asKnowledge? }] } } -> 202 GeneratorJob
 //   | { rev, round: { changes: { <change id>: "taken" | "kept" } } } -> GeneratorJob
 // One part of a scene run, three acts:
 //
@@ -209,7 +209,13 @@ generatorJobRoutes.patch("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 //     round's changes land on the part (`round`). It runs in the background
 //     and the job is `running` until it is back; a round that brings nothing
 //     is `failed` on the part with its `error`, and the notes stay. A blank
-//     answer is no answer, and a round without one is 400. 409 for a part
+//     answer is no answer, and a round without one is 400. An answer with
+//     `asKnowledge: true` is kept as campaign knowledge as well: the round
+//     opens with a `fact` item holding the answer on one line, created like
+//     `POST …/knowledge-items` creates one (at the end of the order), in the
+//     same transaction — so the round's call already has it in its context,
+//     and a refused round creates none. The round itself stores the answer
+//     without the flag. 409 for a part
 //     that is not done, whose proposal is written, dropped or rejected, or
 //     that has a round running or changes left to decide; 503 when no
 //     provider is configured.
