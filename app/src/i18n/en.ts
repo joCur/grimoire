@@ -343,7 +343,7 @@ export const en: Messages = {
   "itemPrices.lead":
     "What a magic item costs when the group wants to buy or sell one. The names stay as the source writes them.",
   "itemPrices.source":
-    "The prices come from {title} by {author}. Where {author} has no price for an item, it shows the value of its rarity from the {srd}.",
+    "The prices come from {title} by {author}. Where {author} has no price for an item, the value of its rarity from the {srd} applies.",
   "itemPrices.search": "Search an item",
   "itemPrices.list.aria": "List",
   "itemPrices.list.all": "All",
@@ -359,7 +359,7 @@ export const en: Messages = {
   "itemPrices.loading": "Loading prices …",
   "itemPrices.noMatch": "No item matches the search.",
   "itemPrices.rowSource": "{list} · priced by {author}",
-  "itemPrices.rowRarity": "Value for {rarity} · {title}",
+  "itemPrices.rowRarity": "Rarity {rarity} · value from the {title}",
   "itemPrices.rarity.common": "common",
   "itemPrices.rarity.uncommon": "uncommon",
   "itemPrices.rarity.rare": "rare",

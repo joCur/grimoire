@@ -392,7 +392,7 @@ export const de = {
   "itemPrices.lead":
     "Was ein magischer Gegenstand kostet, wenn die Gruppe kaufen oder verkaufen will. Die Namen stehen auf Englisch wie in der Quelle.",
   "itemPrices.source":
-    "Die Preise stammen aus {title} von {author}. Hat {author} für einen Gegenstand keinen Preis, steht dort der Richtwert seiner Seltenheit aus dem {srd}.",
+    "Die Preise stammen aus {title} von {author}. Hat {author} für einen Gegenstand keinen Preis, gilt der Richtwert seiner Seltenheit aus dem {srd}.",
   "itemPrices.search": "Gegenstand suchen",
   "itemPrices.list.aria": "Liste",
   "itemPrices.list.all": "Alle",
@@ -408,7 +408,7 @@ export const de = {
   "itemPrices.loading": "Lade Preise …",
   "itemPrices.noMatch": "Kein Gegenstand passt zur Suche.",
   "itemPrices.rowSource": "{list} · Preis nach {author}",
-  "itemPrices.rowRarity": "Richtwert für {rarity} · {title}",
+  "itemPrices.rowRarity": "Seltenheit {rarity} · Richtwert aus dem {title}",
   "itemPrices.rarity.common": "gewöhnlich",
   "itemPrices.rarity.uncommon": "ungewöhnlich",
   "itemPrices.rarity.rare": "selten",
