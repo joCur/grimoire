@@ -11,6 +11,7 @@ import { RefProvider } from "@/markdown/refs";
 import { BrowseRoute } from "@/routes/browse";
 import { GenerateRoute } from "@/routes/generate";
 import { GlossaryRoute } from "@/glossary-term/GlossaryRoute";
+import { ItemPricesRoute } from "@/item-price/ItemPricesRoute";
 import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/knowledge-item/KnowledgeRoute";
@@ -178,6 +179,10 @@ export function App() {
               /settings. Reached from the campaign menu and ⌘K. */}
           <Route path="knowledge" element={<KnowledgeRoute />} />
           <Route path="glossary" element={<GlossaryRoute />} />
+          {/* The item prices — reference data of the instance
+              (decisions/reference-data), looked up inside the campaign the
+              DM is in. Reached from the campaign menu and ⌘K. */}
+          <Route path="item-prices" element={<ItemPricesRoute />} />
           {/* The trash — what was deleted, until it is removed for good
               (decisions/trash). Reached like the two pages above, never
               from the topbar. It composes the trash lists and restores of

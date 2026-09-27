@@ -103,7 +103,7 @@ test("FTS5 works, folds diacritics and ranks by bm25", async () => {
 
     // Prefix search — what ⌘K sends while the DM is still typing.
     const prefix = db.all<{ entity_id: string }>(
-      sql`select entity_id from search_fts where search_fts match 'light*' order by bm25(search_fts, 10, 6, 4, 1)`,
+      sql`select entity_id from search_fts where campaign_id = 'example' and search_fts match 'light*' order by bm25(search_fts, 10, 6, 4, 1)`,
     );
     assert.deepEqual(
       prefix.map((r) => r.entity_id).sort(),
@@ -242,7 +242,7 @@ test("a quoted prefix term matches and operator-looking input stays text", async
       values ('The Lighthouse', 'lighthouse', '', 'Left in a hurry.', 'example', 'location', 'lighthouse')
     `);
     const hits = db.all<{ entity_id: string }>(
-      sql`select entity_id from search_fts where search_fts match '"light"*'`,
+      sql`select entity_id from search_fts where campaign_id = 'example' and search_fts match '"light"*'`,
     );
     assert.deepEqual(hits.map((r) => r.entity_id), ["lighthouse"]);
 

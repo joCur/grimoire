@@ -5,6 +5,7 @@ import {
   BookMarked,
   BookOpen,
   Bookmark,
+  Coins,
   FileText,
   GitFork,
   MapPin,
@@ -28,6 +29,7 @@ describe("kindLabel", () => {
     expect(kindLabel("campaign", t)).toBe(t("kind.campaign"));
     expect(kindLabel("session", t)).toBe(t("kind.session"));
     expect(kindLabel("glossary-term", t)).toBe(t("kind.glossary"));
+    expect(kindLabel("item-price", t)).toBe(t("kind.itemPrice"));
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
@@ -48,6 +50,7 @@ describe("kindIcon", () => {
     expect(kindIcon("campaign")).toBe(BookMarked);
     expect(kindIcon("session")).toBe(NotebookPen);
     expect(kindIcon("glossary-term")).toBe(BookA);
+    expect(kindIcon("item-price")).toBe(Coins);
   });
 
   test("contingency scenes get the fork; the flag is ignored for other kinds", () => {
@@ -111,6 +114,12 @@ describe("resultHref", () => {
   test("a session opens its reading page", () => {
     expect(resultHref("example", { kind: "session", id: "s-42" })).toBe(
       "/campaigns/example/sessions/s-42",
+    );
+  });
+
+  test("an item price opens the price page at that item", () => {
+    expect(resultHref("example", { kind: "item-price", id: "potion-of-healing" })).toBe(
+      "/campaigns/example/item-prices?item=potion-of-healing",
     );
   });
 

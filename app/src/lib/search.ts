@@ -9,6 +9,7 @@ import {
   BookMarked,
   BookOpen,
   Bookmark,
+  Coins,
   FileText,
   GitFork,
   MapPin,
@@ -21,6 +22,7 @@ import { campaignHref } from "@/campaign/campaign-links";
 import { chapterHref } from "@/chapter/chapter-links";
 import { glossaryHref } from "@/glossary-term/glossary-term-links";
 import type { MessageKey, Translate } from "@/i18n";
+import { itemPricesHref } from "@/item-price/item-price-links";
 import { locationHref } from "@/location/location-links";
 import { npcHref } from "@/npc/npc-links";
 import { sceneHref } from "@/scene/scene-links";
@@ -42,6 +44,7 @@ const KIND_KEYS: Record<string, MessageKey> = {
   campaign: "kind.campaign",
   session: "kind.session",
   "glossary-term": "kind.glossary",
+  "item-price": "kind.itemPrice",
 };
 
 export function kindLabel(kind: string, t: Translate): string {
@@ -74,6 +77,9 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
       return NotebookPen;
     case "glossary-term":
       return BookA;
+    // The same coins as the price page in the campaign menu.
+    case "item-price":
+      return Coins;
     default:
       return FileText;
   }
@@ -94,7 +100,8 @@ export function contingencyScenes(tree: CampaignTree | undefined): Set<string> {
  * Route for a picked result. The campaign, a chapter, a scene, an npc and a
  * location open their own routes by their id — the route their slice names
  * (decisions/resources), the campaign's being the chapter overview; a session opens its
- * reading page, a glossary term the glossary page.
+ * reading page, a glossary term the glossary page, an item price the price
+ * page at that item.
  *
  * A kind nobody knows falls back to the chapter overview rather than building
  * a route out of nothing (degrade, README).
@@ -114,6 +121,8 @@ export function resultHref(campaign: string, result: Pick<SearchResult, "kind" |
       return sessionHref(encodeURIComponent(campaign), result.id);
     case "glossary-term":
       return glossaryHref(encodeURIComponent(campaign));
+    case "item-price":
+      return itemPricesHref(encodeURIComponent(campaign), result.id);
     default:
       return scope;
   }

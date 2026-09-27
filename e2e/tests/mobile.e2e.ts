@@ -65,7 +65,7 @@ test("mobile start: search, idea capture, the chapter overview and the campaign 
   expect(Math.round(sheetBox.y + sheetBox.height)).toBe(844);
   for (const [group, areas] of [
     ["campaignMenu.group.prepare", ["area.chapters", "area.scenes", "area.npcs", "area.locations"]],
-    ["campaignMenu.group.lookUp", ["area.glossary", "area.knowledge"]],
+    ["campaignMenu.group.lookUp", ["area.glossary", "area.knowledge", "area.itemPrices"]],
     ["campaignMenu.group.tidyUp", ["area.review", "area.trash"]],
   ] as const) {
     const links = sheet.getByRole("group", { name: ui(group) }).getByRole("link");

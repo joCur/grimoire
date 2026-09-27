@@ -28,7 +28,7 @@
 //      accept, the chapter a new-chapter run decided on. Nowhere else.
 //      A `[[slug]]` in prose is not a
 //      reference in this sense: it is body text, it stays visible text, and
-//      it constrains nothing — which is also why an npc's `## Beziehungen`
+//      it constrains nothing — which is also why an npc's `## Relationships`
 //      is prose and has no table: nothing in the storage is derived from
 //      body text.
 //      The one UNCONSTRAINED reference is `generate_jobs.chapter`: a run
@@ -77,6 +77,7 @@ import {
 import { NPC_STATUSES } from "@grimoire/shared/npc";
 import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
 import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
+import { ITEM_PRICE_LISTS, ITEM_PRICE_SOURCES, ITEM_RARITIES } from "@grimoire/shared/item-price";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
@@ -429,7 +430,7 @@ export const npcs = sqliteTable(
   ],
 );
 
-// An npc's `## Beziehungen` has NO TABLE. It is prose in the npc's body, and
+// An npc's `## Relationships` has NO TABLE. It is prose in the npc's body, and
 // a counterpart a DM wants to link is a `[[id]]` like any other mention.
 // Storage is never derived from body text: a relation list parsed out of a
 // section would be a second, silent source of truth for something the DM
@@ -877,6 +878,45 @@ export const generateJobs = sqliteTable(
     newChapterTitle: text("new_chapter_title"),
   },
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
+);
+
+// --- item prices --------------------------------------------------------------
+
+/**
+ * One ITEM PRICE (decisions/resources): what a magic item costs — Saidoro's
+ * "Sane Magic Item Prices" where it prices the item, otherwise the SRD 5.2's
+ * value for the item's rarity. Reference data of the INSTANCE, so no campaign
+ * column (decisions/reference-data): the rows are written by the migration
+ * that ships them and read by every campaign. `id` is the kebab slug of the
+ * name; `list` is the guide's list and NULL for an SRD row, `rarity` the
+ * rarity an SRD row is priced by and NULL for a guide row; `note` is empty
+ * where the source gives none.
+ */
+export const itemPrices = sqliteTable(
+  "item_prices",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    priceGp: integer("price_gp").notNull(),
+    list: text("list"),
+    rarity: text("rarity"),
+    source: text("source").notNull(),
+    note: text("note").notNull().default(""),
+    rev: revColumn(),
+  },
+  () => [
+    check("item_prices_list_check", oneOf("list", ITEM_PRICE_LISTS, true)),
+    check("item_prices_rarity_check", oneOf("rarity", ITEM_RARITIES, true)),
+    check("item_prices_source_check", oneOf("source", ITEM_PRICE_SOURCES)),
+    // A guide row stands in a list, an SRD row is priced by its rarity.
+    check(
+      "item_prices_source_fields_check",
+      sql.raw(
+        "(`source` = 'saidoro' and `list` is not null and `rarity` is null) or " +
+          "(`source` = 'srd' and `rarity` is not null and `list` is null)",
+      ),
+    ),
+  ],
 );
 
 // --- bookkeeping ------------------------------------------------------------

@@ -1,7 +1,7 @@
 // The areas of a campaign, named once.
 //
 // An area is a place of the campaign the DM goes to: the chapters, the lists
-// of scenes, NPCs and locations, the two reference pages, the session review
+// of scenes, NPCs and locations, the reference pages, the session review
 // and the trash. Each has exactly ONE entry point in the UI, the campaign menu
 // in the topbar (components/CampaignMenu.tsx), and the ⌘K palette reaches the
 // same list. Both read it from here, so a new area is one new row below and
@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bookmark,
   ClipboardCheck,
+  Coins,
   Lightbulb,
   MapPin,
   Trash2,
@@ -29,6 +30,7 @@ import { matchPath } from "react-router";
 
 import type { MessageKey } from "@/i18n";
 import { glossaryHref } from "@/glossary-term/glossary-term-links";
+import { itemPricesHref } from "@/item-price/item-price-links";
 import { locationsHref } from "@/location/location-links";
 import { npcsHref } from "@/npc/npc-links";
 import { reviewHref } from "@/session/session-links";
@@ -38,7 +40,16 @@ export type AreaGroup = "prepare" | "lookUp" | "tidyUp";
 
 export interface Area {
   /** Stable key — also what a test or the palette identifies a row by. */
-  id: "chapters" | "scenes" | "npcs" | "locations" | "glossary" | "knowledge" | "review" | "trash";
+  id:
+    | "chapters"
+    | "scenes"
+    | "npcs"
+    | "locations"
+    | "glossary"
+    | "knowledge"
+    | "itemPrices"
+    | "review"
+    | "trash";
   group: AreaGroup;
   href: (campaign: string) => string;
   icon: LucideIcon;
@@ -100,6 +111,14 @@ export const AREAS: readonly Area[] = [
     icon: Lightbulb,
     label: "area.knowledge",
     routes: ["knowledge"],
+  },
+  {
+    id: "itemPrices",
+    group: "lookUp",
+    href: (c) => itemPricesHref(c),
+    icon: Coins,
+    label: "area.itemPrices",
+    routes: ["item-prices"],
   },
   {
     id: "review",

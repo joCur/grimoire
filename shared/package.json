@@ -24,6 +24,7 @@
     "./thread": "./src/thread.ts",
     "./idea": "./src/idea.ts",
     "./glossary-term": "./src/glossary-term.ts",
+    "./item-price": "./src/item-price.ts",
     "./knowledge-item": "./src/knowledge-item.ts",
     "./session": "./src/session.ts",
     "./log-entry": "./src/log-entry.ts",
