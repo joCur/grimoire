@@ -27,6 +27,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 import { underCampaign, type Api } from "../support/api";
+import { areaEntry, campaignMenu } from "../support/campaign-menu";
 import { getChapter } from "../support/chapter";
 import { getIdeas, ideaPath } from "../support/idea";
 import { createNpc, getNpc, npcExists } from "../support/npc";
@@ -94,9 +95,16 @@ function pageProgress(page: Page, seen: number, total: number) {
   return page.getByText(uiExact("review.progress", { seen, total })).filter({ visible: true });
 }
 
-/** The chapter overview's review link, naming the open count. */
-function reviewLink(page: Page, count: number) {
-  return page.getByRole("link", { name: ui("topbar.review.pending", { count }) });
+/**
+ * The session review's entry in the campaign menu names what is still open:
+ * opened, read, closed again.
+ */
+async function expectMenuCount(page: Page, count: number) {
+  await campaignMenu(page).click();
+  await expect(areaEntry(page, "area.review")).toContainText(
+    ui("campaignMenu.reviewPending", { count }),
+  );
+  await page.keyboard.press("Escape");
 }
 
 /**
@@ -125,7 +133,15 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
 }) => {
   const chapterBefore = await getChapter(api, CHAPTER);
   const threadsBefore = await getThreads(api, CHAPTER);
-  await page.goto(`/campaigns/${CAMPAIGN}/review`);
+  // The session review is reached from the campaign menu, whose entry names
+  // what is still open.
+  await page.goto(`/campaigns/${CAMPAIGN}`);
+  await campaignMenu(page).click();
+  await expect(areaEntry(page, "area.review")).toContainText(
+    ui("campaignMenu.reviewPending", { count: 4 }),
+  );
+  await areaEntry(page, "area.review").click();
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/review$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("review.title"));
 
   // The topbar carries the harvest progress (the page repeats it below md).
@@ -244,8 +260,8 @@ test("adopting a thread creates a thread of the chapter, the idea gets ticked of
   // The finish action goes back to the chapters.
   await page.getByRole("button", { name: ui("review.finish") }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
-  // The chapter overview's quiet review affordance counts what is still open.
-  await expect(reviewLink(page, 2)).toBeVisible();
+  // The campaign menu's review entry counts what is still open.
+  await expectMenuCount(page, 2);
 });
 
 test("an untagged idea is reviewable and can be ticked off", async ({
@@ -287,9 +303,9 @@ test("an untagged idea is reviewable and can be ticked off", async ({
     )
     .toEqual([NOTE_TEXT]);
 
-  // The chapter overview affordance counts the same entries the page does.
+  // The campaign menu counts the same entries the page does.
   await page.getByRole("button", { name: ui("review.finish") }).click();
-  await expect(reviewLink(page, 4)).toBeVisible();
+  await expectMenuCount(page, 4);
 });
 
 test("a #pc note is grouped by character and ticked off", async ({ page, api }) => {
@@ -342,10 +358,10 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
     )
     .toEqual([`${PC_TEXT} #pc #kaela`]);
 
-  // Back at the desk the chapter overview affordance counts what is still open.
+  // Back at the desk the campaign menu counts what is still open.
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("button", { name: ui("review.finish") }).click();
-  await expect(reviewLink(page, 4)).toBeVisible();
+  await expectMenuCount(page, 4);
 });
 
 /** The `reviewed` flag of today's `#npc` log row, read from the session. */

@@ -1,5 +1,5 @@
-// Critical path 8: the mobile start surface and the idea capture at 390px;
-// see CLAUDE.md.
+// Critical path 8: the phone's start of a campaign and the idea capture at
+// 390px; see CLAUDE.md.
 //
 // Mobile is search, reading view and ideas (UI-BRIEF) — exactly that, checked
 // at 390×844 (iPhone size), including what the server stored.
@@ -14,6 +14,7 @@ import { getCampaign } from "../support/campaign";
 import { getIdeas } from "../support/idea";
 import { getNpc } from "../support/npc";
 import { getScene } from "../support/scene";
+import { areaEntry, campaignMenu, currentAreaEntry, openArea } from "../support/campaign-menu";
 import { ui, uiPattern } from "../support/ui";
 import { CAMPAIGN } from "../support/paths";
 
@@ -32,51 +33,65 @@ const IDEA = "A night market at the harbour as a hook #thread";
 /** The idea capture field of the start surface. */
 const ideaCapture = (page: Page) => page.getByLabel(ui("mobileStart.inbox.label"));
 
-test("mobile start surface: search, idea capture, lookup lists", async ({ page, api }) => {
+test("mobile start: search, idea capture, the chapter overview and the campaign menu", async ({
+  page,
+  api,
+}) => {
   const campaign = await getCampaign(api);
   const ideasBefore = await getIdeas(api);
   await page.goto(`/campaigns/${CAMPAIGN}`);
 
-  // The desktop topbar is desktop chrome — below md the surface carries its
-  // own wordmark instead.
+  // The desktop topbar is desktop chrome — below md the start carries its
+  // own wordmark, and next to it the campaign menu.
   await expect(page.getByRole("banner")).toBeHidden();
   await expect(
     page.getByRole("main").getByText(ui("topbar.brand"), { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("main").getByText(ui("campaign.switcher.current", { name: campaign.name })),
-  ).toBeVisible();
-  // The desktop chapter overview is not rendered here.
-  await expect(page.getByText(ui("scene.contingencies.heading"))).toBeHidden();
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    ui("campaignMenu.triggerInArea", { name: campaign.name, area: ui("area.chapters") }),
+  );
+  // Below search and idea capture stands the chapter overview itself: the
+  // campaign's header, and the active chapter with its scenes.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(campaign.name);
+  await expect(page.getByText(ui("scene.contingencies.heading"))).toBeVisible();
+  await expect(page.getByRole("link", { name: /Arrival at the Lighthouse/ })).toBeVisible();
 
-  // Lookup rows with their counts from the tree. The example campaign has two
-  // of each; the two locations exist on their own because a reference
-  // creates nothing (decisions/constraints).
-  const tree = await api.get<{
-    chapters: { scenes: unknown[] }[];
-    npcs: unknown[];
-    locations: unknown[];
-  }>(`campaigns/${CAMPAIGN}/tree`);
-  const sceneCount = tree.chapters.reduce((n, chapter) => n + chapter.scenes.length, 0);
-  expect([sceneCount, tree.npcs.length, tree.locations.length]).toEqual([2, 2, 2]);
+  // The campaign menu opens as a sheet from the bottom edge, with every area
+  // in its group and the current one marked.
+  await campaignMenu(page).click();
+  const sheet = page.getByRole("dialog", { name: ui("campaignMenu.title") });
+  await expect(sheet).toBeVisible();
+  const sheetBox = (await sheet.boundingBox())!;
+  expect(Math.round(sheetBox.y + sheetBox.height)).toBe(844);
+  for (const [group, areas] of [
+    ["campaignMenu.group.prepare", ["area.chapters", "area.scenes", "area.npcs", "area.locations"]],
+    ["campaignMenu.group.lookUp", ["area.glossary", "area.knowledge"]],
+    ["campaignMenu.group.tidyUp", ["area.review", "area.trash"]],
+  ] as const) {
+    const links = sheet.getByRole("group", { name: ui(group) }).getByRole("link");
+    await expect(links).toHaveCount(areas.length);
+    for (const [index, area] of areas.entries()) {
+      await expect(links.nth(index)).toContainText(ui(area));
+    }
+  }
+  await expect(currentAreaEntry(page)).toContainText(ui("area.chapters"));
+  // Every entry is a touch target.
+  for (const box of await Promise.all(
+    (await sheet.getByRole("link").all()).map((link) => link.boundingBox()),
+  )) {
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  // The npc entry leads to the npc list on its own route (decisions/resources).
+  await areaEntry(page, "area.npcs").click();
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs$`));
+  await expect(sheet).toBeHidden();
+  await openArea(page, "area.chapters");
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
 
-  const lookup = page.getByRole("navigation", { name: ui("lookup.heading") });
-  const lookupRow = (key: "browse.title.scenes" | "browse.title.npcs" | "browse.title.locations") =>
-    lookup.getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui(key))}`) });
-  await expect(lookupRow("browse.title.scenes")).toContainText(
-    ui("mobileStart.count.scenes", { count: sceneCount }),
-  );
-  await expect(lookupRow("browse.title.npcs")).toContainText(
-    ui("mobileStart.count.npcs", { count: tree.npcs.length }),
-  );
-  // The npc row leads to the npc list on its own route (decisions/resources).
-  await expect(lookupRow("browse.title.npcs")).toHaveAttribute(
-    "href",
-    `/campaigns/${CAMPAIGN}/npcs`,
-  );
-  await expect(lookupRow("browse.title.locations")).toContainText(
-    ui("mobileStart.count.locations", { count: tree.locations.length }),
-  );
+  // Nothing scrolls sideways at this width.
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
 
   // --- idea capture --------------------------------------------------------
   const capture = ideaCapture(page);
@@ -103,10 +118,11 @@ test("mobile start surface: search, idea capture, lookup lists", async ({ page, 
 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/fenn$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(fenn.name);
-  // The mobile read view has its own way back to the start surface.
-  const back = page.getByRole("link", { name: ui("mobileBack.chapterOverview") });
-  await expect(back).toBeVisible();
-  await back.click();
+  // The mobile read view carries the campaign menu, the way back to the start.
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    ui("campaignMenu.triggerInArea", { name: campaign.name, area: ui("area.npcs") }),
+  );
+  await openArea(page, "area.chapters");
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
   await expect(ideaCapture(page)).toBeVisible();
 });
@@ -139,12 +155,10 @@ test.describe("with a session open since yesterday", () => {
 test("mobile: the reference scene's reading view stays readable", async ({ page, api }) => {
   const scene = await getScene(api, "lighthouse-arrival");
   const jorna = await getNpc(api, "jorna");
-  // Reached the way a phone reaches it: the lookup row of the start surface,
-  // then the scene list — onto the scene's own route (decisions/resources).
+  // Reached the way a phone reaches it: the campaign menu's sheet, then the
+  // scene list — onto the scene's own route (decisions/resources).
   await page.goto(`/campaigns/${CAMPAIGN}`);
-  await page
-    .getByRole("link", { name: new RegExp(`^${escapeStringRegexp(ui("browse.title.scenes"))}`) })
-    .click();
+  await openArea(page, "area.scenes");
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/scenes$`));
   await page.getByRole("link", { name: new RegExp(escapeStringRegexp(scene.title)) }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/scenes/lighthouse-arrival$`));

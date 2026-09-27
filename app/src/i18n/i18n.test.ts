@@ -82,7 +82,7 @@ describe("German quotation marks", () => {
 describe("plural", () => {
   // The number leads the phrase and the noun after it follows the plural
   // category: one form for 1, another for every other count.
-  const KEYS_WITH_PLURAL = ["mobileStart.count.scenes", "mobileStart.count.locations"] as const;
+  const KEYS_WITH_PLURAL = ["generatorJob.notes.summary", "generatorJob.runNotes.summary"] as const;
 
   /** The phrase after the number, for a count. */
   function noun(locale: Locale, key: MessageKey, count: number): string {
@@ -113,25 +113,25 @@ describe("plural", () => {
 describe("interpolation", () => {
   test("puts the value in, once, in the right place", () => {
     for (const locale of LOCALES) {
-      const out = translator(locale)("campaign.switcher.current", { name: "Salt Harbour" });
-      expect(out).toBe(pattern(locale, "campaign.switcher.current").replace("{name}", "Salt Harbour"));
+      const out = translator(locale)("campaignMenu.trigger", { name: "Salt Harbour" });
+      expect(out).toBe(pattern(locale, "campaignMenu.trigger").replace("{name}", "Salt Harbour"));
       expect(out.split("Salt Harbour")).toHaveLength(2);
     }
   });
 
   test("formatParts keeps a non-string value as its own part", () => {
     const marker = { mono: "salt-harbour" };
-    const parts = formatParts("de", "campaign.switcher.current", { name: marker });
+    const parts = formatParts("de", "campaignMenu.trigger", { name: marker });
     expect(parts).toContain(marker);
     expect(parts.filter((part) => typeof part === "string").join("")).toBe(
-      pattern("de", "campaign.switcher.current").replace("{name}", ""),
+      pattern("de", "campaignMenu.trigger").replace("{name}", ""),
     );
   });
 
   test("degrades to the raw pattern instead of throwing", () => {
     // A message that WANTS a parameter and gets none must still render
     // something (CLAUDE.md: the format degrades, it never errors).
-    expect(() => translator("de")("mobileStart.count.scenes")).not.toThrow();
+    expect(() => translator("de")("campaignMenu.reviewPending")).not.toThrow();
   });
 });
 

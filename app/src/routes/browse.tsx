@@ -1,7 +1,6 @@
 // "/campaigns/:campaign/scenes", "/campaigns/:campaign/npcs" and
 // "/campaigns/:campaign/locations" — the simple list pages, reached from the
-// mobile start surface's lookup rows and from the topbar's quiet npc and
-// location links on the desktop. The page is the frame: the heading, the
+// campaign menu (lib/areas.ts). The page is the frame: the heading, the
 // loading states and the place of the list's create action; the list itself
 // and its action come from the slice of what it lists (decisions/resources), handed in by
 // App.tsx. The layout is width-agnostic (a plain list).
@@ -12,7 +11,7 @@ import type { ReactNode } from "react";
 import { useParams } from "react-router";
 
 import { fetchTree } from "@/api";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { useT, type MessageKey } from "@/i18n";
 
 export function BrowseRoute({
@@ -37,7 +36,7 @@ export function BrowseRoute({
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div className="mx-auto max-w-[760px] px-5 pt-5 pb-16 md:px-7 md:pt-10">
         {/* The list heading carries the list's own create action: the npc
             and location pages are the only surfaces that show ALL of them,

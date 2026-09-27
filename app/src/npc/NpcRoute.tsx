@@ -17,16 +17,14 @@ import { useParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
 import { BodyEditAction } from "@/components/BodyEditor";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { NotFound } from "@/components/NotFound";
-import { PageContext } from "@/components/PageContext";
 import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import { NpcArticle } from "./NpcArticle";
 import { NpcEditMode } from "./NpcEditMode";
-import { npcPageCrumbs } from "./npc-links";
 import { npcQuery } from "./npc-query";
 
 export function NpcRoute(props: {
@@ -85,7 +83,7 @@ function NpcPage({
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div
         className={cn(
           "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",
@@ -94,7 +92,6 @@ function NpcPage({
         )}
       >
         <div className={cn("w-full min-w-0 flex-1", editing ? "lg:max-w-[820px]" : "lg:max-w-[680px]")}>
-          <PageContext crumbs={npcPageCrumbs(campaign, t)} />
           {editing ? (
             <NpcEditMode
               key={data.id}

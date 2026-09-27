@@ -34,10 +34,6 @@ export const en: Messages = {
 
   // --- topbar ---------------------------------------------------------------
   "topbar.brand": "Grimoire",
-  "topbar.nav.aria": "Chapters, NPCs and locations",
-  "topbar.nav.chapters": "Chapters",
-  "topbar.nav.npcs": "NPCs",
-  "topbar.nav.locations": "Locations",
   "topbar.search": "Search …",
   "topbar.generator": "Generator",
   "generatorJob.scene.running": "The AI is writing scenes.",
@@ -106,13 +102,26 @@ export const en: Messages = {
   "generatorJob.hint.proposal":
     "The proposal still says “{from}” — the naming convention says “{to}”.",
   "topbar.generator.progress": "{written} of {total} applied",
-  "topbar.review.pending": "Session review · {count} open",
-  "topbar.review.pendingShort": "{count} open",
   "topbar.session.back": "To the session",
 
-  // --- campaign switcher ----------------------------------------------------
-  "campaign.switcher.current": "Campaign: {name}",
-  "campaign.switcher.empty": "No campaigns yet.",
+  // --- campaign menu (components/CampaignMenu.tsx) ---------------------------
+  "campaignMenu.trigger": "Campaign: {name}",
+  "campaignMenu.triggerInArea": "Campaign: {name}, area: {area}",
+  "campaignMenu.title": "Campaign menu",
+  "campaignMenu.campaigns": "Campaigns",
+  "campaignMenu.empty": "No campaigns yet.",
+  "campaignMenu.group.prepare": "Prepare",
+  "campaignMenu.group.lookUp": "Look up",
+  "campaignMenu.group.tidyUp": "Tidy up",
+  "campaignMenu.reviewPending": "{count} open",
+  "area.chapters": "Chapters",
+  "area.scenes": "Scenes",
+  "area.npcs": "NPCs",
+  "area.locations": "Locations",
+  "area.glossary": "Glossary",
+  "area.knowledge": "Campaign knowledge",
+  "area.review": "Session review",
+  "area.trash": "Trash",
 
   // --- the session chip -----------------------------------------------------
   "session.start": "Start session",
@@ -329,7 +338,6 @@ export const en: Messages = {
   "glossary.explanation": "Explanation",
   "glossary.noExplanation": "No explanation",
 
-  "lookup.heading": "Look up",
 
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
   "trash.title": "Trash",
@@ -497,9 +505,8 @@ export const en: Messages = {
   "reading.notLoadable": "Not loadable — check the server and reload.",
   "scene.npcs.heading": "NPCs in this scene",
 
-  // --- context line + mobile back row ---------------------------------------
+  // --- context line (components/PageContext.tsx) ----------------------------
   "context.aria": "Context",
-  "mobileBack.chapterOverview": "Chapters",
 
 
   // --- shared scene-group headings (routes/live.tsx + routes/chapter-overview.tsx) ------
@@ -579,7 +586,6 @@ export const en: Messages = {
   "review.title": "Session review",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
   "review.noSession": "There is no session to review.",
-  "review.backToChapters": "Back to the chapters",
   "review.lead":
     "Go through the notes of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters).
@@ -641,9 +647,6 @@ export const en: Messages = {
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Search scenes, NPCs, locations …",
-  "mobileStart.count.scenes": "{count, plural, one {# scene} other {# scenes}}",
-  "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
-  "mobileStart.count.locations": "{count, plural, one {# location} other {# locations}}",
   "mobileStart.inbox.label": "Ideas",
   "mobileStart.inbox.placeholder": "Drop an idea … #thread #npc",
   "mobileStart.inbox.submit": "Drop in",
@@ -655,7 +658,7 @@ export const en: Messages = {
   "palette.placeholder": "Search scenes, NPCs, locations …",
   "palette.results.aria": "Search results",
   "palette.empty": "Nothing found.",
-  "palette.kind.page": "Page",
+  "palette.kind.area": "Area",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
   "update.available": "New version available — reload",

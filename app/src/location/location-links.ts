@@ -1,9 +1,6 @@
 // Where a location lives in the app and how it names itself (decisions/resources): its
-// reading view, its list, the context line of its reading view, and the label
+// reading view, its list, and the label
 // it carries beside the addresses of a run's scenes.
-
-import type { ContextCrumb } from "@/components/PageContext";
-import type { Translate } from "@/i18n";
 
 /** The reading view of one location. */
 export function locationHref(campaign: string, id: string): string {
@@ -22,10 +19,4 @@ export function locationsHref(campaign: string): string {
  */
 export function locationLabel(id: string): string {
   return `locations/${id}`;
-}
-
-/** The context of a location's reading view: its list. */
-export function locationPageCrumbs(campaign: string, t: Translate): ContextCrumb[] {
-  if (campaign === "") return [];
-  return [{ label: t("browse.title.locations"), to: locationsHref(campaign) }];
 }

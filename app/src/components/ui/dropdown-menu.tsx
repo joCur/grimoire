@@ -43,6 +43,8 @@ function DropdownMenuItem({
   );
 }
 
+const DropdownMenuGroup = DropdownMenuPrimitive.Group;
+const DropdownMenuLabel = DropdownMenuPrimitive.Label;
 const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
 /**
@@ -81,7 +83,9 @@ function DropdownMenuSeparator({
 export {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,

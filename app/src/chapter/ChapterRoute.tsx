@@ -1,7 +1,6 @@
 // "/campaigns/:campaign/chapters/:id" — the reading view of ONE chapter, its
-// own resource with its own type (decisions/resources): the context line on
-// top (the chapter itself, linking to the chapter overview where its scenes
-// stand), the article, and the quiet edit action in its header.
+// own resource with its own type (decisions/resources): the article and the
+// quiet edit action in its header.
 //
 // Edit switches the page into the chapter's edit mode
 // (./ChapterEditMode.tsx): the same article, every field of the chapter
@@ -20,16 +19,14 @@ import { useParams, useSearchParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
 import { BodyEditAction } from "@/components/BodyEditor";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { NotFound } from "@/components/NotFound";
-import { PageContext } from "@/components/PageContext";
 import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import { ChapterArticle } from "./ChapterArticle";
 import { ChapterEditMode, type ChapterThreadsQuery } from "./ChapterEditMode";
-import { chapterPageCrumbs } from "./chapter-links";
 import { chapterQuery } from "./chapter-query";
 
 export function ChapterRoute({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
@@ -96,7 +93,7 @@ function ChapterPage({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div
         className={cn(
           "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",
@@ -105,7 +102,6 @@ function ChapterPage({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
         )}
       >
         <div className={cn("w-full min-w-0 flex-1", editing ? "lg:max-w-[820px]" : "lg:max-w-[680px]")}>
-          <PageContext crumbs={chapterPageCrumbs(campaign, data.id, tree.data)} />
           {editing ? (
             <ChapterEditMode
               key={data.id}

@@ -13,7 +13,7 @@
 // detail is part of the design (curly quotation marks, the em dash with
 // spaces, the single ellipsis character). Do not normalize them.
 //
-// The catalog covers the topbar incl. session chip, campaign switcher, the
+// The catalog covers the topbar incl. session chip, campaign menu, the
 // five create dialogs, the fields of the edit modes, cold start and the areas
 // listed in the sections below. A component not covered here still carries
 // its literal strings.
@@ -37,17 +37,13 @@ export const de = {
   "notFound.toCampaign": "Zur Kapitelübersicht",
   "notFound.toStart": "Zum Anfang",
 
-  // --- language switch (campaign switcher menu) -----------------------------
+  // --- language switch (components/LanguageSwitch.tsx) ----------------------
   "language.heading": "Sprache",
   "language.de": "Deutsch",
   "language.en": "English",
 
   // --- topbar ---------------------------------------------------------------
   "topbar.brand": "Grimoire",
-  "topbar.nav.aria": "Kapitel, NPCs und Orte",
-  "topbar.nav.chapters": "Kapitel",
-  "topbar.nav.npcs": "NPCs",
-  "topbar.nav.locations": "Orte",
   "topbar.search": "Suchen …",
   "topbar.generator": "Generator",
   // The campaign's generator job in one sentence — what it is about and
@@ -131,16 +127,30 @@ export const de = {
   "generatorJob.hint.proposal":
     "Der Vorschlag schreibt noch „{from}“ — die Namenskonvention sagt „{to}“.",
   "topbar.generator.progress": "{written} von {total} übernommen",
-  "topbar.review.pending": "Nachbereitung · {count} offen",
-  // The same link below xl, where the row has no width to spare:
-  // the COUNT is the news, the word is the one thing that can go. The full
-  // label stays as the accessible name at every width.
-  "topbar.review.pendingShort": "{count} offen",
   "topbar.session.back": "Zur Session",
 
-  // --- campaign switcher ----------------------------------------------------
-  "campaign.switcher.current": "Kampagne: {name}",
-  "campaign.switcher.empty": "Noch keine Kampagnen gefunden.",
+  // --- campaign menu (components/CampaignMenu.tsx) ---------------------------
+  // The trigger's accessible name; on a view with no area it names only the
+  // campaign.
+  "campaignMenu.trigger": "Kampagne: {name}",
+  "campaignMenu.triggerInArea": "Kampagne: {name}, Bereich: {area}",
+  "campaignMenu.title": "Kampagnenmenü",
+  "campaignMenu.campaigns": "Kampagnen",
+  "campaignMenu.empty": "Noch keine Kampagnen gefunden.",
+  "campaignMenu.group.prepare": "Vorbereiten",
+  "campaignMenu.group.lookUp": "Nachschlagen",
+  "campaignMenu.group.tidyUp": "Aufräumen",
+  // What the session review still has to go through, beside its entry.
+  "campaignMenu.reviewPending": "{count} offen",
+  // The areas of a campaign (lib/areas.ts), in the menu and in ⌘K.
+  "area.chapters": "Kapitel",
+  "area.scenes": "Szenen",
+  "area.npcs": "NPCs",
+  "area.locations": "Orte",
+  "area.glossary": "Glossar",
+  "area.knowledge": "Kampagnenwissen",
+  "area.review": "Nachbereitung",
+  "area.trash": "Papierkorb",
 
   // --- the session chip -----------------------------------------------------
   "session.start": "Session starten",
@@ -375,10 +385,6 @@ export const de = {
   "glossary.explanation": "Erklärung",
   "glossary.noExplanation": "Ohne Erklärung",
 
-  // Where the two pages are reached from: the chapter overview's lookup line
-  // and the mobile start surface's rows (deliberately NOT
-  // the topbar, which stays the three campaign-wide entries it has).
-  "lookup.heading": "Nachschlagen",
 
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
   "trash.title": "Papierkorb",
@@ -569,9 +575,8 @@ export const de = {
   "reading.notLoadable": "Nicht ladbar — Server prüfen und neu laden.",
   "scene.npcs.heading": "NPCs dieser Szene",
 
-  // --- context line + mobile back row ---------------------------------------
+  // --- context line (components/PageContext.tsx) ----------------------------
   "context.aria": "Kontext",
-  "mobileBack.chapterOverview": "Kapitel",
 
   // --- shared scene-group headings (routes/live.tsx + routes/chapter-overview.tsx) ------
   // Neutral prefix on purpose: the live nav and the chapter overview list show the SAME
@@ -655,7 +660,6 @@ export const de = {
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
   "review.noSession": "Es gibt keine Session zum Sichten.",
-  "review.backToChapters": "Zurück zu den Kapiteln",
   "review.lead":
     "Die Notizen der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters).
@@ -718,9 +722,6 @@ export const de = {
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Szenen, NPCs, Orte suchen …",
-  "mobileStart.count.scenes": "{count, plural, one {# Szene} other {# Szenen}}",
-  "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
-  "mobileStart.count.locations": "{count, plural, one {# Ort} other {# Orte}}",
   "mobileStart.inbox.label": "Ideen",
   "mobileStart.inbox.placeholder": "Idee einwerfen … #thread #npc",
   "mobileStart.inbox.submit": "Einwerfen",
@@ -734,7 +735,7 @@ export const de = {
   "palette.empty": "Nichts gefunden.",
   // The kind label of a NAVIGATION row: a page of this campaign,
   // not a row the search index found.
-  "palette.kind.page": "Seite",
+  "palette.kind.area": "Bereich",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
   "update.available": "Neue Version verfügbar — neu laden",

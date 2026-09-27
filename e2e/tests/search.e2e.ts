@@ -22,7 +22,8 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 import { getGlossaryTerm } from "../support/glossary-term";
-import { ui, uiExact, uiPattern } from "../support/ui";
+import { campaignMenu } from "../support/campaign-menu";
+import { ui, uiPattern } from "../support/ui";
 import { CAMPAIGN } from "../support/paths";
 
 const CAMPAIGN_NAME = "The Lighthouse of Salt Harbour";
@@ -162,19 +163,19 @@ test("an npc hit opens the npc's own route — its kind and id, no address", asy
 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs/fenn$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
-  // The context line points at the npc list, on its own route too.
-  await expect(
-    page.getByRole("link", { name: ui("topbar.nav.npcs") }).first(),
-  ).toHaveAttribute("href", `/campaigns/${CAMPAIGN}/npcs`);
+  // The campaign menu names the NPCs as the area it belongs to.
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    uiPattern("campaignMenu.triggerInArea", { name: /.*/, area: ui("area.npcs") }),
+  );
 });
 
-test("the palette's NPC list entry opens the npc list on its own route", async ({ page }) => {
+test("the palette's NPC area opens the npc list on its own route", async ({ page }) => {
   await page.goto(`/campaigns/${CAMPAIGN}`);
-  await (await openPalette(page)).fill(ui("browse.title.npcs"));
+  await (await openPalette(page)).fill(ui("area.npcs"));
   const option = page
     .getByRole("option")
-    .filter({ hasText: ui("browse.title.npcs") })
-    .filter({ hasText: ui("palette.kind.page") });
+    .filter({ hasText: ui("area.npcs") })
+    .filter({ hasText: ui("palette.kind.area") });
   await expect(option.first()).toBeVisible();
   await option.first().click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/npcs$`));
@@ -207,10 +208,10 @@ test("a location hit opens the location's own route — its kind and id, no addr
 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/locations/lighthouse$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(LOCATION_NAME);
-  // The context line points at the location list, on its own route too.
-  await expect(
-    page.getByRole("link", { name: ui("topbar.nav.locations") }).first(),
-  ).toHaveAttribute("href", `/campaigns/${CAMPAIGN}/locations`);
+  // The campaign menu names the locations as the area it belongs to.
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    uiPattern("campaignMenu.triggerInArea", { name: /.*/, area: ui("area.locations") }),
+  );
 });
 
 test("a chapter hit opens the chapter's own route, a campaign hit the chapter overview", async ({
@@ -234,14 +235,10 @@ test("a chapter hit opens the chapter's own route, a campaign hit the chapter ov
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}/chapters/01-salt-harbour$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CHAPTER_TITLE);
   await expect(page.getByRole("article")).toContainText("Find out why the beacon");
-  // The context line leads back to the chapter overview, where its scenes are.
-  await expect(
-    page.getByRole("navigation", { name: ui("context.aria") }).getByRole("link"),
-  ).toHaveAttribute("href", `/campaigns/${CAMPAIGN}`);
-  // The topbar marks the chapters section.
-  await expect(
-    page.getByRole("link", { name: uiExact("topbar.nav.chapters") }),
-  ).toHaveAttribute("aria-current", "page");
+  // The campaign menu names the chapters as the area it belongs to.
+  await expect(campaignMenu(page)).toHaveAccessibleName(
+    uiPattern("campaignMenu.triggerInArea", { name: /.*/, area: ui("area.chapters") }),
+  );
 
   // The campaign's own hit opens the campaign's route: the chapter overview.
   const campaignHits = await api.get<{ results: { kind: string; id: string }[] }>(

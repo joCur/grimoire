@@ -69,6 +69,7 @@ import {
 import { getLocation, locationExists } from "../support/location";
 import { getNpc, npcExists } from "../support/npc";
 import { getScene, sceneExists } from "../support/scene";
+import { openArea } from "../support/campaign-menu";
 import { ui, uiExact, uiPattern } from "../support/ui";
 
 /** How the review names the proposed scene: its resource segment and id. */
@@ -164,21 +165,11 @@ test("scene run: job, review, apply — the draft is stored and in the chapter o
   await expect(
     page.getByText(ui("generate.input.contextEntities", { npcs: 2, locations: 2 })),
   ).toBeVisible();
-  // The knowledge and the glossary halves are LINKS to their own pages —
-  // this line is where the DM notices a rule is missing, so the fix is one
-  // click from here.
+  // The knowledge half names the count as text: the way to its page is the
+  // campaign menu, not a link in the line.
   await expect(
-    page.getByRole("link", { name: ui("generate.input.knowledgeCount", { count: 0 }) }),
-  ).toHaveAttribute(
-    "href",
-    "/campaigns/example/knowledge",
-  );
-  await expect(
-    page.getByRole("link", { name: ui("generate.input.glossary"), exact: true }),
-  ).toHaveAttribute(
-    "href",
-    "/campaigns/example/glossary",
-  );
+    page.getByText(ui("generate.input.knowledgeCount", { count: 0 })),
+  ).toBeVisible();
 
   // The review of the finished job (the working state may flash by).
   await startSceneRun(page, SOURCE);
@@ -855,7 +846,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   expect((await getScene(api, SCENE_ID)).chapter).toBe(CHAPTER_ID);
 
   // The overview lists the chapter with that title, and the scene inside it.
-  await page.getByRole("link", { name: ui("topbar.nav.chapters"), exact: true }).click();
+  await openArea(page, "area.chapters");
   await expect(page).toHaveURL(/\/campaigns\/example$/);
   await expect(page.getByRole("heading", { level: 2, name: CHAPTER_TITLE })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(CHAPTER_TITLE) }).click();

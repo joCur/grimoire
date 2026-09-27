@@ -2,9 +2,9 @@
 // hierarchy, rendered inside the page. Quiet, one line, `›` between the steps, the
 // linkable step(s) as links.
 //
-// Desktop only (`max-md:hidden`) — below md MobileBackRow already answers
-// "where am I / how do I get back" with its back link to the parent view.
-// Deliberately NOT merged into that component: the back row is a full-width
+// Desktop only (`max-md:hidden`) — below md MobileMenuRow already answers
+// "where am I" with the campaign menu naming the campaign and the area.
+// Deliberately NOT merged into that component: the menu row is a full-width
 // bar ABOVE the content container while this line sits INSIDE the content
 // column, right above the title — one component cannot be in two DOM
 // positions, and faking it would mean passing the crumbs through the route

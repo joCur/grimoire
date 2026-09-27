@@ -38,7 +38,7 @@ import { fetchTree } from "@/api";
 import { LiveDrawer } from "@/components/LiveDrawer";
 import { LocationCard } from "@/location/LocationCard";
 import type { OpenTarget } from "@/lib/open-target";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { NpcCard } from "@/npc/NpcCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
@@ -87,7 +87,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div className="px-5 pt-12 text-center">
         <p className="text-[14px] leading-[1.6] text-muted-foreground">{t("live.mobile.note")}</p>
         {scene !== undefined && (

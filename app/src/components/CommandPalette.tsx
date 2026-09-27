@@ -15,7 +15,7 @@ import { useNavigate } from "react-router";
 
 import { fetchSearch, fetchTree } from "@/api";
 import { useT, type Translate } from "@/i18n";
-import { LOOKUP_TARGETS, type LookupTarget } from "@/lib/lookup";
+import { AREAS, type Area } from "@/lib/areas";
 import { contingencyScenes, kindIcon, kindLabel, resultHref } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
@@ -79,12 +79,11 @@ export function CommandPalette({
 
   // Empty query shows nothing yet; results only exist for a non-empty term.
   const hits = term === "" ? [] : (search.data?.results ?? []);
-  // Above the hits: the PAGES of this campaign whose name the DM typed. The
-  // glossary, the campaign knowledge and the trash are reachable from the
-  // chapter overview and the phone's start surface, but ⌘K is where this app's
-  // keyboard goes first — and the server's index holds entries, not pages,
-  // so it can never answer for them. A navigation target the DM typed the name
-  // of is what they meant, and there are never more than a handful.
+  // Above the hits: the AREAS of this campaign whose name the DM typed — the
+  // same list the campaign menu reads (lib/areas.ts). ⌘K is where this app's
+  // keyboard goes first, and the server's index holds entries, not areas, so
+  // it can never answer for them. An area the DM typed the name of is what
+  // they meant, and there are never more than a handful.
   const navs = useMemo(() => navTargets(campaign, term, t), [campaign, term, t]);
   const results: Item[] = [
     ...navs.map((target) => ({ kind: "nav" as const, target })),
@@ -198,7 +197,7 @@ export function CommandPalette({
                     {nav ? t(item.target.label) : item.result.title}
                   </span>
                   <span className="flex-none text-xs text-muted-foreground">
-                    {nav ? t("palette.kind.page") : kindLabel(item.result.kind, t)}
+                    {nav ? t("palette.kind.area") : kindLabel(item.result.kind, t)}
                   </span>
                 </div>
               );
@@ -210,18 +209,18 @@ export function CommandPalette({
   );
 }
 
-/** One row of the palette: a page of this campaign, or an entry hit. */
+/** One row of the palette: an area of this campaign, or an entry hit. */
 type Item =
-  | { kind: "nav"; target: LookupTarget }
+  | { kind: "nav"; target: Area }
   | { kind: "result"; result: SearchResult };
 
 /**
- * Which of the campaign's pages the typed term names. A plain substring match
- * on the LOCALISED label — the DM types a fragment of the page's name, and
+ * Which of the campaign's areas the typed term names. A plain substring match
+ * on the LOCALISED label — the DM types a fragment of the area's name, and
  * there are only a handful of candidates, so nothing here is worth a ranking.
  */
-function navTargets(campaign: string, term: string, t: Translate): LookupTarget[] {
+function navTargets(campaign: string, term: string, t: Translate): Area[] {
   if (campaign === "" || term === "") return [];
   const needle = term.toLocaleLowerCase("de");
-  return LOOKUP_TARGETS.filter((target) => t(target.label).toLocaleLowerCase("de").includes(needle));
+  return AREAS.filter((target) => t(target.label).toLocaleLowerCase("de").includes(needle));
 }

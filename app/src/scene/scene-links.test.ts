@@ -25,18 +25,18 @@ describe("where a scene lives", () => {
 });
 
 describe("scenePageCrumbs", () => {
-  test("chapter title, then the location's name; the chapter links to the overview", () => {
+  test("chapter title, then the location's name; both as text", () => {
     expect(
       scenePageCrumbs("example", { chapter: "01-salt-harbour", location: "lighthouse" }, tree),
     ).toEqual([
-      { label: "Chapter 1: The Lighthouse of Salt Harbour", to: "/campaigns/example" },
+      { label: "Chapter 1: The Lighthouse of Salt Harbour" },
       { label: "The Lighthouse of Salt Harbour" },
     ]);
   });
 
   test("a scene without a location has no location step", () => {
     expect(scenePageCrumbs("example", { chapter: "01-salt-harbour" }, tree)).toEqual([
-      { label: "Chapter 1: The Lighthouse of Salt Harbour", to: "/campaigns/example" },
+      { label: "Chapter 1: The Lighthouse of Salt Harbour" },
     ]);
   });
 
@@ -49,11 +49,11 @@ describe("scenePageCrumbs", () => {
 
   test("degrades: an unknown chapter or location keeps its id, and so does a missing tree", () => {
     expect(scenePageCrumbs("example", { chapter: "09-unknown", location: "harbour" }, tree)).toEqual(
-      [{ label: "09-unknown", to: "/campaigns/example" }, { label: "harbour" }],
+      [{ label: "09-unknown" }, { label: "harbour" }],
     );
     expect(
       scenePageCrumbs("example", { chapter: "01-salt-harbour", location: "lighthouse" }, undefined),
-    ).toEqual([{ label: "01-salt-harbour", to: "/campaigns/example" }, { label: "lighthouse" }]);
+    ).toEqual([{ label: "01-salt-harbour" }, { label: "lighthouse" }]);
   });
 
   test("no campaign yields nothing", () => {

@@ -42,7 +42,7 @@ export function SceneRow({
     .join(" · ");
 
   return (
-    <div className="group flex items-center gap-3 rounded-md border-b border-divider px-2.5 hover:bg-card">
+    <div className="group flex items-center gap-2 rounded-md border-b border-divider px-1 hover:bg-card md:gap-3 md:px-2.5">
       <Link
         to={sceneHref(campaign, scene.id)}
         className="flex min-w-0 flex-1 items-center gap-3 py-[13px]"
@@ -66,8 +66,9 @@ export function SceneRow({
       {/* Quiet until the row is the one in hand (UI-BRIEF §1): the pair fades
           in on hover and on keyboard focus, and it is never a standing label
           next to every scene. Opacity only — the buttons stay in the tab order
-          and keep their accessible names either way. */}
-      <span className="flex flex-none items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none">
+          and keep their accessible names either way. A phone has no hover, so
+          there the pair stands. */}
+      <span className="flex flex-none items-center opacity-0 transition-opacity max-md:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none">
         <MoveButton
           label={t("chapterOverview.scene.moveUp.aria", { title: scene.title })}
           disabled={first || busy}

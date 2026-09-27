@@ -70,24 +70,26 @@ chapter's scene list in the order from the preparation (planned on top,
 contingency scenes below; it is rearranged in the chapter overview, not
 here), in the middle the current scene, on the right NPCs + the quick-note
 field (always focusable, Enter sends). The evening's common thread is a
-single step below the open scene: the next-scene link (the UI says
-"Nächste Szene: <title>") — it says where the DM reaches next without having
+single step below the open scene: the next-scene link (it names the next
+scene's title) — it says where the DM reaches next without having
 to search the list. On entry, the first scene that has not been played yet
 is up. Header line: session time (computed from `started`), pause, end
 session. After the read-aloud, the quick note is the second most important
 element — nothing may cover it.
 
 ### 4. Mobile
-Job: look things up and drop things in, not moderate. Two things on the
-start surface: search and idea input. Scenes/NPCs as a pure reading view.
+Job: look things up and drop things in, not moderate. The start surface
+puts search and idea input first, with the chapter overview below them;
+the campaign menu opens as a sheet from the bottom edge. Scenes/NPCs as a
+pure reading view.
 Never force the session view onto mobile.
 
 ### 5. Session review (after the session; route `review`)
 Job: five minutes of follow-up (the former term "Ernte", harvest, has been
 replaced in the UI — its metaphor was unclear). Notes and ideas filtered by
 `#thread`/`#npc`, one-click actions per note (adopt the storyline, create
-the suggested NPC, discard). Progress visible (the UI says e.g.
-"3 von 7 gesichtet", 3 of 7 reviewed).
+the suggested NPC, discard). Progress visible (e.g. three of seven
+reviewed).
 
 ## Tone of the UI copy
 

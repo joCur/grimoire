@@ -27,10 +27,10 @@ import type { Thread } from "@grimoire/shared/thread";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 
 import { fetchTree } from "@/api";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { showNotice, showUndoNotice } from "@/components/Notices";
 import { Button } from "@/components/ui/button";
 import type { Translate } from "@/i18n";
@@ -313,7 +313,7 @@ export function ReviewRoute() {
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div className="mx-auto max-w-[680px] px-5 pt-8 pb-24 md:px-7 md:pt-10 md:pb-[100px]">
         <h1
           ref={heading}
@@ -326,12 +326,7 @@ export function ReviewRoute() {
         {model.isError ? (
           <p className="text-[14px] text-muted-foreground">{t("review.sessionFailed")}</p>
         ) : model.noSession ? (
-          <p className="text-[14px] leading-[1.6] text-muted-foreground">
-            {t("review.noSession")}{" "}
-            <Link to={`/campaigns/${campaign}`} className="text-primary hover:text-primary-hover">
-              {t("review.backToChapters")}
-            </Link>
-          </p>
+          <p className="text-[14px] leading-[1.6] text-muted-foreground">{t("review.noSession")}</p>
         ) : (
           <>
             <p className="mb-2 text-[14px] leading-[1.6] text-body-secondary md:mb-8">

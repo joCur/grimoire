@@ -121,14 +121,15 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
 
   await page.goto(ARRIVAL);
 
-  // The context line above the title: chapter › group, replacing
-  // the topbar breadcrumb. The chapter links back to the chapter overview.
+  // The context line above the title: chapter › group, as text — the way
+  // into an area is the campaign menu.
   const context = page.getByRole("navigation", { name: ui("context.aria") });
-  await expect(context.getByRole("link", { name: chapter.title })).toBeVisible();
+  await expect(context).toContainText(chapter.title);
+  await expect(context.getByRole("link")).toHaveCount(0);
   // The group is the scene's location, resolved to the name its entry
   // carries — no invented prettification.
   await expect(context).toContainText(location.name);
-  // The chrome names the campaign exactly ONCE — in the switcher. The old
+  // The chrome names the campaign exactly ONCE — in the campaign menu. The old
   // breadcrumb spelled it again right next to the near-identical chapter title.
   await expect(page.getByRole("banner").getByText(campaign.name)).toHaveCount(1);
 

@@ -12,8 +12,8 @@
 // (decisions/scene-order), and both halves of that promise are checked below.
 //
 // The campaign chrome lives on this path as well: a scene row resolves its
-// location to the location's NAME, the topbar carries the npc and location
-// navigation, and the campaign's name, description and text are editable from
+// location to the location's NAME, the topbar carries the campaign menu into
+// every area of the campaign, and the campaign's name, description and text are editable from
 // the header — the campaign's route IS the chapter overview (decisions/resources).
 
 import escapeStringRegexp from "escape-string-regexp";
@@ -36,6 +36,7 @@ import {
 } from "../support/generator-job";
 import { getScene, patchScene } from "../support/scene";
 import { todaySessionId } from "../support/session";
+import { areaEntry, currentAreaEntry, openArea, type AreaKey } from "../support/campaign-menu";
 import { ui, uiExact, uiPattern } from "../support/ui";
 
 // Seeded content of the example campaign (fixtures/) the overview
@@ -73,8 +74,6 @@ const chapterStatusName = (status: "planned" | "active" | "done") =>
 /** The accessible name of a scene's status control showing `ready`. */
 const READY_STATUS_NAME = ui("status.change.aria", { current: ui("status.scene.ready") });
 
-/** The topbar's section nav, in its order. */
-const NAV_KEYS = ["topbar.nav.chapters", "topbar.nav.npcs", "topbar.nav.locations"] as const;
 
 /**
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
@@ -123,9 +122,9 @@ async function widenGlyphs(page: Page, spacing: string) {
 
 /**
  * The widths the row is checked at. 1000/1024/1040 bracket the lg breakpoint
- * (the nav trio appears), 1280 the xl one (the trio, the full search chip and
- * the chip's reserved width all switch on at once — the tightest width there
- * is), 768 the corner where the search chip is already at its floor.
+ * (the campaign name's cap grows), 1280 the xl one (the full search chip and
+ * the chip's reserved width switch on at once), 768 the corner where the
+ * search chip is already at its floor.
  */
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
@@ -276,145 +275,114 @@ test.describe("a scene without a location", () => {
   });
 });
 
-test("the topbar trio navigates without anything in the left block moving", async ({
-  page,
-}) => {
-  const CAMPAIGN_LABEL = ui("campaign.switcher.current", { name: CAMPAIGN_NAME });
-  const nav = page.getByRole("banner").getByRole("navigation", { name: ui("topbar.nav.aria") });
-  // The campaign context: the switcher trigger, prefix included.
-  const label = page
-    .getByRole("banner")
-    .getByRole("button", { name: uiPattern("campaign.switcher.current", { name: /.*/ }) });
-  /** aria-current marks the one of the three that IS the current view. */
-  const current = nav.locator("[aria-current='page']");
-
-  /**
-   * The whole left block of the topbar, as text and as geometry. EVERY
-   * campaign-scoped view must agree on every bit of it except which entry is
-   * marked: the chrome is global and stable, the trio is a persistent section
-   * nav, and no view brings a breadcrumb of its own. So nothing appears,
-   * disappears or shifts while navigating.
-   */
-  const leftBlock = async () => ({
-    campaign: await label.textContent(),
-    nav: await nav.textContent(),
-    switcherBox: await label.boundingBox(),
-    linkBoxes: await Promise.all(
-      NAV_KEYS.map((key) => nav.getByRole("link", { name: ui(key) }).boundingBox()),
-    ),
+test("the campaign menu leads into every area and names the current one", async ({ page }) => {
+  const trigger = page.getByRole("banner").getByRole("button", {
+    name: uiPattern("campaignMenu.trigger", { name: /.*/ }),
   });
-
-  /** The campaign name belongs to the switcher — and to nothing else up there. */
-  const assertChromeIsStable = async (
-    onChapterOverview: Awaited<ReturnType<typeof leftBlock>>,
-  ) => {
-    expect(await leftBlock()).toEqual(onChapterOverview);
-    await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
-  };
+  /** The name the trigger carries on a view of `area`, or with none. */
+  const triggerName = (area?: AreaKey) =>
+    area === undefined
+      ? ui("campaignMenu.trigger", { name: CAMPAIGN_NAME })
+      : ui("campaignMenu.triggerInArea", { name: CAMPAIGN_NAME, area: ui(area) });
 
   await page.goto("/campaigns/example");
-  await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
-  await expect(nav.getByRole("link")).toHaveText(NAV_KEYS.map((key) => ui(key)));
-  // The chapter overview marks its own entry.
-  await expect(current).toHaveText(ui("topbar.nav.chapters"));
-  const onChapterOverview = await leftBlock();
+  await expect(trigger).toHaveAccessibleName(triggerName("area.chapters"));
+  // The campaign name is up there exactly once — in the trigger.
   await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
+  const triggerLeft = (await trigger.boundingBox())?.x;
 
-  // The chapter overview carries a lookup line — it is where the two
-  // campaign-content pages and the trash are reached from on
-  // the desktop. What matters HERE is that they are not in the TOPBAR:
-  // the trio above is still exactly chapters/NPCs/locations, which is what the
-  // rest of this test measures.
+  // Opened, it lists the campaigns and the areas in their three groups, the
+  // current one marked.
+  await trigger.click();
+  const menu = page.getByRole("menu");
+  for (const group of [
+    "campaignMenu.group.prepare",
+    "campaignMenu.group.lookUp",
+    "campaignMenu.group.tidyUp",
+  ] as const) {
+    await expect(menu.getByRole("group", { name: ui(group) })).toBeVisible();
+  }
   await expect(
-    page.getByRole("navigation", { name: ui("lookup.heading") }).getByRole("link"),
-  ).toHaveText([
-    ui("browse.title.npcs"),
-    ui("browse.title.locations"),
-    ui("glossary.title"),
-    ui("knowledge.title"),
-    ui("trash.title"),
-  ]);
-
-  await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/example\/locations$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.locations"));
-  // Both example locations sit in the same chapter and each row names that
-  // chapter under the location, so the name is anchored: the row STARTS with
-  // the location's own name, where the other one only mentions it as its
-  // chapter.
+    menu.getByRole("group", { name: ui("campaignMenu.group.prepare") }).getByRole("menuitem"),
+  ).toHaveText([ui("area.chapters"), ui("area.scenes"), ui("area.npcs"), ui("area.locations")]);
   await expect(
-    page.getByRole("main").getByRole("link", { name: new RegExp(`^${escapeStringRegexp(LIGHTHOUSE)}`) }),
-  ).toBeVisible();
-  await expect(current).toHaveText(ui("topbar.nav.locations"));
-  await assertChromeIsStable(onChapterOverview);
-  // No list-title crumb behind the switcher — the list's label appears in the
-  // banner exactly once, in the nav.
+    menu.getByRole("group", { name: ui("campaignMenu.group.lookUp") }).getByRole("menuitem"),
+  ).toHaveText([ui("area.glossary"), ui("area.knowledge")]);
   await expect(
-    page.getByRole("banner").getByText(ui("topbar.nav.locations"), { exact: true }),
-  ).toHaveCount(1);
+    menu.getByRole("group", { name: ui("campaignMenu.group.tidyUp") }).getByRole("menuitem"),
+  ).toHaveText([new RegExp(`^${escapeStringRegexp(ui("area.review"))}`), ui("area.trash")]);
+  await expect(currentAreaEntry(page)).toHaveText(ui("area.chapters"));
 
-  // The npc list is the npc's own route (decisions/resources).
-  await nav.getByRole("link", { name: ui("topbar.nav.npcs") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/example\/npcs$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(ui("browse.title.npcs"));
-  await expect(current).toHaveText(ui("topbar.nav.npcs"));
-  await assertChromeIsStable(onChapterOverview);
+  // The keyboard walks it: down to the next area, Enter opens it.
+  await areaEntry(page, "area.chapters").focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(areaEntry(page, "area.scenes")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/campaigns\/example\/scenes$/);
+  await expect(trigger).toHaveAccessibleName(triggerName("area.scenes"));
+  // Escape closes it without going anywhere.
+  await trigger.click();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
 
-  // --- entry views: same chrome, section marking follows the entity ---------
-  // A scene belongs to the chapters section; its hierarchy lives in the page's
-  // context line, not in the topbar.
+  // Every area opens on its own route, and the trigger names it there — the
+  // campaign's name stays where it was.
+  const areas: [AreaKey, RegExp][] = [
+    ["area.locations", /\/campaigns\/example\/locations$/],
+    ["area.npcs", /\/campaigns\/example\/npcs$/],
+    ["area.glossary", /\/campaigns\/example\/glossary$/],
+    ["area.knowledge", /\/campaigns\/example\/knowledge$/],
+    ["area.review", /\/campaigns\/example\/review$/],
+    ["area.trash", /\/campaigns\/example\/trash$/],
+    ["area.chapters", /\/campaigns\/example$/],
+  ];
+  for (const [area, url] of areas) {
+    await openArea(page, area);
+    await expect(page).toHaveURL(url);
+    await expect(trigger).toHaveAccessibleName(triggerName(area));
+    expect((await trigger.boundingBox())?.x).toBe(triggerLeft);
+    await expect(page.getByRole("banner").getByText(CAMPAIGN_NAME)).toHaveCount(1);
+  }
+
+  // A reading view belongs to the area of its list: a scene to the scenes, an
+  // NPC to the NPCs — whichever chapter mentions it.
   await page.goto("/campaigns/example/scenes/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARRIVAL);
-  await expect(current).toHaveText(ui("topbar.nav.chapters"));
-  await assertChromeIsStable(onChapterOverview);
-
-  // An NPC belongs to NPCs — whichever chapter happens to mention it. A
-  // breadcrumb claiming a chapter path here would be plain misleading for an
-  // NPC opened from the NPC list.
+  await expect(trigger).toHaveAccessibleName(triggerName("area.scenes"));
   await page.goto("/campaigns/example/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(FENN);
-  await expect(current).toHaveText(ui("topbar.nav.npcs"));
-  await assertChromeIsStable(onChapterOverview);
-  // Its context line points at the list it came from.
-  await expect(
-    page
-      .getByRole("navigation", { name: ui("context.aria") })
-      .getByRole("link", { name: ui("browse.title.npcs") }),
-  ).toHaveAttribute("href", "/campaigns/example/npcs");
+  await expect(trigger).toHaveAccessibleName(triggerName("area.npcs"));
 
-  // Views that belong to no section mark nothing at all.
+  // A view that belongs to no area names only the campaign and marks nothing.
   await page.goto("/campaigns/example/generate");
-  await expect(current).toHaveCount(0);
-  await assertChromeIsStable(onChapterOverview);
-  await page.goto("/campaigns/example/review");
-  await expect(current).toHaveCount(0);
-  await assertChromeIsStable(onChapterOverview);
+  await expect(trigger).toHaveAccessibleName(triggerName());
+  await trigger.click();
+  await expect(currentAreaEntry(page)).toHaveCount(0);
 
-  // The chapters link is the way back to the chapter overview — the reason the
-  // trio exists.
-  await nav.getByRole("link", { name: ui("topbar.nav.chapters") }).click();
-  await expect(page).toHaveURL(/\/campaigns\/example$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
-  await expect(current).toHaveText(ui("topbar.nav.chapters"));
-  await assertChromeIsStable(onChapterOverview);
-
-  // The switcher still switches, from a list as well.
-  await nav.getByRole("link", { name: ui("topbar.nav.locations") }).click();
-  await label.click();
+  // It still switches campaigns.
   await page.getByRole("menuitem", { name: new RegExp(escapeStringRegexp(CAMPAIGN_NAME)) }).click();
   await expect(page).toHaveURL(/\/campaigns\/example$/);
+
+  // No other link on the page leads into an area: the chapter overview has no
+  // lookup line, and the topbar has no navigation of its own.
+  await expect(page.getByRole("banner").getByRole("navigation")).toHaveCount(0);
+  for (const href of ["/npcs", "/locations", "/glossary", "/knowledge", "/trash", "/review", "/scenes"]) {
+    await expect(page.locator(`a[href="/campaigns/example${href}"]`)).toHaveCount(0);
+  }
 });
 
 /**
  * The gear is part of the global chrome, so it must not undress the bar it
  * sits on. Counting `/settings` as a campaign-LESS route would leave the
- * topbar with the wordmark alone: switcher, nav trio, search and session chip
+ * topbar with the wordmark alone: campaign menu, search and session chip
  * gone the moment the DM presses the gear — against the "nothing appears or
- * disappears between views" rule the chrome
- * exists for (components/Topbar.tsx). So this is the stability check of the
- * trio test above, run across the one route that is not campaign-scoped: the
- * left block and the session chip have to come out BYTE-EQUAL, and the only
- * difference is the gear marking itself as the current view.
+ * disappears between views" rule the chrome exists for
+ * (components/Topbar.tsx). So the campaign menu, the search chip and the
+ * session chip have to stay where they were; what changes is that the menu
+ * names no area — `/settings` is none — and the gear marks itself as the
+ * current view.
  */
 test.describe("with a session running since 19:30, pressing the gear", () => {
   test.use({
@@ -423,29 +391,21 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 
   test("keeps the whole chrome where it was", async ({ page }) => {
     const banner = page.getByRole("banner");
-    const nav = banner.getByRole("navigation", { name: ui("topbar.nav.aria") });
-    const label = banner.getByRole("button", {
-      name: uiPattern("campaign.switcher.current", { name: /.*/ }),
+    const trigger = banner.getByRole("button", {
+      name: uiPattern("campaignMenu.trigger", { name: /.*/ }),
     });
     const gear = banner.getByRole("link", { name: ui("settings.title") });
     const chip = banner.locator("[data-session-chip]");
 
     /**
-     * Everything the chrome is made of: the switcher's label and box, the
-     * trio's labels, boxes and marking, the search chip, and the session
-     * chip's STATE and box. The chip's elapsed readout is deliberately not
-     * compared — it ticks; its state and geometry must not. The section
-     * MARKING is not in here either: it is the one thing that is allowed to
-     * differ between views, and `/settings` belongs to no section (the gear
-     * marks itself instead).
+     * Everything the chrome is made of: where the campaign menu starts, the
+     * search chip, and the session chip's STATE and box. The chip's elapsed
+     * readout is deliberately not compared — it ticks; its state and geometry
+     * must not. The menu's width is not in here either: it names the area,
+     * the one thing that is allowed to differ between views.
      */
     const chrome = async () => ({
-      campaign: await label.textContent(),
-      switcherBox: await label.boundingBox(),
-      navLabels: await nav.getByRole("link").allTextContents(),
-      navBoxes: await Promise.all(
-        NAV_KEYS.map((key) => nav.getByRole("link", { name: ui(key) }).boundingBox()),
-      ),
+      menuLeft: (await trigger.boundingBox())?.x,
       searchBox: await banner
         .getByRole("button", { name: uiPattern("topbar.search") })
         .boundingBox(),
@@ -455,11 +415,10 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
     });
 
     await page.goto("/campaigns/example/npcs");
-    await expect(label).toHaveAccessibleName(
-      ui("campaign.switcher.current", { name: CAMPAIGN_NAME }),
+    await expect(trigger).toHaveAccessibleName(
+      ui("campaignMenu.triggerInArea", { name: CAMPAIGN_NAME, area: ui("area.npcs") }),
     );
     await expect(chip).toHaveAttribute("data-session-chip", "running");
-    await expect(nav.locator("[aria-current='page']")).toHaveText(ui("topbar.nav.npcs"));
     // On a list route the gear is just an entry, not the current view.
     await expect(gear).not.toHaveAttribute("aria-current", "page");
     const before = await chrome();
@@ -470,11 +429,13 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 
     // Nothing moved, nothing vanished, nothing appeared.
     expect(await chrome()).toEqual(before);
-    // The one thing that DID change: the gear is the current view now, and
-    // the trio marks nothing — `/settings` is no section of the campaign.
+    // What DID change: the gear is the current view now, and the menu names
+    // only the campaign — `/settings` is no area of it.
     await expect(gear).toHaveAttribute("aria-current", "page");
-    await expect(nav.locator("[aria-current='page']")).toHaveCount(0);
-    // The campaign name is still up there exactly once — in the switcher.
+    await expect(trigger).toHaveAccessibleName(
+      ui("campaignMenu.trigger", { name: CAMPAIGN_NAME }),
+    );
+    // The campaign name is still up there exactly once — in the menu.
     await expect(banner.getByText(CAMPAIGN_NAME)).toHaveCount(1);
     // And the chip is still the running session's, so the live clock the
     // version poll keeps fresh is reachable from here as well.
@@ -485,7 +446,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 
 /**
  * The topbar must not overflow at ANY width from 390px up. The medium widths
- * are the tight ones — switcher, live pill, timer, pause, discard, end,
+ * are the tight ones — campaign menu, live pill, timer, pause, discard, end,
  * search and generator in one 56px row would run over. With the session
  * consolidated into ONE chip the row fits; this test is the guard that keeps
  * it fitting.
@@ -542,36 +503,39 @@ test.describe("with a session running since 19:30", () => {
 });
 
 /**
- * The FULLEST row there is — and the one the guard above never saw: with NO
+ * The FULLEST rows there are — and the ones the guard above never saw: with NO
  * session running the chip carries the long start label instead of the
- * clock, and the example campaign's last session leaves the review link with
- * its open count on the row next to generator and gear. At
- * 768 and at 1024 that row is tightest: a regression there overflows by 41
- * and 10px in plain macOS rendering, invisible to a `scrollWidth` metric.
+ * clock. On the chapter overview it stands next to the generator entry; on
+ * the campaign knowledge the campaign menu carries the longest area name
+ * there is.
  */
 test("the topbar does not overflow at medium widths with no session running", async ({
   page,
 }) => {
   for (const width of TOPBAR_WIDTHS) {
-    await page.setViewportSize({ width, height: 800 });
-    await page.goto("/campaigns/example");
-    if (width >= 768) {
-      await expect(page.getByRole("button", { name: ui("session.start") })).toBeVisible();
-      // The review link is part of THIS row on purpose — it is the widest
-      // optional element, and the one that runs the row over.
-      await expect(
-        page.getByRole("link", { name: uiPattern("topbar.review.pending", { count: /\d+/ }) }),
-      ).toBeVisible();
+    for (const [view, url] of [
+      ["chapter overview", "/campaigns/example"],
+      ["campaign knowledge", "/campaigns/example/knowledge"],
+    ] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(url);
+      if (width >= 768 && view === "chapter overview") {
+        await expect(page.getByRole("button", { name: ui("session.start") })).toBeVisible();
+      }
+      if (width >= 768) {
+        await expect(
+          page.getByRole("banner").getByRole("button", {
+            name: uiPattern("campaignMenu.trigger", { name: /.*/ }),
+          }),
+        ).toBeVisible();
+      }
+      expect(await topbarOverflow(page), `${view} at ${width}px`).toEqual({ row: 0, page: 0 });
+      await widenGlyphs(page, "1px");
+      expect(await topbarOverflow(page), `${view} at ${width}px with wider glyphs`).toEqual({
+        row: 0,
+        page: 0,
+      });
     }
-    expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
-      row: 0,
-      page: 0,
-    });
-    await widenGlyphs(page, "1px");
-    expect(
-      await topbarOverflow(page),
-      `chapter overview at ${width}px with wider glyphs`,
-    ).toEqual({ row: 0, page: 0 });
   }
 });
 
@@ -685,7 +649,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
   }
 });
 
-test("the edit-campaign dialog writes name, description and text — header, switcher and the campaign follow", async ({
+test("the edit-campaign dialog writes name, description and text — header, campaign menu and the campaign follow", async ({
   page,
   api,
 }) => {
@@ -724,9 +688,11 @@ test("the edit-campaign dialog writes name, description and text — header, swi
   await expect(page.getByText(description)).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Tone" })).toBeVisible();
   await expect(page.getByText(CAMPAIGN_BODY, { exact: false })).toHaveCount(0);
-  // … and the switcher label, which reads the campaign list.
+  // … and the campaign menu, which reads the campaign list.
   await expect(
-    page.getByRole("button", { name: ui("campaign.switcher.current", { name }) }),
+    page.getByRole("button", {
+      name: ui("campaignMenu.triggerInArea", { name, area: ui("area.chapters") }),
+    }),
   ).toBeVisible();
 
   // Stored, through the campaign's own resource.
@@ -853,13 +819,7 @@ test("the chapter overview header is ONE row: the actions right beside the title
     // and never below the description).
     expect(counterBox!.x).toBe(titleBox!.x);
     expect(counterBox!.y).toBeLessThan(descriptionBox!.y);
-
-    // Description, then the lookup line — in that order.
-    const lookupBox = (await page
-      .getByRole("navigation", { name: ui("lookup.heading") })
-      .boundingBox())!;
     expect(descriptionBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
-    expect(lookupBox.y).toBeGreaterThan(descriptionBox!.y);
   }
 });
 

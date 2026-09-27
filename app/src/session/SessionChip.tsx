@@ -1,9 +1,9 @@
 // THE session control of the chrome: ONE chip in ONE slot for EVERY state.
 //
-// The topbar places it right behind the campaign switcher, the same place on
-// EVERY campaign-scoped route, /live included:
+// The topbar places it at the right end of the row, the same place on EVERY
+// campaign-scoped route, /live included:
 //
-//     Grimoire │ campaign switcher: <name> ⌄ │ ● 0:12:33 │ chapters · NPCs · locations
+//     Grimoire │ <campaign> › <area> ⌄ │ … ⌘K · generator · ⚙ · ● 0:12:33
 //
 // The chip is the state: brass/amber (the accent token) means "a session is
 // running", so there is no "Live" label to read. It carries the running time
@@ -85,9 +85,8 @@ function useElapsedLabel(session: Session): string | undefined {
  * Only the colours below and the content inside change, so the switch from
  * the start action to the running clock never makes the topbar jump. From
  * xl up a minimum width holds the states at a comparable size; below that the
- * row is too tight to reserve width (reserving from lg, which is exactly where
- * the nav trio appears, leaves the row no slack on CI's wider font metrics),
- * and the clock's tabular numbers alone keep
+ * row is too tight to reserve width (reserving from lg leaves the row no
+ * slack on CI's wider font metrics), and the clock's tabular numbers alone keep
  * a second's tick from re-flowing anything.
  */
 const SESSION_CHIP_BASE =

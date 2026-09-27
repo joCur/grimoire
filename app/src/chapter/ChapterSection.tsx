@@ -61,8 +61,9 @@ export function ChapterSection({
             className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0 motion-reduce:transition-none"
           />
           {/* The chapter names a section of the page, so it IS a heading —
-              inside the trigger, which stays the button that opens it. */}
-          <h2 className="min-w-0 truncate font-serif text-[18px] font-semibold text-foreground">
+              inside the trigger, which stays the button that opens it. On a
+              phone the title wraps instead of losing its end. */}
+          <h2 className="min-w-0 font-serif md:truncate text-[18px] font-semibold text-foreground">
             {chapter.title}
           </h2>
           <span className="flex-1" />
@@ -76,7 +77,7 @@ export function ChapterSection({
         <ChapterStatusControl campaign={campaign} id={chapter.id} status={chapter.status} />
       </div>
       <CollapsibleContent>
-        <div className="pt-4 pb-1 pl-[25px]">
+        <div className="pt-4 pb-1 md:pl-[25px]">
           {/* The chapter's own actions. They sit INSIDE the accordion and not
               in the heading row: that row is already as wide as it gets, and
               the actions are for the chapter the DM has opened. */}

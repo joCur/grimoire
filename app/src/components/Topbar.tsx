@@ -1,71 +1,49 @@
 // The constant topbar (design reference: 56px, hairline below).
 //
-// THE CHROME IS GLOBAL AND STABLE. Every campaign-scoped
-// view — chapter overview, browse lists, reading views, generator, review — shows the very
-// same left block:
+// THE CHROME IS GLOBAL AND STABLE. Every campaign-scoped view — chapter
+// overview, lists, reading views, generator, review — shows the very same
+// left block:
 //
-//     Grimoire │ campaign switcher: <name> ⌄ │ chapters · NPCs · locations
+//     Grimoire │ <campaign> › <area> ⌄ │ session chip
 //
-// Nothing appears, disappears or shifts when moving between them; the only
-// difference is which nav entry is marked as the current section
-// (lib/topbar-nav.ts). There are NO breadcrumbs in the topbar: one would
-// repeat the campaign name the switcher already carries, compete with the nav
-// next to it, and on a reading view claim a chapter path that is misleading for
-// an NPC opened from the NPC list. Hierarchical context lives in the page
-// header instead (components/PageContext.tsx) — where it belongs, next to the
-// title it describes. The campaign name appears exactly ONCE in the chrome.
+// The campaign menu (components/CampaignMenu.tsx) is the ONE way into the
+// areas of a campaign; closed, it names the campaign and the area of the
+// current view, and that name is the only thing that differs between the
+// campaign-scoped views. There are NO breadcrumbs in the topbar: hierarchical
+// context lives in the page header instead (components/PageContext.tsx), next
+// to the title it describes. The campaign name appears exactly ONCE in the
+// chrome.
 //
 // ONE SESSION CHIP. The running session is a SINGLE chip in a fixed slot —
-// right behind the campaign switcher, the same place on EVERY campaign-scoped
-// route, /live included. The session draws it (session/SessionChip.tsx); the
-// topbar only says where it sits and which state the route allows.
+// the same place on EVERY campaign-scoped route, /live included. The session
+// draws it (session/SessionChip.tsx); the topbar only says where it sits and
+// which state the route allows.
 //
 // Deviation from design/ (which keeps a separate live topbar): stability of
 // the session control beats the prototype's two layouts. The
 // live chapter label lives in the live view's own scene nav, next to the
 // scenes it describes.
 //
-// The right side stays per-view: the ⌘K search chip (opens the palette;
-// hidden without a campaign in the URL — "/" only ever shows the empty
-// state), the session chip (one click starts a session and enters
-// /campaigns/:campaign/live), the harvest progress on the
-// review with a quiet chapter overview link into it while today's session
-// still has unharvested log lines, and the generator entry — on the chapter
-// overview always, on every other campaign view while the campaign has a
-// job — with the job's state and the way to its review.
+// The right side holds the tools, not places: the ⌘K search chip (opens the
+// palette; hidden without a campaign in the URL — "/" only ever shows the
+// empty state), the generator entry — on the chapter overview always, on
+// every other campaign view while the campaign has a job — with the job's
+// state and the way to its review, the settings gear, the session chip (one
+// click starts a session and enters /campaigns/:campaign/live) and the
+// harvest progress on the review.
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Plus, Search, Settings, Sparkles } from "lucide-react";
+import { Search, Settings, Sparkles } from "lucide-react";
 import { useState } from "react";
-import {
-  Link,
-  matchPath,
-  useLocation,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { Link, matchPath, useLocation, useSearchParams } from "react-router";
 
 import { fetchCampaigns, fetchTree } from "@/api";
-import { CampaignCreateDialog } from "@/campaign/CampaignCreate";
+import { CampaignMenu } from "@/components/CampaignMenu";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { useT } from "@/i18n";
-import {
-  campaignDescription,
-  campaignLabel,
-  settingsCampaign,
-} from "@/lib/campaign";
-import { locationsHref } from "@/location/location-links";
-import { npcsHref } from "@/npc/npc-links";
-import { navSection } from "@/lib/topbar-nav";
+import { settingsCampaign } from "@/lib/campaign";
 import {
   acceptProgress,
   augmentTarget,
@@ -79,7 +57,6 @@ import { useGenerateJob } from "@/generator-job/generator-job-query";
 import { cn } from "@/lib/utils";
 import { useReviewCards } from "@/lib/use-review";
 import { MobileSessionRow, SessionChip, sessionChipState } from "@/session/SessionChip";
-import { reviewHref } from "@/session/session-links";
 import { useRunningSession } from "@/session/use-session";
 
 /** The campaign of a `matchPath` result, or undefined when nothing matched. */
@@ -93,7 +70,7 @@ function campaignOf(
  * `/settings` KEEPS THE CAMPAIGN CHROME.
  *
  * The gear is part of the global chrome, so pressing it must not undress the
- * bar it sits on: the switcher, the nav trio, the search chip and the session
+ * bar it sits on: the campaign menu, the search chip and the session
  * chip stay exactly where they were, and the gear itself is simply marked as
  * the current view. Which campaign that chrome is about is NOT a path segment
  * here — `/settings` is campaign-independent on purpose — it is the campaign
@@ -128,10 +105,9 @@ export function Topbar() {
   const scenesMatch = matchPath("/campaigns/:campaign/scenes/*", pathname);
   const npcsMatch = matchPath("/campaigns/:campaign/npcs/*", pathname);
   const locationsMatch = matchPath("/campaigns/:campaign/locations/*", pathname);
-  // The two campaign-content pages and the trash. They are NOT in the nav
-  // trio and must not be — but the bar above them is still
-  // this campaign's bar, so the campaign has to be derived here too. Without
-  // them the topbar goes blank on those pages: no switcher, no ⌘K, no gear.
+  // The two campaign-content pages and the trash: the bar above them is this
+  // campaign's bar too. Without them the topbar goes blank on those pages: no
+  // campaign menu, no ⌘K, no gear.
   const knowledgeMatch = matchPath("/campaigns/:campaign/knowledge", pathname);
   const glossaryMatch = matchPath("/campaigns/:campaign/glossary", pathname);
   const trashMatch = matchPath("/campaigns/:campaign/trash", pathname);
@@ -154,9 +130,8 @@ export function Topbar() {
     "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
   // resolved from `?from=` (see above), so asking `campaign !== ""` would make
-  // the settings page the chapter overview of that campaign, marking the
-  // chapters entry and hanging the chapter overview's review and generator
-  // entries into the row.
+  // the settings page the chapter overview of that campaign, hanging the
+  // chapter overview's generator entry into the row.
   const isChapter =
     campaignOf(chaptersMatch) !== undefined && (chaptersMatch?.params["*"] ?? "") !== "";
   const isScene =
@@ -174,19 +149,6 @@ export function Topbar() {
 
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Which nav entry is the current view — the ONE thing that differs between
-  // the campaign-scoped views. Route-derived, so it never lags behind a query.
-  const isScenes = campaignOf(scenesMatch) !== undefined;
-  const isNpcs = campaignOf(npcsMatch) !== undefined;
-  const isLocations = campaignOf(locationsMatch) !== undefined;
-  const section = navSection({
-    isChapterOverview,
-    isChapter,
-    isScenes,
-    isNpcs,
-    isLocations,
-  });
-
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.
   const session = useRunningSession(campaign, campaign !== "");
@@ -200,7 +162,8 @@ export function Topbar() {
         <MobileSessionRow campaign={campaign} session={live} />
       )}
       {/* Below md the campaign-scoped views carry their own mobile chrome
-          (start-surface wordmark, back rows to the chapters); the topbar
+          (the start's wordmark row and every other view's row with the
+          campaign menu); the topbar
           is desktop chrome there. Without a campaign in the URL ("/" with no
           campaign at all) it stays visible on every width, so the empty state
           is not a bare page. */}
@@ -208,18 +171,9 @@ export function Topbar() {
         className={cn(
           // Gap: 14px is the designed rhythm, and it holds from 2xl up —
           // below that the SPACING gives way instead of any content
-          // (nothing is hidden or truncated for it). Below lg
-          // the row carries switcher, icon-only search, review count,
-          // generator and gear with the search chip already at its floor; in
-          // the lg–2xl band the nav trio, the full search chip, the long
-          // start-session label and the review link with its open count
-          // are all on the row at once, and at exactly 1280 (the xl edge,
-          // where the trio, the full search and the chip's reserved width
-          // switch on together) that band is the tightest width there is —
-          // tight enough that CI's wider Linux glyphs push a 14px rhythm 2px
-          // over while macOS rendering still clears it. 10px instead of 14px
-          // across eight gaps hands the row ~32px, which is real reserve
-          // rather than reserve to the pixel.
+          // (nothing is hidden or truncated for it), so the row keeps real
+          // reserve on CI's wider Linux glyphs rather than reserve to the
+          // pixel.
           "flex h-14 flex-none items-center gap-2.5 border-b border-border px-6 2xl:gap-3.5",
           campaign !== "" && "max-md:hidden",
         )}
@@ -232,57 +186,11 @@ export function Topbar() {
           {t("topbar.brand")}
         </Link>
 
-        {/* ONE campaign context for every campaign-scoped view: the switcher
-            trigger, always the same element in the same place. There are no
-            breadcrumbs next to it: one would spell the campaign name again
-            and, on a reading view, claim a chapter path that is plain misleading for
-            an NPC opened from the NPC list. Hierarchical context lives in the
-            page header (components/PageContext.tsx). */}
-        {campaign !== "" && <CampaignSwitcher campaign={campaign} />}
-
-        {/* Quiet campaign navigation: the three campaign-wide entry
-            points, reachable without scrolling, from every campaign view. The
-            design prototype does not cover this navigation — these links fill
-            the gap per PO decision (design/README.md).
-            The chapters link is the chapter overview — and the way BACK from everywhere: the
-            campaign label next to it is the switcher trigger, not a link, and
-            the wordmark is a detour via "/".
-            Not in the live mode: that view belongs to the running session
-            (design/README.md). Below lg the row is already carrying switcher,
-            session chip and search, so the links step aside there — mobile has
-            the start surface's lookup list, and ⌘K finds both lists at
-            any width. */}
-        {campaign !== "" && !isLive && (
-          <nav
-            // Deliberately NOT named after the mobile lookup nav: that label
-            // belongs to the mobile start surface, and on the chapter overview
-            // both live in the DOM at once (responsive swap) — two navs with
-            // one name is a worse tree.
-            aria-label={t("topbar.nav.aria")}
-            className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
-          >
-            {/* The section of the current view carries aria-current and the
-                stronger tone (lib/topbar-nav.ts). It is the ONLY thing that
-                differs between the campaign-scoped views, so it is a full step
-                of contrast, not a hint. Generator and review belong to no
-                section and mark nothing. */}
-            <TopbarNavLink
-              to={`/campaigns/${campaign}`}
-              label={t("topbar.nav.chapters")}
-              active={section === "chapters"}
-            />
-            <TopbarNavLink
-              to={npcsHref(campaign)}
-              label={t("topbar.nav.npcs")}
-              active={section === "npcs"}
-            />
-            <TopbarNavLink
-              to={locationsHref(campaign)}
-              label={t("topbar.nav.locations")}
-              active={section === "locations"}
-            />
-          </nav>
-        )}
+        {/* ONE campaign context for every campaign-scoped view: the
+            campaign menu, always the same element in the same place. It is
+            the one way into the areas of the campaign, the live mode
+            included. */}
+        {campaign !== "" && <CampaignMenu campaign={campaign} />}
 
         <div className="flex-1" />
 
@@ -297,16 +205,11 @@ export function Topbar() {
               // THE elastic element of the topbar: it wants
               // 200px, gives way down to 3rem at medium widths and never
               // lets the row overflow — its label truncates on the way.
-              // Below XL it goes ICON-ONLY: at 1024px the nav trio, the full
-              // search and the chip's reserved width would otherwise switch
-              // on ALL AT ONCE, and the row would clear that step by single
-              // digits — on CI's wider font metrics not at all. So the
-              // elastic element shrinks one
-              // breakpoint EARLIER and the band from lg to xl, which carries
-              // switcher, nav trio, search, review link, generator and gear
-              // together, has room to spare instead of room to the pixel.
-              // The accessible name stays, so the control is unchanged for a
-              // screen reader.
+              // Below XL it goes ICON-ONLY, so the band up to xl, which
+              // carries the campaign menu with its area, search, generator,
+              // gear and the session chip together, has room to spare instead
+              // of room to the pixel. The accessible name stays, so the
+              // control is unchanged for a screen reader.
               className="hidden h-auto min-w-[3rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft max-xl:min-w-0 max-xl:basis-auto max-xl:px-2.5 sm:flex"
             >
               <Search
@@ -332,13 +235,6 @@ export function Topbar() {
             />
           </>
         )}
-
-        {/* Quiet review affordance — only while the harvested session still
-            has unharvested log lines; otherwise nothing is shown.
-            "The harvested session" is the server's last STARTED one, the same
-            session the review page works on: after a session that ran past
-            midnight, today's date names no session at all. */}
-        {isChapterOverview && <ChapterOverviewReviewLink campaign={campaign} />}
 
         {/* Quiet entry into the generator, next to the brass session button
             per the prototype — always on the chapter overview, and on every
@@ -376,39 +272,6 @@ export function Topbar() {
         {isReview && <ReviewProgress campaign={campaign} />}
       </header>
     </>
-  );
-}
-
-/**
- * One quiet link of the topbar's campaign navigation (chapters, NPCs,
- * locations), marked when it is the view currently open. The caller decides what
- * "current" means — the chapter overview and the two lists are matched differently.
- *
- * The marking is COLOUR ONLY (full contrast step: body-secondary ->
- * foreground). A heavier weight would reflow the row and move the other two
- * links, and this navigation's whole point is that nothing shifts between the
- * three views.
- */
-function TopbarNavLink({
-  to,
-  label,
-  active,
-}: {
-  to: string;
-  label: string;
-  active: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "rounded-md px-1.5 py-1 hover:text-foreground",
-        active ? "text-foreground" : "text-body-secondary",
-      )}
-    >
-      {label}
-    </Link>
   );
 }
 
@@ -500,9 +363,8 @@ function GeneratorLink({ campaign, always }: { campaign: string; always: boolean
       {/* The progress number, and the width it is allowed to cost. A run that
           is BOTH running and half accepted (a pipelined one)
           carries the dot AND this label, which is ~90px the row cannot
-          budget for: at 1280, where the nav trio, the full search chip and
-          this chip's reserved width all switch on at once, that runs the row
-          over by 50px. So the pair is only spelled out from 2xl up; below
+          budget for: at 1280, where the full search chip and this chip's
+          reserved width switch on, it would run the row over. So the pair is only spelled out from 2xl up; below
           that the dot carries the state and the number stays in the
           accessible name (and in the chip's `title`) — the same trade the
           label above makes below xl. */}
@@ -527,7 +389,7 @@ function GeneratorLink({ campaign, always }: { campaign: string; always: boolean
 /**
  * The gear: `/settings`. Icon-only and always present — the
  * language lives behind it, and on a fresh instance (no campaign, no
- * switcher) it is the only settings entry there is. Same geometry as the
+ * campaign menu) it is the only settings entry there is. Same geometry as the
  * generator entry minus its label, so the row's width does not depend on it.
  *
  * WHICH CAMPAIGN the page shows its campaign half for travels ALONG, in
@@ -559,8 +421,8 @@ function SettingsLink({
       className={cn(
         buttonVariants({ variant: "outline" }),
         "h-auto w-auto flex-none border-input bg-card px-2.5 py-[7px] text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
-        // On `/settings` the gear IS the current view, marked the way the nav
-        // trio marks its section: a full step of contrast, no geometry change
+        // On `/settings` the gear IS the current view, marked by a full step
+        // of contrast, no geometry change
         // (padding and border width stay identical, so nothing next to it
         // moves — the chrome must not shift at all).
         active && "border-border-hover text-foreground",
@@ -585,162 +447,5 @@ function ReviewProgress({ campaign }: { campaign: string }) {
     <div className="flex-none text-[13px] text-soft">
       {review.progressLabel}
     </div>
-  );
-}
-
-/** Chapter overview affordance into the review: only when the harvested session (the
- *  server's last started one) still has log lines to review — nothing to see otherwise. */
-function ChapterOverviewReviewLink({ campaign }: { campaign: string }) {
-  const t = useT();
-  const review = useReviewCards(campaign);
-  if (
-    review.isPending ||
-    review.noSession ||
-    review.isError ||
-    review.pendingCount === 0
-  ) {
-    return null;
-  }
-  // Below xl the row carries switcher, search (already at its floor),
-  // generator, gear and the session chip with nothing elastic left: at 768
-  // and at 1024 the full label would push the chip OVER the right padding and
-  // off the viewport. The label steps down to the
-  // count, which is the news; the accessible name stays the full sentence at
-  // every width, so nothing changes for a screen reader.
-  const label = t("topbar.review.pending", { count: review.pendingCount });
-  return (
-    <Link
-      to={reviewHref(campaign)}
-      aria-label={label}
-      className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
-    >
-      <span className="max-xl:hidden">{label}</span>
-      <span aria-hidden className="xl:hidden">
-        {t("topbar.review.pendingShort", { count: review.pendingCount })}
-      </span>
-    </Link>
-  );
-}
-
-/**
- * The switcher is also where a SECOND campaign is created. The cold start
- * covers the FIRST one; without this the menu would be a read-only list and a
- * second campaign would have no entry point in the UI at all. So the menu ends
- * with a quiet create-campaign entry that opens the shared create dialog
- * (components/CreateActions.tsx) and navigates into the new campaign.
- *
- * The menu says nothing about WHERE campaigns are stored: a shell command is
- * developer jargon, `grimoire seed` belongs in README.md/docs/DEPLOYMENT.md,
- * and storage is not a question this menu has to answer while switching
- * between campaigns.
- */
-function CampaignSwitcher({ campaign }: { campaign: string }) {
-  const t = useT();
-  const navigate = useNavigate();
-  const [createOpen, setCreateOpen] = useState(false);
-  const { data } = useQuery({
-    queryKey: ["campaigns"],
-    queryFn: fetchCampaigns,
-  });
-  const current = campaignLabel(
-    (data ?? []).find((c) => c.id === campaign),
-    campaign,
-  );
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className={cn(
-          buttonVariants({ variant: "ghost" }),
-          // flex-none: the campaign context is the anchor of the topbar and
-          // its width must not depend on what the right-hand side happens to
-          // carry (otherwise the chapter overview's Generator link makes the name shorter
-          // there than on a list — the chrome has to be identical on every
-          // route). A very long name truncates at max-w-[280px] with an
-          // ellipsis instead of pushing the row over; the elastic
-          // element of the row is the search chip below.
-          "h-auto min-w-0 flex-none gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
-        )}
-      >
-        {/* Truncates with an ellipsis rather than pushing the row over,
-            and one step harder per tightening of the row: below
-            xl it also carries the chapters · npcs · locations trio, and below lg
-            the search chip has already reached its floor, so the name is the
-            last thing that can still give way there. The full name is one
-            click away in the menu below.
-            The xl cap is 160px, not 280: at exactly
-            1280 the FULLEST row — switcher, nav trio, search, the review
-            link, generator, gear and the start-session chip with its
-            reserved 8.5rem — has only the search chip's ~50px of shrink left,
-            and CI's wider Linux font metrics eat more than that. A static cap
-            keeps the chrome identical on every route (that is why the trigger
-            is flex-none) while handing the row 120px more slack; from 2xl the
-            row is wide enough for the full 280 again. The two caps below it
-            step down by the same logic (7rem / 8.5rem).
-            Note that the SEARCH chip's `basis` is deliberately NOT part of
-            this: it is the elastic element, so a smaller basis only moves
-            width from the chip to the free space in the middle of the row and
-            changes what the row can absorb by exactly nothing. Reserve comes
-            from the flex-none parts — these caps and the gaps. */}
-        <span className="min-w-0 max-w-[7rem] truncate lg:max-w-[8.5rem] xl:max-w-[160px] 2xl:max-w-[280px]">
-          {t("campaign.switcher.current", { name: current })}
-        </span>
-        <ChevronDown
-          aria-hidden
-          size={14}
-          className="flex-none text-muted-foreground"
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[290px]">
-        {/* Name over description — the prototype's campaignRows (name + meta);
-            the id never shows up, it only lives in the URL. */}
-        {(data ?? []).map((c) => (
-          <DropdownMenuItem
-            key={c.id}
-            onSelect={() => void navigate(`/campaigns/${c.id}`)}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] text-foreground">
-                {campaignLabel(c, c.id)}
-              </span>
-              {campaignDescription(c) !== undefined && (
-                <span className="mt-px block truncate text-[11.5px] text-muted-foreground">
-                  {campaignDescription(c)}
-                </span>
-              )}
-            </span>
-            {c.id === campaign && (
-              <Check
-                aria-hidden
-                size={13}
-                className="flex-none text-success-text"
-              />
-            )}
-          </DropdownMenuItem>
-        ))}
-        {data !== undefined && data.length === 0 && (
-          <p className="px-2.5 py-[9px] text-[13px] text-muted-foreground">
-            {t("campaign.switcher.empty")}
-          </p>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          // The dialog must not mount inside the menu: Radix unmounts the
-          // content on select, which would take the dialog with it.
-          onSelect={() => setCreateOpen(true)}
-          className="gap-2 text-[13px] text-body-secondary"
-        >
-          <Plus
-            aria-hidden
-            size={13}
-            className="flex-none text-muted-foreground"
-          />
-          {t("create.campaign.title")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-      {createOpen && (
-        <CampaignCreateDialog onClose={() => setCreateOpen(false)} />
-      )}
-    </DropdownMenu>
   );
 }

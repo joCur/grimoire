@@ -70,7 +70,7 @@ import { chapterIdError, chapterIdValue, newChapterId } from "@/chapter/chapter-
 import { glossaryTermsQuery } from "@/glossary-term/glossary-term-query";
 import { promptKnowledgeCount } from "@/knowledge-item/knowledge-item-draft";
 import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { AllPlaceNotes, PlaceNotesProvider } from "@/components/place-notes";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -167,9 +167,6 @@ import { sceneOf } from "@/scene/scene-proposal";
 type Target = { kind: "chapter"; id: string } | { kind: "new" };
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
-/** The two links in the sent-context hint — quiet, part of the sentence. */
-const CONTEXT_LINK =
-  "rounded px-0.5 text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-solid focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 const FIELD =
   "w-full rounded-lg border border-input bg-card px-4 py-3 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-border-hover";
 const CHIP = "rounded-full border px-3.5 py-[5px] text-[12.5px]";
@@ -906,7 +903,7 @@ export function GenerateRoute() {
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div className="mx-auto max-w-[680px] px-5 pt-8 pb-24 md:px-7 md:pt-10 md:pb-[100px]">
         {phase === "input" && (
           <>
@@ -1086,27 +1083,25 @@ export function GenerateRoute() {
 
             {/* Both modes send the same context along (npc/location names,
                 the campaign knowledge and the glossary, generator/README.md
-                step 1). The last two are LINKS since they became pages of
-                their own (PO feedback): this line is
-                exactly where the DM notices a rule is missing, and it should
-                be one click from here to the page that fixes it. */}
+                step 1). The pages that hold them are areas of the campaign,
+                reached through the campaign menu. */}
             <p className="mt-2.5 mb-[26px] flex flex-wrap items-baseline gap-1.5 text-[12px] leading-[1.5] text-faint">
               <span>{t("generate.input.contextLabel")}</span>
               <span className="text-muted-foreground">
                 {contextHint(tree.data?.npcs.length ?? 0, tree.data?.locations.length ?? 0, t)}
               </span>
               <span aria-hidden>·</span>
-              <Link to={`/campaigns/${campaign}/knowledge`} className={CONTEXT_LINK}>
+              <span className="text-muted-foreground">
                 {knowledgeHint(promptKnowledgeCount(knowledgeItems.data ?? []), t)}
-              </Link>
+              </span>
               <span aria-hidden>·</span>
-              <Link to={`/campaigns/${campaign}/glossary`} className={CONTEXT_LINK}>
+              <span className="text-muted-foreground">
                 {t(
                   (glossaryTerms.data?.length ?? 0) > 0
                     ? "generate.input.glossary"
                     : "generate.input.noGlossary",
                 )}
-              </Link>
+              </span>
             </p>
 
             <Button

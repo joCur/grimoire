@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
-import { MobileBackRow } from "@/components/MobileBackRow";
+import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { NotFound } from "@/components/NotFound";
 import { PageContext } from "@/components/PageContext";
 import { useT } from "@/i18n";
@@ -76,7 +76,7 @@ export function SessionRoute({
 
   return (
     <>
-      <MobileBackRow campaign={campaign} />
+      <MobileMenuRow campaign={campaign} />
       <div className="mx-auto max-w-[680px] px-5 pt-5 pb-24 md:px-7 md:pt-10 md:pb-[100px]">
         {/* There is no session LIST page, so the step above is a plain word:
             it says where this page sits without promising a link. */}

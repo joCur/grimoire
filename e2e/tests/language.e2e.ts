@@ -5,8 +5,7 @@
 //
 //   1. The switch is REACHABLE — one gear in the topbar, on every route, and
 //      on the two surfaces that have no topbar (the cold start, the mobile
-//      start) inline in their footer. The campaign switcher's menu does NOT
-//      carry it.
+//      start) inline in their footer. The campaign menu does NOT carry it.
 //   2. The switch is IMMEDIATE — no reload. Topbar, session chip and a dialog
 //      all read from the same catalog, so one click changes the whole chrome
 //      at once (react-query invalidation of ["settings"]).
@@ -28,6 +27,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
+import { campaignMenu, openArea } from "../support/campaign-menu";
 import { npcExists } from "../support/npc";
 import { uiIn, uiPattern } from "../support/ui";
 import type { Locale } from "../../app/src/i18n/messages";
@@ -50,20 +50,8 @@ const languageRadio = (page: Page, shownIn: Locale, language: Locale) =>
 const gear = (page: Page, shownIn: Locale) =>
   page.getByRole("link", { name: uiIn(shownIn, "settings.title") });
 
-/** The campaign switcher, whichever campaign it names. */
-const switcher = (page: Page, shownIn: Locale) =>
-  page.getByRole("button", { name: switcherName(shownIn) });
-
-/** The accessible name of the campaign switcher, up to the campaign's name. */
-function switcherPrefix(shownIn: Locale): string {
-  const marker = "\u0000";
-  return uiIn(shownIn, "campaign.switcher.current", { name: marker }).split(marker)[0]!;
-}
-
-/** The accessible name of the campaign switcher, whichever campaign it names. */
-function switcherName(shownIn: Locale): RegExp {
-  return uiPattern("campaign.switcher.current", { name: /.*/ }, { exact: true, locale: shownIn });
-}
+/** The campaign menu, whichever campaign and area it names. */
+const switcher = (page: Page, shownIn: Locale) => campaignMenu(page, shownIn);
 
 /** The session chip's running label, in whatever form the chip wraps it. */
 function sessionRunning(shownIn: Locale): RegExp {
@@ -164,25 +152,11 @@ test("the language switch: English and back, server-side and without a reload", 
     locale: "en",
   });
 
-  // The whole chrome of a campaign route, at once: the switcher's own label,
-  // the nav, the search chip and the session chip.
+  // The whole chrome of a campaign route, at once: the campaign menu with the
+  // area it names, the search chip and the session chip.
   await page.goto(`/campaigns/${CAMPAIGN}`);
   await expect(switcher(page, "en")).toBeVisible();
-  // The topbar's own trio — scoped, because the chapter overview's lookup
-  // line links to two of the same pages with the same words.
-  const trio = page.getByRole("navigation", { name: uiIn("en", "topbar.nav.aria") });
-  await expect(trio.getByRole("link", { name: uiIn("en", "topbar.nav.chapters") })).toBeVisible();
-  await expect(trio.getByRole("link", { name: uiIn("en", "topbar.nav.locations") })).toBeVisible();
-  // And the line under the campaign header is translated along with it.
-  await expect(
-    page.getByRole("navigation", { name: uiIn("en", "lookup.heading") }).getByRole("link"),
-  ).toHaveText([
-    uiIn("en", "browse.title.npcs"),
-    uiIn("en", "browse.title.locations"),
-    uiIn("en", "glossary.title"),
-    uiIn("en", "knowledge.title"),
-    uiIn("en", "trash.title"),
-  ]);
+  await expect(page.getByRole("banner")).toContainText(uiIn("en", "area.chapters"));
   await expect(page.getByRole("button", { name: uiIn("en", "topbar.search") })).toBeVisible();
   await expect(
     page.getByRole("button", { name: uiIn("en", "session.start") }),
@@ -324,16 +298,12 @@ test.describe("no language flash", () => {
     // …and not one word of the browser's English ever did.
     for (const english of [
       uiIn("en", "session.start"),
-      uiIn("en", "topbar.nav.chapters"),
-      uiIn("en", "topbar.nav.locations"),
+      uiIn("en", "area.chapters"),
       uiIn("en", "topbar.search"),
       uiIn("en", "language.heading"),
     ]) {
       expect(painted).not.toContain(english);
     }
-    // Belt and braces: not even a stray English switcher prefix.
-    const englishPrefix = switcherPrefix("en").trim();
-    expect(painted.filter((text) => text.startsWith(englishPrefix))).toEqual([]);
   });
 });
 
@@ -434,12 +404,12 @@ test("the gear carries the campaign it was opened FROM, and has a way back", asy
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     uiIn("de", "settings.title"),
   );
-  // The way back is THAT campaign's chapter overview. The row is mobile chrome, so the
-  // claim is checked where it is on screen: a phone width.
+  // The way back is THAT campaign's chapter overview, through its campaign
+  // menu. The row is mobile chrome, so the claim is checked where it is on
+  // screen: a phone width.
   await page.setViewportSize({ width: 390, height: 780 });
-  const back = page.getByRole("link", { name: uiIn("de", "mobileBack.chapterOverview") });
-  await expect(back).toBeVisible();
-  await back.click();
+  await expect(switcher(page, "de")).toBeVisible();
+  await openArea(page, "area.chapters");
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN}$`));
 });
 
@@ -508,11 +478,8 @@ test.describe("the cold start", () => {
     );
     // And no campaign CHROME either: `/settings` is campaign-independent, so
     // the topbar's own `matchPath` must not read "settings" as a campaign id
-    // and dress this page in a campaign switcher naming it.
+    // and dress this page in a campaign menu naming it.
     await expect(switcher(page, "de")).toHaveCount(0);
-    await expect(
-      page.getByRole("navigation", { name: uiIn("de", "topbar.nav.aria") }),
-    ).toHaveCount(0);
   });
 
   test("and at 390px, with a touch-sized target", async ({ page }) => {

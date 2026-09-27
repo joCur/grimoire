@@ -22,11 +22,11 @@ export function sceneLabel(id: string): string {
 }
 
 /**
- * The context of a scene's reading view: `<chapter title> › <location>`, the
- * chapter linking to the chapter overview, where the scene stands in its
- * chapter's list. The location is its display name (the id as written when
- * the tree has no name for it) and is absent for a scene that names none.
- * The campaign name is never part of it — the switcher carries it.
+ * The context of a scene's reading view: `<chapter title> › <location>`, as
+ * text: the way to the chapters is the campaign menu. The location is its
+ * display name (the id as written when the tree has no name for it) and is
+ * absent for a scene that names none. The campaign name is never part of it —
+ * the campaign menu carries it.
  */
 export function scenePageCrumbs(
   campaign: string,
@@ -35,9 +35,7 @@ export function scenePageCrumbs(
 ): ContextCrumb[] {
   if (campaign === "" || scene.chapter === "") return [];
   const chapter = tree?.chapters.find((candidate) => candidate.id === scene.chapter);
-  const crumbs: ContextCrumb[] = [
-    { label: chapter?.title ?? scene.chapter, to: `/campaigns/${campaign}` },
-  ];
+  const crumbs: ContextCrumb[] = [{ label: chapter?.title ?? scene.chapter }];
   const location = locationName(tree, scene.location);
   if (location !== undefined) crumbs.push({ label: location });
   return crumbs;
