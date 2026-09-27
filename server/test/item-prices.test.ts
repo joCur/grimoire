@@ -48,6 +48,7 @@ describe("reading item prices", () => {
       list: "consumable",
       rarity: null,
       note: "",
+      importId: null,
       rev: 1,
     });
     expect(await json<ItemPrice>("/api/item-prices/arrow-of-slaying")).toMatchObject({
@@ -67,6 +68,7 @@ describe("reading item prices", () => {
       list: null,
       rarity: "legendary",
       note: "",
+      importId: null,
       rev: 1,
     });
     // A consumable is worth half its rarity's value.

@@ -55,8 +55,9 @@ deviation requires a changed or new file.
 - [trash.md](trash.md) — deleting content goes to a trash with a fixed
   retention; a row there is absent but keeps its id; nothing live names it.
 - [reference-data.md](reference-data.md) — fixed tables from a published
-  source belong to the instance, ship by migration, are looked up and not
-  edited, and name their source.
+  source belong to the instance, ship by migration or are imported by the DM
+  when they may not be redistributed, are looked up and not edited, and name
+  their source.
 - [data-shape.md](data-shape.md) — data is fields and rows, never text
   sections; fixtures in the shape of the API.
 - [scene-order.md](scene-order.md) — one active chapter, one source for the

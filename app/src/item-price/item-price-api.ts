@@ -1,6 +1,8 @@
 // The API client of an item price (decisions/resources): its resource, read
 // only — item prices are reference data of the instance
-// (decisions/reference-data). Built from the shared HTTP helpers (../api.ts).
+// (decisions/reference-data), and the DM's own items come in through their
+// import (./item-price-import-api.ts). Built from the shared HTTP helpers
+// (../api.ts).
 
 import type { ItemPrice } from "@grimoire/shared/item-price";
 
