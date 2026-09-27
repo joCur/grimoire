@@ -956,6 +956,74 @@ test("the campaign's text stands under its description, clamped the same way", a
   await expect(showMore(page)).toHaveCount(0);
 });
 
+// Critical path 1: a heading inside a chapter's or the campaign's text stays a
+// heading on the chapter overview, but it stands below the title the text sits
+// under — clamped and opened alike. The chapter's reading view keeps its own
+// heading sizes.
+
+/** A top-level heading, set above the long text. */
+const TEXT_HEADING = "The chapter in one line";
+
+/** The rendered font size of an element, in pixels. */
+async function fontSize(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+}
+
+test("headings in the chapter's and the campaign's text stand below their titles", async ({
+  page,
+  api,
+}) => {
+  const body = `# ${TEXT_HEADING}\n\n${LONG_TEXT}\n`;
+  await patchChapter(api, "01-salt-harbour", { body });
+  await patchCampaign(api, { body });
+  await page.goto("/campaigns/example");
+
+  const campaignName = page.getByRole("heading", { level: 1, name: CAMPAIGN_NAME, exact: true });
+  const chapterTitle = page.getByRole("heading", { level: 2, name: CHAPTER_TITLE });
+  const campaignSize = await fontSize(campaignName);
+  const chapterSize = await fontSize(chapterTitle);
+
+  // Both texts are clamped: the first toggle is the header's, the second the
+  // chapter's.
+  const toggles = showMore(page);
+  await expect(toggles).toHaveCount(2);
+  const campaignBox = await clampBox(page, toggles.nth(0));
+  const chapterBox = await clampBox(page, toggles.nth(1));
+
+  const check = async () => {
+    for (const [box, titleSize] of [
+      [campaignBox, campaignSize],
+      [chapterBox, chapterSize],
+    ] as const) {
+      const h1 = box.getByRole("heading", { level: 1, name: TEXT_HEADING });
+      const h2 = box.getByRole("heading", { level: 2, name: LONG_TEXT_HEADING });
+      await expect(h1).toHaveCount(1);
+      await expect(h2).toHaveCount(1);
+      expect(await fontSize(h1)).toBeLessThan(titleSize);
+      expect(await fontSize(h2)).toBeLessThan(titleSize);
+    }
+  };
+
+  await expect(campaignBox).toHaveAttribute("data-clamped", "");
+  await expect(chapterBox).toHaveAttribute("data-clamped", "");
+  await check();
+
+  await toggles.nth(1).click();
+  await toggles.nth(0).click();
+  await expect(campaignBox).not.toHaveAttribute("data-clamped", "");
+  await expect(chapterBox).not.toHaveAttribute("data-clamped", "");
+  await check();
+  const overviewHeading = await fontSize(
+    chapterBox.getByRole("heading", { level: 1, name: TEXT_HEADING }),
+  );
+
+  // The reading view renders the same heading at its reading size.
+  await page.goto("/campaigns/example/chapters/01-salt-harbour");
+  const readingHeading = page.getByRole("heading", { level: 1, name: TEXT_HEADING });
+  await expect(readingHeading).toBeVisible();
+  expect(await fontSize(readingHeading)).toBeGreaterThan(overviewHeading);
+});
+
 // Critical path 1: a chapter is editable from where it is listed.
 //
 // Creating a chapter is not the only moment its title and text can be
