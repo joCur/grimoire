@@ -33,13 +33,13 @@ import { visit } from "unist-util-visit";
 
 // The marker, the If-prefix and the depth boundary are the FORMAT, not this
 // plugin's private business — the Block-Composer reads the same text with
-// the same rules (app/src/markdown/grammar.ts).
+// the same rules (@grimoire/shared/grammar).
 import {
   CALLOUT_MARKER,
   endsIfSection,
   ifSectionCondition,
   isCalloutKind,
-} from "@/markdown/grammar";
+} from "@grimoire/shared/grammar";
 // `[[slug]]` is the format too — the server expands the same references for
 // the search index and the generator is told to emit them (@grimoire/shared).
 import {

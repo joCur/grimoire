@@ -18,6 +18,7 @@ import {
   campaignRefIds,
   collectContext,
   loadAsset,
+  loadPromptAssets,
   setProviderForTests,
 } from "../src/generator";
 import { npcAugmentSystemPrompt, validateNpcAugmentReply } from "../src/npc-augment";
@@ -125,7 +126,7 @@ describe("the prompt", () => {
   });
 
   test("the npc prompts speak of the npc and its fields", async () => {
-    const create = await loadAsset(ASSET_FILES.npc.systemPrompt);
+    const create = (await loadPromptAssets("npc")).systemPrompt;
     const augment = await npcAugmentSystemPrompt();
     for (const prompt of [create, augment]) {
       expect(prompt).not.toContain("Eigenschaft");

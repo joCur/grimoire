@@ -193,6 +193,13 @@ export const ERROR_CODES = [
    * they name, each an id list.
    */
   "proposal_not_written",
+  /**
+   * 409, taking a change of a generator job's patch round: the block of the
+   * proposal's text the change is about is no longer there exactly once — the
+   * text was edited since the round came back. Nothing is written. `{ generatorJob }`
+   * — the job as it stands.
+   */
+  "patch_anchor_missing",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

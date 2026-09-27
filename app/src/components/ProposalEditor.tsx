@@ -18,6 +18,7 @@
 // The text is seeded ONCE, so a section is mounted per proposal: re-reading
 // it out of the props would fight the keystroke that produced it.
 
+import { blockAtLine, blockLines, type SceneBlock } from "@grimoire/shared/blocks";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
@@ -31,7 +32,6 @@ import {
   type PlaceNotes,
 } from "@/components/place-notes";
 import { useT } from "@/i18n";
-import { blockAtLine, blockLines, type SceneBlock } from "@/lib/blocks";
 import {
   composerDraft,
   draftBody,

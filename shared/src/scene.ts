@@ -12,6 +12,7 @@
 // that (decisions/scene-order).
 
 import { z } from "zod";
+import { patchReplySchema } from "./patch-reply";
 
 /** A scene's lifecycle states. A CHECK constraint holds the column to them (decisions/constraints). */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
@@ -131,6 +132,15 @@ export type SceneReplyFields = Omit<SceneReplyObject, "warnings">;
 export const newSceneReplySchema = sceneReplySchema.extend({
   status: z.enum(["draft"]),
 });
+
+/**
+ * The reply of a PATCH call on a proposed scene (./patch-reply.ts): a `set`
+ * takes any field of the new scene's reply but the id and `body`, so a patched
+ * scene is still a draft.
+ */
+export const scenePatchReplySchema = patchReplySchema(
+  newSceneReplySchema.omit({ id: true, body: true, warnings: true }),
+);
 
 /**
  * A scene reply as the proposal it stands for, the one conversion every run

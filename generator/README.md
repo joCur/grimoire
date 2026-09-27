@@ -103,16 +103,15 @@ provider via `z.toJSONSchema` — per run under its own name (`scene`,
 keeps the status the DM gave it. The schema carries no `description`: what
 the model must know about the fields (the id rule, which chapter id `chapter`
 may name, what `motivation` or `atmosphere` is, the shape of `quickstats`,
-`body` and `warnings`) is in the entity's prompt under
-`## Die Felder der Szene`, `## Die Felder des NPC` or `## Die Felder des
-Orts`, and the augment run gets exactly that section. The outline loads its
+`body` and `warnings`) is in the entity's fields file (`scene-fields.md`,
+`npc-fields.md`, `location-fields.md`, see "Prompt files"), and the augment
+and patch runs load exactly that file. The outline loads its
 schema as readable JSON from `shared/schema/outline.schema.json`;
 `shared/test/reply-schema.test.ts` checks the rules of strict mode for
 **every** schema, derived or loaded.
 
-**The prompts show exactly this object.** The format section of every create
-prompt — `## Die Felder der Szene`, `## Die Felder des NPC`, `## Die Felder
-des Orts` — carries a ```json example of the reply object: the fields side by
+**The prompts show exactly this object.** Every entity's fields file carries
+a ```json example of the reply object: the fields side by
 side in the same order as the entity's schema (an optional field without a
 source as `null`), `body` as **one** string — its structure, `## Flow`,
 `## If:`, the six callouts and `[[id]]` references, is described below it as
@@ -170,6 +169,29 @@ the context".
 `outline-example-output.json` show exactly the object the respective call is
 forced into.
 
+## Prompt files
+
+Each entity describes its fields in a file of its own — `scene-fields.md`,
+`npc-fields.md`, `location-fields.md` — the one place they are described.
+The server composes every system prompt from whole files, joined in a fixed
+order with one blank line between them (`ASSET_FILES` and `composePrompt`
+in `server/src/generator.ts`); no code looks for a heading inside a file.
+
+| Prompt | Files, in this order |
+|---|---|
+| scene (one scene of an outline) | `system-prompt.md`, `scene-single-output.md`, `scene-fields.md`, `scene-rules.md` |
+| NPC (NPC run and NPC part) | `npc-system-prompt.md`, `npc-fields.md`, `npc-rules.md` |
+| location (location part) | `location-system-prompt.md`, `location-fields.md`, `location-rules.md` |
+| outline | `outline-system-prompt.md` |
+| scene / NPC / location augment | `scene-augment-system-prompt.md` / `npc-augment-system-prompt.md` / `location-augment-system-prompt.md`, then the entity's fields file |
+| patch | `patch-system-prompt.md`, then the part's entity's fields file |
+
+A create prompt thus reads as one document: who the model is and what it
+answers with, the entity's fields, then the rules and the worked example.
+An augment or patch prompt brings its own output format and its own rule,
+and from the entity only its fields — never a second output format or the
+create rules.
+
 ## Flow of a scene run (pipeline)
 
 A scene run is not **one** call but `1 + N (+ proposals)`:
@@ -209,15 +231,14 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
    The server stores it on the job row, because a retry and a restart need
    it.
 
-2. **Scenes** (one call per scene, concurrency 3): `system-prompt.md` in the
-   mode "exactly one scene from the outline" (`scene-single-output.md` swaps
-   only the output format — all rules stay word for word the same) + outline
-   + the cut source section. Output: exactly one scene object. Validation,
+2. **Scenes** (one call per scene, concurrency 3): the scene prompt, whose
+   output section `scene-single-output.md` writes exactly one scene from the
+   outline (see "Prompt files") + outline + the cut source section. Output: exactly one scene object. Validation,
    correction turns and the naming check **per scene**; a failed part does
    not block the others.
 
 3. **Proposals** (one call per new NPC and per new location):
-   `npc-system-prompt.md` or `location-system-prompt.md`, with the outline
+   the NPC's or the location's create prompt, with the outline
    and the sections of the scenes that name the NPC or play at the location.
    Deduplicated by id.
 
@@ -284,6 +305,52 @@ such a scene says which rejected proposal it names and offers three ways
 out: accept the proposal after all, remove the reference (a change in
 `sceneEdits`; `null` clears the location), or drop the scene.
 
+## Answering a part's notes
+
+Answering a note patches the proposal instead of generating it again
+(decisions/generator). Every model note on a finished scene, NPC or location
+part of a scene run gets an answer field on its card; one action sends every
+answer of the part (`PATCH …/generator-jobs/:id/parts/:key { rev, round:
+{ answers } }`, 202) — one call per part and round, run on the server while
+the app polls. The run's own notes and the NPC run's single card are not
+answered.
+
+The patch call is one provider call. Its system prompt is
+`patch-system-prompt.md` followed by the entity's fields file; its few-shot is `patch-example-output.json`. The prompt carries the
+campaign knowledge, the glossary, the context lists and the run's outline
+as every part does, then the proposal with the DM's edits in its reply form
+(`## Vorschlag, den du änderst`) and the notes with their answers (`## Hinweise
+und Antworten des DM`). The reply is a list of operations, enforced by a
+schema derived from the entity's reply schema:
+
+* `set` — one field (any but `id` and `body`) to a new value;
+* `replace`, `insertAfter`, `remove` — one block of `body`, named by an
+  anchor that quotes the block as it stands;
+* `note` — what the model could not do.
+
+The server applies the operations deterministically to the proposal the
+model saw. An anchor is compared whitespace-normalized with each block; one
+that matches no block or several is not applied. Neither is a field value
+that fails the field's schema or names an id outside the run or the
+campaign, nor a block text with an unknown callout or reference. Each of
+them becomes a finding on the part (`pipeline.parts[].findings`): data that
+names its kind and what it is about (the anchor, the field, the ids), which
+the app says as a whole sentence in the DM's language; the server writes no
+sentence of its own. Nothing else of the proposal moves: an applied block
+operation changes exactly that block.
+
+What the round brings stands on the card as a comparison, field by field
+and block by block, and the DM takes or keeps each change (`PATCH
+…/parts/:key { rev, round: { changes: { <id>: "taken" | "kept" } } }`). A
+taken change is written into `sceneEdits`, `npcEdits` or `locationEdits`
+under the job's guard (a stale `rev` is 409 with the current job); a block
+change that no longer finds its block in the edited proposal is 409
+`patch_anchor_missing` and writes nothing. The answered notes are gone from
+the part once the round returns, and the model's new notes join them; the
+findings stand until the next round opens or the part is decided. A
+failed round keeps the notes and can be sent again; a restart reports a
+round in flight as failed. The token count of the run adds the patch calls.
+
 ## Flow per call
 
 Applies to every SINGLE provider call — the outline call, every scene call,
@@ -292,7 +359,8 @@ every NPC and location call and the single-call runs:
 1. The server gathers context: all npc/location ids + names, chapter id,
    **campaign knowledge** and glossary (both from the database —
    `knowledge_items` and `glossary_terms`).
-2. Prompt = `system-prompt.md` + `example-output.json` (few-shot target)
+2. Prompt = the entity's system prompt (see "Prompt files") + its few-shot
+   target (`example-output.json` for a scene)
    + campaign knowledge + glossary + context + source text.
 3. The LLM replies — with the **entity's object** (scene, NPC, location,
    augment) or with the **outline object**, each enforced by schema; see
@@ -346,10 +414,9 @@ missing entirely.
 
 ## German orthography
 
-All system prompts (`system-prompt.md`, `npc-system-prompt.md`,
-`location-system-prompt.md`, `scene-augment-system-prompt.md`,
-`npc-augment-system-prompt.md`, `location-augment-system-prompt.md` and
-`outline-system-prompt.md`) carry **the same** German-orthography rule:
+All system prompts (the create prompts of scene, NPC and location, the three
+augment prompts, the patch prompt and the outline prompt) carry **the same**
+German-orthography rule:
 every real text — prose, read-alouds, callouts, `## If:` conditions,
 headings, `warnings` and every field that is text (`title`, `name`, `role`,
 `voice`, `appearance`, `trigger`, `statblock` …) — uses ä/ö/ü/ß as exactly
@@ -366,17 +433,12 @@ tests keep it that way: `app/src/i18n/i18n.test.ts` over the catalog VALUES
 string delimiter) and `server/test/typography.test.ts` over prompts,
 few-shots and `examples/`.
 
-The rule stands in the three create prompts under `## Regeln` and in the
-augment prompt in the augment rule — so exactly **once** in every assembled
-prompt, also in augment mode, which takes only the format section from the
-create prompts (`formatContract` in `server/src/generator-augment.ts`; for
-the scene `## Die Felder der Szene` from `system-prompt.md` under the scene
-augment prompt `scene-augment-system-prompt.md`, `server/src/scene-augment.ts`,
-for the NPC `## Die Felder des NPC` from `npc-system-prompt.md` under the NPC
-augment prompt `npc-augment-system-prompt.md`, `server/src/npc-augment.ts`,
-for the location `## Die Felder des Orts` from `location-system-prompt.md`
-under the location augment prompt `location-augment-system-prompt.md`,
-`server/src/location-augment.ts`). The server corrects nothing afterwards:
+The rule stands in the create prompts' rules files (`scene-rules.md`,
+`npc-rules.md`, `location-rules.md`), in the augment prompts in the augment
+rule and in the patch prompt in its rule — so exactly **once** in every
+assembled prompt, because an augment or patch prompt takes only the fields
+file of its entity, never the create prompt's rules. The server corrects
+nothing afterwards:
 there is no heuristic and no silent replacement, the rule works in the
 prompt alone.
 
@@ -387,9 +449,8 @@ all system prompts that write scenes, NPCs or locations — the outline prompt
 does not carry it, because it only outputs the outline (it carries the
 orthography rule anyway, because titles, one-liners and `warnings` are
 text) — in the three create prompts under `## Regeln`, in the augment prompt
-in the augment rule, so exactly **once** in every assembled prompt
-(`formatContract` in `server/src/generator-augment.ts` takes only the format
-section from the create prompts).
+in the augment rule, so exactly **once** in every assembled prompt (an
+augment prompt takes only the fields file of its entity).
 
 What the rule says: tables from the source material — random tables,
 encounter and dice lists — are output as a valid GFM pipe table (header row,
@@ -407,7 +468,7 @@ text — degradation instead of an error.
 
 The same pipeline, its own kind of run (`POST
 /api/campaigns/:campaign/generator-jobs { kind: "npc", sourceText, id? }`)
-and its own prompt assets (`npc-system-prompt.md` and
+and its own prompt assets (the NPC's create prompt and
 `npc-example-output.json` as the few-shot target). Target format: the NPC
 from README.md, without `rev`; `[[id]]` only to NPCs, locations and scenes of
 the campaign or the NPC itself, quick stats as strings (the plus survives),
@@ -418,8 +479,8 @@ accepted like every proposed NPC through its `id` (`PATCH
 
 An existing NPC is augmented on its resource (`POST …/npcs/<id>/augment`,
 accepted with `POST …/npcs/<id>/augment/apply`):
-`npc-augment-system-prompt.md` carries the augment rule, the section
-`## Die Felder des NPC` from `npc-system-prompt.md` the fields, and the
+`npc-augment-system-prompt.md` carries the augment rule, `npc-fields.md`
+the fields, and the
 existing NPC stands in the prompt in the reply shape (`quickstats` as
 pairs).
 
@@ -447,8 +508,8 @@ message in plain text. Full variable table: docs/DEPLOYMENT.md section 2.
 
 An existing scene is augmented on its resource (`POST
 …/scenes/<id>/augment`, accepted with `POST …/scenes/<id>/augment/apply`):
-`scene-augment-system-prompt.md` carries the augment rule, the section
-`## Die Felder der Szene` from `system-prompt.md` the fields, and the
+`scene-augment-system-prompt.md` carries the augment rule, `scene-fields.md`
+the fields, and the
 existing scene stands in the prompt in the reply shape.
 
 ## Proposals carry no address

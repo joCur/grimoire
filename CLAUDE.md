@@ -167,6 +167,7 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `review.writtenScenes`/`writtenNpcs`/`writtenLocations`; once nothing is
   open any more, the job is done and the response is its final state.
   `PATCH …/parts/<key> { status: "running" }` retries a part,
+  `{ rev, round }` there answers its notes and decides the changes,
   `DELETE { rev }` discards the job.
 - UI language: German (primary language), English as the second language.
 - Repository language (decisions/language): everything in the repo is
@@ -349,7 +350,13 @@ The paths:
    unwritten proposal of the run is 409 `proposal_not_written` and
    writes nothing (a `[[id]]` in the text never blocks), and its card says
    so in a whole sentence and offers to accept the proposal after all,
-   remove the reference, or drop the scene. A proposed scene is
+   remove the reference, or drop the scene. Answering a part's notes
+   (`PATCH …/parts/<key> { rev, round: { answers } }`) patches its proposal:
+   the stub's patch has a block replace, a field set and an anchor that
+   hits nothing, the comparison shows exactly the two applied changes plus
+   the finding carrying that anchor (`part-finding`), and taking them (`round: { changes }`)
+   writes them into `sceneEdits` or `locationEdits` and the answered note is
+   gone. A proposed scene is
    the scene without `rev` (`result.scenes`, decisions/resources): the edit
    action opens its fields and its text, the changed fields are saved per
    scene (`sceneEdits`), and the accept action writes them over the model's

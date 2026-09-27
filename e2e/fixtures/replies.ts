@@ -938,3 +938,58 @@ export function proposalPartReply(
   if (kind === "location") return { ...locationStub, warnings: [partNote(LOCATION_STUB_ID)] };
   return { ...npcStub, role: `Smuggler from ${OLD_NAME}`, warnings: [partNote(NPC_STUB_ID)] };
 }
+
+// --- patch round -------------------------------------------------------------
+
+/**
+ * The heading a patch call puts the proposal it changes under, and the one
+ * the model's notes and the DM's answers stand under — server/src/llm-provider.ts
+ * PROPOSAL_HEADING and ANSWERS_HEADING, spelled exactly as the server's
+ * prompt spells them. Duplicated on purpose, like EXISTING_SCENE_HEADING.
+ */
+export const PROPOSAL_HEADING = "## Vorschlag, den du änderst";
+export const ANSWERS_HEADING = "## Hinweise und Antworten des DM";
+
+/** The check block of the rich scene draft, as the patch reply anchors it. */
+export const PATCH_CHECK_ANCHOR = `> [!check] Dexterity (Stealth) DC 13 to get under the mole without
+> alerting the guard at the crane.`;
+
+/** The check block the patch reply puts in its place. */
+export const PATCH_CHECK_TEXT = `> [!check] Dexterity (Stealth) DC 15 to get under the mole without
+> alerting the guard at the crane — the fog lifts at midnight.`;
+
+/** The title the patch reply sets on a scene. */
+export const PATCH_SCENE_TITLE = "Night watch at the foggy quay";
+
+/** An anchor the patch reply removes that no block of any draft carries. */
+export const PATCH_MISSING_ANCHOR = "> [!note] The harbour master owes the party a favour.";
+
+/** The atmosphere the patch reply sets on a location. */
+export const PATCH_LOCATION_ATMOSPHERE = "Cold salt wind, gulls over the mud, a bell far out at sea.";
+
+/** The voice the patch reply sets on an npc. */
+export const PATCH_NPC_VOICE = "hoarse, whispers even when nobody listens";
+
+/**
+ * The reply of a patch call — a list of operations on the proposal, never the
+ * proposal again. A scene gets a block replace, a field set and the removal
+ * of a block that is not there (the server reports that as a finding
+ * carrying the anchor); a location and an npc get one field each.
+ */
+export function patchReply(proposal: Record<string, unknown>): { operations: unknown[] } {
+  if ("title" in proposal) {
+    return {
+      operations: [
+        { op: "replace", anchor: PATCH_CHECK_ANCHOR, text: PATCH_CHECK_TEXT },
+        { op: "set", field: "title", value: PATCH_SCENE_TITLE },
+        { op: "remove", anchor: PATCH_MISSING_ANCHOR },
+      ],
+    };
+  }
+  if ("atmosphere" in proposal) {
+    return {
+      operations: [{ op: "set", field: "atmosphere", value: PATCH_LOCATION_ATMOSPHERE }],
+    };
+  }
+  return { operations: [{ op: "set", field: "voice", value: PATCH_NPC_VOICE }] };
+}

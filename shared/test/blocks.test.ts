@@ -10,15 +10,11 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 
-import { translator } from "@/i18n/format";
-
 import {
   blockAtLine,
-  blockLabel,
   blockLines,
   blockMarkdown,
   blockText,
-  calloutLabel,
   endsIfSectionText,
   insertBlock,
   makeCallout,
@@ -34,9 +30,9 @@ import {
   withChildren,
   withIfCondition,
   type SceneBlock,
-} from "./blocks";
+} from "../src/blocks";
 
-const FIXTURES = new URL("../../../fixtures/", import.meta.url);
+const FIXTURES = new URL("../../fixtures/", import.meta.url);
 
 /** A fixture as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
@@ -625,27 +621,7 @@ describe("list operations are lossless when nothing actually moves", () => {
   });
 });
 
-// The labels come from the catalog and the translator is passed in
-// (decisions/i18n): a callout is named with the key the reading view uses.
-const t = translator("de");
-
-describe("labels", () => {
-  test("the six callouts use the names the reading view already shows", () => {
-    const kinds = ["readaloud", "check", "secret", "outcome", "loot", "note"] as const;
-    const expected = kinds.map((kind) => t(`markdown.callout.${kind}`));
-    expect(kinds.map((kind) => blockLabel(makeCallout(kind, "x"), t))).toEqual(expected);
-    expect(kinds.map((kind) => calloutLabel(kind, t))).toEqual(expected);
-  });
-
-  test("structural blocks are named by their block type", () => {
-    expect(blockLabel(makeIfSection("a"), t)).toBe(t("composer.blockType.ifSection"));
-    expect(blockLabel(makeHeading(2, "Flow"), t)).toBe(t("composer.blockType.heading"));
-    expect(blockLabel(makeText("Paragraph"), t)).toBe(t("composer.blockType.text"));
-    const raw = parseBlocks("> [!warning] x\n")[0];
-    if (raw === undefined) throw new Error("expected a block");
-    expect(blockLabel(raw, t)).toBe(t("composer.blockType.markdown"));
-  });
-
+describe("ids", () => {
   test("ids are unique across blocks and parses", () => {
     const ids = [
       ...parseBlocks(fixtureBody("scenes/lighthouse-arrival.json")),

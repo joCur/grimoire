@@ -57,9 +57,9 @@ export function failInterruptedJobs(db: GrimoireDb): number {
     }
     // A PIPELINED run: the parts that were in flight — and the ones that were
     // still waiting for a worker — died with the process, so they become
-    // `failed` and carry the retry action. Parts that were already `done` are
-    // kept: their drafts are on the row and the DM can review and accept
-    // them. The job is `done` as soon as one part survived, and `failed` with
+    // `failed` and carry the retry action; a patch round in flight fails on
+    // its part. Parts that were already `done` are kept: their drafts are on
+    // the row and the DM can review and accept them. The job is `done` as soon as one part survived, and `failed` with
     // the restart message when none did.
     const anyDone = parts.parts.some((p) => p.status === "done");
     db.update(generateJobs)
@@ -99,6 +99,12 @@ function recoverParts(
     if (part.status === "running" || part.status === "pending") {
       part.status = "failed";
       part.error = RESTART_FAILURE_MESSAGE;
+    }
+    // A patch round in flight died the same way: it fails on its part, whose
+    // proposal and notes stay as they were.
+    const round = part.round as Record<string, unknown> | undefined;
+    if (round !== null && typeof round === "object" && round.status === "running") {
+      part.round = { ...round, status: "failed", error: RESTART_FAILURE_MESSAGE };
     }
     return part as { status: string };
   });

@@ -11,6 +11,7 @@
 // compile.
 
 import { z } from "zod";
+import { patchReplySchema } from "./patch-reply";
 
 /** An npc's states. A CHECK constraint holds the column to them (decisions/constraints). */
 export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
@@ -137,6 +138,14 @@ export const npcReplySchema = npcProposalSchema.extend({
 });
 
 export type NpcReplyObject = z.infer<typeof npcReplySchema>;
+
+/**
+ * The reply of a PATCH call on a proposed npc (./patch-reply.ts): a `set`
+ * takes any field of the npc's reply but the id and `body`.
+ */
+export const npcPatchReplySchema = patchReplySchema(
+  npcReplySchema.omit({ id: true, body: true, warnings: true }),
+);
 
 /** The npc in its reply form, `warnings` aside — how an augment prompt shows it. */
 export type NpcReplyFields = Omit<NpcReplyObject, "warnings">;

@@ -14,7 +14,7 @@ import {
   tokenizeWords,
   wordDiff,
 } from "./augment";
-import { blockMarkdown, blockTreeMarkdown } from "./blocks";
+import { blockMarkdown, blockTreeMarkdown } from "@grimoire/shared/blocks";
 
 describe("wordDiff", () => {
   test("tokenizing is lossless", () => {

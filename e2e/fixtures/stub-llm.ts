@@ -32,6 +32,10 @@
 //     (the reply's scene names exactly that chapter)
 //   - no chapter line                                            -> npc run
 //     (the pinned-id line pins the id of the npc)
+//   - a notes-and-answers section (ANSWERS_HEADING)             -> patch call
+//     (the reply is a list of operations on the proposal below
+//     PROPOSAL_HEADING; checked first, because a patch call also carries the
+//     run's outline and the entity prompt's format)
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
 //   - TRIGGER.unknownRef in the source text -> an npc or augment run's first
@@ -86,12 +90,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import {
+  ANSWERS_HEADING,
   EXISTING_SCENE_HEADING,
   EXISTING_LOCATION_HEADING,
   EXISTING_NPC_HEADING,
   FAILING_SCENE_ID,
   LATE_REPLY_MS,
   NEW_CHAPTER_LINE,
+  PROPOSAL_HEADING,
   SLOW_REPLY_MS,
   THREE_SCENES,
   TRIGGER,
@@ -107,6 +113,7 @@ import {
   npcReply,
   outlineReply,
   partFailNonce,
+  patchReply,
   proposalPartReply,
   scenePartReply,
   unknownRefAugmentReply,
@@ -253,6 +260,25 @@ function existingLocation(prompt: string): ExistingLocation | null {
   }
 }
 
+/**
+ * The proposal a PATCH call changes, out of the fenced JSON below
+ * PROPOSAL_HEADING — in its reply form, the object the operations name
+ * fields of. Null for every other prompt.
+ */
+function patchProposal(prompt: string): Record<string, unknown> | null {
+  if (!prompt.includes(ANSWERS_HEADING)) return null;
+  const start = prompt.indexOf(PROPOSAL_HEADING);
+  if (start === -1) return null;
+  const fence = /```json\n([\s\S]*?)```/.exec(prompt.slice(start));
+  if (fence === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(fence[1]!);
+    return isRecord(parsed) && typeof parsed.id === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -266,7 +292,7 @@ export interface StubDecision {
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
-  kind: "outline" | "scene" | "proposal" | "npc" | "augment";
+  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
   /**
@@ -304,6 +330,13 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // first call of a run is the one without it.
   const unknownRef =
     source.includes(TRIGGER.unknownRef) && !messages.some((m) => m.role === "assistant");
+
+  // A patch call carries the model's notes with the DM's answers; it also
+  // carries the outline, so it is told apart first.
+  const proposal = patchProposal(prompt);
+  if (proposal !== null) {
+    return { kind: "patch", truncated, delayMs, reply: patchReply(proposal) };
+  }
 
   // A location augment run carries the location it works on (decisions/resources).
   const location = existingLocation(prompt);

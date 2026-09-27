@@ -1,10 +1,10 @@
-// The generator jobs: list, start, read, review and accept, retry a part,
+// The generator jobs: list, start, read, review and accept, retry or patch a part,
 // discard.
 //
 // A GENERATOR JOB IS ITS OWN RESOURCE (decisions/resources): `…/generator-jobs` and
 // `…/generator-jobs/:id`, answering the `GeneratorJob` type. A campaign has at
 // most one job, whatever its kind. The parts of a scene run are its children:
-// read embedded in the job, and retried on their own resource,
+// read embedded in the job, and retried or patched on their own resource,
 // `…/generator-jobs/:id/parts/:key`. A scene, an npc and a location are
 // augmented on their own resources (./scenes.ts, ./npcs.ts, ./locations.ts);
 // the job such a run starts is read, reviewed and discarded here like any
@@ -19,6 +19,7 @@ import {
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { acceptJobParts } from "../generator-job-accept";
+import { decidePartChanges, startPartRound } from "../generator-patch";
 import {
   deleteJob,
   getJob,
@@ -113,7 +114,7 @@ generatorJobRoutes.post("/campaigns/:campaign/generator-jobs", async (c) => {
 // The job with its status (running/done/failed), its kind and the proposal in
 // the field its kind reads — `result`, `npcResult`, `sceneAugmentResult`,
 // `npcAugmentResult` or `locationAugmentResult` —, the error body of a failed
-// run, the DM's changes to the proposals (`sceneEdits`, `npcEdits`), the
+// run, the DM's changes to the proposals (`sceneEdits`, `npcEdits`, `locationEdits`), the
 // review and, for a scene run, its parts under `pipeline`. An augment job
 // names what it works on (`scene`, `npc` or `location`) from the moment it
 // starts. A finished result may carry `namingHints`: the SERVER's own
@@ -125,11 +126,12 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 );
 
 // PATCH /api/campaigns/:campaign/generator-jobs/:id
-//   { rev, id?, sceneEdits?, npcEdits?, review? } -> GeneratorJob
+//   { rev, id?, sceneEdits?, npcEdits?, locationEdits?, review? } -> GeneratorJob
 // The review of a run, and its accept. Everything merges, so the app sends
 // the ONE thing that just changed — text debounced, decisions immediately:
 //
-//   - `sceneEdits` and `npcEdits` change a proposed scene or npc, by its id:
+//   - `sceneEdits`, `npcEdits` and `locationEdits` change a proposed scene,
+//     npc or location, by its id:
 //     any subset of the entity's fields, `null` clearing an optional one,
 //     merged onto the stored change of that proposal;
 //   - `review.stage` is the stage of a scene run's review the DM is in;
@@ -172,6 +174,7 @@ generatorJobRoutes.patch("/campaigns/:campaign/generator-jobs/:id", async (c) =>
   if (
     patch.sceneEdits === undefined &&
     patch.npcEdits === undefined &&
+    patch.locationEdits === undefined &&
     Object.keys(review).length === 0
   ) {
     throw new ApiError(400, "the patch names nothing to write", { code: "nothing_to_write" });
@@ -188,27 +191,62 @@ generatorJobRoutes.patch("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 
 // PATCH /api/campaigns/:campaign/generator-jobs/:id/parts/:key
 //   { status: "running" } -> 202 GeneratorJob
-// Runs ONE failed part of a scene run again. Only that part: the outline
-// stays, the finished parts stay reviewable and acceptable, and the part goes
-// back through exactly the call it failed on — same outline, same source
-// excerpt, same validation. The answer is the job with the part `running`,
-// so the app needs no extra read before its next poll.
+//   | { rev, round: { answers: [{ note, answer }] } } -> 202 GeneratorJob
+//   | { rev, round: { changes: { <change id>: "taken" | "kept" } } } -> GeneratorJob
+// One part of a scene run, three acts:
 //
-// 404 without a job under this id and for an unknown part key; 409 for a job
-// that has no parts (an npc or augment run) and for a part that is already
-// running, has not run yet (`pending` — the run's own queue still owns it) or
-// is already done — a double click must not spend tokens twice; 503 when no
-// provider is configured.
+//   - `status: "running"` runs ONE failed part again. Only that part: the
+//     outline stays, the finished parts stay reviewable and acceptable, and
+//     the part goes back through exactly the call it failed on — same
+//     outline, same source excerpt, same validation. 409 for a part that is
+//     already running, has not run yet (`pending` — the run's own queue still
+//     owns it) or is already done — a double click must not spend tokens
+//     twice.
+//   - `round.answers` answers the model's notes on a finished part, each
+//     `note` verbatim as the part carries it: ONE patch call per part and
+//     round (decisions/generator) returns operations, the server applies
+//     them to the proposal as it stands — the DM's edits included — and the
+//     round's changes land on the part (`round`). It runs in the background
+//     and the job is `running` until it is back; a round that brings nothing
+//     is `failed` on the part with its `error`, and the notes stay. A blank
+//     answer is no answer, and a round without one is 400. 409 for a part
+//     that is not done, whose proposal is written, dropped or rejected, or
+//     that has a round running or changes left to decide; 503 when no
+//     provider is configured.
+//   - `round.changes` takes or keeps changes of the part's round, by their
+//     id: a taken one is written into the job's edits of the proposal
+//     (`sceneEdits`, `npcEdits`, `locationEdits`), and the round is over once
+//     none is left. A taken block change whose block is no longer in the
+//     proposal's text exactly once is 409 { code: "patch_anchor_missing",
+//     generatorJob } and nothing is written; an unknown change id is 400.
+//
+// The two round acts carry the job's guard: a stale `rev` — or a note that
+// is not on the part any more — is 409 { code: "rev_conflict", rev,
+// generatorJob }. 404 without a job under this id and for an unknown part
+// key; 409 for a job that has no parts (an npc or augment run). The answer is
+// the job as the act leaves it, so the app needs no extra read before its
+// next poll.
 generatorJobRoutes.patch("/campaigns/:campaign/generator-jobs/:id/parts/:key", async (c) => {
-  parseRequest(generatorJobPartPatchSchema, await jsonBody(c, null), "generator job part");
-  const provider = obtainProvider(); // 503 when nothing is configured
-  const job = await retryJobPart(
-    c.req.param("campaign"),
-    c.req.param("id"),
-    c.req.param("key"),
-    provider,
+  const campaign = c.req.param("campaign");
+  const id = c.req.param("id");
+  const key = c.req.param("key");
+  const body = parseRequest(
+    generatorJobPartPatchSchema,
+    await jsonBody(c, null),
+    "generator job part",
   );
-  return c.json(serializeJob(job), 202);
+  if ("status" in body) {
+    const provider = obtainProvider(); // 503 when nothing is configured
+    return c.json(serializeJob(await retryJobPart(campaign, id, key, provider)), 202);
+  }
+  if ("answers" in body.round) {
+    const provider = obtainProvider(); // 503 when nothing is configured
+    const job = await startPartRound(campaign, id, key, body.rev, body.round.answers, provider);
+    return c.json(serializeJob(job), 202);
+  }
+  return c.json(
+    serializeJob(await decidePartChanges(campaign, id, key, body.rev, body.round.changes)),
+  );
 });
 
 // DELETE /api/campaigns/:campaign/generator-jobs/:id { rev } -> { deleted: true }

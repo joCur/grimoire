@@ -27,12 +27,13 @@ import {
   OUTLINE_ID_DESCRIPTION,
   outlineJsonSchema,
 } from "../src/outline-schema";
-import { locationReplySchema } from "../src/location";
-import { npcReplySchema } from "../src/npc";
+import { locationPatchReplySchema, locationReplySchema } from "../src/location";
+import { npcPatchReplySchema, npcReplySchema } from "../src/npc";
 import {
   SCENE_STATUSES,
   SCENE_TYPES,
   newSceneReplySchema,
+  scenePatchReplySchema,
   sceneReplySchema,
 } from "../src/scene";
 
@@ -106,6 +107,49 @@ describe("the scene replies", () => {
   });
 });
 
+describe("the patch replies", () => {
+  /** The operations a patch reply offers, each as its JSON schema. */
+  const operations = (schema: z.ZodType) =>
+    at(derived(schema), ["properties", "operations", "items"]).anyOf as Array<
+      Record<string, unknown>
+    >;
+  /** The `set` of one field, by the field's name. */
+  const setOf = (schema: z.ZodType, field: string) =>
+    operations(schema).find(
+      (op) =>
+        (op.properties as Record<string, { enum?: string[] }>).field?.enum?.[0] === field,
+    );
+
+  test("a set names one field and carries that field's own value schema", () => {
+    expect(at(setOf(scenePatchReplySchema, "status")!, ["properties", "value"])).toEqual({
+      type: "string",
+      enum: ["draft"],
+    });
+    expect(at(setOf(scenePatchReplySchema, "npcs")!, ["properties", "value"])).toEqual({
+      type: "array",
+      items: { type: "string" },
+    });
+    expect(at(setOf(locationPatchReplySchema, "atmosphere")!, ["properties", "value"])).toEqual({
+      type: ["string", "null"],
+    });
+  });
+
+  test("neither the id nor the text is a field a set takes", () => {
+    for (const schema of [scenePatchReplySchema, npcPatchReplySchema, locationPatchReplySchema]) {
+      expect(setOf(schema, "id")).toBeUndefined();
+      expect(setOf(schema, "body")).toBeUndefined();
+      expect(setOf(schema, "warnings")).toBeUndefined();
+    }
+  });
+
+  test("the text is changed block by block, and a note needs no change", () => {
+    const ops = operations(npcPatchReplySchema).map(
+      (op) => (at(op, ["properties", "op"]).enum as string[])[0],
+    );
+    expect(ops.filter((op) => op !== "set")).toEqual(["replace", "insertAfter", "remove", "note"]);
+  });
+});
+
 describe("the outline schema", () => {
   const scenes = () => at(outlineJsonSchema(), ["properties", "scenes"]);
   const sceneProps = () => at(outlineJsonSchema(), ["properties", "scenes", "items", "properties"]);
@@ -158,6 +202,9 @@ describe("every schema", () => {
     ["scene/augment", derived(sceneReplySchema)] as const,
     ["npc", derived(npcReplySchema)] as const,
     ["location", derived(locationReplySchema)] as const,
+    ["scene/patch", derived(scenePatchReplySchema)] as const,
+    ["npc/patch", derived(npcPatchReplySchema)] as const,
+    ["location/patch", derived(locationPatchReplySchema)] as const,
   ];
 
   test("is strict-mode shaped: every key required, nothing extra allowed", () => {

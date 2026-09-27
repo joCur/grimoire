@@ -15,7 +15,7 @@
 //
 // No state that could diverge from the draft: the forms are CONTROLLED and
 // write straight into the block list through lib/composer.ts (which routes
-// every change through the block helpers of lib/blocks.ts). The only local
+// every change through the block helpers of @grimoire/shared/blocks). The only local
 // state is which card is expanded and where the type picker is open — pure
 // view state, safe to lose.
 //
@@ -25,6 +25,7 @@
 // state stays in the list instead of travelling through every card. Typing in
 // one open card therefore re-renders that card, not the scene.
 
+import { blockText, type HeadingBlock, type SceneBlock } from "@grimoire/shared/blocks";
 import { ChevronDown, ChevronUp, PenLine, Plus, Trash2, X } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 
@@ -32,7 +33,7 @@ import { describedBy, PlaceNoteList, type PlaceNote } from "@/components/place-n
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
 import { useT } from "@/i18n";
-import { blockLabel, blockText, type HeadingBlock, type SceneBlock } from "@/lib/blocks";
+import { blockLabel } from "@/lib/block-labels";
 import {
   headingDepths,
   insertAt,

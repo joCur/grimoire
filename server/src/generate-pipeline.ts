@@ -62,6 +62,7 @@ import {
   ASSET_FILES,
   campaignRefIds,
   collectSceneContext,
+  composePrompt,
   loadAsset,
   loadPromptAssets,
   obtainProvider,
@@ -458,28 +459,20 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
 // --- the per-call prompt assets ----------------------------------------------
 
 /**
- * The scene system prompt in exactly-one-scene-from-the-outline mode: the
- * scene prompt with its own output section swapped for the outline-bound one
- * (`scene-single-output.md`).
- *
- * A swap rather than a second prompt file, for the reason the augment run's
- * `formatContract` exists: the rules (orthography and quotation marks,
- * tables, the callout list, the reference rules) must be the SAME text in
- * both, and the one way to guarantee that is to keep them side by side.
- *
- * Both sections describe the reply object — the swap adds what only the
- * pipeline knows: the outline is binding, and every id of the run is already
- * decided.
+ * The scene system prompt: who the model is, the output section of a scene
+ * written as exactly one scene of its outline (`scene-single-output.md`),
+ * the scene's fields, then the rules and the worked example — composed in
+ * that order (./generator.ts `ASSET_FILES`). The outline-bound output
+ * section adds what only the pipeline knows: the outline is binding, and
+ * every id of the run is already decided.
  */
 export async function sceneSystemPrompt(): Promise<string> {
-  const doc = await loadAsset(ASSET_FILES.scene.systemPrompt);
-  const replacement = await loadAsset(ASSET_FILES.sceneSingle.systemPrompt);
-  const start = doc.indexOf("## Ausgabeformat");
-  if (start === -1) return `${doc.trimEnd()}\n\n${replacement}`;
-  const rest = doc.slice(start + "## Ausgabeformat".length);
-  const next = rest.indexOf("\n## ");
-  const tail = next === -1 ? "" : rest.slice(next + 1);
-  return `${doc.slice(0, start)}${replacement.trimEnd()}\n\n${tail}`;
+  return composePrompt([
+    ASSET_FILES.scene.systemPrompt,
+    ASSET_FILES.sceneSingle.systemPrompt,
+    ASSET_FILES.scene.fields,
+    ASSET_FILES.scene.rules,
+  ]);
 }
 
 /**
@@ -723,7 +716,7 @@ export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
  * endpoint reports no usage at all, and the displayed call count must be
  * true anyway.
  */
-function usageOf(value: unknown, calls: number): PartUsage {
+export function usageOf(value: unknown, calls: number): PartUsage {
   const usage = (value ?? {}) as Partial<GenerateUsage>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   return {
@@ -754,7 +747,7 @@ export function callCounter(): CallCounter {
 }
 
 /** The message and the error list the DM reads next to the retry action. */
-function failureOf(
+export function failureOf(
   err: unknown,
   calls: number,
 ): {

@@ -9,6 +9,7 @@
 
 import {
   unwrittenReferences,
+  withLocationChange,
   withNpcChange,
   withSceneChange,
   type GeneratorJobPatch,
@@ -130,13 +131,20 @@ export async function acceptJobParts(
   };
   job.result?.npcs.forEach((proposal, index) => addNpc(proposal, index));
   if (job.npcResult !== undefined) addNpc(job.npcResult.npc, 0);
-  /** Every proposed location of this run, by its id. */
+  /** Every proposed location of this run, by its id — with the DM's change applied likewise. */
   const locationParts = new Map<string, { location: LocationProposal; open: boolean }>();
   job.result?.locations.forEach((proposal, index) => {
     const open =
       !review.writtenLocations.includes(proposal.id) &&
       review.locations[proposal.id] !== "rejected";
-    locationParts.set(proposal.id, { location: applyLocationItem(proposal, index), open });
+    const change = job.locationEdits[proposal.id];
+    locationParts.set(proposal.id, {
+      location: applyLocationItem(
+        change === undefined ? proposal : withLocationChange(proposal, change),
+        index,
+      ),
+      open,
+    });
   });
 
   /**

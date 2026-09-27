@@ -11,7 +11,8 @@
 // EVERY request carries the schema of the object it wants
 // back — the outline its own (shared/outline-schema), a scene, an npc or a
 // location call the entity's own reply schema (shared/scene, shared/npc,
-// shared/location) — and the transports force it, because that is the one
+// shared/location), a patch call the entity's patch reply schema — and the
+// transports force it, because that is the one
 // guarantee an API can give:
 //
 //   Claude — the schema travels as a TOOL and `tool_choice` forces the call,
@@ -32,7 +33,13 @@
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
 
-import type { LocationProposal, NpcReplyFields, SceneReplyFields } from "@grimoire/shared";
+import type {
+  LocationProposal,
+  LocationReplyFields,
+  NpcReplyFields,
+  PartAnswer,
+  SceneReplyFields,
+} from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
 
 /**
@@ -110,6 +117,17 @@ export interface GenerateRequest {
    * the dialog requires at least one of them.
    */
   instruction?: string;
+  /**
+   * The proposal a PATCH call changes — one scene, npc or location of a scene
+   * run, with the DM's edits applied, every field of it in its reply form.
+   * Absent for every other call.
+   */
+  proposal?: SceneReplyFields | NpcReplyFields | LocationReplyFields;
+  /**
+   * The model's notes on that proposal with the DM's answer to each — what
+   * the patch call acts on. Absent for every other call.
+   */
+  answers?: PartAnswer[];
   /**
    * The JSON schema the reply must satisfy. Every call sets it — the
    * outline its own, a scene, npc or location call its entity's. It stays
@@ -289,6 +307,26 @@ export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
  */
 export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
 
+/**
+ * Heading of the proposal a patch call changes. A constant for the same
+ * reason the others are — the prompt test asserts on it and the E2E stub
+ * reads the prompt by it.
+ */
+export const PROPOSAL_HEADING = "## Vorschlag, den du änderst";
+
+/**
+ * Heading of the model's notes and the DM's answers of a patch call — the
+ * line the E2E stub tells a patch call by.
+ */
+export const ANSWERS_HEADING = "## Hinweise und Antworten des DM";
+
+/** The notes and their answers as prompt lines: each note, its answer under it. */
+function answerLines(answers: readonly PartAnswer[]): string {
+  return answers
+    .map((entry) => `- Hinweis: ${entry.note}\n  Antwort des DM: ${entry.answer}`)
+    .join("\n");
+}
+
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
@@ -301,8 +339,8 @@ export const NEW_CHAPTER_LINE = "neues Kapitel: ja";
  *             OpenAI-compatible endpoint's implicit prefix caching sees the
  *             same prefix on every part of a run without being told.
  *   variable  what this ONE call is about: what an augment run works on,
- *             the DM's instruction, the source text (for a pipeline part: its
- *             excerpt).
+ *             the DM's instruction, a patch call's proposal and answers, the
+ *             source text (for a pipeline part: its excerpt).
  *
  * The Claude provider marks the constant half (and the system prompt) with
  * `cache_control: ephemeral`; everything else joins the two with the same
@@ -382,6 +420,19 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     ...(req.instruction === undefined || req.instruction.trim() === ""
       ? []
       : [INSTRUCTION_HEADING, req.instruction]),
+    // A patch call: the proposal as it stands, then what the DM answered
+    // about it — the model reads the object before the answers that change it.
+    ...(req.proposal === undefined
+      ? []
+      : [
+          `${PROPOSAL_HEADING} (${req.proposal.id})`,
+          "```json",
+          JSON.stringify(req.proposal, null, 2),
+          "```",
+        ]),
+    ...(req.answers === undefined || req.answers.length === 0
+      ? []
+      : [ANSWERS_HEADING, answerLines(req.answers)]),
     // A run may have an instruction and no source text; an empty
     // heading would be one the model has to interpret against nothing.
     ...(req.sourceText.trim() === "" ? [] : ["## Quelltext", req.sourceText]),

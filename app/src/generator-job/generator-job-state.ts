@@ -319,6 +319,7 @@ export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): Generat
     ...job,
     sceneEdits: mergeEdits(job.sceneEdits, patch.sceneEdits),
     npcEdits: mergeEdits(job.npcEdits, patch.npcEdits),
+    locationEdits: mergeEdits(job.locationEdits, patch.locationEdits),
     review: {
       stage: decided.stage ?? review.stage,
       droppedScenes:

@@ -17,7 +17,7 @@ import {
   parseBlocks,
   type IfSectionBlock,
   type SceneBlock,
-} from "@/lib/blocks";
+} from "@grimoire/shared/blocks";
 import { translator } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { composerIssues, setBlockText } from "@/lib/composer";
