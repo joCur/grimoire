@@ -26,11 +26,14 @@ magic item costs or a random table to roll.
   or an import writes a source as a whole. The DM's own additions are
   campaign content and belong in the campaign.
 - **It names its source.** Every page and every row of reference data says
-  where it comes from, with a link, as the source asks to be credited.
+  where it comes from, with a link, as the source asks to be credited; an
+  imported row names the import it came from.
 - **One row per thing, whatever the number of sources.** Where several
   sources cover the same thing, the most specific one gives the value and a
   coarser one only fills the gaps; the row names the source its value comes
-  from, so the DM can tell a precise value from a rough one.
+  from, so the DM can tell a precise value from a rough one. A shipped row
+  stands before an imported one: an import adds what is missing and never
+  overrides what is there.
 - **The search finds it from every campaign.** Its index rows carry no
   campaign, and a hit names its entity like every other (`kind` and `id`).
 - **Shipped only what is shared for redistribution.** A source goes into the
