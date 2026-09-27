@@ -47,7 +47,7 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generator-jobs
-//   { kind: "scene", chapter, sourceText, newChapter?, chapterTitle? }
+//   { kind: "scene", chapter, sourceText, newChapter?, chapterTitle?, extend? }
 //   | { kind: "npc", sourceText, id? } -> 202 GeneratorJob
 // Starts a run in the BACKGROUND and answers at once with the job, `running`.
 // It writes nothing into the campaign (generator/README.md): what the run
@@ -57,7 +57,8 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 // A SCENE run goes into `chapter`; `newChapter` allows a chapter that does
 // not exist yet, which the first accept creates under `chapterTitle` — the
 // title is kept ON the job, so the accept does not depend on the browser that
-// started the run. An NPC run takes the npc's `id` or, without one, lets the
+// started the run. With `extend` the run may also propose changes to npcs and
+// locations the campaign has; without it, it proposes new ones only. An NPC run takes the npc's `id` or, without one, lets the
 // model pick it; a collision with an existing npc then becomes a correction
 // turn.
 //
@@ -92,6 +93,7 @@ generatorJobRoutes.post("/campaigns/:campaign/generator-jobs", async (c) => {
       sourceText,
       newChapter,
       ...(newChapter && chapterTitle !== undefined ? { newChapterTitle: chapterTitle } : {}),
+      extend: body.extend === true,
       provider,
     });
     return c.json(serializeJob(job), 202);

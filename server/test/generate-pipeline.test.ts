@@ -409,6 +409,8 @@ test("an entry's context is the passages that mention it — by name OR by id wo
     locations: [{ id: "mudflats", name: "The Mudflats", summary: "walkable at low tide" }],
     warnings: [],
     serverNotes: [],
+    existingNpcs: [],
+    existingLocations: [],
   };
   const plan = planOf({ campaign: "example", ctx: CTX, outline, sourceText: source });
   // The id and the name share no word — so a source text that never writes
@@ -467,6 +469,8 @@ test("the outline block names every id — and nothing about the assigned part",
     locations: [{ id: "mudflats", name: "The Mudflats", summary: "walkable at low tide" }],
     warnings: [],
     serverNotes: [],
+    existingNpcs: [],
+    existingLocations: [],
   };
   const block = outlineBlock(outline);
   expect(block).toContain("night-watch — Night Watch (planned, location: harbour)");
@@ -503,6 +507,8 @@ test("two parts of one run share a byte-identical constant prefix", () => {
     locations: [],
     warnings: [],
     serverNotes: [],
+    existingNpcs: [],
+    existingLocations: [],
   };
   const base = {
     systemPrompt: "sys",

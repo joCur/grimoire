@@ -52,6 +52,8 @@ import {
   locationEditSchema,
   npcEditSchema,
   openLocationIds,
+  extendedLocationIds,
+  extendedNpcIds,
   openNpcIds,
   openSceneIds,
   partRoundSchema,
@@ -204,6 +206,7 @@ function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
       key: part.key,
       kind: part.kind,
       id: part.id,
+      ...(part.existing === true ? { existing: true as const } : {}),
       title: part.title,
       status: part.status,
       ...(part.error === undefined ? {} : { error: part.error }),
@@ -325,6 +328,7 @@ export function emptyReview(): GeneratorJobReview {
     writtenNpcs: [],
     locations: {},
     writtenLocations: [],
+    keptChanges: {},
   };
 }
 
@@ -358,6 +362,7 @@ function unpackReview(value: string): GeneratorJobReview {
     writtenNpcs: stringList(parsed.writtenNpcs),
     locations: stringRecord(parsed.locations, (v) => (v === "rejected" ? v : undefined)),
     writtenLocations: stringList(parsed.writtenLocations),
+    keptChanges: stringRecord(parsed.keptChanges, (v) => (Array.isArray(v) ? stringList(v) : undefined)),
   };
 }
 
@@ -469,6 +474,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
       key: part.key,
       kind,
       id: part.id,
+      ...(part.existing === true ? { existing: true as const } : {}),
       title: typeof part.title === "string" ? part.title : part.id,
       status:
         status === "pending" || status === "running" || status === "done" || status === "failed"
@@ -490,7 +496,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const sceneStart = unpackSceneStart(parsed.sceneStart);
   return {
-    ...(parsed.outline === undefined ? {} : { outline: parsed.outline as RunOutline }),
+    ...(parsed.outline === undefined ? {} : { outline: storedOutline(parsed.outline) }),
     parts,
     totals: {
       inputTokens: num(totals.inputTokens),
@@ -498,6 +504,20 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
       calls: num(totals.calls),
     },
     ...(sceneStart === undefined ? {} : { sceneStart }),
+  };
+}
+
+/**
+ * A stored outline as the run reads it. An outline stored before a run could
+ * extend what the campaign has names no existing npc and no existing
+ * location.
+ */
+function storedOutline(value: unknown): RunOutline {
+  const outline = value as RunOutline;
+  return {
+    ...outline,
+    existingNpcs: outline.existingNpcs ?? [],
+    existingLocations: outline.existingLocations ?? [],
   };
 }
 
@@ -541,6 +561,8 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
       newChapter: boolean;
       /** Title for the chapter a `newChapter` run creates. */
       newChapterTitle?: string;
+      /** The run may also extend npcs and locations the campaign has. */
+      extend: boolean;
     }
   | { kind: "npc"; sourceText: string; npcId?: string }
   // A scene augment run names a scene that EXISTS by its id. At least one of
@@ -684,6 +706,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         chapter: input.chapter,
         sourceText: input.sourceText,
         newChapter: input.newChapter,
+        extend: input.extend,
         sink: await jobSink(job.campaign, job.id),
         getProvider: () => input.provider,
       });
@@ -800,6 +823,20 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
     if (at === -1) locations.push(location);
     else locations[at] = location;
   }
+  const npcExtensions = [...(result.npcExtensions ?? [])];
+  const locationExtensions = [...(result.locationExtensions ?? [])];
+  const put = <T extends { id: string }>(list: T[], extension: T): void => {
+    const at = list.findIndex((candidate) => candidate.id === extension.id);
+    if (at === -1) list.push(extension);
+    else list[at] = extension;
+  };
+  if (outcome.extension?.kind === "npc") {
+    const { kind: _kind, ...extension } = outcome.extension;
+    put(npcExtensions, extension);
+  } else if (outcome.extension?.kind === "location") {
+    const { kind: _kind, ...extension } = outcome.extension;
+    put(locationExtensions, extension);
+  }
   // The model's notes stay on the part (`partDone`); the naming check's
   // findings name their proposal by id and join the result's list.
   const namingHints = [...(result.namingHints ?? []), ...outcome.namingHints];
@@ -807,6 +844,8 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
     scenes,
     npcs,
     locations,
+    ...(npcExtensions.length === 0 ? {} : { npcExtensions }),
+    ...(locationExtensions.length === 0 ? {} : { locationExtensions }),
     warnings: result.warnings,
     ...(result.serverNotes === undefined ? {} : { serverNotes: result.serverNotes }),
     ...(namingHints.length === 0 ? {} : { namingHints }),
@@ -834,6 +873,8 @@ function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): Gene
   const locationRank = new Map(
     parts.filter((p) => p.kind === "location").map((p, i) => [p.id, i]),
   );
+  const byRank = <T extends { id: string }>(map: Map<string, number>, list: readonly T[]) =>
+    [...list].sort((a, b) => rank(map, a.id) - rank(map, b.id));
   const rank = (map: Map<string, number>, key: string): number => map.get(key) ?? Number.MAX_SAFE_INTEGER;
   return {
     ...result,
@@ -842,6 +883,12 @@ function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): Gene
     locations: [...result.locations].sort(
       (a, b) => rank(locationRank, a.id) - rank(locationRank, b.id),
     ),
+    ...(result.npcExtensions === undefined
+      ? {}
+      : { npcExtensions: byRank(npcRank, result.npcExtensions) }),
+    ...(result.locationExtensions === undefined
+      ? {}
+      : { locationExtensions: byRank(locationRank, result.locationExtensions) }),
   };
 }
 
@@ -1008,6 +1055,10 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           part.warnings = outcome.warnings;
           if (outcome.serverNotes.length === 0) delete part.serverNotes;
           else part.serverNotes = outcome.serverNotes;
+          // An extension's operations that could not be applied to the row
+          // the run read; a proposal written whole has none.
+          if (outcome.findings === undefined || outcome.findings.length === 0) delete part.findings;
+          else part.findings = outcome.findings;
           part.usage = usage;
         }
         addUsage(pipeline, usage);
@@ -1182,6 +1233,8 @@ export function assertAnswerable(job: Job, key: string, rev: number, notes: read
   if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
   if (job.rev !== rev) throw jobConflict(job);
   if (part.status !== "done") throw new ApiError(409, "this part is not finished");
+  // An extension's changes are taken or kept as the model proposed them.
+  if (part.existing === true) throw new ApiError(409, "the notes of an extension are not answered");
   if (!partProposalOpen(job, part)) {
     throw new ApiError(409, "the proposal of this part is written, dropped or rejected");
   }
@@ -1497,22 +1550,47 @@ function assertKnownProposals(job: Job, patch: GeneratorJobPatch): void {
   ]) {
     if (!sceneIds.has(id)) throw new ApiError(400, `unknown scene: ${id}`);
   }
+  // An extension is decided like a new npc or location, but it is not a
+  // proposal the DM edits: its changes are taken or kept instead.
   const npcIds = new Set(proposedNpcIds(job));
-  for (const id of [
-    ...Object.keys(patch.npcEdits ?? {}),
-    ...Object.keys(review.npcs ?? {}),
-    ...(review.writtenNpcs ?? []),
-  ]) {
+  const extendedNpcs = new Set(extendedNpcIds(job));
+  for (const id of Object.keys(patch.npcEdits ?? {})) {
     if (!npcIds.has(id)) throw new ApiError(400, `unknown npc: ${id}`);
   }
+  for (const id of [...Object.keys(review.npcs ?? {}), ...(review.writtenNpcs ?? [])]) {
+    if (!npcIds.has(id) && !extendedNpcs.has(id)) throw new ApiError(400, `unknown npc: ${id}`);
+  }
   const locationIds = new Set((job.result?.locations ?? []).map((location) => location.id));
-  for (const id of [
-    ...Object.keys(patch.locationEdits ?? {}),
-    ...Object.keys(review.locations ?? {}),
-    ...(review.writtenLocations ?? []),
-  ]) {
+  const extendedLocations = new Set(extendedLocationIds(job));
+  for (const id of Object.keys(patch.locationEdits ?? {})) {
     if (!locationIds.has(id)) throw new ApiError(400, `unknown location: ${id}`);
   }
+  for (const id of [...Object.keys(review.locations ?? {}), ...(review.writtenLocations ?? [])]) {
+    if (!locationIds.has(id) && !extendedLocations.has(id)) {
+      throw new ApiError(400, `unknown location: ${id}`);
+    }
+  }
+  for (const [key, kept] of Object.entries(review.keptChanges ?? {})) {
+    const changes = extensionChanges(job, key);
+    if (changes === undefined) throw new ApiError(400, `unknown extension: ${key}`);
+    for (const id of kept ?? []) {
+      if (!changes.some((change) => change.id === id)) {
+        throw new ApiError(400, `unknown change: ${id}`);
+      }
+    }
+  }
+}
+
+/**
+ * The changes of the extension under a part's key (`npc:<id>`,
+ * `location:<id>`), or undefined when the run extends nothing under it.
+ */
+export function extensionChanges(job: Job, key: string): PartChange[] | undefined {
+  const part = job.pipeline?.parts.find((candidate) => candidate.key === key);
+  if (part === undefined || part.existing !== true) return undefined;
+  const extensions =
+    part.kind === "npc" ? job.result?.npcExtensions : job.result?.locationExtensions;
+  return extensions?.find((extension) => extension.id === part.id)?.changes;
 }
 
 /**
@@ -1550,6 +1628,10 @@ export function applyReviewPatch(job: Job, patch: GeneratorJobPatch): void {
   }
   assignFlags(job.review.fields, review.fields);
   assignFlags(job.review.blocks, review.blocks);
+  for (const [key, kept] of Object.entries(review.keptChanges ?? {})) {
+    if (kept === null) delete job.review.keptChanges[key];
+    else job.review.keptChanges[key] = [...new Set(kept)];
+  }
 }
 
 /** Merge boolean decisions; `null` deletes the key. */
@@ -1572,7 +1654,8 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
  *
  * `sceneStart` is the start this accept TOOK — given only by the run's first
  * scene accept, and stored on the pipeline in the same commit as the scenes
- * it placed.
+ * it placed. `findings` are what an accepted extension could not apply to
+ * its row, by the key of its part: they stand on that part from now on.
  *
  * Answers the job as this write leaves it. When nothing is left open the row
  * is deleted in the same commit, and the answer is the job as it ended.
@@ -1584,6 +1667,7 @@ export function markWrittenInTx(
   patch: GeneratorJobPatch,
   written: { scenes: readonly string[]; npcs: readonly string[]; locations: readonly string[] },
   sceneStart?: SceneRunStart,
+  findings: Readonly<Record<string, PatchFinding[]>> = {},
 ): Job {
   const row = jobRow(tx, campaign);
   if (row === undefined || row.id !== jobId) throw noJob();
@@ -1604,10 +1688,36 @@ export function markWrittenInTx(
   job.review.writtenScenes.push(...written.scenes);
   job.review.writtenNpcs.push(...written.npcs);
   job.review.writtenLocations.push(...written.locations);
-  const next: Job = { ...job, rev: row.rev + 1 };
+  const found = Object.entries(findings).filter(([, list]) => list.length > 0);
+  const next: Job = {
+    ...job,
+    rev: row.rev + 1,
+    ...(job.pipeline === undefined
+      ? {}
+      : {
+          pipeline: {
+            ...job.pipeline,
+            parts: job.pipeline.parts.map((part) => {
+              const list = findings[part.key];
+              return list === undefined || list.length === 0 ? part : { ...part, findings: list };
+            }),
+          },
+        }),
+  };
   if (isGeneratorJobSettled(job)) {
     tx.delete(generateJobs).where(eq(generateJobs.id, row.id)).run();
     return next;
+  }
+  // Merged onto the stored column rather than re-serialized from the parsed
+  // record, so nothing else the pipeline holds is rewritten here.
+  let pipeline = row.pipeline;
+  if (sceneStart !== undefined) {
+    pipeline = JSON.stringify({ ...unpackPayload<Record<string, unknown>>(pipeline), sceneStart });
+  }
+  for (const [key, list] of found) {
+    pipeline = withStoredPart(pipeline, key, (part) => {
+      part.findings = list;
+    });
   }
   tx.update(generateJobs)
     .set({
@@ -1616,16 +1726,7 @@ export function markWrittenInTx(
       locationEdits: JSON.stringify(job.locationEdits),
       review: JSON.stringify(job.review),
       rev: row.rev + 1,
-      // Merged onto the stored column rather than re-serialized from the
-      // parsed record, so nothing else the pipeline holds is rewritten here.
-      ...(sceneStart === undefined
-        ? {}
-        : {
-            pipeline: JSON.stringify({
-              ...unpackPayload<Record<string, unknown>>(row.pipeline),
-              sceneStart,
-            }),
-          }),
+      ...(pipeline === row.pipeline ? {} : { pipeline }),
     })
     .where(eq(generateJobs.id, row.id))
     .run();

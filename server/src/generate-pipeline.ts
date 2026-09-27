@@ -36,16 +36,25 @@
 //      outline, each with the scenes that reference it as context and each
 //      answered in its entity's own reply form. Deduped by id.
 //
+//      A run started with `extend` may also name npcs and locations the
+//      campaign already has and the source text adds to. Each is a call of
+//      its own too, with the stored row and the passages that mention it,
+//      and it answers with operations against that row
+//      (./patch-operations.ts) — never with the whole entity.
+//
 // The augment runs and the NPC run stay single-call runs — one row each,
 // nothing to decompose.
 
 import {
   SCENE_TYPES,
+  npcToReply,
   type GeneratorJobPart,
   type GenerateUsage,
   type LocationProposal,
   type NamingHint,
   type NpcProposal,
+  type PartChange,
+  type PatchFinding,
   type SceneProposal,
   type ServerNote,
 } from "@grimoire/shared";
@@ -82,6 +91,15 @@ import { locationReplyRequest, parseLocationReply } from "./location-reply";
 import { npcReplyRequest, parseNpcReply } from "./npc-reply";
 import { parseSceneReply, sceneReplyRequest } from "./scene-reply";
 import type { LLMProvider } from "./llm-provider";
+import {
+  ENTITY,
+  applyPatchOperations,
+  patchReplyRequest,
+  readPatchReply,
+  type ReadOperation,
+} from "./patch-operations";
+import { readLocation } from "./store/locations";
+import { readNpc } from "./store/npcs";
 
 /** How many scene, npc and location calls of one run are in flight at once. */
 export const PART_CONCURRENCY = 3;
@@ -135,6 +153,15 @@ export interface OutlineLocation {
   summary: string;
 }
 
+/** An npc or location the campaign has and the source text adds to. */
+export interface OutlineExisting {
+  id: string;
+  /** Its name as the campaign holds it. */
+  name: string;
+  /** One sentence on what the source text adds. */
+  summary: string;
+}
+
 /**
  * The outline of a run: its scenes, and the npcs and the locations it
  * introduces as two lists of their own — the same split the job's result has
@@ -144,6 +171,10 @@ export interface RunOutline {
   scenes: OutlineScene[];
   npcs: OutlineNpc[];
   locations: OutlineLocation[];
+  /** The npcs of the campaign the run extends — empty for a run without `extend`. */
+  existingNpcs: OutlineExisting[];
+  /** The locations of the campaign the run extends — likewise. */
+  existingLocations: OutlineExisting[];
   /** The model's notes about the run. */
   warnings: string[];
   /**
@@ -197,10 +228,14 @@ function stringField(obj: Record<string, unknown>, key: string): string | undefi
  * The chapter is NOT the model's: a scene that names one has to
  * name the run's, and anything else is a correction turn rather than a
  * silently ignored key — a model that invents chapters also invents addresses.
+ *
+ * With `extend` the outline may also name npcs and locations the campaign
+ * has, each once in the whole run; without it those lists are not read.
  */
 export function validateOutlineReply(
   raw: string,
   ctx: SceneContext,
+  extend = false,
 ): { ok: true; result: RunOutline } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const parsedReply = parseOutlineJson(raw);
@@ -214,6 +249,14 @@ export function validateOutlineReply(
   if (!Array.isArray(rawNpcs)) return { ok: false, errors: ['"npcs" must be an array'] };
   const rawLocations = obj.locations ?? [];
   if (!Array.isArray(rawLocations)) return { ok: false, errors: ['"locations" must be an array'] };
+  const rawExistingNpcs = extend ? (obj.existingNpcs ?? []) : [];
+  if (!Array.isArray(rawExistingNpcs)) {
+    return { ok: false, errors: ['"existingNpcs" must be an array'] };
+  }
+  const rawExistingLocations = extend ? (obj.existingLocations ?? []) : [];
+  if (!Array.isArray(rawExistingLocations)) {
+    return { ok: false, errors: ['"existingLocations" must be an array'] };
+  }
 
   const seen = new Set<string>();
   /**
@@ -252,6 +295,43 @@ export function validateOutlineReply(
   rawLocations.forEach((item, index) => {
     const location = readNew(item, `locations[${index}]`);
     if (location !== null) locations.push(location);
+  });
+  /**
+   * One npc or location of the campaign the run extends: an id the context
+   * lists under `known` that the whole run uses only once, and what the
+   * source adds. Its name is the campaign's.
+   */
+  const readExisting = (
+    item: unknown,
+    label: string,
+    known: readonly { id: string; name: string }[],
+  ): OutlineExisting | null => {
+    if (!isRecord(item)) {
+      errors.push(`${label}: must be an object`);
+      return null;
+    }
+    const id = stringField(item, "id");
+    const entry = known.find((candidate) => candidate.id === id);
+    if (id === undefined || entry === undefined) {
+      errors.push(`${label}: "id" must name an entry of the context list — "${id ?? ""}" is none`);
+      return null;
+    }
+    if (seen.has(id)) {
+      errors.push(`${label}: duplicate id "${id}" — every id occurs only once in the run`);
+      return null;
+    }
+    seen.add(id);
+    return { id, name: entry.name === "" ? id : entry.name, summary: stringField(item, "summary") ?? "" };
+  };
+  const existingNpcs: OutlineExisting[] = [];
+  rawExistingNpcs.forEach((item, index) => {
+    const npc = readExisting(item, `existingNpcs[${index}]`, ctx.npcs);
+    if (npc !== null) existingNpcs.push(npc);
+  });
+  const existingLocations: OutlineExisting[] = [];
+  rawExistingLocations.forEach((item, index) => {
+    const location = readExisting(item, `existingLocations[${index}]`, ctx.locations);
+    if (location !== null) existingLocations.push(location);
   });
 
   const outlineLocationIds = new Set(locations.map((location) => location.id));
@@ -332,10 +412,17 @@ export function validateOutlineReply(
         "(Verzweigungen derselben Situation gehören in EINE Szene)",
     );
   }
-  // Every new npc and every new location is a provider call of its own, so
-  // the two lists share one bound.
-  const proposals = npcs.length + locations.length;
-  if (proposals > MAX_OUTLINE_PROPOSALS) {
+  // Every new npc and every new location is a provider call of its own, and
+  // so is every one the run extends: the four lists share one bound.
+  const proposals =
+    npcs.length + locations.length + existingNpcs.length + existingLocations.length;
+  if (proposals > MAX_OUTLINE_PROPOSALS && existingNpcs.length + existingLocations.length > 0) {
+    errors.push(
+      `"npcs", "locations", "existingNpcs" and "existingLocations": ${proposals} are too many ` +
+        `for one run — name at most ${MAX_OUTLINE_PROPOSALS} together, the ones the chapter ` +
+        "really needs",
+    );
+  } else if (proposals > MAX_OUTLINE_PROPOSALS) {
     errors.push(
       `"npcs" und "locations": ${proposals} neue Figuren und Orte sind zu viele für einen ` +
         `Durchlauf — nenne zusammen höchstens ${MAX_OUTLINE_PROPOSALS}, die das Kapitel ` +
@@ -374,6 +461,8 @@ export function validateOutlineReply(
       scenes,
       npcs,
       locations,
+      existingNpcs,
+      existingLocations,
       warnings,
       // The repair is recorded, not swallowed.
       serverNotes: parsedReply.repaired ? ["reply_repaired"] : [],
@@ -635,6 +724,15 @@ export interface PartOutcome {
   scene?: SceneProposal;
   npc?: NpcProposal;
   location?: LocationProposal;
+  /**
+   * An existing npc or location the part extends: the row as the call read
+   * it, and the changes it proposes for that row.
+   */
+  extension?:
+    | { kind: "npc"; id: string; current: NpcProposal; changes: PartChange[] }
+    | { kind: "location"; id: string; current: LocationProposal; changes: PartChange[] };
+  /** What of an extension's reply could not be applied to that row; absent for a proposal. */
+  findings?: PatchFinding[];
   /** The model's notes on this part — they stay on the part (`GeneratorJobPart.warnings`). */
   warnings: string[];
   /** What the server notes about this part — they stay on it too (`GeneratorJobPart.serverNotes`). */
@@ -686,7 +784,10 @@ export function locationPartKey(id: string): string {
   return `location:${id}`;
 }
 
-/** The parts an outline produces, in the order the review shows them. */
+/**
+ * The parts an outline produces, in the order the review shows them: an
+ * extension follows the new npcs or locations of its stage.
+ */
 export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
   return [
     ...outline.scenes.map(
@@ -709,11 +810,33 @@ export function outlineParts(outline: RunOutline): GeneratorJobPart[] {
         warnings: [],
       }),
     ),
+    ...outline.existingNpcs.map(
+      (npc): GeneratorJobPart => ({
+        key: npcPartKey(npc.id),
+        kind: "npc",
+        id: npc.id,
+        existing: true,
+        title: npc.name,
+        status: "pending",
+        warnings: [],
+      }),
+    ),
     ...outline.locations.map(
       (location): GeneratorJobPart => ({
         key: locationPartKey(location.id),
         kind: "location",
         id: location.id,
+        title: location.name,
+        status: "pending",
+        warnings: [],
+      }),
+    ),
+    ...outline.existingLocations.map(
+      (location): GeneratorJobPart => ({
+        key: locationPartKey(location.id),
+        kind: "location",
+        id: location.id,
+        existing: true,
         title: location.name,
         status: "pending",
         warnings: [],
@@ -844,17 +967,29 @@ export function planOf(input: {
   };
 }
 
-/** Step 1: the outline call, with its own correction turns. */
+/**
+ * Step 1: the outline call, with its own correction turns. With `extend` the
+ * outline may also name npcs and locations the campaign has: its prompt
+ * carries the rule for that and its schema the two lists; without it both
+ * are exactly what a run that only proposes new ones sends.
+ */
 export async function runOutlineStep(
   ctx: SceneContext,
   sourceText: string,
   provider: LLMProvider,
+  extend = false,
 ): Promise<{ outline: RunOutline; usage: PartUsage }> {
   const counter = callCounter();
   const assets = await loadPromptAssets("outline");
+  const systemPrompt = extend
+    ? await composePrompt([
+        ASSET_FILES.outline.systemPrompt,
+        ASSET_FILES.outlineExtend.systemPrompt,
+      ])
+    : assets.systemPrompt;
   const result = await runPipeline<{ outline: RunOutline; usage?: GenerateUsage }>({
     req: {
-      systemPrompt: assets.systemPrompt,
+      systemPrompt,
       fewShotTarget: assets.fewShotTarget,
       knowledge: ctx.knowledge,
       glossary: ctx.glossary,
@@ -873,12 +1008,12 @@ export async function runOutlineStep(
       jsonSchema: {
         name: OUTLINE_SCHEMA_NAME,
         description: OUTLINE_SCHEMA_DESCRIPTION,
-        schema: outlineJsonSchema(),
+        schema: outlineJsonSchema(extend),
       },
     },
     provider,
     validate: (raw) => {
-      const outcome = validateOutlineReply(raw, ctx);
+      const outcome = validateOutlineReply(raw, ctx, extend);
       return outcome.ok ? { ok: true, result: { outline: outcome.result } } : outcome;
     },
     correctionTail: OUTLINE_CORRECTION_TAIL,
@@ -1036,13 +1171,84 @@ export async function runLocationPart(
   };
 }
 
+/** The stored row of an existing npc or location as the proposal the operations change. */
+async function storedProposal(
+  campaign: string,
+  kind: "npc" | "location",
+): Promise<(id: string) => Promise<NpcProposal | LocationProposal>> {
+  return async (id) => {
+    const { rev: _rev, deletedMs: _deleted, ...proposal } =
+      kind === "npc" ? await readNpc(campaign, id) : await readLocation(campaign, id);
+    return proposal;
+  };
+}
+
+/**
+ * Step 3: one existing npc or location the run extends. The call sees the
+ * row as it is stored and the passages that mention it, and replies with
+ * operations against that row; what they would change are the part's
+ * changes, and what cannot be applied is a finding (./patch-operations.ts).
+ * Nothing is written here — the accept applies the taken changes to the row
+ * as it is stored then.
+ */
+export async function runExtensionPart(
+  plan: RunPlan,
+  kind: "npc" | "location",
+  existing: OutlineExisting,
+  provider: LLMProvider,
+  counter: CallCounter = callCounter(),
+): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
+  const proposal = await (await storedProposal(plan.campaign, kind))(existing.id);
+  const [systemPrompt, fewShotTarget] = await Promise.all([
+    composePrompt([ASSET_FILES.extend.systemPrompt, ENTITY[kind].fields]),
+    loadAsset(ASSET_FILES.extend.fewShotTarget),
+  ]);
+  const result = await runPipeline<{ operations: ReadOperation[]; usage?: GenerateUsage }>({
+    req: {
+      systemPrompt,
+      fewShotTarget,
+      knowledge: plan.ctx.knowledge,
+      glossary: plan.ctx.glossary,
+      context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
+      outline: outlineBlock(plan.outline),
+      ...(kind === "npc"
+        ? { existingNpc: npcToReply(proposal as NpcProposal) }
+        : { existingLocation: proposal as LocationProposal }),
+      sourceText:
+        kind === "npc" ? npcContext(plan, existing) : existingLocationContext(plan, existing),
+      jsonSchema: patchReplyRequest(kind),
+    },
+    provider,
+    validate: (raw) => readPatchReply(raw, kind),
+    correctionTail: "alle Ergänzungen enthalten",
+    onCall: counter.onCall,
+  });
+  const { changes, notes, findings } = applyPatchOperations(kind, proposal, result.operations, {
+    chapter: plan.ctx.chapter,
+    ...plan.allowed,
+  });
+  return {
+    outcome: {
+      extension:
+        kind === "npc"
+          ? { kind, id: existing.id, current: proposal as NpcProposal, changes }
+          : { kind, id: existing.id, current: proposal as LocationProposal, changes },
+      warnings: notes,
+      serverNotes: [],
+      namingHints: [],
+      findings,
+    },
+    usage: usageOf(result.usage, counter.count()),
+  };
+}
+
 /**
  * The source material of an npc call: the one-liner from the outline plus the
  * source passages of every scene that mentions the npc — by its name or its
  * id. The outline does not list npcs per scene, and a text search over the
  * passages is both cheap and honest.
  */
-export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc): string {
+export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc | OutlineExisting): string {
   const needle = outlineNpc.name.toLowerCase();
   // The id is kebab-case ENGLISH while the name is German ("harbour-master" /
   // "Hafenmeisterin"), so the whole id rarely appears in an English source
@@ -1065,6 +1271,23 @@ export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc): string {
  */
 export function locationContext(plan: RunPlan, outlineLocation: OutlineLocation): string {
   return contextOf(plan, outlineLocation, (scene) => scene.location === outlineLocation.id);
+}
+
+/**
+ * The source material of an extension of an existing location: the passages
+ * of the scenes set there, and of those that name it — a location the
+ * campaign has is often only mentioned by a scene set elsewhere.
+ */
+export function existingLocationContext(plan: RunPlan, existing: OutlineExisting): string {
+  const needle = existing.name.toLowerCase();
+  return contextOf(
+    plan,
+    existing,
+    (scene, passage) =>
+      scene.location === existing.id ||
+      passage.toLowerCase().includes(needle) ||
+      passage.includes(existing.id),
+  );
 }
 
 /**
@@ -1109,9 +1332,17 @@ export async function runPart(
     const run =
       part.kind === "scene"
         ? await runScenePart(plan, sceneOf(plan.outline, part.id), provider, counter)
-        : part.kind === "npc"
-          ? await runNpcPart(plan, npcOf(plan.outline, part.id), provider, counter)
-          : await runLocationPart(plan, locationOf(plan.outline, part.id), provider, counter);
+        : part.existing === true
+          ? await runExtensionPart(
+              plan,
+              part.kind,
+              existingOf(plan.outline, { kind: part.kind, id: part.id }),
+              provider,
+              counter,
+            )
+          : part.kind === "npc"
+            ? await runNpcPart(plan, npcOf(plan.outline, part.id), provider, counter)
+            : await runLocationPart(plan, locationOf(plan.outline, part.id), provider, counter);
     if (sink.cancelled()) return;
     await sink.partDone(part.key, run.outcome, run.usage);
   } catch (err) {
@@ -1149,6 +1380,16 @@ export function locationOf(outline: RunOutline, id: string): OutlineLocation {
   return location;
 }
 
+export function existingOf(
+  outline: RunOutline,
+  part: { kind: "npc" | "location"; id: string },
+): OutlineExisting {
+  const list = part.kind === "npc" ? outline.existingNpcs : outline.existingLocations;
+  const existing = list.find((candidate) => candidate.id === part.id);
+  if (existing === undefined) throw new ApiError(404, `unknown outline ${part.kind}: ${part.id}`);
+  return existing;
+}
+
 /** Run `parts` with at most PART_CONCURRENCY in flight; failures never stop siblings. */
 export async function runPartsPooled(
   plan: RunPlan,
@@ -1178,12 +1419,14 @@ export async function runScenePipeline(input: {
   chapter: string;
   sourceText: string;
   newChapter: boolean;
+  /** The run may also propose changes to npcs and locations the campaign has. */
+  extend: boolean;
   sink: PipelineSink;
   getProvider?: () => LLMProvider;
 }): Promise<void> {
   const provider = (input.getProvider ?? obtainProvider)();
   const ctx = await collectSceneContext(input.campaign, input.chapter, input.newChapter);
-  const { outline, usage } = await runOutlineStep(ctx, input.sourceText, provider);
+  const { outline, usage } = await runOutlineStep(ctx, input.sourceText, provider, input.extend);
   if (input.sink.cancelled()) return;
   const parts = outlineParts(outline);
   await input.sink.outlineReady(outline, parts, usage);

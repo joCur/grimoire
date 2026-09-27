@@ -231,6 +231,13 @@ export const TRIGGER = {
    * reference.
    */
   unknownRef: "E2E_UNKNOWN_REF",
+  /**
+   * The outline proposes one plain scene (EXTEND_SCENE) and nothing new, and
+   * — when the run may extend what exists, which the outline prompt then
+   * says (EXTEND_RULES_HEADING) — names the existing npc EXTENDED_NPC_ID
+   * for its extension part (extensionReply).
+   */
+  extendNpc: "E2E_EXTEND_NPC",
   // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
   // therefore reaches the state in which its only reviewable part is a failed
   // one.
@@ -698,6 +705,9 @@ export const THREE_SCENES = [
 /** The second scene of a TRIGGER.twoScenes run — it names no new npc or location. */
 export const SECOND_SCENE = { id: "talk-on-the-mole", title: "Talk on the mole" } as const;
 
+/** The one scene of a TRIGGER.extendNpc run; it names the existing npc it extends. */
+export const EXTEND_SCENE = { id: "fenn-at-the-mole", title: "Fenn at the mole" } as const;
+
 /** The scene the failure trigger breaks — the middle one, so two survive. */
 export const FAILING_SCENE_ID = THREE_SCENES[1].id;
 
@@ -783,6 +793,12 @@ export function outlineReply(input: {
    * The case is about the quotation marks.
    */
   asciiQuotes?: boolean;
+  /**
+   * TRIGGER.extendNpc: EXTEND_SCENE alone, and EXTENDED_NPC_ID to extend
+   * when `extending` — the outline prompt asks for extensions.
+   */
+  extendNpc?: boolean;
+  extending?: boolean;
 }): unknown {
   const sourceExcerpt = wholeSourceExcerpt(input.source);
   // The outline is the step that reads the WHOLE source text, so the run's
@@ -804,6 +820,22 @@ export function outlineReply(input: {
       })),
       npcs: [],
       locations: [],
+      chapterDescription,
+      warnings,
+    };
+  }
+  if (input.extendNpc === true) {
+    return {
+      scenes: [
+        { id: EXTEND_SCENE.id, title: EXTEND_SCENE.title, type: "planned", sourceExcerpt, refs: [] },
+      ],
+      npcs: [],
+      locations: [],
+      existingNpcs:
+        input.extending === true
+          ? [{ id: EXTENDED_NPC_ID, summary: "Owes the harbour master a favour." }]
+          : [],
+      existingLocations: [],
       chapterDescription,
       warnings,
     };
@@ -910,7 +942,7 @@ export function scenePartReply(
       warnings: [partNote(sceneId)],
     };
   }
-  const scene = [...THREE_SCENES, SECOND_SCENE].find((s) => s.id === sceneId);
+  const scene = [...THREE_SCENES, SECOND_SCENE, EXTEND_SCENE].find((s) => s.id === sceneId);
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
@@ -1024,4 +1056,47 @@ export function patchReply(
     };
   }
   return { operations: [{ op: "set", field: "voice", value: PATCH_NPC_VOICE }, ...echo] };
+}
+
+// --- extending an existing npc -------------------------------------------------
+
+/**
+ * The heading of the outline prompt's rules for extending existing npcs and
+ * locations (generator/outline-extend-rules.md) — there only when the run may
+ * extend. Duplicated on purpose: the stub reads the prompt as a model would.
+ */
+export const EXTEND_RULES_HEADING = "## Bestehende Figuren und Orte ergänzen";
+
+/** The system prompt of an extension part (generator/extend-system-prompt.md). */
+export const EXTEND_SYSTEM_HEADING = "# System-Prompt: Bestehendes ergänzen";
+
+/** The npc of the example campaign a TRIGGER.extendNpc run extends. */
+export const EXTENDED_NPC_ID = "fenn";
+
+/** The motivation the extension sets. */
+export const EXTEND_NPC_MOTIVATION = "Pay back the harbour master before the next storm.";
+
+/** The block of Fenn's stored text the extension inserts after. */
+export const EXTEND_NPC_ANCHOR =
+  "> [!secret] Knows the name of whoever hired him, but only gives it\n> once his way out is secured.";
+
+/** The block the extension inserts. */
+export const EXTEND_NPC_BLOCK = "> [!note] Owes the harbour master a favour since the storm.";
+
+/** The model's note on the extension. */
+export const EXTEND_NPC_NOTE = "The source does not say how large the debt is.";
+
+/**
+ * What an extension part replies: operations against the row as stored — a
+ * field set, a block inserted after one that is there, and a note. Never the
+ * whole npc.
+ */
+export function extensionReply(): { operations: unknown[] } {
+  return {
+    operations: [
+      { op: "set", field: "motivation", value: EXTEND_NPC_MOTIVATION },
+      { op: "insertAfter", anchor: EXTEND_NPC_ANCHOR, text: EXTEND_NPC_BLOCK },
+      { op: "note", text: EXTEND_NPC_NOTE },
+    ],
+  };
 }

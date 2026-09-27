@@ -723,6 +723,9 @@ export const en: Messages = {
   "generate.input.sourceLabel": "Source text (EN)",
   "generate.input.sourcePlaceholder":
     "Paste adventure text — paragraphs, boxed text, statblock references …",
+  "generate.input.extend": "Extend existing NPCs and locations",
+  "generate.input.extendHint":
+    "The run may add what the source says about NPCs and locations that already exist. You review every change before it is written.",
   "generate.input.contextLabel": "Context sent along:",
   "generate.input.contextEntities":
     "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# location} other {# locations}}",
@@ -864,6 +867,24 @@ export const en: Messages = {
   "generate.stage.next.scenes": "Continue to the scenes",
   "generate.stage.back.locations": "Back to the locations",
   "generate.stage.back.npcs": "Back to the NPCs",
+  "generate.stage.extend.locations":
+    "The run proposes changes to locations that already exist. Take or discard each change on its own — they do not hold up the scenes.",
+  "generate.stage.extend.npcs":
+    "The run proposes changes to NPCs that already exist. Take or discard each change on its own — they do not hold up the scenes.",
+
+  // --- generator: changes a scene run proposes to an existing npc or location
+  "generate.extension.reason.npc": "Changes to an existing NPC",
+  "generate.extension.reason.location": "Changes to an existing location",
+  "generate.extension.apply":
+    "{count, plural, =0 {No change taken} one {Write the change} other {Write the # changes}}",
+  "generate.extension.changes":
+    "{count, plural, one {The proposed change} other {The # proposed changes}}",
+  "generate.extension.taken":
+    "{count, plural, one {{taken} of # change is taken.} other {{taken} of # changes are taken.}} They are written onto what is stored when you accept.",
+  "generate.extension.unchanged.npc":
+    "The source adds nothing to the NPC “{name}” — there is nothing to decide here.",
+  "generate.extension.unchanged.location":
+    "The source adds nothing to the location “{name}” — there is nothing to decide here.",
 
   // --- generator: a scene that names a rejected proposal --------------------
   "generate.incomplete.npc":

@@ -87,6 +87,7 @@ function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
       locations: { ...was.locations, ...is.locations },
       fields: { ...was.fields, ...is.fields },
       blocks: { ...was.blocks, ...is.blocks },
+      keptChanges: { ...was.keptChanges, ...is.keptChanges },
     },
   };
 }
@@ -104,6 +105,7 @@ function prune(patch: ReviewPatch): ReviewPatch {
   if (Object.keys(decided.fields ?? {}).length > 0) review.fields = decided.fields;
   if (Object.keys(decided.blocks ?? {}).length > 0) review.blocks = decided.blocks;
   if (decided.droppedScenes !== undefined) review.droppedScenes = decided.droppedScenes;
+  if (Object.keys(decided.keptChanges ?? {}).length > 0) review.keptChanges = decided.keptChanges;
   if (Object.keys(review).length > 0) out.review = review;
   return out;
 }

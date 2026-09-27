@@ -74,6 +74,7 @@ import { MobileBackRow } from "@/components/MobileBackRow";
 import { AllPlaceNotes, PlaceNotesProvider } from "@/components/place-notes";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   serverErrorBodyMessage,
   serverErrorMessage,
@@ -88,11 +89,13 @@ import {
   augmentTargetName,
   contextHint,
   currentStage,
+  keptChanges,
   knowledgeHint,
   generatePhase,
   runJobArrived,
   hasReviewableParts,
   jobErrorBody,
+  jobExtension,
   jobMode,
   jobSentence,
   jobPipelineParts,
@@ -141,14 +144,17 @@ import { GeneratorJobWorking } from "@/generator-job/GeneratorJobWorking";
 import { jobHref } from "@/generator-job/job-links";
 import { hintPlaceNotes, ModelNotes, RunNotes } from "@/generator-job/PartNotes";
 import { PartRound } from "@/generator-job/PartRound";
+import { ExtensionChanges, ExtensionUnchanged } from "@/generator-job/ExtensionChanges";
 import { ReviewStageNav, ReviewStageSteps } from "@/generator-job/ReviewStages";
 import { SceneReferenceNotice } from "@/generator-job/SceneReferenceNotice";
 import { useJobReview } from "@/generator-job/use-job-review";
 import { cn } from "@/lib/utils";
+import { LocationExtensionRow } from "@/location/LocationExtensionRow";
 import { LocationProposalRow } from "@/location/LocationProposalRow";
 import { locationLabel } from "@/location/location-links";
 import { locationsKey } from "@/location/location-query";
 import { Markdown } from "@/markdown/Markdown";
+import { NpcExtensionRow } from "@/npc/NpcExtensionRow";
 import { NpcProposalRow } from "@/npc/NpcProposalRow";
 import { NpcRunFields, NpcRunReview, NpcRunWrittenAction, useNpcRunForm } from "@/npc/NpcRun";
 import { npcLabel } from "@/npc/npc-links";
@@ -215,6 +221,9 @@ export function GenerateRoute() {
     picked ?? (defaultChapter === undefined ? { kind: "new" } : { kind: "chapter", id: defaultChapter });
   const [newTitle, setNewTitle] = useState("");
   const [sourceText, setSourceText] = useState("");
+  // Whether the run may also extend the npcs and locations the campaign
+  // already has (decisions/generator) — on unless the DM switches it off.
+  const [extend, setExtend] = useState(true);
   // The chapter id of the new-chapter flow. undefined means
   // "the DM has not touched the field" — then the suggestion follows the
   // title. A manual edit pins the value; emptying the field maps back to
@@ -359,6 +368,7 @@ export function GenerateRoute() {
             chapter: chapterId as string,
             sourceText,
             newChapter: creatingChapter,
+            extend,
             // The title travels with the START — the accept must not depend
             // on this tab still being open.
             ...(creatingChapter ? { chapterTitle: newTitle.trim() } : {}),
@@ -681,6 +691,68 @@ export function GenerateRoute() {
       location,
     );
   };
+  /**
+   * One npc or location the campaign already has, with the changes the run
+   * proposes to it (decisions/generator). Each change is taken or kept on its
+   * own; accepting applies the taken ones to the row as it is stored then.
+   * One that brings no change says so and asks nothing.
+   */
+  const extensionRow = (part: GeneratorJobPart, cardRef: (el: HTMLElement | null) => void) => {
+    const extension = jobExtension(job, part);
+    if (extension === undefined) return partCard(part, cardRef);
+    if (extension.changes.length === 0) {
+      return <ExtensionUnchanged key={part.key} part={part} cardRef={cardRef} />;
+    }
+    const kind = part.kind === "npc" ? "npc" : "location";
+    const state = kind === "npc" ? npcState(job, part.id) : locationState(job, part.id);
+    const kept = keptChanges(job, part.key);
+    const taken = extension.changes.filter((change) => !kept.includes(change.id)).length;
+    const decide = (id: string, take: boolean): void => {
+      const rest = kept.filter((keptId) => keptId !== id);
+      review.decide({ keptChanges: { [part.key]: take ? rest : [...rest, id] } });
+    };
+    const notes = (
+      <ExtensionChanges
+        part={part}
+        current={extension.current}
+        changes={extension.changes}
+        kept={kept}
+        open={state === "open"}
+        busy={apply.isPending}
+        onDecide={decide}
+      />
+    );
+    const row = {
+      campaign,
+      cardRef,
+      testId: `${kind}-extension:${part.id}`,
+      state,
+      busy: apply.isPending,
+      notes,
+      acceptLabel: t("generate.extension.apply", { count: taken }),
+      acceptDisabled: taken === 0,
+    };
+    const name = { id: part.id, name: String(extension.current.name ?? part.title) };
+    return kind === "npc" ? (
+      <NpcExtensionRow
+        key={part.key}
+        {...row}
+        npc={name}
+        reason={t("generate.extension.reason.npc")}
+        onReject={() => review.decide({ npcs: { [part.id]: "rejected" } })}
+        onAccept={() => apply.mutate({ npcs: [part.id] })}
+      />
+    ) : (
+      <LocationExtensionRow
+        key={part.key}
+        {...row}
+        location={name}
+        reason={t("generate.extension.reason.location")}
+        onReject={() => review.decide({ locations: { [part.id]: "rejected" } })}
+        onAccept={() => apply.mutate({ locations: [part.id] })}
+      />
+    );
+  };
   /** The status card of a part that has no proposal to show yet. */
   const partCard = (part: GeneratorJobPart, cardRef: (el: HTMLElement | null) => void) => (
     <GeneratorJobPartCard
@@ -991,6 +1063,24 @@ export function GenerateRoute() {
                   placeholder={t("generate.input.sourcePlaceholder")}
                   className={cn(FIELD, "resize-y leading-[1.6] text-body")}
                 />
+                <label
+                  htmlFor="gen-extend"
+                  className="mt-3 flex cursor-pointer items-start gap-2.5 text-[13px] leading-[1.5] text-body-secondary"
+                >
+                  <Checkbox
+                    id="gen-extend"
+                    data-testid="generate-extend"
+                    checked={extend}
+                    onCheckedChange={(state) => setExtend(state === true)}
+                    className="mt-[2px]"
+                  />
+                  <span>
+                    <span className="text-foreground">{t("generate.input.extend")}</span>
+                    <span className="block text-[12px] text-muted-foreground">
+                      {t("generate.input.extendHint")}
+                    </span>
+                  </span>
+                </label>
               </>
             )}
 
@@ -1218,9 +1308,11 @@ export function GenerateRoute() {
               aria-label={t(STAGE_LABEL[stage])}
               className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
             >
-              <p className="mb-[18px] text-[13.5px] leading-[1.6] text-body-secondary">
-                {t(STAGE_LEAD[stage])}
-              </p>
+              {stageLeads(stage, parts).map((lead) => (
+                <p key={lead} className="mb-[18px] text-[13.5px] leading-[1.6] text-body-secondary">
+                  {t(lead)}
+                </p>
+              ))}
 
               {/* Each stage in OUTLINE order: a finished part is its
                   proposal, an open one a status card, a failed one its error
@@ -1228,6 +1320,7 @@ export function GenerateRoute() {
               {stage === "locations" &&
                 locationParts.map((part) => {
                   const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                  if (part.existing === true && part.status === "done") return extensionRow(part, cardRef);
                   const location = part.status === "done" ? locationOfPart(part) : undefined;
                   return location === undefined ? partCard(part, cardRef) : locationRow(location, cardRef);
                 })}
@@ -1235,6 +1328,7 @@ export function GenerateRoute() {
               {stage === "npcs" &&
                 npcParts.map((part) => {
                   const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+                  if (part.existing === true && part.status === "done") return extensionRow(part, cardRef);
                   const npc = part.status === "done" ? npcOfPart(part) : undefined;
                   return npc === undefined ? partCard(part, cardRef) : npcRow(npc, cardRef);
                 })}
@@ -1394,6 +1488,34 @@ const STAGE_LEAD: Record<GeneratorReviewStage, MessageKey> = {
   locations: "generate.stage.lead.locations",
   npcs: "generate.stage.lead.npcs",
   scenes: "generate.stage.lead.scenes",
+};
+
+/** What an extension stage adds to its lead: the rows it changes exist already. */
+const EXTENSION_LEAD: Partial<Record<GeneratorReviewStage, MessageKey>> = {
+  locations: "generate.stage.extend.locations",
+  npcs: "generate.stage.extend.npcs",
+};
+
+/**
+ * The sentences a stage opens with: the lead of its new proposals when it has
+ * any, and the one on its extensions of existing rows when it has those.
+ */
+function stageLeads(stage: GeneratorReviewStage, parts: readonly GeneratorJobPart[]): MessageKey[] {
+  const own = parts.filter((part) => part.kind === STAGE_KIND[stage]);
+  const extension = EXTENSION_LEAD[stage];
+  const extending = extension !== undefined && own.some((part) => part.existing === true);
+  const creating = stage === "scenes" || own.some((part) => part.existing !== true);
+  return [
+    ...(creating ? [STAGE_LEAD[stage]] : []),
+    ...(extending ? [extension] : []),
+  ];
+}
+
+/** The part kind of each stage. */
+const STAGE_KIND: Record<GeneratorReviewStage, GeneratorJobPart["kind"]> = {
+  locations: "location",
+  npcs: "npc",
+  scenes: "scene",
 };
 
 /**

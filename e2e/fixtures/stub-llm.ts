@@ -72,6 +72,10 @@
 //   - TRIGGER.latePart -> the scene PARTS (and an augment reply) answer late
 //     but normally, so a spec can watch a job that is genuinely running
 //     finish on a poll instead of being done before the first one answers.
+//   - the system prompt is the EXTENSION prompt                -> an extension
+//     part: operations against the existing npc (extensionReply)
+//   - TRIGGER.extendNpc -> one plain scene and, when the outline prompt
+//     carries the rules for extending, the existing npc EXTENDED_NPC_ID
 //   - TRIGGER.asciiQuotes -> the scene body carries a typographic opening
 //     quotation mark closed with an ASCII `"`. Under the hand-written JSON
 //     wrapper that ended the string; as the `body` of a forced object the run
@@ -96,6 +100,8 @@ import {
   EXISTING_SCENE_HEADING,
   EXISTING_LOCATION_HEADING,
   EXISTING_NPC_HEADING,
+  EXTEND_RULES_HEADING,
+  EXTEND_SYSTEM_HEADING,
   FAILING_SCENE_ID,
   LATE_REPLY_MS,
   NEW_CHAPTER_LINE,
@@ -104,6 +110,7 @@ import {
   THREE_SCENES,
   TRIGGER,
   augmentReply,
+  extensionReply,
   invalidAugmentReply,
   invalidLocationAugmentReply,
   invalidNpcAugmentReply,
@@ -294,7 +301,7 @@ export interface StubDecision {
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
-  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch";
+  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch" | "extension";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
   /**
@@ -338,6 +345,12 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const proposal = patchProposal(prompt);
   if (proposal !== null) {
     return { kind: "patch", truncated, delayMs, reply: patchReply(proposal, knowledge) };
+  }
+
+  // An EXTENSION part of a scene run carries an existing npc or location too,
+  // like an augment run; its own system prompt tells it apart.
+  if (system.includes(EXTEND_SYSTEM_HEADING)) {
+    return { kind: "extension", truncated, delayMs, reply: extensionReply() };
   }
 
   // A location augment run carries the location it works on (decisions/resources).
@@ -416,6 +429,8 @@ export function decide(messages: ChatMessage[]): StubDecision {
             // The context's own line, as a model reads it.
             newChapter: new RegExp(`^${NEW_CHAPTER_LINE}$`, "m").test(prompt),
             describeAnyway: source.includes(TRIGGER.describeAnyway),
+            extendNpc: source.includes(TRIGGER.extendNpc),
+            extending: system.includes(EXTEND_RULES_HEADING),
           }),
     };
   }

@@ -183,9 +183,10 @@ in `server/src/generator.ts`); no code looks for a heading inside a file.
 | scene (one scene of an outline) | `system-prompt.md`, `scene-single-output.md`, `scene-fields.md`, `scene-rules.md` |
 | NPC (NPC run and NPC part) | `npc-system-prompt.md`, `npc-fields.md`, `npc-rules.md` |
 | location (location part) | `location-system-prompt.md`, `location-fields.md`, `location-rules.md` |
-| outline | `outline-system-prompt.md` |
+| outline | `outline-system-prompt.md`, and `outline-extend-rules.md` for a run that may extend |
 | scene / NPC / location augment | `scene-augment-system-prompt.md` / `npc-augment-system-prompt.md` / `location-augment-system-prompt.md`, then the entity's fields file |
 | patch | `patch-system-prompt.md`, then the part's entity's fields file |
+| extension | `extend-system-prompt.md`, then the entity's fields file |
 
 A create prompt thus reads as one document: who the model is and what it
 answers with, the entity's fields, then the rules and the worked example.
@@ -220,8 +221,15 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
    no run reaches the text of an existing chapter. A missing description
    costs no correction turn — the chapter then starts with an empty text.
 
-   **Limit:** at most 12 scenes and 12 new NPCs and locations together per
-   run (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Every part is a
+   **Extending what exists:** a run started with `extend` may also name NPCs
+   and locations of the context the source text adds to, in
+   `existingNpcs` and `existingLocations`, each entry `{ id, summary }`.
+   The system prompt then carries `outline-extend-rules.md`, and the schema
+   the two lists; a run without the option sends neither and reads neither.
+   Every id of the run, these included, occurs once.
+
+   **Limit:** at most 12 scenes and 12 NPCs and locations — new and extended
+   — together per run (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Every part is a
    provider call, so the outline decides what a run costs; above that the
    reply is a validation error and thus a correction turn that asks for
    merging — not a failed run.
@@ -242,6 +250,16 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
    the NPC's or the location's create prompt, with the outline
    and the sections of the scenes that name the NPC or play at the location.
    Deduplicated by id.
+
+4. **Extensions** (one call per existing NPC and location of the outline):
+   `extend-system-prompt.md` with the entity's fields and
+   `extend-example-output.json`, the stored row in its reply form under the
+   existing-NPC or existing-location heading, and the sections of the scenes
+   that name it or play there. The reply is the list of operations a patch
+   call answers with (see "Answering a part's notes"), applied the same way
+   to the row the call saw: what applies becomes the part's changes
+   (`result.npcExtensions`, `result.locationExtensions`), what does not a
+   finding on the part, and a `note` a note on it.
 
 What this gives the DM: a shape error costs only the affected part, finished
 parts can be reviewed and accepted right away, and a broken part can be
@@ -280,8 +298,17 @@ written back as it changes.
 
 Each location and NPC is decided on its own: accepting writes it right away,
 rejecting marks it rejected (a rejected one can still be accepted after
-all). The scene stage opens only when every location and NPC is decided;
-going back stays possible. Scenes are editable, and accepting a scene
+all). The scene stage opens only when every new location and NPC is decided;
+going back stays possible.
+
+An extension of an existing NPC or location stands in the stage of its
+entity, marked as such, with its changes as the comparison a patch round
+shows. Each change is taken or kept (`review.keptChanges`, by the part's
+key, lists the kept ones); accepting (`writtenNpcs`, `writtenLocations`)
+applies the taken ones to the row as it is stored at that moment, as one
+write of that row. A block change whose anchor no longer names exactly one
+block changes nothing and stands as a finding on the part. An extension
+does not hold the scene stage back, and its notes are not answered. Scenes are editable, and accepting a scene
 writes exactly that scene.
 
 The notes stand where they belong. What the model noted about one scene,

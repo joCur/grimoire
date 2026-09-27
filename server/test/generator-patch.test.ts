@@ -17,7 +17,7 @@ import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generator-jobs";
 import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { setProviderForTests } from "../src/generator";
-import { applyPatchOperations, readPatchReply, type PatchScope } from "../src/generator-patch";
+import { applyPatchOperations, readPatchReply, type PatchScope } from "../src/patch-operations";
 import { ANSWERS_HEADING, PROPOSAL_HEADING, buildPrompt } from "../src/llm-provider";
 import type { CompletionResult, CorrectionTurn, GenerateRequest, LLMProvider } from "../src/llm-provider";
 import { getDb } from "../src/store/handle";

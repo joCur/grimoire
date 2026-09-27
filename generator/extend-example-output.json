@@ -1,0 +1,18 @@
+{
+  "operations": [
+    {
+      "op": "set",
+      "field": "motivation",
+      "value": "Will den Leuchtturm dunkel halten, bis die Schmuggler ihre Ladung gelöscht haben."
+    },
+    {
+      "op": "insertAfter",
+      "anchor": "Die Hafenmeisterin führt das Register jedes Schiffs, das in der Bucht anlegt.",
+      "text": "> [!secret] Sie trägt die Namen der Schmugglerschiffe unter falschen Flaggen ein\n> und kassiert dafür einen Anteil an jeder Ladung."
+    },
+    {
+      "op": "note",
+      "text": "Der Quelltext nennt ihr Alter nicht — das Feld bleibt, wie es ist."
+    }
+  ]
+}

@@ -168,6 +168,7 @@ test("a fresh job carries an empty review state and rev 0", async () => {
     writtenNpcs: [],
     locations: {},
     writtenLocations: [],
+    keptChanges: {},
   });
   expect(job.npcEdits).toEqual({});
   expect(job.sceneEdits).toEqual({});

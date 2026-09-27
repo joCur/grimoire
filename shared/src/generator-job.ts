@@ -14,8 +14,10 @@
 // The proposals are the entities themselves without their guard: a scene
 // run's scenes, npcs and locations each in their own typed list, an npc run's
 // one npc, and an augment run's reading of one scene, npc or location beside
-// the model's proposal for it. Nothing a job proposes is a row of the
-// campaign until it is accepted.
+// the model's proposal for it. A scene run may also extend npcs and locations
+// the campaign already has: such a proposal is the list of changes to the
+// stored row. Nothing a job proposes is written into the campaign until it is
+// accepted.
 
 import { z } from "zod";
 import { blockInsertSchema, blockRemoveSchema, blockReplaceSchema } from "./body-patch";
@@ -114,6 +116,56 @@ export const serverNoteSchema = z.enum(SERVER_NOTES);
 export type ServerNote = z.infer<typeof serverNoteSchema>;
 
 /**
+ * One change a patch round proposes for its part's proposal, as the server
+ * applied it to the proposal the model saw — `id` is its key within the round:
+ *
+ *   set          `field` gets `value`, in the proposal's own form — `null`
+ *                clears an optional field;
+ *   replace,     one block of `body`, named by `anchor`; `block` is that block
+ *   insertAfter, as the body holds it, and `text` what replaces it or follows
+ *   remove       it.
+ */
+export const partChangeSchema = z.union([
+  z.strictObject({
+    id: z.string(),
+    op: z.enum(["set"]),
+    field: z.string(),
+    value: z.unknown(),
+  }),
+  blockReplaceSchema.extend({ id: z.string(), block: z.string() }),
+  blockInsertSchema.extend({ id: z.string(), block: z.string() }),
+  blockRemoveSchema.extend({ id: z.string(), block: z.string() }),
+]);
+
+export type PartChange = z.infer<typeof partChangeSchema>;
+
+/**
+ * An npc or location the campaign already has, as a scene run extends it:
+ * its id, the row as the run read it (`current`, without its guard), and the
+ * changes the model proposes for that row — operations against it, never the
+ * whole entity (decisions/generator). The DM takes or keeps each change
+ * (`review.keptChanges`), and accepting applies the taken ones to the row as
+ * it is stored at that moment.
+ */
+function extensionSchema<T extends z.ZodType>(current: T) {
+  return z.strictObject({
+    id: z.string(),
+    current,
+    changes: z.array(partChangeSchema),
+  });
+}
+
+/** An existing npc a scene run extends — see `extensionSchema`. */
+export const npcExtensionSchema = extensionSchema(npcProposalSchema);
+
+export type NpcExtension = z.infer<typeof npcExtensionSchema>;
+
+/** An existing location a scene run extends — see `extensionSchema`. */
+export const locationExtensionSchema = extensionSchema(locationProposalSchema);
+
+export type LocationExtension = z.infer<typeof locationExtensionSchema>;
+
+/**
  * What a SCENE run proposes. Mechanically validated (every scene is a draft,
  * references resolve, only known callouts). The model's notes on one scene,
  * npc or location travel on its part (`GeneratorJobPart.warnings`); `warnings`
@@ -130,6 +182,13 @@ export const generateResultSchema = z.strictObject({
   npcs: z.array(npcProposalSchema),
   /** The locations the run proposes, each a location without its guard. */
   locations: z.array(locationProposalSchema),
+  /**
+   * The existing npcs the run extends; absent when it extends none — a run
+   * started without the option, or one whose source adds to no npc.
+   */
+  npcExtensions: z.array(npcExtensionSchema).optional(),
+  /** The existing locations the run extends; absent when it extends none. */
+  locationExtensions: z.array(locationExtensionSchema).optional(),
   /** The model's notes about the run — see above. */
   warnings: z.array(z.string()),
   /** What the server notes about the outline reply; absent when nothing. */
@@ -237,29 +296,6 @@ export const partAnswerRequestSchema = partAnswerSchema.extend({
 
 export type PartAnswerRequest = z.infer<typeof partAnswerRequestSchema>;
 
-/**
- * One change a patch round proposes for its part's proposal, as the server
- * applied it to the proposal the model saw — `id` is its key within the round:
- *
- *   set          `field` gets `value`, in the proposal's own form — `null`
- *                clears an optional field;
- *   replace,     one block of `body`, named by `anchor`; `block` is that block
- *   insertAfter, as the body holds it, and `text` what replaces it or follows
- *   remove       it.
- */
-export const partChangeSchema = z.union([
-  z.strictObject({
-    id: z.string(),
-    op: z.enum(["set"]),
-    field: z.string(),
-    value: z.unknown(),
-  }),
-  blockReplaceSchema.extend({ id: z.string(), block: z.string() }),
-  blockInsertSchema.extend({ id: z.string(), block: z.string() }),
-  blockRemoveSchema.extend({ id: z.string(), block: z.string() }),
-]);
-
-export type PartChange = z.infer<typeof partChangeSchema>;
 
 export const PART_ROUND_STATUSES = ["running", "done", "failed"] as const;
 
@@ -341,6 +377,12 @@ export const generatorJobPartSchema = z.strictObject({
   kind: z.enum(["scene", "npc", "location"]),
   /** The id the outline gave this part — the id of its scene, npc or location. */
   id: z.string(),
+  /**
+   * Set when the part extends an npc or location the campaign already has:
+   * its proposal is the changes in `result.npcExtensions` or
+   * `result.locationExtensions`, and its model notes cannot be answered.
+   */
+  existing: z.literal(true).optional(),
   /** Display title of the part; the id when the outline named none. */
   title: z.string(),
   status: z.enum(GENERATOR_JOB_PART_STATUSES),
@@ -490,6 +532,14 @@ export const generatorJobReviewSchema = z.strictObject({
   locations: z.record(z.string(), generateReviewDecisionSchema),
   /** The ids of the proposed locations that are accepted — rows of the campaign now. */
   writtenLocations: z.array(z.string()),
+  /**
+   * The changes of an extension the DM keeps out, by the key of its part
+   * (`npc:<id>`, `location:<id>`): the ids of those changes. Every change
+   * not named here is taken, so an absent key takes them all. An extension
+   * is accepted and rejected like a new npc or location — under its id in
+   * `writtenNpcs`/`npcs` or `writtenLocations`/`locations`.
+   */
+  keptChanges: z.record(z.string(), z.array(z.string())),
 });
 
 export type GeneratorJobReview = z.infer<typeof generatorJobReviewSchema>;
@@ -566,7 +616,9 @@ export type GeneratorJob = z.infer<typeof generatorJobSchema>;
  *   - a SCENE run names its target `chapter` and the `sourceText`;
  *     `newChapter` allows a chapter that does not exist yet, and
  *     `chapterTitle` is that chapter's title — kept on the job, so the accept
- *     creates the chapter in whatever browser it happens in;
+ *     creates the chapter in whatever browser it happens in; `extend` lets
+ *     the run also propose changes to npcs and locations the campaign
+ *     already has, and without it the run proposes new ones only;
  *   - an NPC run takes the `sourceText` and optionally the npc's `id`; without
  *     one the model picks it.
  *
@@ -580,6 +632,7 @@ export const generatorJobCreateSchema = z.discriminatedUnion("kind", [
     sourceText: z.string(),
     newChapter: z.boolean().optional(),
     chapterTitle: z.string().nullable().optional(),
+    extend: z.boolean().optional(),
   }),
   z.strictObject({
     kind: z.literal("npc"),
@@ -598,6 +651,8 @@ export type GeneratorJobCreate = z.infer<typeof generatorJobCreateSchema>;
  *   - `npcs`, `locations`, `fields` and `blocks` merge key by key, and `null`
  *     takes a decision back — to undecided, and the only way to clear
  *     decisions whose keys no longer exist;
+ *   - `keptChanges` merges part by part: a part's list replaces the stored
+ *     one, and `null` takes every change of it again;
  *   - `droppedScenes` is the whole set, because "no longer dropped" has to be
  *     expressible too;
  *   - `writtenScenes`, `writtenNpcs` and `writtenLocations` ACCEPT: every
@@ -612,6 +667,7 @@ export const generatorJobReviewPatchSchema = generatorJobReviewSchema.partial().
   blocks: z.record(z.string(), z.boolean().nullable()).optional(),
   npcs: z.record(z.string(), generateReviewDecisionSchema.nullable()).optional(),
   locations: z.record(z.string(), generateReviewDecisionSchema.nullable()).optional(),
+  keptChanges: z.record(z.string(), z.array(z.string()).nullable()).optional(),
 });
 
 export type GeneratorJobReviewPatch = z.infer<typeof generatorJobReviewPatchSchema>;
@@ -697,24 +753,41 @@ export function openSceneIds(job: JobState): Set<string> {
   );
 }
 
-/** The proposed npcs that are neither accepted nor rejected, by id. */
+/**
+ * The ids of the existing npcs a run extends with at least one change — an
+ * extension without a change has nothing to decide.
+ */
+export function extendedNpcIds(job: JobState): string[] {
+  return (job.result?.npcExtensions ?? [])
+    .filter((extension) => extension.changes.length > 0)
+    .map((extension) => extension.id);
+}
+
+/** The ids of the existing locations a run extends with at least one change. */
+export function extendedLocationIds(job: JobState): string[] {
+  return (job.result?.locationExtensions ?? [])
+    .filter((extension) => extension.changes.length > 0)
+    .map((extension) => extension.id);
+}
+
+/** The proposed and the extended npcs that are neither accepted nor rejected, by id. */
 export function openNpcIds(job: JobState): Set<string> {
   return new Set(
-    proposedNpcIds(job).filter(
+    [...proposedNpcIds(job), ...extendedNpcIds(job)].filter(
       (id) => !job.review.writtenNpcs.includes(id) && job.review.npcs[id] !== "rejected",
     ),
   );
 }
 
-/** The proposed locations that are neither accepted nor rejected, by id. */
+/** The proposed and the extended locations that are neither accepted nor rejected, by id. */
 export function openLocationIds(job: JobState): Set<string> {
   return new Set(
-    (job.result?.locations ?? [])
-      .map((location) => location.id)
-      .filter(
-        (id) =>
-          !job.review.writtenLocations.includes(id) && job.review.locations[id] !== "rejected",
-      ),
+    [
+      ...(job.result?.locations ?? []).map((location) => location.id),
+      ...extendedLocationIds(job),
+    ].filter(
+      (id) => !job.review.writtenLocations.includes(id) && job.review.locations[id] !== "rejected",
+    ),
   );
 }
 
@@ -722,7 +795,8 @@ export function openLocationIds(job: JobState): Set<string> {
  * The npcs and locations of this run that `scene` names in its `npcs` and
  * `location` fields and that are not written yet. A scene is written only
  * once everything it names exists (decisions/generator); a `[[id]]` mention in
- * its text is not a reference and does not count.
+ * its text is not a reference and does not count, and neither is an npc or
+ * location the run extends — it exists already.
  */
 export function unwrittenReferences(
   job: JobState,

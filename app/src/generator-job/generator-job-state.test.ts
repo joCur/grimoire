@@ -55,6 +55,8 @@ import {
   missingReferences,
   rejectedReferences,
   reviewStages,
+  jobExtension,
+  keptChanges,
   sceneWritable,
   hintRef,
   proposalNotes,
@@ -418,6 +420,7 @@ describe("review state mapping", () => {
       writtenNpcs: [],
       locations: {},
       writtenLocations: [],
+      keptChanges: {},
     });
     expect(reviewOf(null)).toEqual(reviewOf(undefined));
   });
@@ -526,6 +529,7 @@ describe("review state mapping", () => {
         writtenNpcs: [],
         locations: {},
         writtenLocations: [],
+        keptChanges: {},
       },
     });
     expect(sceneState(decided, "a")).toBe("written");
@@ -561,6 +565,7 @@ describe("review state mapping", () => {
         writtenNpcs: ["grella"],
         locations: {},
         writtenLocations: [],
+        keptChanges: {},
       },
     });
     expect(jobProgress(partly)).toEqual({ written: 2, total: 3 });
@@ -605,6 +610,7 @@ describe("review state mapping", () => {
         writtenNpcs: [],
         locations: {},
         writtenLocations: [],
+        keptChanges: {},
       },
     });
     expect(openScenes(decided)).toEqual(["a"]);
@@ -737,6 +743,7 @@ describe("the run's parts", () => {
         writtenNpcs: [],
         locations: {},
         writtenLocations: [],
+        keptChanges: {},
       },
     });
     // What the run PRODUCED — and why that number confused the chip.
@@ -768,6 +775,7 @@ describe("the run's parts", () => {
         writtenNpcs: ["grella"],
         locations: {},
         writtenLocations: [],
+        keptChanges: {},
       },
     });
     expect(acceptProgress(withNpc)).toEqual({ written: 2, total: 2 });
@@ -989,10 +997,56 @@ describe("the stages of a scene run's review", () => {
         totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
       },
     });
-    const decided = decide(running, { writtenLocations: ["old-mole"], stage: "scenes" });
+    const decided = decide(running, { writtenLocations: ["old-mole"], keptChanges: {}, stage: "scenes" });
     const npcs = reviewStages(decided).find((stage) => stage.stage === "npcs");
     expect(npcs).toMatchObject({ total: 1, decided: 0, complete: false });
     expect(currentStage(decided)).toBe("npcs");
+  });
+
+  test("an extension of an existing npc stands in its stage but holds nothing back", () => {
+    const change = { id: "c1", op: "set", field: "motivation", value: "Revenge" } as const;
+    const extending = run({
+      result: {
+        scenes: [proposed("a")],
+        npcs: [],
+        locations: [],
+        npcExtensions: [
+          { id: "vex", current: { id: "vex", name: "Vex", status: "alive", body: "b" }, changes: [change] },
+        ],
+        warnings: [],
+      },
+      pipeline: {
+        parts: [part("scene", "a"), { ...part("npc", "vex"), existing: true }],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    expect(currentStage(extending)).toBe("npcs");
+    const npcs = reviewStages(extending).find((stage) => stage.stage === "npcs");
+    expect(npcs).toMatchObject({ total: 1, decided: 0, complete: false, ready: true });
+    expect(reviewStages(extending).find((stage) => stage.stage === "scenes")?.reachable).toBe(true);
+    expect(currentStage(decide(extending, { stage: "scenes" }))).toBe("scenes");
+    expect(jobExtension(extending, { kind: "npc", id: "vex" })?.changes).toEqual([change]);
+    expect(npcState(decide(extending, { writtenNpcs: ["vex"] }), "vex")).toBe("written");
+    // The kept changes merge per part; an empty list takes every change again.
+    const kept = mergeReviewPatch(extending, { review: { keptChanges: { "npc:vex": ["c1"] } } });
+    expect(keptChanges(kept, "npc:vex")).toEqual(["c1"]);
+    expect(keptChanges(mergeReviewPatch(kept, { review: { keptChanges: { "npc:vex": [] } } }), "npc:vex")).toEqual([]);
+  });
+
+  test("an extension still running does not hold the scenes back either", () => {
+    const running = run({
+      status: "running",
+      result: { scenes: [proposed("a")], npcs: [], locations: [], warnings: [] },
+      pipeline: {
+        parts: [part("scene", "a"), { ...part("location", "harbour", "running"), existing: true }],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    expect(reviewStages(running).find((stage) => stage.stage === "locations")).toMatchObject({
+      total: 1,
+      ready: true,
+    });
+    expect(reviewStages(running).find((stage) => stage.stage === "scenes")?.reachable).toBe(true);
   });
 
   test("a proposal's notes come from its own part, and leave with it", () => {
@@ -1045,6 +1099,7 @@ describe("the stages of a scene run's review", () => {
     // Written, rejected or dropped: its notes and hints are gone.
     const decided = decide(noted, {
       writtenLocations: ["old-mole"],
+      keptChanges: {},
       npcs: { grella: "rejected" },
       droppedScenes: ["a"],
     });
