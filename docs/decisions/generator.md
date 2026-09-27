@@ -54,6 +54,16 @@
   data, which the app says in the DM's language. The DM
   takes or discards each applied change on its own, and a taken change is one
   of the DM's edits of the proposal.
+- **A run may propose changes to existing rows.** When the DM starts a scene
+  run with the option to extend, the run may also name npcs and locations
+  the campaign already has and the source material adds to. Such a proposal
+  is operations against the stored row, the same operations that answer a
+  note, never the entity again; the DM takes or keeps each change on its
+  own. Accepting applies the taken changes to the row as it is stored at
+  that moment, in one write, and a change that no longer applies there
+  changes nothing and is a finding. It is decided in the stage of its
+  entity, and it does not hold back a scene that names it, because the row
+  exists. A run never changes an existing scene or a chapter's text.
 - **Applying writes exactly what is named.** Accepting a proposal writes that
   proposal, in one transaction under the same rules as creating its entity,
   and nothing else. A scene is applied only once every location and NPC of
@@ -83,6 +93,11 @@
   and no scene points at a row that was never written.
 - A note in a pooled list above the review has to be matched to its proposal
   by the DM, and it keeps standing after that proposal is decided.
+- A source that adds to a known npc or location is the moment the DM has the
+  material at hand; augmenting each row by hand afterwards is work the run
+  already did. Changes rather than a whole entity keep what the DM wrote,
+  and applying them to the row as stored lets the DM edit it while the
+  review waits.
 - A proposal written again from the answers can change anything, including
   what the DM already edited or checked; the DM would have to review it
   whole a second time. Operations touch only what they name, cost a

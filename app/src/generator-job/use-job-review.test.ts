@@ -118,6 +118,19 @@ describe("a proposed scene and npc", () => {
   });
 });
 
+describe("the changes to an existing row", () => {
+  test("the kept changes of each part travel in the patch, part by part", async () => {
+    const h = harness();
+    const queue = createReviewQueue(h.io, 10_000);
+    queue.editScene("a", { body: "one" });
+    queue.decide({ keptChanges: { "npc:fenn": ["c2"] } });
+    await queue.flush();
+    expect(h.sent).toEqual([
+      { sceneEdits: { a: { body: "one" } }, review: { keptChanges: { "npc:fenn": ["c2"] } } },
+    ]);
+  });
+});
+
 describe("a failed patch", () => {
   test("is retried on the next flush and rolls the optimistic copy back", async () => {
     const h = harness();

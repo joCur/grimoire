@@ -37,6 +37,8 @@ export function ProposalRow({
   cardRef,
   testId,
   notes,
+  acceptLabel,
+  acceptDisabled = false,
   onAccept,
   onReject,
 }: {
@@ -55,6 +57,10 @@ export function ProposalRow({
   testId?: string;
   /** What the caller notes about the proposal, under its name. */
   notes?: ReactNode;
+  /** What the accept action says, when the row writes something else than a new proposal. */
+  acceptLabel?: string;
+  /** Nothing to write yet: the accept action is off. */
+  acceptDisabled?: boolean;
   /** Write the proposal — a rejected one after all. */
   onAccept: () => void;
   onReject: () => void;
@@ -104,16 +110,37 @@ export function ProposalRow({
             <span className="py-1 pr-1.5 text-[12.5px] text-muted-foreground">
               {t("generate.stub.rejected")}
             </span>
-            <Button type="button" variant="outline" disabled={busy} onClick={onAccept} className={QUIET}>
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="proposal-row-accept"
+              disabled={busy || acceptDisabled}
+              onClick={onAccept}
+              className={QUIET}
+            >
               {t("generate.stub.acceptAnyway")}
             </Button>
           </>
         ) : (
           <>
-            <Button type="button" variant="outline" disabled={busy} onClick={onAccept} className={ACCEPT}>
-              {t("generate.stub.accept")}
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="proposal-row-accept"
+              disabled={busy || acceptDisabled}
+              onClick={onAccept}
+              className={ACCEPT}
+            >
+              {acceptLabel ?? t("generate.stub.accept")}
             </Button>
-            <Button type="button" variant="outline" disabled={busy} onClick={onReject} className={QUIET}>
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="proposal-row-reject"
+              disabled={busy}
+              onClick={onReject}
+              className={QUIET}
+            >
               {t("generate.stub.reject")}
             </Button>
           </>

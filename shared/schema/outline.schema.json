@@ -7,6 +7,8 @@
     "scenes",
     "npcs",
     "locations",
+    "existingNpcs",
+    "existingLocations",
     "chapterDescription",
     "warnings"
   ],
@@ -124,6 +126,50 @@
           },
           "summary": {
             "type": "string"
+          }
+        }
+      }
+    },
+    "existingNpcs": {
+      "type": "array",
+      "description": "Figuren aus dem Kontext, über die der Quelltext mehr erzählt, als sie schon tragen; zusammen mit npcs, locations und existingLocations höchstens 12.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Ein Satz: was der Quelltext über die Figur hinzufügt."
+          }
+        }
+      }
+    },
+    "existingLocations": {
+      "type": "array",
+      "description": "Orte aus dem Kontext, über die der Quelltext mehr erzählt, als sie schon tragen; zusammen mit npcs, locations und existingNpcs höchstens 12.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Ein Satz: was der Quelltext über den Ort hinzufügt."
           }
         }
       }

@@ -215,6 +215,12 @@ export const ASSET_FILES = {
   // own few-shot (a list of operations); the fields come from the part's
   // entity above.
   patch: { systemPrompt: "patch-system-prompt.md", fewShotTarget: "patch-example-output.json" },
+  // What the outline prompt adds for a run that may extend the npcs and
+  // locations the campaign has.
+  outlineExtend: { systemPrompt: "outline-extend-rules.md" },
+  // The call that extends one of them: its own rule and its own few-shot (a
+  // list of operations); the fields come from the entity above.
+  extend: { systemPrompt: "extend-system-prompt.md", fewShotTarget: "extend-example-output.json" },
 } as const;
 
 const promptAssets = new Map<string, PromptAssets>();

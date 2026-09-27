@@ -17,8 +17,8 @@
 // validation on a reply the API promised was valid.
 //
 // What the schema does NOT do is replace the validation. A schema can say
-// „a string matching this pattern"; it cannot say „this id appears only once
-// in the whole run", „this ref names a scene of THIS outline" or „the chapter
+// "a string matching this pattern"; it cannot say "this id appears only once
+// in the whole run", "this ref names a scene of THIS outline" or "the chapter
 // comes from the context". Those are the semantic checks
 // (`validateOutlineReply` in server/src/generate-pipeline.ts), and they stay
 // where they are.
@@ -28,12 +28,12 @@ import outlineSchema from "../schema/outline.schema.json";
 
 /**
  * The most parts ONE outline may produce — 12 scenes, and 12 proposals: the
- * new npcs and the new locations counted together, because every one of them
- * is a provider call of the run.
+ * new npcs, the new locations and the existing ones a run extends counted
+ * together, because every one of them is a provider call of the run.
  *
  * Without the bound the outline decides how many provider calls a run makes,
- * and a source text that is a whole adventure turns one „Entwürfe
- * generieren" into dozens of calls the DM never asked for. The schema SAYS
+ * and a source text that is a whole adventure turns one generate action
+ * into dozens of calls the DM never asked for. The schema SAYS
  * the bound (in the array's description — `maxItems` is not allowed in strict
  * mode) and the validation enforces it, and both read the same number.
  */
@@ -64,11 +64,29 @@ export const OUTLINE_SCHEMA_NAME = String(outlineSchema.title);
 export const OUTLINE_SCHEMA_DESCRIPTION = String(outlineSchema.description);
 
 /**
+ * The lists of an outline that name npcs and locations the campaign already
+ * has — only a run started with `extend` offers them to the model.
+ */
+export const OUTLINE_EXTENSION_LISTS = ["existingNpcs", "existingLocations"] as const;
+
+/**
  * The outline schema. A COPY on every call, not the loaded object: both
  * providers hand it to `JSON.stringify` inside a request body, and a caller
  * that could reach into this module's own state would make the next
  * request's payload depend on the last one's.
+ *
+ * Without `extend` the lists of existing npcs and locations are not part of
+ * it, so the model cannot name any.
  */
-export function outlineJsonSchema(): JsonSchema {
-  return structuredClone(outlineSchema) as JsonSchema;
+export function outlineJsonSchema(extend = false): JsonSchema {
+  const schema = structuredClone(outlineSchema) as JsonSchema & {
+    required: string[];
+    properties: Record<string, unknown>;
+  };
+  if (extend) return schema;
+  for (const list of OUTLINE_EXTENSION_LISTS) delete schema.properties[list];
+  schema.required = schema.required.filter(
+    (key) => !(OUTLINE_EXTENSION_LISTS as readonly string[]).includes(key),
+  );
+  return schema;
 }

@@ -802,6 +802,9 @@ export const de = {
   "generate.input.sourceLabel": "Quelltext (EN)",
   "generate.input.sourcePlaceholder":
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
+  "generate.input.extend": "Bestehende NPCs und Orte ergänzen",
+  "generate.input.extendHint":
+    "Der Lauf darf NPCs und Orte, die es schon gibt, um das ergänzen, was der Quelltext über sie sagt. Jede Änderung prüfst du, bevor sie geschrieben wird.",
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
   // The two counts that come from the tree. The knowledge and the glossary
   // are LINKS to their own pages now, so
@@ -981,6 +984,24 @@ export const de = {
   "generate.stage.next.scenes": "Weiter zu den Szenen",
   "generate.stage.back.locations": "Zurück zu den Orten",
   "generate.stage.back.npcs": "Zurück zu den NPCs",
+  "generate.stage.extend.locations":
+    "Der Lauf schlägt Änderungen an Orten vor, die es schon gibt. Übernimm oder verwirf jede Änderung einzeln — sie halten die Szenen nicht auf.",
+  "generate.stage.extend.npcs":
+    "Der Lauf schlägt Änderungen an NPCs vor, die es schon gibt. Übernimm oder verwirf jede Änderung einzeln — sie halten die Szenen nicht auf.",
+
+  // --- generator: changes a scene run proposes to an existing npc or location
+  "generate.extension.reason.npc": "Änderungen an einem bestehenden NPC",
+  "generate.extension.reason.location": "Änderungen an einem bestehenden Ort",
+  "generate.extension.apply":
+    "{count, plural, =0 {Keine Änderung übernommen} one {Die Änderung schreiben} other {Die # Änderungen schreiben}}",
+  "generate.extension.changes":
+    "{count, plural, one {Die vorgeschlagene Änderung} other {Die # vorgeschlagenen Änderungen}}",
+  "generate.extension.taken":
+    "{count, plural, one {{taken} von # Änderung wird übernommen.} other {{taken} von # Änderungen werden übernommen.}} Sie werden auf den Stand geschrieben, der beim Übernehmen gespeichert ist.",
+  "generate.extension.unchanged.npc":
+    "Der Quelltext fügt dem NPC „{name}“ nichts hinzu — hier ist nichts zu entscheiden.",
+  "generate.extension.unchanged.location":
+    "Der Quelltext fügt dem Ort „{name}“ nichts hinzu — hier ist nichts zu entscheiden.",
 
   // --- generator: a scene that names a rejected proposal --------------------
   "generate.incomplete.npc":

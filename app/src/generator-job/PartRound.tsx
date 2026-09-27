@@ -285,7 +285,7 @@ function findingSentence(kind: GeneratorJobPart["kind"], finding: PatchFinding, 
 }
 
 /** What the last round could not apply, one sentence each. */
-function PartFindings({
+export function PartFindings({
   kind,
   findings,
   t,
@@ -370,12 +370,17 @@ function NoteAnswer({
   );
 }
 
-/** One change of the round: what stands there, what would, and take ⇄ discard. */
-function ChangeRow({
+/**
+ * One change: what stands there, what would, and take ⇄ discard. `accepted`
+ * marks the side the change stands on, where it has one; a round's change
+ * has none until it is decided and leaves.
+ */
+export function ChangeRow({
   kind,
   change,
   current,
   busy,
+  accepted,
   onDecide,
   t,
 }: {
@@ -383,6 +388,7 @@ function ChangeRow({
   change: PartChange;
   current: Readonly<Record<string, unknown>>;
   busy: boolean;
+  accepted?: boolean;
   onDecide: (take: boolean) => void;
   t: Translate;
 }) {
@@ -398,7 +404,7 @@ function ChangeRow({
           {unit}
         </span>
         <StateBadge state={changeState(change, current)} t={t} />
-        <DecisionToggle onDecide={onDecide} unit={unit} disabled={busy} t={t} />
+        <DecisionToggle accepted={accepted} onDecide={onDecide} unit={unit} disabled={busy} t={t} />
       </div>
       <ChangeBody change={change} current={current} t={t} />
     </li>

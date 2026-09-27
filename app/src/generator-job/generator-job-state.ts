@@ -18,6 +18,8 @@
 import type { CampaignTree } from "@grimoire/shared/campaign-tree";
 import {
   GENERATOR_REVIEW_STAGES,
+  extendedLocationIds,
+  extendedNpcIds,
   unwrittenReferences,
   type GeneratorJob,
   type GeneratorJobPart,
@@ -25,7 +27,9 @@ import {
   type GeneratorJobReview,
   type GeneratorReviewStage,
   type GenerateReviewDecision,
+  type LocationExtension,
   type NamingHint,
+  type NpcExtension,
   type ServerNote,
 } from "@grimoire/shared/generator-job";
 import { withSceneChange, type SceneProposal } from "@grimoire/shared/scene";
@@ -248,6 +252,7 @@ export function emptyReview(): GeneratorJobReview {
     writtenNpcs: [],
     locations: {},
     writtenLocations: [],
+    keptChanges: {},
   };
 }
 
@@ -311,7 +316,8 @@ function mergeDecisions(
  * server does (generator-jobs.ts `applyReviewPatch`): `stage` replaces the
  * stored one, `droppedScenes` is a set sent whole, everything else merges per
  * key, and a `null` decision — in `npcs`, `locations`, `fields` and `blocks`
- * alike — means that the decision is open again, which deletes the key.
+ * alike — means that the decision is open again, which deletes the key, and
+ * `keptChanges` replaces a part's list.
  */
 export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): GeneratorJob {
   const review = reviewOf(job);
@@ -334,8 +340,22 @@ export function mergeReviewPatch(job: GeneratorJob, patch: ReviewPatch): Generat
       writtenNpcs: review.writtenNpcs,
       locations: mergeDecisions(review.locations, decided.locations),
       writtenLocations: review.writtenLocations,
+      keptChanges: mergeKept(review.keptChanges, decided.keptChanges),
     },
   };
+}
+
+/** Merge the kept changes part by part; `null` takes a part's back (the server does this). */
+function mergeKept(
+  into: Record<string, string[]>,
+  patch?: Record<string, string[] | null>,
+): Record<string, string[]> {
+  const out = { ...into };
+  for (const [key, kept] of Object.entries(patch ?? {})) {
+    if (kept === null) delete out[key];
+    else out[key] = [...new Set(kept)];
+  }
+  return out;
 }
 
 /**
@@ -377,17 +397,42 @@ export function jobScenes(job: GeneratorJob | null | undefined): string[] {
   return (job?.result?.scenes ?? []).map((scene) => scene.id);
 }
 
-/** The ids of the npcs a run proposes — a scene run's list, or the NPC run's one npc. */
+/**
+ * The ids of the npcs a run proposes — a scene run's list, or the NPC run's
+ * one npc — and of the existing ones it extends with a change to decide.
+ */
 export function jobNpcs(job: GeneratorJob | null | undefined): string[] {
   const ids = (job?.result?.npcs ?? []).map((npc) => npc.id);
   const npc = job?.npcResult?.npc.id;
   if (npc !== undefined) ids.push(npc);
-  return ids;
+  return [...ids, ...extendedNpcIds({ ...(job ?? {}), review: reviewOf(job) })];
 }
 
-/** The ids of the locations a run proposes. */
+/** The ids of the locations a run proposes, and of the existing ones it extends. */
 export function jobLocations(job: GeneratorJob | null | undefined): string[] {
-  return (job?.result?.locations ?? []).map((location) => location.id);
+  return [
+    ...(job?.result?.locations ?? []).map((location) => location.id),
+    ...extendedLocationIds({ ...(job ?? {}), review: reviewOf(job) }),
+  ];
+}
+
+/** An existing npc or location the run extends, by the key of its part. */
+export function jobExtension(
+  job: GeneratorJob | null | undefined,
+  part: Pick<GeneratorJobPart, "kind" | "id">,
+): NpcExtension | LocationExtension | undefined {
+  const list =
+    part.kind === "npc"
+      ? job?.result?.npcExtensions
+      : part.kind === "location"
+        ? job?.result?.locationExtensions
+        : undefined;
+  return list?.find((extension) => extension.id === part.id);
+}
+
+/** The changes of an extension the DM keeps out, by the key of its part. */
+export function keptChanges(job: GeneratorJob | null | undefined, key: string): string[] {
+  return reviewOf(job).keptChanges[key] ?? [];
 }
 
 /**
@@ -551,6 +596,12 @@ export interface ReviewStageState {
   decided: number;
   /** Nothing left to decide in it, and no part of it still to come. */
   complete: boolean;
+  /**
+   * Nothing in it holds the next stage back: every new proposal is decided
+   * and none is still to come. An extension of an existing row never holds
+   * it back — the row exists.
+   */
+  ready: boolean;
   /** Can the DM go there now? */
   reachable: boolean;
 }
@@ -562,21 +613,35 @@ const STAGE_PART: Record<GeneratorReviewStage, GeneratorJobPart["kind"]> = {
   scenes: "scene",
 };
 
-/** The ids a stage decides, each with whether it is decided. */
+/**
+ * The ids a stage decides, each with whether it is decided and whether it
+ * extends an existing row.
+ */
 function stageProposals(
   job: GeneratorJob | null | undefined,
   stage: GeneratorReviewStage,
-): Array<{ id: string; decided: boolean }> {
+): Array<{ id: string; decided: boolean; extension: boolean }> {
+  const withReview = { ...(job ?? {}), review: reviewOf(job) };
   switch (stage) {
     case "locations":
-      return jobLocations(job).map((id) => ({ id, decided: locationState(job, id) !== "open" }));
+      return [
+        ...(job?.result?.locations ?? []).map((location) => ({
+          id: location.id,
+          extension: false,
+        })),
+        ...extendedLocationIds(withReview).map((id) => ({ id, extension: true })),
+      ].map((proposal) => ({ ...proposal, decided: locationState(job, proposal.id) !== "open" }));
     case "npcs":
-      return (job?.result?.npcs ?? []).map((npc) => ({
-        id: npc.id,
-        decided: npcState(job, npc.id) !== "open",
-      }));
+      return [
+        ...(job?.result?.npcs ?? []).map((npc) => ({ id: npc.id, extension: false })),
+        ...extendedNpcIds(withReview).map((id) => ({ id, extension: true })),
+      ].map((proposal) => ({ ...proposal, decided: npcState(job, proposal.id) !== "open" }));
     case "scenes":
-      return jobScenes(job).map((id) => ({ id, decided: sceneState(job, id) !== "open" }));
+      return jobScenes(job).map((id) => ({
+        id,
+        decided: sceneState(job, id) !== "open",
+        extension: false,
+      }));
   }
 }
 
@@ -592,24 +657,27 @@ export function reviewStages(job: GeneratorJob | null | undefined): ReviewStageS
     const ids = new Set(proposals.map((proposal) => proposal.id));
     const waiting = parts.filter(
       (part) => part.kind === STAGE_PART[stage] && part.status !== "done" && !ids.has(part.id),
-    ).length;
+    );
     const decided = proposals.filter((proposal) => proposal.decided).length;
-    const total = proposals.length + waiting;
-    return { stage, total, decided, complete: decided === total, reachable: true };
+    const total = proposals.length + waiting.length;
+    const ready =
+      proposals.every((proposal) => proposal.decided || proposal.extension) &&
+      waiting.every((part) => part.existing === true);
+    return { stage, total, decided, complete: decided === total, ready, reachable: true };
   });
-  const earlierComplete = states
+  const earlierReady = states
     .filter((state) => state.stage !== "scenes")
-    .every((state) => state.complete);
+    .every((state) => state.ready);
   return states.map((state) =>
-    state.stage === "scenes" ? { ...state, reachable: earlierComplete } : state,
+    state.stage === "scenes" ? { ...state, reachable: earlierReady } : state,
   );
 }
 
 /**
  * The stage the review shows: the stored one, moved to the next stage that
  * has proposals when it has none (or to the last one before it), and to the
- * first undecided stage when the stored one is the scene stage and that is
- * not open yet.
+ * first stage that holds it back when the stored one is the scene stage and
+ * that is not open yet.
  */
 export function currentStage(job: GeneratorJob | null | undefined): GeneratorReviewStage {
   const stages = reviewStages(job).filter((state) => state.total > 0);
@@ -619,7 +687,7 @@ export function currentStage(job: GeneratorJob | null | undefined): GeneratorRev
     stages.find((state) => order(state.stage) >= order(stored)) ?? stages.at(-1);
   if (shown === undefined) return "scenes";
   if (shown.reachable) return shown.stage;
-  return stages.find((state) => !state.complete)?.stage ?? shown.stage;
+  return stages.find((state) => !state.ready)?.stage ?? shown.stage;
 }
 
 /**

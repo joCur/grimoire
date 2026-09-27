@@ -8,6 +8,8 @@
 // exists for.
 
 import {
+  openLocationIds,
+  openNpcIds,
   unwrittenReferences,
   withLocationChange,
   withNpcChange,
@@ -15,11 +17,19 @@ import {
   type GeneratorJobPatch,
   type LocationProposal,
   type NpcProposal,
+  type PartChange,
+  type PatchFinding,
   type SceneProposal,
 } from "@grimoire/shared";
+import type { GrimoireDb } from "./db/client";
+import { locationPartKey, npcPartKey } from "./generate-pipeline";
+import { applyTakenChanges } from "./patch-operations";
+import { locationIn, patchLocationIn, readLocationPatch } from "./store/locations";
+import { npcIn, patchNpcIn, readNpcPatch } from "./store/npcs";
 import { ApiError } from "./api-error";
 import {
   applyReviewPatch,
+  extensionChanges,
   markWrittenInTx,
   outlineSceneNumbers,
   jobConflict,
@@ -59,6 +69,14 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  *               order. The start is the chapter's end at the FIRST scene
  *               accept, taken in that transaction and stored on the job in
  *               the same commit.
+ *   extensions  an existing npc or location the run extends is accepted
+ *               under its id like a new one: its taken changes — every
+ *               change `review.keptChanges` does not keep — are applied to
+ *               the row as it is stored in this transaction and written as
+ *               one patch of that row. A block change whose anchor no longer
+ *               names exactly one block changes nothing and stands as a
+ *               finding on the part. Nothing taken is a 400
+ *               `nothing_to_write`: the DM rejects the extension instead.
  *   job         the patch's review part and the written proposals are
  *               recorded ON the job in that same commit, and the row is
  *               deleted the moment nothing is left open. Discarding the job
@@ -154,7 +172,10 @@ export async function acceptJobParts(
   const chosenScenes = new Set<string>();
   const chosenNpcs = new Set<string>();
   const chosenLocations = new Set<string>();
+  const chosenExtensions: Extension[] = [];
   const selection = patch.review ?? {};
+  const openNpcs = openNpcIds(job);
+  const openLocations = openLocationIds(job);
   // An unknown id is a 400 (`applyReviewPatch`); an already WRITTEN one is
   // skipped. One that is dropped or rejected cannot be written.
   for (const id of selection.writtenScenes ?? []) {
@@ -163,13 +184,19 @@ export async function acceptJobParts(
     else if (!review.writtenScenes.includes(id)) throw notOpen("scene", id);
   }
   for (const id of selection.writtenNpcs ?? []) {
-    const part = npcParts.get(id)!;
-    if (part.open) chosenNpcs.add(id);
+    const part = npcParts.get(id);
+    if (part === undefined) {
+      if (openNpcs.has(id)) chosenExtensions.push(takenExtension(job, "npc", id));
+      else if (!review.writtenNpcs.includes(id)) throw notOpen("npc", id);
+    } else if (part.open) chosenNpcs.add(id);
     else if (!review.writtenNpcs.includes(id)) throw notOpen("npc", id);
   }
   for (const id of selection.writtenLocations ?? []) {
-    const part = locationParts.get(id)!;
-    if (part.open) chosenLocations.add(id);
+    const part = locationParts.get(id);
+    if (part === undefined) {
+      if (openLocations.has(id)) chosenExtensions.push(takenExtension(job, "location", id));
+      else if (!review.writtenLocations.includes(id)) throw notOpen("location", id);
+    } else if (part.open) chosenLocations.add(id);
     else if (!review.writtenLocations.includes(id)) throw notOpen("location", id);
   }
   // The references are read off the scene with the DM's change applied, so
@@ -213,7 +240,12 @@ export async function acceptJobParts(
   // A selection whose parts are ALL written already is a double click or a
   // second tab, not an error: the caller asked for a state that is the
   // state. What else the patch carries is stored as a review patch.
-  if (scenes.length === 0 && npcs.length === 0 && locations.length === 0) {
+  if (
+    scenes.length === 0 &&
+    npcs.length === 0 &&
+    locations.length === 0 &&
+    chosenExtensions.length === 0
+  ) {
     return patchJobReview(campaign, jobId, patch);
   }
 
@@ -247,8 +279,14 @@ export async function acceptJobParts(
   };
 
   const writtenScenes = scenes.map((scene) => scene.id);
-  const writtenNpcs = npcs.map((npc) => npc.id);
-  const writtenLocations = locations.map((location) => location.id);
+  const writtenNpcs = [
+    ...npcs.map((npc) => npc.id),
+    ...chosenExtensions.filter((extension) => extension.kind === "npc").map(({ id }) => id),
+  ];
+  const writtenLocations = [
+    ...locations.map((location) => location.id),
+    ...chosenExtensions.filter((extension) => extension.kind === "location").map(({ id }) => id),
+  ];
   let accepted: Job | undefined;
   await writeGenerated(campaign, {
     ...(newChapter === null ? {} : { chapter: newChapter }),
@@ -258,6 +296,10 @@ export async function acceptJobParts(
     runChapters: job.chapter === undefined ? [] : [job.chapter],
     placeScene,
     onWritten: (tx) => {
+      const findings: Record<string, PatchFinding[]> = {};
+      for (const extension of chosenExtensions) {
+        findings[extension.key] = writeExtension(tx, campaign, extension);
+      }
       accepted = markWrittenInTx(
         tx,
         campaign,
@@ -265,10 +307,53 @@ export async function acceptJobParts(
         patch,
         { scenes: writtenScenes, npcs: writtenNpcs, locations: writtenLocations },
         tookStart ? sceneStart : undefined,
+        findings,
       );
     },
   });
   return accepted!;
+}
+
+/** An extension the accept writes: its part and the changes the DM takes. */
+interface Extension {
+  kind: "npc" | "location";
+  id: string;
+  key: string;
+  taken: PartChange[];
+}
+
+/**
+ * The extension of `id` with the changes the DM takes — every change of it
+ * the review does not keep. Nothing taken is a 400: there is nothing to
+ * write, and the DM rejects the extension instead.
+ */
+function takenExtension(job: Job, kind: "npc" | "location", id: string): Extension {
+  const key = kind === "npc" ? npcPartKey(id) : locationPartKey(id);
+  const kept = new Set(job.review.keptChanges[key] ?? []);
+  const taken = (extensionChanges(job, key) ?? []).filter((change) => !kept.has(change.id));
+  if (taken.length === 0) {
+    throw new ApiError(400, `the extension of ${kind} ${id} takes no change`, {
+      code: "nothing_to_write",
+    });
+  }
+  return { kind, id, key, taken };
+}
+
+/**
+ * Apply an extension's taken changes to its row as it is stored in `tx` and
+ * write them as one patch of that row. Answers what could not be applied.
+ */
+function writeExtension(tx: GrimoireDb, campaign: string, extension: Extension): PatchFinding[] {
+  const current =
+    extension.kind === "npc"
+      ? npcIn(tx, campaign, extension.id)
+      : locationIn(tx, campaign, extension.id);
+  const { fields, findings } = applyTakenChanges(current, extension.taken);
+  if (Object.keys(fields).length === 0) return findings;
+  const patch = { rev: current.rev, ...fields };
+  if (extension.kind === "npc") patchNpcIn(tx, campaign, extension.id, readNpcPatch(patch));
+  else patchLocationIn(tx, campaign, extension.id, readLocationPatch(patch));
+  return findings;
 }
 
 /** The 409 of a proposal the DM dropped or rejected — it is not open to accept. */

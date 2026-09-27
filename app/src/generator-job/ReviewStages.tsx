@@ -129,7 +129,7 @@ export function ReviewStageNav({
         <Button
           type="button"
           data-testid="review-next"
-          disabled={!here.complete || !next.reachable}
+          disabled={!here.ready || !next.reachable}
           onClick={() => onGo(next.stage)}
           className="h-auto gap-1.5 px-[18px] py-2.5 text-[13.5px] font-semibold"
         >

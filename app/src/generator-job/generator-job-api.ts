@@ -40,7 +40,13 @@ function generatorJobPath(campaign: string, id: string): string {
  */
 export function startGenerateJob(
   campaign: string,
-  input: { chapter: string; sourceText: string; newChapter?: boolean; chapterTitle?: string },
+  input: {
+    chapter: string;
+    sourceText: string;
+    newChapter?: boolean;
+    chapterTitle?: string;
+    extend?: boolean;
+  },
 ): Promise<GeneratorJob> {
   return startJob(generatorJobsPath(campaign), {
     kind: "scene",
@@ -50,6 +56,7 @@ export function startGenerateJob(
     ...(input.newChapter === true && input.chapterTitle !== undefined
       ? { chapterTitle: input.chapterTitle }
       : {}),
+    ...(input.extend === true ? { extend: true } : {}),
   });
 }
 
