@@ -58,6 +58,7 @@ import {
   patchFindingSchema,
   proposedNpcIds,
   sceneEditSchema,
+  serverNoteSchema,
 } from "@grimoire/shared";
 import type {
   GeneratorJob,
@@ -211,6 +212,7 @@ function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
         : { validationErrors: part.validationErrors }),
       ...(part.rawReply === undefined ? {} : { rawReply: part.rawReply }),
       warnings: part.warnings,
+      ...(part.serverNotes === undefined ? {} : { serverNotes: part.serverNotes }),
       ...(part.round === undefined ? {} : { round: part.round }),
       ...(part.findings === undefined ? {} : { findings: part.findings }),
     })),
@@ -462,6 +464,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
     // still on the part, and the DM can answer them again.
     const round = partRoundSchema.safeParse(part.round);
     const findings = z.array(patchFindingSchema).safeParse(part.findings);
+    const serverNotes = z.array(serverNoteSchema).safeParse(part.serverNotes);
     parts.push({
       key: part.key,
       kind,
@@ -478,6 +481,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
         : {}),
       ...(typeof part.rawReply === "string" ? { rawReply: part.rawReply } : {}),
       warnings: stringList(part.warnings),
+      ...(serverNotes.success ? { serverNotes: serverNotes.data } : {}),
       ...(round.success ? { round: round.data } : {}),
       ...(findings.success ? { findings: findings.data } : {}),
     });
@@ -804,6 +808,7 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
     npcs,
     locations,
     warnings: result.warnings,
+    ...(result.serverNotes === undefined ? {} : { serverNotes: result.serverNotes }),
     ...(namingHints.length === 0 ? {} : { namingHints }),
   };
 }
@@ -967,7 +972,13 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
         // The outline's own warnings are the run's warnings: it is the step
         // that read the whole source text, so a note about what the source
         // material does not contain can only come from here.
-        return { result: { ...result, warnings: outline.warnings } };
+        return {
+          result: {
+            ...result,
+            warnings: outline.warnings,
+            ...(outline.serverNotes.length === 0 ? {} : { serverNotes: outline.serverNotes }),
+          },
+        };
       });
     },
     async partRunning(key) {
@@ -995,6 +1006,8 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           delete part.validationErrors;
           delete part.rawReply;
           part.warnings = outcome.warnings;
+          if (outcome.serverNotes.length === 0) delete part.serverNotes;
+          else part.serverNotes = outcome.serverNotes;
           part.usage = usage;
         }
         addUsage(pipeline, usage);

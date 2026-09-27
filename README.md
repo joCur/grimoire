@@ -916,8 +916,12 @@ written is refused (409 `proposal_not_written`) and nothing is written
 ([decisions/generator](docs/decisions/generator.md)). The notes of a scene
 run belong to what they are about: what the model noted about one scene,
 NPC or location stands on its part (`pipeline.parts[].warnings`), what it
-noted about the run as a whole (the outline's notes, a repaired outline reply) under
-`result.warnings`. The naming check's findings (`result.namingHints`) name
+noted about the run as a whole (the outline's notes) under
+`result.warnings`. What the server itself notes — a reply that had to be
+repaired, a scene written from the whole source text because its passage
+could not be matched — is data beside them (`pipeline.parts[].serverNotes`,
+`result.serverNotes` for the outline reply), which the app says in a
+sentence and nobody answers. The naming check's findings (`result.namingHints`) name
 their scene, NPC or location by id, the field and, in the text, the line.
 The review shows a part's notes and hints on its card, a hint at the field
 or the block of the text it names, until the part is written, rejected or

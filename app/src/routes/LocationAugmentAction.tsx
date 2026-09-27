@@ -53,6 +53,7 @@ export function LocationAugmentAction({
                   currentBody: result.current.body,
                   proposedBody: result.proposed.body,
                   warnings: result.warnings,
+                  serverNotes: result.serverNotes ?? [],
                   namingHints: result.namingHints,
                 }}
                 onDone={onClose}

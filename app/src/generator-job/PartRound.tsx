@@ -13,11 +13,13 @@
 //              answers can go again;
 //   deciding   what the round changes, field by field and block by block —
 //              the value or block as it stands beside the new one — and the
-//              DM takes or keeps each change. A taken one lands in the job's
-//              edits of the proposal, which the accept writes.
+//              DM takes or discards each change. A taken one lands in the
+//              job's edits of the proposal, which the accept writes.
 //
 // The answer form is where the part's notes stand, so it carries the notes'
-// test id; the running and deciding states carry the round's.
+// test id; the running and deciding states carry the round's. What the
+// server noted about the part stands above the model's notes and gets no
+// answer field: the model did not write it (PartNotes.tsx).
 //
 // A note whose answer was worked in is done and gone from the part; what the
 // model noted in the round joins the notes. The comparison shows only changes
@@ -47,10 +49,9 @@ import { cn } from "@/lib/utils";
 
 import { answerPartNotes, decidePartChanges } from "./generator-job-api";
 import { generateJobKey } from "./generator-job-query";
-import { FIELD_LABEL, ModelNotes } from "./PartNotes";
+import { FIELD_LABEL, ModelNotes, NOTES_FRAME, ServerNoteList } from "./PartNotes";
 
-const FRAME =
-  "mb-3 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3 py-2";
+const FRAME = cn("mb-3 px-3 py-2", NOTES_FRAME);
 
 /**
  * The notes of a finished part with its patch round: answered, sent, and the
@@ -144,6 +145,7 @@ export function PartRound({
     );
   }
 
+  const serverNotes = part.serverNotes ?? [];
   const findings = <PartFindings kind={part.kind} findings={part.findings ?? []} t={t} />;
   const framedFindings =
     (part.findings ?? []).length === 0 ? null : <div className={FRAME}>{findings}</div>;
@@ -151,7 +153,7 @@ export function PartRound({
   if (round?.status === "done") {
     return (
       <>
-        <ModelNotes warnings={part.warnings} />
+        <ModelNotes warnings={part.warnings} serverNotes={serverNotes} title={part.title} />
         {framedFindings}
         <section
           data-testid="part-round"
@@ -184,6 +186,7 @@ export function PartRound({
   if (part.warnings.length === 0) {
     return (
       <>
+        <ModelNotes warnings={[]} serverNotes={serverNotes} title={part.title} />
         {framedFindings}
         {problemLine}
       </>
@@ -200,6 +203,7 @@ export function PartRound({
         if (ready && !send.isPending) send.mutate();
       }}
     >
+      <ServerNoteList notes={serverNotes} title={part.title} className="mb-2.5" />
       {framedFindings === null ? null : <div className="mb-2.5">{findings}</div>}
       {round?.status === "failed" && (
         <p role="alert" className="mb-2 text-[12.5px] leading-[1.5] text-destructive">
@@ -366,7 +370,7 @@ function NoteAnswer({
   );
 }
 
-/** One change of the round: what stands there, what would, and take ⇄ keep. */
+/** One change of the round: what stands there, what would, and take ⇄ discard. */
 function ChangeRow({
   kind,
   change,
@@ -389,7 +393,7 @@ function ChangeRow({
       data-change-op={change.op}
       className="rounded-md border border-border bg-card px-3 py-2.5"
     >
-      <div className="mb-1.5 flex items-center gap-2">
+      <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="text-[11px] font-semibold tracking-[.08em] text-muted-foreground uppercase">
           {unit}
         </span>

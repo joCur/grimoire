@@ -1023,19 +1023,30 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   await startSceneRun(page, `${SOURCE}\n\n${TRIGGER.partNotes}`);
   await expectStage(page, "locations");
 
-  // The wire: a part carries its own notes (a scene part also the server's
-  // note on its source excerpt), the result only the run's.
+  // The wire: a part carries its own notes, the result only the run's. The
+  // second scene's passage was quoted wrongly: the server's note on it is
+  // data beside the model's notes, not one of them.
   const job = await getGeneratorJob(api);
   expect(job.result?.warnings).toContain(OUTLINE_WARNING);
   expect(job.result?.warnings).not.toContain(partNote(LOCATION_STUB_ID));
+  expect(job.result?.serverNotes).toBeUndefined();
   const partWarnings = Object.fromEntries(
     (job.pipeline?.parts ?? []).map((part) => [part.key, part.warnings]),
   );
   expect(partWarnings).toEqual({
-    [`scene:${SCENE_ID}`]: expect.arrayContaining([partNote(SCENE_ID)]),
-    [`scene:${SECOND_SCENE.id}`]: expect.arrayContaining([partNote(SECOND_SCENE.id)]),
+    [`scene:${SCENE_ID}`]: [partNote(SCENE_ID)],
+    [`scene:${SECOND_SCENE.id}`]: [partNote(SECOND_SCENE.id)],
     [`npc:${NPC_STUB_ID}`]: [partNote(NPC_STUB_ID)],
     [`location:${LOCATION_STUB_ID}`]: [partNote(LOCATION_STUB_ID)],
+  });
+  const partServerNotes = Object.fromEntries(
+    (job.pipeline?.parts ?? []).map((part) => [part.key, part.serverNotes]),
+  );
+  expect(partServerNotes).toEqual({
+    [`scene:${SCENE_ID}`]: undefined,
+    [`scene:${SECOND_SCENE.id}`]: ["source_excerpt_unmatched"],
+    [`npc:${NPC_STUB_ID}`]: undefined,
+    [`location:${LOCATION_STUB_ID}`]: undefined,
   });
 
   // --- the run's note above the stages, the location's on its row ----------
@@ -1072,9 +1083,18 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   await expect(rich).toHaveAttribute("data-state", "dropped");
   await expect(rich.getByTestId("part-notes")).toHaveCount(0);
 
-  // --- the hints stand at the field and at the block they name ---------------
+  // --- the server's note stands with the model's, and gets no answer field ---
   const second = sceneProposal(page, SECOND_SCENE.id);
   await expect(second.getByTestId("part-notes")).toContainText(partNote(SECOND_SCENE.id));
+  const serverNote = second.getByTestId("server-note");
+  await expect(serverNote).toHaveCount(1);
+  await expect(serverNote).toHaveAttribute("data-note-kind", "source_excerpt_unmatched");
+  await expect(serverNote).toContainText(SECOND_SCENE.title);
+  await expect(serverNote.getByTestId("part-note-answer")).toHaveCount(0);
+  await expect(second.getByTestId("part-note-answer")).toHaveCount(1);
+  await expect(rich.getByTestId("server-note")).toHaveCount(0);
+
+  // --- the hints stand at the field and at the block they name ---------------
   const titleHint = second.locator('[data-testid="naming-hint"][data-field="title"]');
   await expect(titleHint).toHaveCount(1);
   const titleHintId = await titleHint.getAttribute("id");
@@ -1105,6 +1125,7 @@ test("each part's notes and naming hints stand on its card and leave with it; th
   expect(await readGeneratorJob(api)).toBeNull();
   await expect(page.getByTestId("run-notes")).toHaveCount(0);
   await expect(page.getByTestId("part-notes")).toHaveCount(0);
+  await expect(page.getByTestId("server-note")).toHaveCount(0);
   await expect(page.getByTestId("naming-hint")).toHaveCount(0);
 });
 
@@ -1139,6 +1160,10 @@ test("answering a part's notes patches the proposal, a taken change lands in the
   const locationChange = location.getByTestId("part-change");
   await expect(locationChange).toHaveCount(1);
   await expect(locationChange).toContainText(PATCH_LOCATION_ATMOSPHERE);
+  // The row's own decision stands below the round, never beside a change's.
+  const roundBox = await locationRound.boundingBox();
+  const decisionBox = await location.getByTestId("proposal-row-decision").boundingBox();
+  expect(decisionBox!.y).toBeGreaterThanOrEqual(roundBox!.y + roundBox!.height);
   await locationChange.getByTestId("decision-take").click();
   await expect(locationRound).toHaveCount(0);
   await expect(location.getByTestId("part-notes")).toHaveCount(0);

@@ -18,9 +18,10 @@ import {
   sceneProposalSchema,
   sceneReplySchema,
   type SceneProposal,
+  type ServerNote,
 } from "@grimoire/shared";
 import type { JsonSchema } from "@grimoire/shared/outline-schema";
-import { parseJsonReply, REPAIRED_OBJECT_WARNING } from "./json-reply";
+import { parseJsonReply } from "./json-reply";
 import type { ReplySchema, RunMode } from "./llm-provider";
 
 /** The tool (Claude) or `json_schema` (OpenAI) name a scene call travels under, per run. */
@@ -52,6 +53,8 @@ export interface SceneReply {
   scene: SceneProposal;
   /** The model's notes for the DM; empty when there was nothing to report. */
   warnings: string[];
+  /** What the server notes about the reply — `reply_repaired` when it had to be repaired. */
+  serverNotes: ServerNote[];
   /**
    * The keys an AUGMENT reply carried that a scene does not have — echoes of
    * the scene the model was shown, dropped instead of failing the run. Always
@@ -155,7 +158,8 @@ export function parseSceneReply(
         // lines and exactly one trailing newline.
         body: `${scene.body.replace(/^\n+/, "").trimEnd()}\n`,
       },
-      warnings: parsed.repaired ? [...warnings, REPAIRED_OBJECT_WARNING] : warnings,
+      warnings: warnings,
+      serverNotes: parsed.repaired ? ["reply_repaired"] : [],
       ignored,
     },
   };

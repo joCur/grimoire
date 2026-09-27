@@ -15,14 +15,15 @@
 //             tab may be closed, navigated away from, or reloaded; a finished
 //             proposal is still here afterwards, and so is a restart.
 //   review    the proposal, on two levels:
-//               fields per FIELD   stored value beside proposed one, take or
-//                                  keep,
+//               fields per FIELD   stored value beside proposed one, take
+//                                  or discard the change,
 //               body per BLOCK     the block composer's own blocks, with a
 //                                  word diff INSIDE a changed block, plus a
 //                                  raw tab carrying a line/word diff over the
 //                                  whole text.
-//             What the model noted stands at the top; a naming hint stands at
-//             the field or the block of the proposed text it names.
+//             What the server and the model noted stands at the top; a
+//             naming hint stands at the field or the block of the proposed
+//             text it names.
 //
 // DEFAULTS never overwrite silently: what is empty or new is preselected, what
 // is filled is kept. Accepting writes ONE request (fields + text, one
@@ -35,7 +36,7 @@
 // not that. The reading view itself is untouched by this at every width.
 
 import { blockTreeMarkdown } from "@grimoire/shared/blocks";
-import type { GeneratorJob, NamingHint } from "@grimoire/shared/generator-job";
+import type { GeneratorJob, NamingHint, ServerNote } from "@grimoire/shared/generator-job";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -71,7 +72,7 @@ import {
   type AugmentTarget,
 } from "./generator-job-state";
 import { AUGMENT_OPEN_PARAM, jobHref } from "./job-links";
-import { hintPlaceNotes } from "./PartNotes";
+import { hintPlaceNotes, ServerNoteList } from "./PartNotes";
 import { useJobReview, type JobReviewSync } from "./use-job-review";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
@@ -105,7 +106,10 @@ export interface ProposalView {
   currentBody: string;
   /** The model's proposed text, complete. */
   proposedBody: string;
+  /** The model's notes. */
   warnings: string[];
+  /** What the server noted about the reply — worded here, never answered. */
+  serverNotes: ServerNote[];
   namingHints?: NamingHint[] | undefined;
 }
 
@@ -611,6 +615,12 @@ export function AugmentReview({
       aria-label={t("augment.review.aria")}
       className="flex min-h-0 flex-col outline-none"
     >
+      {proposal.serverNotes.length > 0 && (
+        <ServerNoteList
+          notes={proposal.serverNotes}
+          className="mb-2 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
+        />
+      )}
       {proposal.warnings.map((warning) => (
         <div
           key={warning}
@@ -768,7 +778,7 @@ function PropertyRow({
       data-testid={`augment-field:${field.key}`}
       className="rounded-md border border-border bg-card px-3 py-2.5"
     >
-      <div className="mb-1.5 flex items-center gap-2">
+      <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="font-mono text-[12px] text-soft">{field.key}</span>
         <StateBadge state={field.state} t={t} />
         <DecisionToggle accepted={accepted} onDecide={onDecide} unit={field.key} t={t} />
@@ -813,7 +823,7 @@ function BlockRow({
         quiet ? "border-border/60 bg-transparent" : "border-border bg-card",
       )}
     >
-      <div className="mb-1.5 flex items-center gap-2">
+      <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className={OVERLINE}>{blockLabel(block, t)}</span>
         {change.kind !== "same" && <StateBadge state={change.kind} t={t} />}
         {!quiet && (

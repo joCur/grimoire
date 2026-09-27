@@ -47,6 +47,7 @@ import {
   type NamingHint,
   type NpcProposal,
   type SceneProposal,
+  type ServerNote,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import {
@@ -143,7 +144,14 @@ export interface RunOutline {
   scenes: OutlineScene[];
   npcs: OutlineNpc[];
   locations: OutlineLocation[];
+  /** The model's notes about the run. */
   warnings: string[];
+  /**
+   * What the server notes about the outline reply — `reply_repaired` when it
+   * had to be repaired. The repair is silent otherwise, and a provider whose
+   * replies need it every run is a provider to reconsider.
+   */
+  serverNotes: ServerNote[];
   /**
    * What the chapter a new-chapter run creates is about, from the source
    * material — it becomes that chapter's text when the run is accepted.
@@ -157,27 +165,14 @@ export interface RunOutline {
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
 
 /**
- * The run warning a REPAIRED outline earns. German, like the excerpt-fallback
- * warning of a scene part: it rides along in the run's own `warnings` and the
- * review shows those verbatim.
- *
- * Why it is a warning at all: the repair is silent otherwise, and "the model
- * answered something JSON.parse could not read" is exactly the kind of thing
- * a DM wants to see once — a provider whose replies need patching every run
- * is a provider to reconsider, and without the note nobody would ever know.
- */
-export const REPAIRED_REPLY_WARNING =
-  "Antwort musste repariert werden — das Modell hat die Gliederung nicht als " +
-  "gültiges JSON geliefert.";
-
-/**
  * The outline reply as a JSON value — read by the tolerant reader every reply
  * shares (`parseJsonReply`, ./json-reply): the whole text first (which is
  * what a schema-forced reply is), then a fence, then the brace span, and ONE
  * deterministic `jsonrepair` attempt before a correction turn is spent.
  *
  * Kept as a named function of its own because the outline's `repaired` flag
- * becomes a RUN WARNING here, and because the tests of this step address it.
+ * becomes the run's server note here, and because the tests of this step
+ * address it.
  */
 export function parseOutlineJson(raw: string): { value: unknown; repaired: boolean } | null {
   return parseJsonReply(raw);
@@ -379,8 +374,9 @@ export function validateOutlineReply(
       scenes,
       npcs,
       locations,
-      // The repair is recorded as a run warning, not swallowed.
-      warnings: parsedReply.repaired ? [...warnings, REPAIRED_REPLY_WARNING] : warnings,
+      warnings,
+      // The repair is recorded, not swallowed.
+      serverNotes: parsedReply.repaired ? ["reply_repaired"] : [],
       ...(chapterDescription === undefined ? {} : { chapterDescription }),
     },
   };
@@ -520,7 +516,9 @@ export function validateSingleSceneReply(input: {
   ctx: SceneContext;
   scene: OutlineScene;
   allowed: AllowedRefs;
-}): { ok: true; result: { scene: SceneProposal; warnings: string[] } } | { ok: false; errors: string[] } {
+}):
+  | { ok: true; result: { scene: SceneProposal; warnings: string[]; serverNotes: ServerNote[] } }
+  | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT: every field of the scene plus
   // `warnings` (./scene-reply reads it). Everything below judges that object.
   const read = parseSceneReply(input.raw, "create");
@@ -538,7 +536,10 @@ export function validateSingleSceneReply(input: {
     expectedId: input.scene.id,
   });
   if (scene === null) return { ok: false, errors };
-  return { ok: true, result: { scene, warnings: read.reply.warnings } };
+  return {
+    ok: true,
+    result: { scene, warnings: read.reply.warnings, serverNotes: read.reply.serverNotes },
+  };
 }
 
 /**
@@ -578,7 +579,9 @@ export function validateNpcPartReply(
   raw: string,
   outlineNpc: OutlineNpc,
   allowed: AllowedRefs,
-): { ok: true; result: { npc: NpcProposal; warnings: string[] } } | { ok: false; errors: string[] } {
+):
+  | { ok: true; result: { npc: NpcProposal; warnings: string[]; serverNotes: ServerNote[] } }
+  | { ok: false; errors: string[] } {
   const label = `npc "${outlineNpc.id}"`;
   const read = parseNpcReply(raw);
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `${label}: ${e}`) };
@@ -587,7 +590,10 @@ export function validateNpcPartReply(
   if (npc === null || errors.length > 0) return { ok: false, errors };
   errors.push(...proposalErrors(label, npc.id, outlineNpc.id, npc.body, allowed));
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { npc, warnings: read.reply.warnings } };
+  return {
+    ok: true,
+    result: { npc, warnings: read.reply.warnings, serverNotes: read.reply.serverNotes },
+  };
 }
 
 /**
@@ -600,7 +606,10 @@ export function validateLocationPartReply(
   outlineLocation: OutlineLocation,
   allowed: AllowedRefs,
 ):
-  | { ok: true; result: { location: LocationProposal; warnings: string[] } }
+  | {
+      ok: true;
+      result: { location: LocationProposal; warnings: string[]; serverNotes: ServerNote[] };
+    }
   | { ok: false; errors: string[] } {
   const label = `location "${outlineLocation.id}"`;
   const read = parseLocationReply(raw);
@@ -610,7 +619,10 @@ export function validateLocationPartReply(
   if (location === null || errors.length > 0) return { ok: false, errors };
   errors.push(...proposalErrors(label, location.id, outlineLocation.id, location.body, allowed));
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { location, warnings: read.reply.warnings } };
+  return {
+    ok: true,
+    result: { location, warnings: read.reply.warnings, serverNotes: read.reply.serverNotes },
+  };
 }
 
 // --- the run ------------------------------------------------------------------
@@ -625,9 +637,9 @@ export interface PartOutcome {
   location?: LocationProposal;
   /** The model's notes on this part — they stay on the part (`GeneratorJobPart.warnings`). */
   warnings: string[];
+  /** What the server notes about this part — they stay on it too (`GeneratorJobPart.serverNotes`). */
+  serverNotes: ServerNote[];
   namingHints: NamingHint[];
-  /** The excerpt could not be matched, so the part got the WHOLE source. */
-  excerptFallback?: boolean;
 }
 
 /** Usage of one part — `calls` is what the review header sums into its call count. */
@@ -890,6 +902,7 @@ export async function runScenePart(
   const result = await runPipeline<{
     scene: SceneProposal;
     warnings: string[];
+    serverNotes: ServerNote[];
     usage?: GenerateUsage;
   }>({
     req: {
@@ -912,20 +925,15 @@ export async function runScenePart(
   return {
     outcome: {
       scene: result.scene,
-      warnings: [
-        ...result.warnings,
+      warnings: result.warnings,
+      serverNotes: [
+        ...result.serverNotes,
         // The DM has to know when a scene was written from the WHOLE source
         // instead of its passage: it is the one quality difference the
         // pipeline can produce silently.
-        ...(cut.matched
-          ? []
-          : [
-              `Der Quelltext-Ausschnitt für „${scene.title}“ ließ sich nicht wörtlich ` +
-                "zuordnen — diese Szene wurde aus dem ganzen Quelltext geschrieben.",
-            ]),
+        ...(cut.matched ? [] : (["source_excerpt_unmatched"] as const)),
       ],
       namingHints: checkProposalsNaming([sceneChecked(result.scene)], plan.ctx.namingRules),
-      ...(cut.matched ? {} : { excerptFallback: true }),
     },
     usage: usageOf(result.usage, counter.count()),
   };
@@ -945,7 +953,12 @@ export async function runNpcPart(
   counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const assets = await loadPromptAssets("npc");
-  const result = await runPipeline<{ npc: NpcProposal; warnings: string[]; usage?: GenerateUsage }>({
+  const result = await runPipeline<{
+    npc: NpcProposal;
+    warnings: string[];
+    serverNotes: ServerNote[];
+    usage?: GenerateUsage;
+  }>({
     req: {
       systemPrompt: assets.systemPrompt,
       fewShotTarget: assets.fewShotTarget,
@@ -968,6 +981,7 @@ export async function runNpcPart(
     outcome: {
       npc: result.npc,
       warnings: result.warnings,
+      serverNotes: result.serverNotes,
       namingHints: checkProposalsNaming([{ npc: result.npc.id, fields, body }], plan.ctx.namingRules),
     },
     usage: usageOf(result.usage, counter.count()),
@@ -985,6 +999,7 @@ export async function runLocationPart(
   const result = await runPipeline<{
     location: LocationProposal;
     warnings: string[];
+    serverNotes: ServerNote[];
     usage?: GenerateUsage;
   }>({
     req: {
@@ -1011,6 +1026,7 @@ export async function runLocationPart(
     outcome: {
       location: result.location,
       warnings: result.warnings,
+      serverNotes: result.serverNotes,
       namingHints: checkProposalsNaming(
         [{ location: result.location.id, fields, body }],
         plan.ctx.namingRules,

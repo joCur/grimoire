@@ -540,7 +540,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(result.warnings).toEqual(["The source text names no status — set to alive"]);
   });
 
-  test("an almost-JSON reply is repaired once, with a warning", async () => {
+  test("an almost-JSON reply is repaired once, and the server notes it", async () => {
     // A trailing comma is mechanical; `jsonrepair` fixes it deterministically
     // and much more cheaply than a correction turn — and the run SAYS so.
     const fake = useFake([`${npcReply().replace(/}$/, ",}")}`]);
@@ -549,7 +549,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     expect(fake.calls).toHaveLength(1);
     const result = (await res.json()) as GenerateNpcResult;
     expect(result.npc.id).toBe("grella");
-    expect(result.warnings.some((w) => w.includes("repariert"))).toBe(true);
+    expect(result.serverNotes).toEqual(["reply_repaired"]);
   });
 
   // --- id collisions -------------------------------------------------------------

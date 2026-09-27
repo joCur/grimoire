@@ -58,7 +58,8 @@
 //   - TRIGGER.twoScenes    -> the default outline plus a second scene that
 //     names no new npc and no new location
 //   - TRIGGER.partNotes    -> that two-scene run with a note on every part and
-//     OLD_NAME in the npc's role and in the second scene
+//     OLD_NAME in the npc's role and in the second scene, whose source
+//     passage the outline quotes wrongly
 //   - TRIGGER.partFail:<nonce> -> the middle scene fails its whole FIRST
 //     ROUND for that nonce — the initial call AND the correction turn the
 //     server spends on it — and succeeds from the second round on. That is
@@ -409,6 +410,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
             knowledge,
             three,
             two,
+            partNotes,
             oldName,
             asciiQuotes,
             // The context's own line, as a model reads it.

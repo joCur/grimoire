@@ -59,6 +59,7 @@ import {
   hintRef,
   proposalNotes,
   runNotes,
+  runServerNotes,
 } from "./generator-job-state";
 import { AUGMENT_OPEN_PARAM, generatorHref, jobHref } from "./job-links";
 
@@ -1006,11 +1007,16 @@ describe("the stages of a scene run's review", () => {
         npcs: [{ id: "grella", name: "Grella", status: "unknown", body: "s" }],
         locations: [{ id: "old-mole", name: "Old Mole", body: "m" }],
         warnings: ["The source names no weather."],
+        serverNotes: ["reply_repaired"],
         namingHints: hints,
       },
       pipeline: {
         parts: [
-          { ...part("scene", "a"), warnings: ["About a."] },
+          {
+            ...part("scene", "a"),
+            warnings: ["About a."],
+            serverNotes: ["source_excerpt_unmatched"],
+          },
           part("scene", "b"),
           { ...part("npc", "grella"), warnings: ["About Grella."] },
           { ...part("location", "old-mole"), warnings: ["About the mole."] },
@@ -1020,11 +1026,17 @@ describe("the stages of a scene run's review", () => {
     });
     expect(proposalNotes(noted, { kind: "scene", id: "a" })).toEqual({
       warnings: ["About a."],
+      serverNotes: ["source_excerpt_unmatched"],
       hints: [hints[0]!],
     });
-    expect(proposalNotes(noted, { kind: "scene", id: "b" })).toEqual({ warnings: [], hints: [] });
+    expect(proposalNotes(noted, { kind: "scene", id: "b" })).toEqual({
+      warnings: [],
+      serverNotes: [],
+      hints: [],
+    });
     expect(proposalNotes(noted, { kind: "npc", id: "grella" })).toEqual({
       warnings: ["About Grella."],
+      serverNotes: [],
       hints: [hints[1]!],
     });
     expect(proposalNotes(noted, { kind: "location", id: "old-mole" }).hints).toEqual([hints[2]!]);
@@ -1041,11 +1053,13 @@ describe("the stages of a scene run's review", () => {
       { kind: "npc", id: "grella" },
       { kind: "location", id: "old-mole" },
     ] as const) {
-      expect(proposalNotes(decided, proposal)).toEqual({ warnings: [], hints: [] });
+      expect(proposalNotes(decided, proposal)).toEqual({ warnings: [], serverNotes: [], hints: [] });
     }
     // The run's own notes stay while the job is there.
     expect(runNotes(decided)).toEqual(["The source names no weather."]);
+    expect(runServerNotes(decided)).toEqual(["reply_repaired"]);
     expect(runNotes(null)).toEqual([]);
+    expect(runServerNotes(null)).toEqual([]);
   });
 
   test("an npc run's notes stand on its one proposal", () => {
@@ -1055,16 +1069,22 @@ describe("the stages of a scene run's review", () => {
       npcResult: {
         npc: { id: "grella", name: "Grella", status: "unknown", body: "s" },
         warnings: ["No voice given."],
+        serverNotes: ["reply_repaired"],
         namingHints: [hint],
       },
     } as GeneratorJob;
     expect(proposalNotes(npcRun, { kind: "npc", id: "grella" })).toEqual({
       warnings: ["No voice given."],
+      serverNotes: ["reply_repaired"],
       hints: [hint],
     });
-    expect(proposalNotes(npcRun, { kind: "npc", id: "other" })).toEqual({ warnings: [], hints: [] });
+    expect(proposalNotes(npcRun, { kind: "npc", id: "other" })).toEqual({
+      warnings: [],
+      serverNotes: [],
+      hints: [],
+    });
     expect(
       proposalNotes(decide(npcRun, { writtenNpcs: ["grella"] }), { kind: "npc", id: "grella" }),
-    ).toEqual({ warnings: [], hints: [] });
+    ).toEqual({ warnings: [], serverNotes: [], hints: [] });
   });
 });

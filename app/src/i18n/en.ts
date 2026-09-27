@@ -51,9 +51,16 @@ export const en: Messages = {
   "generatorJob.augment.failed": "Augmenting {name} failed.",
   "generatorJob.notes.label": "Notes from the model",
   "generatorJob.notes.summary":
-    "{count, plural, one {# note from the model} other {# notes from the model}} on this proposal",
+    "{count, plural, one {# note} other {# notes}} on this proposal",
   "generatorJob.runNotes.summary":
-    "{count, plural, one {# note from the model on the whole run} other {# notes from the model on the whole run}}",
+    "{count, plural, one {# note on the whole run} other {# notes on the whole run}}",
+  "generatorJob.serverNotes.label": "Notes from Grimoire",
+  "generatorJob.serverNote.reply_repaired":
+    "The model's reply for this proposal was not valid JSON and was repaired before it was read.",
+  "generatorJob.serverNote.source_excerpt_unmatched":
+    "The source passage for “{title}” could not be matched word for word, so this scene was written from the whole source text.",
+  "generatorJob.runServerNote.reply_repaired":
+    "The model's outline was not valid JSON and was repaired before it was read.",
   "generatorJob.round.answer": "Your answer to this note",
   "generatorJob.round.answerPlaceholder": "Answer if the note should change something in the proposal",
   "generatorJob.round.keepAsKnowledge": "Keep this answer as campaign knowledge so that every later run knows it too.",
@@ -387,7 +394,7 @@ export const en: Messages = {
   "server.proposal_not_written":
     "Not written — this scene names an NPC or a location of the run that has not been accepted. Accept it first or remove it from the scene.",
   "server.patch_anchor_missing":
-    "Not applied — the block this change is about is no longer in the text as it was. Keep the change and edit the text yourself.",
+    "Not applied — the block this change is about is no longer in the text as it was. Discard the change and edit the text yourself.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": "the chapter “{name}”",
@@ -1096,11 +1103,11 @@ export const en: Messages = {
   "augment.state.new": "New",
   "augment.state.changed": "Changed",
   "augment.state.removed": "Dropped",
-  "augment.decision.aria": "Accept or keep",
-  "augment.decision.take": "Accept",
-  "augment.decision.keep": "Keep",
-  "augment.decision.takeUnit": "Accept: {label}",
-  "augment.decision.keepUnit": "Keep: {label}",
+  "augment.decision.aria": "Take or discard the change",
+  "augment.decision.take": "Take change",
+  "augment.decision.keep": "Discard change",
+  "augment.decision.takeUnit": "Take change: {label}",
+  "augment.decision.keepUnit": "Discard change: {label}",
   "augment.diff.added": "added",
   "augment.diff.removed": "removed",
   "augment.diff.changed": "changed",
