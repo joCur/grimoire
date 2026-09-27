@@ -12,6 +12,7 @@ import { BrowseRoute } from "@/routes/browse";
 import { GenerateRoute } from "@/routes/generate";
 import { GlossaryRoute } from "@/glossary-term/GlossaryRoute";
 import { ItemPricesRoute } from "@/item-price/ItemPricesRoute";
+import { RandomTablesRoute } from "@/routes/random-tables";
 import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/knowledge-item/KnowledgeRoute";
@@ -183,6 +184,10 @@ export function App() {
               (decisions/reference-data), looked up inside the campaign the
               DM is in. Reached from the campaign menu and ⌘K. */}
           <Route path="item-prices" element={<ItemPricesRoute />} />
+          {/* The random tables the DM imported into the instance
+              (decisions/reference-data), rolled inside the campaign the DM
+              is in; a result becomes a log line or an idea of it. */}
+          <Route path="random-tables" element={<RandomTablesRoute />} />
           {/* The trash — what was deleted, until it is removed for good
               (decisions/trash). Reached like the two pages above, never
               from the topbar. It composes the trash lists and restores of

@@ -25,6 +25,7 @@
     "./idea": "./src/idea.ts",
     "./glossary-term": "./src/glossary-term.ts",
     "./item-price": "./src/item-price.ts",
+    "./random-table": "./src/random-table.ts",
     "./knowledge-item": "./src/knowledge-item.ts",
     "./session": "./src/session.ts",
     "./log-entry": "./src/log-entry.ts",

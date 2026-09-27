@@ -200,6 +200,17 @@ export const ERROR_CODES = [
    * — the job as it stands.
    */
   "patch_anchor_missing",
+  /**
+   * 400, importing random tables: the file is not a 5etools file — it names
+   * no sources in `_meta.sources`, or its tables are not in the 5etools
+   * shape. Nothing is written. No parameters.
+   */
+  "import_not_fivetools",
+  /**
+   * 400, importing random tables: the 5etools file holds no table of any of
+   * its sources. Nothing is written. No parameters.
+   */
+  "import_no_tables",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

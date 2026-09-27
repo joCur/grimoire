@@ -5,7 +5,8 @@ Grimoire stores a campaign in an SQLite database
 **scene**, **NPC**, **location**, **thread** (a plot thread a chapter
 carries), **idea**, **glossary term**, **campaign knowledge** (every naming
 convention, every fact, every style rule on its own), the **session**
-with its **pauses** and **log lines** and the **item price** — is a row of its own table and its own
+with its **pauses** and **log lines**, the **item price** and the **random table** with its
+**source** — is a row of its own table and its own
 resource with its own
 fields ([decisions/resources](docs/decisions/resources.md)). Campaign, chapter, scene, NPC and location have among their
 fields a `body`: their **text** in Markdown.
@@ -41,9 +42,12 @@ included, without `kind`, without `path`:
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
 | Item price | `GET /api/item-prices/<id>` | `GET /api/item-prices` | on the price page `/campaigns/<campaign>/item-prices` |
+| Random-table source | `GET/DELETE /api/random-table-sources/<id>` | `GET/POST /api/random-table-sources` | on the random tables page `/campaigns/<campaign>/random-tables` |
+| Random table | `GET /api/random-tables/<id>` | `GET /api/random-tables` | on the random tables page `/campaigns/<campaign>/random-tables` |
 
 `DELETE` on a chapter, a scene, an NPC, a location or an idea puts it in the
-**trash** (see trash below); the other `DELETE`s remove their row. The trash
+**trash** (see trash below); the other `DELETE`s remove their row — a
+random-table source with its tables. The trash
 has its app route `/campaigns/<campaign>/trash`.
 
 The chapter overview stays `/campaigns/<campaign>`; the list of campaigns
@@ -73,7 +77,8 @@ are maintained on their own pages.
 Everything that depends on a campaign hangs under the campaign — in the API
 `/api/campaigns/<campaign>/…`, in the app `/campaigns/<campaign>/…` ([decisions/resources](docs/decisions/resources.md)).
 Without a campaign stay `/api/campaigns`, `/api/settings`, `/settings` and
-the instance's reference data, `/api/item-prices`
+the instance's reference data, `/api/item-prices`, `/api/random-table-sources`
+and `/api/random-tables`
 ([decisions/reference-data](docs/decisions/reference-data.md)).
 
 ## Fields
@@ -551,6 +556,90 @@ the items, a migration writes them, and nothing changes them. `GET /api/item-pri
   with `kind: "item-price"` and its `id` and opens the price page at that
   item.
 
+### Random table and its source
+
+A random table is a table the DM rolls at the table — names, encounters,
+weather, trinkets —, its own resource with its own type (`RandomTable`, from
+the zod schema in `shared/src/random-table.ts`). It comes from a **source**,
+a published collection with its own resource (`RandomTableSource`). Both are
+reference data of the instance, not of a campaign, and none ships with the
+app: the DM imports a 5etools homebrew file (for example from
+[TheGiddyLimit/homebrew](https://github.com/TheGiddyLimit/homebrew)) into
+their own instance, and the import is their only writer
+([decisions/reference-data](docs/decisions/reference-data.md)).
+`GET /api/random-table-sources/<id>` responds with a source:
+
+```json
+{
+  "id": "rsp",
+  "title": "Raging Swan Press",
+  "authors": ["Raging Swan Press"],
+  "url": "http://www.ragingswan.com/",
+  "rev": 1
+}
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, the slug of the source key in the file's `_meta.sources` |
+| `title` | the source's full name, as its file gives it |
+| `authors` | the source's authors, as its file gives them |
+| `url` | where the source is published; empty where the file names no link |
+| `rev` | row version |
+
+`GET /api/random-tables/<id>` responds with a table and its rows:
+
+```json
+{
+  "id": "rsp-harbour-weather",
+  "source": "rsp",
+  "name": "Harbour Weather",
+  "caption": "",
+  "intro": "Roll at the start of a day at sea.",
+  "die": 6,
+  "columns": ["Weather"],
+  "rows": [
+    { "min": 1, "max": 3, "cells": ["Fog rolls in over the piers."] },
+    { "min": 4, "max": 6, "cells": ["A sharp wind from the north."] }
+  ],
+  "rev": 1
+}
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, the source's `id` and the slug of the table's name |
+| `source` | the `id` of the source it was imported from |
+| `name` | the table as its source names it |
+| `caption`, `intro` | the source's heading and introductory text of the table; empty where it gives none |
+| `die` | the number of sides of the die the rows are rolled with; `null` for a table without dice ranges |
+| `columns` | the headings of the result columns |
+| `rows` | the rows in the source's order: `min` and `max` the die results a row stands for (both `null` without dice ranges), `cells` its result columns as plain text |
+| `rev` | row version |
+
+- `POST /api/random-table-sources` takes a 5etools file as it is and
+  responds with the sources it wrote: every source of its `_meta.sources`
+  that has tables in its `table` list. A source that is already there is
+  replaced — its tables are the file's afterwards. The first column of a
+  table is read as its dice ranges (`7`, `2-5`, `96-00`, a d100's `00` being
+  100); a table whose first column is no die result keeps every column and
+  gives each row the same chance. 5etools inline tags read as the text they
+  show (`{@creature goblin|MM}` is "goblin"); a cell of an unknown shape
+  degrades to the text it holds.
+- `DELETE /api/random-table-sources/<id> { rev }` removes the source with its
+  tables for good; importing the file again brings them back.
+- `GET /api/random-tables?source=<id>` responds with the tables of one
+  source in the order of its file; without `source`, with every table.
+- The random tables page imports a file picked from disk or loaded from an
+  address (a GitHub file page is read from its raw address; the app reads
+  it, the server never fetches it), lists the sources with their credit and
+  rolls a table: a row of a range `2-5` comes up four times as often as a
+  `1`. A result becomes a log line of the running session, or an idea when
+  none runs; either begins with the table's name.
+- The search of every campaign finds a table by its name; the hit names
+  itself with `kind: "random-table"` and its `id` and opens the random
+  tables page at that table.
+
 ### Campaign knowledge
 
 The campaign knowledge is the naming conventions, facts and style rules the
@@ -1017,4 +1106,5 @@ campaign directory, by default `fixtures/`. It reads the folders
 `ideas/`, `glossary-terms/`, `knowledge-items/` and `sessions/` in it — the
 campaign folder holds exactly one campaign — and writes the rows into a
 database through the store layer. The server itself seeds nothing — a fresh
-instance starts without campaigns; only the item prices come with it.
+instance starts without campaigns; only the item prices come with it, and
+random tables come only from the DM's own import.

@@ -119,6 +119,7 @@ export const en: Messages = {
   "area.npcs": "NPCs",
   "area.locations": "Locations",
   "area.glossary": "Glossary",
+  "area.randomTables": "Random tables",
   "area.itemPrices": "Item prices",
   "area.knowledge": "Campaign knowledge",
   "area.review": "Session review",
@@ -294,6 +295,48 @@ export const en: Messages = {
   "settings.language.heading": "Language",
   "settings.language.hint": "Language of the interface. Applies to this instance, not to the campaign data.",
 
+  // --- random tables ----------------------------------------------------------
+  "randomTables.title": "Random tables",
+  "randomTables.lead":
+    "Tables from 5etools files you imported into this instance. Roll a table and take the result into the running session's log or keep it as an idea.",
+  "randomTables.sources": "Sources",
+  "randomTables.loading": "Loading random tables …",
+  "randomTables.empty": "No random tables imported yet. Import a 5etools file below.",
+  "randomTables.tableGone": "This table is no longer in this instance.",
+  "randomTables.by": "by {authors}",
+  "randomTables.unfold": "Show the tables of {title}",
+  "randomTables.fold": "Hide the tables of {title}",
+  "randomTables.remove": "Remove",
+  "randomTables.rowCount": "{count, plural, one {# row} other {# rows}}",
+  "randomTables.roll": "Roll d{die}",
+  "randomTables.rollAny": "Roll a row",
+  "randomTables.showRows": "{count, plural, one {Show the # row} other {Show all # rows}}",
+  "randomTables.hideRows": "Hide the rows",
+  "randomTables.removeDialog.title": "Remove {title}?",
+  "randomTables.removeDialog.body":
+    "The source leaves this instance for good, with all its tables. Importing the 5etools file again brings them back.",
+  "randomTables.removeDialog.keep": "Keep",
+  "randomTables.removeDialog.confirm": "Remove",
+  "randomTables.removeDialog.failed": "The source could not be removed. Try again.",
+  "randomTables.import.title": "Import a 5etools file",
+  "randomTables.import.lead":
+    "Paste the address of a file, for example from the 5etools homebrew repository, or pick a file. A source that is already here is replaced by the file.",
+  "randomTables.import.address": "Address of the 5etools file",
+  "randomTables.import.load": "Load and import",
+  "randomTables.import.or": "or",
+  "randomTables.import.pick": "Pick a 5etools file",
+  "randomTables.import.running": "Importing …",
+  "randomTables.import.done":
+    "{count, plural, one {Imported: {titles}.} other {Imported # sources: {titles}.}}",
+  "randomTables.import.notJson": "That is not JSON and was not imported.",
+  "randomTables.import.unreachable":
+    "The address could not be loaded. Check it, or download the 5etools file and pick it.",
+  "randomTables.import.failed": "The import did not work. Try again.",
+  "randomTables.take.log": "Take into the log",
+  "randomTables.take.idea": "Keep as an idea",
+  "randomTables.take.loggedDone": "It is in the running session's log.",
+  "randomTables.take.ideaDone": "It is with the ideas.",
+  "randomTables.take.failed": "The result could not be saved. Try again.",
   // --- the two campaign-content pages --------------------------------------
   "editableList.loading": "Loading the list …",
   "editableList.loadFailed": "List not loaded — reload the page.",
@@ -430,6 +473,9 @@ export const en: Messages = {
     "This cannot be restored while {blockers} {count, plural, one {is} other {are}} in the trash. Restore {count, plural, one {it} other {them}} first.",
   "server.proposal_not_written":
     "Not written — this scene names an NPC or a location of the run that has not been accepted. Accept it first or remove it from the scene.",
+  "server.import_not_fivetools":
+    "This is not a 5etools file: it lacks the sources under _meta or the table list. Nothing was imported.",
+  "server.import_no_tables": "The 5etools file holds no random table. Nothing was imported.",
   "server.patch_anchor_missing":
     "Not applied — the block this change is about is no longer in the text as it was. Discard the change and edit the text yourself.",
   // One row in the way of a trash or a restore, as it stands inside the
@@ -723,6 +769,7 @@ export const en: Messages = {
   "kind.campaign": "Campaign",
   "kind.session": "Session",
   "kind.glossary": "Glossary",
+  "kind.randomTable": "Random table",
   "kind.itemPrice": "Item price",
   "markdown.ref.aria": "{kind}: {name}",
 

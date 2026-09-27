@@ -57,6 +57,8 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   restore_blocked: "server.restore_blocked",
   proposal_not_written: "server.proposal_not_written",
   patch_anchor_missing: "server.patch_anchor_missing",
+  import_not_fivetools: "server.import_not_fivetools",
+  import_no_tables: "server.import_no_tables",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -232,6 +234,8 @@ function paramsFor(
     case "body_not_editable":
     case "proposal_not_written":
     case "patch_anchor_missing":
+    case "import_not_fivetools":
+    case "import_no_tables":
       return {};
   }
 }

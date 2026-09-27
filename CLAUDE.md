@@ -71,6 +71,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `glossary-terms`,
   `knowledge-items` (with their order),
   `item-prices` (read only, decisions/reference-data),
+  `random-table-sources` (the import of a 5etools file and the removal of a
+  source) and `random-tables` (their tables, written only by that import),
   `generated` (accepting a generator run),
   `trash` (the purge of rows past the trash's retention, decisions/trash) — and
   each carries the **read AND write access** of its kind. No catch-all
@@ -78,7 +80,7 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 - `app/` — the frontend. Every entity with its own resource has its slice
   `app/src/<entity>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
-  `item-price/`, `session/`, `generator-job/`) with everything the app knows about it
+  `item-price/`, `random-table/`, `session/`, `generator-job/`) with everything the app knows about it
   (decisions/resources); **slices do not import each other.** Pause and log
   line belong to the `session/` slice: the app reads them only embedded in
   their session, and every one of their writes lands in the session's cache;
@@ -92,10 +94,12 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   its threads and its scene list, the scene gets its NPC cards, the reading
   page of a session gets the link of a scene, the live view's next-scene
   step gets setting the scene status; scene, NPC and location get
-  their augment action from the generator job). Whatever connects two slices
+  their augment action from the generator job; the random tables page gets
+  what a rolled result becomes). Whatever connects two slices
   lives with the page that composes them (the reminders of the live view
   from log lines and ideas in `routes/PcReminders.tsx`, the augment actions
-  in `routes/<Entity>AugmentAction.tsx`). No barrel:
+  in `routes/<Entity>AugmentAction.tsx`, a rolled result as a log line or an
+  idea in `routes/random-tables.tsx`). No barrel:
   callers import the concrete file.
 - `generator/` — LLM pipeline (prompt, few-shot, process README).
 - `design/` — binding design reference (the PO's Claude Design export, see
@@ -134,6 +138,10 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `…/ideas/<id>` with `Idea`, `…/glossary-terms/<id>` with `GlossaryTerm`,
   `/api/item-prices/<id>` with `ItemPrice` (reference data of the instance,
   decisions/reference-data, read only),
+  `/api/random-table-sources/<id>` with `RandomTableSource` and
+  `/api/random-tables/<id>` with `RandomTable` (reference data the DM
+  imports from a 5etools file, decisions/reference-data; the import is their
+  only writer, and a source is removed as a whole),
   `…/knowledge-items/<id>` with `KnowledgeItem`, `…/sessions/<id>` with
   `Session` (pauses and log lines embedded), all fields side
   by side,
@@ -144,7 +152,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `/campaigns/:id/locations/<id>`; threads are maintained by the chapter
   overview, ideas by the debrief and the mobile start surface, glossary terms
   by the page `/campaigns/:id/glossary` and campaign knowledge by
-  `/campaigns/:id/knowledge`; what is in the trash is listed and restored
+  `/campaigns/:id/knowledge`; random tables are imported and rolled on
+  `/campaigns/:id/random-tables`; what is in the trash is listed and restored
   on `/campaigns/:id/trash` (decisions/trash).
   A scene and a thread lie flat under their campaign; their chapter is a
   field. Which
@@ -298,22 +307,25 @@ The paths:
    current thread); chapter text and chapter `rev` stay untouched. The
    campaign menu in the topbar is the one entry point into every area
    (chapters, scenes, NPCs, locations, glossary, campaign knowledge,
-   item prices, debrief, trash): closed it names the campaign and the
+   item prices, random tables, debrief, trash): closed it names the campaign and the
    current area, opened it marks that area and works with the keyboard; no
    other link leads into an area
 2. Read a scene: opened from that list (`/campaigns/:id/scenes/<id>`, read
    via `GET …/scenes/<id>`) — callouts, if sections, NPC cards of the
    reference scenes
 3. ⌘K search finds and opens: indexed are campaign, chapters, scenes,
-   NPCs, locations, the glossary terms and the instance's item prices.
+   NPCs, locations, the glossary terms, the instance's item prices and
+   the random tables the DM imported.
    Every hit names itself with `kind` + `id` without an address: a campaign hit opens
    `/campaigns/:id`, a chapter hit `/campaigns/:id/chapters/<id>`, a
    scene hit `/campaigns/:id/scenes/<id>`, an
    NPC hit `/campaigns/:id/npcs/<id>`, a location hit
    `/campaigns/:id/locations/<id>`, a glossary hit
    (`kind: "glossary-term"`, the term's `id`) `/campaigns/:id/glossary`
-   and an item hit (`kind: "item-price"`) `/campaigns/:id/item-prices?item=<id>`
-   with that item marked and its price shown;
+   an item hit (`kind: "item-price"`) `/campaigns/:id/item-prices?item=<id>`
+   with that item marked and its price shown, and a random-table hit
+   (`kind: "random-table"`) `/campaigns/:id/random-tables?table=<id>` with
+   that table open;
    sessions and ideas are not indexed; typing an area's name offers that
    area, from the same list the campaign menu reads
 4. Session cycle: start (open is the first scene of the order that is
@@ -482,6 +494,19 @@ The paths:
     no seed), and names both sources with a link; searching an item,
     filtering by list or by rarity value and sorting by price narrow and
     order the list. The page fits 390px
+13. Random tables (decisions/reference-data): the campaign menu opens
+    `/campaigns/:id/random-tables`, empty on a fresh instance (nothing ships,
+    no seed); a 5etools file picked from disk is imported (`POST
+    /api/random-table-sources`, the app sends the file's content) and its
+    source is listed with title, authors and link; a table opened from it
+    rolls a row by its dice ranges and shows the number and the row; the
+    result becomes a log line of the running session (`POST …/log`) or,
+    without one, an idea (`POST …/ideas`), each beginning with the table's
+    name; a file that is no 5etools file writes nothing and says so in a
+    whole sentence; removing the source asks first (`DELETE
+    /api/random-table-sources/<id> { rev }`) and takes its tables along.
+    The page fits 390px. The suite imports a small table written for it;
+    no published table is in the repository
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same

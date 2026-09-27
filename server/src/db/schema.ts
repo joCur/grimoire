@@ -72,6 +72,7 @@ import {
   primaryKey,
   sqliteTable,
   text,
+  index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { NPC_STATUSES } from "@grimoire/shared/npc";
@@ -915,6 +916,75 @@ export const itemPrices = sqliteTable(
         "(`source` = 'saidoro' and `list` is not null and `rarity` is null) or " +
           "(`source` = 'srd' and `rarity` is not null and `list` is null)",
       ),
+    ),
+  ],
+);
+
+// --- random tables ----------------------------------------------------------
+
+/**
+ * One SOURCE of random tables (decisions/resources): a published collection
+ * the DM imported from a 5etools file. Reference data of the INSTANCE, so no
+ * campaign column (decisions/reference-data), and written only by its import:
+ * importing it again replaces its tables, and it is removed as a whole with
+ * them. `id` is the kebab slug of the 5etools file's source key; `authors` is a
+ * JSON array; `url` is empty where the 5etools file names no link.
+ */
+export const randomTableSources = sqliteTable("random_table_sources", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  authors: text("authors").notNull().default("[]"),
+  url: text("url").notNull().default(""),
+  rev: revColumn(),
+});
+
+/**
+ * One RANDOM TABLE of a source (decisions/resources). `id` is the source's id
+ * and the kebab slug of the table's name; `die` is the number of sides its
+ * rows are rolled with, NULL for a table without dice ranges; `columns` is
+ * a JSON array of the result columns' headings. Goes with its source.
+ */
+export const randomTables = sqliteTable(
+  "random_tables",
+  {
+    id: text("id").primaryKey(),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => randomTableSources.id, { onDelete: "cascade" }),
+    pos: integer("pos").notNull(),
+    name: text("name").notNull(),
+    caption: text("caption").notNull().default(""),
+    intro: text("intro").notNull().default(""),
+    die: integer("die"),
+    columns: text("columns").notNull().default("[]"),
+    rev: revColumn(),
+  },
+  (t) => [index("random_tables_source_idx").on(t.sourceId, t.pos)],
+);
+
+/**
+ * One ROW of a random table, in the table's order (`pos`). `min` and `max`
+ * are the die results it stands for, both NULL on a table without dice
+ * ranges; `cells` is a JSON array of its result columns as plain text. Goes
+ * with its table.
+ */
+export const randomTableRows = sqliteTable(
+  "random_table_rows",
+  {
+    tableId: text("table_id")
+      .notNull()
+      .references(() => randomTables.id, { onDelete: "cascade" }),
+    pos: integer("pos").notNull(),
+    min: integer("min"),
+    max: integer("max"),
+    cells: text("cells").notNull().default("[]"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tableId, t.pos] }),
+    // A row stands for a range of die results, or for none.
+    check(
+      "random_table_rows_range_check",
+      sql.raw("(`min` is null and `max` is null) or (`min` is not null and `max` is not null and `min` <= `max`)"),
     ),
   ],
 );

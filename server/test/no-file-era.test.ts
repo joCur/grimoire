@@ -169,6 +169,61 @@ const EXCEPTIONS: readonly Exception[] = [
     reason: "it builds a dist directory of real assets and asks the server to serve them",
   },
   {
+    path: "server/src/fivetools-tables.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "server/src/routes/random-tables.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "server/src/store/random-table-sources.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "server/src/store/random-tables.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "server/test/random-tables.test.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "shared/src/random-table.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "e2e/tests/random-tables.e2e.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "e2e/support/random-table.ts",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    path: "app/src/random-table",
+    rule: "file-word-for-an-entry",
+    reason: "random tables come from a 5etools file the DM imports — a real file from outside, not an entry",
+  },
+  {
+    phrase: "5etools",
+    rule: "file-word-for-an-entry",
+    reason: "the 5etools file the DM imports random tables from, named in the catalog — a real file, not an entry",
+  },
+  {
+    phrase: "5etools",
+    rule: "entry-is-not-a-file",
+    reason: "the 5etools file the DM imports random tables from, named in the catalog — a real file, not an entry",
+  },
+  {
     phrase: "sql.raw",
     rule: "raw-list-column",
     reason: "drizzle's escape hatch for a value that goes into a table DEFINITION",

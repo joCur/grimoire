@@ -20,6 +20,7 @@ import {
   Bookmark,
   ClipboardCheck,
   Coins,
+  Dices,
   Lightbulb,
   MapPin,
   Trash2,
@@ -32,6 +33,7 @@ import type { MessageKey } from "@/i18n";
 import { glossaryHref } from "@/glossary-term/glossary-term-links";
 import { itemPricesHref } from "@/item-price/item-price-links";
 import { locationsHref } from "@/location/location-links";
+import { randomTablesHref } from "@/random-table/random-table-links";
 import { npcsHref } from "@/npc/npc-links";
 import { reviewHref } from "@/session/session-links";
 
@@ -48,6 +50,7 @@ export interface Area {
     | "glossary"
     | "knowledge"
     | "itemPrices"
+    | "randomTables"
     | "review"
     | "trash";
   group: AreaGroup;
@@ -119,6 +122,14 @@ export const AREAS: readonly Area[] = [
     icon: Coins,
     label: "area.itemPrices",
     routes: ["item-prices"],
+  },
+  {
+    id: "randomTables",
+    group: "lookUp",
+    href: (c) => randomTablesHref(c),
+    icon: Dices,
+    label: "area.randomTables",
+    routes: ["random-tables"],
   },
   {
     id: "review",

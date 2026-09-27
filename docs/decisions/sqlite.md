@@ -12,7 +12,7 @@ no two-way sync.
   error.
 - **A fresh instance starts empty.** The server reads no campaign files; a
   real campaign is created in the UI. Reference data is not campaign content
-  and comes with the app (`decisions/reference-data`). A seed tool that writes the fixtures
+  and comes with the app or the DM's import (`decisions/reference-data`). A seed tool that writes the fixtures
   through the store layer exists for dev, tests and E2E only
   (`decisions/data-shape`).
 - **Backing up the database file is the stack owner's job**

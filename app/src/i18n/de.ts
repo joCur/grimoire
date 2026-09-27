@@ -149,6 +149,7 @@ export const de = {
   "area.locations": "Orte",
   "area.glossary": "Glossar",
   "area.knowledge": "Kampagnenwissen",
+  "area.randomTables": "Zufallstabellen",
   "area.itemPrices": "Gegenstandspreise",
   "area.review": "Nachbereitung",
   "area.trash": "Papierkorb",
@@ -386,6 +387,48 @@ export const de = {
   "glossary.explanation": "Erklärung",
   "glossary.noExplanation": "Ohne Erklärung",
 
+  // --- random tables ----------------------------------------------------------
+  "randomTables.title": "Zufallstabellen",
+  "randomTables.lead":
+    "Tabellen aus 5etools-Dateien, die du in diese Instanz importiert hast. Würfle eine Tabelle und übernimm das Ergebnis ins Log der laufenden Sitzung oder als Idee.",
+  "randomTables.sources": "Quellen",
+  "randomTables.loading": "Lade Zufallstabellen …",
+  "randomTables.empty": "Noch keine Zufallstabellen importiert. Importiere unten eine 5etools-Datei.",
+  "randomTables.tableGone": "Diese Tabelle gibt es in dieser Instanz nicht mehr.",
+  "randomTables.by": "von {authors}",
+  "randomTables.unfold": "Tabellen von {title} aufklappen",
+  "randomTables.fold": "Tabellen von {title} zuklappen",
+  "randomTables.remove": "Entfernen",
+  "randomTables.rowCount": "{count, plural, one {# Zeile} other {# Zeilen}}",
+  "randomTables.roll": "d{die} würfeln",
+  "randomTables.rollAny": "Zeile auswürfeln",
+  "randomTables.showRows": "{count, plural, one {Die # Zeile zeigen} other {Alle # Zeilen zeigen}}",
+  "randomTables.hideRows": "Zeilen ausblenden",
+  "randomTables.removeDialog.title": "{title} entfernen?",
+  "randomTables.removeDialog.body":
+    "Die Quelle geht mit allen ihren Tabellen endgültig aus dieser Instanz. Importierst du die 5etools-Datei erneut, sind sie wieder da.",
+  "randomTables.removeDialog.keep": "Behalten",
+  "randomTables.removeDialog.confirm": "Entfernen",
+  "randomTables.removeDialog.failed": "Die Quelle konnte nicht entfernt werden. Versuch es noch einmal.",
+  "randomTables.import.title": "5etools-Datei importieren",
+  "randomTables.import.lead":
+    "Füge die Adresse einer Datei ein, etwa aus dem Homebrew-Repository von 5etools, oder wähle eine Datei aus. Eine Quelle, die schon da ist, wird durch die Datei ersetzt.",
+  "randomTables.import.address": "Adresse der 5etools-Datei",
+  "randomTables.import.load": "Laden und importieren",
+  "randomTables.import.or": "oder",
+  "randomTables.import.pick": "5etools-Datei auswählen",
+  "randomTables.import.running": "Importiere …",
+  "randomTables.import.done":
+    "{count, plural, one {Importiert: {titles}.} other {# Quellen importiert: {titles}.}}",
+  "randomTables.import.notJson": "Das ist kein JSON und wurde nicht importiert.",
+  "randomTables.import.unreachable":
+    "Die Adresse ließ sich nicht laden. Prüfe sie, oder lade die 5etools-Datei herunter und wähle sie aus.",
+  "randomTables.import.failed": "Der Import hat nicht geklappt. Versuch es noch einmal.",
+  "randomTables.take.log": "Ins Log übernehmen",
+  "randomTables.take.idea": "Als Idee behalten",
+  "randomTables.take.loggedDone": "Steht im Log der laufenden Sitzung.",
+  "randomTables.take.ideaDone": "Steht bei den Ideen.",
+  "randomTables.take.failed": "Das Ergebnis konnte nicht gespeichert werden. Versuch es noch einmal.",
   // --- item prices (item-price/ItemPricesRoute.tsx) --------------------------
   // The item names stay English, as in the guide; only the page speaks German.
   "itemPrices.title": "Preise magischer Gegenstände",
@@ -483,6 +526,9 @@ export const de = {
     "Nicht geschrieben — diese Szene nennt einen NPC oder Ort des Laufs, der nicht angenommen ist. Nimm ihn zuerst an oder entferne ihn aus der Szene.",
   // A change of a patch round is about a block that is no longer in the
   // proposal's text as it was. Nothing was written.
+  "server.import_not_fivetools":
+    "Das ist keine 5etools-Datei: Ihr fehlen die Quellen unter _meta oder die Tabellenliste. Nichts wurde importiert.",
+  "server.import_no_tables": "Die 5etools-Datei enthält keine Zufallstabelle. Nichts wurde importiert.",
   "server.patch_anchor_missing":
     "Nicht übernommen — der Block, den diese Änderung betrifft, steht nicht mehr so im Text. Verwirf die Änderung und bearbeite den Text selbst.",
   // One row in the way of a trash or a restore, as it stands inside the
@@ -801,6 +847,7 @@ export const de = {
   "kind.campaign": "Kampagne",
   "kind.session": "Session",
   "kind.glossary": "Glossar",
+  "kind.randomTable": "Zufallstabelle",
   "kind.itemPrice": "Gegenstandspreis",
   // The accessible name of a `[[ref]]` in a body (markdown/refs.tsx):
   // what it points at, then its current name.
