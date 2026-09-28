@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.11.0](https://github.com/joCur/grimoire/compare/v0.10.0...v0.11.0) (2026-09-28)
+
+
+### Features
+
+* import own item lists into the price list ([#243](https://github.com/joCur/grimoire/issues/243)) ([#246](https://github.com/joCur/grimoire/issues/246)) ([f2e0aae](https://github.com/joCur/grimoire/commit/f2e0aae60491c8090981c251452dcc7f5696f11a))
+* import random tables from 5etools files and roll them ([#241](https://github.com/joCur/grimoire/issues/241)) ([#245](https://github.com/joCur/grimoire/issues/245)) ([fe5ef64](https://github.com/joCur/grimoire/commit/fe5ef64b4634a8a12dff7f3d900c58fd7aac25a5))
+* look up magic item prices from Sane Magic Item Prices ([#224](https://github.com/joCur/grimoire/issues/224)) ([#242](https://github.com/joCur/grimoire/issues/242)) ([0161be0](https://github.com/joCur/grimoire/commit/0161be09126fc9f2d0edb9900ffd630158f0809b))
+
 ## [0.10.0](https://github.com/joCur/grimoire/compare/v0.9.0...v0.10.0) (2026-09-27)
 
 
