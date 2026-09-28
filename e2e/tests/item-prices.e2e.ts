@@ -1,11 +1,13 @@
 // The item prices: open the price page from the campaign menu, search an
-// item, filter by list, sort by price; see CLAUDE.md.
+// item, filter by list, sort by price, import and remove one of the DM's own
+// item lists; see CLAUDE.md.
 //
 // Item prices are reference data of the instance (decisions/reference-data):
-// the migration writes them, so the example campaign seeds none and the page
-// has them all the same. The page names both sources — Saidoro's guide and,
-// for the items it has no price for, the SRD 5.2's rarity value — and every
-// item names the one its price comes from.
+// the migration writes the shipped ones, so the example campaign seeds none
+// and the page has them all the same. The page names both sources — Saidoro's
+// guide and, for the items it has no price for, the SRD 5.2's rarity value —
+// and every item names the one its price comes from, and the DM's list an
+// imported item comes from.
 
 import type { Page } from "@playwright/test";
 
@@ -79,6 +81,70 @@ test("the campaign menu opens the prices, which search, filter by list and sort 
   await toggle(page, "item-prices-lists", "rarity").click();
   await expect.poll(() => rowIds(page)).toEqual(["staff-of-the-magi"]);
   await expect(rows(page).first()).toContainText(ui("itemPrices.rarity.legendary"));
+});
+
+/** A JSON file as the DM's browser hands it to the picker. */
+function listFile(content: unknown) {
+  return {
+    name: "my-book.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(typeof content === "string" ? content : JSON.stringify(content)),
+  };
+}
+
+test("the DM imports an own item list, finds its items priced by rarity, and removes it again", async ({
+  page,
+}) => {
+  await page.goto(`/campaigns/${CAMPAIGN}/item-prices`);
+  await expect(rows(page)).toHaveCount(348);
+  const outcome = page.getByTestId("item-price-import-outcome");
+  const picker = page.getByTestId("item-price-import-picker");
+
+  // A text that is no list says why, and imports nothing.
+  await picker.setInputFiles(listFile("name,rarity"));
+  await expect(outcome).toHaveText(ui("itemPriceImports.notJson"));
+  await picker.setInputFiles(
+    listFile({ name: "My Book", items: [{ name: "Lantern of the Drowned Bell", rarity: "very rare" }] }),
+  );
+  await expect(outcome).toHaveText(ui("itemPriceImports.badItem", { item: 1 }));
+  await expect(page.getByText(ui("itemPriceImports.empty"))).toBeVisible();
+
+  // A list: its items stand among the others; one the guide prices keeps that price.
+  await picker.setInputFiles(
+    listFile({
+      name: "My Book",
+      items: [
+        { name: "Lantern of the Drowned Bell", rarity: "legendary" },
+        { name: "Tincture of Tidewalking", rarity: "rare", consumable: true },
+        { name: "Potion of Healing", rarity: "common", consumable: true },
+      ],
+    }),
+  );
+  await expect(outcome).toHaveText(ui("itemPriceImports.imported", { name: "My Book", count: 2 }));
+  await expect(rows(page)).toHaveCount(350);
+  const lists = page.getByTestId("item-price-import-row");
+  await expect(lists).toHaveCount(1);
+  await expect(lists.first()).toContainText(ui("itemPriceImports.count", { count: 2 }));
+  await expect(lists.first()).toContainText(ui("itemPriceImports.skipped", { count: 1 }));
+
+  await toggle(page, "item-prices-lists", "imported").click();
+  await expect.poll(() => rowIds(page)).toEqual(["lantern-of-the-drowned-bell", "tincture-of-tidewalking"]);
+  await expect.poll(() => rowPrices(page)).toEqual([200000, 2000]);
+  await expect(rows(page).first()).toContainText(
+    ui("itemPrices.rowImported", {
+      rarity: ui("itemPrices.rarity.legendary"),
+      title: "SRD 5.2",
+      list: "My Book",
+    }),
+  );
+
+  // Removing the list takes its items along; the guide's items stay.
+  await lists.first().getByRole("button").click();
+  await expect(outcome).toHaveText(ui("itemPriceImports.removed", { name: "My Book" }));
+  await expect(lists).toHaveCount(0);
+  await expect(toggle(page, "item-prices-lists", "imported")).toHaveCount(0);
+  await toggle(page, "item-prices-lists", "all").click();
+  await expect(rows(page)).toHaveCount(348);
 });
 
 test.describe("on the phone", () => {

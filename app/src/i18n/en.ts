@@ -409,6 +409,40 @@ export const en: Messages = {
   "itemPrices.rarity.veryRare": "very rare",
   "itemPrices.rarity.legendary": "legendary",
   "itemPrices.price": "{price, number} gp",
+  "itemPrices.list.imported": "From your lists",
+  "itemPrices.rowImported": "Rarity {rarity} · value from the {title} · from your list “{list}”",
+  "itemPrices.rowImportPrice": "Rarity {rarity} · price from your list “{list}”",
+
+  // --- the DM's own item lists (item-price/ItemPriceImports.tsx) -------------
+  "itemPriceImports.title": "Your item lists",
+  "itemPriceImports.lead":
+    "You bring the magic items of your own books into this instance as a list: a JSON file with a name for the list and, for each item, its name and its rarity. Grimoire prices each item by the value of its rarity unless the list gives a price of its own. An item the price list already knows is left out, and a list of the same name replaces the earlier one.",
+  "itemPriceImports.format": "List format",
+  "itemPriceImports.formatHelp":
+    "The rarity is one of the values {rarities}. Optionally add: consumable (true halves the value for an item that is used up), priceGp (a price of your own in gp) and note (what the price counts).",
+  "itemPriceImports.import": "Import a list",
+  "itemPriceImports.importing": "Importing …",
+  "itemPriceImports.empty": "You have not imported a list of your own yet.",
+  "itemPriceImports.count": "{count, plural, one {# item in the price list} other {# items in the price list}}",
+  "itemPriceImports.skipped":
+    "{count, plural, one {# item was already in the price list} other {# items were already in the price list}}",
+  "itemPriceImports.remove": "Remove",
+  "itemPriceImports.removeAria": "Remove the list “{name}” with its items",
+  "itemPriceImports.imported":
+    "“{name}” is imported: {count, plural, one {# item now stands} other {# items now stand}} in the price list.",
+  "itemPriceImports.replaced":
+    "“{name}” replaces the earlier list of the same name: {count, plural, one {# item now stands} other {# items now stand}} in the price list.",
+  "itemPriceImports.removed": "“{name}” is removed, with every item it brought into the price list.",
+  "itemPriceImports.notJson": "This is not a JSON file, so it cannot be read as a list.",
+  "itemPriceImports.badItem":
+    "Item {item} of the list does not match the format: it needs a name and one of the five rarities.",
+  "itemPriceImports.badList":
+    "The list does not match the format: it needs a name and at least one item.",
+  "itemPriceImports.badName":
+    "The list's name holds no letter or digit Grimoire could store it under.",
+  "itemPriceImports.failed": "The import failed; the price list is unchanged.",
+  "itemPriceImports.removeFailed":
+    "The list could not be removed because it has changed in the meantime. The page now shows its current state.",
 
 
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------

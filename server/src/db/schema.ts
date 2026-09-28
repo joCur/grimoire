@@ -884,14 +884,29 @@ export const generateJobs = sqliteTable(
 // --- item prices --------------------------------------------------------------
 
 /**
+ * One ITEM-PRICE IMPORT (decisions/resources): one of the DM's own item lists,
+ * reference data of the INSTANCE like the item prices it brings
+ * (decisions/reference-data). `id` is the kebab slug of its name; `skipped`
+ * is a JSON array of the item names the list already held.
+ */
+export const itemPriceImports = sqliteTable("item_price_imports", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  skipped: text("skipped").notNull().default("[]"),
+  rev: revColumn(),
+});
+
+/**
  * One ITEM PRICE (decisions/resources): what a magic item costs — Saidoro's
  * "Sane Magic Item Prices" where it prices the item, otherwise the SRD 5.2's
- * value for the item's rarity. Reference data of the INSTANCE, so no campaign
- * column (decisions/reference-data): the rows are written by the migration
- * that ships them and read by every campaign. `id` is the kebab slug of the
- * name; `list` is the guide's list and NULL for an SRD row, `rarity` the
- * rarity an SRD row is priced by and NULL for a guide row; `note` is empty
- * where the source gives none.
+ * value for the item's rarity, or the price of the DM's own item list.
+ * Reference data of the INSTANCE, so no campaign column
+ * (decisions/reference-data): the shipped rows are written by the migration
+ * that ships them, an imported row by its import, and every campaign reads
+ * them. `id` is the kebab slug of the name; `list` is the guide's list and
+ * NULL for every other row, `rarity` the item's rarity and NULL for a guide
+ * row; `note` is empty where the source gives none; `import_id` is the import
+ * an item comes from and NULL for a shipped row.
  */
 export const itemPrices = sqliteTable(
   "item_prices",
@@ -903,18 +918,21 @@ export const itemPrices = sqliteTable(
     rarity: text("rarity"),
     source: text("source").notNull(),
     note: text("note").notNull().default(""),
+    importId: text("import_id").references(() => itemPriceImports.id),
     rev: revColumn(),
   },
   () => [
     check("item_prices_list_check", oneOf("list", ITEM_PRICE_LISTS, true)),
     check("item_prices_rarity_check", oneOf("rarity", ITEM_RARITIES, true)),
     check("item_prices_source_check", oneOf("source", ITEM_PRICE_SOURCES)),
-    // A guide row stands in a list, an SRD row is priced by its rarity.
+    // A guide row stands in a list and is shipped; every other row is priced
+    // with its rarity known, and a row priced by the DM's own list is imported.
     check(
       "item_prices_source_fields_check",
       sql.raw(
-        "(`source` = 'saidoro' and `list` is not null and `rarity` is null) or " +
-          "(`source` = 'srd' and `rarity` is not null and `list` is null)",
+        "(`source` = 'saidoro' and `list` is not null and `rarity` is null and `import_id` is null) or " +
+          "(`source` = 'srd' and `rarity` is not null and `list` is null) or " +
+          "(`source` = 'import' and `rarity` is not null and `list` is null and `import_id` is not null)",
       ),
     ),
   ],

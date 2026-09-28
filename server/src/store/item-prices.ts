@@ -3,8 +3,8 @@
 // An item price is its own resource with its own type (decisions/resources,
 // @grimoire/shared/item-price), and reference data of the instance
 // (decisions/reference-data): no campaign scopes it, and nothing here writes —
-// the rows and their search-index rows come with the migration that ships
-// them.
+// the shipped rows and their search-index rows come with the migration that
+// ships them, an imported row with its import (./item-price-imports.ts).
 
 import { asc, eq } from "drizzle-orm";
 import { itemPriceSchema, type ItemPrice } from "@grimoire/shared/item-price";
@@ -25,6 +25,7 @@ function renderItemPrice(row: ItemPriceRow): ItemPrice {
     list: row.list,
     rarity: row.rarity,
     note: row.note,
+    importId: row.importId,
     rev: row.rev,
   });
 }

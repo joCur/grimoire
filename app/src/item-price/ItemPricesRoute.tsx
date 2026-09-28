@@ -4,10 +4,12 @@
 //
 // A REFERENCE the DM looks up at the table while the group haggles: a search
 // field, the guide's five lists as a filter, name or price as the order, and
-// one line per item with its price. Nothing here writes — item prices are
-// reference data of the instance (decisions/reference-data), the same on the
-// page of every campaign. Both sources are named on the page, with the SRD's
-// license statement, and every item names the one its price comes from.
+// one line per item with its price. Item prices are reference data of the
+// instance (decisions/reference-data), the same on the page of every
+// campaign. Both sources are named on the page, with the SRD's license
+// statement, and every item names the one its price comes from — and, for an
+// item of the DM's own lists, that list. Below the items the DM imports and
+// removes those lists (./ItemPriceImports.tsx); nothing else here writes.
 //
 // `?item=<id>` is where a ⌘K hit leads: that item stands marked and scrolled
 // into view.
@@ -28,12 +30,13 @@ import { Button } from "@/components/ui/button";
 import { useI18n, useT, type MessageKey } from "@/i18n";
 import { cn } from "@/lib/utils";
 
+import { ItemPriceImports } from "./ItemPriceImports";
 import {
   visibleItemPrices,
   type ItemPriceListFilter,
   type ItemPriceSort,
 } from "./item-price-list";
-import { itemPricesQuery } from "./item-price-query";
+import { itemPriceImportsQuery, itemPricesQuery } from "./item-price-query";
 
 const LIST_LABELS: Record<ItemPriceListFilter, MessageKey> = {
   all: "itemPrices.list.all",
@@ -43,6 +46,7 @@ const LIST_LABELS: Record<ItemPriceListFilter, MessageKey> = {
   summoning: "itemPrices.list.summoning",
   gamechanging: "itemPrices.list.gamechanging",
   rarity: "itemPrices.list.rarity",
+  imported: "itemPrices.list.imported",
 };
 
 const RARITY_LABELS: Record<ItemRarity, MessageKey> = {
@@ -74,6 +78,8 @@ export function ItemPricesRoute() {
   const [list, setList] = useState<ItemPriceListFilter>("all");
   const [sort, setSort] = useState<ItemPriceSort>("name");
   const query = useQuery(itemPricesQuery());
+  const imports = useQuery(itemPriceImportsQuery()).data ?? [];
+  const listNames = new Map(imports.map((entry) => [entry.id, entry.name]));
   const items = query.data ?? [];
   const shown = visibleItemPrices(items, search, list, sort);
 
@@ -144,7 +150,11 @@ export function ItemPricesRoute() {
           <ToggleGroup
             label={t("itemPrices.list.aria")}
             testId="item-prices-lists"
-            options={["all", ...ITEM_PRICE_LISTS, "rarity"] as const}
+            options={
+              imports.length > 0
+                ? (["all", ...ITEM_PRICE_LISTS, "rarity", "imported"] as const)
+                : (["all", ...ITEM_PRICE_LISTS, "rarity"] as const)
+            }
             value={list}
             onChange={setList}
             labelOf={(option) => t(LIST_LABELS[option])}
@@ -168,12 +178,14 @@ export function ItemPricesRoute() {
               <ItemPriceRow
                 key={item.id}
                 item={item}
+                listName={item.importId === null ? undefined : listNames.get(item.importId)}
                 marked={item.id === target}
                 rowRef={item.id === target ? marked : undefined}
               />
             ))}
           </ul>
         )}
+        <ItemPriceImports />
         {/* The statement the SRD's license asks for, in its own words. */}
         <p className="mt-8 max-w-[62ch] text-[11.5px] leading-[1.6] text-muted-foreground" lang="en">
           {ITEM_PRICE_SOURCE.srd.attribution}
@@ -183,23 +195,31 @@ export function ItemPricesRoute() {
   );
 }
 
-/** One item: its name and note, where its price comes from, and the price. */
+/**
+ * One item: its name and note, where its price comes from — and the DM's list
+ * it comes from, named `listName` — and the price.
+ */
 function ItemPriceRow({
   item,
+  listName,
   marked,
   rowRef,
 }: {
   item: ItemPrice;
+  listName?: string;
   marked: boolean;
   rowRef?: Ref<HTMLLIElement>;
 }) {
   const t = useT();
+  const rarity = t(RARITY_LABELS[item.rarity ?? "common"]);
+  const list = listName ?? item.importId ?? "";
   return (
     <li
       ref={rowRef}
       data-testid="item-price-row"
       data-id={item.id}
       data-list={item.list}
+      data-import={item.importId ?? undefined}
       aria-current={marked ? "true" : undefined}
       className={cn(
         "flex items-baseline gap-3 border-b border-divider px-2 py-2.5",
@@ -219,10 +239,11 @@ function ItemPriceRow({
                 list: t(LIST_LABELS[item.list]),
                 author: ITEM_PRICE_SOURCE.saidoro.author,
               })
-            : t("itemPrices.rowRarity", {
-                rarity: t(RARITY_LABELS[item.rarity ?? "common"]),
-                title: ITEM_PRICE_SOURCE.srd.title,
-              })}
+            : item.source === "import"
+              ? t("itemPrices.rowImportPrice", { rarity, list })
+              : item.importId !== null
+                ? t("itemPrices.rowImported", { rarity, title: ITEM_PRICE_SOURCE.srd.title, list })
+                : t("itemPrices.rowRarity", { rarity, title: ITEM_PRICE_SOURCE.srd.title })}
         </p>
       </div>
       <p

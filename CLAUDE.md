@@ -71,6 +71,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `glossary-terms`,
   `knowledge-items` (with their order),
   `item-prices` (read only, decisions/reference-data),
+  `item-price-imports` (the DM's own item lists, the only writer of the
+  items they bring),
   `random-table-sources` (the import of a 5etools file and the removal of a
   source) and `random-tables` (their tables, written only by that import),
   `generated` (accepting a generator run),
@@ -85,7 +87,9 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   line belong to the `session/` slice: the app reads them only embedded in
   their session, and every one of their writes lands in the session's cache;
   their resources each have their own module there (`pause-api.ts`,
-  `log-entry-api.ts`). Shared are
+  `log-entry-api.ts`). The same holds for the item-price import in the
+  `item-price/` slice (`item-price-import-api.ts`): it is managed on the
+  price page, and its writes land in the item prices. Shared are
   only UI building blocks without knowledge of entities
   (`app/src/components/`, e.g. `components/fields/`); mixed places (search,
   `[[id]]` resolution, campaign tree) are pure dispatchers. A page that
@@ -138,6 +142,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `…/ideas/<id>` with `Idea`, `…/glossary-terms/<id>` with `GlossaryTerm`,
   `/api/item-prices/<id>` with `ItemPrice` (reference data of the instance,
   decisions/reference-data, read only),
+  `/api/item-price-imports/<id>` with `ItemPriceImport` (the DM's own item
+  list, written whole with `PUT`, removed with `DELETE { rev }`),
   `/api/random-table-sources/<id>` with `RandomTableSource` and
   `/api/random-tables/<id>` with `RandomTable` (reference data the DM
   imports from a 5etools file, decisions/reference-data; the import is their
@@ -493,7 +499,13 @@ The paths:
     value for the rarity (`GET /api/item-prices`, written by the migration,
     no seed), and names both sources with a link; searching an item,
     filtering by list or by rarity value and sorting by price narrow and
-    order the list. The page fits 390px
+    order the list. The DM imports an own item list there from a JSON file
+    (`PUT /api/item-price-imports/<id>`): a file that is no list says why in
+    a whole sentence and writes nothing; the list's items stand priced by
+    their rarity and name the list, an item the price list already has keeps
+    its price and is counted as skipped, the list filter shows only them,
+    and removing the list (`DELETE …/item-price-imports/<id> { rev }`) takes
+    its items along. The page fits 390px
 13. Random tables (decisions/reference-data): the campaign menu opens
     `/campaigns/:id/random-tables`, empty on a fresh instance (nothing ships,
     no seed); a 5etools file picked from disk is imported (`POST

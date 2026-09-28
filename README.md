@@ -5,8 +5,9 @@ Grimoire stores a campaign in an SQLite database
 **scene**, **NPC**, **location**, **thread** (a plot thread a chapter
 carries), **idea**, **glossary term**, **campaign knowledge** (every naming
 convention, every fact, every style rule on its own), the **session**
-with its **pauses** and **log lines**, the **item price** and the **random table** with its
-**source** — is a row of its own table and its own
+with its **pauses** and **log lines**, the **item price**, the **item-price
+import** and the **random table** with its **source** — is a row of its own
+table and its own
 resource with its own
 fields ([decisions/resources](docs/decisions/resources.md)). Campaign, chapter, scene, NPC and location have among their
 fields a `body`: their **text** in Markdown.
@@ -42,6 +43,7 @@ included, without `kind`, without `path`:
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
 | Item price | `GET /api/item-prices/<id>` | `GET /api/item-prices` | on the price page `/campaigns/<campaign>/item-prices` |
+| Item-price import | `GET/PUT/DELETE /api/item-price-imports/<id>` | `GET /api/item-price-imports` | on the price page `/campaigns/<campaign>/item-prices` |
 | Random-table source | `GET/DELETE /api/random-table-sources/<id>` | `GET/POST /api/random-table-sources` | on the random tables page `/campaigns/<campaign>/random-tables` |
 | Random table | `GET /api/random-tables/<id>` | `GET /api/random-tables` | on the random tables page `/campaigns/<campaign>/random-tables` |
 
@@ -77,8 +79,8 @@ are maintained on their own pages.
 Everything that depends on a campaign hangs under the campaign — in the API
 `/api/campaigns/<campaign>/…`, in the app `/campaigns/<campaign>/…` ([decisions/resources](docs/decisions/resources.md)).
 Without a campaign stay `/api/campaigns`, `/api/settings`, `/settings` and
-the instance's reference data, `/api/item-prices`, `/api/random-table-sources`
-and `/api/random-tables`
+the instance's reference data, `/api/item-prices`, `/api/item-price-imports`,
+`/api/random-table-sources` and `/api/random-tables`
 ([decisions/reference-data](docs/decisions/reference-data.md)).
 
 ## Fields
@@ -515,14 +517,16 @@ schema in `shared/src/glossary-term.ts`, [decisions/resources](docs/decisions/re
 
 An item price is what one magic item costs, its own resource with its own
 type (`ItemPrice`, from the zod schema in `shared/src/item-price.ts`). Two
-sources price the items: Saidoro's "Sane Magic Item Prices"
+shipped sources price the items: Saidoro's "Sane Magic Item Prices"
 ([the guide](https://www.giantitp.com/forums/showthread.php?424243)) prices
 each item on its own, and every magic item of the
 [SRD 5.2](https://www.dndbeyond.com/srd) (CC BY 4.0) the guide has no price
-for gets the SRD's value for its rarity, halved for a consumable. It is
-reference data of the instance, not of a campaign
+for gets the SRD's value for its rarity, halved for a consumable. Beside
+them stand the items of the DM's own item lists (item-price import, below).
+It is reference data of the instance, not of a campaign
 ([decisions/reference-data](docs/decisions/reference-data.md)): the app ships
-the items, a migration writes them, and nothing changes them. `GET /api/item-prices/<id>` responds with it:
+the guide's and the SRD's items and a migration writes them, an import writes
+its own items, and nothing changes a row on its own. `GET /api/item-prices/<id>` responds with it:
 
 ```json
 {
@@ -533,6 +537,7 @@ the items, a migration writes them, and nothing changes them. `GET /api/item-pri
   "list": "consumable",
   "rarity": null,
   "note": "each",
+  "importId": null,
   "rev": 1
 }
 ```
@@ -540,21 +545,77 @@ the items, a migration writes them, and nothing changes them. `GET /api/item-pri
 | Field | Meaning |
 | ----- | ------- |
 | `id` | stable, the slug of the name |
-| `name` | the item as its source names it, in English |
+| `name` | the item as its source names it |
 | `priceGp` | the price in gold pieces |
-| `source` | `saidoro` (the guide's price) or `srd` (the SRD's value for the rarity) |
-| `list` | the guide's list: `consumable`, `combat`, `noncombat`, `summoning` or `gamechanging`; `null` for an SRD price |
-| `rarity` | the rarity an SRD price stands for: `common`, `uncommon`, `rare`, `very-rare` or `legendary`; `null` for a guide price |
+| `source` | `saidoro` (the guide's price), `srd` (the SRD's value for the rarity) or `import` (the price the DM's list gives) |
+| `list` | the guide's list: `consumable`, `combat`, `noncombat`, `summoning` or `gamechanging`; `null` for every other price |
+| `rarity` | the item's rarity: `common`, `uncommon`, `rare`, `very-rare` or `legendary`; `null` for a guide price |
 | `note` | what the price counts where the source says so (`each`, `per dose`, `without the base item`); otherwise empty |
+| `importId` | the item-price import the item comes from; `null` for a shipped item |
 | `rev` | row version |
 
 - `GET /api/item-prices` responds with every item, sorted by name. The
   price page searches, filters by list (or by the items priced by their
-  rarity) and sorts by name or price; it names both sources, with the SRD's
-  license statement, and every item names the one its price comes from.
+  rarity, or by the items of the DM's lists) and sorts by name or price; it
+  names both sources, with the SRD's license statement, and every item names
+  the one its price comes from, and the DM's list it comes from.
 - The search of every campaign finds an item by name; the hit names itself
   with `kind: "item-price"` and its `id` and opens the price page at that
   item.
+
+### Item-price import
+
+An item-price import is one of the DM's own item lists: the magic items of
+a book the DM owns, which may not ship with the app. Its own resource with
+its own type (`ItemPriceImport`, from the zod schema in
+`shared/src/item-price-import.ts`), reference data of the instance like the
+items it brings ([decisions/reference-data](docs/decisions/reference-data.md)).
+The DM imports a list on the price page from a JSON file:
+
+```json
+{
+  "name": "My Book",
+  "items": [
+    { "name": "Lantern of the Drowned Bell", "rarity": "legendary" },
+    { "name": "Tincture of Tidewalking", "rarity": "rare", "consumable": true },
+    { "name": "Gull-Feather Cloak", "rarity": "uncommon", "priceGp": 900, "note": "each" }
+  ]
+}
+```
+
+Per item: `name` and `rarity` (one of the five rarities above), optionally
+`consumable` (halves the rarity's value), `priceGp` (the list's own price)
+and `note`. Each item becomes an item price with its `importId`, priced by
+`priceGp` (`source: "import"`) or else by the SRD's value for its rarity
+(`source: "srd"`). An item whose id the price list already holds keeps what
+it has and is named in the import's `skipped`: a shipped price is never
+overridden, and the first list to bring an item keeps it.
+`GET /api/item-price-imports/<id>` responds with it:
+
+```json
+{
+  "id": "my-book",
+  "name": "My Book",
+  "itemCount": 2,
+  "skipped": ["Potion of Healing"],
+  "rev": 1
+}
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `id` | stable, the slug of the name |
+| `name` | the list's name as the file gives it |
+| `itemCount` | how many of its items stand in the price list |
+| `skipped` | the names of the items it left out because the price list already held them, in the file's order |
+| `rev` | row version |
+
+- `PUT /api/item-price-imports/<id>` with the file as its body writes the
+  list, `<id>` being the slug of its `name`. A list of that id already there
+  is replaced: its items go, the file's come, and its `rev` moves. A file
+  that does not match the shape writes nothing.
+- `DELETE /api/item-price-imports/<id> { rev }` removes the list and every
+  item it brought; a stale `rev` is 409 with the current list.
 
 ### Random table and its source
 
@@ -1106,5 +1167,5 @@ campaign directory, by default `fixtures/`. It reads the folders
 `ideas/`, `glossary-terms/`, `knowledge-items/` and `sessions/` in it — the
 campaign folder holds exactly one campaign — and writes the rows into a
 database through the store layer. The server itself seeds nothing — a fresh
-instance starts without campaigns; only the item prices come with it, and
-random tables come only from the DM's own import.
+instance starts without campaigns; only the shipped item prices come with it,
+and random tables come only from the DM's own import.

@@ -94,7 +94,8 @@ export const ERROR_CODES = [
    * under the key of what was written: `{ campaign }`, `{ chapter }`,
    * `{ scene }`, `{ npc }`, `{ location }`, `{ thread }`, `{ idea }`,
    * `{ glossaryTerm }`, `{ knowledgeItem }`, `{ session }`, `{ pause }` or
-   * `{ logEntry }` for the write of one of those, and `{ knowledgeItemOrder }`
+   * `{ logEntry }` for the write of one of those, `{ itemPriceImport }` for
+   * the removal of an item list, and `{ knowledgeItemOrder }`
    * for the order of the knowledge items. The scene order carries none of them —
    * the chapter overview reloads its tree.
    */

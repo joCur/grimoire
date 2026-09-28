@@ -159,6 +159,21 @@ const EXCEPTIONS: readonly Exception[] = [
     reason: "`shared/schema/*.json`, the JSON schemas the consistency test reads from disk",
   },
   {
+    phrase: "JSON file",
+    rule: "file-word-for-an-entry",
+    reason: "the item list the DM picks on their own disk to import it",
+  },
+  {
+    phrase: "JSON-Datei",
+    rule: "entry-is-not-a-file",
+    reason: "the same item list in the German catalog",
+  },
+  {
+    path: "app/src/item-price/ItemPriceImports.tsx",
+    rule: "file-word-for-an-entry",
+    reason: "the file picker of the import: the browser hands over a real file from the DM's disk",
+  },
+  {
     path: "server/test/typography.test.ts",
     rule: "file-word-for-an-entry",
     reason: "it walks the prompt and fixture files on disk and reports the offenders by path",
