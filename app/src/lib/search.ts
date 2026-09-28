@@ -10,6 +10,7 @@ import {
   BookOpen,
   Bookmark,
   Coins,
+  Dices,
   FileText,
   GitFork,
   MapPin,
@@ -24,6 +25,7 @@ import { glossaryHref } from "@/glossary-term/glossary-term-links";
 import type { MessageKey, Translate } from "@/i18n";
 import { itemPricesHref } from "@/item-price/item-price-links";
 import { locationHref } from "@/location/location-links";
+import { randomTablesHref } from "@/random-table/random-table-links";
 import { npcHref } from "@/npc/npc-links";
 import { sceneHref } from "@/scene/scene-links";
 import { sessionHref } from "@/session/session-links";
@@ -45,6 +47,7 @@ const KIND_KEYS: Record<string, MessageKey> = {
   session: "kind.session",
   "glossary-term": "kind.glossary",
   "item-price": "kind.itemPrice",
+  "random-table": "kind.randomTable",
 };
 
 export function kindLabel(kind: string, t: Translate): string {
@@ -80,6 +83,9 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
     // The same coins as the price page in the campaign menu.
     case "item-price":
       return Coins;
+    // The same dice as the random tables in the campaign menu.
+    case "random-table":
+      return Dices;
     default:
       return FileText;
   }
@@ -101,7 +107,7 @@ export function contingencyScenes(tree: CampaignTree | undefined): Set<string> {
  * location open their own routes by their id — the route their slice names
  * (decisions/resources), the campaign's being the chapter overview; a session opens its
  * reading page, a glossary term the glossary page, an item price the price
- * page at that item.
+ * page at that item, a random table the random tables page at that table.
  *
  * A kind nobody knows falls back to the chapter overview rather than building
  * a route out of nothing (degrade, README).
@@ -123,6 +129,8 @@ export function resultHref(campaign: string, result: Pick<SearchResult, "kind" |
       return glossaryHref(encodeURIComponent(campaign));
     case "item-price":
       return itemPricesHref(encodeURIComponent(campaign), result.id);
+    case "random-table":
+      return randomTablesHref(encodeURIComponent(campaign), result.id);
     default:
       return scope;
   }

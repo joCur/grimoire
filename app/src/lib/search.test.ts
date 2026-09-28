@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bookmark,
   Coins,
+  Dices,
   FileText,
   GitFork,
   MapPin,
@@ -30,6 +31,7 @@ describe("kindLabel", () => {
     expect(kindLabel("session", t)).toBe(t("kind.session"));
     expect(kindLabel("glossary-term", t)).toBe(t("kind.glossary"));
     expect(kindLabel("item-price", t)).toBe(t("kind.itemPrice"));
+    expect(kindLabel("random-table", t)).toBe(t("kind.randomTable"));
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
@@ -51,6 +53,7 @@ describe("kindIcon", () => {
     expect(kindIcon("session")).toBe(NotebookPen);
     expect(kindIcon("glossary-term")).toBe(BookA);
     expect(kindIcon("item-price")).toBe(Coins);
+    expect(kindIcon("random-table")).toBe(Dices);
   });
 
   test("contingency scenes get the fork; the flag is ignored for other kinds", () => {
@@ -120,6 +123,12 @@ describe("resultHref", () => {
   test("an item price opens the price page at that item", () => {
     expect(resultHref("example", { kind: "item-price", id: "potion-of-healing" })).toBe(
       "/campaigns/example/item-prices?item=potion-of-healing",
+    );
+  });
+
+  test("a random table opens the random tables page at that table", () => {
+    expect(resultHref("example", { kind: "random-table", id: "rsp-tavern-names" })).toBe(
+      "/campaigns/example/random-tables?table=rsp-tavern-names",
     );
   });
 

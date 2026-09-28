@@ -12,7 +12,8 @@ export type SearchKind =
   | "location"
   | "session"
   | "glossary-term"
-  | "item-price";
+  | "item-price"
+  | "random-table";
 
 /**
  * One row of GET /api/:campaign/search (the response wraps them as

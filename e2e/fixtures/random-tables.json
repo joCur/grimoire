@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "sources": [
+      {
+        "json": "HarbourTables",
+        "abbreviation": "HT",
+        "full": "Tables of Salt Harbour",
+        "url": "https://example.org/salt-harbour-tables",
+        "authors": ["Grimoire Test Suite"],
+        "version": "1.0.0"
+      },
+      {
+        "json": "EmptySource",
+        "full": "A source without tables",
+        "authors": ["Nobody"]
+      }
+    ]
+  },
+  "table": [
+    {
+      "name": "Harbour Weather",
+      "source": "HarbourTables",
+      "caption": "Weather at the harbour",
+      "colLabels": ["{@dice d6}", "Weather"],
+      "intro": ["Roll at the start of a day at sea."],
+      "rows": [
+        ["1-3", "Fog rolls in over the {@b piers}."],
+        ["4-5", "A sharp wind from the north."],
+        ["6", "A storm; the {@creature harbour master|MM} closes the gate."]
+      ]
+    },
+    {
+      "name": "Dockside Names",
+      "source": "HarbourTables",
+      "colLabels": ["Name", "Trade"],
+      "rows": [
+        ["Mara Brine", "net mender"],
+        ["Old Tobin", "ferryman"]
+      ]
+    }
+  ]
+}
