@@ -2,7 +2,9 @@
 // reference's GENERATOR section, four states in one route:
 //
 //   input   target chapter (existing chip or the new-chapter flow with
-//           a live id preview) + source text + the context hint
+//           a live id preview) + source text + optional supplementary
+//           material (each typed, pasted or loaded from a text file) + the
+//           context hint
 //   working the spinner while the SERVER's job runs (correction turns happen
 //           inside that job, generator/README.md)
 //   review  what a job proposes, in stages (decisions/generator): first the
@@ -73,6 +75,7 @@ import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
 import { MobileMenuRow } from "@/components/MobileMenuRow";
 import { AllPlaceNotes, PlaceNotesProvider } from "@/components/place-notes";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
+import { TextFileButton } from "@/components/TextFileButton";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -218,6 +221,12 @@ export function GenerateRoute() {
     picked ?? (defaultChapter === undefined ? { kind: "new" } : { kind: "chapter", id: defaultChapter });
   const [newTitle, setNewTitle] = useState("");
   const [sourceText, setSourceText] = useState("");
+  // Supplementary material beside the source (a fan expansion of the
+  // chapter, say) — optional; a blank one is not sent.
+  const [supplementText, setSupplementText] = useState("");
+  // A text file the browser could not read — said under the fields until the
+  // next one loads.
+  const [fileUnreadable, setFileUnreadable] = useState(false);
   // Whether the run may also extend the npcs and locations the campaign
   // already has (decisions/generator) — on unless the DM switches it off.
   const [extend, setExtend] = useState(true);
@@ -364,6 +373,7 @@ export function GenerateRoute() {
         : startGenerateJob(campaign, {
             chapter: chapterId as string,
             sourceText,
+            supplementText,
             newChapter: creatingChapter,
             extend,
             // The title travels with the START — the accept must not depend
@@ -1049,9 +1059,21 @@ export function GenerateRoute() {
                   </div>
                 )}
 
-                <label htmlFor="gen-source" className={cn(OVERLINE, "mb-2 block")}>
-                  {t("generate.input.sourceLabel")}
-                </label>
+                <div className="mb-1 flex items-center justify-between gap-3">
+                  <label htmlFor="gen-source" className={OVERLINE}>
+                    {t("generate.input.sourceLabel")}
+                  </label>
+                  <TextFileButton
+                    label={t("generate.input.loadFile")}
+                    accessibleLabel={t("generate.input.loadSourceFile")}
+                    testId="generate-source-file"
+                    onLoad={(text) => {
+                      setFileUnreadable(false);
+                      setSourceText(text);
+                    }}
+                    onError={() => setFileUnreadable(true)}
+                  />
+                </div>
                 <textarea
                   id="gen-source"
                   rows={12}
@@ -1060,6 +1082,42 @@ export function GenerateRoute() {
                   placeholder={t("generate.input.sourcePlaceholder")}
                   className={cn(FIELD, "resize-y leading-[1.6] text-body")}
                 />
+
+                <div className="mt-5 mb-1 flex items-center justify-between gap-3">
+                  <label htmlFor="gen-supplement" className={OVERLINE}>
+                    {t("generate.input.supplementLabel")}
+                  </label>
+                  <TextFileButton
+                    label={t("generate.input.loadFile")}
+                    accessibleLabel={t("generate.input.loadSupplementFile")}
+                    testId="generate-supplement-file"
+                    onLoad={(text) => {
+                      setFileUnreadable(false);
+                      setSupplementText(text);
+                    }}
+                    onError={() => setFileUnreadable(true)}
+                  />
+                </div>
+                <p
+                  id="gen-supplement-hint"
+                  className="mb-2 text-[12px] leading-[1.5] text-muted-foreground"
+                >
+                  {t("generate.input.supplementHint")}
+                </p>
+                <textarea
+                  id="gen-supplement"
+                  rows={6}
+                  value={supplementText}
+                  onChange={(e) => setSupplementText(e.target.value)}
+                  aria-describedby="gen-supplement-hint"
+                  placeholder={t("generate.input.supplementPlaceholder")}
+                  className={cn(FIELD, "resize-y leading-[1.6] text-body")}
+                />
+                {fileUnreadable && (
+                  <p role="alert" className="mt-2 text-[12px] leading-[1.5] text-destructive">
+                    {t("generate.input.fileUnreadable")}
+                  </p>
+                )}
                 <label
                   htmlFor="gen-extend"
                   className="mt-3 flex cursor-pointer items-start gap-2.5 text-[13px] leading-[1.5] text-body-secondary"

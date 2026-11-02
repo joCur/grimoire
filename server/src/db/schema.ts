@@ -865,6 +865,13 @@ export const generateJobs = sqliteTable(
      * restart, when nothing but the row is left. Only a scene run stores it.
      */
     sourceText: text("source_text"),
+    /**
+     * The run's supplementary material beside its source, kept for the same
+     * reason: every call of the run carries it whole, a retry and a patch
+     * round after a restart included. NULL for a run without one and for
+     * every other kind.
+     */
+    supplementText: text("supplement_text"),
     /** The run's new-chapter flag — a retry must not 404 on it. */
     newChapter: integer("new_chapter").notNull().default(0),
     /**

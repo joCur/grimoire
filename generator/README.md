@@ -183,10 +183,14 @@ in `server/src/generator.ts`); no code looks for a heading inside a file.
 | scene (one scene of an outline) | `system-prompt.md`, `scene-single-output.md`, `scene-fields.md`, `scene-rules.md` |
 | NPC (NPC run and NPC part) | `npc-system-prompt.md`, `npc-fields.md`, `npc-rules.md` |
 | location (location part) | `location-system-prompt.md`, `location-fields.md`, `location-rules.md` |
-| outline | `outline-system-prompt.md`, and `outline-extend-rules.md` for a run that may extend |
+| outline | `outline-system-prompt.md`, `outline-extend-rules.md` for a run that may extend, and `supplement-rules.md` plus `outline-supplement-rules.md` for a run with supplementary material |
 | scene / NPC / location augment | `scene-augment-system-prompt.md` / `npc-augment-system-prompt.md` / `location-augment-system-prompt.md`, then the entity's fields file |
 | patch | `patch-system-prompt.md`, then the part's entity's fields file |
 | extension | `extend-system-prompt.md`, then the entity's fields file |
+
+Every other prompt of a scene run with supplementary material — scene, NPC,
+location, extension, patch — ends with `supplement-rules.md`; a run without
+one sends each prompt exactly as the table lists it.
 
 A create prompt thus reads as one document: who the model is and what it
 answers with, the entity's fields, then the rules and the worked example.
@@ -228,7 +232,25 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
    the two lists; a run without the option sends neither and reads neither.
    Every id of the run, these included, occurs once.
 
-   **Limit:** at most 12 scenes and 12 NPCs and locations — new and extended
+   **Supplementary material:** a scene run may carry a second, optional text
+   beside its source (`supplementText` on the start, stored on the job like
+   the source text, so a retry, a patch round and a restart still see it) —
+   a fan expansion of the chapter, say. The source text sets the chapter's
+   frame (its goal, start and end, its scenes); the supplement enriches those
+   scenes and may add scenes of its own, and the outline orders all of them
+   in one sequence. With a supplement every outline scene also names
+   `supplementExcerpt`, the first and last sentence of its passage there;
+   each of the two quotes is `null` when the scene has no passage in that
+   text. The scene call gets the passages its scene names (both when both),
+   each cut the same way; a scene from the supplement alone gets only its
+   supplement passage and no source text — and no server note. A quote that
+   matches nothing falls back to the whole text of its source with a note
+   (`source_excerpt_unmatched` or `supplement_excerpt_unmatched`). An NPC,
+   location or extension call gets the supplement passages of the scenes
+   that concern it beside their source passages. A run without a supplement
+   sends neither the quote in the schema nor any section of it.
+
+   **Limit:** at most 20 scenes and 12 NPCs and locations — new and extended
    — together per run (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Every part is a
    provider call, so the outline decides what a run costs; above that the
    reply is a validation error and thus a correction turn that asks for
@@ -242,7 +264,9 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
 
 2. **Scenes** (one call per scene, concurrency 3): the scene prompt, whose
    output section `scene-single-output.md` writes exactly one scene from the
-   outline (see "Prompt files") + outline + the cut source section. Output: exactly one scene object. Validation,
+   outline (see "Prompt files") + outline + the cut source section (and the
+   cut supplement section under `## Ergänzungsmaterial — zugehöriger
+   Abschnitt`). Output: exactly one scene object. Validation,
    correction turns and the naming check **per scene**; a failed part does
    not block the others.
 
@@ -267,17 +291,19 @@ retried on its own (`PATCH …/generator-jobs/:id/parts/:key { status:
 "running" }`). The job model behind it is in `docs/decisions/generator.md`.
 
 **Prompt caching:** the constant part of the prompt — system prompt,
-campaign knowledge, glossary, context lists, few-shot, outline — comes
+campaign knowledge, glossary, context lists, few-shot, the whole
+supplementary material (`## Ergänzungsmaterial`), outline — comes
 **first** in every call and is marked with `cache_control: ephemeral` for the
 Claude provider (one mark each for the system prompt and the constant
 block); OpenAI-compatible endpoints cache the same prefix implicitly. Only
 the variable rest changes per part: **which scene this call writes**
-(`## Diese Szene schreibst du jetzt`), the excerpt, the existing scene, the
-existing NPC or location, the instruction. The outline block itself is
-**byte for byte identical** for every part of a run — which is why the
-assignment is not in it.
+(`## Diese Szene schreibst du jetzt`), the excerpt and the supplement
+passage, the existing scene, the existing NPC or location, the instruction.
+The outline block and the supplement are **byte for byte identical** for
+every part of a run — which is why the assignment is not in it.
 
-The "~N tokens · M calls" display sums over all parts, the outline included.
+The "~N tokens · M calls" display sums over all parts, the outline included;
+the supplementary material counts like every other input.
 
 **Single calls:** the augment runs and the NPC run — one scene, one NPC or
 one location each, nothing to split.
@@ -320,8 +346,9 @@ assistive technology; a card that shows neither fields nor text (an NPC or a
 location row) lists its hints, each naming where it sits. A hint is never a
 blocker. A part's notes and hints leave with it once it is written, rejected
 or dropped. What the server notes about a part — its reply had to be
-repaired, or a scene was written from the whole source text because its
-passage could not be matched (`serverNotes` on the part) — stands with the
+repaired, or a scene was written from the whole source text or the whole
+supplement because its passage could not be matched (`serverNotes` on the
+part) — stands with the
 model's notes as a sentence of the app, and is not answered: the model did
 not write it. What the model noted about the run as a whole — the outline's
 own notes — and that the outline reply had to be repaired (`serverNotes` on

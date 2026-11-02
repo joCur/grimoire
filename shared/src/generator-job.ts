@@ -108,9 +108,16 @@ export type NamingHint = z.infer<typeof namingHintSchema>;
  *                             the scene's source passage matched nothing, so
  *                             the scene was written from the whole source
  *                             text — more expensive, and the one quality
- *                             difference the pipeline can produce silently.
+ *                             difference the pipeline can produce silently;
+ *   supplement_excerpt_unmatched  the same for the scene's passage of the
+ *                             run's supplementary material: the scene was
+ *                             written from the whole supplementary material.
  */
-export const SERVER_NOTES = ["reply_repaired", "source_excerpt_unmatched"] as const;
+export const SERVER_NOTES = [
+  "reply_repaired",
+  "source_excerpt_unmatched",
+  "supplement_excerpt_unmatched",
+] as const;
 export const serverNoteSchema = z.enum(SERVER_NOTES);
 
 export type ServerNote = z.infer<typeof serverNoteSchema>;
@@ -619,6 +626,10 @@ export type GeneratorJob = z.infer<typeof generatorJobSchema>;
  *     creates the chapter in whatever browser it happens in; `extend` lets
  *     the run also propose changes to npcs and locations the campaign
  *     already has, and without it the run proposes new ones only;
+ *     `supplementText` is supplementary material beside the source (a fan
+ *     expansion of the chapter, say): it enriches the scenes of the source
+ *     and may add scenes of its own, while the source sets the chapter's
+ *     frame;
  *   - an NPC run takes the `sourceText` and optionally the npc's `id`; without
  *     one the model picks it.
  *
@@ -633,6 +644,7 @@ export const generatorJobCreateSchema = z.discriminatedUnion("kind", [
     newChapter: z.boolean().optional(),
     chapterTitle: z.string().nullable().optional(),
     extend: z.boolean().optional(),
+    supplementText: z.string().optional(),
   }),
   z.strictObject({
     kind: z.literal("npc"),

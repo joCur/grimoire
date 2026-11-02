@@ -72,6 +72,19 @@ export interface GenerateRequest {
   };
   sourceText: string; // English source text ("" when a run has none)
   /**
+   * The supplementary material of a scene run, WHOLE — the same text in every
+   * call of the run, so it is part of the CONSTANT prefix. Absent for a run
+   * without one; then the prompt has no such section.
+   */
+  supplement?: string;
+  /**
+   * The passage of the supplementary material a scene call writes from (an
+   * npc, location or extension call: the passages of the scenes it
+   * concerns). It belongs to the VARIABLE half beside the source passage.
+   * Absent when the call has none.
+   */
+  supplementPassage?: string;
+  /**
    * The run's OUTLINE, rendered as prompt lines: every scene id with its
    * title/type/location, every new npc and every new location. It travels
    * with each per-scene, per-npc and per-location call so cross references
@@ -289,6 +302,16 @@ export const INSTRUCTION_HEADING = "## Anweisung des DM";
 export const OUTLINE_HEADING = "## Gliederung des Durchlaufs — verbindlich, ids unverändert übernehmen";
 
 /**
+ * Heading of the run's supplementary material, whole, in the constant half.
+ * A constant for the same reason the others are: the prompt test asserts on
+ * it, the supplement rules name it and the E2E stub reads the prompt by it.
+ */
+export const SUPPLEMENT_HEADING = "## Ergänzungsmaterial";
+
+/** Heading of this call's passage of the supplementary material, in the variable half. */
+export const SUPPLEMENT_PASSAGE_HEADING = "## Ergänzungsmaterial — zugehöriger Abschnitt";
+
+/**
  * Heading of the line that says WHICH scene of the outline this call writes.
  * It stands in the VARIABLE half, above the excerpt: the
  * outline block above it is byte-identical for every part of a run, which is
@@ -335,12 +358,14 @@ function answerLines(answers: readonly PartAnswer[]): string {
  *
  *   constant  everything that is the same for every call of a run: the
  *             campaign knowledge, the glossary, the context lists, the
- *             few-shot and the run's outline. It stands FIRST, so an
+ *             few-shot, the supplementary material and the run's outline.
+ *             It stands FIRST, so an
  *             OpenAI-compatible endpoint's implicit prefix caching sees the
  *             same prefix on every part of a run without being told.
  *   variable  what this ONE call is about: what an augment run works on,
  *             the DM's instruction, a patch call's proposal and answers, the
- *             source text (for a pipeline part: its excerpt).
+ *             source text (for a pipeline part: its excerpt) and its passage
+ *             of the supplementary material.
  *
  * The Claude provider marks the constant half (and the system prompt) with
  * `cache_control: ephemeral`; everything else joins the two with the same
@@ -377,6 +402,12 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     "```json",
     req.fewShotTarget,
     "```",
+    // The supplementary material is the same for every call of a run, so it
+    // stands whole in this half; the passages a call writes from follow in
+    // the variable half.
+    ...(req.supplement === undefined || req.supplement.trim() === ""
+      ? []
+      : [SUPPLEMENT_HEADING, req.supplement]),
     // The outline stands below the few-shot and above what this call is
     // about: the model has to know which ids exist before it reads the
     // excerpt it has to write from.
@@ -436,6 +467,9 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     // A run may have an instruction and no source text; an empty
     // heading would be one the model has to interpret against nothing.
     ...(req.sourceText.trim() === "" ? [] : ["## Quelltext", req.sourceText]),
+    ...(req.supplementPassage === undefined || req.supplementPassage.trim() === ""
+      ? []
+      : [SUPPLEMENT_PASSAGE_HEADING, req.supplementPassage]),
   ].join("\n\n");
   return { constant, variable };
 }

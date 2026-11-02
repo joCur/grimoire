@@ -65,6 +65,8 @@ function serverNoteSentence(note: ServerNote, scope: ServerNoteScope, title: str
       );
     case "source_excerpt_unmatched":
       return t("generatorJob.serverNote.source_excerpt_unmatched", { title });
+    case "supplement_excerpt_unmatched":
+      return t("generatorJob.serverNote.supplement_excerpt_unmatched", { title });
   }
 }
 

@@ -73,6 +73,8 @@ export const de = {
     "Die Antwort des Modells zu diesem Vorschlag war kein gültiges JSON und wurde repariert, bevor sie gelesen wurde.",
   "generatorJob.serverNote.source_excerpt_unmatched":
     "Der Quelltext-Ausschnitt für „{title}“ ließ sich nicht wörtlich zuordnen, deshalb wurde diese Szene aus dem ganzen Quelltext geschrieben.",
+  "generatorJob.serverNote.supplement_excerpt_unmatched":
+    "Der Abschnitt des Ergänzungsmaterials für „{title}“ ließ sich nicht wörtlich zuordnen, deshalb wurde diese Szene mit dem ganzen Ergänzungsmaterial geschrieben.",
   "generatorJob.runServerNote.reply_repaired":
     "Die Gliederung des Modells war kein gültiges JSON und wurde repariert, bevor sie gelesen wurde.",
   // The patch round of one proposal (generator-job/PartRound.tsx): the DM
@@ -916,6 +918,15 @@ export const de = {
   "generate.input.sourceLabel": "Quelltext (EN)",
   "generate.input.sourcePlaceholder":
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
+  "generate.input.supplementLabel": "Ergänzungsmaterial (optional)",
+  "generate.input.supplementPlaceholder":
+    "Erweiterung des Kapitels einfügen — etwa eine Fan-Erweiterung mit Begegnungen, Rätseln oder eigenen Szenen …",
+  "generate.input.supplementHint":
+    "Der Quelltext gibt den Rahmen des Kapitels vor. Das Ergänzungsmaterial reichert seine Szenen an und darf eigene Szenen hinzufügen, die der Lauf an passender Stelle einordnet.",
+  "generate.input.loadFile": "Datei laden",
+  "generate.input.loadSourceFile": "Quelltext aus einer Datei laden",
+  "generate.input.loadSupplementFile": "Ergänzungsmaterial aus einer Datei laden",
+  "generate.input.fileUnreadable": "Die Datei ließ sich nicht lesen. Wähle eine Textdatei (.md oder .txt).",
   "generate.input.extend": "Bestehende NPCs und Orte ergänzen",
   "generate.input.extendHint":
     "Der Lauf darf NPCs und Orte, die es schon gibt, um das ergänzen, was der Quelltext über sie sagt. Jede Änderung prüfst du, bevor sie geschrieben wird.",

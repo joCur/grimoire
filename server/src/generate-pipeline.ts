@@ -22,6 +22,12 @@
 //      the quotes cannot be found the scene simply gets the WHOLE source
 //      text: more expensive, never wrong, and never a reason to fail a run.
 //
+//      A run may carry SUPPLEMENTARY material beside its source text — a fan
+//      expansion of the chapter, say. It travels whole in the constant half
+//      of every call of the run; the outline names for each scene where its
+//      passage comes from — the source, the supplement or both — and a scene
+//      the supplement alone brings is written from its supplement passage.
+//
 //      The outline is INTERNAL. It is never shown to the DM and never
 //      offered for editing — it exists to reduce errors, and the only thing
 //      the DM is interested in is the finished scene.
@@ -105,20 +111,20 @@ import { readNpc } from "./store/npcs";
 export const PART_CONCURRENCY = 3;
 
 /**
- * The most parts ONE outline may produce — 12 scenes, and 12 new npcs and
+ * The most parts ONE outline may produce — 20 scenes, and 12 new npcs and
  * locations counted together.
  *
  * Without it the outline decides how many provider calls a run makes, and a
  * source text that is a whole adventure (or a model that splits every
  * paragraph) turns one generate action into dozens of calls the DM never
- * asked for and cannot stop except by discarding the run. A chapter of
- * twelve playable scenes is already a long evening — beyond that the honest
+ * asked for and cannot stop except by discarding the run. A chapter with an
+ * expansion of its own fills several evenings — beyond the bound the honest
  * answer is to cut the source text, so an outline over the bound is a
  * VALIDATION ERROR and therefore a correction turn that asks the model to
  * consolidate, not a failed run.
  *
- * The numbers live in the SCHEMA module (`maxItems` states
- * them to the provider, the validation below enforces them) and are
+ * The numbers live in the SCHEMA module (its descriptions state them to
+ * the provider, the validation below enforces them) and are
  * re-exported here, where every caller already reads them.
  */
 export { MAX_OUTLINE_PROPOSALS, MAX_OUTLINE_SCENES } from "@grimoire/shared/outline-schema";
@@ -133,6 +139,11 @@ export interface OutlineScene {
   location?: string;
   /** The verbatim first/last sentence of this scene's source passage. */
   sourceExcerpt?: { first: string; last: string };
+  /**
+   * The same for its passage of the run's supplementary material — only a
+   * run that carries one reads it.
+   */
+  supplementExcerpt?: { first: string; last: string };
   /** ids of OTHER outline scenes this one refers to. */
   refs: string[];
 }
@@ -230,12 +241,15 @@ function stringField(obj: Record<string, unknown>, key: string): string | undefi
  * silently ignored key — a model that invents chapters also invents addresses.
  *
  * With `extend` the outline may also name npcs and locations the campaign
- * has, each once in the whole run; without it those lists are not read.
+ * has, each once in the whole run; without it those lists are not read. With
+ * `supplement` a scene may also quote its passage of the supplementary
+ * material; without it that quote is not read.
  */
 export function validateOutlineReply(
   raw: string,
   ctx: SceneContext,
   extend = false,
+  supplement = false,
 ): { ok: true; result: RunOutline } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const parsedReply = parseOutlineJson(raw);
@@ -374,30 +388,39 @@ export function validateOutlineReply(
     if (!Array.isArray(rawRefs) || rawRefs.some((r) => typeof r !== "string")) {
       errors.push(`scene "${id}": "refs" must be an array of scene ids`);
     }
-    const excerpt = item.sourceExcerpt;
-    let sourceExcerpt: { first: string; last: string } | undefined;
-    if (excerpt !== undefined && excerpt !== null) {
+    /** One of the scene's quotes: absent or null is none, anything else needs both sentences. */
+    const readExcerpt = (
+      key: "sourceExcerpt" | "supplementExcerpt",
+      from: string,
+    ): { first: string; last: string } | undefined => {
+      const excerpt = item[key];
+      if (excerpt === undefined || excerpt === null) return undefined;
       if (!isRecord(excerpt)) {
-        errors.push(`scene "${id}": "sourceExcerpt" must be an object with "first" and "last"`);
-      } else {
-        const first = stringField(excerpt, "first");
-        const last = stringField(excerpt, "last");
-        if (first === undefined || last === undefined) {
-          errors.push(
-            `scene "${id}": "sourceExcerpt" braucht "first" und "last" — ` +
-              "je ein wörtliches Zitat aus dem Quelltext",
-          );
-        } else {
-          sourceExcerpt = { first, last };
-        }
+        errors.push(`scene "${id}": "${key}" must be an object with "first" and "last"`);
+        return undefined;
       }
-    }
+      const first = stringField(excerpt, "first");
+      const last = stringField(excerpt, "last");
+      if (first === undefined || last === undefined) {
+        errors.push(
+          `scene "${id}": "${key}" braucht "first" und "last" — ` +
+            `je ein wörtliches Zitat aus ${from}`,
+        );
+        return undefined;
+      }
+      return { first, last };
+    };
+    const sourceExcerpt = readExcerpt("sourceExcerpt", "dem Quelltext");
+    const supplementExcerpt = supplement
+      ? readExcerpt("supplementExcerpt", "dem Ergänzungsmaterial")
+      : undefined;
     scenes.push({
       id,
       title: stringField(item, "title") ?? id,
       type,
       ...(location === undefined ? {} : { location }),
       ...(sourceExcerpt === undefined ? {} : { sourceExcerpt }),
+      ...(supplementExcerpt === undefined ? {} : { supplementExcerpt }),
       refs: Array.isArray(rawRefs) ? rawRefs.filter((r): r is string => typeof r === "string") : [],
     });
   });
@@ -508,6 +531,58 @@ export function cutExcerpt(
   const to = norm.offsets[end - 1];
   if (from === undefined || to === undefined) return { text: source, matched: false };
   return { text: source.slice(from, to + 1).trim(), matched: true };
+}
+
+/** One cut passage, and whether its quotes were found. */
+export interface CutPassage {
+  text: string;
+  matched: boolean;
+}
+
+/**
+ * Where a scene of the outline is written from: its passage of the source
+ * text, its passage of the supplementary material, or both.
+ *
+ *   - A scene that quotes the source gets that passage — the whole source
+ *     text when the quotes match nothing (`matched: false`).
+ *   - A scene that quotes the supplement alone comes from the supplement and
+ *     gets no source passage at all.
+ *   - A scene that quotes neither gets the whole source text, unmatched.
+ *   - A scene that quotes the supplement gets that passage — the whole
+ *     supplement when the quotes match nothing.
+ */
+export interface ScenePassages {
+  source?: CutPassage;
+  supplement?: CutPassage;
+}
+
+/** Cut a scene's passages out of the run's two texts — see `ScenePassages`. */
+export function scenePassages(
+  scene: Pick<OutlineScene, "sourceExcerpt" | "supplementExcerpt">,
+  sourceText: string,
+  supplementText: string | undefined,
+): ScenePassages {
+  const supplement =
+    supplementText === undefined || scene.supplementExcerpt === undefined
+      ? undefined
+      : cutExcerpt(supplementText, scene.supplementExcerpt);
+  const fromSupplementAlone = supplement !== undefined && scene.sourceExcerpt === undefined;
+  return {
+    ...(fromSupplementAlone ? {} : { source: cutExcerpt(sourceText, scene.sourceExcerpt) }),
+    ...(supplement === undefined ? {} : { supplement }),
+  };
+}
+
+/** What the server notes about a scene's passages: each one cut from a whole text. */
+export function passageNotes(passages: ScenePassages): ServerNote[] {
+  return [
+    ...(passages.source !== undefined && !passages.source.matched
+      ? (["source_excerpt_unmatched"] as const)
+      : []),
+    ...(passages.supplement !== undefined && !passages.supplement.matched
+      ? (["supplement_excerpt_unmatched"] as const)
+      : []),
+  ];
 }
 
 /** Collapse whitespace runs into single spaces. */
@@ -919,15 +994,17 @@ export interface RunPlan {
   ctx: SceneContext;
   outline: RunOutline;
   sourceText: string;
+  /** The run's supplementary material; absent for a run without one. */
+  supplementText?: string;
   allowed: AllowedRefs;
   /**
-   * The cut source passage per scene id, computed once for the whole run.
-   * `npcContext` and `locationContext` need every scene's passage for every
-   * npc and location they build, and the cut normalizes the WHOLE source text
-   * per call — so an outline with ten scenes and ten npcs would otherwise
+   * The cut passages per scene id, computed once for the whole run.
+   * `npcContext` and `locationContext` need every scene's passages for every
+   * npc and location they build, and the cut normalizes the WHOLE text per
+   * call — so an outline with ten scenes and ten npcs would otherwise
    * normalize it a hundred times.
    */
-  excerpts: Map<string, { text: string; matched: boolean }>;
+  excerpts: Map<string, ScenePassages>;
 }
 
 /**
@@ -941,6 +1018,7 @@ export function planOf(input: {
   ctx: SceneContext;
   outline: RunOutline;
   sourceText: string;
+  supplementText?: string;
 }): RunPlan {
   const { ctx, outline } = input;
   return {
@@ -948,7 +1026,7 @@ export function planOf(input: {
     excerpts: new Map(
       outline.scenes.map((scene) => [
         scene.id,
-        cutExcerpt(input.sourceText, scene.sourceExcerpt),
+        scenePassages(scene, input.sourceText, input.supplementText),
       ]),
     ),
     allowed: {
@@ -968,25 +1046,47 @@ export function planOf(input: {
 }
 
 /**
+ * A part's system prompt, followed by the rules for the supplementary
+ * material when the run carries one — every call of such a run reads what
+ * the material is for. Without one the prompt is exactly `systemPrompt`.
+ */
+export async function withSupplementRules(
+  systemPrompt: string,
+  supplementText: string | undefined,
+): Promise<string> {
+  if (supplementText === undefined) return systemPrompt;
+  const rules = await loadAsset(ASSET_FILES.supplement.systemPrompt);
+  return `${systemPrompt.trimEnd()}\n\n${rules.trimEnd()}\n`;
+}
+
+/**
  * Step 1: the outline call, with its own correction turns. With `extend` the
  * outline may also name npcs and locations the campaign has: its prompt
  * carries the rule for that and its schema the two lists; without it both
- * are exactly what a run that only proposes new ones sends.
+ * are exactly what a run that only proposes new ones sends. With
+ * `supplementText` the prompt carries the material whole and the rules for
+ * it, and each scene of the schema may quote its passage there.
  */
 export async function runOutlineStep(
   ctx: SceneContext,
   sourceText: string,
   provider: LLMProvider,
   extend = false,
+  supplementText?: string,
 ): Promise<{ outline: RunOutline; usage: PartUsage }> {
   const counter = callCounter();
   const assets = await loadPromptAssets("outline");
-  const systemPrompt = extend
-    ? await composePrompt([
-        ASSET_FILES.outline.systemPrompt,
-        ASSET_FILES.outlineExtend.systemPrompt,
-      ])
-    : assets.systemPrompt;
+  const supplement = supplementText !== undefined;
+  const systemPrompt =
+    extend || supplement
+      ? await composePrompt([
+          ASSET_FILES.outline.systemPrompt,
+          ...(extend ? [ASSET_FILES.outlineExtend.systemPrompt] : []),
+          ...(supplement
+            ? [ASSET_FILES.supplement.systemPrompt, ASSET_FILES.outlineSupplement.systemPrompt]
+            : []),
+        ])
+      : assets.systemPrompt;
   const result = await runPipeline<{ outline: RunOutline; usage?: GenerateUsage }>({
     req: {
       systemPrompt,
@@ -1002,18 +1102,19 @@ export async function runOutlineStep(
         locations: ctx.locations,
       },
       sourceText,
+      ...(supplementText === undefined ? {} : { supplement: supplementText }),
       // The one call of a run that still answers JSON — so it is the one
       // call whose shape the API can GUARANTEE: Claude gets a
       // forced tool, an OpenAI-compatible endpoint `json_schema`.
       jsonSchema: {
         name: OUTLINE_SCHEMA_NAME,
         description: OUTLINE_SCHEMA_DESCRIPTION,
-        schema: outlineJsonSchema(extend),
+        schema: outlineJsonSchema(extend, supplement),
       },
     },
     provider,
     validate: (raw) => {
-      const outcome = validateOutlineReply(raw, ctx, extend);
+      const outcome = validateOutlineReply(raw, ctx, extend, supplement);
       return outcome.ok ? { ok: true, result: { outline: outcome.result } } : outcome;
     },
     correctionTail: OUTLINE_CORRECTION_TAIL,
@@ -1030,10 +1131,10 @@ export async function runScenePart(
   counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const [systemPrompt, fewShotTarget] = await Promise.all([
-    sceneSystemPrompt(),
+    sceneSystemPrompt().then((prompt) => withSupplementRules(prompt, plan.supplementText)),
     loadAsset(ASSET_FILES.scene.fewShotTarget),
   ]);
-  const cut = excerptOf(plan, scene);
+  const passages = excerptOf(plan, scene);
   const result = await runPipeline<{
     scene: SceneProposal;
     warnings: string[];
@@ -1046,9 +1147,14 @@ export async function runScenePart(
       knowledge: plan.ctx.knowledge,
       glossary: plan.ctx.glossary,
       context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
+      ...supplementOf(plan),
       outline: outlineBlock(plan.outline),
       assignment: assignmentBlock(scene),
-      sourceText: cut.text,
+      // A scene the supplement alone brings has no source passage.
+      sourceText: passages.source?.text ?? "",
+      ...(passages.supplement === undefined
+        ? {}
+        : { supplementPassage: passages.supplement.text }),
       // Forced like the outline: the reply is the scene object.
       jsonSchema: sceneReplyRequest("create"),
     },
@@ -1063,10 +1169,10 @@ export async function runScenePart(
       warnings: result.warnings,
       serverNotes: [
         ...result.serverNotes,
-        // The DM has to know when a scene was written from the WHOLE source
+        // The DM has to know when a scene was written from a WHOLE text
         // instead of its passage: it is the one quality difference the
         // pipeline can produce silently.
-        ...(cut.matched ? [] : (["source_excerpt_unmatched"] as const)),
+        ...passageNotes(passages),
       ],
       namingHints: checkProposalsNaming([sceneChecked(result.scene)], plan.ctx.namingRules),
     },
@@ -1095,15 +1201,16 @@ export async function runNpcPart(
     usage?: GenerateUsage;
   }>({
     req: {
-      systemPrompt: assets.systemPrompt,
+      systemPrompt: await withSupplementRules(assets.systemPrompt, plan.supplementText),
       fewShotTarget: assets.fewShotTarget,
       knowledge: plan.ctx.knowledge,
       glossary: plan.ctx.glossary,
       context: { npcs: plan.ctx.npcs, locations: plan.ctx.locations, targetId: outlineNpc.id },
+      ...supplementOf(plan),
       outline: outlineBlock(plan.outline),
       // What this ONE call is about: the npc, and the passages of the scenes
       // that mention it — rather than no context of its own at all.
-      sourceText: npcContext(plan, outlineNpc),
+      ...npcContext(plan, outlineNpc),
       jsonSchema: npcReplyRequest("create"),
     },
     provider,
@@ -1138,7 +1245,7 @@ export async function runLocationPart(
     usage?: GenerateUsage;
   }>({
     req: {
-      systemPrompt: assets.systemPrompt,
+      systemPrompt: await withSupplementRules(assets.systemPrompt, plan.supplementText),
       fewShotTarget: assets.fewShotTarget,
       knowledge: plan.ctx.knowledge,
       glossary: plan.ctx.glossary,
@@ -1147,8 +1254,9 @@ export async function runLocationPart(
         locations: plan.ctx.locations,
         targetId: outlineLocation.id,
       },
+      ...supplementOf(plan),
       outline: outlineBlock(plan.outline),
-      sourceText: locationContext(plan, outlineLocation),
+      ...locationContext(plan, outlineLocation),
       jsonSchema: locationReplyRequest("create"),
     },
     provider,
@@ -1200,7 +1308,9 @@ export async function runExtensionPart(
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const proposal = await (await storedProposal(plan.campaign, kind))(existing.id);
   const [systemPrompt, fewShotTarget] = await Promise.all([
-    composePrompt([ASSET_FILES.extend.systemPrompt, ENTITY[kind].fields]),
+    composePrompt([ASSET_FILES.extend.systemPrompt, ENTITY[kind].fields]).then((prompt) =>
+      withSupplementRules(prompt, plan.supplementText),
+    ),
     loadAsset(ASSET_FILES.extend.fewShotTarget),
   ]);
   const result = await runPipeline<{ operations: ReadOperation[]; usage?: GenerateUsage }>({
@@ -1210,12 +1320,12 @@ export async function runExtensionPart(
       knowledge: plan.ctx.knowledge,
       glossary: plan.ctx.glossary,
       context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
+      ...supplementOf(plan),
       outline: outlineBlock(plan.outline),
       ...(kind === "npc"
         ? { existingNpc: npcToReply(proposal as NpcProposal) }
         : { existingLocation: proposal as LocationProposal }),
-      sourceText:
-        kind === "npc" ? npcContext(plan, existing) : existingLocationContext(plan, existing),
+      ...(kind === "npc" ? npcContext(plan, existing) : existingLocationContext(plan, existing)),
       jsonSchema: patchReplyRequest(kind),
     },
     provider,
@@ -1243,12 +1353,22 @@ export async function runExtensionPart(
 }
 
 /**
- * The source material of an npc call: the one-liner from the outline plus the
- * source passages of every scene that mentions the npc — by its name or its
- * id. The outline does not list npcs per scene, and a text search over the
- * passages is both cheap and honest.
+ * What one npc, location or extension call writes from: its source material
+ * (`sourceText`) and, for a run with supplementary material, the passages of
+ * it that belong to the call (`supplementPassage`).
  */
-export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc | OutlineExisting): string {
+export interface PartSource {
+  sourceText: string;
+  supplementPassage?: string;
+}
+
+/**
+ * The source material of an npc call: the one-liner from the outline plus the
+ * passages of every scene that mentions the npc — by its name or its id. The
+ * outline does not list npcs per scene, and a text search over the passages
+ * is both cheap and honest.
+ */
+export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc | OutlineExisting): PartSource {
   const needle = outlineNpc.name.toLowerCase();
   // The id is kebab-case ENGLISH while the name is German ("harbour-master" /
   // "Hafenmeisterin"), so the whole id rarely appears in an English source
@@ -1269,7 +1389,7 @@ export function npcContext(plan: RunPlan, outlineNpc: OutlineNpc | OutlineExisti
  * The source material of a location call: the one-liner from the outline
  * plus the source passages of every scene whose `location` it is.
  */
-export function locationContext(plan: RunPlan, outlineLocation: OutlineLocation): string {
+export function locationContext(plan: RunPlan, outlineLocation: OutlineLocation): PartSource {
   return contextOf(plan, outlineLocation, (scene) => scene.location === outlineLocation.id);
 }
 
@@ -1278,7 +1398,7 @@ export function locationContext(plan: RunPlan, outlineLocation: OutlineLocation)
  * of the scenes set there, and of those that name it — a location the
  * campaign has is often only mentioned by a scene set elsewhere.
  */
-export function existingLocationContext(plan: RunPlan, existing: OutlineExisting): string {
+export function existingLocationContext(plan: RunPlan, existing: OutlineExisting): PartSource {
   const needle = existing.name.toLowerCase();
   return contextOf(
     plan,
@@ -1291,28 +1411,43 @@ export function existingLocationContext(plan: RunPlan, existing: OutlineExisting
 }
 
 /**
- * The one-liner plus the passage of every scene `mentions` picks. Nothing
- * matched: the whole source text is the honest fallback — the same rule the
- * excerpt cut follows.
+ * The one-liner plus the passages of every scene `mentions` picks — its
+ * source passage with the source material, its supplement passage with the
+ * supplement passages. Nothing matched: the whole source text is the honest
+ * fallback — the same rule the excerpt cut follows.
  */
 function contextOf(
   plan: RunPlan,
   item: { id: string; name: string; summary: string },
   mentions: (scene: OutlineScene, passage: string) => boolean,
-): string {
+): PartSource {
   const blocks: string[] = [`${item.name} (${item.id}): ${item.summary}`];
+  const supplementBlocks: string[] = [];
   for (const scene of plan.outline.scenes) {
-    const passage = excerptOf(plan, scene).text;
+    const { source, supplement } = excerptOf(plan, scene);
+    const passage = [source?.text ?? "", supplement?.text ?? ""].join("\n\n");
     if (!mentions(scene, passage)) continue;
-    blocks.push(`### Szene „${scene.title}“ (${scene.id})\n\n${passage}`);
+    const heading = `### Szene „${scene.title}“ (${scene.id})`;
+    if (source !== undefined) blocks.push(`${heading}\n\n${source.text}`);
+    if (supplement !== undefined) supplementBlocks.push(`${heading}\n\n${supplement.text}`);
   }
-  if (blocks.length === 1) blocks.push(plan.sourceText);
-  return blocks.join("\n\n");
+  if (blocks.length === 1 && supplementBlocks.length === 0) blocks.push(plan.sourceText);
+  return {
+    sourceText: blocks.join("\n\n"),
+    ...(supplementBlocks.length === 0 ? {} : { supplementPassage: supplementBlocks.join("\n\n") }),
+  };
 }
 
-/** This scene's source passage — cut once per run (RunPlan.excerpts). */
-function excerptOf(plan: RunPlan, scene: OutlineScene): { text: string; matched: boolean } {
-  return plan.excerpts.get(scene.id) ?? cutExcerpt(plan.sourceText, scene.sourceExcerpt);
+/** This scene's passages — cut once per run (RunPlan.excerpts). */
+function excerptOf(plan: RunPlan, scene: OutlineScene): ScenePassages {
+  return (
+    plan.excerpts.get(scene.id) ?? scenePassages(scene, plan.sourceText, plan.supplementText)
+  );
+}
+
+/** The run's supplementary material for a call's constant half; nothing without one. */
+export function supplementOf(plan: RunPlan): { supplement?: string } {
+  return plan.supplementText === undefined ? {} : { supplement: plan.supplementText };
 }
 
 /**
@@ -1418,6 +1553,8 @@ export async function runScenePipeline(input: {
   campaign: string;
   chapter: string;
   sourceText: string;
+  /** The run's supplementary material; absent for a run without one. */
+  supplementText?: string;
   newChapter: boolean;
   /** The run may also propose changes to npcs and locations the campaign has. */
   extend: boolean;
@@ -1426,7 +1563,13 @@ export async function runScenePipeline(input: {
 }): Promise<void> {
   const provider = (input.getProvider ?? obtainProvider)();
   const ctx = await collectSceneContext(input.campaign, input.chapter, input.newChapter);
-  const { outline, usage } = await runOutlineStep(ctx, input.sourceText, provider, input.extend);
+  const { outline, usage } = await runOutlineStep(
+    ctx,
+    input.sourceText,
+    provider,
+    input.extend,
+    input.supplementText,
+  );
   if (input.sink.cancelled()) return;
   const parts = outlineParts(outline);
   await input.sink.outlineReady(outline, parts, usage);
@@ -1435,6 +1578,7 @@ export async function runScenePipeline(input: {
     ctx,
     outline,
     sourceText: input.sourceText,
+    ...(input.supplementText === undefined ? {} : { supplementText: input.supplementText }),
   });
   await runPartsPooled(plan, parts, provider, input.sink);
 }
@@ -1444,6 +1588,7 @@ export async function replanStoredRun(input: {
   campaign: string;
   chapter: string;
   sourceText: string;
+  supplementText?: string;
   newChapter: boolean;
   outline: RunOutline;
 }): Promise<RunPlan> {
@@ -1453,5 +1598,6 @@ export async function replanStoredRun(input: {
     ctx,
     outline: input.outline,
     sourceText: input.sourceText,
+    ...(input.supplementText === undefined ? {} : { supplementText: input.supplementText }),
   });
 }

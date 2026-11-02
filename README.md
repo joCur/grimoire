@@ -1088,6 +1088,12 @@ outline is an internal step — it is never shown. If the run creates its
 chapter, the outline describes it from the source material; the review of
 the proposals shows this description, and accepting creates the chapter
 with it as its text. No run changes the text of an existing chapter.
+A scene run may carry supplementary material beside its source text (a fan
+expansion of the chapter, say): it travels whole with every call of the
+run, the source text sets the chapter's frame, and the supplement enriches
+its scenes and may add scenes of its own, which the outline orders among
+the others. Each outline scene names its passage in the source, in the
+supplement, or in both.
 
 **Every** call responds with a JSON object whose schema the server
 **enforces** via the provider API. A scene, NPC or location call (creating
@@ -1115,8 +1121,8 @@ run belong to what they are about: what the model noted about one scene,
 NPC or location stands on its part (`pipeline.parts[].warnings`), what it
 noted about the run as a whole (the outline's notes) under
 `result.warnings`. What the server itself notes — a reply that had to be
-repaired, a scene written from the whole source text because its passage
-could not be matched — is data beside them (`pipeline.parts[].serverNotes`,
+repaired, a scene written from the whole source text (or the whole
+supplement) because its passage could not be matched — is data beside them (`pipeline.parts[].serverNotes`,
 `result.serverNotes` for the outline reply), which the app says in a
 sentence and nobody answers. The naming check's findings (`result.namingHints`) name
 their scene, NPC or location by id, the field and, in the text, the line.

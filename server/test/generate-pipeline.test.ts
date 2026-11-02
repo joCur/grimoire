@@ -416,21 +416,21 @@ test("an entry's context is the passages that mention it — by name OR by id wo
   // The id and the name share no word — so a source text that never writes
   // "Mistress of the Docks" and never writes "harbour-master" still has to
   // reach its npc, through the WORDS of the id.
-  const master = npcContext(plan, outline.npcs[0]!);
+  const master = npcContext(plan, outline.npcs[0]!).sourceText;
   expect(master).toContain("The harbour master counts crates");
   expect(master).not.toContain("Grella waits in the mudflats");
   // …and the plain name match still works, and matches only its own scene.
-  const grella = npcContext(plan, outline.npcs[1]!);
+  const grella = npcContext(plan, outline.npcs[1]!).sourceText;
   expect(grella).toContain("Grella waits in the mudflats");
   expect(grella).not.toContain("harbour master counts");
   // A location is reached by the scenes that are set there — and no scene of
   // this outline names one, so its call gets the whole source text.
-  const watt = locationContext(plan, outline.locations[0]!);
+  const watt = locationContext(plan, outline.locations[0]!).sourceText;
   expect(watt).toContain("The Mudflats (mudflats): walkable at low tide");
   expect(watt).toContain(source);
   // The excerpts are cut ONCE for the whole run, not per npc × scene.
   expect([...plan.excerpts.keys()]).toEqual(["quay", "mudflats"]);
-  expect(plan.excerpts.get("quay")!.matched).toBe(true);
+  expect(plan.excerpts.get("quay")!.source!.matched).toBe(true);
 });
 
 // --- the per-part prompt -------------------------------------------------------

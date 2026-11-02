@@ -55,6 +55,8 @@ export const en: Messages = {
     "The model's reply for this proposal was not valid JSON and was repaired before it was read.",
   "generatorJob.serverNote.source_excerpt_unmatched":
     "The source passage for “{title}” could not be matched word for word, so this scene was written from the whole source text.",
+  "generatorJob.serverNote.supplement_excerpt_unmatched":
+    "The supplementary passage for “{title}” could not be matched word for word, so this scene was written with the whole supplementary material.",
   "generatorJob.runServerNote.reply_repaired":
     "The model's outline was not valid JSON and was repaired before it was read.",
   "generatorJob.round.answer": "Your answer to this note",
@@ -837,6 +839,15 @@ export const en: Messages = {
   "generate.input.sourceLabel": "Source text (EN)",
   "generate.input.sourcePlaceholder":
     "Paste adventure text — paragraphs, boxed text, statblock references …",
+  "generate.input.supplementLabel": "Supplementary material (optional)",
+  "generate.input.supplementPlaceholder":
+    "Paste an expansion of the chapter — a fan expansion with encounters, puzzles or scenes of its own …",
+  "generate.input.supplementHint":
+    "The source text sets the chapter's frame. The supplementary material enriches its scenes and may add scenes of its own, which the run puts in their place.",
+  "generate.input.loadFile": "Load file",
+  "generate.input.loadSourceFile": "Load the source text from a file",
+  "generate.input.loadSupplementFile": "Load the supplementary material from a file",
+  "generate.input.fileUnreadable": "The file could not be read. Pick a text file (.md or .txt).",
   "generate.input.extend": "Extend existing NPCs and locations",
   "generate.input.extendHint":
     "The run may add what the source says about NPCs and locations that already exist. You review every change before it is written.",

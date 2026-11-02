@@ -28,6 +28,13 @@
   own. The outline is internal and not offered for editing. Each finished
   part can be reviewed and applied while others still run, and a failed part
   can be retried on its own.
+- **Supplementary material is a second source, never a second frame.** A
+  scene run may carry, beside its source, material that adds to it. The
+  source sets the chapter's frame; the supplement enriches its scenes and may
+  add scenes of its own, and the outline orders all of them in one sequence
+  and names for each scene where its passage comes from. The supplement
+  travels whole with every call of the run, as part of what every call
+  shares.
 - **The review state lives on the job,** not in the browser: the DM's edits
   and decisions are stored per entity and id and written back as they happen.
   The job has its own guard (`decisions/writes`).
@@ -87,6 +94,11 @@
 - Fields assembled into a text and taken apart again can only lose values.
 - Parts let a long run deliver early and let one failure cost one call
   instead of the whole run.
+- A DM's material often comes in two texts, a published chapter and an
+  expansion of it. Cutting them into matching passages by hand is the work
+  the outline already does, and a run that reads only one loses what the
+  other adds. Ranking the two keeps a run from building a chapter neither
+  text describes.
 - A scene is only playable when what it names exists. Deciding the things a
   scene references before the scene itself makes every write the DM's own
   choice: nothing enters the campaign because something else was accepted,
