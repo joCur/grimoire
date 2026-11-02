@@ -147,6 +147,11 @@ export interface Job {
   pipeline?: PipelineRecord;
   /** The run's source material — a per-part retry sends it again. */
   sourceText?: string;
+  /**
+   * The run's supplementary material — every call of the run carries it, a
+   * retry and a patch round included. Absent for a run without one.
+   */
+  supplementText?: string;
   newChapter: boolean;
   /**
    * Title of the chapter a new-chapter run creates — stored when the run
@@ -444,6 +449,7 @@ function toJob(row: JobRow): Job {
     rev: row.rev,
     ...(pipeline === undefined ? {} : { pipeline }),
     ...(row.sourceText === null ? {} : { sourceText: row.sourceText }),
+    ...(row.supplementText === null ? {} : { supplementText: row.supplementText }),
     newChapter: row.newChapter === 1,
     ...(row.newChapterTitle === null ? {} : { newChapterTitle: row.newChapterTitle }),
   };
@@ -558,6 +564,8 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
       kind: "scene";
       chapter: string;
       sourceText: string;
+      /** Supplementary material beside the source; absent for a run without one. */
+      supplementText?: string;
       newChapter: boolean;
       /** Title for the chapter a `newChapter` run creates. */
       newChapterTitle?: string;
@@ -609,6 +617,9 @@ export async function startJob(input: JobInput): Promise<Job> {
     ...(input.kind === "scene"
       ? { sourceText: input.sourceText, pipeline: emptyPipeline() }
       : {}),
+    ...(input.kind === "scene" && input.supplementText !== undefined
+      ? { supplementText: input.supplementText }
+      : {}),
     newChapter: input.kind === "scene" && input.newChapter,
     ...(input.kind === "scene" && input.newChapterTitle !== undefined
       ? { newChapterTitle: input.newChapterTitle }
@@ -645,6 +656,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         rev: 0,
         pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
         sourceText: input.kind === "scene" ? input.sourceText : null,
+        supplementText: input.kind === "scene" ? (input.supplementText ?? null) : null,
         newChapter: input.kind === "scene" && input.newChapter ? 1 : 0,
         newChapterTitle: input.kind === "scene" ? (input.newChapterTitle ?? null) : null,
       })
@@ -705,6 +717,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         campaign: input.campaign,
         chapter: input.chapter,
         sourceText: input.sourceText,
+        ...(input.supplementText === undefined ? {} : { supplementText: input.supplementText }),
         newChapter: input.newChapter,
         extend: input.extend,
         sink: await jobSink(job.campaign, job.id),
@@ -1130,6 +1143,7 @@ export async function retryJobPart(
     campaign,
     chapter,
     sourceText: prejob.sourceText ?? "",
+    ...(prejob.supplementText === undefined ? {} : { supplementText: prejob.supplementText }),
     newChapter: prejob.newChapter,
     outline: prejob.pipeline!.outline!,
   });

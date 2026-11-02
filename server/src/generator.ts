@@ -218,6 +218,10 @@ export const ASSET_FILES = {
   // What the outline prompt adds for a run that may extend the npcs and
   // locations the campaign has.
   outlineExtend: { systemPrompt: "outline-extend-rules.md" },
+  // What every prompt of a run with supplementary material adds: what that
+  // material is for. The outline adds its own rules for quoting and ordering.
+  supplement: { systemPrompt: "supplement-rules.md" },
+  outlineSupplement: { systemPrompt: "outline-supplement-rules.md" },
   // The call that extends one of them: its own rule and its own few-shot (a
   // list of operations); the fields come from the entity above.
   extend: { systemPrompt: "extend-system-prompt.md", fewShotTarget: "extend-example-output.json" },

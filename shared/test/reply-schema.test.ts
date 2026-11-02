@@ -183,6 +183,17 @@ describe("the outline schema", () => {
     expect(sceneProps().sourceExcerpt).toMatchObject({ type: ["object", "null"] });
   });
 
+  test("a scene quotes its passage of supplementary material only in a run that has one", () => {
+    const withSupplement = at(outlineJsonSchema(false, true), ["properties", "scenes", "items"]);
+    expect(at(withSupplement, ["properties"]).supplementExcerpt).toMatchObject({
+      type: ["object", "null"],
+    });
+    expect(withSupplement.required).toContain("supplementExcerpt");
+    const without = at(outlineJsonSchema(), ["properties", "scenes", "items"]);
+    expect(at(without, ["properties"]).supplementExcerpt).toBeUndefined();
+    expect(without.required).not.toContain("supplementExcerpt");
+  });
+
   test("carries the name and the description the provider request sends", () => {
     expect(typeof outlineJsonSchema().title).toBe("string");
     expect(typeof outlineJsonSchema().description).toBe("string");
@@ -198,6 +209,9 @@ describe("the outline schema", () => {
 describe("every schema", () => {
   const all = [
     ["outline", outlineJsonSchema()] as const,
+    ["outline/extend", outlineJsonSchema(true)] as const,
+    ["outline/supplement", outlineJsonSchema(false, true)] as const,
+    ["outline/extend+supplement", outlineJsonSchema(true, true)] as const,
     ["scene/create", derived(newSceneReplySchema)] as const,
     ["scene/augment", derived(sceneReplySchema)] as const,
     ["npc", derived(npcReplySchema)] as const,

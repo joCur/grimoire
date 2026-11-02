@@ -15,7 +15,7 @@
   "properties": {
     "scenes": {
       "type": "array",
-      "description": "Mindestens eine, höchstens 12 Szenen.",
+      "description": "Mindestens eine, höchstens 20 Szenen.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -25,6 +25,7 @@
           "type",
           "location",
           "sourceExcerpt",
+          "supplementExcerpt",
           "refs"
         ],
         "properties": {
@@ -60,6 +61,26 @@
               "last"
             ],
             "description": "Erster und letzter Satz des Quelltext-Abschnitts, wörtlich; null, wenn keine.",
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              }
+            }
+          },
+          "supplementExcerpt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "first",
+              "last"
+            ],
+            "description": "Erster und letzter Satz des Abschnitts im Ergänzungsmaterial, wörtlich; null, wenn die Szene keinen hat.",
             "properties": {
               "first": {
                 "type": "string"

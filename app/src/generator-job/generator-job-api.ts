@@ -37,12 +37,16 @@ function generatorJobPath(campaign: string, id: string): string {
  * It is what makes the accept independent of this browser: the review state is
  * persistent, so the accept regularly happens in a tab that never saw this
  * form.
+ *
+ * `supplementText` is the run's optional supplementary material; a blank one
+ * is not sent.
  */
 export function startGenerateJob(
   campaign: string,
   input: {
     chapter: string;
     sourceText: string;
+    supplementText?: string;
     newChapter?: boolean;
     chapterTitle?: string;
     extend?: boolean;
@@ -52,6 +56,9 @@ export function startGenerateJob(
     kind: "scene",
     chapter: input.chapter,
     sourceText: input.sourceText,
+    ...(input.supplementText === undefined || input.supplementText.trim() === ""
+      ? {}
+      : { supplementText: input.supplementText }),
     ...(input.newChapter === true ? { newChapter: true } : {}),
     ...(input.newChapter === true && input.chapterTitle !== undefined
       ? { chapterTitle: input.chapterTitle }

@@ -410,7 +410,12 @@ The paths:
    it and stays acceptable, a running one is reported as `failed`). The
    scenes of a run stand in the chapter in outline order, even when they
    are accepted one by one and in reverse order — start value at the first acceptance plus the number in
-   the outline (decisions/scene-order)
+   the outline (decisions/scene-order). Plus a run with supplementary
+   material (`supplementText`): both start fields load a local text file;
+   the stub echoes the material from the outline call and from a scene
+   call; the scene the supplement alone brings is written from its
+   supplement passage, carries no passage-not-matched note, and stands
+   between the source's scenes
 7. Edit modes of scene, NPC, location and chapter / status control
    including the 409 conflict. No entity has a fields dialog: every field is
    edited in the edit mode of its reading view. The scene's edit mode on

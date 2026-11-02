@@ -27,9 +27,11 @@ import { ENTITY_SLUG } from "./slug";
 import outlineSchema from "../schema/outline.schema.json";
 
 /**
- * The most parts ONE outline may produce — 12 scenes, and 12 proposals: the
+ * The most parts ONE outline may produce — 20 scenes, and 12 proposals: the
  * new npcs, the new locations and the existing ones a run extends counted
- * together, because every one of them is a provider call of the run.
+ * together, because every one of them is a provider call of the run. The
+ * scene bound leaves room for a chapter whose supplementary material adds
+ * scenes of its own.
  *
  * Without the bound the outline decides how many provider calls a run makes,
  * and a source text that is a whole adventure turns one generate action
@@ -37,7 +39,7 @@ import outlineSchema from "../schema/outline.schema.json";
  * the bound (in the array's description — `maxItems` is not allowed in strict
  * mode) and the validation enforces it, and both read the same number.
  */
-export const MAX_OUTLINE_SCENES = 12;
+export const MAX_OUTLINE_SCENES = 20;
 export const MAX_OUTLINE_PROPOSALS = 12;
 
 /**
@@ -70,23 +72,36 @@ export const OUTLINE_SCHEMA_DESCRIPTION = String(outlineSchema.description);
 export const OUTLINE_EXTENSION_LISTS = ["existingNpcs", "existingLocations"] as const;
 
 /**
+ * The key of an outline scene that quotes its passage of the supplementary
+ * material — only a run started with one offers it to the model.
+ */
+export const OUTLINE_SUPPLEMENT_EXCERPT = "supplementExcerpt";
+
+/** A JSON-schema object node with its keys, as far as this module edits one. */
+type ObjectNode = JsonSchema & { required: string[]; properties: Record<string, unknown> };
+
+/** Remove `keys` from an object node: from its properties and from `required`. */
+function dropKeys(node: ObjectNode, keys: readonly string[]): void {
+  for (const key of keys) delete node.properties[key];
+  node.required = node.required.filter((key) => !keys.includes(key));
+}
+
+/**
  * The outline schema. A COPY on every call, not the loaded object: both
  * providers hand it to `JSON.stringify` inside a request body, and a caller
  * that could reach into this module's own state would make the next
  * request's payload depend on the last one's.
  *
  * Without `extend` the lists of existing npcs and locations are not part of
- * it, so the model cannot name any.
+ * it, so the model cannot name any; without `supplement` a scene has no
+ * passage of supplementary material to quote.
  */
-export function outlineJsonSchema(extend = false): JsonSchema {
-  const schema = structuredClone(outlineSchema) as JsonSchema & {
-    required: string[];
-    properties: Record<string, unknown>;
-  };
-  if (extend) return schema;
-  for (const list of OUTLINE_EXTENSION_LISTS) delete schema.properties[list];
-  schema.required = schema.required.filter(
-    (key) => !(OUTLINE_EXTENSION_LISTS as readonly string[]).includes(key),
-  );
+export function outlineJsonSchema(extend = false, supplement = false): JsonSchema {
+  const schema = structuredClone(outlineSchema) as ObjectNode;
+  if (!extend) dropKeys(schema, OUTLINE_EXTENSION_LISTS);
+  if (!supplement) {
+    const scenes = schema.properties.scenes as { items: ObjectNode };
+    dropKeys(scenes.items, [OUTLINE_SUPPLEMENT_EXCERPT]);
+  }
   return schema;
 }

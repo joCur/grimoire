@@ -942,7 +942,9 @@ export function scenePartReply(
       warnings: [partNote(sceneId)],
     };
   }
-  const scene = [...THREE_SCENES, SECOND_SCENE, EXTEND_SCENE].find((s) => s.id === sceneId);
+  const scene = [...THREE_SCENES, SECOND_SCENE, EXTEND_SCENE, ...SUPPLEMENT_SCENES].find(
+    (s) => s.id === sceneId,
+  );
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
@@ -994,6 +996,117 @@ export function proposalPartReply(
   if (!notes) return kind === "location" ? locationStub : npcStub;
   if (kind === "location") return { ...locationStub, warnings: [partNote(LOCATION_STUB_ID)] };
   return { ...npcStub, role: `Smuggler from ${OLD_NAME}`, warnings: [partNote(NPC_STUB_ID)] };
+}
+
+// --- a run with supplementary material ---------------------------------------
+
+/**
+ * The heading the run's supplementary material stands under, whole, and the
+ * one a call's own passage of it stands under — server/src/llm-provider.ts
+ * SUPPLEMENT_HEADING and SUPPLEMENT_PASSAGE_HEADING, spelled exactly as the
+ * server's prompt spells them. Duplicated on purpose, like
+ * EXISTING_SCENE_HEADING: the stub reads the prompt the way a model does.
+ */
+export const SUPPLEMENT_HEADING = "## Ergänzungsmaterial";
+export const SUPPLEMENT_PASSAGE_HEADING = "## Ergänzungsmaterial — zugehöriger Abschnitt";
+
+/**
+ * How the stub reports back the supplementary material it was sent: a
+ * warning of the outline (a note on the whole run) and of the scene the
+ * supplement alone brings, so a spec can read through the browser that the
+ * material reached both calls.
+ */
+export const SUPPLEMENT_ECHO = "Supplement echo:";
+
+/** The echo warning of a supplementary material, on one line. */
+export function supplementEcho(supplement: string): string {
+  return `${SUPPLEMENT_ECHO} ${supplement.trim().replace(/\s+/g, " ")}`;
+}
+
+/**
+ * The scenes of a run with supplementary material, in outline order: the
+ * source's first sentence, the supplement's own scene, the source's last
+ * sentence — so the scene of the supplement stands between the source's.
+ */
+export const SUPPLEMENT_SCENES = [
+  { id: "arrival-at-the-quay", title: "Arrival at the quay" },
+  { id: "keepers-riddle", title: "The keeper's riddle" },
+  { id: "storm-over-the-bay", title: "Storm over the bay" },
+] as const;
+
+/** The scene the supplementary material alone brings. */
+export const SUPPLEMENT_SCENE = SUPPLEMENT_SCENES[1];
+
+/** The sentences of a text, whitespace normalized. */
+function sentencesOf(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => part !== "");
+}
+
+/**
+ * The outline of a run with supplementary material: a scene from the first
+ * sentence of the source, a scene from the whole supplement alone (no source
+ * passage), and a scene from the last sentence of the source. Nothing new
+ * besides; the run's notes echo the supplement.
+ */
+export function supplementOutlineReply(source: string, supplement: string): unknown {
+  const sentences = sentencesOf(source.replace(/^## Quelltext\s*/, ""));
+  const first = sentences[0] ?? source.trim();
+  const last = sentences.at(-1) ?? source.trim();
+  const supplementSentences = sentencesOf(supplement);
+  const scene = (
+    index: number,
+    sourceExcerpt: { first: string; last: string } | null,
+    supplementExcerpt: { first: string; last: string } | null,
+  ) => ({
+    ...SUPPLEMENT_SCENES[index],
+    type: "planned",
+    location: null,
+    sourceExcerpt,
+    supplementExcerpt,
+    refs: [],
+  });
+  return {
+    scenes: [
+      scene(0, { first, last: first }, null),
+      scene(1, null, {
+        first: supplementSentences[0] ?? supplement.trim(),
+        last: supplementSentences.at(-1) ?? supplement.trim(),
+      }),
+      scene(2, { first: last, last }, null),
+    ],
+    npcs: [],
+    locations: [],
+    chapterDescription: null,
+    warnings: [supplementEcho(supplement)],
+  };
+}
+
+/**
+ * The scene the supplementary material alone brings: written from the
+ * passage the call got, which its text quotes, and echoing the whole
+ * material the call carried.
+ */
+export function supplementSceneReply(
+  chapter: string,
+  passage: string,
+  supplement: string,
+): SceneReply {
+  return {
+    ...sceneReply({
+      id: SUPPLEMENT_SCENE.id,
+      title: SUPPLEMENT_SCENE.title,
+      chapter,
+      npcs: ["fenn"],
+      body: `## Flow
+
+${passage.trim().replace(/\s+/g, " ")}
+`,
+    }),
+    warnings: [supplementEcho(supplement)],
+  };
 }
 
 // --- patch round -------------------------------------------------------------

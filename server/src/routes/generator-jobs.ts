@@ -47,7 +47,8 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generator-jobs
-//   { kind: "scene", chapter, sourceText, newChapter?, chapterTitle?, extend? }
+//   { kind: "scene", chapter, sourceText, supplementText?, newChapter?, chapterTitle?,
+//     extend? }
 //   | { kind: "npc", sourceText, id? } -> 202 GeneratorJob
 // Starts a run in the BACKGROUND and answers at once with the job, `running`.
 // It writes nothing into the campaign (generator/README.md): what the run
@@ -58,7 +59,11 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 // not exist yet, which the first accept creates under `chapterTitle` — the
 // title is kept ON the job, so the accept does not depend on the browser that
 // started the run. With `extend` the run may also propose changes to npcs and
-// locations the campaign has; without it, it proposes new ones only. An NPC run takes the npc's `id` or, without one, lets the
+// locations the campaign has; without it, it proposes new ones only.
+// `supplementText` is supplementary material beside the source (a fan
+// expansion of the chapter, say): it travels whole with every call of the
+// run, may enrich the source's scenes and add scenes of its own, while the
+// source sets the chapter's frame; blank is the same as none. An NPC run takes the npc's `id` or, without one, lets the
 // model pick it; a collision with an existing npc then becomes a correction
 // turn.
 //
@@ -84,6 +89,10 @@ generatorJobRoutes.post("/campaigns/:campaign/generator-jobs", async (c) => {
     const chapter = body.chapter;
     const newChapter = body.newChapter === true;
     const chapterTitle = normalizeLineText(body.chapterTitle);
+    const supplementText =
+      body.supplementText === undefined || body.supplementText.trim() === ""
+        ? undefined
+        : body.supplementText;
     await assertGenerateTarget(campaign, chapter, newChapter); // 400/404
     const provider = obtainProvider(); // 503 when nothing is configured
     const job = await startJob({
@@ -91,6 +100,7 @@ generatorJobRoutes.post("/campaigns/:campaign/generator-jobs", async (c) => {
       campaign,
       chapter,
       sourceText,
+      ...(supplementText === undefined ? {} : { supplementText }),
       newChapter,
       ...(newChapter && chapterTitle !== undefined ? { newChapterTitle: chapterTitle } : {}),
       extend: body.extend === true,

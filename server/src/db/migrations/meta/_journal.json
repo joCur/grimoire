@@ -127,6 +127,13 @@
       "when": 1790626568845,
       "tag": "0017_random_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793638403791,
+      "tag": "0018_supplement_text",
+      "breakpoints": true
     }
   ]
 }

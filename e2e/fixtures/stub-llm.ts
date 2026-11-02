@@ -76,6 +76,11 @@
 //     part: operations against the existing npc (extensionReply)
 //   - TRIGGER.extendNpc -> one plain scene and, when the outline prompt
 //     carries the rules for extending, the existing npc EXTENDED_NPC_ID
+//   - a supplementary-material section (SUPPLEMENT_HEADING) -> the outline
+//     has three scenes, the middle one from the supplement alone, and its
+//     notes echo the material; the middle scene's call answers with a scene
+//     written from its supplement passage (SUPPLEMENT_PASSAGE_HEADING) that
+//     echoes the material it carried
 //   - TRIGGER.asciiQuotes -> the scene body carries a typographic opening
 //     quotation mark closed with an ASCII `"`. Under the hand-written JSON
 //     wrapper that ended the string; as the `body` of a forced object the run
@@ -107,6 +112,9 @@ import {
   NEW_CHAPTER_LINE,
   PROPOSAL_HEADING,
   SLOW_REPLY_MS,
+  SUPPLEMENT_HEADING,
+  SUPPLEMENT_PASSAGE_HEADING,
+  SUPPLEMENT_SCENE,
   THREE_SCENES,
   TRIGGER,
   augmentReply,
@@ -125,6 +133,8 @@ import {
   patchReply,
   proposalPartReply,
   scenePartReply,
+  supplementOutlineReply,
+  supplementSceneReply,
   unknownRefAugmentReply,
   unknownRefLocationAugmentReply,
   unknownRefNpcAugmentReply,
@@ -197,6 +207,27 @@ const KNOWLEDGE_HEADING =
  */
 const OUTLINE_HEADING = "## Gliederung des Durchlaufs";
 const ASSIGNED_SCENE = /## Diese Szene schreibst du jetzt\n+([a-z0-9-]+) /;
+
+/**
+ * The run's supplementary material — the section below SUPPLEMENT_HEADING in
+ * the prompt's constant half, up to the next section the server writes — or
+ * "" when the run has none.
+ */
+function supplementBlock(prompt: string): string {
+  const start = prompt.indexOf(`${SUPPLEMENT_HEADING}\n\n`);
+  if (start === -1) return "";
+  const after = prompt.slice(start + SUPPLEMENT_HEADING.length);
+  const ends = [OUTLINE_HEADING, "## Diese Szene", "## Quelltext", SUPPLEMENT_PASSAGE_HEADING]
+    .map((heading) => after.indexOf(`\n\n${heading}`))
+    .filter((index) => index !== -1);
+  return (ends.length === 0 ? after : after.slice(0, Math.min(...ends))).trim();
+}
+
+/** This call's passage of the supplementary material, or "" when it has none. */
+function supplementPassage(prompt: string): string {
+  const start = prompt.indexOf(SUPPLEMENT_PASSAGE_HEADING);
+  return start === -1 ? "" : prompt.slice(start + SUPPLEMENT_PASSAGE_HEADING.length).trim();
+}
 
 /**
  * How many ROUNDS a scene part has been asked for, per failure nonce. The stub's
@@ -407,9 +438,14 @@ export function decide(messages: ChatMessage[]): StubDecision {
     };
   }
 
+  const supplement = supplementBlock(prompt);
+
   // The OUTLINE call. Recognized by its own system prompt, which is the honest
   // signal — it is the only call that has no outline to read.
   if (system.includes("System-Prompt: Gliederung")) {
+    if (supplement !== "") {
+      return { kind: "outline", truncated, delayMs, reply: supplementOutlineReply(source, supplement) };
+    }
     return {
       kind: "outline",
       truncated,
@@ -440,6 +476,14 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // carry no chapter and name their target id).
   if (prompt.includes(OUTLINE_HEADING)) {
     const assigned = ASSIGNED_SCENE.exec(prompt)?.[1];
+    if (assigned !== undefined && chapter !== undefined && assigned === SUPPLEMENT_SCENE.id) {
+      return {
+        kind: "scene",
+        truncated,
+        delayMs: 0,
+        reply: supplementSceneReply(chapter, supplementPassage(prompt), supplement),
+      };
+    }
     if (assigned !== undefined && chapter !== undefined) {
       const nonce = partFailNonce(source);
       // The first ROUND fails whole — initial call and correction turn — so
