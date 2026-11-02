@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/joCur/grimoire/compare/v0.11.0...v0.12.0) (2026-11-02)
+
+
+### Features
+
+* supplementary material for scene runs ([#247](https://github.com/joCur/grimoire/issues/247)) ([#248](https://github.com/joCur/grimoire/issues/248)) ([4673ed9](https://github.com/joCur/grimoire/commit/4673ed90de1fab10324585089a69b8dcf8a93cf9))
+
 ## [0.11.0](https://github.com/joCur/grimoire/compare/v0.10.0...v0.11.0) (2026-09-28)
 
 
