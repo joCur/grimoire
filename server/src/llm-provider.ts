@@ -59,6 +59,14 @@ export interface GenerateRequest {
    * so a campaign that never uses the feature sees the prompt unchanged.
    */
   knowledge: string;
+  /**
+   * The decided terms of a scene run as prompt lines (generate-pipeline.ts
+   * `termsBlock`) — the same for every call of the run, so part of the
+   * CONSTANT prefix. Absent for a call that carries none: the outline, which
+   * proposes them, every single-call run, and a scene run whose outline found
+   * none; then the prompt has no such section.
+   */
+  terms?: string;
   glossary: string; // the campaign's glossary as `term → explanation` lines ("" when empty)
   context: {
     /** Target chapter of a scene run; absent for an NPC run. */
@@ -278,6 +286,17 @@ export const KNOWLEDGE_HEADING =
   "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
 
 /**
+ * The heading of a scene run's decided terms. Binding in the same words as
+ * KNOWLEDGE_HEADING, because it is the same kind of rule: the DM decided how
+ * the run writes each term, whatever the source material says. It stands
+ * right below the knowledge and above the glossary. A constant for the same
+ * reason the others are: the prompt test asserts on it and the E2E stub reads
+ * the prompt by it.
+ */
+export const TERMS_HEADING =
+  "## Begriffe dieses Durchlaufs — immer so schreiben, auch wenn das Quellmaterial anders lautet";
+
+/**
  * Heading of the augment run's „this is what already stands there" block.
  * A constant for the same reason KNOWLEDGE_HEADING is one: the prompt test
  * asserts on it, and the E2E stub reads the prompt by it.
@@ -357,7 +376,7 @@ function answerLines(answers: readonly PartAnswer[]): string {
  * The prompt in TWO halves — the split prompt caching hangs off:
  *
  *   constant  everything that is the same for every call of a run: the
- *             campaign knowledge, the glossary, the context lists, the
+ *             campaign knowledge, the run's decided terms, the glossary, the context lists, the
  *             few-shot, the supplementary material and the run's outline.
  *             It stands FIRST, so an
  *             OpenAI-compatible endpoint's implicit prefix caching sees the
@@ -381,6 +400,7 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     // Nothing at all when there is no knowledge — an empty binding section
     // would be a heading the model has to interpret against no content.
     ...(req.knowledge.trim() === "" ? [] : [KNOWLEDGE_HEADING, req.knowledge]),
+    ...(req.terms === undefined || req.terms.trim() === "" ? [] : [TERMS_HEADING, req.terms]),
     "## Glossar",
     req.glossary,
     "## Kontext",

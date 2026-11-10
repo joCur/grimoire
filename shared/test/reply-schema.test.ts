@@ -27,6 +27,7 @@ import {
   OUTLINE_ID_DESCRIPTION,
   outlineJsonSchema,
 } from "../src/outline-schema";
+import { RUN_TERM_KINDS } from "../src/generator-job";
 import { locationPatchReplySchema, locationReplySchema } from "../src/location";
 import { npcPatchReplySchema, npcReplySchema } from "../src/npc";
 import {
@@ -176,6 +177,12 @@ describe("the outline schema", () => {
         description: OUTLINE_ID_DESCRIPTION,
       });
     }
+  });
+
+  test("names the same term kinds as the job's terms", () => {
+    const terms = at(outlineJsonSchema(), ["properties", "terms", "items"]);
+    expect(terms.required).toEqual(["wording", "description", "kind", "rendering"]);
+    expect(at(terms, ["properties", "kind"])).toEqual({ type: "string", enum: [...RUN_TERM_KINDS] });
   });
 
   test("the genuinely optional fields are nullable instead of absent", () => {

@@ -59,6 +59,7 @@ import {
   partRoundSchema,
   patchFindingSchema,
   proposedNpcIds,
+  runTermsSchema,
   sceneEditSchema,
   serverNoteSchema,
 } from "@grimoire/shared";
@@ -80,6 +81,9 @@ import type {
   PartChange,
   PartRound,
   PatchFinding,
+  RunTerm,
+  RunTermDecision,
+  RunTerms,
   SceneAugmentResult,
   SceneChange,
 } from "@grimoire/shared";
@@ -93,6 +97,7 @@ import { runGenerateNpc } from "./generator";
 import {
   replanStoredRun,
   runPart,
+  runPartsPooled,
   runScenePipeline,
   type PartOutcome,
   type PartUsage,
@@ -103,6 +108,7 @@ import type { LLMProvider } from "./llm-provider";
 import { bumpCampaignVersion } from "./store/campaigns";
 import type { SceneRunStart } from "./store/chapters";
 import { getDb } from "./store/handle";
+import { insertGlossaryTermUnlessTaken } from "./store/glossary-terms";
 import { insertKnowledgeItem } from "./store/knowledge-items";
 import { revConflict } from "./store/shared";
 
@@ -174,6 +180,12 @@ export interface PipelineRecord {
   parts: StoredPart[];
   totals: { inputTokens: number; outputTokens: number; calls: number };
   /**
+   * The run's terms — open while the run waits on the DM, the binding list
+   * every part call carries once they are confirmed. Absent when the outline
+   * found none. Unlike the outline they reach the client: the DM decides them.
+   */
+  terms?: RunTerms;
+  /**
    * Where the run's scenes are placed from in their chapter
    * (store/chapters.ts `sceneRunPos`). Absent until the FIRST scene accept
    * takes it, and never recomputed after that — the whole point is that a
@@ -207,6 +219,7 @@ function serializePipeline(pipeline: PipelineRecord): GeneratorJobPipeline {
   const chapterDescription = pipeline.outline?.chapterDescription;
   return {
     ...(chapterDescription === undefined ? {} : { chapterDescription }),
+    ...(pipeline.terms === undefined ? {} : { terms: pipeline.terms }),
     parts: pipeline.parts.map((part) => ({
       key: part.key,
       kind: part.kind,
@@ -501,8 +514,12 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
   const totals = (parsed.totals ?? {}) as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const sceneStart = unpackSceneStart(parsed.sceneStart);
+  // Terms that cannot be read degrade to none: a run waiting on them then
+  // shows its parts as they stand, and the DM can discard it.
+  const terms = runTermsSchema.safeParse(parsed.terms);
   return {
     ...(parsed.outline === undefined ? {} : { outline: storedOutline(parsed.outline) }),
+    ...(terms.success ? { terms: terms.data } : {}),
     parts,
     totals: {
       inputTokens: num(totals.inputTokens),
@@ -516,7 +533,7 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
 /**
  * A stored outline as the run reads it. An outline stored before a run could
  * extend what the campaign has names no existing npc and no existing
- * location.
+ * location, and one stored before runs had terms names no term.
  */
 function storedOutline(value: unknown): RunOutline {
   const outline = value as RunOutline;
@@ -524,6 +541,7 @@ function storedOutline(value: unknown): RunOutline {
     ...outline,
     existingNpcs: outline.existingNpcs ?? [],
     existingLocations: outline.existingLocations ?? [],
+    terms: outline.terms ?? [],
   };
 }
 
@@ -974,6 +992,9 @@ async function updatePipeline(
     const result = inPartOrder(outcome.result ?? base, pipeline.parts);
     const settled = partsSettled(pipeline);
     const anyDone = pipeline.parts.some((p) => p.status === "done");
+    // A run whose terms wait on the DM has nothing in flight: it is `done`
+    // with its parts pending, and only the confirmation sets it going again.
+    const waiting = pipeline.terms?.status === "open";
     tx.update(generateJobs)
       .set({
         pipeline: JSON.stringify(pipeline),
@@ -998,9 +1019,11 @@ async function updatePipeline(
         // `done` as soon as ONE part produced something (the failed ones are
         // retryable, the finished ones acceptable), `failed` only when the
         // whole run produced nothing at all.
-        status: settled ? (anyDone ? "done" : "failed") : "running",
-        ...(settled ? { finishedAt: timestamp() } : {}),
-        ...(settled && !anyDone ? { error: JSON.stringify(allPartsFailed(pipeline)) } : {}),
+        status: waiting ? "done" : settled ? (anyDone ? "done" : "failed") : "running",
+        ...(settled || waiting ? { finishedAt: timestamp() } : {}),
+        ...(settled && !anyDone && !waiting
+          ? { error: JSON.stringify(allPartsFailed(pipeline)) }
+          : {}),
       })
       .where(eq(generateJobs.id, row.id))
       .run();
@@ -1028,6 +1051,8 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
       await updatePipeline(campaign, jobId, (pipeline, result) => {
         pipeline.outline = outline;
         pipeline.parts = parts.map((part) => ({ ...part }));
+        // New terms make the run wait on the DM before any part runs.
+        if (outline.terms.length > 0) pipeline.terms = { status: "open", list: outline.terms };
         addUsage(pipeline, usage);
         // The outline's own warnings are the run's warnings: it is the step
         // that read the whole source text, so a note about what the source
@@ -1146,6 +1171,7 @@ export async function retryJobPart(
     ...(prejob.supplementText === undefined ? {} : { supplementText: prejob.supplementText }),
     newChapter: prejob.newChapter,
     outline: prejob.pipeline!.outline!,
+    terms: decidedTerms(prejob),
   });
 
   // Back to `running` BEFORE the answer — every sink write refuses a row that
@@ -1217,6 +1243,135 @@ function assertRetryable(job: Job, key: string): StoredPart {
   if (part.status === "pending") throw new ApiError(409, "this part has not run yet");
   if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
   return part;
+}
+
+// --- the terms of a run --------------------------------------------------------
+
+/**
+ * The terms every part call of the run carries: the confirmed list, or none
+ * while they are open and for a run whose outline found none.
+ */
+export function decidedTerms(job: Job): RunTerm[] {
+  const terms = job.pipeline?.terms;
+  return terms?.status === "confirmed" ? terms.list : [];
+}
+
+/**
+ * The run's terms as the DM decided them: each rendering as sent, a blank one
+ * keeping the wording.
+ */
+function decideTerms(
+  list: readonly RunTerm[],
+  decisions: Readonly<Record<string, RunTermDecision>>,
+): RunTerm[] {
+  return list.map((term) => {
+    const rendering = decisions[term.wording]?.rendering.trim() ?? "";
+    return { ...term, rendering: rendering === "" ? term.wording : rendering };
+  });
+}
+
+/**
+ * May the DM confirm the terms of this job with these decisions? Answers with
+ * the open terms, throws the endpoint's 409/400 otherwise. Like
+ * `assertRetryable` it runs once before the context read and once, binding,
+ * inside the transaction that confirms them.
+ */
+function assertConfirmable(
+  job: Job,
+  rev: number,
+  decisions: Readonly<Record<string, RunTermDecision>>,
+): RunTerm[] {
+  if (job.rev !== rev) throw jobConflict(job);
+  const terms = job.pipeline?.terms;
+  if (terms === undefined || job.pipeline?.outline === undefined) {
+    throw new ApiError(409, "this job has no terms to confirm");
+  }
+  if (terms.status !== "open") throw new ApiError(409, "the terms of this run are confirmed");
+  if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
+  const wordings = new Set(terms.list.map((term) => term.wording));
+  for (const wording of Object.keys(decisions)) {
+    if (!wordings.has(wording)) throw new ApiError(400, `unknown term: ${wording}`);
+  }
+  const missing = terms.list.filter((term) => decisions[term.wording] === undefined);
+  if (missing.length > 0) {
+    throw new ApiError(
+      400,
+      `the confirmation decides every term — missing: ${missing.map((term) => term.wording).join(", ")}`,
+    );
+  }
+  return terms.list;
+}
+
+/**
+ * Confirm the terms of a run that waits on them (decisions/generator): every
+ * term gets the rendering the DM decided, the ones the DM keeps in the
+ * glossary become glossary terms — `term` the wording, `explanation` the
+ * rendering and the description; one the glossary already has is skipped —
+ * and the run's parts start, each carrying the decided list. A review act:
+ * it takes the job's guard and moves it, and the job is `running` again
+ * until its parts are settled. Answers the job as the confirmation leaves it.
+ */
+export async function confirmJobTerms(
+  campaign: string,
+  jobId: string,
+  rev: number,
+  decisions: Readonly<Record<string, RunTermDecision>>,
+  provider: LLMProvider,
+): Promise<Job> {
+  const db = await getDb();
+  const preread = jobRow(db, campaign);
+  if (preread === undefined || preread.id !== jobId) throw noJob();
+  const prejob = toJob(preread);
+  const terms = decideTerms(assertConfirmable(prejob, rev, decisions), decisions);
+  const plan = await replanStoredRun({
+    campaign,
+    chapter: prejob.chapter!,
+    sourceText: prejob.sourceText ?? "",
+    ...(prejob.supplementText === undefined ? {} : { supplementText: prejob.supplementText }),
+    newChapter: prejob.newChapter,
+    outline: prejob.pipeline!.outline!,
+    terms,
+  });
+
+  const parts = db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) throw noJob();
+    const job = toJob(row);
+    const list = decideTerms(assertConfirmable(job, rev, decisions), decisions);
+    let kept = false;
+    for (const term of list) {
+      if (decisions[term.wording]?.glossary !== true) continue;
+      const explanation =
+        term.description === "" ? term.rendering : `${term.rendering} — ${term.description}`;
+      kept = insertGlossaryTermUnlessTaken(tx, campaign, { term: term.wording, explanation }) || kept;
+    }
+    if (kept) bumpCampaignVersion(tx, campaign);
+    tx.update(generateJobs)
+      .set({
+        status: "running",
+        pipeline: JSON.stringify({
+          ...unpackPayload<Record<string, unknown>>(row.pipeline),
+          terms: { status: "confirmed", list } satisfies RunTerms,
+        }),
+        error: null,
+        finishedAt: null,
+        rev: row.rev + 1,
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+    return job.pipeline!.parts.filter((part) => part.status === "pending");
+  }) as StoredPart[];
+
+  const sink = await jobSink(campaign, jobId);
+  void (async () => {
+    try {
+      await runPartsPooled(plan, parts, provider, sink);
+    } catch (err) {
+      console.error("could not record the parts of the run", err);
+    }
+  })();
+  return requireJob(campaign, jobId);
 }
 
 // --- the patch round on a part -------------------------------------------------

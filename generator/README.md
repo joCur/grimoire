@@ -159,8 +159,8 @@ silent replacement.
 
 **The outline** has its own schema (`shared/schema/outline.schema.json`), the
 only one that describes no entity: a small flat object of the scene list,
-the list of new NPCs (`npcs`), the list of new locations (`locations`) and,
-for a new chapter, its description. The **semantic** checks stay where they
+the list of new NPCs (`npcs`), the list of new locations (`locations`), the
+run's terms (`terms`) and, for a new chapter, its description. The **semantic** checks stay where they
 are: a schema cannot say "this id occurs only once in the whole run", "this
 reference in `refs` is a scene of THIS outline" or "the chapter comes from
 the context".
@@ -250,6 +250,42 @@ A scene run is not **one** call but `1 + N (+ proposals)`:
    that concern it beside their source passages. A run without a supplement
    sends neither the quote in the schema nor any section of it.
 
+   **Terms:** the outline also names the material's own terms — of the
+   source and of the supplement — whose rendering in the campaign's
+   language is a real choice: places, people and titles, groups, game terms
+   (`kind`: `place`, `person`, `group`, `game-term`), no everyday words, no
+   limit on their number. Each entry is `{ wording, description, kind,
+   rendering }`: the wording as the material spells it, a short sentence on
+   what it is, and the proposed rendering — keeping the wording is one. The
+   prompt already carries the glossary and the naming conventions, and the
+   server drops every term whose wording matches a glossary `term` or a
+   naming convention's `from` (case-insensitive), and a second term of the
+   same wording. When terms are left, the run **waits** after the outline
+   (decisions/generator): the job holds them under `pipeline.terms` with
+   `status: "open"`, is `done` with every part `pending`, and no scene, NPC
+   or location call is made — a restart leaves it waiting, because nothing
+   is in flight. The DM confirms them on the job's resource (`PATCH
+   …/generator-jobs/:id { rev, terms: { <wording>: { rendering, glossary }
+   } }`, 202; it decides every term and carries nothing else, a stale `rev`
+   is 409 with the current job): every term takes the rendering the DM sent
+   (blank keeps the wording), each one with `glossary: true` becomes a
+   glossary term in the same transaction — `term` the wording,
+   `explanation` „<rendering> — <description>“, skipped when the glossary
+   already has the wording (case-insensitive) — `pipeline.terms` turns
+   `confirmed` with the decided list, and the parts start. From then on
+   every part call of the run — scene, NPC, location, extension, patch
+   round, retry — carries the list in its constant half, right below the
+   campaign knowledge, one line per term:
+
+   ```
+   ## Begriffe dieses Durchlaufs — immer so schreiben, auch wenn das Quellmaterial anders lautet
+
+   - schreibe „Companion“ als „Gefährte“ (Ehrentitel der Bürger Elturels.)
+   ```
+
+   An outline without a new term runs its parts right away and sends no
+   such section.
+
    **Limit:** at most 20 scenes and 12 NPCs and locations — new and extended
    — together per run (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_PROPOSALS`). Every part is a
    provider call, so the outline decides what a run costs; above that the
@@ -291,7 +327,7 @@ retried on its own (`PATCH …/generator-jobs/:id/parts/:key { status:
 "running" }`). The job model behind it is in `docs/decisions/generator.md`.
 
 **Prompt caching:** the constant part of the prompt — system prompt,
-campaign knowledge, glossary, context lists, few-shot, the whole
+campaign knowledge, the run's decided terms, glossary, context lists, few-shot, the whole
 supplementary material (`## Ergänzungsmaterial`), outline — comes
 **first** in every call and is marked with `cache_control: ephemeral` for the
 Claude provider (one mark each for the system prompt and the constant
@@ -309,6 +345,12 @@ the supplementary material counts like every other input.
 one location each, nothing to split.
 
 ## Review of a scene run
+
+A run whose outline found new terms opens with the **terms stage**, before
+any part has run (see "Terms" above): the terms grouped by kind, each with
+its wording, its description, an editable rendering and a tick "keep in the
+glossary", set by default. One action accepts every term as it stands and
+sends the confirmation; the parts then run, and the review below follows.
 
 The review walks the run in the order its proposals reference each other
 (decisions/generator):
@@ -427,10 +469,11 @@ every NPC and location call and the single-call runs:
 
 1. The server gathers context: all npc/location ids + names, chapter id,
    **campaign knowledge** and glossary (both from the database —
-   `knowledge_items` and `glossary_terms`).
+   `knowledge_items` and `glossary_terms`), and for a part of a scene run
+   the run's decided terms (from the job).
 2. Prompt = the entity's system prompt (see "Prompt files") + its few-shot
    target (`example-output.json` for a scene)
-   + campaign knowledge + glossary + context + source text.
+   + campaign knowledge + the run's terms + glossary + context + source text.
 3. The LLM replies — with the **entity's object** (scene, NPC, location,
    augment) or with the **outline object**, each enforced by schema; see
    "Reply formats" above.

@@ -40,6 +40,7 @@ const CTX = {
   locations: [{ id: "harbour", name: "The Harbour" }],
   knowledge: "",
   glossary: "",
+  glossaryTerms: [],
   namingRules: [],
   npcIds: new Set(["fenn"]),
   locationIds: new Set(["harbour"]),

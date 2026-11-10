@@ -69,7 +69,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { ApiError, fetchTree } from "@/api";
 import { chapterLabel } from "@/chapter/chapter-links";
 import { chapterIdError, chapterIdValue, newChapterId } from "@/chapter/chapter-run";
-import { glossaryTermsQuery } from "@/glossary-term/glossary-term-query";
+import { glossaryTermsKey, glossaryTermsQuery } from "@/glossary-term/glossary-term-query";
 import { promptKnowledgeCount } from "@/knowledge-item/knowledge-item-draft";
 import { knowledgeItemsQuery } from "@/knowledge-item/knowledge-item-query";
 import { MobileMenuRow } from "@/components/MobileMenuRow";
@@ -150,6 +150,7 @@ import { PartRound } from "@/generator-job/PartRound";
 import { ExtensionChanges, ExtensionUnchanged } from "@/generator-job/ExtensionChanges";
 import { ReviewStageNav, ReviewStageSteps } from "@/generator-job/ReviewStages";
 import { SceneReferenceNotice } from "@/generator-job/SceneReferenceNotice";
+import { TermsStage } from "@/generator-job/TermsStage";
 import { useJobReview } from "@/generator-job/use-job-review";
 import { cn } from "@/lib/utils";
 import { LocationExtensionRow } from "@/location/LocationExtensionRow";
@@ -549,6 +550,9 @@ export function GenerateRoute() {
   const retryBusy = (key: string): boolean => retry.isPending && retry.variables === key;
 
   const parts = jobPipelineParts(job);
+  // A scene run whose outline found new terms waits on the DM: its review is
+  // the terms stage until they are confirmed, and no part has run yet.
+  const openTerms = job?.pipeline?.terms?.status === "open" ? job.pipeline.terms.list : undefined;
   const sceneParts = parts.filter((part) => part.kind === "scene");
   const locationParts = parts.filter((part) => part.kind === "location");
   const npcParts = parts.filter((part) => part.kind === "npc");
@@ -1293,7 +1297,25 @@ export function GenerateRoute() {
             show (its error and its retry action) while `result` is
             still empty. Gating on the result rendered that state as an empty
             page, and the run only became visible on a reload. */}
-        {phase === "review" && jobKind === "scene" && (
+        {phase === "review" && jobKind === "scene" && job !== null && openTerms !== undefined && (
+          <TermsStage
+            key={job.id}
+            campaign={campaign}
+            job={job}
+            terms={openTerms}
+            // The kept terms are glossary terms now.
+            onConfirmed={() =>
+              void queryClient.invalidateQueries({ queryKey: glossaryTermsKey(campaign) })
+            }
+            discard={{
+              pending: discard.isPending,
+              failed: discard.isError,
+              onDiscard: () => discard.mutate(),
+            }}
+          />
+        )}
+
+        {phase === "review" && jobKind === "scene" && openTerms === undefined && (
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">

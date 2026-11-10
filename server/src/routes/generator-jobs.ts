@@ -21,6 +21,7 @@ import { ApiError } from "../api-error";
 import { acceptJobParts } from "../generator-job-accept";
 import { decidePartChanges, startPartRound } from "../generator-patch";
 import {
+  confirmJobTerms,
   deleteJob,
   getJob,
   patchJobReview,
@@ -139,7 +140,23 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 
 // PATCH /api/campaigns/:campaign/generator-jobs/:id
 //   { rev, id?, sceneEdits?, npcEdits?, locationEdits?, review? } -> GeneratorJob
-// The review of a run, and its accept. Everything merges, so the app sends
+//   | { rev, id?, terms: { <wording>: { rendering, glossary } } } -> 202 GeneratorJob
+// The review of a run, and its accept — or the confirmation of its terms.
+//
+// `terms` confirms the terms stage of a scene run whose outline found terms
+// the campaign does not cover yet: the run waits on it, `done` with every
+// part `pending`, and no scene, npc or location call is made before it. It
+// decides EVERY term of the run by its wording — the rendering every call of
+// the run writes it with (blank keeps the wording), and whether it is kept in
+// the glossary: a kept one becomes a glossary term with the wording as `term`
+// and the rendering and the description as `explanation`, and one the
+// glossary already has (ignoring case) is skipped. Then the parts start, the
+// job is `running` again, and the answer is 202 with it. A term the run does
+// not have, a term left out, or any other key beside `rev` and `id` is 400; a
+// job whose terms are not open (none, or confirmed already) is 409; 503 when
+// no provider is configured.
+//
+// Otherwise it is the review of a run, and its accept. Everything merges, so the app sends
 // the ONE thing that just changed — text debounced, decisions immediately:
 //
 //   - `sceneEdits`, `npcEdits` and `locationEdits` change a proposed scene,
@@ -182,6 +199,15 @@ generatorJobRoutes.patch("/campaigns/:campaign/generator-jobs/:id", async (c) =>
   const id = c.req.param("id");
   const patch = parseRequest(generatorJobPatchSchema, await jsonBody(c, null), "generator job");
   if (patch.id !== undefined && patch.id !== id) throw new ApiError(400, "id cannot be changed");
+  if (patch.terms !== undefined) {
+    const { rev, id: _id, terms, ...rest } = patch;
+    const extra = Object.keys(rest);
+    if (extra.length > 0) {
+      throw new ApiError(400, `a terms confirmation carries nothing else: ${extra.join(", ")}`);
+    }
+    const provider = obtainProvider(); // 503 when nothing is configured
+    return c.json(serializeJob(await confirmJobTerms(campaign, id, rev, terms, provider)), 202);
+  }
   const review = patch.review ?? {};
   if (
     patch.sceneEdits === undefined &&

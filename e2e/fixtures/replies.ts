@@ -238,6 +238,13 @@ export const TRIGGER = {
    * for its extension part (extensionReply).
    */
   extendNpc: "E2E_EXTEND_NPC",
+  /**
+   * The default run's outline also names the material's own terms
+   * (RUN_TERMS), one of them a term the example campaign's glossary already
+   * has (COVERED_TERM) — so the run waits on its terms stage, and the server
+   * has to leave that one out.
+   */
+  terms: "E2E_TERMS",
   // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
   // therefore reaches the state in which its only reviewable part is a failed
   // one.
@@ -760,6 +767,55 @@ export const CHAPTER_DESCRIPTION =
 /** The note the outline adds to every run: a detail the source text does not give. */
 export const OUTLINE_WARNING = "The bill of lading is invented — the source text mentions no seal.";
 
+// --- the terms of a run --------------------------------------------------------
+
+/**
+ * The terms a TRIGGER.terms outline names, one of each kind, as the model
+ * proposes them.
+ */
+export const RUN_TERMS = [
+  {
+    wording: "Companion",
+    description: "Honorary title of every sworn citizen of the harbour.",
+    kind: "person",
+    rendering: "Sworn Companion",
+  },
+  { wording: "Tide Hall", description: "The harbour council's seat.", kind: "place", rendering: "Tide Hall" },
+  { wording: "Gullriders", description: "The harbour's mounted watch.", kind: "group", rendering: "Gull Riders" },
+  { wording: "tide coin", description: "The smugglers' token of passage.", kind: "game-term", rendering: "tide coin" },
+] as const;
+
+/**
+ * A term of the outline the example campaign's glossary already covers —
+ * spelled with other capitals than the glossary term, as a model would.
+ */
+export const COVERED_TERM = {
+  wording: "Lighthouse Keeper",
+  description: "Keeps the lighthouse.",
+  kind: "person",
+  rendering: "Keeper",
+} as const;
+
+/**
+ * The heading the decided terms of a run stand under —
+ * server/src/llm-provider.ts TERMS_HEADING, spelled exactly as the server's
+ * prompt spells it and duplicated on purpose like EXISTING_SCENE_HEADING: the
+ * stub reads the prompt the way a model does.
+ */
+export const TERMS_HEADING =
+  "## Begriffe dieses Durchlaufs — immer so schreiben, auch wenn das Quellmaterial anders lautet";
+
+/**
+ * How the stub reports back the decided terms a part call carried: as a note
+ * of the part, the terms block on one line — so a spec reads in the browser
+ * which renderings reached the call.
+ */
+export const TERMS_ECHO = "Terms echo:";
+
+export function termsEcho(terms: string): string {
+  return `${TERMS_ECHO} ${terms.trim().replace(/\n/g, " | ")}`;
+}
+
 /** The outline reply: one scene plus one npc and one location, or three scenes and none. */
 export function outlineReply(input: {
   source: string;
@@ -799,6 +855,8 @@ export function outlineReply(input: {
    */
   extendNpc?: boolean;
   extending?: boolean;
+  /** TRIGGER.terms: the default run names RUN_TERMS and COVERED_TERM. */
+  terms?: boolean;
 }): unknown {
   const sourceExcerpt = wholeSourceExcerpt(input.source);
   // The outline is the step that reads the WHOLE source text, so the run's
@@ -879,6 +937,7 @@ export function outlineReply(input: {
         summary: "The shallow bay north of the harbour.",
       },
     ],
+    ...(input.terms === true ? { terms: [...RUN_TERMS, COVERED_TERM] } : {}),
     chapterDescription,
     warnings,
   };

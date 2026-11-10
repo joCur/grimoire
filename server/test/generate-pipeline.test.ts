@@ -51,6 +51,7 @@ const CTX = {
   locations: [{ id: "harbour", name: "The Harbour" }],
   knowledge: "",
   glossary: "",
+  glossaryTerms: [],
   namingRules: [],
   npcIds: new Set(["fenn"]),
   locationIds: new Set(["harbour"]),
@@ -411,6 +412,7 @@ test("an entry's context is the passages that mention it — by name OR by id wo
     serverNotes: [],
     existingNpcs: [],
     existingLocations: [],
+    terms: [],
   };
   const plan = planOf({ campaign: "example", ctx: CTX, outline, sourceText: source });
   // The id and the name share no word — so a source text that never writes
@@ -471,6 +473,7 @@ test("the outline block names every id — and nothing about the assigned part",
     serverNotes: [],
     existingNpcs: [],
     existingLocations: [],
+    terms: [],
   };
   const block = outlineBlock(outline);
   expect(block).toContain("night-watch — Night Watch (planned, location: harbour)");
@@ -509,6 +512,7 @@ test("two parts of one run share a byte-identical constant prefix", () => {
     serverNotes: [],
     existingNpcs: [],
     existingLocations: [],
+    terms: [],
   };
   const base = {
     systemPrompt: "sys",

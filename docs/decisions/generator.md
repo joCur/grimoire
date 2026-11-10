@@ -21,8 +21,9 @@
   parses them back out.
 - **Jobs run on the server and are rows,** at most one per campaign. Starting
   answers immediately; the app polls. Nothing depends on an open tab or
-  connection. A finished job survives a restart and stays applicable; a job
-  interrupted by a restart is reported as failed.
+  connection. A finished job survives a restart and stays applicable, and so
+  does a job waiting on the DM; a job interrupted by a restart is reported
+  as failed.
 - **A scene run is a pipeline of parts:** an outline call decides which
   scenes exist, then each scene and each new NPC or location is a call of its
   own. The outline is internal and not offered for editing. Each finished
@@ -35,6 +36,16 @@
   and names for each scene where its passage comes from. The supplement
   travels whole with every call of the run, as part of what every call
   shares.
+- **A scene run decides its terms before its parts.** The outline also
+  names the material's own terms whose rendering is a real choice, each
+  with a proposed rendering; what the campaign's glossary or naming
+  conventions already decide is not asked again. When any are left, the run
+  waits on the DM between the outline and its parts: no part is written
+  before the DM has decided how each term is written, and the decided list
+  travels with every call of the run, as part of what every call shares,
+  and stays on the job. The DM may keep a decided term in the glossary,
+  where a term the glossary already has stays as it is. A run whose outline
+  finds no new term goes straight on.
 - **The review state lives on the job,** not in the browser: the DM's edits
   and decisions are stored per entity and id and written back as they happen.
   The job has its own guard (`decisions/writes`).
@@ -99,6 +110,12 @@
   the outline already does, and a run that reads only one loses what the
   other adds. Ranking the two keeps a run from building a chapter neither
   text describes.
+- Each part is its own call, and a call left alone decides the rendering of
+  a term the source introduces by itself — one scene says it one way, the
+  next another. A naming convention or a glossary term helps only for what
+  was defined before the run; deciding the run's own terms once, before any
+  part is written, is the one point where a term the chapter brings for the
+  first time can still come out the same everywhere.
 - A scene is only playable when what it names exists. Deciding the things a
   scene references before the scene itself makes every write the DM's own
   choice: nothing enters the campaign because something else was accepted,
@@ -121,6 +138,8 @@
 - When an entity's shape changes, stored jobs carrying the old shape are
   deleted by the migration instead of converted: a run costs a few tokens, a
   half-converted proposal a wrong row.
+- A run waiting on the DM has no call in flight, so a restart has nothing
+  to fail; it stays waiting until the DM decides or discards it.
 - Two tabs are a conflict to report, not one to merge. There is no undo
   history.
 - Where applied scenes stand in their chapter follows `decisions/scene-order`.

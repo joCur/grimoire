@@ -66,7 +66,7 @@ import type { SceneReply } from "./scene-reply";
 import { requireCampaign } from "./store/campaigns";
 import { buildTree, chapterExists, newChapterBody } from "./store/chapters";
 import { knowledgeText, namingRules } from "./store/knowledge-items";
-import { glossaryText } from "./store/glossary-terms";
+import { glossaryTermWordings, glossaryText } from "./store/glossary-terms";
 import { writeGenerated } from "./store/generated";
 import { readLocationProposal } from "./store/locations";
 import { npcHoldsContent, readNpcProposal } from "./store/npcs";
@@ -293,6 +293,11 @@ export interface CampaignContext {
   knowledge: string;
   glossary: string;
   /**
+   * The wording of every glossary term — what a scene run's outline must not
+   * ask about again as a term of the run (decisions/generator).
+   */
+  glossaryTerms: string[];
+  /**
    * The naming conventions of that knowledge, for the POST-RUN check
    * (naming-check.ts). Collected WITH the context so the run checks against
    * the same rules it prompted with, even if the DM edits them meanwhile.
@@ -408,6 +413,7 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
     locations,
     knowledge,
     glossary,
+    glossaryTerms: await glossaryTermWordings(campaign),
     namingRules: await namingRules(campaign),
     npcIds: new Set(npcs.map((n) => n.id)),
     locationIds: new Set(locations.map((l) => l.id)),

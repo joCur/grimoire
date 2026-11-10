@@ -8,6 +8,7 @@ import type {
   GeneratorJob,
   GeneratorJobPatch,
   PartAnswerRequest,
+  RunTermDecision,
 } from "@grimoire/shared/generator-job";
 
 import { ApiError, campaignPath, deleteJson, getJson, sendJson, startJob } from "@/api";
@@ -166,6 +167,23 @@ export function acceptJobParts(
         : { writtenLocations: selection.locations, locations: reopen(selection.locations) }),
     },
   });
+}
+
+/**
+ * Confirm the terms stage of a scene run that waits on it: the decision on
+ * every term, by its wording — the rendering every call of the run writes it
+ * with, and whether it is kept in the glossary. The run's parts start on the
+ * server, and the answer is the job `running` again, so the job query polls
+ * until they are back. `rev` is the job's guard; a 409 means the job moved
+ * on elsewhere and nothing was written.
+ */
+export function confirmJobTerms(
+  campaign: string,
+  jobId: string,
+  rev: number,
+  terms: Record<string, RunTermDecision>,
+): Promise<GeneratorJob> {
+  return patchGeneratorJob(campaign, jobId, { rev, terms });
 }
 
 /**
