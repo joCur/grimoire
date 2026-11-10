@@ -55,6 +55,12 @@ interface TrashItem {
   listKey: QueryKey;
   /** For a chapter: how many of its scenes come back with it. */
   scenes?: number;
+  /**
+   * The rows of another list that come back with this one and leave that
+   * list with it — a scene's chat — so none of them stands on its own while
+   * the lists are read again.
+   */
+  along?: { listKey: QueryKey; ids: string[] };
   restore: () => Promise<unknown>;
 }
 
@@ -93,6 +99,12 @@ export function TrashRoute() {
       queryClient.setQueryData<Array<{ id: string }>>(item.listKey, (list) =>
         list?.filter((row) => row.id !== item.id),
       );
+      if (item.along !== undefined) {
+        const along = new Set(item.along.ids);
+        queryClient.setQueryData<Array<{ id: string }>>(item.along.listKey, (list) =>
+          list?.filter((row) => !along.has(row.id)),
+        );
+      }
       invalidateCampaignQueries(queryClient, campaign);
       setRestored(t("trash.restored", { name: item.name }));
       // The row and its button are gone: the focus goes back to the top of
@@ -305,7 +317,15 @@ function trashGroups(campaign: string, t: Translate, rows: TrashRows): TrashGrou
         .flatMap((scene) =>
           item("scene", scene, scene.title === "" ? scene.id : scene.title, sceneTrashKey(campaign), () =>
             restoreScene(campaign, scene),
-          ),
+          ).map((row) => ({
+            ...row,
+            along: {
+              listKey: sceneChatTrashKey(campaign),
+              ids: rows.sceneChats
+                .filter((chat) => chat.scene === scene.id && chat.deletedMs === scene.deletedMs)
+                .map((chat) => chat.id),
+            },
+          })),
         ),
     },
     {

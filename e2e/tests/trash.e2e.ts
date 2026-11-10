@@ -66,7 +66,8 @@ const CAVE_SCENE = coveScene("cove-the-cave", "Into the cave", "cove-cave");
 
 /** The group of the trash page with that heading. */
 function trashGroup(page: Page, heading: Parameters<typeof ui>[0]) {
-  return page.getByRole("region", { name: ui(heading) });
+  // Exact: one heading can begin another's (the scenes and the scene chats).
+  return page.getByRole("region", { name: ui(heading), exact: true });
 }
 
 /** One row of the trash page, found by the name it shows. */
@@ -248,8 +249,10 @@ test.describe("a scene's chat in the trash", () => {
       }),
     );
 
+    // The chat's row names the scene too, so the scene's row is told apart by
+    // its group, which is gone once its one row is.
     await restoreAction(page, LANDING.title).click();
-    await expect(trashRow(page, LANDING.title)).toHaveCount(0);
+    await expect(trashGroup(page, "trash.group.scenes")).toHaveCount(0);
     expect((await getSceneChat(api, LANDING.id))?.id).toBe(live.id);
     // The scene has its chat back, so the cleared one stays in the trash.
     await restoreAction(page, name).click();
