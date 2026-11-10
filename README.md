@@ -1102,6 +1102,20 @@ after the outline: the review opens with a terms stage, and no scene, NPC or
 location is written before the DM confirms it. Every later call of the run
 carries the decided list, and the ticked terms become glossary terms.
 
+A **chapter check** (`kind: "chapter-check"`, started on a chapter) makes
+the terms of one chapter consistent. It reads the chapter's scenes, the NPCs
+and locations those scenes name, and the NPCs and locations of the chapter:
+one call per row names that row's terms as it writes them, one call merges
+the lists into the terms the chapter writes in different ways. A term the
+glossary or a naming convention decides goes straight to the fixes; every
+other one waits on the same terms stage, each with its variants and the rows
+they stand in. Then every affected row is a part whose proposal is
+operations against the row as read (`result.sceneExtensions`,
+`result.npcExtensions`, `result.locationExtensions`, each with the `rev` it
+was read at); accepting one writes that row alone and refuses a row changed
+since (409 `fix_row_changed`). A chapter without inconsistencies ends the
+check done and without parts, and nothing is written.
+
 **Every** call responds with a JSON object whose schema the server
 **enforces** via the provider API. A scene, NPC or location call (creating
 as well as augmenting) returns the scene, the NPC or the location without
@@ -1118,8 +1132,9 @@ under `result.scenes`, the NPCs under `result.npcs` and the locations under
 The DM's changes to a proposal are kept per scene under `sceneEdits`, per
 NPC under `npcEdits` and per location under `locationEdits`. The job is its own resource (`…/generator-jobs/<id>`,
 at most one per campaign): it is reviewed and accepted with `PATCH` on it,
-discarded with `DELETE`. A scene run whose outline found new terms holds
-them under `pipeline.terms` (`open` while the run waits on them, `confirmed`
+discarded with `DELETE`. A scene run whose outline found new terms — or a
+chapter check that found terms written in different ways, each with its
+`variants` — holds them under `pipeline.terms` (`open` while the run waits on them, `confirmed`
 once decided) and waits `done` with every part `pending`; the terms are
 confirmed with `PATCH { rev, terms: { <wording>: { rendering, glossary } } }`,
 which starts the parts. The review of a scene run walks in stages — the new

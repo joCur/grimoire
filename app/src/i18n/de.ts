@@ -57,6 +57,9 @@ export const de = {
   "generatorJob.augment.running": "Die KI ergänzt gerade {name}.",
   "generatorJob.augment.ready": "Der Vorschlag für {name} wartet auf deine Prüfung.",
   "generatorJob.augment.failed": "Die Ergänzung von {name} ist fehlgeschlagen.",
+  "generatorJob.check.running": "Die KI prüft gerade die Begriffe eines Kapitels.",
+  "generatorJob.check.ready": "Die Begriffsprüfung eines Kapitels wartet auf deine Entscheidung.",
+  "generatorJob.check.failed": "Die Begriffsprüfung eines Kapitels ist fehlgeschlagen.",
   // What the model and Grimoire itself noted about one proposal — under its
   // card's header — and about the whole run, above the stages
   // (generator-job/PartNotes.tsx). From three on a list starts folded, and
@@ -567,6 +570,10 @@ export const de = {
   "server.import_no_tables": "Die 5etools-Datei enthält keine Zufallstabelle. Nichts wurde importiert.",
   "server.patch_anchor_missing":
     "Nicht übernommen — der Block, den diese Änderung betrifft, steht nicht mehr so im Text. Verwirf die Änderung und bearbeite den Text selbst.",
+  // A fix of a chapter check is about the text as the check read it; the row
+  // changed since. Nothing was written.
+  "server.fix_row_changed":
+    "Nicht übernommen — dieser Text wurde geändert, nachdem die Prüfung ihn gelesen hat. Verwirf die Korrekturen oder starte die Begriffsprüfung neu.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": 'das Kapitel „{name}“',
@@ -1136,6 +1143,33 @@ export const de = {
   "generate.terms.conflict":
     "Der Lauf wurde inzwischen anderswo geändert und ist neu geladen. Prüfe die Begriffe noch einmal.",
   "generate.terms.failed": "Die Begriffe konnten nicht übernommen werden. Versuch es noch einmal.",
+  // The same stage in a chapter check: the terms the chapter writes in
+  // different ways, each with the ways it stands there and where.
+  "generate.terms.lead.check":
+    "Die Prüfung hat Begriffe gefunden, die das Kapitel unterschiedlich schreibt. Lege für jeden fest, wie das Kapitel ihn schreiben soll — danach schlägt die Prüfung für jeden betroffenen Text die Korrekturen vor.",
+  "generate.terms.hint.check":
+    "Ein leeres Feld behält den Begriff so, wie er oben steht. Was im Glossar bleiben soll, steht danach auch dort.",
+  "generate.terms.rendering.check": "So soll das Kapitel ihn schreiben",
+  "generate.terms.renderingOf.check": "So soll das Kapitel „{wording}“ schreiben",
+  "generate.terms.accept.check":
+    "{count, plural, one {Begriff übernehmen und Korrekturen vorschlagen} other {Alle # Begriffe übernehmen und Korrekturen vorschlagen}}",
+  "generate.terms.variants": "So steht er im Kapitel",
+  "generate.terms.variantIn": "„{wording}“ in {places}",
+
+  // --- generator: the review of a chapter check (routes/generate.tsx) --------
+  "generate.check.working": "Die Begriffe des Kapitels werden geprüft …",
+  "generate.check.title": "Begriffe angleichen",
+  "generate.check.lead":
+    "Für jeden Text, in dem ein Begriff anders steht als festgelegt, schlägt die Prüfung Korrekturen vor. Übernimm oder verwirf sie für jeden Text einzeln.",
+  "generate.check.consistent":
+    "Das Kapitel „{chapter}“ schreibt seine Begriffe überall gleich. Es gibt nichts anzugleichen, und nichts wurde geändert.",
+  "generate.check.reason.scene": "Korrekturen an einer Szene des Kapitels",
+  "generate.check.reason.npc": "Korrekturen an einem NPC des Kapitels",
+  "generate.check.reason.location": "Korrekturen an einem Ort des Kapitels",
+  "generate.check.taken":
+    "{count, plural, one {{taken} von # Korrektur wird übernommen.} other {{taken} von # Korrekturen werden übernommen.}} Sie gelten für den Text, wie die Prüfung ihn gelesen hat — wurde er seither geändert, wird nichts geschrieben.",
+  "generate.check.unchanged":
+    "In „{name}“ fand die Prüfung nichts zu korrigieren — hier ist nichts zu entscheiden.",
 
   // --- generator: changes a scene run proposes to an existing npc or location
   "generate.extension.reason.npc": "Änderungen an einem bestehenden NPC",
@@ -1169,6 +1203,9 @@ export const de = {
     "Die Szenen erscheinen unter ihrem Kapitel mit Status „Entwurf“. Bestehende Szenen, NPCs und Orte werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.hint.npc":
     "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende NPCs werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+  "generate.written.title.check": "Geschrieben — die Korrekturen stehen in den Texten",
+  "generate.written.hint.check":
+    "Die übernommenen Korrekturen stehen in den Szenen, NPCs und Orten des Kapitels. Was du verworfen hast, blieb unverändert.",
   "generate.written.openNpc": "NPC ansehen",
   "generate.written.toChapters": "Zu den Kapiteln",
 
@@ -1361,6 +1398,18 @@ export const de = {
   "harness.title": "Markdown-Harness",
   "harness.lead": "Rendert die Referenz-Fixtures aus fixtures/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
+
+  // --- the chapter check action (routes/ChapterCheckAction.tsx) -------------
+  "chapterCheck.action": "Begriffe prüfen",
+  "chapterCheck.action.running": "Begriffe werden geprüft …",
+  "chapterCheck.action.ready": "Begriffsprüfung ansehen",
+  "chapterCheck.action.failed": "Begriffsprüfung fehlgeschlagen",
+  "chapterCheck.busy":
+    "In dieser Kampagne wartet schon ein Lauf der KI. Schließe ihn ab oder verwirf ihn, bevor du die Begriffe prüfst.",
+  "chapterCheck.busyOpen": "Zum Lauf",
+  "chapterCheck.noApiKey":
+    "Die Begriffsprüfung braucht einen Zugang zum Modell, und auf dem Server ist keiner eingerichtet (ANTHROPIC_API_KEY, siehe server/.env).",
+  "chapterCheck.failed": "Die Begriffsprüfung konnte nicht gestartet werden. Versuch es noch einmal.",
 
   // --- the augment-with-AI action (generator-job/AugmentAction.tsx) --------
   "augment.action": "Mit KI ergänzen",

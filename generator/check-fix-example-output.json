@@ -1,0 +1,14 @@
+{
+  "operations": [
+    {
+      "op": "set",
+      "field": "trigger",
+      "value": "Die Hafenmeisterin erwischt die Gruppe am Kai"
+    },
+    {
+      "op": "replace",
+      "anchor": "> [!secret] Der Harbourmaster weiß, wer die Schmuggler deckt, und\n> schweigt, solange niemand fragt.",
+      "text": "> [!secret] Die Hafenmeisterin weiß, wer die Schmuggler deckt, und\n> schweigt, solange niemand fragt."
+    }
+  ]
+}

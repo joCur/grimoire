@@ -140,9 +140,9 @@ test("title and text change together and are ONE patch of exactly those fields",
 
   await page.goto(CHAPTER_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(before.title);
-  // The reading view's header carries the edit action and nothing else: the
-  // chapter's fields are its edit mode.
-  await expect(page.getByRole("article").getByRole("button")).toHaveCount(1);
+  // The reading view's header carries the chapter check and the edit action
+  // and nothing else: the chapter's fields are its edit mode.
+  await expect(page.getByRole("article").getByRole("button")).toHaveCount(2);
   await editAction(page).click();
 
   // The heading gave way to the editable title; nothing to save yet.

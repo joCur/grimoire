@@ -1,5 +1,6 @@
 // The API client of the generator job (decisions/resources): its resource — start a
-// run, read, review and accept, retry or patch a part, discard. Built from the
+// run (a scene run, an npc run or a chapter check), read, review and accept,
+// retry or patch a part, discard. Built from the
 // shared HTTP helpers (../api.ts). There is one job per campaign, whatever its
 // kind; an augment run starts on the resource of its scene, npc or location
 // and is read here like every other run.
@@ -86,6 +87,17 @@ export function startGenerateNpcJob(
     sourceText: input.sourceText,
     ...(input.id === undefined || input.id === "" ? {} : { id: input.id }),
   });
+}
+
+/**
+ * Start a chapter check: the chapter's scenes, npcs and locations are read
+ * for terms they write in different ways (decisions/generator). Same job
+ * model as the other runs (`startJob`); its fixes are read on the job's
+ * `result`. Worth handling are 503 (no provider configured) and 404 (unknown
+ * chapter).
+ */
+export function startChapterCheckJob(campaign: string, chapter: string): Promise<GeneratorJob> {
+  return startJob(generatorJobsPath(campaign), { kind: "chapter-check", chapter });
 }
 
 /**

@@ -20,6 +20,7 @@ import { LiveRoute } from "@/routes/live";
 import { LocationCreateAction } from "@/location/LocationCreateAction";
 import { LocationList } from "@/location/LocationList";
 import { LocationRoute } from "@/location/LocationRoute";
+import { ChapterCheckAction } from "@/routes/ChapterCheckAction";
 import { LocationAugmentAction } from "@/routes/LocationAugmentAction";
 import { NpcCard } from "@/npc/NpcCard";
 import { NpcCreateAction } from "@/npc/NpcCreateAction";
@@ -113,8 +114,18 @@ export function App() {
               where — and each reading view its augment action, the generator
               job's dialog joined with the entity's own write. The chapter's
               reading view is handed the query of its threads, which its
-              delete dialog counts. */}
-          <Route path="chapters/:id" element={<ChapterRoute threadsQuery={threadsQuery} />} />
+              delete dialog counts, and its chapter check action. */}
+          <Route
+            path="chapters/:id"
+            element={
+              <ChapterRoute
+                threadsQuery={threadsQuery}
+                checkAction={(campaign, chapter) => (
+                  <ChapterCheckAction campaign={campaign} chapter={chapter} />
+                )}
+              />
+            }
+          />
           {/* The scene list — reached from the campaign menu. Each list page
               draws the rows of its own slice. */}
           <Route

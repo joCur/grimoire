@@ -17,6 +17,12 @@
 //           ways out (generator-job/SceneReferenceNotice.tsx).
 //   done    what the accept wrote — the scenes as drafts
 //
+// A chapter check (decisions/generator) is reviewed here too, started from
+// the chapter's reading view: its terms stage, then one row per scene, npc
+// and location it fixes, each accepted — one write of that row — or rejected
+// on its own. A chapter that writes its terms consistently ends the check
+// with a sentence, and nothing is written.
+//
 // An augment run is the campaign's one job as well, but it is reviewed at
 // the row it works on. While one is open the route shows none of the four
 // states: it names the run and leads to its review.
@@ -97,6 +103,7 @@ import {
   generatePhase,
   runJobArrived,
   hasReviewableParts,
+  isChapterCheck,
   jobErrorBody,
   jobExtension,
   jobMode,
@@ -163,7 +170,9 @@ import { NpcProposalRow } from "@/npc/NpcProposalRow";
 import { NpcRunFields, NpcRunReview, NpcRunWrittenAction, useNpcRunForm } from "@/npc/NpcRun";
 import { npcLabel } from "@/npc/npc-links";
 import { npcsKey } from "@/npc/npc-query";
+import { SceneExtensionRow } from "@/scene/SceneExtensionRow";
 import { SceneProposalCard } from "@/scene/SceneProposalCard";
+import { sceneKey } from "@/scene/scene-query";
 import { sceneLabel } from "@/scene/scene-links";
 import { sceneOf } from "@/scene/scene-proposal";
 
@@ -269,6 +278,8 @@ export function GenerateRoute() {
   // The npc an NPC run's accept wrote — what the open action opens once the job
   // is gone.
   const [writtenNpc, setWrittenNpc] = useState<string>();
+  // The written rows were a chapter check's fixes — what the done state says.
+  const [wroteFixes, setWroteFixes] = useState(false);
 
   // The server's job IS the state of a run.
   //
@@ -319,6 +330,9 @@ export function GenerateRoute() {
   // Which result field to read is the job's kind, never the local mode: a
   // done job of the other kind must not be rendered as this one's.
   const jobKind = jobMode(job);
+  // A chapter check reads like a scene run's result, but is reviewed as one
+  // list of the rows it fixes.
+  const checking = isChapterCheck(job);
   // A pipelined run has a result WHILE it runs: every finished
   // part is already in it, so the review fills up instead of appearing whole.
   const result =
@@ -461,6 +475,11 @@ export function GenerateRoute() {
           ...wrote.locations.map(locationLabel),
         ]);
         if (wrote.npcs[0] !== undefined) setWrittenNpc(wrote.npcs[0]);
+        setWroteFixes(isChapterCheck(before));
+      }
+      // A chapter check rewrote rows that are open elsewhere.
+      for (const id of wrote.scenes) {
+        void queryClient.invalidateQueries({ queryKey: sceneKey(campaign, id) });
       }
       // The scenes, npcs and locations exist now — the chapter overview and
       // the lists have to show them.
@@ -703,19 +722,28 @@ export function GenerateRoute() {
     );
   };
   /**
-   * One npc or location the campaign already has, with the changes the run
-   * proposes to it (decisions/generator). Each change is taken or kept on its
-   * own; accepting applies the taken ones to the row as it is stored then.
-   * One that brings no change says so and asks nothing.
+   * One row the campaign already has, with the changes the run proposes to
+   * it (decisions/generator): an npc or location a scene run extends, or a
+   * scene, npc or location a chapter check fixes. Each change is taken or
+   * kept on its own; accepting applies the taken ones to the row as it is
+   * stored then — a fix of a check only to the row as the check read it. One
+   * that brings no change says so and asks nothing.
    */
   const extensionRow = (part: GeneratorJobPart, cardRef: (el: HTMLElement | null) => void) => {
     const extension = jobExtension(job, part);
     if (extension === undefined) return partCard(part, cardRef);
     if (extension.changes.length === 0) {
-      return <ExtensionUnchanged key={part.key} part={part} cardRef={cardRef} />;
+      return (
+        <ExtensionUnchanged key={part.key} part={part} cardRef={cardRef} checked={checking} />
+      );
     }
-    const kind = part.kind === "npc" ? "npc" : "location";
-    const state = kind === "npc" ? npcState(job, part.id) : locationState(job, part.id);
+    const kind = part.kind;
+    const state =
+      kind === "npc"
+        ? npcState(job, part.id)
+        : kind === "location"
+          ? locationState(job, part.id)
+          : sceneState(job, part.id);
     const kept = keptChanges(job, part.key);
     const taken = extension.changes.filter((change) => !kept.includes(change.id)).length;
     const decide = (id: string, take: boolean): void => {
@@ -730,6 +758,7 @@ export function GenerateRoute() {
         kept={kept}
         open={state === "open"}
         busy={apply.isPending}
+        checked={checking}
         onDecide={decide}
       />
     );
@@ -743,13 +772,31 @@ export function GenerateRoute() {
       acceptLabel: t("generate.extension.apply", { count: taken }),
       acceptDisabled: taken === 0,
     };
-    const name = { id: part.id, name: String(extension.current.name ?? part.title) };
+    const current: Record<string, unknown> = extension.current;
+    const name = { id: part.id, name: String(current.name ?? part.title) };
+    if (kind === "scene") {
+      return (
+        <SceneExtensionRow
+          key={part.key}
+          {...row}
+          scene={{ id: part.id, title: String(current.title ?? part.title) }}
+          reason={t("generate.check.reason.scene")}
+          onReject={() => toggleDrop(part.id)}
+          // A dropped fix taken after all is put back first; the accept
+          // sends that decision before it writes.
+          onAccept={() => {
+            if (state === "dropped") toggleDrop(part.id);
+            apply.mutate({ scenes: [part.id] });
+          }}
+        />
+      );
+    }
     return kind === "npc" ? (
       <NpcExtensionRow
         key={part.key}
         {...row}
         npc={name}
-        reason={t("generate.extension.reason.npc")}
+        reason={t(checking ? "generate.check.reason.npc" : "generate.extension.reason.npc")}
         onReject={() => review.decide({ npcs: { [part.id]: "rejected" } })}
         onAccept={() => apply.mutate({ npcs: [part.id] })}
       />
@@ -758,7 +805,9 @@ export function GenerateRoute() {
         key={part.key}
         {...row}
         location={name}
-        reason={t("generate.extension.reason.location")}
+        reason={t(
+          checking ? "generate.check.reason.location" : "generate.extension.reason.location",
+        )}
         onReject={() => review.decide({ locations: { [part.id]: "rejected" } })}
         onAccept={() => apply.mutate({ locations: [part.id] })}
       />
@@ -1271,7 +1320,8 @@ export function GenerateRoute() {
             flash the empty form. */}
         {phase === "checking" && <div className="py-24 md:py-[120px]" />}
 
-        {phase === "working" && <GeneratorJobWorking />}
+        {phase === "working" &&
+          (checking ? <GeneratorJobWorking title="generate.check.working" /> : <GeneratorJobWorking />)}
 
         {phase === "augment" && job !== null && augmenting !== undefined && (
           <div className="py-16 md:py-[80px]">
@@ -1303,6 +1353,7 @@ export function GenerateRoute() {
             campaign={campaign}
             job={job}
             terms={openTerms}
+            check={checking}
             // The kept terms are glossary terms now.
             onConfirmed={() =>
               void queryClient.invalidateQueries({ queryKey: glossaryTermsKey(campaign) })
@@ -1315,7 +1366,99 @@ export function GenerateRoute() {
           />
         )}
 
-        {phase === "review" && jobKind === "scene" && openTerms === undefined && (
+        {phase === "review" && checking && job !== null && openTerms === undefined && (
+          <section data-testid="check-review" aria-labelledby="check-review-title">
+            <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
+              <h1
+                id="check-review-title"
+                className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground"
+              >
+                {t("generate.check.title")}
+              </h1>
+              {/* THE live region of the check's review, as in a scene run's. */}
+              <span aria-live="polite" className="text-[13px] text-muted-foreground">
+                {runProgress ?? (parts.length > 0 ? t("generate.review.progress", progress) : "")}
+              </span>
+              <ReviewSaveStatus status={review.status} />
+            </div>
+            {parts.length === 0 ? (
+              <p
+                data-testid="check-consistent"
+                className="mb-[22px] text-[14px] leading-[1.6] text-body-secondary"
+              >
+                {t("generate.check.consistent", {
+                  chapter:
+                    chapters.find((chapter) => chapter.id === job.chapter)?.title ??
+                    job.chapter ??
+                    "",
+                })}
+              </p>
+            ) : (
+              <p className="mb-1.5 text-[14px] leading-[1.6] text-body-secondary">
+                {t("generate.check.lead")}
+              </p>
+            )}
+            {runCost !== undefined && (
+              <p className="mb-[22px] text-[12px] text-faint">{runCost}</p>
+            )}
+            {running && (
+              <p className="mb-[18px] text-[13px] leading-[1.6] text-body-secondary">
+                {t("generate.pipeline.stillRunning")}
+              </p>
+            )}
+
+            {/* One row per scene, npc and location the check fixes, in the
+                chapter's order: a finished part is its fix, an open one a
+                status card, a failed one its error plus its retry action. */}
+            {parts.map((part) => {
+              const cardRef = (el: HTMLElement | null) => partCards.current.set(part.key, el);
+              return part.status === "done" ? extensionRow(part, cardRef) : partCard(part, cardRef);
+            })}
+
+            {apply.isError && (
+              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
+                {serverErrorMessage(apply.error, t, "generate.review.applyFailed")}
+              </p>
+            )}
+            {discard.isError && (
+              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
+                {t("generate.review.discardFailed")}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
+              <Button
+                type="button"
+                variant={parts.length === 0 ? "default" : "outline"}
+                data-testid="check-close"
+                disabled={apply.isPending || discard.isPending}
+                onClick={() => discard.mutate()}
+                className={
+                  parts.length === 0
+                    ? "h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
+                    : "h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+                }
+              >
+                {t(
+                  parts.length === 0
+                    ? "common.close"
+                    : progress.written === 0
+                      ? "common.discard"
+                      : "generate.review.discardRest",
+                )}
+              </Button>
+              {parts.length > 0 &&
+                rest.length + restNpcs.length + restLocations.length === 0 &&
+                progress.written > 0 && (
+                  <p className="text-[12.5px] text-muted-foreground">
+                    {t("generate.review.allDecided")}
+                  </p>
+                )}
+            </div>
+          </section>
+        )}
+
+        {phase === "review" && jobKind === "scene" && !checking && openTerms === undefined && (
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
@@ -1517,7 +1660,13 @@ export function GenerateRoute() {
           <div className="flex flex-col items-start gap-3.5 py-14 md:py-20">
             <p className="flex items-center gap-2.5 text-[15px] text-foreground">
               <Check aria-hidden size={17} className="flex-none text-success-text" />
-              {t(mode === "npc" ? "generate.written.title.npc" : "generate.written.title.scene")}
+              {t(
+                wroteFixes
+                  ? "generate.written.title.check"
+                  : mode === "npc"
+                    ? "generate.written.title.npc"
+                    : "generate.written.title.scene",
+              )}
             </p>
             <ul className="flex flex-col gap-1.5">
               {written.map((label) => (
@@ -1527,7 +1676,13 @@ export function GenerateRoute() {
               ))}
             </ul>
             <p className="max-w-[420px] text-[13px] leading-[1.6] text-muted-foreground">
-              {t(mode === "npc" ? "generate.written.hint.npc" : "generate.written.hint.scene")}
+              {t(
+                wroteFixes
+                  ? "generate.written.hint.check"
+                  : mode === "npc"
+                    ? "generate.written.hint.npc"
+                    : "generate.written.hint.scene",
+              )}
             </p>
             <div className="mt-2 flex flex-wrap gap-2.5">
               {mode === "npc" && writtenNpc !== undefined && (

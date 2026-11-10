@@ -1272,3 +1272,140 @@ export function extensionReply(): { operations: unknown[] } {
     ],
   };
 }
+
+// --- a chapter check ------------------------------------------------------------
+//
+// A check (decisions/generator) is three kinds of call, each with its own
+// system prompt: one per row naming that row's own terms, one merging the
+// lists, and one per row that holds a deviating wording, answering with the
+// operations that align it. The stub's replies are derived from what the
+// prompt carries, as a model's would be: a row names a term only when its
+// text has it, the merge names a term only from the rows that listed it, and
+// a fix replaces exactly the deviating wordings its terms block names.
+
+/** The system prompt of a check's terms call (generator/check-terms-system-prompt.md). */
+export const CHECK_TERMS_SYSTEM_HEADING = "# System-Prompt: Begriffsprüfung — Begriffe eines Textes";
+
+/** The system prompt of a check's merge call (generator/check-merge-system-prompt.md). */
+export const CHECK_MERGE_SYSTEM_HEADING = "# System-Prompt: Begriffsprüfung — Abgleich eines Kapitels";
+
+/** The system prompt of a check's fix call (generator/check-fix-system-prompt.md). */
+export const CHECK_FIX_SYSTEM_HEADING = "# System-Prompt: Begriffsprüfung — Text angleichen";
+
+/** The section of a terms or fix call that carries the row (server CHECKED_ROW_HEADING). */
+export const CHECKED_ROW_HEADING = "## Text der Kampagne";
+
+/** The section of the merge call that carries every row's list (server CHECK_TERMS_HEADING). */
+export const CHECK_TERMS_HEADING = "## Begriffe der Texte des Kapitels";
+
+/**
+ * The term the example chapter writes in two ways: "the party" in both of its
+ * scenes, "the characters" in the smuggler scene. The glossary does not cover
+ * it, so it waits on the terms stage.
+ */
+export const CHECK_PARTY = {
+  wording: "the party",
+  description: "The adventurers the players play.",
+  kind: "game-term",
+  rendering: "the party",
+  variants: ["the party", "the characters"],
+} as const;
+
+/**
+ * The term the example campaign's glossary decides ("lighthouse keeper" → the
+ * Keeper): both scenes deviate from it, so it goes straight to the fixes.
+ */
+export const CHECK_KEEPER = {
+  wording: "lighthouse keeper",
+  description: "The keeper of the lighthouse.",
+  kind: "person",
+  rendering: "Keeper",
+  variants: ["lighthouse keeper"],
+} as const;
+
+const CHECK_TERMS = [CHECK_PARTY, CHECK_KEEPER];
+
+/** A terms call's reply: every wording of the check's terms the row's text has. */
+export function checkTermsReply(rowText: string): { terms: unknown[] } {
+  const text = rowText.toLowerCase();
+  return {
+    terms: CHECK_TERMS.flatMap((term) =>
+      term.variants
+        .filter((wording) => text.includes(wording))
+        .map((wording) => ({ wording, description: term.description, kind: term.kind })),
+    ),
+  };
+}
+
+/**
+ * The merge call's reply, out of the rows' lists (`### <key> — <name>` and one
+ * `- „<wording>“ …` line per term): a term with its variants and the rows
+ * each one stands in, named only when the lists hold every one of its
+ * variants. A chapter whose rows name none of them merges into nothing.
+ */
+export function checkMergeReply(lists: string): { terms: unknown[] } {
+  const rows = new Map<string, string[]>();
+  let key: string | undefined;
+  for (const line of lists.split("\n")) {
+    const heading = /^### (\S+) — /.exec(line);
+    if (heading !== null) {
+      key = heading[1];
+      continue;
+    }
+    const term = /^- „([^“]+)“/.exec(line);
+    if (term !== null && key !== undefined) rows.set(key, [...(rows.get(key) ?? []), term[1]!]);
+  }
+  const placesOf = (wording: string) =>
+    [...rows].filter(([, wordings]) => wordings.includes(wording)).map(([row]) => row);
+  return {
+    terms: CHECK_TERMS.filter((term) => term.variants.every((wording) => placesOf(wording).length > 0)).map(
+      (term) => ({
+        wording: term.wording,
+        description: term.description,
+        kind: term.kind,
+        rendering: term.rendering,
+        variants: term.variants.map((wording) => ({ wording, places: placesOf(wording) })),
+      }),
+    ),
+  };
+}
+
+/** Every deviating wording a fix call's terms block names, with its rendering. */
+function fixPairs(terms: string): Array<[string, string]> {
+  return [...terms.matchAll(/schreibe „([^“]+)“ als „([^“]+)“/g)].map((m) => [m[1]!, m[2]!]);
+}
+
+/** A text with every deviating wording replaced, its capitalised form too. */
+function aligned(text: string, pairs: ReadonlyArray<[string, string]>): string {
+  const upper = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+  let out = text;
+  for (const [from, to] of pairs) {
+    out = out.split(from).join(to).split(upper(from)).join(upper(to));
+  }
+  return out;
+}
+
+/**
+ * A fix call's reply: a `set` for every text field that holds a deviating
+ * wording, and a `replace` of every block of the text that does — the whole
+ * block as its anchor, exactly as it stands.
+ */
+export function checkFixReply(
+  form: Record<string, unknown>,
+  terms: string,
+): { operations: unknown[] } {
+  const pairs = fixPairs(terms);
+  const operations: unknown[] = [];
+  for (const [field, value] of Object.entries(form)) {
+    if (field === "id" || field === "body" || typeof value !== "string") continue;
+    const fixed = aligned(value, pairs);
+    if (fixed !== value) operations.push({ op: "set", field, value: fixed });
+  }
+  for (const block of String(form.body ?? "").split(/\n\s*\n/)) {
+    const text = block.trim();
+    if (text === "" || text.startsWith("#")) continue;
+    const fixed = aligned(text, pairs);
+    if (fixed !== text) operations.push({ op: "replace", anchor: text, text: fixed });
+  }
+  return { operations };
+}

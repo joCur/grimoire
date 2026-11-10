@@ -56,6 +56,7 @@ import {
   rejectedReferences,
   reviewStages,
   jobExtension,
+  isChapterCheck,
   keptChanges,
   sceneWritable,
   hintRef,
@@ -1031,6 +1032,40 @@ describe("the stages of a scene run's review", () => {
     const kept = mergeReviewPatch(extending, { review: { keptChanges: { "npc:vex": ["c1"] } } });
     expect(keptChanges(kept, "npc:vex")).toEqual(["c1"]);
     expect(keptChanges(mergeReviewPatch(kept, { review: { keptChanges: { "npc:vex": [] } } }), "npc:vex")).toEqual([]);
+  });
+
+  test("a chapter check's fixes of existing scenes are its scenes, decided by their own state", () => {
+    const change = { id: "c1", op: "set", field: "title", value: "The Keeper's Light" } as const;
+    const check = run({
+      kind: "chapter-check",
+      chapter: "01",
+      result: {
+        scenes: [],
+        npcs: [],
+        locations: [],
+        sceneExtensions: [
+          { id: "a", current: proposed("a"), changes: [change], rev: 3 },
+          { id: "b", current: proposed("b"), changes: [] },
+        ],
+        warnings: [],
+      },
+      pipeline: {
+        parts: [
+          { ...part("scene", "a"), existing: true },
+          { ...part("scene", "b"), existing: true },
+        ],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      },
+    });
+    // A fix without a change has nothing to decide.
+    expect(jobScenes(check)).toEqual(["a"]);
+    expect(openScenes(check)).toEqual(["a"]);
+    expect(jobExtension(check, { kind: "scene", id: "a" })?.rev).toBe(3);
+    expect(sceneState(decide(check, { droppedScenes: ["a"] }), "a")).toBe("dropped");
+    expect(jobProgress(decide(check, { writtenScenes: ["a"] }))).toEqual({ written: 1, total: 1 });
+    expect(isChapterCheck(check)).toBe(true);
+    expect(isChapterCheck(run({ kind: "scene" }))).toBe(false);
+    expect(jobSentence(check, "", t)).toBe(t("generatorJob.check.ready"));
   });
 
   test("an extension still running does not hold the scenes back either", () => {

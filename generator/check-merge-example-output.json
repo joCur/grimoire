@@ -1,0 +1,14 @@
+{
+  "terms": [
+    {
+      "wording": "harbourmaster",
+      "description": "Titel von Jorna, der Hafenaufsicht von Salzhafen.",
+      "kind": "person",
+      "rendering": "Hafenmeisterin",
+      "variants": [
+        { "wording": "Hafenmeisterin", "places": ["scene:hafen-ankunft", "npc:jorna"] },
+        { "wording": "Harbourmaster", "places": ["scene:schmuggler-gefangen"] }
+      ]
+    }
+  ]
+}

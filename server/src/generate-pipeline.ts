@@ -889,12 +889,21 @@ export interface PartOutcome {
   npc?: NpcProposal;
   location?: LocationProposal;
   /**
-   * An existing npc or location the part extends: the row as the call read
-   * it, and the changes it proposes for that row.
+   * An existing row the part changes — an npc or location a scene run
+   * extends, a scene, npc or location a chapter check fixes: the row as the
+   * call read it, the changes it proposes for that row and, for a fix, the
+   * row version it read.
    */
   extension?:
-    | { kind: "npc"; id: string; current: NpcProposal; changes: PartChange[] }
-    | { kind: "location"; id: string; current: LocationProposal; changes: PartChange[] };
+    | { kind: "scene"; id: string; current: SceneProposal; changes: PartChange[]; rev?: number }
+    | { kind: "npc"; id: string; current: NpcProposal; changes: PartChange[]; rev?: number }
+    | {
+        kind: "location";
+        id: string;
+        current: LocationProposal;
+        changes: PartChange[];
+        rev?: number;
+      };
   /** What of an extension's reply could not be applied to that row; absent for a proposal. */
   findings?: PatchFinding[];
   /** The model's notes on this part — they stay on the part (`GeneratorJobPart.warnings`). */
@@ -1551,8 +1560,7 @@ export function supplementOf(plan: RunPlan): { supplement?: string } {
 }
 
 /**
- * Run one part and report it into the sink. The ONE place a part's outcome
- * becomes job state, so a fresh run and a per-part retry cannot drift.
+ * Run one part of a scene run and report it into the sink (`reportPart`).
  */
 export async function runPart(
   plan: RunPlan,
@@ -1560,24 +1568,39 @@ export async function runPart(
   provider: LLMProvider,
   sink: PipelineSink,
 ): Promise<void> {
+  await reportPart(part, sink, (counter) =>
+    part.kind === "scene"
+      ? runScenePart(plan, sceneOf(plan.outline, part.id), provider, counter)
+      : part.existing === true
+        ? runExtensionPart(
+            plan,
+            part.kind,
+            existingOf(plan.outline, { kind: part.kind, id: part.id }),
+            provider,
+            counter,
+          )
+        : part.kind === "npc"
+          ? runNpcPart(plan, npcOf(plan.outline, part.id), provider, counter)
+          : runLocationPart(plan, locationOf(plan.outline, part.id), provider, counter),
+  );
+}
+
+/**
+ * Run one part's call (`call`) and report it into the sink: running, then
+ * done with its outcome or failed with what went wrong. The ONE place a
+ * part's outcome becomes job state, so a fresh run, a per-part retry and
+ * every run kind with parts cannot drift.
+ */
+export async function reportPart(
+  part: GeneratorJobPart,
+  sink: PipelineSink,
+  call: (counter: CallCounter) => Promise<{ outcome: PartOutcome; usage: PartUsage }>,
+): Promise<void> {
   if (sink.cancelled()) return;
   await sink.partRunning(part.key);
   const counter = callCounter();
   try {
-    const run =
-      part.kind === "scene"
-        ? await runScenePart(plan, sceneOf(plan.outline, part.id), provider, counter)
-        : part.existing === true
-          ? await runExtensionPart(
-              plan,
-              part.kind,
-              existingOf(plan.outline, { kind: part.kind, id: part.id }),
-              provider,
-              counter,
-            )
-          : part.kind === "npc"
-            ? await runNpcPart(plan, npcOf(plan.outline, part.id), provider, counter)
-            : await runLocationPart(plan, locationOf(plan.outline, part.id), provider, counter);
+    const run = await call(counter);
     if (sink.cancelled()) return;
     await sink.partDone(part.key, run.outcome, run.usage);
   } catch (err) {
@@ -1632,17 +1655,33 @@ export async function runPartsPooled(
   provider: LLMProvider,
   sink: PipelineSink,
 ): Promise<void> {
-  const queue = [...parts];
-  const workers = Array.from({ length: Math.min(PART_CONCURRENCY, queue.length) }, async () => {
+  // runPart swallows its own failure into the sink, so one bad part can
+  // never take the queue — or its siblings — down.
+  await pooled(parts, () => sink.cancelled(), (part) => runPart(plan, part, provider, sink));
+}
+
+/**
+ * `run` for every item, with at most PART_CONCURRENCY in flight and in the
+ * order of `items`; nothing new starts once `stopped` says so. Answers the
+ * results in the order of `items` — a stopped item has none.
+ */
+export async function pooled<T, R>(
+  items: readonly T[],
+  stopped: () => boolean,
+  run: (item: T) => Promise<R>,
+): Promise<(R | undefined)[]> {
+  const results: (R | undefined)[] = items.map(() => undefined);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(PART_CONCURRENCY, items.length) }, async () => {
     for (;;) {
-      const next = queue.shift();
-      if (next === undefined || sink.cancelled()) return;
-      // runPart swallows its own failure into the sink, so one bad part can
-      // never take the queue — or its siblings — down.
-      await runPart(plan, next, provider, sink);
+      const index = next;
+      next += 1;
+      if (index >= items.length || stopped()) return;
+      results[index] = await run(items[index]!);
     }
   });
   await Promise.all(workers);
+  return results;
 }
 
 /**

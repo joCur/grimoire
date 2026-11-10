@@ -45,6 +45,9 @@ export const en: Messages = {
   "generatorJob.augment.running": "The AI is augmenting {name}.",
   "generatorJob.augment.ready": "The proposal for {name} is waiting for your review.",
   "generatorJob.augment.failed": "Augmenting {name} failed.",
+  "generatorJob.check.running": "The AI is checking the terms of a chapter.",
+  "generatorJob.check.ready": "The term check of a chapter is waiting for your decision.",
+  "generatorJob.check.failed": "The term check of a chapter failed.",
   "generatorJob.notes.label": "Notes from the model",
   "generatorJob.notes.summary":
     "{count, plural, one {# note} other {# notes}} on this proposal",
@@ -514,6 +517,10 @@ export const en: Messages = {
   "server.import_no_tables": "The 5etools file holds no random table. Nothing was imported.",
   "server.patch_anchor_missing":
     "Not applied — the block this change is about is no longer in the text as it was. Discard the change and edit the text yourself.",
+  // A fix of a chapter check is about the text as the check read it; the row
+  // changed since. Nothing was written.
+  "server.fix_row_changed":
+    "Not applied — this text was changed after the check read it. Discard the fixes or start the term check again.",
   // One row in the way of a trash or a restore, as it stands inside the
   // sentences above; several of them are joined into one list.
   "server.blocker.chapter": "the chapter “{name}”",
@@ -1017,6 +1024,33 @@ export const en: Messages = {
   "generate.terms.conflict":
     "The run was changed elsewhere in the meantime and has been reloaded. Check the terms once more.",
   "generate.terms.failed": "The terms could not be accepted. Try again.",
+  // The same stage in a chapter check: the terms the chapter writes in
+  // different ways, each with the ways it stands there and where.
+  "generate.terms.lead.check":
+    "The check found terms the chapter writes in different ways. Decide for each how the chapter should write it — the check then proposes the fixes for every text it concerns.",
+  "generate.terms.hint.check":
+    "An empty field keeps the term as it stands above. What you keep in the glossary stands there afterwards as well.",
+  "generate.terms.rendering.check": "How the chapter should write it",
+  "generate.terms.renderingOf.check": "How the chapter should write “{wording}”",
+  "generate.terms.accept.check":
+    "{count, plural, one {Accept the term and propose fixes} other {Accept all # terms and propose fixes}}",
+  "generate.terms.variants": "How the chapter writes it",
+  "generate.terms.variantIn": "“{wording}” in {places}",
+
+  // --- generator: the review of a chapter check (routes/generate.tsx) --------
+  "generate.check.working": "Checking the terms of the chapter …",
+  "generate.check.title": "Align the terms",
+  "generate.check.lead":
+    "For every text in which a term stands differently from what was decided, the check proposes fixes. Accept or discard them text by text.",
+  "generate.check.consistent":
+    "The chapter “{chapter}” writes its terms the same way everywhere. There is nothing to align, and nothing was changed.",
+  "generate.check.reason.scene": "Fixes to a scene of the chapter",
+  "generate.check.reason.npc": "Fixes to an NPC of the chapter",
+  "generate.check.reason.location": "Fixes to a location of the chapter",
+  "generate.check.taken":
+    "{count, plural, one {{taken} of # fix is taken.} other {{taken} of # fixes are taken.}} They are about the text as the check read it — if it was changed since, nothing is written.",
+  "generate.check.unchanged":
+    "The check found nothing to fix in “{name}” — there is nothing to decide here.",
 
   // --- generator: changes a scene run proposes to an existing npc or location
   "generate.extension.reason.npc": "Changes to an existing NPC",
@@ -1050,6 +1084,9 @@ export const en: Messages = {
     "The scenes show up under their chapter with status “draft”. Existing scenes, NPCs and locations are never overwritten — on a conflict the server writes nothing.",
   "generate.written.hint.npc":
     "The NPC shows up in the NPC list and in search. Existing NPCs are never overwritten — on a conflict the server writes nothing.",
+  "generate.written.title.check": "Written — the fixes stand in the texts",
+  "generate.written.hint.check":
+    "The fixes you accepted stand in the scenes, NPCs and locations of the chapter. What you discarded stayed as it was.",
   "generate.written.openNpc": "Open NPC",
   "generate.written.toChapters": "To the chapters",
 
@@ -1221,6 +1258,17 @@ export const en: Messages = {
   "harness.lead": "Renders the reference fixtures from fixtures/ without a running server.",
   "harness.properties": "Show properties",
 
+  // --- the chapter check action (routes/ChapterCheckAction.tsx) -------------
+  "chapterCheck.action": "Check terms",
+  "chapterCheck.action.running": "Checking terms …",
+  "chapterCheck.action.ready": "Open the term check",
+  "chapterCheck.action.failed": "Term check failed",
+  "chapterCheck.busy":
+    "A run of the AI is already waiting in this campaign. Finish or discard it before you check the terms.",
+  "chapterCheck.busyOpen": "Go to the run",
+  "chapterCheck.noApiKey":
+    "The term check needs access to the model, and the server has none set up (ANTHROPIC_API_KEY, see server/.env).",
+  "chapterCheck.failed": "The term check could not be started. Try again.",
 
   // --- "Augment with AI" (generator-job/AugmentAction.tsx) -----------------
   "augment.action": "Augment with AI",

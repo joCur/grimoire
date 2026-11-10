@@ -81,7 +81,21 @@
   that moment, in one write, and a change that no longer applies there
   changes nothing and is a finding. It is decided in the stage of its
   entity, and it does not hold back a scene that names it, because the row
-  exists. A run never changes an existing scene or a chapter's text.
+  exists. A scene run never changes an existing scene or a chapter's text.
+- **A chapter check makes one chapter's terms consistent.** Started on a
+  chapter, it reads the chapter's scenes, the npcs and locations those
+  scenes name, and the npcs and locations of the chapter. It works in two
+  steps: first one small call per row names that row's own terms as it
+  writes them, then one call merges those lists and names the terms the
+  chapter writes in different ways, with each way and the rows it stands
+  in. A term the glossary or a naming convention decides is not asked; its
+  deviations go straight to the fixes with the decided rendering. Every
+  other inconsistent term waits on the same terms stage a scene run has,
+  with its variants and their rows beside it. Then each affected row is one
+  part whose proposal is operations against the row as the check read it;
+  accepting writes that row alone, in one write, and refuses a row that
+  changed since the check read it. A chapter without inconsistencies ends
+  the check with a sentence and nothing written.
 - **Applying writes exactly what is named.** Accepting a proposal writes that
   proposal, in one transaction under the same rules as creating its entity,
   and nothing else. A scene is applied only once every location and NPC of
@@ -122,6 +136,12 @@
   and no scene points at a row that was never written.
 - A note in a pooled list above the review has to be matched to its proposal
   by the DM, and it keeps standing after that proposal is decided.
+- A term drifts when its rows are written at different times, and no single
+  call holds a whole chapter's text with room to compare it. A row read on
+  its own costs little and names only what stands there; the comparison is
+  then a list against a list, not a text against a text. A fix is about
+  the text exactly as it was read, so a row that changed since is the
+  DM's newer word and is not overwritten.
 - A source that adds to a known npc or location is the moment the DM has the
   material at hand; augmenting each row by hand afterwards is work the run
   already did. Changes rather than a whole entity keep what the DM wrote,
@@ -149,6 +169,8 @@
   the DM reads the finding and answers again or edits by hand. A change that no
   longer applies to the proposal as the DM has edited it since is refused
   instead of guessed.
+- A chapter check whose row changed after it was read cannot fix that row;
+  the DM discards the fixes or checks the chapter again.
 - A scene that names a rejected proposal cannot be applied as it stands:
   the DM accepts the proposal after all, removes the reference, or drops the
   scene.

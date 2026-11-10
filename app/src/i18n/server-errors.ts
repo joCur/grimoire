@@ -59,6 +59,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   patch_anchor_missing: "server.patch_anchor_missing",
   import_not_fivetools: "server.import_not_fivetools",
   import_no_tables: "server.import_no_tables",
+  fix_row_changed: "server.fix_row_changed",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -236,6 +237,7 @@ function paramsFor(
     case "patch_anchor_missing":
     case "import_not_fivetools":
     case "import_no_tables":
+    case "fix_row_changed":
       return {};
   }
 }
