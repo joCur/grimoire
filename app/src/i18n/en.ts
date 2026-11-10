@@ -477,6 +477,11 @@ export const en: Messages = {
   "sceneChat.send.failed": "The message was not sent — check the server.",
   "sceneChat.unconfigured":
     "No language model is set up on this server, so the chat cannot reply. Once a provider is set up, you can write here.",
+  "sceneChat.open": "Open the brainstorming on this scene",
+  "sceneChat.open.running": "Open the brainstorming on this scene — a reply is being written",
+  "sceneChat.close": "Close the chat",
+  "sceneChat.expand": "Dock as a side panel",
+  "sceneChat.collapse": "Open as a window again",
   "sceneChat.clear": "Clear chat",
   "sceneChat.clear.title": "Clear this chat?",
   "sceneChat.clear.sentence":

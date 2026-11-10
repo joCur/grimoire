@@ -16,11 +16,12 @@
 // in place and saved together. The npc cards step aside while it stands, so
 // the text gets the width.
 //
-// The npc cards, the augment action and the brainstorming chat below the
-// article are not this slice's to draw: the route is handed them (`npcCard`,
+// The npc cards, the augment action and the brainstorming chat are not this
+// slice's to draw: the route is handed them (`npcCard`,
 // `augmentAction`, `chat`), so the scene never reaches into the npc's slice,
-// the generator job's or the scene chat's. The chat steps aside in edit mode
-// like the npc cards.
+// the generator job's or the scene chat's. The chat stands beside the page,
+// floating or docked at its right, and steps aside in edit mode like the npc
+// cards.
 //
 // Edit mode is remembered BY SCENE: this route stays mounted across a
 // navigation, and an editor seeded from another scene would be a lie. A
@@ -131,65 +132,71 @@ function ScenePage({
   const editing = editingId === data.id;
 
   return (
-    <>
-      <MobileMenuRow campaign={campaign} />
-      <div
-        className={cn(
-          "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 lg:flex-row",
-          // Room for the save bar at the bottom of the phone's screen.
-          editing ? "pb-[140px] md:pb-[100px]" : "pb-[100px]",
-        )}
-      >
-        <div className={cn("w-full min-w-0 flex-1", editing ? "lg:max-w-[820px]" : "lg:max-w-[680px]")}>
-          <PageContext crumbs={scenePageCrumbs(campaign, data, tree.data)} />
-          {editing ? (
-            <SceneEditMode
-              key={data.id}
-              campaign={campaign}
-              scene={data}
-              tree={tree.data}
-              onClose={() => setEditingId(undefined)}
-            />
-          ) : (
-            <SceneArticle
-              scene={data}
-              tree={tree.data}
-              variant="scene"
-              // The augment action is desktop-only (mobile is the reading
-              // surface).
-              actions={
-                <>
-                  <BodyEditAction onEdit={() => setEditingId(data.id)} />
-                  {augmentAction(campaign, data)}
-                </>
-              }
-              // The status display IS the control here. The rev comes from the
-              // scene on screen, so the write carries exactly the version the
-              // DM was looking at.
-              statusControl={
-                <SceneStatusControl
-                  campaign={campaign}
-                  id={data.id}
-                  status={data.status}
-                  rev={data.rev}
-                  variant="pill"
-                />
-              }
-            />
+    // The chat is a sibling of the page: floating above it, or docked as a
+    // column at its right, where the page narrows for it. The page's columns
+    // follow the width the page has (a container query), so with the chat
+    // docked the npc cards flow under the text instead of squeezing it.
+    <div className="flex items-start">
+      <div className="@container min-w-0 flex-1">
+        <MobileMenuRow campaign={campaign} />
+        <div
+          className={cn(
+            "mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 md:px-7 md:pt-10 @min-[64rem]:flex-row",
+            // Room for the save bar at the bottom of the phone's screen.
+            editing ? "pb-[140px] md:pb-[100px]" : "pb-[100px]",
           )}
-          {!editing && chat(campaign, data.id)}
+        >
+          <div className={cn("w-full min-w-0 flex-1", editing ? "@min-[64rem]:max-w-[820px]" : "@min-[64rem]:max-w-[680px]")}>
+            <PageContext crumbs={scenePageCrumbs(campaign, data, tree.data)} />
+            {editing ? (
+              <SceneEditMode
+                key={data.id}
+                campaign={campaign}
+                scene={data}
+                tree={tree.data}
+                onClose={() => setEditingId(undefined)}
+              />
+            ) : (
+              <SceneArticle
+                scene={data}
+                tree={tree.data}
+                variant="scene"
+                // The augment action is desktop-only (mobile is the reading
+                // surface).
+                actions={
+                  <>
+                    <BodyEditAction onEdit={() => setEditingId(data.id)} />
+                    {augmentAction(campaign, data)}
+                  </>
+                }
+                // The status display IS the control here. The rev comes from the
+                // scene on screen, so the write carries exactly the version the
+                // DM was looking at.
+                statusControl={
+                  <SceneStatusControl
+                    campaign={campaign}
+                    id={data.id}
+                    status={data.status}
+                    rev={data.rev}
+                    variant="pill"
+                  />
+                }
+              />
+            )}
+          </div>
+          {!editing && data.npcs.length > 0 && (
+            <aside className="flex w-full flex-none flex-col gap-3.5 @min-[64rem]:sticky @min-[64rem]:top-0 @min-[64rem]:w-[280px]">
+              <h2 className="text-[12px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+                {t("scene.npcs.heading")}
+              </h2>
+              {data.npcs.map((npc) => (
+                <Fragment key={npc}>{npcCard(campaign, npc)}</Fragment>
+              ))}
+            </aside>
+          )}
         </div>
-        {!editing && data.npcs.length > 0 && (
-          <aside className="flex w-full flex-none flex-col gap-3.5 lg:sticky lg:top-0 lg:w-[280px]">
-            <h2 className="text-[12px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-              {t("scene.npcs.heading")}
-            </h2>
-            {data.npcs.map((npc) => (
-              <Fragment key={npc}>{npcCard(campaign, npc)}</Fragment>
-            ))}
-          </aside>
-        )}
       </div>
-    </>
+      {!editing && chat(campaign, data.id)}
+    </div>
   );
 }

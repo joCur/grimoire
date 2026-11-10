@@ -42,7 +42,7 @@ included, without `kind`, without `path`:
 | Session | `GET/PATCH/DELETE /api/campaigns/<campaign>/sessions/<id>` | `GET/POST /api/campaigns/<campaign>/sessions` | `/campaigns/<campaign>/sessions/<id>`, live `/campaigns/<campaign>/live` |
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
-| Scene chat | `GET/PATCH/DELETE /api/campaigns/<campaign>/scene-chats/<id>` | `GET/POST /api/campaigns/<campaign>/scene-chats` | below its scene `/campaigns/<campaign>/scenes/<scene>` |
+| Scene chat | `GET/PATCH/DELETE /api/campaigns/<campaign>/scene-chats/<id>` | `GET/POST /api/campaigns/<campaign>/scene-chats` | opened from its scene `/campaigns/<campaign>/scenes/<scene>` |
 | Scene chat message | `PATCH …/scene-chats/<chat>/messages/<id>` | `POST …/scene-chats/<chat>/messages` | in its chat |
 | Item price | `GET /api/item-prices/<id>` | `GET /api/item-prices` | on the price page `/campaigns/<campaign>/item-prices` |
 | Item-price import | `GET/PUT/DELETE /api/item-price-imports/<id>` | `GET /api/item-price-imports` | on the price page `/campaigns/<campaign>/item-prices` |
@@ -867,7 +867,11 @@ A scene chat is the DM's brainstorming conversation about one scene with
 the language model, and its own resource (`SceneChat`, from
 `shared/src/scene-chat.ts`): `{ id, scene, messages, deletedMs?, rev }`,
 its messages embedded in the order they were written. A scene has at most
-one live chat; it stands below the scene's reading view and has no title.
+one live chat and has no title. The scene's reading view opens it from a
+button at the bottom right: as a popup above the page, which docks as a side
+panel at the right while the page narrows, and on the phone as a sheet from
+the bottom. Where it stands is part of the URL (`?chat=popup` or
+`?chat=side`), so a reload keeps it.
 
 - `GET …/scene-chats?scene=<id>` responds with the scene's live chat (one or
   none); without the filter, every live chat of the campaign.

@@ -527,6 +527,11 @@ export const de = {
   "sceneChat.send.failed": "Die Nachricht wurde nicht gesendet — Server prüfen.",
   "sceneChat.unconfigured":
     "Auf diesem Server ist kein Sprachmodell eingerichtet, deshalb kann der Chat nicht antworten. Sobald ein Anbieter eingerichtet ist, kannst du hier schreiben.",
+  "sceneChat.open": "Brainstorming zu dieser Szene öffnen",
+  "sceneChat.open.running": "Brainstorming zu dieser Szene öffnen — eine Antwort wird gerade geschrieben",
+  "sceneChat.close": "Chat schließen",
+  "sceneChat.expand": "Als Seitenleiste andocken",
+  "sceneChat.collapse": "Wieder als Fenster öffnen",
   "sceneChat.clear": "Chat leeren",
   "sceneChat.clear.title": "Diesen Chat leeren?",
   "sceneChat.clear.sentence":

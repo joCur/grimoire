@@ -326,7 +326,7 @@ The paths:
    other link leads into an area
 2. Read a scene: opened from that list (`/campaigns/:id/scenes/<id>`, read
    via `GET …/scenes/<id>`) — callouts, if sections, NPC cards of the
-   reference scenes, and its brainstorming chat below the text (path 14)
+   reference scenes, and the button of its brainstorming chat (path 14)
 3. ⌘K search finds and opens: indexed are campaign, chapters, scenes,
    NPCs, locations, the glossary terms, the instance's item prices and
    the random tables the DM imported.
@@ -547,9 +547,13 @@ The paths:
     The page fits 390px. The suite imports a small table written for it;
     no published table is in the repository
 14. Scene chat (decisions/generator): the reading view of a scene
-    (`/campaigns/:id/scenes/<id>`) has its brainstorming chat below the
-    text, empty at first; sending (`POST …/scene-chats { scene }` on the
-    first message, then `POST …/scene-chats/<chat>/messages { text }`)
+    (`/campaigns/:id/scenes/<id>`) opens its brainstorming chat from a button
+    at the bottom right as a popup above the page, which docks as a side
+    panel at the right (the page narrows, nothing covers the text) and back;
+    on the phone it is a sheet from the bottom. Where it stands is in the URL
+    (`?chat=popup|side`), so a reload keeps it; Esc closes the popup and the
+    focus returns to the button. The chat is empty at first; sending
+    (`POST …/scene-chats { scene }` on the first message, then `POST …/scene-chats/<chat>/messages { text }`)
     shows the DM's message at once and the reply as running, with the send
     action disabled until it stands; the app polls the chat, and the stub
     LLM's reply echoes the context block — the scene, its NPC, its location
@@ -560,7 +564,7 @@ The paths:
     sentence, keeps the DM's message and offers to retry. Clearing asks
     first (`DELETE …/scene-chats/<id> { rev }`) and puts the chat in the
     trash as one row, and the trash page restores it (`PATCH …/scene-chats/<id>
-    { rev, deletedMs: null }`). The chat fits 390px
+    { rev, deletedMs: null }`). The sheet fits 390px
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same
