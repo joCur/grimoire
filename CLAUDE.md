@@ -367,9 +367,14 @@ The paths:
    404, a stale `rev` 409 with the current line, and the card says that the
    note was changed elsewhere; `review/seen` responds 404
 6. Generator cycle (stub LLM): job → review proposals → accept →
-   scene in the chapters; plus the 409/error path. The review of a scene
-   run walks in stages (decisions/generator): the new locations, then the
-   new NPCs, then the scenes; a stage without proposals is skipped, and the
+   scene in the chapters; plus the 409/error path. A scene run whose
+   outline names terms the campaign does not cover yet waits on a terms
+   stage before any part call (grouped by kind, a glossary-covered term
+   absent): accepting all writes the ticked terms as glossary terms, and a
+   scene call and a location call carry the decided renderings (the stub
+   echoes them); a restart leaves a waiting run waiting. The review of a
+   scene run walks in stages (decisions/generator): the new locations, then
+   the new NPCs, then the scenes; a stage without proposals is skipped, and the
    stage is stored on the job (`review.stage`). Each location and NPC is
    accepted (written right away) or rejected on its own; the scene stage
    opens only when both are decided, and going back stays possible.

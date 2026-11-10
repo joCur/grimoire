@@ -32,6 +32,12 @@
 //      offered for editing — it exists to reduce errors, and the only thing
 //      the DM is interested in is the finished scene.
 //
+//      The outline also names the material's own TERMS whose rendering is a
+//      real choice, each with a proposed rendering. When it names any the
+//      campaign does not cover yet, the run WAITS: no part call is made until
+//      the DM has decided them, and every part call then carries the decided
+//      list in its constant half (decisions/generator).
+//
 //   2. SCENES — one call per outline scene, three at a time. Prompt =
 //      the scene prompt in single-scene-from-outline mode + the outline +
 //      the excerpt. Validation, correction turns and the naming check happen
@@ -52,6 +58,7 @@
 // nothing to decompose.
 
 import {
+  RUN_TERM_KINDS,
   SCENE_TYPES,
   npcToReply,
   type GeneratorJobPart,
@@ -61,6 +68,7 @@ import {
   type NpcProposal,
   type PartChange,
   type PatchFinding,
+  type RunTerm,
   type SceneProposal,
   type ServerNote,
 } from "@grimoire/shared";
@@ -105,6 +113,7 @@ import {
   type ReadOperation,
 } from "./patch-operations";
 import { readLocation } from "./store/locations";
+import { promptInline } from "./store/knowledge-items";
 import { readNpc } from "./store/npcs";
 
 /** How many scene, npc and location calls of one run are in flight at once. */
@@ -186,6 +195,12 @@ export interface RunOutline {
   existingNpcs: OutlineExisting[];
   /** The locations of the campaign the run extends — likewise. */
   existingLocations: OutlineExisting[];
+  /**
+   * The material's own terms the campaign does not cover yet, each with the
+   * outline's proposed rendering — empty when there are none, and then the
+   * run does not wait on the DM.
+   */
+  terms: RunTerm[];
   /** The model's notes about the run. */
   warnings: string[];
   /**
@@ -348,6 +363,8 @@ export function validateOutlineReply(
     if (location !== null) existingLocations.push(location);
   });
 
+  const terms = readTerms(obj.terms, ctx, errors);
+
   const outlineLocationIds = new Set(locations.map((location) => location.id));
   const scenes: OutlineScene[] = [];
   rawScenes.forEach((item, index) => {
@@ -486,12 +503,61 @@ export function validateOutlineReply(
       locations,
       existingNpcs,
       existingLocations,
+      terms,
       warnings,
       // The repair is recorded, not swallowed.
       serverNotes: parsedReply.repaired ? ["reply_repaired"] : [],
       ...(chapterDescription === undefined ? {} : { chapterDescription }),
     },
   };
+}
+
+/**
+ * The terms of an outline reply. Each needs its wording and a known kind; a
+ * missing description is none, a missing rendering keeps the wording. A term
+ * the campaign already covers — a glossary term or the `from` of a naming
+ * convention reads the same, ignoring case — is dropped, and so is a second
+ * term of the same wording: what the campaign decided is not asked again.
+ * A reply without the list has no terms.
+ */
+function readTerms(raw: unknown, ctx: SceneContext, errors: string[]): RunTerm[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    errors.push('"terms" must be an array');
+    return [];
+  }
+  const key = (value: string): string => value.trim().toLowerCase();
+  const covered = new Set([
+    ...ctx.glossaryTerms.map(key),
+    ...ctx.namingRules.map((rule) => key(rule.from)),
+  ]);
+  const terms: RunTerm[] = [];
+  raw.forEach((item, index) => {
+    const label = `terms[${index}]`;
+    if (!isRecord(item)) {
+      errors.push(`${label}: must be an object`);
+      return;
+    }
+    const wording = stringField(item, "wording")?.trim();
+    if (wording === undefined) {
+      errors.push(`${label}: "wording" must name the term as the material spells it`);
+      return;
+    }
+    const kind = RUN_TERM_KINDS.find((candidate) => candidate === item.kind);
+    if (kind === undefined) {
+      errors.push(`${label}: "kind" must be one of ${RUN_TERM_KINDS.join(", ")}`);
+      return;
+    }
+    if (covered.has(key(wording))) return;
+    covered.add(key(wording));
+    terms.push({
+      wording,
+      description: stringField(item, "description")?.trim() ?? "",
+      kind,
+      rendering: stringField(item, "rendering")?.trim() ?? wording,
+    });
+  });
+  return terms;
 }
 
 // --- cutting the source passage ----------------------------------------------
@@ -667,6 +733,29 @@ export function outlineBlock(outline: RunOutline): string {
   return lines.join("\n");
 }
 
+/**
+ * The run's decided terms as prompt lines (llm-provider TERMS_HEADING): the
+ * wording, the rendering every call writes it with, and what it is. One line
+ * per term, each value made a single line of plain text like every other
+ * item quoted into the prompt (store/knowledge-items.ts `promptInline`).
+ */
+export function termsBlock(terms: readonly RunTerm[]): string {
+  return terms
+    .map((term) => {
+      const description = promptInline(term.description);
+      return (
+        `- schreibe „${promptInline(term.wording)}“ als „${promptInline(term.rendering)}“` +
+        (description === "" ? "" : ` (${description})`)
+      );
+    })
+    .join("\n");
+}
+
+/** The run's decided terms for a call's constant half; nothing for a run without. */
+export function termsOf(plan: RunPlan): { terms?: string } {
+  return plan.terms.length === 0 ? {} : { terms: termsBlock(plan.terms) };
+}
+
 /** Which scene of the outline THIS call writes (llm-provider ASSIGNMENT_HEADING). */
 export function assignmentBlock(scene: OutlineScene): string {
   return `${scene.id} — ${scene.title}`;
@@ -835,6 +924,9 @@ export interface PipelineSink {
    * serialized to the client (PipelineRecord).
    */
   outlineReady(outline: RunOutline, parts: GeneratorJobPart[], usage: PartUsage): Promise<void>;
+  // An outline with terms leaves the run WAITING on the DM: `outlineReady`
+  // stores them as open, and the parts run only once the DM confirms them
+  // (generator-jobs.ts `confirmJobTerms`).
   partRunning(key: string): Promise<void>;
   partDone(key: string, outcome: PartOutcome, usage: PartUsage): Promise<void>;
   partFailed(
@@ -996,6 +1088,8 @@ export interface RunPlan {
   sourceText: string;
   /** The run's supplementary material; absent for a run without one. */
   supplementText?: string;
+  /** The run's decided terms — empty for a run whose outline found none. */
+  terms: RunTerm[];
   allowed: AllowedRefs;
   /**
    * The cut passages per scene id, computed once for the whole run.
@@ -1019,10 +1113,12 @@ export function planOf(input: {
   outline: RunOutline;
   sourceText: string;
   supplementText?: string;
+  terms?: readonly RunTerm[];
 }): RunPlan {
   const { ctx, outline } = input;
   return {
     ...input,
+    terms: [...(input.terms ?? [])],
     excerpts: new Map(
       outline.scenes.map((scene) => [
         scene.id,
@@ -1145,6 +1241,7 @@ export async function runScenePart(
       systemPrompt,
       fewShotTarget,
       knowledge: plan.ctx.knowledge,
+      ...termsOf(plan),
       glossary: plan.ctx.glossary,
       context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
       ...supplementOf(plan),
@@ -1204,6 +1301,7 @@ export async function runNpcPart(
       systemPrompt: await withSupplementRules(assets.systemPrompt, plan.supplementText),
       fewShotTarget: assets.fewShotTarget,
       knowledge: plan.ctx.knowledge,
+      ...termsOf(plan),
       glossary: plan.ctx.glossary,
       context: { npcs: plan.ctx.npcs, locations: plan.ctx.locations, targetId: outlineNpc.id },
       ...supplementOf(plan),
@@ -1248,6 +1346,7 @@ export async function runLocationPart(
       systemPrompt: await withSupplementRules(assets.systemPrompt, plan.supplementText),
       fewShotTarget: assets.fewShotTarget,
       knowledge: plan.ctx.knowledge,
+      ...termsOf(plan),
       glossary: plan.ctx.glossary,
       context: {
         npcs: plan.ctx.npcs,
@@ -1318,6 +1417,7 @@ export async function runExtensionPart(
       systemPrompt,
       fewShotTarget,
       knowledge: plan.ctx.knowledge,
+      ...termsOf(plan),
       glossary: plan.ctx.glossary,
       context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
       ...supplementOf(plan),
@@ -1573,6 +1673,9 @@ export async function runScenePipeline(input: {
   if (input.sink.cancelled()) return;
   const parts = outlineParts(outline);
   await input.sink.outlineReady(outline, parts, usage);
+  // New terms: the run waits on the DM, and their confirmation starts the
+  // parts (generator-jobs.ts `confirmJobTerms`).
+  if (outline.terms.length > 0) return;
   const plan = planOf({
     campaign: input.campaign,
     ctx,
@@ -1591,6 +1694,8 @@ export async function replanStoredRun(input: {
   supplementText?: string;
   newChapter: boolean;
   outline: RunOutline;
+  /** The run's decided terms; none for a run whose outline found none. */
+  terms?: readonly RunTerm[];
 }): Promise<RunPlan> {
   const ctx = await collectSceneContext(input.campaign, input.chapter, input.newChapter);
   return planOf({
@@ -1599,5 +1704,6 @@ export async function replanStoredRun(input: {
     outline: input.outline,
     sourceText: input.sourceText,
     ...(input.supplementText === undefined ? {} : { supplementText: input.supplementText }),
+    ...(input.terms === undefined ? {} : { terms: input.terms }),
   });
 }

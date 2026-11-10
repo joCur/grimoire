@@ -221,6 +221,37 @@ export async function deleteGlossaryTerm(
   });
 }
 
+/**
+ * Write a term at the end INSIDE the caller's transaction — unless the
+ * glossary already has one that reads the same, ignoring case, which is left
+ * as it stands. Answers whether the term was written. The confirmation of a
+ * generator run's terms keeps its ticked terms this way (decisions/generator):
+ * a term the DM already defined is no conflict there, it is simply covered.
+ */
+export function insertGlossaryTermUnlessTaken(
+  tx: GrimoireDb,
+  campaign: string,
+  request: { term: string; explanation: string },
+): boolean {
+  const wording = request.term.trim().toLowerCase();
+  const taken = glossaryTermRows(tx, campaign).some(
+    (row) => row.term.trim().toLowerCase() === wording,
+  );
+  if (taken) return false;
+  const id = randomUUID();
+  tx.insert(glossaryTerms)
+    .values({
+      campaignId: campaign,
+      id,
+      term: request.term,
+      explanation: request.explanation,
+      pos: nextGlossaryTermPos(tx, campaign),
+    })
+    .run();
+  indexGlossaryTerm(tx, campaign, requireGlossaryTermRow(tx, campaign, id));
+  return true;
+}
+
 /** The one past the highest `pos` of the campaign — where a new term stands. */
 function nextGlossaryTermPos(tx: GrimoireDb, campaign: string): number {
   return nextPos(
@@ -275,6 +306,11 @@ function indexGlossaryTerm(tx: GrimoireDb, campaign: string, row: GlossaryTermRo
 }
 
 // --- the prompt block ---------------------------------------------------------
+
+/** The wording of every term of the campaign, in the order the terms were created. */
+export async function glossaryTermWordings(campaign: string): Promise<string[]> {
+  return glossaryTermRows(await getDb(), campaign).map((row) => row.term);
+}
 
 /**
  * The glossary as the generator's context block — the `EN → DE` lines the

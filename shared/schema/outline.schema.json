@@ -9,6 +9,7 @@
     "locations",
     "existingNpcs",
     "existingLocations",
+    "terms",
     "chapterDescription",
     "warnings"
   ],
@@ -191,6 +192,43 @@
           "summary": {
             "type": "string",
             "description": "Ein Satz: was der Quelltext über den Ort hinzufügt."
+          }
+        }
+      }
+    },
+    "terms": {
+      "type": "array",
+      "description": "Die eigenen Begriffe des Quelltexts und des Ergänzungsmaterials, deren Wiedergabe in der Sprache der Kampagne eine echte Wahl ist: Orte, Personen und Titel, Gruppen, Spielbegriffe — keine Alltagswörter und nichts, was Glossar oder Namenskonventionen schon regeln.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "wording",
+          "description",
+          "kind",
+          "rendering"
+        ],
+        "properties": {
+          "wording": {
+            "type": "string",
+            "description": "Der Begriff, wörtlich so, wie das Material ihn schreibt."
+          },
+          "description": {
+            "type": "string",
+            "description": "Ein kurzer Satz auf Deutsch: was der Begriff ist."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "place",
+              "person",
+              "group",
+              "game-term"
+            ]
+          },
+          "rendering": {
+            "type": "string",
+            "description": "Wie die Kampagne den Begriff schreiben soll — auch der unveränderte Begriff ist eine Wiedergabe."
           }
         }
       }

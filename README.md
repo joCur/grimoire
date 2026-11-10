@@ -1094,6 +1094,13 @@ run, the source text sets the chapter's frame, and the supplement enriches
 its scenes and may add scenes of its own, which the outline orders among
 the others. Each outline scene names its passage in the source, in the
 supplement, or in both.
+The outline also names the material's own terms whose rendering is a real
+choice — places, people and titles, groups, game terms — each with a short
+description and a proposed rendering; a term a glossary term or a naming
+convention already covers is left out. When any are left, the run waits
+after the outline: the review opens with a terms stage, and no scene, NPC or
+location is written before the DM confirms it. Every later call of the run
+carries the decided list, and the ticked terms become glossary terms.
 
 **Every** call responds with a JSON object whose schema the server
 **enforces** via the provider API. A scene, NPC or location call (creating
@@ -1111,7 +1118,11 @@ under `result.scenes`, the NPCs under `result.npcs` and the locations under
 The DM's changes to a proposal are kept per scene under `sceneEdits`, per
 NPC under `npcEdits` and per location under `locationEdits`. The job is its own resource (`…/generator-jobs/<id>`,
 at most one per campaign): it is reviewed and accepted with `PATCH` on it,
-discarded with `DELETE`. The review of a scene run walks in stages — the new
+discarded with `DELETE`. A scene run whose outline found new terms holds
+them under `pipeline.terms` (`open` while the run waits on them, `confirmed`
+once decided) and waits `done` with every part `pending`; the terms are
+confirmed with `PATCH { rev, terms: { <wording>: { rendering, glossary } } }`,
+which starts the parts. The review of a scene run walks in stages — the new
 locations, then the new NPCs, then the scenes — and the stage is part of the
 review on the job. Accepting a proposal writes exactly that proposal; a
 scene whose `npcs` or `location` names a proposal of the run that is not

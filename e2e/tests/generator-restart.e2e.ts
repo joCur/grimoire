@@ -7,7 +7,7 @@
 // real provider; the only thing arranged is WHEN the stub answers
 // (TRIGGER.slow holds the reply, so a job can be caught while it truly runs).
 //
-// Two claims, and they are the two halves of what "persistent" has to mean:
+// Three claims, and they are what "persistent" has to mean:
 //
 //   1. a run that was IN FLIGHT cannot come back — its provider call died with
 //      the process — so the boot fails it with an error code the app has a
@@ -15,7 +15,10 @@
 //   2. a FINISHED run comes back whole — result, warnings and the review edits
 //      — and is still acceptable afterwards. That is the loss this guards
 //      against: a deploy between a finished run and its accept must not throw
-//      a good generation away.
+//      a good generation away;
+//   3. a run WAITING on the DM's decision of its terms has nothing in flight,
+//      so it comes back still waiting — and, once confirmed and done, keeps
+//      its decided list.
 
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -203,6 +206,60 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(await readGeneratorJob(api)).toBeNull();
   } finally {
     await second.proc.stop();
+  }
+
+  if (process.env.E2E_KEEP !== "1") await rm(dataDir, { recursive: true, force: true });
+});
+
+test("a run waiting on its terms stays waiting across a restart and keeps its list once done", async ({}, testInfo) => {
+  const dataDir = await ownDataDir(testInfo.testId, testInfo.workerIndex);
+  const sourceText = `${SOURCE}\n\n${TRIGGER.terms}`;
+
+  // --- boot 1: the outline is in, the run waits on its terms ----------------
+  const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
+  let waiting: GeneratorJob;
+  try {
+    const api = apiFor(first.handle.url);
+    await startGeneratorJob(api, { kind: "scene", chapter: "01-salt-harbour", sourceText });
+    waiting = await waitForGeneratorJob(api);
+    expect(waiting.pipeline!.terms!.status).toBe("open");
+  } finally {
+    await first.proc.stop();
+  }
+
+  // --- boot 2: still waiting, nothing ran — and the confirmation runs it ----
+  const second = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
+  let confirmed: GeneratorJob;
+  try {
+    const api = apiFor(second.handle.url);
+    const after = (await readGeneratorJob(api))!;
+    expect(after).toEqual(waiting);
+    expect(after.status).toBe("done");
+    expect(after.pipeline!.parts.every((part) => part.status === "pending")).toBe(true);
+    await patchGeneratorJob(api, after.id, {
+      rev: after.rev,
+      terms: Object.fromEntries(
+        after.pipeline!.terms!.list.map((term) => [
+          term.wording,
+          { rendering: term.rendering, glossary: false },
+        ]),
+      ),
+    });
+    confirmed = await waitForGeneratorJob(api);
+    expect(confirmed.status).toBe("done");
+    expect(confirmed.pipeline!.parts.every((part) => part.status === "done")).toBe(true);
+    expect(confirmed.pipeline!.terms!.status).toBe("confirmed");
+  } finally {
+    await second.proc.stop();
+  }
+
+  // --- boot 3: the finished job keeps its decided list -----------------------
+  const third = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
+  try {
+    const api = apiFor(third.handle.url);
+    expect((await readGeneratorJob(api))!.pipeline!.terms).toEqual(confirmed.pipeline!.terms);
+  } finally {
+    await third.proc.stop();
   }
 
   if (process.env.E2E_KEEP !== "1") await rm(dataDir, { recursive: true, force: true });

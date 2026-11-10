@@ -76,6 +76,10 @@
 //     part: operations against the existing npc (extensionReply)
 //   - TRIGGER.extendNpc -> one plain scene and, when the outline prompt
 //     carries the rules for extending, the existing npc EXTENDED_NPC_ID
+//   - TRIGGER.terms -> the default outline also names the material's terms
+//     (RUN_TERMS, and COVERED_TERM, which the glossary already has)
+//   - a decided-terms section (TERMS_HEADING) -> a scene, npc or location
+//     part echoes the terms block back as a note of its own (termsEcho)
 //   - a supplementary-material section (SUPPLEMENT_HEADING) -> the outline
 //     has three scenes, the middle one from the supplement alone, and its
 //     notes echo the material; the middle scene's call answers with a scene
@@ -115,6 +119,7 @@ import {
   SUPPLEMENT_HEADING,
   SUPPLEMENT_PASSAGE_HEADING,
   SUPPLEMENT_SCENE,
+  TERMS_HEADING,
   THREE_SCENES,
   TRIGGER,
   augmentReply,
@@ -135,6 +140,7 @@ import {
   scenePartReply,
   supplementOutlineReply,
   supplementSceneReply,
+  termsEcho,
   unknownRefAugmentReply,
   unknownRefLocationAugmentReply,
   unknownRefNpcAugmentReply,
@@ -182,8 +188,30 @@ function knowledgeBlock(prompt: string): string {
   const start = prompt.indexOf(KNOWLEDGE_HEADING);
   if (start === -1) return "";
   const after = prompt.slice(start + KNOWLEDGE_HEADING.length);
+  const ends = [TERMS_HEADING, "## Glossar"]
+    .map((heading) => after.indexOf(heading))
+    .filter((index) => index !== -1);
+  return (ends.length === 0 ? after : after.slice(0, Math.min(...ends))).trim();
+}
+
+/**
+ * The decided terms of a scene run — the section below TERMS_HEADING, up to
+ * the glossary — or "" when the call carries none.
+ */
+function termsBlock(prompt: string): string {
+  const start = prompt.indexOf(TERMS_HEADING);
+  if (start === -1) return "";
+  const after = prompt.slice(start + TERMS_HEADING.length);
   const end = after.indexOf("## Glossar");
   return (end === -1 ? after : after.slice(0, end)).trim();
+}
+
+/** A part's reply with the terms it was sent echoed as one more note; unchanged without. */
+function withTermsEcho(reply: unknown, terms: string): unknown {
+  if (terms === "" || reply === null || typeof reply !== "object") return reply;
+  const object = reply as { warnings?: unknown };
+  const warnings = Array.isArray(object.warnings) ? object.warnings : [];
+  return { ...object, warnings: [...warnings, termsEcho(terms)] };
 }
 
 /**
@@ -467,6 +495,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
             describeAnyway: source.includes(TRIGGER.describeAnyway),
             extendNpc: source.includes(TRIGGER.extendNpc),
             extending: system.includes(EXTEND_RULES_HEADING),
+            terms: source.includes(TRIGGER.terms),
           }),
     };
   }
@@ -514,11 +543,19 @@ export function decide(messages: ChatMessage[]): StubDecision {
         reply:
           invalid || fails
             ? invalidScenePartReply(chapter, assigned)
-            : scenePartReply(chapter, assigned, oldName, asciiQuotes, partNotes),
+            : withTermsEcho(
+                scenePartReply(chapter, assigned, oldName, asciiQuotes, partNotes),
+                termsBlock(prompt),
+              ),
       };
     }
     const kind = system.includes("System-Prompt: Ort-Generator") ? "location" : "npc";
-    return { kind: "proposal", truncated, delayMs, reply: proposalPartReply(kind, partNotes) };
+    return {
+      kind: "proposal",
+      truncated,
+      delayMs,
+      reply: withTermsEcho(proposalPartReply(kind, partNotes), termsBlock(prompt)),
+    };
   }
 
   // Everything left is the single-call NPC run: no chapter, and the

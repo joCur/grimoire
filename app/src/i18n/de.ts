@@ -1114,6 +1114,29 @@ export const de = {
   "generate.stage.extend.npcs":
     "Der Lauf schlägt Änderungen an NPCs vor, die es schon gibt. Übernimm oder verwirf jede Änderung einzeln — sie halten die Szenen nicht auf.",
 
+  // --- generator: the terms stage of a scene run -----------------------------
+  // The outline named the material's own terms; the run waits until the DM
+  // decided how it writes them, before any scene, NPC or location is written.
+  "generate.terms.title": "Begriffe festlegen",
+  "generate.terms.count": "{count, plural, one {# Begriff} other {# Begriffe}}",
+  "generate.terms.lead":
+    "Die Gliederung steht. Bevor der Lauf Szenen, NPCs und Orte schreibt, lege fest, wie er diese Begriffe aus dem Material schreibt — jede Szene, jeder NPC und jeder Ort des Laufs hält sich dann daran.",
+  "generate.terms.hint":
+    "Ein leeres Feld lässt den Begriff so, wie er im Material steht. Was im Glossar bleiben soll, steht danach auch dort.",
+  "generate.terms.kind.place": "Orte",
+  "generate.terms.kind.person": "Personen und Titel",
+  "generate.terms.kind.group": "Gruppen",
+  "generate.terms.kind.game-term": "Spielbegriffe",
+  "generate.terms.rendering": "So schreibt der Lauf ihn",
+  "generate.terms.renderingOf": "So schreibt der Lauf „{wording}“",
+  "generate.terms.glossary": "Im Glossar behalten",
+  "generate.terms.accept":
+    "{count, plural, one {Begriff übernehmen und weiterschreiben} other {Alle # Begriffe übernehmen und weiterschreiben}}",
+  "generate.terms.accepting": "Übernehme die Begriffe …",
+  "generate.terms.conflict":
+    "Der Lauf wurde inzwischen anderswo geändert und ist neu geladen. Prüfe die Begriffe noch einmal.",
+  "generate.terms.failed": "Die Begriffe konnten nicht übernommen werden. Versuch es noch einmal.",
+
   // --- generator: changes a scene run proposes to an existing npc or location
   "generate.extension.reason.npc": "Änderungen an einem bestehenden NPC",
   "generate.extension.reason.location": "Änderungen an einem bestehenden Ort",

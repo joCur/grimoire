@@ -422,12 +422,76 @@ export const generatorJobPartSchema = z.strictObject({
 
 export type GeneratorJobPart = z.infer<typeof generatorJobPartSchema>;
 
+// --- the terms of a scene run -------------------------------------------------
+
+/**
+ * What kind of thing a term of a run names: a place, a person or title, a
+ * group, or a game term. The terms stage groups them by it.
+ */
+export const RUN_TERM_KINDS = ["place", "person", "group", "game-term"] as const;
+export type RunTermKind = (typeof RUN_TERM_KINDS)[number];
+
+/**
+ * One term of a scene run: a name or word of the source material (or its
+ * supplement) whose rendering in the campaign's language is a real choice.
+ *
+ *   - `wording` as the material spells it — the term's key within the run;
+ *   - `description` what it is, in a short sentence;
+ *   - `kind` what kind of thing it names (`RUN_TERM_KINDS`);
+ *   - `rendering` how the run writes it — the outline's proposal until the DM
+ *     confirms the stage, the DM's choice after that. Keeping the wording is
+ *     a rendering too.
+ */
+export const runTermSchema = z.strictObject({
+  wording: z.string(),
+  description: z.string(),
+  kind: z.enum(RUN_TERM_KINDS),
+  rendering: z.string(),
+});
+
+export type RunTerm = z.infer<typeof runTermSchema>;
+
+export const RUN_TERMS_STATUSES = ["open", "confirmed"] as const;
+
+/**
+ * The terms of a scene run whose outline found any the campaign does not
+ * cover yet (decisions/generator):
+ *
+ *   - `open` while the run waits on the DM — no scene, npc or location call
+ *     has been made, and none is made until the stage is confirmed;
+ *   - `confirmed` once the DM decided them: `list` is then the binding list
+ *     every call of the run carries, a retry and a patch round included.
+ */
+export const runTermsSchema = z.strictObject({
+  status: z.enum(RUN_TERMS_STATUSES),
+  list: z.array(runTermSchema),
+});
+
+export type RunTerms = z.infer<typeof runTermsSchema>;
+
+/**
+ * The DM's decision on one term as the confirmation sends it: the rendering
+ * the run writes it with (blank keeps the wording), and whether the term is
+ * kept in the glossary as well.
+ */
+export const runTermDecisionSchema = runTermSchema.pick({ rendering: true }).extend({
+  glossary: z.boolean(),
+});
+
+export type RunTermDecision = z.infer<typeof runTermDecisionSchema>;
+
 /**
  * The pipeline state of a scene run: its parts in OUTLINE order plus what the
  * whole run has cost so far. Absent for the single-call runs (npc, augment).
  */
 export const generatorJobPipelineSchema = z.strictObject({
   parts: z.array(generatorJobPartSchema),
+  /**
+   * The run's terms, while they wait on the DM and once they are decided —
+   * see `runTermsSchema`. Absent when the outline found none: the parts then
+   * start right away.
+   */
+  terms: runTermsSchema.optional(),
   /**
    * What the chapter a new-chapter run creates is about — written by the
    * outline from the source material, and the text that chapter starts with
@@ -588,7 +652,9 @@ export const locationEditSchema = locationChangeSchema.omit({ id: true });
  *
  * A running job does not survive a restart of the server — its provider call
  * died with the process — and comes back as `failed` with a message saying
- * so; a finished one comes back whole.
+ * so; a finished one comes back whole. A scene run whose terms wait on the DM
+ * (`pipeline.terms.status` `open`) has no call in flight: it is `done`, with
+ * every part still `pending`, and a restart leaves it waiting.
  */
 export const generatorJobSchema = z.strictObject({
   id: z.string(),
@@ -691,12 +757,18 @@ export type GeneratorJobReviewPatch = z.infer<typeof generatorJobReviewPatchSche
  * (see `generatorJobReviewPatchSchema`). The run's own fields are the
  * server's. Strict like the schema it comes from: any other key is a 400
  * naming it.
+ *
+ * `terms` confirms the terms stage of a scene run that waits on it: the DM's
+ * decision on every term, keyed by its `wording`. It names every term of the
+ * run and nothing else, and it carries no other key of the review — the
+ * confirmation is its own write, and it starts the run's parts.
  */
 export const generatorJobPatchSchema = generatorJobSchema
   .pick({ id: true, sceneEdits: true, npcEdits: true, locationEdits: true })
   .partial()
   .extend({
     review: generatorJobReviewPatchSchema.optional(),
+    terms: z.record(z.string(), runTermDecisionSchema).optional(),
     rev: z.number(),
   });
 

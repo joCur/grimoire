@@ -44,12 +44,14 @@ import {
   outlineBlock,
   replanStoredRun,
   supplementOf,
+  termsOf,
   usageOf,
   withSupplementRules,
 } from "./generate-pipeline";
 import { ASSET_FILES, composePrompt, loadAsset, runPipeline } from "./generator";
 import {
   assertAnswerable,
+  decidedTerms,
   decidePartRound,
   openPartRound,
   requireJob,
@@ -194,6 +196,7 @@ async function runRound(input: {
       ...(job.supplementText === undefined ? {} : { supplementText: job.supplementText }),
       newChapter: job.newChapter,
       outline: job.pipeline!.outline!,
+      terms: decidedTerms(job),
     });
     const [systemPrompt, fewShotTarget] = await Promise.all([
       patchSystemPrompt(part.kind).then((prompt) =>
@@ -206,6 +209,7 @@ async function runRound(input: {
         systemPrompt,
         fewShotTarget,
         knowledge: plan.ctx.knowledge,
+        ...termsOf(plan),
         glossary: plan.ctx.glossary,
         context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
         ...supplementOf(plan),

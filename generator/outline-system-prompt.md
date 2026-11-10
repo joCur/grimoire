@@ -41,6 +41,14 @@ Gib genau dieses JSON-Objekt zurück:
   "locations": [
     { "id": "<kebab-case id>", "name": "<Anzeigename>", "summary": "<ein Satz>" }
   ],
+  "terms": [
+    {
+      "wording": "<Begriff, wörtlich wie im Material>",
+      "description": "<ein kurzer Satz: was der Begriff ist>",
+      "kind": "place | person | group | game-term",
+      "rendering": "<wie die Kampagne ihn schreibt>"
+    }
+  ],
   "chapterDescription": "<bei „neues Kapitel: ja“: worum es im Kapitel geht und was die Gruppe erreichen soll; sonst null>",
   "warnings": ["<alles, was der DM prüfen sollte>"]
 }
@@ -49,8 +57,8 @@ Gib genau dieses JSON-Objekt zurück:
 Das JSON-Objekt ist die ganze Antwort.
 
 **Inhalte kommen später.** Dieser Aufruf liefert allein die Gliederung: ids,
-Titel, Typ, Ort, Zitatgrenzen, Querverweise und — für ein neues Kapitel —
-dessen Beschreibung. Szenentexte, Callouts und die übrigen Felder schreiben
+Titel, Typ, Ort, Zitatgrenzen, Querverweise, die Begriffe des Durchlaufs und
+— für ein neues Kapitel — dessen Beschreibung. Szenentexte, Callouts und die übrigen Felder schreiben
 die folgenden Aufrufe; das Kapitel jeder Szene ist das aus dem Kontext.
 
 ## Regeln
@@ -90,16 +98,28 @@ die folgenden Aufrufe; das Kapitel jeder Szene ist das aus dem Kontext.
    Kapitel geht und was die Gruppe erreichen soll —, als schlichten
    Fließtext, der direkt mit dem ersten Satz beginnt. Für ein bestehendes
    Kapitel steht hier `null`: sein Text gehört dem DM.
-9. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
+9. **terms**: Nach `terms` gehört jeder eigene Begriff des Quelltexts (und
+   des Ergänzungsmaterials), dessen Wiedergabe in der Sprache der Kampagne
+   eine echte Wahl ist — Orte (`place`), Personen und Titel (`person`),
+   Gruppen (`group`) und Spielbegriffe (`game-term`). Alltagswörter gehören
+   nicht dazu. Jeder Begriff steht einmal, mit `wording` genau so, wie das
+   Material ihn schreibt, einem kurzen Satz auf Deutsch in `description`, was
+   er ist, und in `rendering` deinem Vorschlag, wie die Kampagne ihn schreibt;
+   den Begriff unverändert zu lassen ist ebenfalls eine Wiedergabe. Was das
+   Glossar oder eine Namenskonvention des Kampagnenwissens schon regelt,
+   bleibt draußen. Der DM entscheidet die Liste, bevor die Szenen, Figuren
+   und Orte geschrieben werden, und jeder folgende Aufruf schreibt jeden
+   Begriff so, wie der DM ihn entschieden hat.
+10. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
    auch für Titel und Einzeiler.
-10. **Quelltreu bleiben**: Jede Szene stammt aus dem Quelltext. Lücken
+11. **Quelltreu bleiben**: Jede Szene stammt aus dem Quelltext. Lücken
    gehören in `warnings`.
-11. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
+12. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
    Rechtschreibung — ä, ö, ü und ß stehen als genau diese Zeichen. Das gilt
    für Fließtext, Read-Alouds, alle Callouts, `## If:`-Bedingungen,
    Überschriften, `warnings` und für jedes Feld, das Text ist (`title`,
-   `name`, `summary`, `chapterDescription`). **Einzige Ausnahme**: `id`-Werte
+   `name`, `summary`, `description`, `rendering`, `chapterDescription`). **Einzige Ausnahme**: `id`-Werte
    — die bleiben kebab-case ASCII. Eigennamen aus dem Quelltext bleiben genau
    so geschrieben, wie sie dort stehen. **Anführungszeichen**: deutsche
    typografische Anführungszeichen „…“ (unten öffnend U+201E, oben
@@ -110,4 +130,5 @@ die folgenden Aufrufe; das Kapitel jeder Szene ist das aus dem Kontext.
 Der Prompt trägt eine Beispiel-Gliederung als Referenz bei
 (`outline-example-output.json`): drei Szenen aus einem neuen Hafen-Kapitel,
 eine davon `contingency` mit `refs` auf die Szene, aus der sie ausgelöst wird,
-eine neue Figur, ein neuer Ort und die Beschreibung des Kapitels.
+eine neue Figur, ein neuer Ort, zwei Begriffe des Durchlaufs und die
+Beschreibung des Kapitels.

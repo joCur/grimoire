@@ -997,6 +997,27 @@ export const en: Messages = {
   "generate.stage.extend.npcs":
     "The run proposes changes to NPCs that already exist. Take or discard each change on its own — they do not hold up the scenes.",
 
+  // --- generator: the terms stage of a scene run -----------------------------
+  "generate.terms.title": "Decide the terms",
+  "generate.terms.count": "{count, plural, one {# term} other {# terms}}",
+  "generate.terms.lead":
+    "The outline is ready. Before the run writes scenes, NPCs and locations, decide how it writes these terms from the material — every scene, NPC and location of the run then sticks to them.",
+  "generate.terms.hint":
+    "An empty field keeps the term as the material spells it. What you keep in the glossary stands there afterwards as well.",
+  "generate.terms.kind.place": "Places",
+  "generate.terms.kind.person": "People and titles",
+  "generate.terms.kind.group": "Groups",
+  "generate.terms.kind.game-term": "Game terms",
+  "generate.terms.rendering": "How the run writes it",
+  "generate.terms.renderingOf": "How the run writes “{wording}”",
+  "generate.terms.glossary": "Keep in the glossary",
+  "generate.terms.accept":
+    "{count, plural, one {Accept the term and continue writing} other {Accept all # terms and continue writing}}",
+  "generate.terms.accepting": "Accepting the terms …",
+  "generate.terms.conflict":
+    "The run was changed elsewhere in the meantime and has been reloaded. Check the terms once more.",
+  "generate.terms.failed": "The terms could not be accepted. Try again.",
+
   // --- generator: changes a scene run proposes to an existing npc or location
   "generate.extension.reason.npc": "Changes to an existing NPC",
   "generate.extension.reason.location": "Changes to an existing location",
