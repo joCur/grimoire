@@ -51,7 +51,7 @@ import { AutoGrowTextarea } from "@/components/ui/autogrow-textarea";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/i18n";
-import { IconChatSpark } from "@/icons";
+import { IconLogo } from "@/icons";
 import { serverErrorBodyMessage, serverErrorMessage } from "@/i18n/server-errors";
 import { DESKTOP_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -312,24 +312,23 @@ export function SceneChat({ campaign, scene }: { campaign: string; scene: string
   );
 
   const openLabel = running ? t("sceneChat.open.running") : t("sceneChat.open");
-  // A round, icon-only button; its name stands in a tooltip on hover and on
-  // keyboard focus (the name itself is the aria-label).
+  // An icon-only brass bubble carrying the logo; its name stands in a tooltip
+  // on hover and on keyboard focus (the name itself is the aria-label).
   const button =
     mode === undefined ? (
       <div className="group fixed right-5 bottom-5 z-40 md:right-7 md:bottom-7">
         <Button
           ref={opener}
           type="button"
-          variant="outline"
           onClick={() => setMode("popup")}
           aria-label={openLabel}
-          className="relative size-12 rounded-full border-input bg-popover p-0 text-primary shadow-popover hover:border-border-hover hover:bg-popover hover:text-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+          className="relative size-12 rounded-[50%_50%_50%_6px] p-0 shadow-popover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
         >
-          <IconChatSpark size={22} />
+          <IconLogo size={22} />
           {running && (
             <span
               aria-hidden
-              className="absolute top-0.5 right-0.5 size-2.5 rounded-full border-2 border-popover bg-primary motion-safe:animate-pulse"
+              className="absolute top-0.5 right-0.5 size-2.5 rounded-full border-2 border-primary bg-primary-foreground motion-safe:animate-pulse"
             />
           )}
         </Button>

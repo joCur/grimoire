@@ -35,29 +35,3 @@ export function IconLogo({ size = 16, ...rest }: IconProps) {
     </svg>
   );
 }
-
-/**
- * The scene's AI brainstorming: a speech bubble with the logo's spark in it.
- * Lucide has no chat bubble with a sparkle; the bubble is lucide's own
- * `message-circle`, the spark the one of IconLogo.
- */
-export function IconChatSpark({ size = 16, ...rest }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="block flex-none"
-      {...rest}
-    >
-      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-      <path d="M12 7.6l1.4 2.9 2.9 1.4-2.9 1.4L12 16.2l-1.4-2.9-2.9-1.4 2.9-1.4z" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
