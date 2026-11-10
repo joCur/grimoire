@@ -1,0 +1,19 @@
+{
+  "terms": [
+    {
+      "wording": "Leuchtturmwärter",
+      "description": "Der Wärter des Leuchtturms, der in der Bucht festgehalten wird.",
+      "kind": "person"
+    },
+    {
+      "wording": "Smugglers' Cove",
+      "description": "Die Bucht nördlich des Dorfes, in der die Schmuggler anlanden.",
+      "kind": "place"
+    },
+    {
+      "wording": "Hafenmeisterin",
+      "description": "Titel von Jorna, die die Gruppe angeheuert hat.",
+      "kind": "person"
+    }
+  ]
+}

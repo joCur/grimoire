@@ -7,12 +7,17 @@
 // sets the run going again — the confirmation is ONE write of the job, under
 // its guard. Until then the renderings are a form of this view, like any
 // edit mode before it is saved.
+//
+// A chapter check waits on the same stage: its terms are the ones the
+// chapter writes in different ways, and each shows every way it stands there
+// and the scenes, npcs and locations it stands in.
 
 import {
   RUN_TERM_KINDS,
   type GeneratorJob,
   type RunTerm,
   type RunTermKind,
+  type RunTermVariant,
 } from "@grimoire/shared/generator-job";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
@@ -21,8 +26,7 @@ import { ApiError } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { INPUT_CLASS } from "@/components/ui/field";
-import { useT } from "@/i18n";
-import type { MessageKey } from "@/i18n";
+import { INTL_TAG, useT, type MessageKey } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import { confirmJobTerms } from "./generator-job-api";
@@ -37,26 +41,49 @@ const KIND_LABEL: Record<RunTermKind, MessageKey> = {
   "game-term": "generate.terms.kind.game-term",
 };
 
+/** The sentences of the stage that differ between a scene run and a chapter check. */
+const COPY = {
+  run: {
+    lead: "generate.terms.lead",
+    hint: "generate.terms.hint",
+    rendering: "generate.terms.rendering",
+    renderingOf: "generate.terms.renderingOf",
+    accept: "generate.terms.accept",
+  },
+  check: {
+    lead: "generate.terms.lead.check",
+    hint: "generate.terms.hint.check",
+    rendering: "generate.terms.rendering.check",
+    renderingOf: "generate.terms.renderingOf.check",
+    accept: "generate.terms.accept.check",
+  },
+} satisfies Record<string, Record<string, MessageKey>>;
+
+type StageCopy = (typeof COPY)[keyof typeof COPY];
+
 /**
  * The terms stage of a run whose terms are open. `onConfirmed` is told once
  * the confirmation is written — the page that composes this view refreshes
  * what the kept terms changed. Discarding the run is the page's, as in every
- * stage of the review.
+ * stage of the review. `check` sets the stage up for a chapter check.
  */
 export function TermsStage({
   campaign,
   job,
   terms,
+  check = false,
   onConfirmed,
   discard,
 }: {
   campaign: string;
   job: GeneratorJob;
   terms: readonly RunTerm[];
+  check?: boolean;
   onConfirmed: () => void;
   discard: { pending: boolean; failed: boolean; onDiscard: () => void };
 }) {
   const t = useT();
+  const copy = check ? COPY.check : COPY.run;
   const queryClient = useQueryClient();
   const [renderings, setRenderings] = useState<Record<string, string>>(() =>
     Object.fromEntries(terms.map((term) => [term.wording, term.rendering])),
@@ -116,9 +143,9 @@ export function TermsStage({
           {t("generate.terms.count", { count: terms.length })}
         </span>
       </div>
-      <p className="mb-2 text-[14px] leading-[1.6] text-body-secondary">{t("generate.terms.lead")}</p>
+      <p className="mb-2 text-[14px] leading-[1.6] text-body-secondary">{t(copy.lead)}</p>
       <p className="mb-[22px] text-[12.5px] leading-[1.55] text-muted-foreground">
-        {t("generate.terms.hint")}
+        {t(copy.hint)}
       </p>
 
       {groups.map((group) => (
@@ -136,6 +163,7 @@ export function TermsStage({
               <TermRow
                 key={term.wording}
                 term={term}
+                copy={copy}
                 rendering={renderings[term.wording] ?? term.rendering}
                 kept={dropped[term.wording] !== true}
                 disabled={confirm.isPending}
@@ -170,7 +198,7 @@ export function TermsStage({
         >
           {confirm.isPending
             ? t("generate.terms.accepting")
-            : t("generate.terms.accept", { count: terms.length })}
+            : t(copy.accept, { count: terms.length })}
         </Button>
         <Button
           type="button"
@@ -186,9 +214,13 @@ export function TermsStage({
   );
 }
 
-/** One term: its wording and what it is, its rendering, and the glossary tick. */
+/**
+ * One term: its wording and what it is, the ways a checked chapter writes it,
+ * its rendering, and the glossary tick.
+ */
 function TermRow({
   term,
+  copy,
   rendering,
   kept,
   disabled,
@@ -196,6 +228,7 @@ function TermRow({
   onKept,
 }: {
   term: RunTerm;
+  copy: StageCopy;
   rendering: string;
   kept: boolean;
   disabled: boolean;
@@ -217,9 +250,12 @@ function TermRow({
           {term.description}
         </p>
       )}
+      {term.variants !== undefined && term.variants.length > 0 && (
+        <TermVariants variants={term.variants} />
+      )}
       <div className="mt-2.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
         <label htmlFor={`${id}-rendering`} className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[12px] text-muted-foreground">{t("generate.terms.rendering")}</span>
+          <span className="text-[12px] text-muted-foreground">{t(copy.rendering)}</span>
           <input
             id={`${id}-rendering`}
             data-testid="term-rendering"
@@ -227,7 +263,7 @@ function TermRow({
             value={rendering}
             disabled={disabled}
             placeholder={term.wording}
-            aria-label={t("generate.terms.renderingOf", { wording: term.wording })}
+            aria-label={t(copy.renderingOf, { wording: term.wording })}
             onChange={(event) => onRendering(event.target.value)}
             className={cn(
               INPUT_CLASS,
@@ -250,5 +286,32 @@ function TermRow({
         </label>
       </div>
     </li>
+  );
+}
+
+/** Every way a checked chapter writes a term, each with the rows it stands in. */
+function TermVariants({ variants }: { variants: readonly RunTermVariant[] }) {
+  const t = useT();
+  const list = new Intl.ListFormat(INTL_TAG[t.locale], { type: "conjunction" });
+  return (
+    <div className="mt-2">
+      <p className="text-[12px] text-muted-foreground">{t("generate.terms.variants")}</p>
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {variants.map((variant) => (
+          <li
+            key={variant.wording}
+            data-testid="term-variant"
+            className="text-[13px] leading-[1.5] break-words text-body-secondary"
+          >
+            {t("generate.terms.variantIn", {
+              wording: variant.wording,
+              places: list.format(
+                variant.places.map((place) => (place.name === "" ? place.id : place.name)),
+              ),
+            })}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

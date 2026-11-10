@@ -67,6 +67,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   scene_chat_reply_restarted: "server.scene_chat_reply_restarted",
   scene_chat_reply_running: "server.scene_chat_reply_running",
   scene_chat_replaced: "server.scene_chat_replaced",
+  fix_row_changed: "server.fix_row_changed",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -265,6 +266,7 @@ function paramsFor(
     case "scene_chat_reply_restarted":
     case "scene_chat_reply_running":
     case "scene_chat_replaced":
+    case "fix_row_changed":
       return {};
   }
 }

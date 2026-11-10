@@ -157,6 +157,22 @@ export interface GenerateRequest {
    */
   answers?: PartAnswer[];
   /**
+   * The row of a chapter the call of a chapter check is about — a scene, npc
+   * or location by its key (`scene:<id>`), every field of it in its reply
+   * form. The call that names the row's terms reads it, and so does the call
+   * that fixes them. Absent for every other call.
+   */
+  checkedRow?: {
+    key: string;
+    form: SceneReplyFields | NpcReplyFields | LocationReplyFields;
+  };
+  /**
+   * The terms every row of a chapter named, as prompt lines under each row's
+   * key — what the merge call of a chapter check reads. Absent for every
+   * other call.
+   */
+  checkTerms?: string;
+  /**
    * The JSON schema the reply must satisfy. Every call sets it — the
    * outline its own, a scene, npc or location call its entity's. It stays
    * OPTIONAL in the type so a caller that forces nothing (and a test that
@@ -410,6 +426,15 @@ export const PROPOSAL_HEADING = "## Vorschlag, den du änderst";
  */
 export const ANSWERS_HEADING = "## Hinweise und Antworten des DM";
 
+/**
+ * Heading of the row a call of a chapter check is about, and of the terms
+ * every row of the chapter named — constants for the same reason the others
+ * are: the prompt test asserts on them and the E2E stub reads the prompt by
+ * them.
+ */
+export const CHECKED_ROW_HEADING = "## Text der Kampagne";
+export const CHECK_TERMS_HEADING = "## Begriffe der Texte des Kapitels";
+
 /** The notes and their answers as prompt lines: each note, its answer under it. */
 function answerLines(answers: readonly PartAnswer[]): string {
   return answers
@@ -431,8 +456,9 @@ function answerLines(answers: readonly PartAnswer[]): string {
  *             same prefix on every part of a run without being told.
  *   variable  what this ONE call is about: what an augment run works on,
  *             the DM's instruction, a patch call's proposal and answers, the
- *             source text (for a pipeline part: its excerpt) and its passage
- *             of the supplementary material.
+ *             row a call of a chapter check is about and the terms its merge
+ *             reads, the source text (for a pipeline part: its excerpt) and
+ *             its passage of the supplementary material.
  *
  * The Claude provider marks the constant half (and the system prompt) with
  * `cache_control: ephemeral`; everything else joins the two with the same
@@ -532,6 +558,19 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     ...(req.answers === undefined || req.answers.length === 0
       ? []
       : [ANSWERS_HEADING, answerLines(req.answers)]),
+    // A chapter check: the row one of its calls is about, in the same shape
+    // as every row above, and the terms its merge call reads.
+    ...(req.checkedRow === undefined
+      ? []
+      : [
+          `${CHECKED_ROW_HEADING} (${req.checkedRow.key})`,
+          "```json",
+          JSON.stringify(req.checkedRow.form, null, 2),
+          "```",
+        ]),
+    ...(req.checkTerms === undefined || req.checkTerms.trim() === ""
+      ? []
+      : [CHECK_TERMS_HEADING, req.checkTerms]),
     // A run may have an instruction and no source text; an empty
     // heading would be one the model has to interpret against nothing.
     ...(req.sourceText.trim() === "" ? [] : ["## Quelltext", req.sourceText]),

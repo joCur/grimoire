@@ -10,6 +10,7 @@
 import {
   openLocationIds,
   openNpcIds,
+  openSceneIds,
   unwrittenReferences,
   withLocationChange,
   withNpcChange,
@@ -22,14 +23,15 @@ import {
   type SceneProposal,
 } from "@grimoire/shared";
 import type { GrimoireDb } from "./db/client";
-import { locationPartKey, npcPartKey } from "./generate-pipeline";
+import { locationPartKey, npcPartKey, scenePartKey } from "./generate-pipeline";
 import { applyTakenChanges } from "./patch-operations";
 import { locationIn, patchLocationIn, readLocationPatch } from "./store/locations";
 import { npcIn, patchNpcIn, readNpcPatch } from "./store/npcs";
+import { patchSceneIn, readScenePatch, sceneIn } from "./store/scenes";
 import { ApiError } from "./api-error";
 import {
   applyReviewPatch,
-  extensionChanges,
+  jobExtension,
   markWrittenInTx,
   outlineSceneNumbers,
   jobConflict,
@@ -69,14 +71,18 @@ import { writeGenerated, type ScenePlacement } from "./store/generated";
  *               order. The start is the chapter's end at the FIRST scene
  *               accept, taken in that transaction and stored on the job in
  *               the same commit.
- *   extensions  an existing npc or location the run extends is accepted
- *               under its id like a new one: its taken changes — every
- *               change `review.keptChanges` does not keep — are applied to
- *               the row as it is stored in this transaction and written as
- *               one patch of that row. A block change whose anchor no longer
- *               names exactly one block changes nothing and stands as a
- *               finding on the part. Nothing taken is a 400
- *               `nothing_to_write`: the DM rejects the extension instead.
+ *   extensions  an existing row the run changes — an npc or location a scene
+ *               run extends, a scene, npc or location a chapter check fixes —
+ *               is accepted under its id like a new one: its taken changes —
+ *               every change `review.keptChanges` does not keep — are
+ *               applied to the row as it is stored in this transaction and
+ *               written as one patch of that row. A block change whose
+ *               anchor no longer names exactly one block changes nothing and
+ *               stands as a finding on the part. Nothing taken is a 400
+ *               `nothing_to_write`: the DM rejects the extension instead. A
+ *               fix of a chapter check is about the row exactly as the check
+ *               read it: a row whose version moved since is a 409
+ *               `fix_row_changed`, and nothing is written.
  *   job         the patch's review part and the written proposals are
  *               recorded ON the job in that same commit, and the row is
  *               deleted the moment nothing is left open. Discarding the job
@@ -174,13 +180,17 @@ export async function acceptJobParts(
   const chosenLocations = new Set<string>();
   const chosenExtensions: Extension[] = [];
   const selection = patch.review ?? {};
+  const openScenes = openSceneIds(job);
   const openNpcs = openNpcIds(job);
   const openLocations = openLocationIds(job);
   // An unknown id is a 400 (`applyReviewPatch`); an already WRITTEN one is
   // skipped. One that is dropped or rejected cannot be written.
   for (const id of selection.writtenScenes ?? []) {
-    const part = sceneParts.get(id)!;
-    if (part.open) chosenScenes.add(id);
+    const part = sceneParts.get(id);
+    if (part === undefined) {
+      if (openScenes.has(id)) chosenExtensions.push(takenExtension(job, "scene", id));
+      else if (!review.writtenScenes.includes(id)) throw notOpen("scene", id);
+    } else if (part.open) chosenScenes.add(id);
     else if (!review.writtenScenes.includes(id)) throw notOpen("scene", id);
   }
   for (const id of selection.writtenNpcs ?? []) {
@@ -278,7 +288,10 @@ export async function acceptJobParts(
     return sceneRunPos(tx, campaign, chapter, sceneStart, number);
   };
 
-  const writtenScenes = scenes.map((scene) => scene.id);
+  const writtenScenes = [
+    ...scenes.map((scene) => scene.id),
+    ...chosenExtensions.filter((extension) => extension.kind === "scene").map(({ id }) => id),
+  ];
   const writtenNpcs = [
     ...npcs.map((npc) => npc.id),
     ...chosenExtensions.filter((extension) => extension.kind === "npc").map(({ id }) => id),
@@ -314,12 +327,14 @@ export async function acceptJobParts(
   return accepted!;
 }
 
-/** An extension the accept writes: its part and the changes the DM takes. */
+/** An extension the accept writes: its part, the changes the DM takes and the version it read. */
 interface Extension {
-  kind: "npc" | "location";
+  kind: "scene" | "npc" | "location";
   id: string;
   key: string;
   taken: PartChange[];
+  /** The row version a chapter check read; absent for an extension of a scene run. */
+  rev?: number;
 }
 
 /**
@@ -327,31 +342,44 @@ interface Extension {
  * the review does not keep. Nothing taken is a 400: there is nothing to
  * write, and the DM rejects the extension instead.
  */
-function takenExtension(job: Job, kind: "npc" | "location", id: string): Extension {
-  const key = kind === "npc" ? npcPartKey(id) : locationPartKey(id);
+function takenExtension(job: Job, kind: Extension["kind"], id: string): Extension {
+  const key =
+    kind === "scene" ? scenePartKey(id) : kind === "npc" ? npcPartKey(id) : locationPartKey(id);
   const kept = new Set(job.review.keptChanges[key] ?? []);
-  const taken = (extensionChanges(job, key) ?? []).filter((change) => !kept.has(change.id));
+  const extension = jobExtension(job, key);
+  const taken = (extension?.changes ?? []).filter((change) => !kept.has(change.id));
   if (taken.length === 0) {
     throw new ApiError(400, `the extension of ${kind} ${id} takes no change`, {
       code: "nothing_to_write",
     });
   }
-  return { kind, id, key, taken };
+  return { kind, id, key, taken, ...(extension?.rev === undefined ? {} : { rev: extension.rev }) };
 }
 
 /**
  * Apply an extension's taken changes to its row as it is stored in `tx` and
- * write them as one patch of that row. Answers what could not be applied.
+ * write them as one patch of that row. Answers what could not be applied. A
+ * fix of a chapter check whose row moved since the check read it is refused.
  */
 function writeExtension(tx: GrimoireDb, campaign: string, extension: Extension): PatchFinding[] {
   const current =
-    extension.kind === "npc"
-      ? npcIn(tx, campaign, extension.id)
-      : locationIn(tx, campaign, extension.id);
+    extension.kind === "scene"
+      ? sceneIn(tx, campaign, extension.id)
+      : extension.kind === "npc"
+        ? npcIn(tx, campaign, extension.id)
+        : locationIn(tx, campaign, extension.id);
+  if (extension.rev !== undefined && current.rev !== extension.rev) {
+    throw new ApiError(409, `the ${extension.kind} ${extension.id} changed after the check read it`, {
+      code: "fix_row_changed",
+      kind: extension.kind,
+      id: extension.id,
+    });
+  }
   const { fields, findings } = applyTakenChanges(current, extension.taken);
   if (Object.keys(fields).length === 0) return findings;
   const patch = { rev: current.rev, ...fields };
-  if (extension.kind === "npc") patchNpcIn(tx, campaign, extension.id, readNpcPatch(patch));
+  if (extension.kind === "scene") patchSceneIn(tx, campaign, extension.id, readScenePatch(patch));
+  else if (extension.kind === "npc") patchNpcIn(tx, campaign, extension.id, readNpcPatch(patch));
   else patchLocationIn(tx, campaign, extension.id, readLocationPatch(patch));
   return findings;
 }

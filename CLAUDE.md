@@ -185,8 +185,9 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   one. The client writes a point in time as an epoch value (`…Ms`); the
   server derives the zoneless local time from it.
 - The generator job is its own resource, at most one per campaign:
-  `POST …/generator-jobs { kind, … }` starts a scene or NPC run
-  (an augment run starts on its entity), `GET …/generator-jobs`
+  `POST …/generator-jobs { kind, … }` starts a scene run, an NPC run or a
+  chapter check (`{ kind: "chapter-check", chapter }`; an augment run starts
+  on its entity), `GET …/generator-jobs`
   returns it (one or none). `PATCH …/generator-jobs/<id> { rev, … }`
   reviews and accepts: accepting means naming proposals in
   `review.writtenScenes`/`writtenNpcs`/`writtenLocations`; once nothing is
@@ -427,7 +428,12 @@ The paths:
    the stub echoes the material from the outline call and from a scene
    call; the scene the supplement alone brings is written from its
    supplement passage, carries no passage-not-matched note, and stands
-   between the source's scenes
+   between the source's scenes. Plus a chapter check from the chapter's
+   reading view: its terms stage shows the term written two ways with both
+   variants and their scenes (the glossary-decided term is a fix, not a
+   question); each affected scene is then its own row of fixes, accepting
+   one writes only it, a changed one is 409 `fix_row_changed`, and a
+   consistent chapter ends the check with a sentence and writes nothing
 7. Edit modes of scene, NPC, location and chapter / status control
    including the 409 conflict. No entity has a fields dialog: every field is
    edited in the edit mode of its reading view. The scene's edit mode on

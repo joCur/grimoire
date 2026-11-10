@@ -15,7 +15,8 @@
 // run's scenes, npcs and locations each in their own typed list, an npc run's
 // one npc, and an augment run's reading of one scene, npc or location beside
 // the model's proposal for it. A scene run may also extend npcs and locations
-// the campaign already has: such a proposal is the list of changes to the
+// the campaign already has, and a chapter check fixes the scenes, npcs and
+// locations of a chapter: such a proposal is the list of changes to the
 // stored row. Nothing a job proposes is written into the campaign until it is
 // accepted.
 
@@ -147,20 +148,32 @@ export const partChangeSchema = z.union([
 export type PartChange = z.infer<typeof partChangeSchema>;
 
 /**
- * An npc or location the campaign already has, as a scene run extends it:
- * its id, the row as the run read it (`current`, without its guard), and the
- * changes the model proposes for that row — operations against it, never the
- * whole entity (decisions/generator). The DM takes or keeps each change
- * (`review.keptChanges`), and accepting applies the taken ones to the row as
- * it is stored at that moment.
+ * A row the campaign already has, as a run proposes changes to it — an npc or
+ * location a scene run extends, or a scene, npc or location a chapter check
+ * fixes: its id, the row as the run read it (`current`, without its guard),
+ * and the changes the model proposes for that row — operations against it,
+ * never the whole entity (decisions/generator). The DM takes or keeps each
+ * change (`review.keptChanges`), and accepting applies the taken ones to the
+ * row as it is stored at that moment.
+ *
+ * `rev` is the row version a chapter check read: its fixes are about the text
+ * exactly as it was read, so accepting one refuses a row that changed since
+ * (409 `fix_row_changed`). An extension of a scene run adds to the row as it
+ * stands and carries none.
  */
 function extensionSchema<T extends z.ZodType>(current: T) {
   return z.strictObject({
     id: z.string(),
     current,
     changes: z.array(partChangeSchema),
+    rev: z.number().optional(),
   });
 }
+
+/** An existing scene a chapter check fixes — see `extensionSchema`. */
+export const sceneExtensionSchema = extensionSchema(sceneProposalSchema);
+
+export type SceneExtension = z.infer<typeof sceneExtensionSchema>;
 
 /** An existing npc a scene run extends — see `extensionSchema`. */
 export const npcExtensionSchema = extensionSchema(npcProposalSchema);
@@ -196,6 +209,8 @@ export const generateResultSchema = z.strictObject({
   npcExtensions: z.array(npcExtensionSchema).optional(),
   /** The existing locations the run extends; absent when it extends none. */
   locationExtensions: z.array(locationExtensionSchema).optional(),
+  /** The existing scenes a chapter check fixes; absent when it fixes none. */
+  sceneExtensions: z.array(sceneExtensionSchema).optional(),
   /** The model's notes about the run — see above. */
   warnings: z.array(z.string()),
   /** What the server notes about the outline reply; absent when nothing. */
@@ -422,7 +437,7 @@ export const generatorJobPartSchema = z.strictObject({
 
 export type GeneratorJobPart = z.infer<typeof generatorJobPartSchema>;
 
-// --- the terms of a scene run -------------------------------------------------
+// --- the terms of a run -------------------------------------------------------
 
 /**
  * What kind of thing a term of a run names: a place, a person or title, a
@@ -431,22 +446,43 @@ export type GeneratorJobPart = z.infer<typeof generatorJobPartSchema>;
 export const RUN_TERM_KINDS = ["place", "person", "group", "game-term"] as const;
 export type RunTermKind = (typeof RUN_TERM_KINDS)[number];
 
+/** A row of the chapter a chapter check found a term in: its kind, its id and its name. */
+export const runTermPlaceSchema = z.strictObject({
+  kind: generatorJobPartSchema.shape.kind,
+  id: z.string(),
+  name: z.string(),
+});
+
+export type RunTermPlace = z.infer<typeof runTermPlaceSchema>;
+
+/** One way a chapter writes a term — `wording` as it stands there — and the rows it stands in. */
+export const runTermVariantSchema = z.strictObject({
+  wording: z.string(),
+  places: z.array(runTermPlaceSchema),
+});
+
+export type RunTermVariant = z.infer<typeof runTermVariantSchema>;
+
 /**
- * One term of a scene run: a name or word of the source material (or its
- * supplement) whose rendering in the campaign's language is a real choice.
+ * One term of a run: a name or word whose rendering in the campaign's
+ * language is a real choice — of a scene run's source material (or its
+ * supplement), or one a chapter check found written in different ways.
  *
  *   - `wording` as the material spells it — the term's key within the run;
  *   - `description` what it is, in a short sentence;
  *   - `kind` what kind of thing it names (`RUN_TERM_KINDS`);
- *   - `rendering` how the run writes it — the outline's proposal until the DM
- *     confirms the stage, the DM's choice after that. Keeping the wording is
- *     a rendering too.
+ *   - `rendering` how the run writes it — the proposal until the DM confirms
+ *     the stage, the DM's choice after that. Keeping the wording is a
+ *     rendering too;
+ *   - `variants`, a chapter check's only: every way the chapter writes the
+ *     term and the rows each one stands in.
  */
 export const runTermSchema = z.strictObject({
   wording: z.string(),
   description: z.string(),
   kind: z.enum(RUN_TERM_KINDS),
   rendering: z.string(),
+  variants: z.array(runTermVariantSchema).optional(),
 });
 
 export type RunTerm = z.infer<typeof runTermSchema>;
@@ -455,7 +491,8 @@ export const RUN_TERMS_STATUSES = ["open", "confirmed"] as const;
 
 /**
  * The terms of a scene run whose outline found any the campaign does not
- * cover yet (decisions/generator):
+ * cover yet, or of a chapter check that found terms the chapter writes in
+ * different ways (decisions/generator):
  *
  *   - `open` while the run waits on the DM — no scene, npc or location call
  *     has been made, and none is made until the stage is confirmed;
@@ -481,15 +518,16 @@ export const runTermDecisionSchema = runTermSchema.pick({ rendering: true }).ext
 export type RunTermDecision = z.infer<typeof runTermDecisionSchema>;
 
 /**
- * The pipeline state of a scene run: its parts in OUTLINE order plus what the
- * whole run has cost so far. Absent for the single-call runs (npc, augment).
+ * The pipeline state of a scene run or a chapter check: its parts in order
+ * plus what the whole run has cost so far. Absent for the single-call runs
+ * (npc, augment).
  */
 export const generatorJobPipelineSchema = z.strictObject({
   parts: z.array(generatorJobPartSchema),
   /**
    * The run's terms, while they wait on the DM and once they are decided —
-   * see `runTermsSchema`. Absent when the outline found none: the parts then
-   * start right away.
+   * see `runTermsSchema`. Absent when the outline or the check found none:
+   * the parts then start right away.
    */
   terms: runTermsSchema.optional(),
   /**
@@ -518,11 +556,13 @@ export const GENERATOR_JOB_STATUSES = ["running", "done", "failed"] as const;
 export type GeneratorJobStatus = (typeof GENERATOR_JOB_STATUSES)[number];
 
 /**
- * What a run produces: proposed scenes for a chapter, one proposed npc, or a
+ * What a run produces: proposed scenes for a chapter, one proposed npc, a
  * proposal for an existing scene (`scene-augment`), npc (`npc-augment`) or
- * location (`location-augment`). The kind tells which result field to read.
- * A scene and an npc run start on `POST …/generator-jobs`; an augment run
- * starts on the resource of what it augments (`POST …/scenes/:id/augment`).
+ * location (`location-augment`), or the fixes a check of a chapter's terms
+ * proposes for its scenes, npcs and locations (`chapter-check`, in `result`).
+ * The kind tells which result field to read. A scene run, an npc run and a
+ * chapter check start on `POST …/generator-jobs`; an augment run starts on
+ * the resource of what it augments (`POST …/scenes/:id/augment`).
  */
 export const GENERATOR_JOB_KINDS = [
   "scene",
@@ -530,6 +570,7 @@ export const GENERATOR_JOB_KINDS = [
   "scene-augment",
   "npc-augment",
   "location-augment",
+  "chapter-check",
 ] as const;
 export type GeneratorJobKind = (typeof GENERATOR_JOB_KINDS)[number];
 
@@ -697,7 +738,9 @@ export type GeneratorJob = z.infer<typeof generatorJobSchema>;
  *     and may add scenes of its own, while the source sets the chapter's
  *     frame;
  *   - an NPC run takes the `sourceText` and optionally the npc's `id`; without
- *     one the model picks it.
+ *     one the model picks it;
+ *   - a CHAPTER CHECK names the `chapter` whose scenes, npcs and locations it
+ *     checks for terms written in different ways.
  *
  * An augment run is started on the resource it augments, not here. Strict
  * like every write: a key the kind does not take is a 400 naming it.
@@ -716,6 +759,10 @@ export const generatorJobCreateSchema = z.discriminatedUnion("kind", [
     kind: z.literal("npc"),
     sourceText: z.string(),
     id: z.string().nullable().optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("chapter-check"),
+    chapter: z.string(),
   }),
 ]);
 
@@ -826,15 +873,25 @@ export function proposedNpcIds(job: JobState): string[] {
   ];
 }
 
-/** The proposed scenes that are neither accepted nor dropped, by id. */
+/**
+ * The proposed and the fixed scenes that are neither accepted nor dropped, by
+ * id — a fix of an existing scene is dropped when the DM rejects it.
+ */
 export function openSceneIds(job: JobState): Set<string> {
   const written = new Set(job.review.writtenScenes);
   const dropped = new Set(job.review.droppedScenes);
   return new Set(
-    (job.result?.scenes ?? [])
-      .map((scene) => scene.id)
-      .filter((id) => !written.has(id) && !dropped.has(id)),
+    [...(job.result?.scenes ?? []).map((scene) => scene.id), ...extendedSceneIds(job)].filter(
+      (id) => !written.has(id) && !dropped.has(id),
+    ),
   );
+}
+
+/** The ids of the existing scenes a run fixes with at least one change. */
+export function extendedSceneIds(job: JobState): string[] {
+  return (job.result?.sceneExtensions ?? [])
+    .filter((extension) => extension.changes.length > 0)
+    .map((extension) => extension.id);
 }
 
 /**

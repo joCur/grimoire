@@ -20,6 +20,7 @@ import {
   GENERATOR_REVIEW_STAGES,
   extendedLocationIds,
   extendedNpcIds,
+  extendedSceneIds,
   unwrittenReferences,
   type GeneratorJob,
   type GeneratorJobPart,
@@ -30,6 +31,7 @@ import {
   type LocationExtension,
   type NamingHint,
   type NpcExtension,
+  type SceneExtension,
   type ServerNote,
 } from "@grimoire/shared/generator-job";
 import { withSceneChange, type SceneProposal } from "@grimoire/shared/scene";
@@ -392,9 +394,12 @@ export function locationState(job: GeneratorJob | null | undefined, id: string):
   return "open";
 }
 
-/** The ids of the scenes a run proposes. */
+/** The ids of the scenes a run proposes, and of the existing ones a chapter check fixes. */
 export function jobScenes(job: GeneratorJob | null | undefined): string[] {
-  return (job?.result?.scenes ?? []).map((scene) => scene.id);
+  return [
+    ...(job?.result?.scenes ?? []).map((scene) => scene.id),
+    ...extendedSceneIds({ ...(job ?? {}), review: reviewOf(job) }),
+  ];
 }
 
 /**
@@ -416,18 +421,27 @@ export function jobLocations(job: GeneratorJob | null | undefined): string[] {
   ];
 }
 
-/** An existing npc or location the run extends, by the key of its part. */
+/**
+ * An existing row the run proposes changes to, by the key of its part: an npc
+ * or location a scene run extends, or a scene, npc or location a chapter
+ * check fixes.
+ */
 export function jobExtension(
   job: GeneratorJob | null | undefined,
   part: Pick<GeneratorJobPart, "kind" | "id">,
-): NpcExtension | LocationExtension | undefined {
+): SceneExtension | NpcExtension | LocationExtension | undefined {
   const list =
     part.kind === "npc"
       ? job?.result?.npcExtensions
       : part.kind === "location"
         ? job?.result?.locationExtensions
-        : undefined;
+        : job?.result?.sceneExtensions;
   return list?.find((extension) => extension.id === part.id);
+}
+
+/** Is this job a chapter check (decisions/generator)? */
+export function isChapterCheck(job: GeneratorJob | null | undefined): boolean {
+  return job?.kind === "chapter-check";
 }
 
 /** The changes of an extension the DM keeps out, by the key of its part. */
@@ -959,6 +973,15 @@ export function jobSentence(
           ? "generatorJob.augment.ready"
           : "generatorJob.augment.failed",
       { name },
+    );
+  }
+  if (isChapterCheck(job)) {
+    return t(
+      state === "running"
+        ? "generatorJob.check.running"
+        : state === "ready"
+          ? "generatorJob.check.ready"
+          : "generatorJob.check.failed",
     );
   }
   if (jobMode(job) === "npc") {

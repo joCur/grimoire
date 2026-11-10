@@ -8,13 +8,17 @@
 //
 // The threads of the chapter are not this slice's to read: the page is handed
 // their query (`threadsQuery`), which the edit mode's delete dialog counts.
+// Neither is the chapter check, the generator job's run over the chapter's
+// texts: the page is handed its action (`checkAction`) and only says where it
+// stands — beside the edit action.
 //
 // Edit mode is remembered BY CHAPTER: this route stays mounted across a
 // navigation, and an editor seeded from another chapter would be a lie. A
 // navigation away from unsaved work asks first (UnsavedChangesGuard).
 
+import type { Chapter } from "@grimoire/shared/chapter";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { fetchTree, isNotFound } from "@/api";
@@ -29,15 +33,30 @@ import { ChapterArticle } from "./ChapterArticle";
 import { ChapterEditMode, type ChapterThreadsQuery } from "./ChapterEditMode";
 import { chapterQuery } from "./chapter-query";
 
-export function ChapterRoute({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
+/** The chapter check action of the reading view, drawn by the page that composes it. */
+export type ChapterCheckSlot = (campaign: string, chapter: Chapter) => ReactNode;
+
+export function ChapterRoute({
+  threadsQuery,
+  checkAction,
+}: {
+  threadsQuery: ChapterThreadsQuery;
+  checkAction?: ChapterCheckSlot;
+}) {
   return (
     <UnsavedChangesGuard>
-      <ChapterPage threadsQuery={threadsQuery} />
+      <ChapterPage threadsQuery={threadsQuery} checkAction={checkAction} />
     </UnsavedChangesGuard>
   );
 }
 
-function ChapterPage({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
+function ChapterPage({
+  threadsQuery,
+  checkAction,
+}: {
+  threadsQuery: ChapterThreadsQuery;
+  checkAction: ChapterCheckSlot | undefined;
+}) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
   const [editingId, setEditingId] = useState<string>();
@@ -114,7 +133,12 @@ function ChapterPage({ threadsQuery }: { threadsQuery: ChapterThreadsQuery }) {
           ) : (
             <ChapterArticle
               chapter={data}
-              actions={<BodyEditAction onEdit={() => setEditingId(data.id)} />}
+              actions={
+                <>
+                  {checkAction?.(campaign, data)}
+                  <BodyEditAction onEdit={() => setEditingId(data.id)} />
+                </>
+              }
             />
           )}
         </div>
