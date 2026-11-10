@@ -217,6 +217,12 @@ export const ERROR_CODES = [
    * its sources. Nothing is written. No parameters.
    */
   "import_no_tables",
+  /**
+   * 409, accepting a fix of a chapter check: the scene, npc or location was
+   * changed after the check read it, and the fix is about the text as it was
+   * read. Nothing is written. `{ kind, id }`.
+   */
+  "fix_row_changed",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

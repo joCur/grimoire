@@ -54,6 +54,7 @@ import {
   openLocationIds,
   extendedLocationIds,
   extendedNpcIds,
+  extendedSceneIds,
   openNpcIds,
   openSceneIds,
   partRoundSchema,
@@ -95,13 +96,22 @@ import { runNpcAugment } from "./npc-augment";
 import { runSceneAugment } from "./scene-augment";
 import { runGenerateNpc } from "./generator";
 import {
+  checkRecordSchema,
+  fixParts,
+  replanCheck,
+  runChapterCheck,
+  runFixPart,
+  type CheckRecord,
+  type CheckSink,
+} from "./chapter-check";
+import {
+  pooled,
   replanStoredRun,
+  reportPart,
   runPart,
-  runPartsPooled,
   runScenePipeline,
   type PartOutcome,
   type PartUsage,
-  type PipelineSink,
   type RunOutline,
 } from "./generate-pipeline";
 import type { LLMProvider } from "./llm-provider";
@@ -146,9 +156,9 @@ export interface Job {
   /** Optimistic-concurrency token of that review state. */
   rev: number;
   /**
-   * The pipeline of a scene run: the internal outline, the parts
-   * with their status, and the run's totals. `undefined` for the single-call
-   * runs.
+   * The pipeline of a scene run or a chapter check: the internal outline or
+   * check, the parts with their status, and the run's totals. `undefined`
+   * for the single-call runs.
    */
   pipeline?: PipelineRecord;
   /** The run's source material — a per-part retry sends it again. */
@@ -177,6 +187,12 @@ export interface Job {
  */
 export interface PipelineRecord {
   outline?: RunOutline;
+  /**
+   * What a chapter check read and what the glossary decides
+   * (chapter-check.ts) — internal like the outline: a retry and the
+   * confirmation of its terms need it, the browser does not.
+   */
+  check?: CheckRecord;
   parts: StoredPart[];
   totals: { inputTokens: number; outputTokens: number; calls: number };
   /**
@@ -397,6 +413,11 @@ function stringList(value: unknown): string[] {
 export const UNREADABLE_PAYLOAD_MESSAGE =
   "the result of this run can no longer be read — discard the job and start it again";
 
+/** Does a run of this kind consist of parts (`pipeline`)? A scene run and a chapter check do. */
+function pipelined(kind: GeneratorJobKind): boolean {
+  return kind === "scene" || kind === "chapter-check";
+}
+
 /** The kind of a stored job; anything unknown reads as a scene run. */
 function jobKind(value: string): GeneratorJobKind {
   return (GENERATOR_JOB_KINDS as readonly string[]).includes(value)
@@ -428,7 +449,7 @@ function toJob(row: JobRow): Job {
   // failure. As a failed job with a message the existing block appears, and
   // discarding works.
   const nothingToShow =
-    (result === undefined || (kind === "scene" && pipeline === undefined)) &&
+    (result === undefined || (pipelined(kind) && pipeline === undefined)) &&
     npcResult === undefined &&
     sceneAugmentResult === undefined &&
     npcAugmentResult === undefined &&
@@ -517,8 +538,12 @@ function unpackPipeline(value: string): PipelineRecord | undefined {
   // Terms that cannot be read degrade to none: a run waiting on them then
   // shows its parts as they stand, and the DM can discard it.
   const terms = runTermsSchema.safeParse(parsed.terms);
+  // A check that cannot be read degrades to none: its parts stand as they
+  // are, and only a retry or a confirmation needs it.
+  const check = checkRecordSchema.safeParse(parsed.check);
   return {
     ...(parsed.outline === undefined ? {} : { outline: storedOutline(parsed.outline) }),
+    ...(check.success ? { check: check.data } : {}),
     ...(terms.success ? { terms: terms.data } : {}),
     parts,
     totals: {
@@ -591,6 +616,8 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
       extend: boolean;
     }
   | { kind: "npc"; sourceText: string; npcId?: string }
+  // A chapter check names the chapter whose rows it checks.
+  | { kind: "chapter-check"; chapter: string }
   // A scene augment run names a scene that EXISTS by its id. At least one of
   // sourceText/instruction is there — the route enforces that before a job
   // is created, and the run asserts it again.
@@ -621,7 +648,7 @@ export async function startJob(input: JobInput): Promise<Job> {
     id: randomUUID(),
     campaign: input.campaign,
     kind: input.kind,
-    ...(input.kind === "scene" ? { chapter: input.chapter } : {}),
+    ...(input.kind === "scene" || input.kind === "chapter-check" ? { chapter: input.chapter } : {}),
     ...(input.kind === "scene-augment" ? { scene: input.scene } : {}),
     ...(input.kind === "npc-augment" ? { npc: input.npc } : {}),
     ...(input.kind === "location-augment" ? { location: input.location } : {}),
@@ -632,9 +659,8 @@ export async function startJob(input: JobInput): Promise<Job> {
     locationEdits: {},
     review: emptyReview(),
     rev: 0,
-    ...(input.kind === "scene"
-      ? { sourceText: input.sourceText, pipeline: emptyPipeline() }
-      : {}),
+    ...(input.kind === "scene" ? { sourceText: input.sourceText } : {}),
+    ...(pipelined(input.kind) ? { pipeline: emptyPipeline() } : {}),
     ...(input.kind === "scene" && input.supplementText !== undefined
       ? { supplementText: input.supplementText }
       : {}),
@@ -672,7 +698,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         locationEdits: "{}",
         review: "{}",
         rev: 0,
-        pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
+        pipeline: pipelined(input.kind) ? JSON.stringify(emptyPipeline()) : "{}",
         sourceText: input.kind === "scene" ? input.sourceText : null,
         supplementText: input.kind === "scene" ? (input.supplementText ?? null) : null,
         newChapter: input.kind === "scene" && input.newChapter ? 1 : 0,
@@ -723,6 +749,18 @@ export async function startJob(input: JobInput): Promise<Job> {
           () => input.provider,
         );
         await finish(job, { status: "done", npcResult: JSON.stringify(npcResult) });
+        return;
+      }
+      // A chapter check: every row's terms, their merge, then — once nothing
+      // waits on the DM — one fix part per row that needs one, written onto
+      // this job's row by the same sink as a scene run's parts.
+      if (input.kind === "chapter-check") {
+        await runChapterCheck({
+          campaign: input.campaign,
+          chapter: input.chapter,
+          sink: await jobSink(job.campaign, job.id),
+          provider: input.provider,
+        });
         return;
       }
       // A scene run is a PIPELINE: the outline call, then
@@ -856,6 +894,7 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
   }
   const npcExtensions = [...(result.npcExtensions ?? [])];
   const locationExtensions = [...(result.locationExtensions ?? [])];
+  const sceneExtensions = [...(result.sceneExtensions ?? [])];
   const put = <T extends { id: string }>(list: T[], extension: T): void => {
     const at = list.findIndex((candidate) => candidate.id === extension.id);
     if (at === -1) list.push(extension);
@@ -867,6 +906,9 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
   } else if (outcome.extension?.kind === "location") {
     const { kind: _kind, ...extension } = outcome.extension;
     put(locationExtensions, extension);
+  } else if (outcome.extension?.kind === "scene") {
+    const { kind: _kind, ...extension } = outcome.extension;
+    put(sceneExtensions, extension);
   }
   // The model's notes stay on the part (`partDone`); the naming check's
   // findings name their proposal by id and join the result's list.
@@ -877,6 +919,7 @@ function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateRes
     locations,
     ...(npcExtensions.length === 0 ? {} : { npcExtensions }),
     ...(locationExtensions.length === 0 ? {} : { locationExtensions }),
+    ...(sceneExtensions.length === 0 ? {} : { sceneExtensions }),
     warnings: result.warnings,
     ...(result.serverNotes === undefined ? {} : { serverNotes: result.serverNotes }),
     ...(namingHints.length === 0 ? {} : { namingHints }),
@@ -920,6 +963,9 @@ function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): Gene
     ...(result.locationExtensions === undefined
       ? {}
       : { locationExtensions: byRank(locationRank, result.locationExtensions) }),
+    ...(result.sceneExtensions === undefined
+      ? {}
+      : { sceneExtensions: byRank(sceneRank, result.sceneExtensions) }),
   };
 }
 
@@ -991,7 +1037,8 @@ async function updatePipeline(
     const outcome = change(pipeline, base);
     const result = inPartOrder(outcome.result ?? base, pipeline.parts);
     const settled = partsSettled(pipeline);
-    const anyDone = pipeline.parts.some((p) => p.status === "done");
+    const succeeded =
+      pipeline.parts.length === 0 || pipeline.parts.some((p) => p.status === "done");
     // A run whose terms wait on the DM has nothing in flight: it is `done`
     // with its parts pending, and only the confirmation sets it going again.
     const waiting = pipeline.terms?.status === "open";
@@ -1018,10 +1065,12 @@ async function updatePipeline(
         // polling and the review keeps filling up. Settled means finished:
         // `done` as soon as ONE part produced something (the failed ones are
         // retryable, the finished ones acceptable), `failed` only when the
-        // whole run produced nothing at all.
-        status: waiting ? "done" : settled ? (anyDone ? "done" : "failed") : "running",
+        // whole run produced nothing at all. A run without a single part — a
+        // chapter check that found nothing to fix — is done: it has nothing
+        // to fail.
+        status: waiting ? "done" : settled ? (succeeded ? "done" : "failed") : "running",
         ...(settled || waiting ? { finishedAt: timestamp() } : {}),
-        ...(settled && !anyDone && !waiting
+        ...(settled && !succeeded && !waiting
           ? { error: JSON.stringify(allPartsFailed(pipeline)) }
           : {}),
       })
@@ -1044,9 +1093,20 @@ function findPart(pipeline: PipelineRecord, key: string): StoredPart | undefined
 }
 
 /** The sink a run (or a single-part retry) reports into. */
-export async function jobSink(campaign: string, jobId: string): Promise<PipelineSink> {
+export async function jobSink(campaign: string, jobId: string): Promise<CheckSink> {
   const db = await getDb();
   return {
+    async checkReady(check, terms, parts, usage) {
+      await updatePipeline(campaign, jobId, (pipeline) => {
+        pipeline.check = check;
+        pipeline.parts = parts.map((part) => ({ ...part }));
+        // Terms the chapter writes in different ways make the check wait on
+        // the DM before any row is fixed.
+        if (terms.length > 0) pipeline.terms = { status: "open", list: terms };
+        addUsage(pipeline, usage);
+        return {};
+      });
+    },
     async outlineReady(outline, parts, usage) {
       await updatePipeline(campaign, jobId, (pipeline, result) => {
         pipeline.outline = outline;
@@ -1163,16 +1223,7 @@ export async function retryJobPart(
   // The guards run TWICE: here, so a 404/409 costs no context read at all,
   // and again inside the transaction, which is where they are binding.
   assertRetryable(prejob, key);
-  const chapter = prejob.chapter!;
-  const plan = await replanStoredRun({
-    campaign,
-    chapter,
-    sourceText: prejob.sourceText ?? "",
-    ...(prejob.supplementText === undefined ? {} : { supplementText: prejob.supplementText }),
-    newChapter: prejob.newChapter,
-    outline: prejob.pipeline!.outline!,
-    terms: decidedTerms(prejob),
-  });
+  const rerun = await partRunner(campaign, prejob, provider);
 
   // Back to `running` BEFORE the answer — every sink write refuses a row that
   // is not running (see ownRow) and this is the one place that revives one. A
@@ -1213,13 +1264,54 @@ export async function retryJobPart(
   const sink = await jobSink(campaign, jobId);
   void (async () => {
     try {
-      await runPart(plan, { ...part, status: "pending" }, provider, sink);
+      await rerun({ ...part, status: "pending" }, sink);
     } catch (err) {
       console.error("could not record the retried part", err);
     }
   })();
   const after = await getJob(campaign);
   return after ?? prejob;
+}
+
+/**
+ * What runs one part of a stored run again: the part call of a scene run
+ * against its stored outline, or the fix call of a chapter check against its
+ * stored check — each with the run's decided terms.
+ */
+async function partRunner(
+  campaign: string,
+  job: Job,
+  provider: LLMProvider,
+): Promise<(part: GeneratorJobPart, sink: CheckSink) => Promise<void>> {
+  const check = job.pipeline?.check;
+  if (job.kind === "chapter-check" && check !== undefined) {
+    const plan = await replanCheck({
+      campaign,
+      chapter: job.chapter!,
+      check,
+      terms: checkTerms(job),
+    });
+    return (part, sink) =>
+      reportPart(part, sink, (counter) => runFixPart(plan, part, provider, counter));
+  }
+  const plan = await replanStoredRun({
+    campaign,
+    chapter: job.chapter!,
+    sourceText: job.sourceText ?? "",
+    ...(job.supplementText === undefined ? {} : { supplementText: job.supplementText }),
+    newChapter: job.newChapter,
+    outline: job.pipeline!.outline!,
+    terms: decidedTerms(job),
+  });
+  return (part, sink) => runPart(plan, part, provider, sink);
+}
+
+/**
+ * Every decided term of a chapter check: what the glossary decides and what
+ * the DM decided in its terms stage.
+ */
+function checkTerms(job: Job): RunTerm[] {
+  return [...(job.pipeline?.check?.decided ?? []), ...decidedTerms(job)];
 }
 
 /**
@@ -1230,7 +1322,7 @@ export async function retryJobPart(
  */
 function assertRetryable(job: Job, key: string): StoredPart {
   const pipeline = job.pipeline;
-  if (pipeline === undefined || pipeline.outline === undefined) {
+  if (pipeline === undefined || (pipeline.outline === undefined && pipeline.check === undefined)) {
     throw new ApiError(409, "this job has no pipeline parts to retry");
   }
   const part = findPart(pipeline, key);
@@ -1283,7 +1375,10 @@ function assertConfirmable(
 ): RunTerm[] {
   if (job.rev !== rev) throw jobConflict(job);
   const terms = job.pipeline?.terms;
-  if (terms === undefined || job.pipeline?.outline === undefined) {
+  if (
+    terms === undefined ||
+    (job.pipeline?.outline === undefined && job.pipeline?.check === undefined)
+  ) {
     throw new ApiError(409, "this job has no terms to confirm");
   }
   if (terms.status !== "open") throw new ApiError(409, "the terms of this run are confirmed");
@@ -1307,9 +1402,12 @@ function assertConfirmable(
  * term gets the rendering the DM decided, the ones the DM keeps in the
  * glossary become glossary terms — `term` the wording, `explanation` the
  * rendering and the description; one the glossary already has is skipped —
- * and the run's parts start, each carrying the decided list. A review act:
- * it takes the job's guard and moves it, and the job is `running` again
- * until its parts are settled. Answers the job as the confirmation leaves it.
+ * and the run's parts start, each carrying the decided list. A chapter
+ * check's parts are only known now: every row that writes a decided term
+ * otherwise is one. A review act: it takes the job's guard and moves it, and
+ * the job is `running` again until its parts are settled — `done` at once for
+ * a check whose decisions leave nothing to fix. Answers the job as the
+ * confirmation leaves it.
  */
 export async function confirmJobTerms(
   campaign: string,
@@ -1323,15 +1421,11 @@ export async function confirmJobTerms(
   if (preread === undefined || preread.id !== jobId) throw noJob();
   const prejob = toJob(preread);
   const terms = decideTerms(assertConfirmable(prejob, rev, decisions), decisions);
-  const plan = await replanStoredRun({
-    campaign,
-    chapter: prejob.chapter!,
-    sourceText: prejob.sourceText ?? "",
-    ...(prejob.supplementText === undefined ? {} : { supplementText: prejob.supplementText }),
-    newChapter: prejob.newChapter,
-    outline: prejob.pipeline!.outline!,
-    terms,
-  });
+  const confirmed: Job = {
+    ...prejob,
+    pipeline: { ...prejob.pipeline!, terms: { status: "confirmed", list: terms } },
+  };
+  const rerun = await partRunner(campaign, confirmed, provider);
 
   const parts = db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
@@ -1347,26 +1441,34 @@ export async function confirmJobTerms(
       kept = insertGlossaryTermUnlessTaken(tx, campaign, { term: term.wording, explanation }) || kept;
     }
     if (kept) bumpCampaignVersion(tx, campaign);
+    const check = job.pipeline!.check;
+    // A check fixes every row that writes a decided term otherwise.
+    const fixes =
+      job.kind === "chapter-check" && check !== undefined
+        ? fixParts(check.rows, [...check.decided, ...list])
+        : undefined;
+    const idle = fixes !== undefined && fixes.length === 0;
     tx.update(generateJobs)
       .set({
-        status: "running",
+        status: idle ? "done" : "running",
         pipeline: JSON.stringify({
           ...unpackPayload<Record<string, unknown>>(row.pipeline),
+          ...(fixes === undefined ? {} : { parts: fixes }),
           terms: { status: "confirmed", list } satisfies RunTerms,
         }),
         error: null,
-        finishedAt: null,
+        finishedAt: idle ? timestamp() : null,
         rev: row.rev + 1,
       })
       .where(eq(generateJobs.id, row.id))
       .run();
-    return job.pipeline!.parts.filter((part) => part.status === "pending");
-  }) as StoredPart[];
+    return fixes ?? job.pipeline!.parts.filter((part) => part.status === "pending");
+  }) as GeneratorJobPart[];
 
   const sink = await jobSink(campaign, jobId);
   void (async () => {
     try {
-      await runPartsPooled(plan, parts, provider, sink);
+      await pooled(parts, () => sink.cancelled(), (part) => rerun(part, sink));
     } catch (err) {
       console.error("could not record the parts of the run", err);
     }
@@ -1712,12 +1814,15 @@ export async function patchJobReview(
 function assertKnownProposals(job: Job, patch: GeneratorJobPatch): void {
   const review = patch.review ?? {};
   const sceneIds = new Set((job.result?.scenes ?? []).map((scene) => scene.id));
-  for (const id of [
-    ...Object.keys(patch.sceneEdits ?? {}),
-    ...(review.droppedScenes ?? []),
-    ...(review.writtenScenes ?? []),
-  ]) {
+  // A fixed scene is decided like a proposed one — accepted, or dropped when
+  // the DM rejects the fix — but its changes are taken or kept instead of
+  // edited.
+  const extendedScenes = new Set(extendedSceneIds(job));
+  for (const id of Object.keys(patch.sceneEdits ?? {})) {
     if (!sceneIds.has(id)) throw new ApiError(400, `unknown scene: ${id}`);
+  }
+  for (const id of [...(review.droppedScenes ?? []), ...(review.writtenScenes ?? [])]) {
+    if (!sceneIds.has(id) && !extendedScenes.has(id)) throw new ApiError(400, `unknown scene: ${id}`);
   }
   // An extension is decided like a new npc or location, but it is not a
   // proposal the DM edits: its changes are taken or kept instead.
@@ -1751,15 +1856,29 @@ function assertKnownProposals(job: Job, patch: GeneratorJobPatch): void {
 }
 
 /**
- * The changes of the extension under a part's key (`npc:<id>`,
- * `location:<id>`), or undefined when the run extends nothing under it.
+ * The extension under a part's key (`scene:<id>`, `npc:<id>`,
+ * `location:<id>`) — the changes a run proposes to an existing row, and the
+ * row version a chapter check read — or undefined when the run changes
+ * nothing under it.
  */
-export function extensionChanges(job: Job, key: string): PartChange[] | undefined {
+export function jobExtension(
+  job: Job,
+  key: string,
+): { changes: PartChange[]; rev?: number } | undefined {
   const part = job.pipeline?.parts.find((candidate) => candidate.key === key);
   if (part === undefined || part.existing !== true) return undefined;
   const extensions =
-    part.kind === "npc" ? job.result?.npcExtensions : job.result?.locationExtensions;
-  return extensions?.find((extension) => extension.id === part.id)?.changes;
+    part.kind === "npc"
+      ? job.result?.npcExtensions
+      : part.kind === "location"
+        ? job.result?.locationExtensions
+        : job.result?.sceneExtensions;
+  return extensions?.find((extension) => extension.id === part.id);
+}
+
+/** The changes of the extension under a part's key — see `jobExtension`. */
+export function extensionChanges(job: Job, key: string): PartChange[] | undefined {
+  return jobExtension(job, key)?.changes;
 }
 
 /**

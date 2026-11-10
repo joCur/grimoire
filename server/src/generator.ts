@@ -225,6 +225,21 @@ export const ASSET_FILES = {
   // The call that extends one of them: its own rule and its own few-shot (a
   // list of operations); the fields come from the entity above.
   extend: { systemPrompt: "extend-system-prompt.md", fewShotTarget: "extend-example-output.json" },
+  // The three calls of a chapter check (chapter-check.ts): the terms of one
+  // row, the merge of every row's terms, and the fix of one row — its own
+  // rule and few-shot each; the fix's fields come from the row's entity above.
+  checkTerms: {
+    systemPrompt: "check-terms-system-prompt.md",
+    fewShotTarget: "check-terms-example-output.json",
+  },
+  checkMerge: {
+    systemPrompt: "check-merge-system-prompt.md",
+    fewShotTarget: "check-merge-example-output.json",
+  },
+  checkFix: {
+    systemPrompt: "check-fix-system-prompt.md",
+    fewShotTarget: "check-fix-example-output.json",
+  },
 } as const;
 
 const promptAssets = new Map<string, PromptAssets>();

@@ -85,6 +85,10 @@
 //     notes echo the material; the middle scene's call answers with a scene
 //     written from its supplement passage (SUPPLEMENT_PASSAGE_HEADING) that
 //     echoes the material it carried
+//   - a CHAPTER CHECK's system prompts -> its calls: a terms call names the
+//     check's terms the row's text has (checkTermsReply), the merge call
+//     merges the rows' lists into those terms (checkMergeReply), and a fix
+//     call aligns its row to the terms block it carries (checkFixReply)
 //   - TRIGGER.asciiQuotes -> the scene body carries a typographic opening
 //     quotation mark closed with an ASCII `"`. Under the hand-written JSON
 //     wrapper that ended the string; as the `body` of a forced object the run
@@ -106,6 +110,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import {
   ANSWERS_HEADING,
+  CHECK_FIX_SYSTEM_HEADING,
+  CHECK_MERGE_SYSTEM_HEADING,
+  CHECK_TERMS_HEADING,
+  CHECK_TERMS_SYSTEM_HEADING,
+  CHECKED_ROW_HEADING,
   EXISTING_SCENE_HEADING,
   EXISTING_LOCATION_HEADING,
   EXISTING_NPC_HEADING,
@@ -123,6 +132,9 @@ import {
   THREE_SCENES,
   TRIGGER,
   augmentReply,
+  checkFixReply,
+  checkMergeReply,
+  checkTermsReply,
   extensionReply,
   invalidAugmentReply,
   invalidLocationAugmentReply,
@@ -204,6 +216,33 @@ function termsBlock(prompt: string): string {
   const after = prompt.slice(start + TERMS_HEADING.length);
   const end = after.indexOf("## Glossar");
   return (end === -1 ? after : after.slice(0, end)).trim();
+}
+
+/** The fenced JSON of the row a check call carries (CHECKED_ROW_HEADING), as text. */
+function checkedRowText(prompt: string): string {
+  const start = prompt.indexOf(CHECKED_ROW_HEADING);
+  if (start === -1) return "";
+  const fence = /```json\n([\s\S]*?)\n```/.exec(prompt.slice(start));
+  return fence?.[1] ?? "";
+}
+
+/** The row a check call carries, as the object the prompt holds; empty without. */
+function checkedRow(prompt: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(checkedRowText(prompt));
+    return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The rows' term lists of a check's merge call (CHECK_TERMS_HEADING), up to the next section. */
+function checkTermsLists(prompt: string): string {
+  const start = prompt.indexOf(CHECK_TERMS_HEADING);
+  if (start === -1) return "";
+  const after = prompt.slice(start + CHECK_TERMS_HEADING.length);
+  const end = after.search(/^## /m);
+  return end === -1 ? after : after.slice(0, end);
 }
 
 /** A part's reply with the terms it was sent echoed as one more note; unchanged without. */
@@ -360,7 +399,7 @@ export interface StubDecision {
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
-  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch" | "extension";
+  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch" | "extension" | "check";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
   /**
@@ -398,6 +437,22 @@ export function decide(messages: ChatMessage[]): StubDecision {
   // first call of a run is the one without it.
   const unknownRef =
     source.includes(TRIGGER.unknownRef) && !messages.some((m) => m.role === "assistant");
+
+  // A CHAPTER CHECK's calls are told apart by their own system prompts.
+  if (system.includes(CHECK_TERMS_SYSTEM_HEADING)) {
+    return { kind: "check", truncated, delayMs: 0, reply: checkTermsReply(checkedRowText(prompt)) };
+  }
+  if (system.includes(CHECK_MERGE_SYSTEM_HEADING)) {
+    return { kind: "check", truncated, delayMs: 0, reply: checkMergeReply(checkTermsLists(prompt)) };
+  }
+  if (system.includes(CHECK_FIX_SYSTEM_HEADING)) {
+    return {
+      kind: "check",
+      truncated,
+      delayMs: 0,
+      reply: checkFixReply(checkedRow(prompt), termsBlock(prompt)),
+    };
+  }
 
   // A patch call carries the model's notes with the DM's answers; it also
   // carries the outline, so it is told apart first.

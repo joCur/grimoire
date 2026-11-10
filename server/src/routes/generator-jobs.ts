@@ -50,11 +50,13 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 // POST /api/campaigns/:campaign/generator-jobs
 //   { kind: "scene", chapter, sourceText, supplementText?, newChapter?, chapterTitle?,
 //     extend? }
-//   | { kind: "npc", sourceText, id? } -> 202 GeneratorJob
+//   | { kind: "npc", sourceText, id? }
+//   | { kind: "chapter-check", chapter } -> 202 GeneratorJob
 // Starts a run in the BACKGROUND and answers at once with the job, `running`.
 // It writes nothing into the campaign (generator/README.md): what the run
 // proposes waits in the job — a scene run's scenes, npcs and locations under
-// `result`, an npc run's one npc under `npcResult`.
+// `result`, an npc run's one npc under `npcResult`, a chapter check's fixes
+// of existing rows under `result` as extensions.
 //
 // A SCENE run goes into `chapter`; `newChapter` allows a chapter that does
 // not exist yet, which the first accept creates under `chapterTitle` — the
@@ -67,6 +69,17 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 // source sets the chapter's frame; blank is the same as none. An NPC run takes the npc's `id` or, without one, lets the
 // model pick it; a collision with an existing npc then becomes a correction
 // turn.
+//
+// A CHAPTER CHECK reads the scenes of `chapter`, the npcs and locations they
+// name and every npc and location of that chapter, and finds the terms they
+// write in different ways (decisions/generator). A term the glossary or a
+// naming convention decides is fixed with that rendering; when others are
+// left, the job waits on them under `pipeline.terms` like a scene run's
+// terms stage, and their confirmation starts the fixes. Each row that needs
+// a fix is a part (`existing`) whose proposal is the changes in
+// `result.sceneExtensions`, `npcExtensions` or `locationExtensions`, with the
+// `rev` the check read. A chapter that writes every term the same way ends
+// `done` with no part and no terms.
 //
 // Everything cheap stays a synchronous answer, BEFORE a job exists — a
 // request error must not turn into a failed job the DM has to go and read:
@@ -82,6 +95,13 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs", async (c) => {
 generatorJobRoutes.post("/campaigns/:campaign/generator-jobs", async (c) => {
   const campaign = c.req.param("campaign");
   const body = parseRequest(generatorJobCreateSchema, await jsonBody(c, null), "generator job");
+  if (body.kind === "chapter-check") {
+    requiredText(body.chapter, "chapter");
+    await assertGenerateTarget(campaign, body.chapter); // 400/404
+    const provider = obtainProvider(); // 503 when nothing is configured
+    const job = await startJob({ kind: "chapter-check", campaign, chapter: body.chapter, provider });
+    return c.json(serializeJob(job), 202);
+  }
   // The source material travels as the DM pasted it; blank is a 400.
   requiredText(body.sourceText, "sourceText");
   const sourceText = body.sourceText;
@@ -151,7 +171,10 @@ generatorJobRoutes.get("/campaigns/:campaign/generator-jobs/:id", async (c) =>
 // the glossary: a kept one becomes a glossary term with the wording as `term`
 // and the rendering and the description as `explanation`, and one the
 // glossary already has (ignoring case) is skipped. Then the parts start, the
-// job is `running` again, and the answer is 202 with it. A term the run does
+// job is `running` again, and the answer is 202 with it. A chapter check's
+// terms stage is confirmed the same way: the confirmation plans its fix
+// parts, one per row that deviates from a decided rendering, and a check
+// with none left is `done` at once. A term the run does
 // not have, a term left out, or any other key beside `rev` and `id` is 400; a
 // job whose terms are not open (none, or confirmed already) is 409; 503 when
 // no provider is configured.

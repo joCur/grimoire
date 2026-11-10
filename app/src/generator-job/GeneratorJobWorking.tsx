@@ -2,15 +2,20 @@
 // correction-turn explainer and the one fact that matters — the run is on the
 // server, so the tab may go.
 
-import { useT } from "@/i18n";
+import { useT, type MessageKey } from "@/i18n";
 
 /**
  * The working state: spinner + the correction-turn explainer + the one fact
  * that matters — the run is on the server, so the tab may
  * go. No number of attempts here: LLM_CORRECTION_TURNS is a server setting
  * (default 1) and a hardcoded "max. 2" would be a lie in half the setups.
+ * `title` names what the run is doing — drafts unless said otherwise.
  */
-export function GeneratorJobWorking() {
+export function GeneratorJobWorking({
+  title = "generate.working.title",
+}: {
+  title?: MessageKey;
+} = {}) {
   const t = useT();
   return (
     <div
@@ -27,7 +32,7 @@ export function GeneratorJobWorking() {
         aria-hidden
         className="hidden size-[30px] rounded-full border-[3px] border-primary motion-reduce:block"
       />
-      <p className="text-[14.5px] text-foreground">{t("generate.working.title")}</p>
+      <p className="text-[14.5px] text-foreground">{t(title)}</p>
       <p className="max-w-[380px] text-[13px] leading-[1.6] text-muted-foreground">
         {t("generate.working.correction")}
       </p>

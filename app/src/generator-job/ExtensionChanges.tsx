@@ -6,6 +6,10 @@
 // stored then; what no longer applies there comes back as a finding of the
 // part and stands here after the accept.
 //
+// A chapter check's fix of a scene, npc or location is the same row: its
+// changes are about the text as the check read it, and accepting refuses a
+// row that changed since (`checked`).
+//
 // The notes of an extension are not answered: its changes are decided as the
 // model proposed them.
 
@@ -24,6 +28,7 @@ export function ExtensionChanges({
   kept,
   open,
   busy,
+  checked = false,
   onDecide,
 }: {
   part: GeneratorJobPart;
@@ -35,6 +40,8 @@ export function ExtensionChanges({
   /** Still to decide: the changes can be taken or kept. */
   open: boolean;
   busy: boolean;
+  /** A chapter check's fix: the changes hold only for the row as it was read. */
+  checked?: boolean;
   onDecide: (id: string, take: boolean) => void;
 }) {
   const t = useT();
@@ -54,7 +61,10 @@ export function ExtensionChanges({
           aria-label={t("generate.extension.changes", { count: changes.length })}
         >
           <p className="mb-2 text-[12.5px] text-body-secondary">
-            {t("generate.extension.taken", { taken, count: changes.length })}
+            {t(checked ? "generate.check.taken" : "generate.extension.taken", {
+              taken,
+              count: changes.length,
+            })}
           </p>
           <ul className="flex flex-col gap-2">
             {changes.map((change) => (
@@ -76,13 +86,18 @@ export function ExtensionChanges({
   );
 }
 
-/** A finished extension that brought no change: the source adds nothing to the row. */
+/**
+ * A finished extension that brought no change: the source adds nothing to the
+ * row, or a chapter check found nothing to fix in it (`checked`).
+ */
 export function ExtensionUnchanged({
   part,
   cardRef,
+  checked = false,
 }: {
   part: GeneratorJobPart;
   cardRef?: (el: HTMLElement | null) => void;
+  checked?: boolean;
 }) {
   const t = useT();
   return (
@@ -93,9 +108,14 @@ export function ExtensionUnchanged({
       className="mb-[18px] rounded-lg border border-border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <p className="mb-2 text-[13px] leading-[1.55] text-body-secondary">
-        {t(part.kind === "npc" ? "generate.extension.unchanged.npc" : "generate.extension.unchanged.location", {
-          name: part.title,
-        })}
+        {t(
+          checked
+            ? "generate.check.unchanged"
+            : part.kind === "npc"
+              ? "generate.extension.unchanged.npc"
+              : "generate.extension.unchanged.location",
+          { name: part.title },
+        )}
       </p>
       <ModelNotes warnings={part.warnings} serverNotes={part.serverNotes ?? []} title={part.title} />
       {(part.findings ?? []).length > 0 && (

@@ -171,9 +171,11 @@ reference in `refs` is a scene of THIS outline" or "the chapter comes from
 the context".
 
 **The few-shots are replies**: `example-output.json`,
-`npc-example-output.json`, `location-example-output.json` and
-`outline-example-output.json` show exactly the object the respective call is
-forced into.
+`npc-example-output.json`, `location-example-output.json`,
+`outline-example-output.json` and the chapter check's
+`check-terms-example-output.json`, `check-merge-example-output.json` and
+`check-fix-example-output.json` show exactly the object the respective call
+is forced into.
 
 ## Prompt files
 
@@ -192,6 +194,9 @@ in `server/src/generator.ts`); no code looks for a heading inside a file.
 | scene / NPC / location augment | `scene-augment-system-prompt.md` / `npc-augment-system-prompt.md` / `location-augment-system-prompt.md`, then the entity's fields file |
 | patch | `patch-system-prompt.md`, then the part's entity's fields file |
 | extension | `extend-system-prompt.md`, then the entity's fields file |
+| chapter check: one row's terms | `check-terms-system-prompt.md` |
+| chapter check: merge | `check-merge-system-prompt.md` |
+| chapter check: fix of one row | `check-fix-system-prompt.md`, then the row's entity's fields file |
 
 Every other prompt of a scene run with supplementary material — scene, NPC,
 location, extension, patch — ends with `supplement-rules.md`; a run without
@@ -347,7 +352,8 @@ The "~N tokens · M calls" display sums over all parts, the outline included;
 the supplementary material counts like every other input.
 
 **Single calls:** the augment runs and the NPC run — one scene, one NPC or
-one location each, nothing to split.
+one location each, nothing to split. A chapter check is a pipeline of its own
+(see "Chapter check").
 
 ## Review of a scene run
 
@@ -620,6 +626,62 @@ they differ only in base URL, model and auth header. Missing required
 variables and an unknown `LLM_PROVIDER` value are not swallowed: starting a
 run (`POST /api/campaigns/:campaign/generator-jobs`) answers `503` with the
 message in plain text. Full variable table: docs/DEPLOYMENT.md section 2.
+
+## Chapter check
+
+A chapter check (`POST /api/campaigns/:campaign/generator-jobs { kind:
+"chapter-check", chapter }`, decisions/generator) finds the terms one
+chapter writes in different ways and proposes the fixes. It reads the
+chapter's scenes, the NPCs and locations those scenes name, and every NPC and
+location whose `chapter` is this one — each in its reply form, as a model
+reads a row — and runs in three steps:
+
+1. **Terms of one row** (one call per row, concurrency 3,
+   `check-terms-system-prompt.md` with `check-terms-example-output.json`):
+   the row under `## Text der Kampagne (<key>)`, the key the row's part key
+   (`scene:<id>`, `npc:<id>`, `location:<id>`). The reply is
+   `{ terms: [{ wording, description, kind }] }` — every term exactly as
+   this row writes it (`checkTermsReplySchema`,
+   `shared/src/check-reply.ts`).
+2. **Merge** (one call, `check-merge-system-prompt.md` with
+   `check-merge-example-output.json`): every row's list under `## Begriffe
+   der Texte des Kapitels`, one `### <key> — <name>` per row. The reply is
+   the run's terms (`{ wording, description, kind, rendering }`) with
+   `variants`: each way the chapter writes the term and the keys of the rows
+   it stands in (`checkMergeReplySchema`). A key that names no row of the
+   check is a validation error and goes back as a correction turn. Without a
+   single term in any row the call is not made.
+3. **Fixes** (one call per affected row, concurrency 3,
+   `check-fix-system-prompt.md` plus the row's fields file, with
+   `check-fix-example-output.json`): the decided terms under the terms
+   heading, one `schreibe „<variant>“ als „<rendering>“` line per deviating
+   variant, and the row under `## Text der Kampagne (<key>)`. The reply is
+   the list of operations a patch call answers with (see "Answering a
+   part's notes"), applied to the row as the check read it: what applies
+   becomes the row's changes (`result.sceneExtensions`,
+   `result.npcExtensions`, `result.locationExtensions`, each with the `rev`
+   that was read), what does not a finding on the part.
+
+Between the merge and the fixes the server sorts the terms. A term whose
+wording or variant the glossary or a naming convention has (case ignored)
+is decided — a convention's `to` is its rendering — and its deviating rows
+become fixes without a question. Every other term written in at least two
+ways is **open**: the job waits on the terms stage (`pipeline.terms`,
+`status: "open"`, the variants on each term) exactly like a scene run, and
+the same confirmation (`PATCH …/generator-jobs/:id { rev, terms }`) keeps
+the ticked ones in the glossary and plans one fix part per row that deviates
+from a decided rendering. With only decided terms the stage is skipped;
+without a deviation at all the job is done without parts, and nothing is
+written.
+
+Each fix part is reviewed and accepted on its own — the scene through
+`review.writtenScenes` (dropped through `review.droppedScenes`), the NPC and
+location through `review.writtenNpcs` / `review.writtenLocations` (rejected
+through their decisions). Accepting applies the taken changes to the row in
+one write, and only when its `rev` is still the one the check read;
+otherwise the server answers 409 `fix_row_changed` and writes nothing. A
+failed extraction or merge call fails the job; a failed fix part is retried
+on its own.
 
 ## Augmenting scenes
 
