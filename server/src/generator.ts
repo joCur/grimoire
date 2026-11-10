@@ -749,6 +749,15 @@ export function truncationMessage(maxTokens: number | undefined): string {
 }
 
 /**
+ * The refusal message — the ENGLISH technical fallback next to
+ * `code: "llm_refused"`; the sentence the DM reads is built by the app from
+ * `reason`.
+ */
+export function refusalMessage(reason: string): string {
+  return `the model declined to answer${reason === "" ? "" : ` (${reason})`}.`;
+}
+
+/**
  * Attach the naming check's findings to a result. Its own function so the
  * runs cannot drift apart on it, and so the "no rules,
  * no field" case is spelled once: with nothing to report the key stays
@@ -794,6 +803,18 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
     input.onCall?.();
     spend.add(completion);
     const raw = completion.text;
+
+    // Fail fast: a declined answer is not a form error either, and a
+    // correction turn would only ask the same question again.
+    if (completion.refusal !== undefined) {
+      spend.log(provider.name, "refused");
+      throw new ApiError(422, refusalMessage(completion.refusal), {
+        code: "llm_refused",
+        ...(completion.refusal === "" ? {} : { reason: completion.refusal }),
+        rawReply: capRawReply(raw),
+        ...(spend.usage() === undefined ? {} : { usage: spend.usage() }),
+      });
+    }
 
     // Fail fast: a cut-off reply is not a form error the model can fix, and
     // a correction turn would resend prompt + reply at full price.

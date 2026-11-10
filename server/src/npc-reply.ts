@@ -21,7 +21,7 @@ import type { JsonSchema } from "@grimoire/shared/outline-schema";
 import { parseJsonReply } from "./json-reply";
 import type { ReplySchema, RunMode } from "./llm-provider";
 
-/** The tool (Claude) or `json_schema` (OpenAI) name an npc call travels under, per run. */
+/** The name of an npc call's reply schema, per run. */
 const NPC_REPLY_NAMES: Record<RunMode, string> = {
   create: "npc",
   augment: "augmented_npc",

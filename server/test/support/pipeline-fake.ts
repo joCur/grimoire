@@ -45,7 +45,9 @@ import type {
 } from "../../src/llm-provider";
 
 /** A scripted reply: raw text, or text plus truncation/usage signals. */
-export type ScriptedReply = string | { text: string; truncated?: boolean; usage?: TokenUsage };
+export type ScriptedReply =
+  | string
+  | { text: string; truncated?: boolean; refusal?: string; usage?: TokenUsage };
 
 /** One entry a script carries: the two halves of an entry. */
 export interface ScriptedEntry {
@@ -74,7 +76,12 @@ function textOf(reply: ScriptedReply): string {
 
 function completionOf(reply: ScriptedReply): CompletionResult {
   if (typeof reply === "string") return { text: reply, truncated: false };
-  return { text: reply.text, truncated: reply.truncated ?? false, usage: reply.usage };
+  return {
+    text: reply.text,
+    truncated: reply.truncated ?? false,
+    ...(reply.refusal === undefined ? {} : { refusal: reply.refusal }),
+    usage: reply.usage,
+  };
 }
 
 /** Is this value a scripted entry — both halves, in the right shape? */

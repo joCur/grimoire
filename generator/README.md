@@ -8,8 +8,13 @@ Pipeline: source text (EN) → LLM → proposed scenes (DE) → review → datab
 That is the whole contract: the provider sends the schema along and the
 interface guarantees the shape before the server reads it.
 
-* **Claude**: the schema travels as a tool, `tool_choice` forces the call;
-  the reply is the tool input.
+* **Claude**: the schema travels as structured output
+  (`output_config.format`, `type: "json_schema"`), its description inside the
+  schema; the reply is the text of the answer. No tool is forced, so the
+  current models that reject a forced `tool_choice` work as well. An answer
+  that stops with `stop_reason: refusal` fails its part with
+  `code: "llm_refused"` and the reason the API gave, without a correction
+  turn.
 * **OpenAI-compatible**: `response_format: { type: "json_schema", …, strict:
   true }`, with **one** fallback to `json_object` when the endpoint answers
   400. The fallback is remembered (once per process, so the detection is paid

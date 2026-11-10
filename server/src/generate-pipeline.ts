@@ -1200,8 +1200,8 @@ export async function runOutlineStep(
       sourceText,
       ...(supplementText === undefined ? {} : { supplement: supplementText }),
       // The one call of a run that still answers JSON — so it is the one
-      // call whose shape the API can GUARANTEE: Claude gets a
-      // forced tool, an OpenAI-compatible endpoint `json_schema`.
+      // call whose shape the API can GUARANTEE: Claude gets it as structured
+      // output, an OpenAI-compatible endpoint as `json_schema`.
       jsonSchema: {
         name: OUTLINE_SCHEMA_NAME,
         description: OUTLINE_SCHEMA_DESCRIPTION,

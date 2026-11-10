@@ -49,6 +49,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   job_draft_format: "server.job_draft_format",
   llm_truncated: "server.llm_truncated",
   llm_invalid: "server.llm_invalid",
+  llm_refused: "server.llm_refused",
   status_not_allowed: "server.status_not_allowed",
   scene_type_not_allowed: "server.scene_type_not_allowed",
   timestamp_not_allowed: "server.timestamp_not_allowed",
@@ -214,6 +215,12 @@ function paramsFor(
       // No cap configured: the endpoint's own default, which has no number.
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
       return { max: max ?? t("server.llm_truncated.defaultCap") };
+    }
+    case "llm_refused": {
+      // The API's reason is optional; without it the sentence still says
+      // what happened.
+      const reason = typeof body.reason === "string" ? body.reason : undefined;
+      return { reason: reason ?? t("server.llm_refused.noReason") };
     }
     // The codes whose sentence names a RULE rather than a value, so there is
     // no parameter to check for. `nothing_to_write` says the request carried

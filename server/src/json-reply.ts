@@ -4,7 +4,8 @@
 // the npc and the location each in their own reply form (./scene-reply.ts,
 // ./npc-reply.ts, ./location-reply.ts), the outline in its own
 // (./generate-pipeline.ts). The object is forced for every call — Claude gets
-// the schema as a tool with `tool_choice`, an OpenAI-compatible endpoint gets
+// the schema as structured output (`output_config.format`), an
+// OpenAI-compatible endpoint gets
 // `response_format: json_schema` with `strict: true` (llm-provider.ts) — so
 // the shape the API guarantees is the shape the readers read. The body
 // travels as a JSON string, which the TRANSPORT escapes: quotation marks,

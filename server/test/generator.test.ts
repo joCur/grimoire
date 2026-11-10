@@ -904,6 +904,19 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: scene }", () => {
     expect(await exists(SCENE_ID)).toBe(false);
   });
 
+  test("a refused reply aborts after ONE call and names the reason", async () => {
+    const fake = useFake([{ text: "", truncated: false, refusal: "Too grim." }, reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { code?: string; reason?: string; error: string };
+    expect(body.code).toBe("llm_refused");
+    expect(body.reason).toBe("Too grim.");
+    expect(body.error).toBe("the model declined to answer (Too grim.).");
+    // A refusal is no form error: no correction turn asks the same again.
+    expect(fake.calls).toHaveLength(1);
+    expect(await exists(SCENE_ID)).toBe(false);
+  });
+
   test("without a configured cap the message names the endpoint default", async () => {
     const fake = useFake([{ text: "cut off", truncated: true }]);
     const res = await generate(generateBody);

@@ -24,7 +24,7 @@ import type { JsonSchema } from "@grimoire/shared/outline-schema";
 import { parseJsonReply } from "./json-reply";
 import type { ReplySchema, RunMode } from "./llm-provider";
 
-/** The tool (Claude) or `json_schema` (OpenAI) name a scene call travels under, per run. */
+/** The name of a scene call's reply schema, per run. */
 const SCENE_REPLY_NAMES: Record<RunMode, string> = {
   create: "scene",
   augment: "augmented_scene",

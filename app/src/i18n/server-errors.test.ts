@@ -220,6 +220,19 @@ describe("the trash refusals", () => {
   });
 });
 
+describe("a refused reply", () => {
+  test("names the reason the API gave, or says it gave none", () => {
+    for (const t of [de, en]) {
+      expect(serverErrorBodyMessage(body("llm_refused", { reason: "Too grim." }), t)).toBe(
+        t("server.llm_refused", { reason: "Too grim." }),
+      );
+      expect(serverErrorBodyMessage(body("llm_refused"), t)).toBe(
+        t("server.llm_refused", { reason: t("server.llm_refused.noReason") }),
+      );
+    }
+  });
+});
+
 describe("the degrade rule", () => {
   test("every code the server may send has a sentence in both languages", () => {
     for (const code of ERROR_CODES) {
@@ -236,6 +249,7 @@ describe("the degrade rule", () => {
           blockers: "x",
           count: 1,
           chapter: "x",
+          reason: "x",
         });
         expect(sentence.trim()).not.toBe("");
         expect(sentence).not.toContain("{");

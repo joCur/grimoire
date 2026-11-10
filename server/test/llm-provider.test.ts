@@ -814,7 +814,7 @@ describe("ClaudeProvider reply", () => {
       });
     }) as typeof fetch;
     try {
-      await run(new ClaudeProvider("sk-ant-test", "claude-sonnet-4-6", 8000));
+      await run(new ClaudeProvider("sk-ant-test", "claude-sonnet-5-5", 8000));
     } finally {
       globalThis.fetch = original;
     }
@@ -837,12 +837,12 @@ describe("ClaudeProvider reply", () => {
     );
     // the cap the message will name is the one actually sent
     expect(sent.max_tokens).toBe(8000);
-    expect(sent.model).toBe("claude-sonnet-4-6");
+    expect(sent.model).toBe("claude-sonnet-5-5");
   });
 
-  // --- the reply shape: a forced tool ----------------------------------------
+  // --- the reply shape: structured output -----------------------------------
 
-  test("a request without a schema sends no tool and no prefill", async () => {
+  test("a request without a schema sends no output format and no prefill", async () => {
     const entry = "---\nid: night-watch-quay\n---\n\n## Flow\n\nText.\n";
     const sent = await withStubbedFetch(
       { content: [{ type: "text", text: entry }], stop_reason: "end_turn" },
@@ -853,59 +853,55 @@ describe("ClaudeProvider reply", () => {
     );
     const messages = sent.messages as Array<{ role: string; content: unknown }>;
     expect(messages.map((m) => m.role)).toEqual(["user"]);
+    expect("output_config" in sent).toBe(false);
     expect("tools" in sent).toBe(false);
     expect("tool_choice" in sent).toBe(false);
   });
 
-  test("the OUTLINE call sends the schema as a tool and FORCES the call", async () => {
+  test("the OUTLINE call sends its schema as the structured output format", async () => {
     const outline = { scenes: [], entries: [], warnings: [] };
     const sent = await withStubbedFetch(
       {
-        content: [
-          { type: "text", text: "Outlining the source text:" },
-          { type: "tool_use", name: OUTLINE_SCHEMA_NAME, input: outline },
-        ],
-        stop_reason: "tool_use",
+        content: [{ type: "text", text: JSON.stringify(outline) }],
+        stop_reason: "end_turn",
       },
       async (p) => {
-        // The tool INPUT is the reply — the validation downstream parses JSON.
         expect(JSON.parse((await p.complete(OUTLINE_REQ)).text)).toEqual(outline);
       },
     );
-    expect(sent.tools).toEqual([
-      {
-        name: OUTLINE_SCHEMA_NAME,
-        description: OUTLINE_SCHEMA_DESCRIPTION,
-        input_schema: outlineJsonSchema(),
-      },
-    ]);
-    expect(sent.tool_choice).toEqual({ type: "tool", name: OUTLINE_SCHEMA_NAME });
-    // Still no prefill: the forced tool call is what guarantees the shape.
+    expect(sent.output_config).toEqual({
+      format: { type: "json_schema", schema: outlineJsonSchema() },
+    });
+    // The outline schema carries its own description.
+    expect(outlineJsonSchema().description).toBe(OUTLINE_SCHEMA_DESCRIPTION);
+    // No forced tool, which current models reject, and still no prefill.
+    expect("tools" in sent).toBe(false);
+    expect("tool_choice" in sent).toBe(false);
     const messages = sent.messages as Array<{ role: string }>;
     expect(messages.map((m) => m.role)).toEqual(["user"]);
   });
 
-  test("EVERY entry call travels as a forced tool", async () => {
-    for (const { label, req, name } of ENTRY_REQS) {
+  test("EVERY entry call travels as structured output", async () => {
+    for (const { label, req } of ENTRY_REQS) {
       const reply = { properties: { id: "kai" }, body: "## Flow\n", warnings: [] };
       const sent = await withStubbedFetch(
         {
-          content: [{ type: "tool_use", name, input: reply }],
-          stop_reason: "tool_use",
+          content: [{ type: "text", text: JSON.stringify(reply) }],
+          stop_reason: "end_turn",
         },
         async (p) => {
-          // The tool INPUT is the reply — entry-reply.ts parses JSON.
           expect(JSON.parse((await p.complete(req)).text), label).toEqual(reply);
         },
       );
-      expect(sent.tools, label).toEqual([
-        {
-          name,
-          description: req.jsonSchema!.description,
-          input_schema: req.jsonSchema!.schema,
+      const { description, schema } = req.jsonSchema!;
+      expect(sent.output_config, label).toEqual({
+        format: {
+          type: "json_schema",
+          // The format has no name: the description travels in the schema.
+          schema: description === undefined ? schema : { description, ...schema },
         },
-      ]);
-      expect(sent.tool_choice, label).toEqual({ type: "tool", name });
+      });
+      expect("tool_choice" in sent, label).toBe(false);
       // The system prompt keeps its cache breakpoint.
       expect((sent.system as Array<Record<string, unknown>>)[0]!.cache_control, label).toEqual({
         type: "ephemeral",
@@ -913,15 +909,40 @@ describe("ClaudeProvider reply", () => {
     }
   });
 
-  test("an outline reply with no tool block degrades to its text", async () => {
-    // A refusal, or an endpoint that ignored `tool_choice`: the text has to
-    // reach the validation as text, so the run fails with a message that says
-    // what came back — never with an empty reply nobody can explain.
+  test("a reply that came back as prose reaches the validation as prose", async () => {
+    // The text has to reach the validation as text, so the run fails with a
+    // message that says what came back — never with an empty reply nobody
+    // can explain.
     await withStubbedFetch(
       { content: [{ type: "text", text: "I cannot do that." }], stop_reason: "end_turn" },
       async (p) => {
-        expect((await p.complete(OUTLINE_REQ)).text).toBe("I cannot do that.");
+        const answer = await p.complete(OUTLINE_REQ);
+        expect(answer.text).toBe("I cannot do that.");
+        expect(answer.refusal).toBeUndefined();
       },
+    );
+  });
+
+  test('stop_reason "refusal" is a refusal with the explanation the API gave', async () => {
+    await withStubbedFetch(
+      {
+        content: [],
+        stop_reason: "refusal",
+        stop_details: { type: "refusal", category: "general_harms", explanation: "  Too grim.  " },
+      },
+      async (p) => {
+        const answer = await p.complete(OUTLINE_REQ);
+        expect(answer.refusal).toBe("Too grim.");
+        expect(answer.truncated).toBe(false);
+      },
+    );
+    await withStubbedFetch(
+      { content: [], stop_reason: "refusal", stop_details: { category: "cyber" } },
+      // The category is a wire value, not a reason the DM can read.
+      async (p) => expect((await p.complete(OUTLINE_REQ)).refusal).toBe(""),
+    );
+    await withStubbedFetch({ content: [], stop_reason: "refusal" }, async (p) =>
+      expect((await p.complete(OUTLINE_REQ)).refusal).toBe(""),
     );
   });
 
