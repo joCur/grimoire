@@ -199,7 +199,7 @@ apply only to the selected one:
 | -------------------- | ------------ | ------------------------------ | ----------------------------------------------------- |
 | `LLM_PROVIDER`       | –            | `claude`                       | `claude`, `openrouter`, `openai`, `lmstudio`           |
 | `ANTHROPIC_API_KEY`  | `claude`     | –                              | **required** for `claude`                              |
-| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-5`            | Model override                                         |
+| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-5`            | Model override, e.g. `claude-sonnet-5-5`               |
 | `OPENROUTER_API_KEY` | `openrouter` | –                              | **required** for `openrouter`                          |
 | `LLM_MODEL`          | `openrouter`, `openai` | –                    | **required**, e.g. `anthropic/claude-sonnet-5`       |
 | `LLM_BASE_URL`       | `openai` (required), `openrouter` (override) | `https://openrouter.ai/api/v1` | API root of an OpenAI-compatible endpoint, **without** `/chat/completions` |
@@ -208,7 +208,7 @@ apply only to the selected one:
 | `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Model name in LM Studio                                |
 | `LLM_MAX_TOKENS`     | all          | `8000` (`claude`), otherwise the endpoint default | Upper limit of the response length (positive integer; unusable values are ignored) |
 | `LLM_CORRECTION_TURNS` | all        | `1`                            | Correction turns after the first call (`0`–`2`; unusable values are ignored) |
-| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | on              | Sends `response_format` along (`json_schema`, strict, falling back to `json_object` on 400); `0` = off, for endpoints/models without `response_format` support. Affects **every** call — outline and entries — because every response is an object with its own schema; the `claude` path forces every response via a tool call and is unaffected |
+| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | on              | Sends `response_format` along (`json_schema`, strict, falling back to `json_object` on 400); `0` = off, for endpoints/models without `response_format` support. Affects **every** call — outline and entries — because every response is an object with its own schema; the `claude` path forces every response via structured output and is unaffected |
 | `LLM_PROMPT_CACHE`   | `openrouter`, `openai`, `lmstudio` | on for `openrouter`, otherwise off | Marks the constant part of the prompt as cacheable; `0` = off (for endpoints that reject content parts), `1` = on (e.g. your own Anthropic proxy). The `claude` path always caches and is unaffected |
 
 `LLM_PROMPT_CACHE` is the cost lever of a chapter run: with the pipeline

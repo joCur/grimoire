@@ -62,7 +62,7 @@ export type JsonSchema = Record<string, unknown>;
 /** The tool / schema name both providers send the outline under. */
 export const OUTLINE_SCHEMA_NAME = String(outlineSchema.title);
 
-/** What the tool's description tells the model it is for (Claude path). */
+/** What the schema's description tells the model the outline is for. */
 export const OUTLINE_SCHEMA_DESCRIPTION = String(outlineSchema.description);
 
 /**

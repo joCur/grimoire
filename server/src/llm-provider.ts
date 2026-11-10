@@ -15,23 +15,26 @@
 // transports force it, because that is the one
 // guarantee an API can give:
 //
-//   Claude — the schema travels as a TOOL and `tool_choice` forces the call,
-//       so the reply cannot be prose, cannot miss a required key and cannot
-//       break on a quotation mark; the reply text is the tool input.
+//   Claude — the schema travels as structured output
+//       (`output_config.format: json_schema`), so the reply cannot be prose,
+//       cannot miss a required key and cannot break on a quotation mark; the
+//       reply is the answer's text.
 //   OpenAI-compatible — `response_format: json_schema` with `strict: true`,
 //       with ONE fallback to plain `json_object` for endpoints that reject
 //       the field (detected once per process, and only on a 400 that actually
 //       blames the format).
 //
-// There is no assistant prefill of `{`: a forced tool and a forced
-// `response_format` do the job, and a prefilled brace in front of a reply the
-// API already shapes would only be in the way.
+// There is no assistant prefill of `{`: a forced output format does the job,
+// and a prefilled brace in front of a reply the API already shapes would only
+// be in the way.
 //
-// Two facts travel WITH the text, because only the transport can see them:
+// Three facts travel WITH the text, because only the transport can see them:
 // whether the model hit its output cap (`finish_reason: length`
 // / `stop_reason: max_tokens` — a truncated reply is unfixable by a
-// correction turn, so the generator fails fast on it) and the API's token
-// usage, normalized so the generator can sum it over a whole run.
+// correction turn, so the generator fails fast on it), whether the model
+// declined to answer at all (`stop_reason: refusal`, equally unfixable by a
+// correction turn) and the API's token usage, normalized so the generator can
+// sum it over a whole run.
 
 import type {
   LocationProposal,
@@ -160,9 +163,9 @@ export interface GenerateRequest {
 
 /** A schema a provider can force a reply into — see GenerateRequest.jsonSchema. */
 export interface ReplySchema {
-  /** Tool name (Claude) / `json_schema.name` (OpenAI). */
+  /** `json_schema.name` (OpenAI); the correction turns name the schema by it. */
   name: string;
-  /** What the tool is for, when the schema says; only the Claude path sends it. */
+  /** What the reply is for, when the schema says; only the Claude path sends it. */
   description?: string;
   schema: JsonSchema;
 }
@@ -197,6 +200,12 @@ export interface CompletionResult {
   text: string;
   /** The reply hit the output cap — it is cut off, not merely malformed. */
   truncated: boolean;
+  /**
+   * The model declined to answer (Messages API `stop_reason: refusal`): the
+   * reason the API gave, or `""` when it gave none. Absent for every answer
+   * that is not a refusal.
+   */
+  refusal?: string;
   /** Absent when the endpoint reports no usage (some local servers do not). */
   usage?: TokenUsage;
 }
@@ -552,8 +561,8 @@ export function cachedMessages(
 
 // --- JSON forcing: every call, by schema ------------------------------------
 //
-// JSON is forced by the SCHEMA of the request: a forced tool on the Messages
-// API, `json_schema` with `strict: true` on the OpenAI path — the shape is
+// JSON is forced by the SCHEMA of the request: structured output on the
+// Messages API, `json_schema` with `strict: true` on the OpenAI path — the shape is
 // guaranteed rather than merely asked for.
 
 // --- Claude API ------------------------------------------------------------
@@ -613,10 +622,12 @@ export class ClaudeProvider implements LLMProvider {
     });
     if (!res.ok) throw new Error(`Claude API: ${res.status} ${await res.text()}`);
     const data = await res.json();
+    const refusal = claudeRefusal(data);
     return {
-      text: claudeText(data, req.jsonSchema !== undefined),
+      text: claudeText(data),
       // Messages API: the reply stopped because it ran into max_tokens.
       truncated: data.stop_reason === "max_tokens",
+      ...(refusal === undefined ? {} : { refusal }),
       usage: claudeUsage(data.usage),
     };
   }
@@ -625,7 +636,7 @@ export class ClaudeProvider implements LLMProvider {
 /**
  * The Messages API request body. Split out of `complete` because the two
  * reply shapes differ HERE and nowhere else: a schema request
- * carries the schema as a forced tool, a request without one carries
+ * carries the schema as its output format, a request without one carries
  * nothing extra at all.
  */
 export function claudeBody(
@@ -645,44 +656,55 @@ export function claudeBody(
     // scene" being affordable and not.
     system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL }],
     messages: claudeMessages(req, corrections),
-    // The reply's schema: it travels as a TOOL and the call is
-    // forced, so the reply cannot be prose and cannot miss a required key —
-    // the API validates it before we do. Absent only for a request that
-    // deliberately forces nothing.
+    // The reply's schema: it travels as the structured output format, so the
+    // reply cannot be prose and cannot miss a required key — the API
+    // constrains it before we read it. The format has no name, so the
+    // schema's description travels inside the schema. Absent only for a
+    // request that deliberately forces nothing.
     ...(schema === undefined
       ? {}
       : {
-          tools: [
-            {
-              name: schema.name,
-              ...(schema.description === undefined ? {} : { description: schema.description }),
-              input_schema: schema.schema,
+          output_config: {
+            format: {
+              type: "json_schema",
+              schema:
+                schema.description === undefined || "description" in schema.schema
+                  ? schema.schema
+                  : { description: schema.description, ...schema.schema },
             },
-          ],
-          tool_choice: { type: "tool", name: schema.name },
+          },
         }),
   };
 }
 
 /**
- * The reply text of one Messages API answer. For a forced tool call that is
- * the tool INPUT re-serialized — the validation downstream reads JSON, and
- * the API hands the arguments over as a parsed object. `text` blocks are the
- * fallback: an API that answered prose anyway must reach the validation as
- * prose, not as an empty reply the run cannot explain.
+ * The reply text of one Messages API answer: its `text` blocks, joined. A
+ * structured-output reply is exactly that text; a reply that came back as
+ * prose anyway must reach the validation as prose, not as an empty reply the
+ * run cannot explain. Thinking blocks are not the reply.
  */
-export function claudeText(data: unknown, wantsTool: boolean): string {
+export function claudeText(data: unknown): string {
   const blocks = Array.isArray((data as { content?: unknown }).content)
     ? ((data as { content: Array<Record<string, unknown>> }).content)
     : [];
-  if (wantsTool) {
-    const call = blocks.find((b) => b.type === "tool_use" && b.input !== undefined);
-    if (call !== undefined) return JSON.stringify(call.input);
-  }
   return blocks
     .filter((b) => b.type === "text" && typeof b.text === "string")
     .map((b) => b.text as string)
     .join("\n");
+}
+
+/**
+ * The reason of a declined answer (`stop_reason: refusal`), or undefined for
+ * any other answer. The reason is the API's explanation, a sentence the DM
+ * can read; its category is a wire value and stays out. A refusal without an
+ * explanation is still a refusal, with `""` as its reason.
+ */
+export function claudeRefusal(data: unknown): string | undefined {
+  const answer = data as { stop_reason?: unknown; stop_details?: unknown };
+  if (answer.stop_reason !== "refusal") return undefined;
+  const explanation = (answer.stop_details as { explanation?: unknown } | null | undefined)
+    ?.explanation;
+  return typeof explanation === "string" ? explanation.trim() : "";
 }
 
 // --- OpenAI-compatible endpoints (OpenRouter, LM Studio, vLLM, …) -----------

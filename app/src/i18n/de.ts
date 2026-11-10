@@ -585,6 +585,9 @@ export const de = {
     "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}) oder Quelltext verkleinern.",
   "server.llm_invalid": "Antwort hat die mechanische Prüfung nicht bestanden.",
   "server.llm_truncated.defaultCap": "Standard des Endpoints",
+  "server.llm_refused":
+    "Das Modell hat die Antwort verweigert (Grund: {reason}) — Quelltext anpassen oder ein anderes Modell einstellen.",
+  "server.llm_refused.noReason": "keiner angegeben",
   "server.status_not_allowed": 'Status „{value}“ gibt es nicht — erlaubt sind {allowed}.',
   "server.scene_type_not_allowed": 'Szenentyp „{value}“ gibt es nicht — erlaubt sind {allowed}.',
   "server.timestamp_not_allowed":

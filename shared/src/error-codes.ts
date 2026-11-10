@@ -128,6 +128,11 @@ export const ERROR_CODES = [
   /** 422, generator: the reply failed mechanical validation after the retries. */
   "llm_invalid",
   /**
+   * 422, generator: the model declined to answer. `{ reason? }` — the
+   * reason the API gave, absent when it gave none.
+   */
+  "llm_refused",
+  /**
    * 400, a chapter, scene or npc write: `status` carries a value the column
    * does not accept.
    * The four status columns are CLOSED (decisions/constraints), so a value
