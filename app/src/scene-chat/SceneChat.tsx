@@ -32,7 +32,7 @@ import type { SceneChat as SceneChatType } from "@grimoire/shared/scene-chat";
 import type { SceneChatMessage } from "@grimoire/shared/scene-chat-message";
 import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Maximize2, MessageSquareText, Minimize2, Trash2, X } from "lucide-react";
+import { Check, Copy, Maximize2, Minimize2, Trash2, X } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -51,6 +51,7 @@ import { AutoGrowTextarea } from "@/components/ui/autogrow-textarea";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/i18n";
+import { IconChatSpark } from "@/icons";
 import { serverErrorBodyMessage, serverErrorMessage } from "@/i18n/server-errors";
 import { DESKTOP_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -310,22 +311,35 @@ export function SceneChat({ campaign, scene }: { campaign: string; scene: string
     </>
   );
 
+  const openLabel = running ? t("sceneChat.open.running") : t("sceneChat.open");
+  // A round, icon-only button; its name stands in a tooltip on hover and on
+  // keyboard focus (the name itself is the aria-label).
   const button =
     mode === undefined ? (
-      <Button
-        ref={opener}
-        type="button"
-        variant="outline"
-        onClick={() => setMode("popup")}
-        aria-label={running ? t("sceneChat.open.running") : t("sceneChat.open")}
-        className="fixed right-5 bottom-5 z-40 h-auto min-h-11 gap-2 rounded-full border-input bg-popover px-4 py-2.5 text-[13.5px] font-semibold text-foreground shadow-popover hover:border-border-hover hover:bg-popover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:right-7 md:bottom-7 [&_svg]:size-[17px]"
-      >
-        <MessageSquareText aria-hidden className="text-primary" />
-        {t("sceneChat.heading")}
-        {running && (
-          <span aria-hidden className="size-2 rounded-full bg-primary motion-safe:animate-pulse" />
-        )}
-      </Button>
+      <div className="group fixed right-5 bottom-5 z-40 md:right-7 md:bottom-7">
+        <Button
+          ref={opener}
+          type="button"
+          variant="outline"
+          onClick={() => setMode("popup")}
+          aria-label={openLabel}
+          className="relative size-12 rounded-full border-input bg-popover p-0 text-primary shadow-popover hover:border-border-hover hover:bg-popover hover:text-primary-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+        >
+          <IconChatSpark size={22} />
+          {running && (
+            <span
+              aria-hidden
+              className="absolute top-0.5 right-0.5 size-2.5 rounded-full border-2 border-popover bg-primary motion-safe:animate-pulse"
+            />
+          )}
+        </Button>
+        <span
+          aria-hidden
+          className="pointer-events-none absolute right-0 bottom-full mb-2 hidden w-max max-w-[260px] rounded-md border border-input bg-popover px-2.5 py-1.5 text-[12.5px] leading-[1.4] text-foreground shadow-popover group-hover:block group-has-[:focus-visible]:block"
+        >
+          {openLabel}
+        </span>
+      </div>
     ) : null;
 
   if (!desktop) {
