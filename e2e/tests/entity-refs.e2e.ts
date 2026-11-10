@@ -226,8 +226,12 @@ test("reading view: hovering a reference previews its target, per kind", async (
   await expect(tooltip).not.toContainText(ui("status.npc.alive"));
   await expect(jorna).not.toHaveAttribute("aria-describedby", /.+/);
 
-  // Scene: its type is its kind; trigger and location as rows.
-  await page.getByRole("link", { name: refName("scene", CAPTURED) }).hover();
+  // Scene: its type is its kind; trigger and location as rows. The open
+  // location preview lies over the scene's reference, so the reference is
+  // brought to the middle of the screen first, out from under it.
+  const captured = page.getByRole("link", { name: refName("scene", CAPTURED) });
+  await captured.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await captured.hover();
   await expect(tooltip).toHaveCount(1);
   await expect(tooltip).toContainText(ui("sceneArticle.type.contingency"));
   await expect(tooltip).toContainText(ui("status.scene.ready"));

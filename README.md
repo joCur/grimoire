@@ -42,13 +42,15 @@ included, without `kind`, without `path`:
 | Session | `GET/PATCH/DELETE /api/campaigns/<campaign>/sessions/<id>` | `GET/POST /api/campaigns/<campaign>/sessions` | `/campaigns/<campaign>/sessions/<id>`, live `/campaigns/<campaign>/live` |
 | Pause | `PATCH …/sessions/<session>/pauses/<id>` | `POST …/sessions/<session>/pauses` | in the session |
 | Log line | `PATCH …/sessions/<session>/log/<id>` | `POST …/sessions/<session>/log` | in the session and the debrief |
+| Scene chat | `GET/PATCH/DELETE /api/campaigns/<campaign>/scene-chats/<id>` | `GET/POST /api/campaigns/<campaign>/scene-chats` | below its scene `/campaigns/<campaign>/scenes/<scene>` |
+| Scene chat message | `PATCH …/scene-chats/<chat>/messages/<id>` | `POST …/scene-chats/<chat>/messages` | in its chat |
 | Item price | `GET /api/item-prices/<id>` | `GET /api/item-prices` | on the price page `/campaigns/<campaign>/item-prices` |
 | Item-price import | `GET/PUT/DELETE /api/item-price-imports/<id>` | `GET /api/item-price-imports` | on the price page `/campaigns/<campaign>/item-prices` |
 | Random-table source | `GET/DELETE /api/random-table-sources/<id>` | `GET/POST /api/random-table-sources` | on the random tables page `/campaigns/<campaign>/random-tables` |
 | Random table | `GET /api/random-tables/<id>` | `GET /api/random-tables` | on the random tables page `/campaigns/<campaign>/random-tables` |
 
-`DELETE` on a chapter, a scene, an NPC, a location or an idea puts it in the
-**trash** (see trash below); the other `DELETE`s remove their row — a
+`DELETE` on a chapter, a scene, an NPC, a location, an idea or a scene chat
+puts it in the **trash** (see trash below); the other `DELETE`s remove their row — a
 random-table source with its tables. The trash
 has its app route `/campaigns/<campaign>/trash`.
 
@@ -78,8 +80,9 @@ are maintained on their own pages.
 
 Everything that depends on a campaign hangs under the campaign — in the API
 `/api/campaigns/<campaign>/…`, in the app `/campaigns/<campaign>/…` ([decisions/resources](docs/decisions/resources.md)).
-Without a campaign stay `/api/campaigns`, `/api/settings`, `/settings` and
-the instance's reference data, `/api/item-prices`, `/api/item-price-imports`,
+Without a campaign stay `/api/campaigns`, `/api/settings`, `/settings`,
+`/api/llm-provider` (`{ configured }`: whether the instance has a language
+model to ask) and the instance's reference data, `/api/item-prices`, `/api/item-price-imports`,
 `/api/random-table-sources` and `/api/random-tables`
 ([decisions/reference-data](docs/decisions/reference-data.md)).
 
@@ -858,9 +861,63 @@ A log line is a quick note of the DM and its own resource (`LogEntry`, from
   Every other field, `text` included, is a 400; a stale `rev` is 409 with
   the current line under `logEntry`.
 
+### Scene chat
+
+A scene chat is the DM's brainstorming conversation about one scene with
+the language model, and its own resource (`SceneChat`, from
+`shared/src/scene-chat.ts`): `{ id, scene, messages, deletedMs?, rev }`,
+its messages embedded in the order they were written. A scene has at most
+one live chat; it stands below the scene's reading view and has no title.
+
+- `GET …/scene-chats?scene=<id>` responds with the scene's live chat (one or
+  none); without the filter, every live chat of the campaign.
+- `POST …/scene-chats { scene }` starts the scene's chat, empty (201); if
+  the scene has one, it comes back unchanged (200). The scene must be live
+  (400 otherwise).
+- `DELETE …/scene-chats/<id> { rev }` **clears** the chat: it goes to the
+  trash as one row with its messages (see trash below). `PATCH …/scene-chats/<id>
+  { rev, force?, deletedMs: null }` restores it while its scene is live
+  (`restore_blocked` otherwise) and has no new chat (409
+  `scene_chat_replaced` with the new chat's `id`). A chat takes no other
+  write.
+
+A **scene chat message** is its own resource (`SceneChatMessage`, from
+`shared/src/scene-chat-message.ts`) under its chat:
+`{ id, role, text, status, error?, rev }` — `role` is `dm` or `model`,
+`status` is `done`, `running` or `failed`, and a failed reply carries its
+reason as an error body (`{ code, error, … }`) under `error`. No message
+write moves the chat's `rev`.
+
+- `POST …/scene-chats/<chat>/messages { text }` writes the DM's message
+  (Markdown, trimmed, empty is 400) and responds with it at once (201);
+  behind it the model's reply stands as `running`, and the **server** writes
+  it in the background — nothing depends on an open tab, and the app polls
+  the chat until the reply is `done` or `failed`. One reply per chat at a
+  time: a message while one runs is 409 `scene_chat_reply_running`. Without
+  a configured provider it is 503 `llm_unconfigured`, and nothing is
+  written.
+- `PATCH …/scene-chats/<chat>/messages/<id> { rev, force?, status: "running" }`
+  **retries** a failed reply against the conversation before it. It is the
+  only write on a message.
+- Every reply is written from the context **as it is stored at that
+  moment**: the campaign knowledge, the glossary, the text of the scene's
+  chapter, the scene with every field and its text, the NPCs it names and
+  the location it plays at, each with every field — then the written
+  messages of the chat so far. A reply is **free Markdown** in the DM's UI
+  language, never written into another row; `[[id]]` references in it
+  resolve like in every text. A reply that fails — a provider error
+  (`llm_failed`), a timeout (`llm_timeout`), the output cap
+  (`scene_chat_reply_truncated`) or a server restart
+  (`scene_chat_reply_restarted`) — keeps the DM's message, and the app says
+  why in a whole sentence and offers to retry.
+- A reply is no generator job: it counts against no limit of the campaign's
+  job and waits for none.
+- The chat is not searched.
+
 ## Trash
 
-Deleting a chapter, a scene, an NPC, a location or an idea puts it in the
+Deleting a chapter, a scene, an NPC, a location or an idea, or clearing a
+scene chat, puts it in the
 **trash** ([decisions/trash](docs/decisions/trash.md)); after 30 days the
 server removes it for good. A row in the trash keeps its id, its fields and
 its references and carries `deletedMs`, the moment it went there.
@@ -889,6 +946,9 @@ its references and carries `deletedMs`, the moment it went there.
 - **A chapter takes its live scenes and threads along**, at the same moment,
   and its restore brings back exactly those, the scenes at their places in
   its order. A scene restored on its own lands at the end of its chapter.
+- **A scene takes its live chat along** (also when it goes with its
+  chapter), and its restore brings back exactly that chat; a chat the DM
+  cleared before stays in the trash.
 - **What a row names must be live for it to come back:** a scene whose
   chapter is in the trash is 409 `chapter_in_trash`; a scene whose location
   or NPC, an NPC or location whose chapter, or a chapter one of whose scenes
@@ -898,7 +958,9 @@ its references and carries `deletedMs`, the moment it went there.
 
 In the app, the **trash page** (`/campaigns/<campaign>/trash`) lists what is
 in the trash by kind, each row with the days it has left, and restores it;
-a scene that went there with its chapter is part of the chapter's row. It is
+a scene that went there with its chapter is part of the chapter's row, a
+chat that went with its scene part of the scene's, and a cleared chat is
+named by its scene. It is
 reached from the campaign menu and ⌘K. Deleting an idea in the debrief asks
 for no confirmation: a notice offers to undo it. A chapter, a scene, an NPC or a location is deleted from
 its edit mode, after a confirmation that says what goes to the trash with it
@@ -1102,8 +1164,10 @@ after the outline: the review opens with a terms stage, and no scene, NPC or
 location is written before the DM confirms it. Every later call of the run
 carries the decided list, and the ticked terms become glossary terms.
 
-**Every** call responds with a JSON object whose schema the server
-**enforces** via the provider API. A scene, NPC or location call (creating
+**Every** call of a run responds with a JSON object whose schema the server
+**enforces** via the provider API — the one model reply that is free text is
+the scene chat's (see scene chat above), because it is never written into a
+row. A scene, NPC or location call (creating
 as well as augmenting) returns the scene, the NPC or the location without
 `rev`, all fields side by side, plus the hints for the DM under `warnings`;
 a new scene is always `draft`, and an NPC's `quickstats` travel as a list of

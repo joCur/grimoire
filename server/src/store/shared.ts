@@ -174,7 +174,7 @@ export function guardRev(current: number, sent: number, what: string): void {
 export type { TrashBlocker } from "@grimoire/shared/trash";
 
 /** The kinds that go to the trash on their own. */
-export type TrashKind = "chapter" | "scene" | "npc" | "location" | "idea";
+export type TrashKind = "chapter" | "scene" | "npc" | "location" | "idea" | "scene-chat";
 
 /** The moment a row goes to the trash: now, in the stored shape (./time.ts). */
 export function trashMoment(now: Date = new Date()): string {

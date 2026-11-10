@@ -674,7 +674,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: npc }", () => {
     try {
       const res = await postJson(jobsUrl("example"), npcBody);
       expect(res.status).toBe(503);
-      expect(await res.json()).toEqual({ error: "ANTHROPIC_API_KEY fehlt" });
+      expect(await res.json()).toEqual({ code: "llm_unconfigured", error: "ANTHROPIC_API_KEY is missing" });
       expect(await fetchJob()).toBeNull();
     } finally {
       Object.assign(process.env, saved);

@@ -134,6 +134,13 @@
       "when": 1793638403791,
       "tag": "0018_supplement_text",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1794338173387,
+      "tag": "0019_scene_chats",
+      "breakpoints": true
     }
   ]
 }

@@ -447,6 +447,40 @@ export const en: Messages = {
     "The list could not be removed because it has changed in the meantime. The page now shows its current state.",
 
 
+  // --- the brainstorming chat of a scene (scene-chat/SceneChat.tsx) ----------
+  "sceneChat.heading": "Brainstorming",
+  "sceneChat.lead":
+    "Think this scene through in conversation. Every reply reads the scene, its NPCs, its location, the chapter's text, the campaign knowledge and the glossary as they are saved right now.",
+  "sceneChat.loading": "Loading the chat …",
+  "sceneChat.loadFailed": "The chat could not be loaded — check the server.",
+  "sceneChat.empty": "No message yet. Ask a question about this scene to start the conversation.",
+  "sceneChat.log": "Conversation about this scene",
+  "sceneChat.role.dm": "You",
+  "sceneChat.role.model": "Reply",
+  "sceneChat.running": "The reply is being written …",
+  "sceneChat.running.hint": "You can leave the page. The reply stands here when you come back.",
+  "sceneChat.failed.fallback": "The reply could not be written.",
+  "sceneChat.failed.hint": "Your message stays, and the reply can be asked for again.",
+  "sceneChat.retry": "Try again",
+  "sceneChat.retry.failed": "The reply was not asked for again — check the server.",
+  "sceneChat.copy": "Copy",
+  "sceneChat.copied": "Copied",
+  "sceneChat.copy.aria": "Copy the reply",
+  "sceneChat.copied.aria": "Reply copied",
+  "sceneChat.input.label": "Your message",
+  "sceneChat.input.placeholder": "Ask something about this scene …",
+  "sceneChat.send": "Send",
+  "sceneChat.sending": "Sending …",
+  "sceneChat.send.failed": "The message was not sent — check the server.",
+  "sceneChat.unconfigured":
+    "No language model is set up on this server, so the chat cannot reply. Once a provider is set up, you can write here.",
+  "sceneChat.clear": "Clear chat",
+  "sceneChat.clear.title": "Clear this chat?",
+  "sceneChat.clear.sentence":
+    "The whole conversation goes to the trash. From there it can be restored for {days} days, as long as the scene has no new chat.",
+  "sceneChat.clear.failed": "The chat was not cleared — check the server.",
+  "sceneChat.cleared": "The chat is in the trash.",
+
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
   "trash.title": "Trash",
   "trash.lead":
@@ -459,6 +493,8 @@ export const en: Messages = {
   "trash.group.npcs": "NPCs",
   "trash.group.locations": "Locations",
   "trash.group.ideas": "Ideas",
+  "trash.group.sceneChats": "Scene chats",
+  "trash.sceneChat.name": "Chat on the scene “{scene}”",
   "trash.remaining":
     "{days, plural, =0 {Removed for good today.} one {Removed for good in # day.} other {Removed for good in # days.}}",
   "trash.chapter.scenes":
@@ -512,6 +548,18 @@ export const en: Messages = {
   "server.import_not_fivetools":
     "This is not a 5etools file: it lacks the sources under _meta or the table list. Nothing was imported.",
   "server.import_no_tables": "The 5etools file holds no random table. Nothing was imported.",
+  // The scene chat's reply: why one was not written (scene-chat/), and the
+  // generator's start without a provider.
+  "server.llm_unconfigured": "No language model is set up on this server ({detail}).",
+  "server.llm_failed": "The language model's provider answered with an error or could not be reached.",
+  "server.llm_timeout": "The language model's provider did not answer in time.",
+  "server.scene_chat_reply_truncated":
+    "The reply was cut off at the output cap — raise LLM_MAX_TOKENS (currently: {max}).",
+  "server.scene_chat_reply_restarted": "The server was restarted while the reply was being written.",
+  "server.scene_chat_reply_running":
+    "A reply of this chat is still being written. Wait until it stands, then write on.",
+  "server.scene_chat_replaced":
+    "The scene has a new chat by now. Clear that one first, then this one can be restored.",
   "server.patch_anchor_missing":
     "Not applied — the block this change is about is no longer in the text as it was. Discard the change and edit the text yourself.",
   // One row in the way of a trash or a restore, as it stands inside the

@@ -16,9 +16,11 @@
 // in place and saved together. The npc cards step aside while it stands, so
 // the text gets the width.
 //
-// The npc cards and the augment action are not this slice's to draw: the
-// route is handed them (`npcCard`, `augmentAction`), so the scene never
-// reaches into the npc's slice or the generator job's.
+// The npc cards, the augment action and the brainstorming chat below the
+// article are not this slice's to draw: the route is handed them (`npcCard`,
+// `augmentAction`, `chat`), so the scene never reaches into the npc's slice,
+// the generator job's or the scene chat's. The chat steps aside in edit mode
+// like the npc cards.
 //
 // Edit mode is remembered BY SCENE: this route stays mounted across a
 // navigation, and an editor seeded from another scene would be a lie. A
@@ -49,6 +51,8 @@ export function SceneRoute(props: {
   npcCard: (campaign: string, id: string) => ReactNode;
   /** The augment run on this scene — the generator job's dialog. */
   augmentAction: (campaign: string, scene: Scene) => ReactNode;
+  /** The brainstorming chat of this scene — drawn by the scene chat. */
+  chat: (campaign: string, scene: string) => ReactNode;
 }) {
   return (
     <UnsavedChangesGuard>
@@ -60,9 +64,11 @@ export function SceneRoute(props: {
 function ScenePage({
   npcCard,
   augmentAction,
+  chat,
 }: {
   npcCard: (campaign: string, id: string) => ReactNode;
   augmentAction: (campaign: string, scene: Scene) => ReactNode;
+  chat: (campaign: string, scene: string) => ReactNode;
 }) {
   const t = useT();
   const { campaign = "", id = "" } = useParams();
@@ -171,6 +177,7 @@ function ScenePage({
               }
             />
           )}
+          {!editing && chat(campaign, data.id)}
         </div>
         {!editing && data.npcs.length > 0 && (
           <aside className="flex w-full flex-none flex-col gap-3.5 lg:sticky lg:top-0 lg:w-[280px]">

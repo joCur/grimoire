@@ -93,8 +93,9 @@ export const ERROR_CODES = [
    * so the app can show what is in the way instead of fetching it again,
    * under the key of what was written: `{ campaign }`, `{ chapter }`,
    * `{ scene }`, `{ npc }`, `{ location }`, `{ thread }`, `{ idea }`,
-   * `{ glossaryTerm }`, `{ knowledgeItem }`, `{ session }`, `{ pause }` or
-   * `{ logEntry }` for the write of one of those, `{ itemPriceImport }` for
+   * `{ glossaryTerm }`, `{ knowledgeItem }`, `{ session }`, `{ pause }`,
+   * `{ logEntry }`, `{ sceneChat }` or `{ sceneChatMessage }` for the write
+   * of one of those, `{ itemPriceImport }` for
    * the removal of an item list, and `{ knowledgeItemOrder }`
    * for the order of the knowledge items. The scene order carries none of them —
    * the chapter overview reloads its tree.
@@ -217,6 +218,42 @@ export const ERROR_CODES = [
    * its sources. Nothing is written. No parameters.
    */
   "import_no_tables",
+  /**
+   * 503, a request that needs the model while no LLM provider is configured
+   * (a generator run, a scene chat message). Nothing is written. No
+   * parameters.
+   */
+  "llm_unconfigured",
+  /**
+   * A scene chat reply that failed: the provider answered with an error, could
+   * not be reached, or sent an empty reply. Stored on the reply as its error
+   * body. `{ status }` when the provider answered with an HTTP error — data,
+   * not part of the sentence.
+   */
+  "llm_failed",
+  /** A scene chat reply that failed: the provider did not answer in time. No parameters. */
+  "llm_timeout",
+  /**
+   * A scene chat reply that failed: it hit the output cap and is cut off.
+   * `{ maxTokens }` — absent when the endpoint's own default applies.
+   */
+  "scene_chat_reply_truncated",
+  /**
+   * A scene chat reply that failed: the server was restarted while it was
+   * being written. No parameters.
+   */
+  "scene_chat_reply_restarted",
+  /**
+   * 409, a scene chat message or retry while a reply of that chat is still
+   * being written — one reply per scene at a time. Nothing is written. No
+   * parameters.
+   */
+  "scene_chat_reply_running",
+  /**
+   * 409, restoring a scene chat from the trash while its scene has a new chat:
+   * a scene has one chat. Nothing is written. `{ id }` — the new chat.
+   */
+  "scene_chat_replaced",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

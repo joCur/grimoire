@@ -28,6 +28,10 @@
 // and a prefilled brace in front of a reply the API already shapes would only
 // be in the way.
 //
+// The ONE exception is the scene chat (`ChatProvider.chat`): its reply is free
+// Markdown the DM reads and is never written into a row, so it carries no
+// schema and nothing forces its shape (decisions/generator).
+//
 // Three facts travel WITH the text, because only the transport can see them:
 // whether the model hit its output cap (`finish_reason: length`
 // / `stop_reason: max_tokens` — a truncated reply is unfixable by a
@@ -136,8 +140,8 @@ export interface GenerateRequest {
    */
   existingLocation?: LocationProposal;
   /**
-   * The DM's free instruction of an augment run („Führe einen Handlungsstrang
-   * um den Schmuggler-Spitzel ein"). Either this or `sourceText` is there —
+   * The DM's free instruction of an augment run ("introduce a storyline
+   * around the smugglers' informer"). Either this or `sourceText` is there —
    * the dialog requires at least one of them.
    */
   instruction?: string;
@@ -189,7 +193,7 @@ export interface TokenUsage {
    * Reporting only — it is what tells us whether caching actually engages on
    * a routed model, and it is absent when the endpoint says nothing about it.
    * NOT part of the job totals: a cached token was still sent, so the run's
-   * „~N Tokens" must keep counting it (same reasoning as claudeUsage).
+   * token count must keep counting it (same reasoning as claudeUsage).
    */
   cachedInputTokens?: number;
 }
@@ -222,6 +226,38 @@ export interface LLMProvider {
   complete(req: GenerateRequest, corrections?: CorrectionTurn[]): Promise<CompletionResult>;
 }
 
+/** One stored turn of a chat, in the roles both APIs speak. */
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * One reply of a scene chat: the system prompt, the CONTEXT block — what the
+ * chat is about, read fresh for every reply and sent as the first user turn
+ * — and the stored turns of the chat so far, the DM's last message at the
+ * end. The reply is plain text; nothing forces a shape.
+ */
+export interface ChatRequest {
+  systemPrompt: string;
+  context: string;
+  turns: ChatTurn[];
+}
+
+/**
+ * The transport of a free-text reply over a whole conversation. The model
+ * APIs are stateless, so every reply request carries the conversation from
+ * its start. Its own interface beside `LLMProvider`: the generator never asks
+ * for prose, and the chat never asks for a schema.
+ */
+export interface ChatProvider {
+  readonly name: string;
+  /** See LLMProvider.maxTokens. */
+  readonly maxTokens?: number;
+  /** One reply: context + turns -> the model's raw text. `signal` aborts the request. */
+  chat(req: ChatRequest, signal?: AbortSignal): Promise<CompletionResult>;
+}
+
 /**
  * Normalize one API's usage object. Absent object -> undefined; a present
  * object with unusable numbers counts as 0 rather than failing the run —
@@ -246,7 +282,7 @@ function normalizeUsage(
  * `cache_control` in play the API reports the cached prefix under
  * `cache_read_input_tokens` / `cache_creation_input_tokens` and leaves
  * `input_tokens` with the uncached tail only. Summing them keeps the review's
- * „~N Tokens" the honest size of what was sent — caching makes a run cheaper,
+ * token count the honest size of what was sent — caching makes a run cheaper,
  * it does not make it smaller.
  */
 export function claudeUsage(raw: unknown): TokenUsage | undefined {
@@ -294,6 +330,9 @@ export function openAIUsage(raw: unknown): TokenUsage | undefined {
 export const KNOWLEDGE_HEADING =
   "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
 
+/** The heading of the campaign's glossary block in every prompt that carries it. */
+export const GLOSSARY_HEADING = "## Glossar";
+
 /**
  * The heading of a scene run's decided terms. Binding in the same words as
  * KNOWLEDGE_HEADING, because it is the same kind of rule: the DM decided how
@@ -306,7 +345,7 @@ export const TERMS_HEADING =
   "## Begriffe dieses Durchlaufs — immer so schreiben, auch wenn das Quellmaterial anders lautet";
 
 /**
- * Heading of the augment run's „this is what already stands there" block.
+ * Heading of the augment run's "this is what already stands there" block.
  * A constant for the same reason KNOWLEDGE_HEADING is one: the prompt test
  * asserts on it, and the E2E stub reads the prompt by it.
  */
@@ -410,7 +449,7 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
     // would be a heading the model has to interpret against no content.
     ...(req.knowledge.trim() === "" ? [] : [KNOWLEDGE_HEADING, req.knowledge]),
     ...(req.terms === undefined || req.terms.trim() === "" ? [] : [TERMS_HEADING, req.terms]),
-    "## Glossar",
+    GLOSSARY_HEADING,
     req.glossary,
     "## Kontext",
     // Only the lines that HAVE a value: an NPC run has no target chapter,
@@ -571,6 +610,37 @@ export function cachedMessages(
 export const EPHEMERAL = { type: "ephemeral" } as const;
 
 /**
+ * The breakpoint of a CHAT: the same kind with the one-hour lifetime. A DM
+ * answers minutes apart, so the default five minutes would expire between
+ * two messages and every reply would pay for the whole prefix again.
+ */
+export const EPHEMERAL_HOUR = { type: "ephemeral", ttl: "1h" } as const;
+
+/**
+ * The turns of one chat reply: the context block as the first user turn,
+ * then the stored turns. Two breakpoints: the context block, which stays the
+ * same until the DM edits what it shows, and the LAST stored turn, so the
+ * next reply reads the whole conversation so far from the cache. Both APIs
+ * take two user turns in a row (the context and the DM's first message) as
+ * one turn.
+ */
+export function chatTurns(
+  req: ChatRequest,
+  cacheControl: Record<string, string> | undefined,
+): Array<{ role: "user" | "assistant"; content: unknown }> {
+  const marked = (text: string): unknown =>
+    cacheControl === undefined ? text : [{ type: "text", text, cache_control: cacheControl }];
+  const last = req.turns.length - 1;
+  return [
+    { role: "user", content: marked(req.context) },
+    ...req.turns.map((turn, index) => ({
+      role: turn.role,
+      content: index === last ? marked(turn.content) : turn.content,
+    })),
+  ];
+}
+
+/**
  * The Claude turns of one attempt: the first user turn is SPLIT into the
  * cacheable constant prefix and this call's own variable tail; the replayed
  * correction turns are plain strings — they are unique per attempt, so
@@ -598,7 +668,7 @@ export function claudeMessages(
 /** Output cap when nothing is configured — enough for a full scene batch. */
 export const DEFAULT_MAX_TOKENS = 8000;
 
-export class ClaudeProvider implements LLMProvider {
+export class ClaudeProvider implements LLMProvider, ChatProvider {
   readonly name = "claude";
   constructor(
     private apiKey: string,
@@ -630,6 +700,60 @@ export class ClaudeProvider implements LLMProvider {
       ...(refusal === undefined ? {} : { refusal }),
       usage: claudeUsage(data.usage),
     };
+  }
+
+  async chat(req: ChatRequest, signal?: AbortSignal): Promise<CompletionResult> {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(claudeChatBody(req, this.model, this.maxTokens)),
+      ...(signal === undefined ? {} : { signal }),
+    });
+    if (!res.ok) throw new ProviderError(res.status, `Claude API: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    const refusal = claudeRefusal(data);
+    return {
+      text: claudeText(data),
+      truncated: data.stop_reason === "max_tokens",
+      ...(refusal === undefined ? {} : { refusal }),
+      usage: claudeUsage(data.usage),
+    };
+  }
+}
+
+/**
+ * The Messages API body of one chat reply: no tool, nothing forced. The
+ * system prompt, the context block and the last stored turn each carry the
+ * one-hour breakpoint (`chatTurns`).
+ */
+export function claudeChatBody(
+  req: ChatRequest,
+  model: string,
+  maxTokens: number,
+): Record<string, unknown> {
+  return {
+    model,
+    max_tokens: maxTokens,
+    system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL_HOUR }],
+    messages: chatTurns(req, EPHEMERAL_HOUR),
+  };
+}
+
+/**
+ * A provider that answered with an HTTP error. The status travels as data, so
+ * a caller can tell a refusal of the endpoint from a request that never
+ * reached it.
+ */
+export class ProviderError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
   }
 }
 
@@ -743,7 +867,7 @@ export interface OpenAICompatOptions {
  * request shape is identical everywhere; only base URL, model and auth
  * differ, and those come from the environment (see createProvider).
  */
-export class OpenAICompatProvider implements LLMProvider {
+export class OpenAICompatProvider implements LLMProvider, ChatProvider {
   readonly name: string;
   private baseUrl: string;
   private model: string;
@@ -821,6 +945,47 @@ export class OpenAICompatProvider implements LLMProvider {
       // OpenAI-compatible: "length" means the cap cut the reply off.
       truncated: choice?.finish_reason === "length",
       usage: openAIUsage(data.usage),
+    };
+  }
+
+  async chat(req: ChatRequest, signal?: AbortSignal): Promise<CompletionResult> {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      ...this.extraHeaders,
+    };
+    if (this.apiKey) headers.authorization = `Bearer ${this.apiKey}`;
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(this.chatBody(req)),
+      ...(signal === undefined ? {} : { signal }),
+    });
+    if (!res.ok) throw new ProviderError(res.status, `${this.name}: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    const choice = data.choices?.[0];
+    const content = choice?.message?.content;
+    return {
+      text: typeof content === "string" ? content : "",
+      truncated: choice?.finish_reason === "length",
+      usage: openAIUsage(data.usage),
+    };
+  }
+
+  /**
+   * The request body of one chat reply: the system prompt, the context
+   * block and the turns as `/chat/completions` messages, without
+   * `response_format`. With explicit breakpoints switched on, the context
+   * block and the last stored turn carry the one-hour breakpoint, as on the
+   * Messages API.
+   */
+  chatBody(req: ChatRequest): Record<string, unknown> {
+    return {
+      model: this.model,
+      messages: [
+        { role: "system", content: req.systemPrompt },
+        ...chatTurns(req, this.promptCache ? EPHEMERAL_HOUR : undefined),
+      ],
+      ...(this.maxTokens === undefined ? {} : { max_tokens: this.maxTokens }),
     };
   }
 
@@ -917,7 +1082,7 @@ const OPENROUTER_HEADERS = {
 // vendor-prefixed and picking one for the user would silently bill the wrong
 // model.
 function requireModel(env: NodeJS.ProcessEnv): string {
-  if (!env.LLM_MODEL) throw new Error("LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)");
+  if (!env.LLM_MODEL) throw new Error("LLM_MODEL is missing (a vendor-prefixed model id)");
   return env.LLM_MODEL;
 }
 
@@ -963,15 +1128,17 @@ function parsePromptCache(env: NodeJS.ProcessEnv, fallback: boolean): boolean {
   return fallback;
 }
 
-// The German "fehlt" messages are deliberate: they surface in the (German) UI
-// when the generate endpoint answers 503 because no provider is configured.
-export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
+// A missing variable throws an English message naming it: the endpoint that
+// needed the provider answers 503 `llm_unconfigured` with it as the technical
+// text (generator.ts `obtainProvider`), and the app says it in a sentence of
+// its own.
+export function createProvider(env: NodeJS.ProcessEnv): LLMProvider & ChatProvider {
   const kind = env.LLM_PROVIDER ?? "claude";
   const maxTokens = parseMaxTokens(env);
   const forceJson = parseForceJson(env);
   switch (kind) {
     case "claude": {
-      if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY fehlt");
+      if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is missing");
       // The Messages API requires max_tokens — hence the default here, while
       // the OpenAI-compatible cases may leave it to the endpoint.
       return new ClaudeProvider(
@@ -981,7 +1148,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
       );
     }
     case "openrouter": {
-      if (!env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY fehlt");
+      if (!env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is missing");
       return new OpenAICompatProvider({
         name: "openrouter",
         baseUrl: env.LLM_BASE_URL ?? OPENROUTER_BASE_URL,
@@ -996,7 +1163,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
       });
     }
     case "openai": {
-      if (!env.LLM_BASE_URL) throw new Error("LLM_BASE_URL fehlt");
+      if (!env.LLM_BASE_URL) throw new Error("LLM_BASE_URL is missing");
       return new OpenAICompatProvider({
         name: "openai",
         baseUrl: env.LLM_BASE_URL,
@@ -1020,6 +1187,6 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
     }
     default:
       // Better a 503 naming the typo than silently generating with Claude.
-      throw new Error(`Unbekannter LLM_PROVIDER: ${kind}`);
+      throw new Error(`unknown LLM_PROVIDER: ${kind}`);
   }
 }

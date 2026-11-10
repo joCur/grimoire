@@ -31,6 +31,7 @@ import { ReviewRoute } from "@/routes/review";
 import { SettingsRoute } from "@/routes/settings";
 import { TrashRoute } from "@/routes/trash";
 import { SceneAugmentAction } from "@/routes/SceneAugmentAction";
+import { SceneChat } from "@/scene-chat/SceneChat";
 import { SceneList } from "@/scene/SceneList";
 import { SceneRoute } from "@/scene/SceneRoute";
 import { sceneHref } from "@/scene/scene-links";
@@ -134,6 +135,7 @@ export function App() {
                 augmentAction={(campaign, scene) => (
                   <SceneAugmentAction campaign={campaign} scene={scene} />
                 )}
+                chat={(campaign, scene) => <SceneChat campaign={campaign} scene={scene} />}
               />
             }
           />

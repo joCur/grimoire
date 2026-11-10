@@ -6,8 +6,9 @@
 // moves the version counter of every campaign it removed rows of
 // (decisions/polling), because the trash lists of those campaigns changed.
 //
-// The order: a scene names npcs, a location and a chapter, npcs and locations
-// name a chapter, so scenes go first, then npcs and locations, then chapters
+// The order: a scene chat names its scene, a scene names npcs, a location and
+// a chapter, npcs and locations name a chapter, so scene chats go first, then
+// scenes, then npcs and locations, then chapters
 // — whose threads go with them — and the ideas, which name nothing. A row
 // that names another went to the trash no later than the row it names (the
 // trash refuses a row something live still names, and a restore refuses a row
@@ -22,13 +23,14 @@ import { getDb } from "./handle";
 import { purgeIdeas } from "./ideas";
 import { purgeLocations } from "./locations";
 import { purgeNpcs } from "./npcs";
+import { purgeSceneChats } from "./scene-chats";
 import { purgeScenes } from "./scenes";
 import { LOCAL_DATE_TIME_SECONDS } from "./time";
 
 /**
  * Remove every row that went to the trash more than `TRASH_RETENTION_DAYS`
  * before `now`, across all campaigns. Returns how many rows it removed
- * (threads that go with their chapter not counted).
+ * (threads that go with their chapter and the messages of a chat not counted).
  *
  * The cutoff is `now` minus the retention in the server's wall clock, in the
  * stored shape of a trash moment, which sorts as text in the order of time.
@@ -39,6 +41,7 @@ export async function purgeTrash(now: Date = new Date()): Promise<number> {
   return db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
     const removed = [
+      ...purgeSceneChats(tx, cutoff),
       ...purgeScenes(tx, cutoff),
       ...purgeNpcs(tx, cutoff),
       ...purgeLocations(tx, cutoff),

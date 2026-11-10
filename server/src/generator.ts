@@ -127,16 +127,24 @@ export function setProviderForTests(provider: LLMProvider | null): void {
 
 /**
  * Resolve the configured provider — lazily, per generate request. An
- * unconfigured provider (e.g. missing ANTHROPIC_API_KEY) answers 503 with
- * the factory's message; the rest of the API stays usable without a key.
+ * unconfigured provider (e.g. missing ANTHROPIC_API_KEY) answers 503
+ * `llm_unconfigured` with the factory's message; the rest of the API stays
+ * usable without a key.
  */
 export function obtainProvider(): LLMProvider {
   if (providerOverride !== null) return providerOverride;
   try {
     return createProvider(process.env);
   } catch (err) {
-    throw new ApiError(503, err instanceof Error ? err.message : "LLM provider not configured");
+    throw providerUnconfigured(err);
   }
+}
+
+/** The 503 of a request that needs the model while no provider is configured. */
+export function providerUnconfigured(err: unknown): ApiError {
+  return new ApiError(503, err instanceof Error ? err.message : "LLM provider not configured", {
+    code: "llm_unconfigured",
+  });
 }
 
 // --- prompt assets -----------------------------------------------------------
@@ -200,6 +208,9 @@ export const ASSET_FILES = {
   // The location augment run's own augmentation rule; the location assets
   // above bring the fields and the few-shot.
   locationAugment: { systemPrompt: "location-augment-system-prompt.md" },
+  // The brainstorming chat on a scene: its own prompt alone. Its reply is
+  // free Markdown, so it has no fields file and no few-shot.
+  sceneChat: { systemPrompt: "scene-chat-system-prompt.md" },
   // The OUTLINE step of a pipelined scene run: its own prompt
   // and its own few-shot (a worked example outline, not a target draft).
   outline: {

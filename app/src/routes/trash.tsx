@@ -1,14 +1,15 @@
 // "/campaigns/:campaign/trash" — what the DM deleted, until the server
 // removes it for good (decisions/trash): the chapters, scenes, npcs,
-// locations and ideas in the trash, each with the days it has left and a
-// restore action.
+// locations, ideas and cleared scene chats in the trash, each with the days
+// it has left and a restore action.
 //
-// The page composes five slices: each one reads its own trash list and
+// The page composes six slices: each one reads its own trash list and
 // restores its own rows on its own resource (`PATCH { rev, deletedMs: null }`
 // with the `rev` the list answered with). What connects them lives here: a
 // scene that went to the trash together with its chapter — the same chapter,
 // the same moment — is no row of its own but part of its chapter's row, and
-// comes back with it. A restore brings rows back into the tree, the lists and
+// comes back with it; a scene's chat that went along with its scene is part
+// of the scene the same way. A chat is named by its scene's title. A restore brings rows back into the tree, the lists and
 // the search, so it refreshes everything read from the campaign.
 //
 // A refused restore says why in a whole sentence under its row: what is in
@@ -22,7 +23,7 @@ import { TRASH_RETENTION_DAYS } from "@grimoire/shared/trash";
 import { useRef, useState } from "react";
 import { useParams } from "react-router";
 
-import { ApiError, isNotFound } from "@/api";
+import { ApiError, fetchTree, isNotFound } from "@/api";
 import { restoreChapter } from "@/chapter/chapter-api";
 import { chapterTrashKey, chapterTrashQuery } from "@/chapter/chapter-query";
 import { MobileMenuRow } from "@/components/MobileMenuRow";
@@ -31,12 +32,15 @@ import { useT, type MessageKey, type Translate } from "@/i18n";
 import { serverErrorMessage } from "@/i18n/server-errors";
 import { restoreIdea } from "@/idea/idea-api";
 import { ideaTrashKey, ideaTrashQuery } from "@/idea/idea-query";
+import { sceneTitle } from "@/lib/campaign";
 import { daysUntilPurge } from "@/lib/trash";
 import { invalidateCampaignQueries } from "@/lib/use-campaign-version";
 import { restoreLocation } from "@/location/location-api";
 import { locationTrashKey, locationTrashQuery } from "@/location/location-query";
 import { restoreNpc } from "@/npc/npc-api";
 import { npcTrashKey, npcTrashQuery } from "@/npc/npc-query";
+import { restoreSceneChat } from "@/scene-chat/scene-chat-api";
+import { sceneChatTrashKey, sceneChatTrashQuery } from "@/scene-chat/scene-chat-query";
 import { restoreScene } from "@/scene/scene-api";
 import { sceneTrashKey, sceneTrashQuery } from "@/scene/scene-query";
 
@@ -66,16 +70,19 @@ export function TrashRoute() {
   const heading = useRef<HTMLHeadingElement>(null);
   const [restored, setRestored] = useState("");
 
-  const [chapters, scenes, npcs, locations, ideas] = useQueries({
+  const [chapters, scenes, npcs, locations, ideas, sceneChats, tree] = useQueries({
     queries: [
       chapterTrashQuery(campaign),
       sceneTrashQuery(campaign),
       npcTrashQuery(campaign),
       locationTrashQuery(campaign),
       ideaTrashQuery(campaign),
+      sceneChatTrashQuery(campaign),
+      // The titles of the live scenes, which name their cleared chats.
+      { queryKey: ["tree", campaign], queryFn: () => fetchTree(campaign) },
     ],
   });
-  const reads = [chapters, scenes, npcs, locations, ideas];
+  const reads = [chapters, scenes, npcs, locations, ideas, sceneChats];
 
   const restore = useMutation({
     mutationFn: (item: TrashItem) => item.restore(),
@@ -99,12 +106,19 @@ export function TrashRoute() {
     },
   });
 
-  const groups = trashGroups(campaign, {
+  const groups = trashGroups(campaign, t, {
     chapters: chapters.data ?? [],
     scenes: scenes.data ?? [],
     npcs: npcs.data ?? [],
     locations: locations.data ?? [],
     ideas: ideas.data ?? [],
+    sceneChats: sceneChats.data ?? [],
+    sceneTitle: (id) => {
+      const trashed = scenes.data?.find((scene) => scene.id === id);
+      if (trashed !== undefined) return trashed.title === "" ? id : trashed.title;
+      const title = sceneTitle(tree.data, id);
+      return title === undefined || title === "" ? id : title;
+    },
   }).filter((group) => group.items.length > 0);
   const now = new Date();
   const failure = (item: TrashItem) =>
@@ -236,15 +250,22 @@ interface TrashRows {
   npcs: Array<{ id: string; name: string; deletedMs?: number; rev: number }>;
   locations: Array<{ id: string; name: string; deletedMs?: number; rev: number }>;
   ideas: Array<{ id: string; text: string; deletedMs?: number; rev: number }>;
+  sceneChats: Array<{ id: string; scene: string; deletedMs?: number; rev: number }>;
+  /** The title the DM knows a scene by, live or in the trash. */
+  sceneTitle: (id: string) => string;
 }
 
 /**
  * The page's groups, in the order of the campaign's own hierarchy. A scene
  * that went to the trash with its chapter — its chapter in the trash, the
  * same moment — is counted on the chapter's row instead of standing on its
- * own. A row without a trash moment is none of the trash's and is left out.
+ * own; a chat that went to the trash with its scene — the same scene, the
+ * same moment — is part of the scene the same way, and is no row either. A
+ * row without a trash moment is none of the trash's and is left out.
  */
-function trashGroups(campaign: string, rows: TrashRows): TrashGroup[] {
+function trashGroups(campaign: string, t: Translate, rows: TrashRows): TrashGroup[] {
+  const withScene = (chat: TrashRows["sceneChats"][number]) =>
+    rows.scenes.some((scene) => scene.id === chat.scene && scene.deletedMs === chat.deletedMs);
   const withChapter = (scene: TrashRows["scenes"][number]) =>
     rows.chapters.some(
       (chapter) => chapter.id === scene.chapter && chapter.deletedMs === scene.deletedMs,
@@ -284,6 +305,20 @@ function trashGroups(campaign: string, rows: TrashRows): TrashGroup[] {
         .flatMap((scene) =>
           item("scene", scene, scene.title === "" ? scene.id : scene.title, sceneTrashKey(campaign), () =>
             restoreScene(campaign, scene),
+          ),
+        ),
+    },
+    {
+      heading: "trash.group.sceneChats",
+      items: rows.sceneChats
+        .filter((chat) => !withScene(chat))
+        .flatMap((chat) =>
+          item(
+            "scene-chat",
+            chat,
+            t("trash.sceneChat.name", { scene: rows.sceneTitle(chat.scene) }),
+            sceneChatTrashKey(campaign),
+            () => restoreSceneChat(campaign, chat),
           ),
         ),
     },

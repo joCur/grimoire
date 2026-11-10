@@ -250,6 +250,7 @@ describe("the degrade rule", () => {
           count: 1,
           chapter: "x",
           reason: "x",
+          detail: "x",
         });
         expect(sentence.trim()).not.toBe("");
         expect(sentence).not.toContain("{");
