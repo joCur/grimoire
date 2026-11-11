@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0](https://github.com/joCur/grimoire/compare/v0.12.0...v0.13.0) (2026-11-11)
+
+
+### Features
+
+* brainstorming chat on a scene ([#253](https://github.com/joCur/grimoire/issues/253)) ([#259](https://github.com/joCur/grimoire/issues/259)) ([9585d18](https://github.com/joCur/grimoire/commit/9585d18003b85e3b52b1632d2c2d13ccf6f7e0a2))
+* chapter check run for consistent terms ([#251](https://github.com/joCur/grimoire/issues/251)) ([#258](https://github.com/joCur/grimoire/issues/258)) ([8a0f71f](https://github.com/joCur/grimoire/commit/8a0f71f5137d92cf42fca00d89c01ed7b5f17984))
+* quick-ideas chat in the live view ([#260](https://github.com/joCur/grimoire/issues/260)) ([#261](https://github.com/joCur/grimoire/issues/261)) ([54d2463](https://github.com/joCur/grimoire/commit/54d24634bb09258a0983db66d2f76e77ca15cfb6))
+* terms stage for scene runs ([#250](https://github.com/joCur/grimoire/issues/250)) ([#252](https://github.com/joCur/grimoire/issues/252)) ([3a63114](https://github.com/joCur/grimoire/commit/3a631146d9112c2cd04b570ecc830737d9465a73))
+
+
+### Bug Fixes
+
+* **server:** Claude provider enforces reply schemas via structured output ([#256](https://github.com/joCur/grimoire/issues/256)) ([#257](https://github.com/joCur/grimoire/issues/257)) ([31a6fb6](https://github.com/joCur/grimoire/commit/31a6fb6f0e4903119f3163ddc624361e9f0f1aae))
+
 ## [0.12.0](https://github.com/joCur/grimoire/compare/v0.11.0...v0.12.0) (2026-11-02)
 
 
