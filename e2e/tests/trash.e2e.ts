@@ -5,8 +5,9 @@
 // (`PATCH …/ideas/:id { rev, deletedMs: null }`). The trash page — reached
 // from the campaign menu, on the desktop and on the phone, and ⌘K — lists what is in the trash with the days it has left and restores it. A
 // chapter that went there with its scenes is ONE row and brings its scenes
-// back in their order; a restore that something in the trash stands in the
-// way of says what, and writes nothing.
+// back in their order; a scene's chat goes along with its scene the same way,
+// and a cleared chat is a row of its own; a restore that something in the
+// trash stands in the way of says what, and writes nothing.
 //
 // Every claim about what was deleted or restored reads the rows through the
 // API; the page is reached by roles and catalog keys only.
@@ -24,6 +25,7 @@ import { chapterExists, getTrashedChapters, trashChapter } from "../support/chap
 import { getIdeas, getTrashedIdeas } from "../support/idea";
 import { getTrashedLocations, locationExists, trashLocation } from "../support/location";
 import { getTrashedScenes, sceneExists, trashScene } from "../support/scene";
+import { chatWithReply, getSceneChat, getTrashedSceneChats, sceneChatPath } from "../support/scene-chat";
 import { campaignMenu, openArea } from "../support/campaign-menu";
 import { ui, uiExact, uiPattern } from "../support/ui";
 
@@ -64,7 +66,8 @@ const CAVE_SCENE = coveScene("cove-the-cave", "Into the cave", "cove-cave");
 
 /** The group of the trash page with that heading. */
 function trashGroup(page: Page, heading: Parameters<typeof ui>[0]) {
-  return page.getByRole("region", { name: ui(heading) });
+  // Exact: one heading can begin another's (the scenes and the scene chats).
+  return page.getByRole("region", { name: ui(heading), exact: true });
 }
 
 /** One row of the trash page, found by the name it shows. */
@@ -207,6 +210,54 @@ test.describe("a restore something in the trash stands in the way of", () => {
     expect(await locationExists(api, CAVE.id)).toBe(true);
     expect(await sceneExists(api, CAVE_SCENE.id)).toBe(true);
     expect(await getTrashedLocations(api)).toEqual([]);
+  });
+});
+
+test.describe("a scene's chat in the trash", () => {
+  test.use({ seed: { chapters: [COVE], scenes: [LANDING] } });
+
+  test("goes along with its scene and comes back with it; a cleared one waits for its scene", async ({
+    page,
+    api,
+  }) => {
+    // A cleared chat, then a new one: the scene takes only the new one along.
+    const cleared = await chatWithReply(api, LANDING.id, "Who lands first?");
+    await api.send("DELETE", sceneChatPath(api, cleared.id), { rev: cleared.rev });
+    // A trash moment is to the second: the scene goes in a later one.
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    const live = await chatWithReply(api, LANDING.id, "And who waits?");
+    const scene = await trashScene(api, LANDING.id);
+    expect(
+      (await getTrashedSceneChats(api)).map((chat) => [chat.id, chat.deletedMs === scene.deletedMs]).sort(),
+    ).toEqual(
+      [
+        [cleared.id, false],
+        [live.id, true],
+      ].sort(),
+    );
+
+    await page.goto("/campaigns/example/trash");
+    const name = ui("trash.sceneChat.name", { scene: LANDING.title });
+    // The chat that went along is part of the scene's row; the cleared one
+    // stands on its own, named by its scene, and waits for it.
+    await expect(trashGroup(page, "trash.group.sceneChats").getByRole("listitem")).toHaveCount(1);
+    await restoreAction(page, name).click();
+    await expect(trashRow(page, name)).toContainText(
+      ui("server.restore_blocked", {
+        blockers: ui("server.blocker.scene", { name: LANDING.title }),
+        count: 1,
+      }),
+    );
+
+    // The chat's row names the scene too, so the scene's row is told apart by
+    // its group, which is gone once its one row is.
+    await restoreAction(page, LANDING.title).click();
+    await expect(trashGroup(page, "trash.group.scenes")).toHaveCount(0);
+    expect((await getSceneChat(api, LANDING.id))?.id).toBe(live.id);
+    // The scene has its chat back, so the cleared one stays in the trash.
+    await restoreAction(page, name).click();
+    await expect(trashRow(page, name)).toContainText(ui("server.scene_chat_replaced"));
+    expect((await getTrashedSceneChats(api)).map((chat) => chat.id)).toEqual([cleared.id]);
   });
 });
 

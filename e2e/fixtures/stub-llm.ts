@@ -45,6 +45,13 @@
 //   - TRIGGER.truncated in the source text -> finish_reason "length"
 //   - TRIGGER.slow in the source text      -> the reply is HELD (SLOW_REPLY_MS)
 //     so a spec can observe a job while it is really running
+//   - the system prompt is the SCENE CHAT prompt              -> a chat reply:
+//     free Markdown echoing the ids of the scene, its npcs and its location
+//     from the context block, the campaign knowledge and the DM's last
+//     message (`chatReply`); TRIGGER.truncated in that message -> cut off,
+//     TRIGGER.latePart in it -> the reply answers late (LATE_REPLY_MS).
+//     Checked first, because the chat's context block carries a scene with
+//     its `chapter` field
 //
 // A SCENE run is not one call but a pipeline, and the stub answers each of its
 // calls (told apart by the prompt):
@@ -399,7 +406,7 @@ export interface StubDecision {
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
-  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch" | "extension" | "check";
+  kind: "outline" | "scene" | "proposal" | "npc" | "augment" | "patch" | "extension" | "check" | "chat";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
   /**
@@ -415,10 +422,62 @@ function systemPrompt(messages: ChatMessage[]): string {
   return messages.find((m) => m.role === "system")?.content ?? "";
 }
 
+/** The system prompt of a scene chat reply (generator/scene-chat-system-prompt.md). */
+const CHAT_SYSTEM_HEADING = "# System-Prompt: Szenen-Chat";
+
+/**
+ * The Markdown reply of a scene chat: it echoes what the context block — the
+ * first user turn — carries (the scene, its npcs and its location by their
+ * ids, the campaign knowledge) and names the DM's last message, so a spec
+ * sees that the context and the conversation reached the model. The npc
+ * travels as an `[[id]]`, the way the prompt asks the model to name it.
+ */
+export function chatReply(messages: ChatMessage[]): string {
+  const context = firstUserPrompt(messages);
+  const ids = (heading: string) =>
+    [...context.matchAll(new RegExp(`^${heading} \\(([^)]+)\\)`, "gm"))].map((match) => match[1]!);
+  const start = context.indexOf(KNOWLEDGE_HEADING);
+  const knowledge =
+    start === -1
+      ? ""
+      : context
+          .slice(start + KNOWLEDGE_HEADING.length)
+          .split(/\n## /)[0]!
+          .trim();
+  const last = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const turns = messages.filter((m) => m.role !== "system").length;
+  return [
+    "## Stub reply",
+    "",
+    `- Scene: ${ids("## Szene").join(", ")}`,
+    `- NPCs: ${ids("## NPC").map((id) => `[[${id}]]`).join(", ")}`,
+    `- Location: ${ids("## Ort").join(", ")}`,
+    `- Messages: ${turns}`,
+    "",
+    `> ${last.split("\n").join(" ")}`,
+    "",
+    "### Campaign knowledge in the context",
+    "",
+    knowledge === "" ? "(none)" : knowledge,
+  ].join("\n");
+}
+
 /** The whole stub logic: prompt in, canned reply out. Exported for reuse. */
 export function decide(messages: ChatMessage[]): StubDecision {
   const prompt = firstUserPrompt(messages);
   const system = systemPrompt(messages);
+  // A scene chat reply is free Markdown, no schema; the DM's message says
+  // whether it comes cut off.
+  if (system.includes(CHAT_SYSTEM_HEADING)) {
+    const last = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+    return {
+      kind: "chat",
+      truncated: last.includes(TRIGGER.truncated),
+      delayMs: 0,
+      pauseMs: last.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0,
+      reply: chatReply(messages),
+    };
+  }
   const source = sourceText(prompt);
   const invalid = source.includes(TRIGGER.invalid);
   const truncated = source.includes(TRIGGER.truncated);

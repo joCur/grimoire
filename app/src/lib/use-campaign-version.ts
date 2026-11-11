@@ -21,6 +21,7 @@ import { KNOWLEDGE_ITEM_QUERY_ROOTS } from "@/knowledge-item/knowledge-item-quer
 import { reportServerBuild } from "@/lib/build-id";
 import { LOCATION_QUERY_ROOTS } from "@/location/location-query";
 import { NPC_QUERY_ROOTS } from "@/npc/npc-query";
+import { SCENE_CHAT_QUERY_ROOTS } from "@/scene-chat/scene-chat-query";
 import { SCENE_QUERY_ROOTS } from "@/scene/scene-query";
 import { SESSION_QUERY_ROOTS } from "@/session/session-query";
 import { THREAD_QUERY_ROOTS } from "@/thread/thread-query";
@@ -73,7 +74,8 @@ export function useCampaignVersion(campaign: string): void {
  * ideas and each chapter's threads name their key roots in their slices too;
  * the threads are keyed per chapter below the campaign, and the prefix reaches
  * all of them. The glossary terms, the knowledge items and their order name
- * theirs in their slices as well. An OPEN row on their pages keeps the `rev`
+ * theirs in their slices as well, and so do the scene chats — a reply
+ * finished or a chat cleared in another tab. An OPEN row on their pages keeps the `rev`
  * it was opened with (components/EditableList.tsx), so a fresh list never
  * turns into a silent overwrite.
  *
@@ -87,6 +89,7 @@ export function invalidateCampaignQueries(queryClient: QueryClient, campaign: st
     ...CAMPAIGN_QUERY_ROOTS,
     ...CHAPTER_QUERY_ROOTS,
     ...SCENE_QUERY_ROOTS,
+    ...SCENE_CHAT_QUERY_ROOTS,
     ...NPC_QUERY_ROOTS,
     ...LOCATION_QUERY_ROOTS,
     "search",

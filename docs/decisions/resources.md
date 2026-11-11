@@ -36,7 +36,10 @@ general endpoint across several entities, neither in the API nor in the app.
   the campaign, and its parent is a field; its URL does not change when it
   moves, and lists filter by parent. An entity that cannot exist without its
   parent and never moves hangs under it, is read embedded in the parent, and
-  is written only through its own resource.
+  is written only through its own resource — unless it goes to the trash on
+  its own: the trash is read as a list across the campaign
+  (`decisions/trash`), so such an entity lies flat with its parent as a
+  field, and its own children hang under it.
 
 ### State changes are resource changes
 

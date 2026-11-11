@@ -51,9 +51,9 @@
 //      the renderer still shows whatever it is handed, and there simply is
 //      no way to get a foreign value into the column.
 //   8. THE TRASH IS A COLUMN (decisions/trash). `deleted_at` on chapters,
-//      scenes, npcs, locations and ideas is NULL for a live row and, for a
-//      row in the trash, the moment it went there — a zone-less wall-clock
-//      string like rule 6. A thread carries it too, because it goes to the
+//      scenes, npcs, locations, ideas and scene chats is NULL for a live row
+//      and, for a row in the trash, the moment it went there — a zone-less
+//      wall-clock string like rule 6. A thread carries it too, because it goes to the
 //      trash with its chapter and comes back with it. A row in the trash
 //      keeps its id and its references; every read of live content leaves
 //      it out, and the purge deletes it for good once its time is up.
@@ -78,6 +78,7 @@ import {
 import { NPC_STATUSES } from "@grimoire/shared/npc";
 import { SCENE_STATUSES, SCENE_TYPES } from "@grimoire/shared/scene";
 import { CHAPTER_STATUSES } from "@grimoire/shared/chapter";
+import { SCENE_CHAT_MESSAGE_STATUSES, SCENE_CHAT_ROLES } from "@grimoire/shared/scene-chat-message";
 import { ITEM_PRICE_LISTS, ITEM_PRICE_SOURCES, ITEM_RARITIES } from "@grimoire/shared/item-price";
 
 /** Optimistic-concurrency token of one row (rule 4). */
@@ -375,6 +376,91 @@ export const sceneTags = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
+  ],
+);
+
+// --- scene chats ------------------------------------------------------------
+
+/**
+ * One SCENE CHAT (decisions/resources): the DM's brainstorming chat with the
+ * model on one scene. Its messages are rows of their own below.
+ *
+ * `id` is an OPAQUE random string (store/scene-chats.ts), unique per
+ * campaign. `scene_id` is the scene it is about — a foreign key (rule 3)
+ * that never changes. A scene has at most ONE live chat, and the partial
+ * unique index is what says so; the chats of a scene that the DM cleared lie
+ * in the trash beside it (rule 8). A scene's removal takes its chats with it
+ * (`ON DELETE CASCADE`): a scene is removed for good only by the purge of the
+ * trash, and its live chat went to the trash with it.
+ *
+ * `rev` is the chat's own guard (rule 4); no message write moves it.
+ */
+export const sceneChats = sqliteTable(
+  "scene_chats",
+  {
+    campaignId: text("campaign_id").notNull(),
+    /** Opaque random id — the chat's identity on the wire. */
+    id: text("id").notNull(),
+    /** The scene the chat is about — a foreign key (rule 3). */
+    sceneId: text("scene_id").notNull(),
+    rev: revColumn(),
+    /** When the chat went to the trash, cleared or with its scene; NULL while live (rule 8). */
+    deletedAt: text("deleted_at"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.id] }),
+    uniqueIndex("scene_chats_live_scene_unique")
+      .on(t.campaignId, t.sceneId)
+      .where(sql`${t.deletedAt} is null`),
+    foreignKey({
+      columns: [t.campaignId, t.sceneId],
+      foreignColumns: [scenes.campaignId, scenes.id],
+      name: "scene_chats_scene_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+  ],
+);
+
+/**
+ * One MESSAGE of a scene chat (decisions/resources). The DM's message is written
+ * once; the model's reply is written by the server, from `running` to `done`
+ * with its text or to `failed` with `error`, the error body (JSON) of the
+ * reason — and a retry sets it `running` again.
+ *
+ * `id` is an OPAQUE random string (store/scene-chat-messages.ts), unique
+ * within its chat; `pos` is the order of the chat. `rev` is the message's
+ * own guard (rule 4).
+ */
+export const sceneChatMessages = sqliteTable(
+  "scene_chat_messages",
+  {
+    campaignId: text("campaign_id").notNull(),
+    chatId: text("chat_id").notNull(),
+    /** Opaque random id — the message's identity on the wire. */
+    id: text("id").notNull(),
+    /** `dm | model` (shared `SCENE_CHAT_ROLES`), CHECKed. */
+    role: text("role").notNull(),
+    /** The message as Markdown; empty while a reply runs or after it failed. */
+    text: text("text").notNull().default(""),
+    /** `done | running | failed` (shared `SCENE_CHAT_MESSAGE_STATUSES`), CHECKed. */
+    status: text("status").notNull(),
+    /** The error body of a failed reply as JSON; NULL otherwise. */
+    error: text("error"),
+    pos: integer("pos").notNull(),
+    rev: revColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.chatId, t.id] }),
+    foreignKey({
+      columns: [t.campaignId, t.chatId],
+      foreignColumns: [sceneChats.campaignId, sceneChats.id],
+      name: "scene_chat_messages_chat_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+    check("scene_chat_messages_role_check", oneOf("role", SCENE_CHAT_ROLES)),
+    check("scene_chat_messages_status_check", oneOf("status", SCENE_CHAT_MESSAGE_STATUSES)),
   ],
 );
 
@@ -1097,6 +1183,8 @@ export const schema = {
   scenes,
   sceneNpcs,
   sceneTags,
+  sceneChats,
+  sceneChatMessages,
   npcs,
   locations,
   sessions,

@@ -26,8 +26,8 @@
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of
 // making the DM invent another name.
 //
-// THE TRASH (decisions/trash): chapters, scenes, npcs, locations and ideas go
-// to the trash with their DELETE `{ rev }`, which answers the row with its
+// THE TRASH (decisions/trash): chapters, scenes, npcs, locations, ideas and
+// scene chats go to the trash with their DELETE `{ rev }`, which answers the row with its
 // `deletedMs`, and come back with a PATCH `{ rev, deletedMs: null }`; their
 // lists answer the rows in the trash with `?deleted=true`. For every other
 // read and write a row in the trash is not there (404), yet its id stays
@@ -46,10 +46,13 @@ import { itemPriceImportRoutes } from "./item-price-imports";
 import { itemPriceRoutes } from "./item-prices";
 import { randomTableRoutes } from "./random-tables";
 import { knowledgeItemRoutes } from "./knowledge-items";
+import { llmProviderRoutes } from "./llm-provider";
 import { locationRoutes } from "./locations";
 import { logEntryRoutes } from "./log-entries";
 import { npcRoutes } from "./npcs";
 import { pauseRoutes } from "./pauses";
+import { sceneChatMessageRoutes } from "./scene-chat-messages";
+import { sceneChatRoutes } from "./scene-chats";
 import { sceneRoutes } from "./scenes";
 import { searchRoutes } from "./search";
 import { sessionRoutes } from "./sessions";
@@ -83,9 +86,12 @@ api.use("*", async (c, next) => {
 // request, so the order below changes nothing about which route answers;
 // the build-id middleware above is registered first and wraps them all.
 api.route("/", settingsRoutes);
+api.route("/", llmProviderRoutes);
 api.route("/", campaignRoutes);
 api.route("/", chapterRoutes);
 api.route("/", sceneRoutes);
+api.route("/", sceneChatRoutes);
+api.route("/", sceneChatMessageRoutes);
 api.route("/", npcRoutes);
 api.route("/", locationRoutes);
 api.route("/", threadRoutes);

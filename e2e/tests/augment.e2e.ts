@@ -384,7 +384,7 @@ test("block decisions survive a reload — the review state is on the job", asyn
   // comes back on the DM's decision instead of on the default.
   await keep().click();
   await expect(keep()).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText(ui("generate.review.saved"))).toBeVisible();
+  await expect(page.getByText(ui("generate.review.saved"), { exact: true })).toBeVisible();
 
   await page.reload();
   // The trigger carries its row's finished run: the proposal waits.

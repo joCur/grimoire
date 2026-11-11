@@ -1256,7 +1256,7 @@ describe("POST /api/campaigns/:campaign/generator-jobs { kind: scene }", () => {
     try {
       const res = await generate(generateBody);
       expect(res.status).toBe(503);
-      expect(await res.json()).toEqual({ error: "ANTHROPIC_API_KEY fehlt" });
+      expect(await res.json()).toEqual({ code: "llm_unconfigured", error: "ANTHROPIC_API_KEY is missing" });
     } finally {
       if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
       if (savedProvider !== undefined) process.env.LLM_PROVIDER = savedProvider;

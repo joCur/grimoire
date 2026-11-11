@@ -4,9 +4,11 @@ Pipeline: source text (EN) → LLM → proposed scenes (DE) → review → datab
 
 ## Reply formats
 
-**Every reply is a JSON object, and every object is enforced by a schema.**
-That is the whole contract: the provider sends the schema along and the
-interface guarantees the shape before the server reads it.
+**Every reply of a run is a JSON object, and every object is enforced by a
+schema.** That is the whole contract: the provider sends the schema along and
+the interface guarantees the shape before the server reads it. The one reply
+outside it is the scene chat's (see "Scene chat" below): free Markdown,
+because it is never written into a row.
 
 * **Claude**: the schema travels as structured output
   (`output_config.format`, `type: "json_schema"`), its description inside the
@@ -194,6 +196,7 @@ in `server/src/generator.ts`); no code looks for a heading inside a file.
 | scene / NPC / location augment | `scene-augment-system-prompt.md` / `npc-augment-system-prompt.md` / `location-augment-system-prompt.md`, then the entity's fields file |
 | patch | `patch-system-prompt.md`, then the part's entity's fields file |
 | extension | `extend-system-prompt.md`, then the entity's fields file |
+| scene chat | `scene-chat-system-prompt.md`, then one line naming the DM's UI language |
 | chapter check: one row's terms | `check-terms-system-prompt.md` |
 | chapter check: merge | `check-merge-system-prompt.md` |
 | chapter check: fix of one row | `check-fix-system-prompt.md`, then the row's entity's fields file |
@@ -624,8 +627,40 @@ Abstraction in `server/src/llm-provider.ts`, chosen by the env var
 The three OpenAI-compatible cases share one class (`OpenAICompatProvider`);
 they differ only in base URL, model and auth header. Missing required
 variables and an unknown `LLM_PROVIDER` value are not swallowed: starting a
-run (`POST /api/campaigns/:campaign/generator-jobs`) answers `503` with the
-message in plain text. Full variable table: docs/DEPLOYMENT.md section 2.
+run (`POST /api/campaigns/:campaign/generator-jobs`) or sending a scene chat
+message answers `503` with `code: "llm_unconfigured"` and the message as its
+`error`. Full variable table: docs/DEPLOYMENT.md section 2.
+
+## Scene chat
+
+The brainstorming chat of a scene (README.md, "Scene chat") is not a run:
+one reply per call, written on the server in the background, never a job.
+Its request carries no schema, no tool and no response format, and its reply
+is Markdown the app renders as it stands.
+
+Every reply resends the whole conversation, because the APIs keep no state:
+
+1. the system prompt — `scene-chat-system-prompt.md` and the sentence that
+   sets the reply language (the instance's UI language, German while none
+   is stored);
+2. the CONTEXT block as the first user turn, read from the campaign at that
+   moment: the campaign knowledge and the glossary (the same blocks a run
+   sends), the scene's chapter with its title and text, the scene, the NPCs
+   its `npcs` names and the location its `location` names — each under its
+   heading with its id and every field as JSON;
+3. the written messages of the chat, the DM's as user turns and the
+   replies as assistant turns. A reply that failed or still runs is no turn.
+
+The context stays the same from reply to reply until the DM edits what it
+shows, so it comes first and carries a breakpoint, and so does the last
+stored message: the next reply reads the conversation so far from the
+cache. On the Claude API the system prompt, the context and the last message
+carry `cache_control` with the one-hour lifetime; an OpenAI-compatible
+endpoint gets the same markers when `LLM_PROMPT_CACHE` switches them on.
+
+A reply that is cut off at the output cap, empty, refused by the provider,
+not there within five minutes, or interrupted by a restart fails with its
+reason; the DM's message stays and the reply can be retried.
 
 ## Chapter check
 

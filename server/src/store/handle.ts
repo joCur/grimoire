@@ -7,12 +7,14 @@
 // The handle is opened LAZILY rather than at module import, so that importing
 // the app for in-process tests stays free of side effects (no database file
 // appearing next to the repository). The first access opens the database file,
-// runs the schema migrator (client.ts) and then the job cleanup; every
+// runs the schema migrator (client.ts) and then the cleanup of the jobs and
+// chat replies the previous process left running; every
 // later call gets the memoized handle.
 
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
 import { failInterruptedJobs } from "../db/job-boot";
+import { failInterruptedReplies } from "../db/scene-chat-boot";
 
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
@@ -25,6 +27,11 @@ export interface StoreInfo {
    * runs the previous process took down with it.
    */
   interruptedJobs: number;
+  /**
+   * How many scene chat replies this boot found `running` and had to fail —
+   * the replies the previous process was waiting for.
+   */
+  interruptedReplies: number;
 }
 
 let opened: OpenDb | null = null;
@@ -51,8 +58,11 @@ export async function initStore(options: { dbFile?: string } = {}): Promise<Grim
     // of being polled forever. Finished jobs are untouched and stay
     // applyable.
     const interruptedJobs = failInterruptedJobs(handle.db);
+    // The same holds for a scene chat reply: it fails with the restart as
+    // its reason, and the DM retries it.
+    const interruptedReplies = failInterruptedReplies(handle.db);
     opened = handle;
-    info = { dbFile, backend: handle.client.backend, interruptedJobs };
+    info = { dbFile, backend: handle.client.backend, interruptedJobs, interruptedReplies };
     return handle.db;
   })();
   try {

@@ -49,6 +49,7 @@ import { assertNpcRefs, trashedNpcBlockers } from "./npcs";
 import { getDb } from "./handle";
 import { expandCampaignBodyRefs } from "./refs";
 import type { SceneRow } from "./render";
+import { restoreChatOfScene, trashChatOfScene } from "./scene-chats";
 import { reindexReferrers } from "./search-index";
 import {
   assertSafeChapterId,
@@ -368,8 +369,9 @@ function unindexScene(tx: GrimoireDb, campaign: string, id: string): void {
 /**
  * DELETE /api/campaigns/:campaign/scenes/:id `{ rev }` — the scene goes to
  * the trash (decisions/trash): it keeps its id, its fields and its place, and
- * its `rev` moves. A scene a log entry names stays where it is: 409
- * `trash_blocked` with those log entries, and nothing is written. A stale
+ * its `rev` moves; its live chat goes with it. A scene a log entry names
+ * stays where it is: 409 `trash_blocked` with those log entries, and nothing
+ * is written. A stale
  * `rev` is 409 with the current scene; a scene that is not there, or already
  * in the trash, is 404.
  */
@@ -382,11 +384,13 @@ export async function trashScene(campaign: string, id: string, request: SceneDel
     }
     const blockers = logEntriesNamingScenes(tx, campaign, [row.id]);
     if (blockers.length > 0) throw trashBlocked("scene", row.id, blockers);
-    const next: SceneRow = { ...row, deletedAt: trashMoment(), rev: row.rev + 1 };
+    const at = trashMoment();
+    const next: SceneRow = { ...row, deletedAt: at, rev: row.rev + 1 };
     tx.update(scenes)
       .set({ deletedAt: next.deletedAt, rev: next.rev })
       .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
       .run();
+    trashChatOfScene(tx, campaign, row.id, at);
     unindexScene(tx, campaign, row.id);
     return renderRow(tx, campaign, next);
   });
@@ -400,7 +404,8 @@ export async function trashScene(campaign: string, id: string, request: SceneDel
  * scene whose location or one of whose npcs is in the trash would name a row
  * that is not there (409 `restore_blocked` with those rows). A restored scene
  * lands at the END of its chapter: its old place counted among siblings that
- * the DM may have rearranged since (decisions/scene-order).
+ * the DM may have rearranged since (decisions/scene-order). The chat that went
+ * to the trash with it comes back with it.
  */
 function restoreSceneIn(tx: GrimoireDb, campaign: string, row: SceneRow, guard: number): Scene {
   if (row.rev !== guard) {
@@ -422,6 +427,7 @@ function restoreSceneIn(tx: GrimoireDb, campaign: string, row: SceneRow, guard: 
     .set({ deletedAt: null, pos: next.pos, rev: next.rev })
     .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
     .run();
+  if (row.deletedAt !== null) restoreChatOfScene(tx, campaign, row.id, row.deletedAt);
   indexScene(tx, campaign, next, refTags(tx, campaign, row.id));
   return renderRow(tx, campaign, next);
 }
@@ -455,7 +461,7 @@ export function liveSceneIdsOf(tx: GrimoireDb, campaign: string, chapter: string
 /**
  * Put a chapter's live scenes in the trash with it, INSIDE the caller's
  * transaction, at the chapter's moment `at`: each keeps its place and moves
- * its `rev`, and each leaves the search index.
+ * its `rev`, takes its live chat along, and leaves the search index.
  */
 export function trashScenesOfChapter(
   tx: GrimoireDb,
@@ -470,6 +476,7 @@ export function trashScenesOfChapter(
       .set({ deletedAt: at, rev: row.rev + 1 })
       .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
       .run();
+    trashChatOfScene(tx, campaign, id, at);
     unindexScene(tx, campaign, id);
   }
 }
@@ -506,7 +513,8 @@ export function trashedReferencesOfChapterScenes(
 /**
  * Restore the scenes that went to the trash with a chapter, INSIDE the
  * caller's transaction: exactly those of its moment `at`, each at the place
- * it had, each with its `rev` moved and back in the search index.
+ * it had, each with its `rev` moved, its chat of that moment and back in the
+ * search index.
  */
 export function restoreScenesOfChapter(
   tx: GrimoireDb,
@@ -520,6 +528,7 @@ export function restoreScenesOfChapter(
       .set({ deletedAt: null, rev: next.rev })
       .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
       .run();
+    restoreChatOfScene(tx, campaign, row.id, at);
     indexScene(tx, campaign, next, refTags(tx, campaign, row.id));
   }
 }

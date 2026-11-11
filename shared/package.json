@@ -31,6 +31,9 @@
     "./knowledge-item": "./src/knowledge-item.ts",
     "./session": "./src/session.ts",
     "./log-entry": "./src/log-entry.ts",
+    "./scene-chat": "./src/scene-chat.ts",
+    "./scene-chat-message": "./src/scene-chat-message.ts",
+    "./llm-provider": "./src/llm-provider.ts",
     "./pause": "./src/pause.ts",
     "./generator-job": "./src/generator-job.ts",
     "./trash": "./src/trash.ts"

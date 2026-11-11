@@ -60,6 +60,13 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   patch_anchor_missing: "server.patch_anchor_missing",
   import_not_fivetools: "server.import_not_fivetools",
   import_no_tables: "server.import_no_tables",
+  llm_unconfigured: "server.llm_unconfigured",
+  llm_failed: "server.llm_failed",
+  llm_timeout: "server.llm_timeout",
+  scene_chat_reply_truncated: "server.scene_chat_reply_truncated",
+  scene_chat_reply_restarted: "server.scene_chat_reply_restarted",
+  scene_chat_reply_running: "server.scene_chat_reply_running",
+  scene_chat_replaced: "server.scene_chat_replaced",
   fix_row_changed: "server.fix_row_changed",
 };
 
@@ -212,7 +219,13 @@ function paramsFor(
       const chapter = blockersOf(body.blockers)?.find((blocker) => blocker.kind === "chapter");
       return chapter === undefined ? undefined : { chapter: chapter.name };
     }
-    case "llm_truncated": {
+    case "llm_unconfigured": {
+      // The server's own reason names what is missing in its configuration.
+      const detail = text(body.error);
+      return detail === undefined ? undefined : { detail };
+    }
+    case "llm_truncated":
+    case "scene_chat_reply_truncated": {
       // No cap configured: the endpoint's own default, which has no number.
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
       return { max: max ?? t("server.llm_truncated.defaultCap") };
@@ -229,7 +242,11 @@ function paramsFor(
     // names a list, so there is no text to refuse — and stands here
     // only because the code list is append-only. `job_draft_format` has no
     // sender left either, but a job an older version failed with it still
-    // shows its sentence.
+    // shows its sentence. The scene chat's reply codes name what happened to
+    // the reply: `llm_failed` carries the provider's HTTP status as data,
+    // which the sentence leaves out, since the DM retries either way, and
+    // `scene_chat_replaced` names the new chat by its id only, while the
+    // sentence speaks of the scene's new chat.
     case "chapter_required":
     case "session_running":
     case "session_not_empty":
@@ -244,6 +261,11 @@ function paramsFor(
     case "patch_anchor_missing":
     case "import_not_fivetools":
     case "import_no_tables":
+    case "llm_failed":
+    case "llm_timeout":
+    case "scene_chat_reply_restarted":
+    case "scene_chat_reply_running":
+    case "scene_chat_replaced":
     case "fix_row_changed":
       return {};
   }

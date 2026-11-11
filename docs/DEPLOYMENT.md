@@ -247,13 +247,16 @@ survives a container restart and stays acceptable, a running one is
 reported as failed.
 
 If a required variable is missing, only the start of a run (`POST
-/api/campaigns/:campaign/generator-jobs` or `POST …/augment`) responds with
-`503` and a plain-text message in the `error` field naming the missing
+/api/campaigns/:campaign/generator-jobs` or `POST …/augment`) and a scene
+chat message (`POST …/scene-chats/<chat>/messages`) respond with
+`503` (`code: "llm_unconfigured"`) and a plain-text message in the `error` field naming the missing
 variable (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, or `LLM_MODEL` with an
 example value such as `anthropic/claude-sonnet-5`); the provider is
 deliberately created per request. A typo in `LLM_PROVIDER` is caught the
 same way instead of silently falling back to Claude: the message names the
-unknown provider. The read and write API is not affected by any of this.
+unknown provider. The read and write API is not affected by any of this;
+the scene's chat says in a sentence that no model is set up
+(`GET /api/llm-provider`).
 
 **Example OpenRouter** (one key, many models — handy for comparing):
 

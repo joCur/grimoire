@@ -65,6 +65,12 @@ if (import.meta.main) {
         "marked as failed (restart the run).",
     );
   }
+  if (info !== undefined && info.interruptedReplies > 0) {
+    console.log(
+      `${info.interruptedReplies} scene chat repl(ies) were being written at the last shutdown — ` +
+        "marked as failed (retry them in the chat).",
+    );
+  }
 
   // The trash is purged at boot and then every hour, so a row leaves it
   // once its retention is over whether or not the server was restarted.

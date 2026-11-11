@@ -75,6 +75,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   items they bring),
   `random-table-sources` (the import of a 5etools file and the removal of a
   source) and `random-tables` (their tables, written only by that import),
+  `scene-chats` and `scene-chat-messages` (a scene's brainstorming chat and
+  its messages; the reply itself is written by `server/src/scene-chat-reply.ts`),
   `generated` (accepting a generator run),
   `trash` (the purge of rows past the trash's retention, decisions/trash) — and
   each carries the **read AND write access** of its kind. No catch-all
@@ -82,7 +84,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
 - `app/` — the frontend. Every entity with its own resource has its slice
   `app/src/<entity>/` (`campaign/`, `chapter/`, `scene/`, `npc/`,
   `location/`, `thread/`, `idea/`, `glossary-term/`, `knowledge-item/`,
-  `item-price/`, `random-table/`, `session/`, `generator-job/`) with everything the app knows about it
+  `item-price/`, `random-table/`, `session/`, `generator-job/`,
+  `scene-chat/`) with everything the app knows about it
   (decisions/resources); **slices do not import each other.** Pause and log
   line belong to the `session/` slice: the app reads them only embedded in
   their session, and every one of their writes lands in the session's cache;
@@ -98,7 +101,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   its threads and its scene list, the scene gets its NPC cards, the reading
   page of a session gets the link of a scene, the live view's next-scene
   step gets setting the scene status; scene, NPC and location get
-  their augment action from the generator job; the random tables page gets
+  their augment action from the generator job, the scene its brainstorming
+  chat from the scene chat; the random tables page gets
   what a rolled result becomes). Whatever connects two slices
   lives with the page that composes them (the reminders of the live view
   from log lines and ideas in `routes/PcReminders.tsx`, the augment actions
@@ -134,8 +138,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   token of the read (`rev`, the row version) — 409 on conflict, never a
   silent overwrite.
 - Campaign, chapter, scene, NPC, location, thread, idea, glossary term,
-  campaign knowledge and session with pause and log line are each their
-  own resource (decisions/resources):
+  campaign knowledge, session with pause and log line, and scene chat with
+  its messages are each their own resource (decisions/resources):
   `/campaigns/<id>` responds with `Campaign`, `…/chapters/<id>` with
   `Chapter`, `…/scenes/<id>` with `Scene`, `…/npcs/<id>` with `Npc`,
   `…/locations/<id>` with `Location`, `…/threads/<id>` with `Thread`,
@@ -149,7 +153,9 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   imports from a 5etools file, decisions/reference-data; the import is their
   only writer, and a source is removed as a whole),
   `…/knowledge-items/<id>` with `KnowledgeItem`, `…/sessions/<id>` with
-  `Session` (pauses and log lines embedded), all fields side
+  `Session` (pauses and log lines embedded), `…/scene-chats/<id>` with
+  `SceneChat` (its messages embedded, each written under
+  `…/scene-chats/<id>/messages/<message-id>`), all fields side
   by side,
   `body` included where the entity has one, without `kind` and `path`;
   every row carries its own `rev`. The app routes are
@@ -162,7 +168,8 @@ It is NOT a VTT, NOT a campaign wiki, and has NO player view.
   `/campaigns/:id/random-tables`; what is in the trash is listed and restored
   on `/campaigns/:id/trash` (decisions/trash).
   A scene and a thread lie flat under their campaign; their chapter is a
-  field. Which
+  field. A scene chat lies flat too, its scene a field: at most one live
+  chat per scene. Which
   chapter is active is said by its `status`: at most one per campaign, and
   whoever activates one sets the previously active one to `planned` in the
   same operation.
@@ -319,7 +326,7 @@ The paths:
    other link leads into an area
 2. Read a scene: opened from that list (`/campaigns/:id/scenes/<id>`, read
    via `GET …/scenes/<id>`) — callouts, if sections, NPC cards of the
-   reference scenes
+   reference scenes, and the button of its brainstorming chat (path 14)
 3. ⌘K search finds and opens: indexed are campaign, chapters, scenes,
    NPCs, locations, the glossary terms, the instance's item prices and
    the random tables the DM imported.
@@ -508,7 +515,11 @@ The paths:
     the end of its chapter, decisions/trash); a blocked delete
     (`trash_blocked`, e.g. an NPC a live scene names) names what is in the
     way in the dialog and writes nothing. The delete action is reachable at
-    390px
+    390px. Plus a scene's chat: a scene takes its live chat along, the chat
+    is part of the scene's row and comes back with it; a chat cleared before
+    is a row of its own named by its scene, blocked (`restore_blocked`)
+    while the scene is in the trash and refused (`scene_chat_replaced`) once
+    the scene has its chat back
 12. Item prices (decisions/reference-data): the campaign menu opens
     `/campaigns/:id/item-prices`, which lists every price of Saidoro's "Sane
     Magic Item Prices" and, for the items it has none for, the SRD 5.2's
@@ -535,6 +546,25 @@ The paths:
     /api/random-table-sources/<id> { rev }`) and takes its tables along.
     The page fits 390px. The suite imports a small table written for it;
     no published table is in the repository
+14. Scene chat (decisions/generator): the reading view of a scene
+    (`/campaigns/:id/scenes/<id>`) opens its brainstorming chat from a button
+    at the bottom right as a popup above the page, which docks as a side
+    panel at the right (the page narrows, nothing covers the text) and back;
+    on the phone it is a sheet from the bottom. Where it stands is in the URL
+    (`?chat=popup|side`), so a reload keeps it; Esc closes the popup and the
+    focus returns to the button. The chat is empty at first; sending
+    (`POST …/scene-chats { scene }` on the first message, then `POST …/scene-chats/<chat>/messages { text }`)
+    shows the DM's message at once and the reply as running, with the send
+    action disabled until it stands; the app polls the chat, and the stub
+    LLM's reply echoes the context block — the scene, its NPC, its location
+    and the campaign knowledge — rendered as Markdown with its `[[id]]`
+    resolved and a copy action; a second reply sees the whole conversation.
+    A reload keeps the chat (rows on the server, nothing in the browser). A
+    reply cut off at the output cap is `failed`, says why in a whole
+    sentence, keeps the DM's message and offers to retry. Clearing asks
+    first (`DELETE …/scene-chats/<id> { rev }`) and puts the chat in the
+    trash as one row, and the trash page restores it (`PATCH …/scene-chats/<id>
+    { rev, deletedMs: null }`). The sheet fits 390px
 
 Rule for new features: every ready ticket names the critical paths it
 touches; whoever touches or creates one extends the E2E suite in the same

@@ -2,7 +2,7 @@
 //
 // Two kinds of test, no network and no new dependencies:
 //
-//   1. createProvider(env) — selection and every "… fehlt" message. The env
+//   1. createProvider(env) — selection and every "… is missing" message. The env
 //      is passed in explicitly (the factory takes it as an argument), so
 //      process.env stays untouched here.
 //   2. Request shape — a throwaway node:http server captures exactly ONE
@@ -25,10 +25,11 @@ import {
   OpenAICompatProvider,
   buildPrompt,
   buildPromptParts,
+  claudeChatBody,
   createProvider,
   resetJsonSchemaSupportForTests,
 } from "../src/llm-provider";
-import type { GenerateRequest } from "../src/llm-provider";
+import type { ChatRequest, GenerateRequest } from "../src/llm-provider";
 import {
   OUTLINE_SCHEMA_DESCRIPTION,
   OUTLINE_SCHEMA_NAME,
@@ -51,17 +52,17 @@ describe("createProvider", () => {
   });
 
   test("claude without a key throws the 503 message", () => {
-    expect(() => createProvider({} as NodeJS.ProcessEnv)).toThrow("ANTHROPIC_API_KEY fehlt");
+    expect(() => createProvider({} as NodeJS.ProcessEnv)).toThrow("ANTHROPIC_API_KEY is missing");
     expect(() => createProvider({ LLM_PROVIDER: "claude" } as NodeJS.ProcessEnv)).toThrow(
-      "ANTHROPIC_API_KEY fehlt",
+      "ANTHROPIC_API_KEY is missing",
     );
   });
 
   test("openrouter needs key and model", () => {
     const base = { LLM_PROVIDER: "openrouter" } as NodeJS.ProcessEnv;
-    expect(() => createProvider(base)).toThrow("OPENROUTER_API_KEY fehlt");
+    expect(() => createProvider(base)).toThrow("OPENROUTER_API_KEY is missing");
     expect(() => createProvider({ ...base, OPENROUTER_API_KEY: "sk-or-test" })).toThrow(
-      "LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)",
+      "LLM_MODEL is missing (a vendor-prefixed model id)",
     );
     const p = createProvider({
       ...base,
@@ -74,9 +75,9 @@ describe("createProvider", () => {
 
   test("openai needs a base url and a model, the key is optional", () => {
     const base = { LLM_PROVIDER: "openai" } as NodeJS.ProcessEnv;
-    expect(() => createProvider(base)).toThrow("LLM_BASE_URL fehlt");
+    expect(() => createProvider(base)).toThrow("LLM_BASE_URL is missing");
     expect(() => createProvider({ ...base, LLM_BASE_URL: "http://x/v1" })).toThrow(
-      "LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)",
+      "LLM_MODEL is missing (a vendor-prefixed model id)",
     );
     const p = createProvider({ ...base, LLM_BASE_URL: "http://x/v1", LLM_MODEL: "m" });
     expect(p).toBeInstanceOf(OpenAICompatProvider);
@@ -111,7 +112,7 @@ describe("createProvider", () => {
         LLM_PROVIDER: "gemini",
         ANTHROPIC_API_KEY: "sk-ant-test",
       } as NodeJS.ProcessEnv),
-    ).toThrow("Unbekannter LLM_PROVIDER: gemini");
+    ).toThrow("unknown LLM_PROVIDER: gemini");
   });
 });
 
@@ -1088,5 +1089,52 @@ describe("prompt caching", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("chat replies", () => {
+  const CHAT: ChatRequest = {
+    systemPrompt: "CHAT SYS",
+    context: "## Szene (night-watch)",
+    turns: [
+      { role: "user", content: "What does Fenn want?" },
+      { role: "assistant", content: "Coin." },
+      { role: "user", content: "And Jorna?" },
+    ],
+  };
+  const HOUR = { type: "ephemeral", ttl: "1h" };
+
+  test("Claude marks the system prompt, the context block and the last turn for an hour, and forces no tool", () => {
+    const body = claudeChatBody(CHAT, "a-model", 2000);
+    expect(body.tools).toBeUndefined();
+    expect(body.tool_choice).toBeUndefined();
+    expect(body.system).toEqual([{ type: "text", text: "CHAT SYS", cache_control: HOUR }]);
+    expect(body.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "## Szene (night-watch)", cache_control: HOUR }] },
+      { role: "user", content: "What does Fenn want?" },
+      { role: "assistant", content: "Coin." },
+      { role: "user", content: [{ type: "text", text: "And Jorna?", cache_control: HOUR }] },
+    ]);
+  });
+
+  test("the OpenAI-compatible body asks for no format and marks only with explicit breakpoints", () => {
+    const plain = new OpenAICompatProvider({ baseUrl: "http://localhost:1", model: "m" }).chatBody(CHAT);
+    expect(plain.response_format).toBeUndefined();
+    expect(plain.messages).toEqual([
+      { role: "system", content: "CHAT SYS" },
+      { role: "user", content: "## Szene (night-watch)" },
+      ...CHAT.turns,
+    ]);
+    const cached = new OpenAICompatProvider({
+      baseUrl: "http://localhost:1",
+      model: "m",
+      promptCache: true,
+    }).chatBody(CHAT);
+    const messages = cached.messages as Array<{ content: unknown }>;
+    expect(messages[1]!.content).toEqual([
+      { type: "text", text: "## Szene (night-watch)", cache_control: HOUR },
+    ]);
+    expect(messages[4]!.content).toEqual([{ type: "text", text: "And Jorna?", cache_control: HOUR }]);
+    expect(messages[2]!.content).toBe("What does Fenn want?");
   });
 });

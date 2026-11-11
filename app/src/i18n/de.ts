@@ -499,6 +499,46 @@ export const de = {
     "Die Liste ließ sich nicht entfernen, weil sie sich inzwischen geändert hat. Die Seite zeigt jetzt ihren aktuellen Stand.",
 
 
+  // --- the brainstorming chat of a scene (scene-chat/SceneChat.tsx) ----------
+  "sceneChat.heading": "Brainstorming",
+  "sceneChat.lead":
+    "Denk diese Szene im Gespräch durch. Jede Antwort liest die Szene, ihre NPCs, ihren Ort, den Text des Kapitels, das Kampagnenwissen und das Glossar so, wie sie gerade gespeichert sind.",
+  "sceneChat.loading": "Lade den Chat …",
+  "sceneChat.loadFailed": "Der Chat konnte nicht geladen werden — Server prüfen.",
+  "sceneChat.empty": "Noch keine Nachricht. Stell eine Frage zu dieser Szene, um das Gespräch zu beginnen.",
+  "sceneChat.log": "Gespräch zu dieser Szene",
+  "sceneChat.role.dm": "Du",
+  "sceneChat.role.model": "Antwort",
+  "sceneChat.running": "Die Antwort wird geschrieben …",
+  "sceneChat.running.hint":
+    "Du kannst die Seite verlassen. Die Antwort steht hier, wenn du zurückkommst.",
+  "sceneChat.failed.fallback": "Die Antwort ließ sich nicht schreiben.",
+  "sceneChat.failed.hint": "Deine Nachricht bleibt stehen, und die Antwort lässt sich noch einmal anfordern.",
+  "sceneChat.retry": "Noch einmal versuchen",
+  "sceneChat.retry.failed": "Die Antwort wurde nicht neu angefordert — Server prüfen.",
+  "sceneChat.copy": "Kopieren",
+  "sceneChat.copied": "Kopiert",
+  "sceneChat.copy.aria": "Antwort kopieren",
+  "sceneChat.copied.aria": "Antwort kopiert",
+  "sceneChat.input.label": "Deine Nachricht",
+  "sceneChat.input.placeholder": "Frag etwas zu dieser Szene …",
+  "sceneChat.send": "Senden",
+  "sceneChat.sending": "Wird gesendet …",
+  "sceneChat.send.failed": "Die Nachricht wurde nicht gesendet — Server prüfen.",
+  "sceneChat.unconfigured":
+    "Auf diesem Server ist kein Sprachmodell eingerichtet, deshalb kann der Chat nicht antworten. Sobald ein Anbieter eingerichtet ist, kannst du hier schreiben.",
+  "sceneChat.open": "Brainstorming zu dieser Szene öffnen",
+  "sceneChat.open.running": "Brainstorming zu dieser Szene öffnen — eine Antwort wird gerade geschrieben",
+  "sceneChat.close": "Chat schließen",
+  "sceneChat.expand": "Als Seitenleiste andocken",
+  "sceneChat.collapse": "Wieder als Fenster öffnen",
+  "sceneChat.clear": "Chat leeren",
+  "sceneChat.clear.title": "Diesen Chat leeren?",
+  "sceneChat.clear.sentence":
+    "Das ganze Gespräch kommt in den Papierkorb. Von dort lässt es sich {days} Tage lang zurückholen, solange die Szene keinen neuen Chat hat.",
+  "sceneChat.clear.failed": "Der Chat wurde nicht geleert — Server prüfen.",
+  "sceneChat.cleared": "Der Chat liegt im Papierkorb.",
+
   // --- trash (routes/trash.tsx, components/Notices.tsx) ---------------------
   "trash.title": "Papierkorb",
   "trash.lead":
@@ -511,6 +551,8 @@ export const de = {
   "trash.group.npcs": "NPCs",
   "trash.group.locations": "Orte",
   "trash.group.ideas": "Ideen",
+  "trash.group.sceneChats": "Szenen-Chats",
+  "trash.sceneChat.name": "Chat zur Szene „{scene}“",
   "trash.remaining":
     "{days, plural, =0 {Wird heute endgültig entfernt.} one {Wird in # Tag endgültig entfernt.} other {Wird in # Tagen endgültig entfernt.}}",
   "trash.chapter.scenes":
@@ -568,6 +610,20 @@ export const de = {
   "server.import_not_fivetools":
     "Das ist keine 5etools-Datei: Ihr fehlen die Quellen unter _meta oder die Tabellenliste. Nichts wurde importiert.",
   "server.import_no_tables": "Die 5etools-Datei enthält keine Zufallstabelle. Nichts wurde importiert.",
+  // The scene chat's reply: why one was not written (scene-chat/), and the
+  // generator's start without a provider.
+  "server.llm_unconfigured": "Auf diesem Server ist kein Sprachmodell eingerichtet ({detail}).",
+  "server.llm_failed":
+    "Der Anbieter des Sprachmodells hat mit einem Fehler geantwortet oder war nicht erreichbar.",
+  "server.llm_timeout": "Der Anbieter des Sprachmodells hat nicht rechtzeitig geantwortet.",
+  "server.scene_chat_reply_truncated":
+    "Die Antwort wurde am Ausgabelimit abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}).",
+  "server.scene_chat_reply_restarted":
+    "Der Server wurde neu gestartet, während die Antwort geschrieben wurde.",
+  "server.scene_chat_reply_running":
+    "Eine Antwort dieses Chats wird noch geschrieben. Warte, bis sie dasteht, und schreib dann weiter.",
+  "server.scene_chat_replaced":
+    "Die Szene hat inzwischen einen neuen Chat. Leere ihn zuerst, dann lässt sich dieser zurückholen.",
   "server.patch_anchor_missing":
     "Nicht übernommen — der Block, den diese Änderung betrifft, steht nicht mehr so im Text. Verwirf die Änderung und bearbeite den Text selbst.",
   // A fix of a chapter check is about the text as the check read it; the row

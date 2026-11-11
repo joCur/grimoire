@@ -8,10 +8,24 @@
   in [generator/README.md](../../generator/README.md).
 - **The provider sits behind an interface.** The Claude API is the default;
   an OpenAI-compatible endpoint is the alternative.
-- **Every model response is schema-enforced JSON.** An entity's response
-  schema is derived from its zod schema (`decisions/resources`) in the
-  providers' strict form and carries only the shape; what the model must know
-  beyond the shape is stated in the prompt and checked by validation.
+- **Every model response that can become a row is schema-enforced JSON.** An
+  entity's response schema is derived from its zod schema
+  (`decisions/resources`) in the providers' strict form and carries only the
+  shape; what the model must know beyond the shape is stated in the prompt
+  and checked by validation. The one model reply that is free text is the
+  reply of a scene's brainstorming chat: it is never written into a row of
+  the campaign, so there is no shape to enforce and nothing to validate —
+  it is Markdown the DM reads and takes from by hand.
+- **A chat reply is no job.** The brainstorming chat of a scene is a
+  conversation, not a run: it proposes nothing to review, counts against
+  no limit of the campaign's job and waits for none. Like a job it is
+  written on the server and stored as a row, so leaving the page loses
+  nothing, and a reply interrupted by a restart is reported as failed. One
+  reply per scene runs at a time. Every reply reads its context fresh from
+  the campaign as it is stored at that moment — the scene and what it
+  names, its chapter, the campaign knowledge and the glossary — and sends
+  the whole conversation with it; the constant part comes first, so the
+  providers can cache it.
 - **Repair, then validate, then correct.** A deterministic JSON repair runs
   before validation; validation errors go back to the model as a limited
   number of correction turns. References a response introduces must name
@@ -147,6 +161,11 @@
   already did. Changes rather than a whole entity keep what the DM wrote,
   and applying them to the row as stored lets the DM edit it while the
   review waits.
+- A chat is thinking aloud. Forcing its replies into a schema would make
+  the model fill fields instead of answering, and nothing it says becomes
+  data without the DM; a chat bound to the job would block a run for a
+  question, or a question for a run. Context read fresh makes a reply
+  answer the scene the DM sees, not the one they asked about yesterday.
 - A proposal written again from the answers can change anything, including
   what the DM already edited or checked; the DM would have to review it
   whole a second time. Operations touch only what they name, cost a
