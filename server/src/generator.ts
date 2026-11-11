@@ -211,6 +211,9 @@ export const ASSET_FILES = {
   // The brainstorming chat on a scene: its own prompt alone. Its reply is
   // free Markdown, so it has no fields file and no few-shot.
   sceneChat: { systemPrompt: "scene-chat-system-prompt.md" },
+  // The quick-ideas chat of a running session: its own prompt alone, for
+  // the same reason.
+  quickIdeas: { systemPrompt: "quick-ideas-system-prompt.md" },
   // The OUTLINE step of a pipelined scene run: its own prompt
   // and its own few-shot (a worked example outline, not a target draft).
   outline: {

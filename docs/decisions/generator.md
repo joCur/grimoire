@@ -12,10 +12,11 @@
   entity's response schema is derived from its zod schema
   (`decisions/resources`) in the providers' strict form and carries only the
   shape; what the model must know beyond the shape is stated in the prompt
-  and checked by validation. The one model reply that is free text is the
-  reply of a scene's brainstorming chat: it is never written into a row of
-  the campaign, so there is no shape to enforce and nothing to validate —
-  it is Markdown the DM reads and takes from by hand.
+  and checked by validation. The model replies that are free text are those
+  of a chat — a scene's brainstorming chat and a session's quick-ideas
+  chat: they are never written into a row of the campaign, so there is no
+  shape to enforce and nothing to validate — they are Markdown the DM reads
+  and takes from by hand.
 - **A chat reply is no job.** The brainstorming chat of a scene is a
   conversation, not a run: it proposes nothing to review, counts against
   no limit of the campaign's job and waits for none. Like a job it is
@@ -26,6 +27,16 @@
   names, its chapter, the campaign knowledge and the glossary — and sends
   the whole conversation with it; the constant part comes first, so the
   providers can cache it.
+- **The quick-ideas chat is not stored.** During a running session the DM
+  asks the model for quick ideas at the table. Like the scene's chat it is
+  no job, and unlike it the conversation is no entity and no row: it lives only in the open live view and is gone with
+  it. Every question carries the whole conversation and the scene the DM
+  has open, the server reads the rest of its context fresh from the
+  campaign — that scene and what it names, its chapter, the campaign
+  knowledge, the glossary and the session's log so far — and answers in
+  the same request, writing nothing on any path. A reply that cannot be
+  used is answered as an error that says why, and the DM asks again. An
+  ended session takes no question.
 - **Repair, then validate, then correct.** A deterministic JSON repair runs
   before validation; validation errors go back to the model as a limited
   number of correction turns. References a response introduces must name
@@ -166,6 +177,13 @@
   data without the DM; a chat bound to the job would block a run for a
   question, or a question for a run. Context read fresh makes a reply
   answer the scene the DM sees, not the one they asked about yesterday.
+- A question at the table is about this moment and is read once; what is
+  worth keeping, the DM writes down as a note. Storing the conversation
+  would make a second record of the evening beside the log, with nothing
+  in the app to read it. Without a row there is nothing to poll, so the
+  reply comes back in the request that asked for it; it waits a bounded
+  time, shorter than the server keeps a silent connection open, so a slow
+  model ends as a sentence and never as a dropped request.
 - A proposal written again from the answers can change anything, including
   what the DM already edited or checked; the DM would have to review it
   whole a second time. Operations touch only what they name, cost a

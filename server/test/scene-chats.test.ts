@@ -16,7 +16,7 @@ import type { SceneChatMessage } from "@grimoire/shared/scene-chat-message";
 import { failInterruptedReplies } from "../src/db/scene-chat-boot";
 import type { ChatProvider, ChatRequest, CompletionResult } from "../src/llm-provider";
 import { ProviderError } from "../src/llm-provider";
-import { setChatProviderForTests } from "../src/scene-chat-reply";
+import { setChatProviderForTests } from "../src/chat-reply";
 import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { purgeTrash } from "../src/store/trash";

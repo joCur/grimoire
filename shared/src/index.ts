@@ -23,6 +23,7 @@ export * from "./log-entry";
 export * from "./pause";
 export * from "./scene-chat";
 export * from "./scene-chat-message";
+export * from "./quick-ideas";
 export * from "./llm-provider";
 export * from "./generator-job";
 export * from "./trash";

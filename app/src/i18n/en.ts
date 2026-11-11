@@ -450,6 +450,39 @@ export const en: Messages = {
     "The list could not be removed because it has changed in the meantime. The page now shows its current state.",
 
 
+  // --- the shared parts of a chat with the model (components/ChatPanel.tsx,
+  // components/ChatMessage.tsx) ------------------------------------------
+  "chat.role.dm": "You",
+  "chat.role.model": "Reply",
+  "chat.running": "The reply is being written …",
+  "chat.failed.fallback": "The reply could not be written.",
+  "chat.failed.hint": "Your message stays, and the reply can be asked for again.",
+  "chat.retry": "Try again",
+  "chat.copy": "Copy",
+  "chat.copied": "Copied",
+  "chat.copy.aria": "Copy the reply",
+  "chat.copied.aria": "Reply copied",
+  "chat.input.label": "Your message",
+  "chat.send": "Send",
+  "chat.sending": "Sending …",
+  "chat.close": "Close the chat",
+  "chat.expand": "Dock as a side panel",
+  "chat.collapse": "Open as a window again",
+
+  // --- the quick-ideas chat of the live view (session/QuickIdeas.tsx) --------
+  "quickIdeas.heading": "Quick ideas",
+  "quickIdeas.lead":
+    "Ask for an idea for the table. Every reply reads the open scene, its NPCs, its location, the chapter, the campaign knowledge, the glossary and this session's notes as they are stored right now.",
+  "quickIdeas.empty":
+    "No question yet. The conversation is not saved: it ends when you reload the page or leave the live view.",
+  "quickIdeas.log": "Quick ideas for this session",
+  "quickIdeas.input.placeholder": "Ask for a name, a twist, a reaction …",
+  "quickIdeas.open": "Open quick ideas",
+  "quickIdeas.open.running": "Open quick ideas — a reply is being written",
+  "quickIdeas.ended":
+    "This session has already ended, so the chat answers no more questions. Start a new session to keep asking.",
+  "quickIdeas.unreachable": "The question did not reach the server — check the server.",
+
   // --- the brainstorming chat of a scene (scene-chat/SceneChat.tsx) ----------
   "sceneChat.heading": "Brainstorming",
   "sceneChat.lead":
@@ -458,30 +491,14 @@ export const en: Messages = {
   "sceneChat.loadFailed": "The chat could not be loaded — check the server.",
   "sceneChat.empty": "No message yet. Ask a question about this scene to start the conversation.",
   "sceneChat.log": "Conversation about this scene",
-  "sceneChat.role.dm": "You",
-  "sceneChat.role.model": "Reply",
-  "sceneChat.running": "The reply is being written …",
   "sceneChat.running.hint": "You can leave the page. The reply stands here when you come back.",
-  "sceneChat.failed.fallback": "The reply could not be written.",
-  "sceneChat.failed.hint": "Your message stays, and the reply can be asked for again.",
-  "sceneChat.retry": "Try again",
   "sceneChat.retry.failed": "The reply was not asked for again — check the server.",
-  "sceneChat.copy": "Copy",
-  "sceneChat.copied": "Copied",
-  "sceneChat.copy.aria": "Copy the reply",
-  "sceneChat.copied.aria": "Reply copied",
-  "sceneChat.input.label": "Your message",
   "sceneChat.input.placeholder": "Ask something about this scene …",
-  "sceneChat.send": "Send",
-  "sceneChat.sending": "Sending …",
   "sceneChat.send.failed": "The message was not sent — check the server.",
   "sceneChat.unconfigured":
     "No language model is set up on this server, so the chat cannot reply. Once a provider is set up, you can write here.",
   "sceneChat.open": "Open the brainstorming on this scene",
   "sceneChat.open.running": "Open the brainstorming on this scene — a reply is being written",
-  "sceneChat.close": "Close the chat",
-  "sceneChat.expand": "Dock as a side panel",
-  "sceneChat.collapse": "Open as a window again",
   "sceneChat.clear": "Clear chat",
   "sceneChat.clear.title": "Clear this chat?",
   "sceneChat.clear.sentence":
@@ -562,6 +579,8 @@ export const en: Messages = {
   "server.llm_failed": "The language model's provider answered with an error or could not be reached.",
   "server.llm_timeout": "The language model's provider did not answer in time.",
   "server.scene_chat_reply_truncated":
+    "The reply was cut off at the output cap — raise LLM_MAX_TOKENS (currently: {max}).",
+  "server.quick_ideas_reply_truncated":
     "The reply was cut off at the output cap — raise LLM_MAX_TOKENS (currently: {max}).",
   "server.scene_chat_reply_restarted": "The server was restarted while the reply was being written.",
   "server.scene_chat_reply_running":

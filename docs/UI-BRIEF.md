@@ -75,7 +75,9 @@ scene's title) — it says where the DM reaches next without having
 to search the list. On entry, the first scene that has not been played yet
 is up. Header line: session time (computed from `started`), pause, end
 session. After the read-aloud, the quick note is the second most important
-element — nothing may cover it.
+element — nothing may cover it. A brass button at the bottom right, left of
+the aside, opens the quick-ideas chat: a popup above the page, or docked as
+a side panel at the right while the zones narrow.
 
 ### 4. Mobile
 Job: look things up and drop things in, not moderate. The start surface

@@ -2,7 +2,7 @@
 
 import { Hono } from "hono";
 import type { LlmProvider } from "@grimoire/shared/llm-provider";
-import { chatProviderConfigured } from "../scene-chat-reply";
+import { chatProviderConfigured } from "../chat-reply";
 
 export const llmProviderRoutes = new Hono();
 
